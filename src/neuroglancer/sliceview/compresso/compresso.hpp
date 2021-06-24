@@ -256,9 +256,9 @@ std::unique_ptr<bool[]> decode_boundaries(
 
 template <typename LABEL>
 void decode_nonboundary_labels(
-		std::unique_ptr<uint32_t[]> &components, const std::vector<LABEL> &ids, 
-		const size_t sx, const size_t sy, const size_t sz,
-		LABEL* output
+	std::unique_ptr<uint32_t[]> &components, const std::vector<LABEL> &ids, 
+	const size_t sx, const size_t sy, const size_t sz,
+	LABEL* output
 ) {
 	const size_t voxels = sx * sy * sz;
 	for (size_t i = 0; i < voxels; i++) {
@@ -268,10 +268,10 @@ void decode_nonboundary_labels(
 
 template <typename LABEL>
 int decode_indeterminate_locations(
-		std::unique_ptr<bool[]> &boundaries, LABEL *labels, 
-		const std::vector<LABEL> &locations, 
-		const size_t sx, const size_t sy, const size_t sz,
-		const size_t connectivity
+	std::unique_ptr<bool[]> &boundaries, LABEL *labels, 
+	const std::vector<LABEL> &locations, 
+	const size_t sx, const size_t sy, const size_t sz,
+	const size_t connectivity
 ) {
 	const size_t sxy = sx * sy;
 
