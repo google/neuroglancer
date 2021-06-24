@@ -189,7 +189,7 @@ std::vector<WINDOW> run_length_decode_windows(
 /* DECOMPRESS STARTS HERE */
 
 template <typename LABEL, typename WINDOW>
-bool* decode_boundaries(
+std::unique_ptr<bool[]> decode_boundaries(
 	const std::vector<WINDOW> &windows, const std::vector<WINDOW> &window_values, 
 	const size_t sx, const size_t sy, const size_t sz,
 	const size_t xstep, const size_t ystep, const size_t zstep
@@ -205,7 +205,7 @@ bool* decode_boundaries(
 	const bool xstep_pot = (xstep != 0) && ((xstep & (xstep - 1)) == 0);
 	const int xshift = std::log2(xstep); // must use log2 here, not lg/lg2 to avoid fp errors
 
-	bool* boundaries = new bool[voxels]();
+	std::unique_ptr<bool[]> boundaries(new bool[voxels]());
 
 	if (window_values.size() == 0) {
 		return boundaries;
@@ -268,7 +268,7 @@ void decode_nonboundary_labels(
 
 template <typename LABEL>
 int decode_indeterminate_locations(
-		bool *boundaries, LABEL *labels, 
+		std::unique_ptr<bool[]> &boundaries, LABEL *labels, 
 		const std::vector<LABEL> &locations, 
 		const size_t sx, const size_t sy, const size_t sz,
 		const size_t connectivity
@@ -416,7 +416,7 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output = NULL) {
 
 	windows = run_length_decode_windows<WINDOW>(windows, nblocks);
 
-	bool* boundaries = decode_boundaries<WINDOW>(
+	std::unique_ptr<bool[]> boundaries = decode_boundaries<WINDOW>(
 		windows, window_values, 
 		sx, sy, sz, 
 		xstep, ystep, zstep
@@ -425,7 +425,7 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output = NULL) {
 	window_values = std::vector<WINDOW>();
 
 	uint32_t* components = cc3d::connected_components<uint32_t>(
-		boundaries, sx, sy, sz, header.connectivity
+		boundaries.get(), sx, sy, sz, header.connectivity
 	);
 
 	if (output == NULL) {
@@ -441,8 +441,6 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output = NULL) {
 		sx, sy, sz,
 		header.connectivity
 	);
-
-	delete[] boundaries;
 
 	// if err is 0, everything was ok
 	return err;
