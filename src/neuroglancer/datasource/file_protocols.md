@@ -26,7 +26,7 @@ File-backed data sources, which include [precomputed](./precomputed), [zarr](./z
 - `gs://BUCKET/PATH`: access to Google Cloud Storage (GCS) buckets
 
   - When not using the Python integration, Neuroglancer can only access buckets that allow public read
-    access and do not require [requestor pays](https://cloud.google.com/storage/docs/requester-pays).
+    access and do not require [requester pays](https://cloud.google.com/storage/docs/requester-pays).
 
     Specifically, the bucket must grant `storage.objects.get` permission to `allUsers`, which you
     can enable using [these instructions](
@@ -87,3 +87,12 @@ File-backed data sources, which include [precomputed](./precomputed), [zarr](./z
   access to non-public Google Cloud Storage (GCS) buckets via an [ngauth
   server](../../../ngauth_server) using the [S3-compatible XML
   API](https://cloud.google.com/storage/docs/xml-api/overview).
+
+- `s3://BUCKET/PATH`: access to public Amazon Simple Storage Service (S3) buckets.
+
+  Only buckets that allow public read access and do not require [requester
+  pays](https://docs.aws.amazon.com/AmazonS3/latest/userguide/RequesterPaysBuckets.html) are
+  supported.
+
+  Additionally, you must configure a suitable [CORS
+  configuration](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ManageCorsUsing.html).
