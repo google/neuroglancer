@@ -128,6 +128,38 @@ export function makeVolumeChunkSpecification(options: VolumeChunkSpecificationOp
   };
 }
 
+function shouldTranscodeToCompressedSegmentation(
+    options: VolumeChunkSpecificationDefaultCompressionOptions&VolumeChunkSpecificationOptions&
+    VolumeChunkSpecificationVolumeSourceOptions) {
+  if (options.compressedSegmentationBlockSize !== undefined) return false;
+  if (options.volumeType !== VolumeType.SEGMENTATION &&
+      !options.volumeSourceOptions.discreteValues) {
+    return false;
+  }
+  switch (options.dataType) {
+    case DataType.UINT32:
+    case DataType.UINT64:
+      break;
+    default:
+      return false;
+  }
+  switch (options.rank) {
+    case 3:
+      return true;
+    case 4: {
+      // precomputed format always uses 4-d chunks, even if there is a single channel.  We still
+      // want to allow transcoding in that case.  In fact the compressed_segmentation format
+      // supports transcoding even for arbitrary 4-d chunks, but it is not clear it would be a good
+      // default encoding in that case.
+      const {chunkDataSize} = options;
+      if (chunkDataSize[3] !== 1) return false;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
 /**
  * Returns a VolumeChunkSpecification with default compression specified if suitable for the
  * volumeType.
@@ -137,44 +169,39 @@ export function makeVolumeChunkSpecificationWithDefaultCompression(
     VolumeChunkSpecificationVolumeSourceOptions) {
   let {
     rank,
-    compressedSegmentationBlockSize,
-    dataType,
     lowerVoxelBound,
     upperVoxelBound,
   } = options;
-  if (compressedSegmentationBlockSize === undefined && rank === 3 &&
-      (options.volumeType === VolumeType.SEGMENTATION ||
-       options.volumeSourceOptions.discreteValues === true) &&
-      (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
-    let {
-      volumeSourceOptions: {displayRank, multiscaleToViewTransform},
-      chunkToMultiscaleTransform,
-      chunkToViewTransform,
-    } = options;
-    if (chunkToViewTransform === undefined) {
-      chunkToViewTransform = matrix.multiply(
-          new Float32Array(rank * displayRank), displayRank,  //
-          multiscaleToViewTransform, displayRank,             //
-          chunkToMultiscaleTransform, rank + 1,               //
-          displayRank, rank, rank);
-    }
-    const {maxCompressedSegmentationBlockSize, chunkDataSize} = options;
-    return makeVolumeChunkSpecification({
-      ...options,
-      compressedSegmentationBlockSize: Float32Array.from(getNearIsotropicBlockSize({
-        rank,
-        chunkToViewTransform,
-        displayRank,
-        lowerVoxelBound,
-        upperVoxelBound,
-        maxVoxelsPerChunkLog2: 9,
-        maxBlockSize: maxCompressedSegmentationBlockSize === undefined ?
-            chunkDataSize :
-            vector.min(new Uint32Array(rank), chunkDataSize, maxCompressedSegmentationBlockSize),
-      })) as vec3
-    });
+  if (!shouldTranscodeToCompressedSegmentation(options)) {
+    return makeVolumeChunkSpecification(options);
   }
-  return makeVolumeChunkSpecification(options);
+  let {
+    volumeSourceOptions: {displayRank, multiscaleToViewTransform},
+    chunkToMultiscaleTransform,
+    chunkToViewTransform,
+  } = options;
+  if (chunkToViewTransform === undefined) {
+    chunkToViewTransform = matrix.multiply(
+        new Float32Array(rank * displayRank), displayRank,  //
+        multiscaleToViewTransform, displayRank,             //
+        chunkToMultiscaleTransform, rank + 1,               //
+        displayRank, rank, rank);
+  }
+  const {maxCompressedSegmentationBlockSize, chunkDataSize} = options;
+  return makeVolumeChunkSpecification({
+    ...options,
+    compressedSegmentationBlockSize: Float32Array.from(getNearIsotropicBlockSize({
+      rank,
+      chunkToViewTransform,
+      displayRank,
+      lowerVoxelBound,
+      upperVoxelBound,
+      maxVoxelsPerChunkLog2: 9,
+      maxBlockSize: maxCompressedSegmentationBlockSize === undefined ?
+          chunkDataSize :
+          vector.min(new Uint32Array(rank), chunkDataSize, maxCompressedSegmentationBlockSize),
+    })) as vec3
+  });
 }
 
 export function makeDefaultVolumeChunkSpecifications(
