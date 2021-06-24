@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// @ts-ignore
 import compressoWasmDataUrl from './compresso.wasm';
 
 const libraryEnv = {
@@ -62,7 +61,6 @@ function readHeader(buffer: Uint8Array)
   return {sx,sy,sz,dataWidth};
 }
 
-// @ts-ignore
 export async function decompressCompresso(buffer: Uint8Array) 
   : Promise<Uint8Array> {
   
