@@ -67,20 +67,14 @@ export class UrlHashBinding extends RefCounted {
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
 
-  // private defaultFragment: string;
-
   constructor(
       public root: Trackable, public credentialsManager: CredentialsManager,
       updateDelayMilliseconds = 200) {
-      // options: UrlHashBindingOptions = {}) {
     super();
-    // const {updateDelayMilliseconds = 200, defaultFragment = '{}'} = options;
-    // const {updateDelayMilliseconds = 200} = options;
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
     this.registerDisposer(root.changed.add(throttledSetUrlHash));
     this.registerDisposer(() => throttledSetUrlHash.cancel());
-    // this.defaultFragment = defaultFragment;
   }
 
   /**
@@ -157,10 +151,6 @@ export class UrlHashBinding extends RefCounted {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
         s = decodeURIComponent(s);
-        // if(found) {
-          // Keycloak make encode multiple times.
-          s = decodeURIComponent(s);
-        // }
         let state = urlSafeParse(s);
         verifyObject(state);
         this.root.restoreState(state);
@@ -168,10 +158,6 @@ export class UrlHashBinding extends RefCounted {
       } else if (s.startsWith('#!')) {
         s = s.slice(2);
         s = decodeURIComponent(s);
-        // if(found) {
-          // Keycloak make encode multiple times.
-          s = decodeURIComponent(s);
-        // }
         if (s === this.prevStateString) {
           return;
         }

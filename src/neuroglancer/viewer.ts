@@ -788,25 +788,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.helpPanelState.location.visible = !this.helpPanelState.location.visible;
   }
 
-  // loadFromJsonUrl() {
-  //   var urlParams = new URLSearchParams(window.location.search);
-  //   if (urlParams.has('json_url')) {
-  //     let json_url = urlParams.get('json_url')!;
-  //     history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-  //     StatusMessage
-  //     .forPromise(
-  //       cancellableFetchOk(json_url, {}, responseJson)
-  //         .then(response => {
-  //           this.state.restoreState(response);
-  //         }),
-  //             {
-  //               initialMessage: `Retrieving state from json_url: ${json_url}.`,
-  //               delay: true,
-  //               errorPrefix: `Error retrieving state: `,
-  //             });
-  //     }
-  // }
-
   promptJsonStateServer(message: string): void {
     let json_server_input = prompt(message, 'https://json.neurodata.io/v1');
     if (json_server_input !== null) {
