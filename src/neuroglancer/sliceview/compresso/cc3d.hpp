@@ -385,6 +385,6 @@ OUT* connected_components(
 }
 
 
-};
+}
 
 #endif
