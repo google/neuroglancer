@@ -444,6 +444,41 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output) {
 	return err;
 }
 
+// This function is used to produce the cartesian
+// product of LABEL x WINDOW possibilities and reduce
+// the human edited code down from 16 conditions down to
+// 8.
+template <typename WINDOW>
+int decompress_helper(
+	unsigned char* buffer, size_t num_bytes, 
+	void* output, const CompressoHeader &header
+) {
+	if (header.data_width == 1) {
+		return decompress<uint8_t,WINDOW>(
+			buffer, num_bytes, reinterpret_cast<uint8_t*>(output)
+		);
+	}
+	else if (header.data_width == 2) {
+		return decompress<uint16_t,WINDOW>(
+			buffer, num_bytes, reinterpret_cast<uint16_t*>(output)
+		);
+	}
+	else if (header.data_width == 4) {
+		return decompress<uint32_t,WINDOW>(
+			buffer, num_bytes, reinterpret_cast<uint32_t*>(output)
+		);
+	}
+	else if (header.data_width == 8) {
+		return decompress<uint64_t,WINDOW>(
+			buffer, num_bytes, reinterpret_cast<uint64_t*>(output)
+		);
+	}
+	else {
+		return 13;
+	}
+}
+
+
 template <>
 int decompress<void,void>(unsigned char* buffer, size_t num_bytes, void* output) {
 	if (!CompressoHeader::valid_header(buffer)) {
@@ -462,96 +497,33 @@ int decompress<void,void>(unsigned char* buffer, size_t num_bytes, void* output)
 		static_cast<int>(header.xstep) * static_cast<int>(header.ystep) * static_cast<int>(header.zstep) <= 32
 	);
 
-	if (header.data_width == 1) {
-		if (window8) {
-			return decompress<uint8_t,uint8_t>(
-				buffer, num_bytes, reinterpret_cast<uint8_t*>(output)
-			);
-		}
-		else if (window16) {
-			return decompress<uint8_t,uint16_t>(
-				buffer, num_bytes, reinterpret_cast<uint8_t*>(output)
-			);
-		}
-		else if (window32) {
-			return decompress<uint8_t,uint32_t>(
-				buffer, num_bytes, reinterpret_cast<uint8_t*>(output)
-			);
-		}
-		else {
-			return decompress<uint8_t, uint64_t>(
-				buffer, num_bytes, reinterpret_cast<uint8_t*>(output)
-			);		
-		}
+	if (window8) {
+		return decompress_helper<uint8_t>(
+			buffer, num_bytes, 
+			reinterpret_cast<uint8_t*>(output),
+			header
+		);
 	}
-	else if (header.data_width == 2) {
-		if (window8) {
-			return decompress<uint16_t,uint8_t>(
-				buffer, num_bytes, reinterpret_cast<uint16_t*>(output)
-			);
-		}
-		else if (window16) {
-			return decompress<uint16_t,uint16_t>(
-				buffer, num_bytes, reinterpret_cast<uint16_t*>(output)
-			);
-		}
-		else if (window32) {
-			return decompress<uint16_t,uint32_t>(
-				buffer, num_bytes, reinterpret_cast<uint16_t*>(output)
-			);
-		}
-		else {
-			return decompress<uint16_t, uint64_t>(
-				buffer, num_bytes, reinterpret_cast<uint16_t*>(output)
-			);		
-		}
+	else if (window16) {
+		return decompress_helper<uint16_t>(
+			buffer, num_bytes, 
+			reinterpret_cast<uint8_t*>(output),
+			header
+		);
 	}
-	else if (header.data_width == 4) {
-		if (window8) {
-			return decompress<uint32_t,uint8_t>(
-				buffer, num_bytes, reinterpret_cast<uint32_t*>(output)
-			);
-		}
-		else if (window16) {
-			return decompress<uint32_t,uint16_t>(
-				buffer, num_bytes, reinterpret_cast<uint32_t*>(output)
-			);	
-		}
-		else if (window32) {
-			return decompress<uint32_t,uint32_t>(
-				buffer, num_bytes, reinterpret_cast<uint32_t*>(output)
-			);
-		}
-		else {
-			return decompress<uint32_t, uint64_t>(
-				buffer, num_bytes, reinterpret_cast<uint32_t*>(output)
-			);		
-		}
-	}
-	else if (header.data_width == 8) {
-		if (window8) {
-			return decompress<uint64_t,uint8_t>(
-				buffer, num_bytes, reinterpret_cast<uint64_t*>(output)
-			);
-		}
-		else if (window16) {
-			return decompress<uint64_t,uint16_t>(
-				buffer, num_bytes, reinterpret_cast<uint64_t*>(output)
-			);	
-		}
-		else if (window32) {
-			return decompress<uint64_t,uint32_t>(
-				buffer, num_bytes, reinterpret_cast<uint64_t*>(output)
-			);
-		}
-		else {
-			return decompress<uint64_t, uint64_t>(
-				buffer, num_bytes, reinterpret_cast<uint64_t*>(output)
-			);		
-		}
+	else if (window32) {
+		return decompress_helper<uint32_t>(
+			buffer, num_bytes, 
+			reinterpret_cast<uint8_t*>(output),
+			header
+		);
 	}
 	else {
-		return 13;
+		return decompress_helper<uint64_t>(
+			buffer, num_bytes, 
+			reinterpret_cast<uint8_t*>(output),
+			header
+		);	
 	}
 }
 
