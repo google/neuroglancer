@@ -134,7 +134,7 @@ OUT* relabel(
   ) {
 
   OUT label;
-  OUT* renumber = new OUT[num_labels + 1]();
+  std::unique_ptr<OUT[]> renumber(new OUT[num_labels + 1]());
   OUT next_label = start_label;
 
   for (int64_t i = 1; i <= num_labels; i++) {
@@ -156,8 +156,6 @@ OUT* relabel(
       out_labels[loc] = renumber[out_labels[loc]];
     }
   }
-
-  delete[] renumber;
 
   return out_labels;
 }
