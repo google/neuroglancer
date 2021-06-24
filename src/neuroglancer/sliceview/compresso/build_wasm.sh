@@ -1,4 +1,4 @@
-#!/bin/zsh -xve
+#!/bin/bash -xve
 
 compile_options=(
     compresso_wasm.cc
