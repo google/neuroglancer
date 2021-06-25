@@ -15,8 +15,7 @@
  */
 
 import {TypedArray} from 'neuroglancer/util/array';
-import {DataType} from 'neuroglancer/sliceview/base';
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
+import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {decodeCompresso} from 'neuroglancer/async_computation/decode_compresso_request';
@@ -29,18 +28,5 @@ export async function decodeCompressoChunk(
     decodeCompresso, cancellationToken, [response], new Uint8Array(response)
   );
 
-  const spec = chunk.source!.spec;
-
-  // uint8 is already set correctly
-  if (spec.dataType === DataType.UINT16) {
-    image = new Uint16Array(image.buffer);
-  }
-  else if (spec.dataType === DataType.UINT32) {
-    image = new Uint32Array(image.buffer);
-  }
-  else if (spec.dataType === DataType.UINT64) {
-    image = new Uint32Array(image.buffer);
-  }
-
-  await postProcessRawData(chunk, cancellationToken, image);
+  await decodeRawChunk(chunk, cancellationToken, image.buffer);
 }
