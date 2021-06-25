@@ -72,10 +72,6 @@ public:
     }
   }
 
-  ~DisjointSet () {
-    ids.reset();
-  }
-
   T root (T n) {
     T i = ids[n];
     while (i != ids[i]) {
