@@ -15,18 +15,18 @@
  */
 
 import {CredentialsManager, MaybeOptionalCredentialsProvider} from 'neuroglancer/credentials_provider';
-import {fetchWithOAuth2Credentials, OAuth2Credentials} from 'neuroglancer/credentials_provider/oauth2';
+import {fetchWithOAuth2Credentials} from 'neuroglancer/credentials_provider/oauth2';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {parseUrl, ResponseTransform} from 'neuroglancer/util/http_request';
+import {cancellableFetchS3Ok, getS3RegionCredentials} from 'neuroglancer/util/s3';
 
-export type SpecialProtocolCredentials = OAuth2Credentials|undefined;
+export type SpecialProtocolCredentials = any;
 export type SpecialProtocolCredentialsProvider =
-  MaybeOptionalCredentialsProvider<SpecialProtocolCredentials>;
+    MaybeOptionalCredentialsProvider<SpecialProtocolCredentials>;
 
 function getMiddleAuthCredentialsProvider(
     credentialsManager: CredentialsManager, url: string): SpecialProtocolCredentialsProvider {
-  return credentialsManager.getCredentialsProvider(
-    'middleauthapp', new URL(url).origin);
+  return credentialsManager.getCredentialsProvider('middleauthapp', new URL(url).origin);
 }
 
 function getNgauthCredentialsProvider(
@@ -55,22 +55,26 @@ export function parseSpecialUrl(url: string, credentialsManager: CredentialsMana
       };
     case 'gs+ngauth+http':
       return {
-        credentialsProvider: getNgauthCredentialsProvider(credentialsManager, `http://${u.host}`, u.path),
+        credentialsProvider:
+            getNgauthCredentialsProvider(credentialsManager, `http://${u.host}`, u.path),
         url: 'gs:/' + u.path,
       };
     case 'gs+ngauth+https':
       return {
-        credentialsProvider: getNgauthCredentialsProvider(credentialsManager, `https://${u.host}`, u.path),
+        credentialsProvider:
+            getNgauthCredentialsProvider(credentialsManager, `https://${u.host}`, u.path),
         url: 'gs:/' + u.path,
       };
     case 'gs+xml+ngauth+http':
       return {
-        credentialsProvider: getNgauthCredentialsProvider(credentialsManager, `http://${u.host}`, u.path),
+        credentialsProvider:
+            getNgauthCredentialsProvider(credentialsManager, `http://${u.host}`, u.path),
         url: 'gs+xml:/' + u.path,
       };
     case 'gs+xml+ngauth+https':
       return {
-        credentialsProvider: getNgauthCredentialsProvider(credentialsManager, `https://${u.host}`, u.path),
+        credentialsProvider:
+            getNgauthCredentialsProvider(credentialsManager, `https://${u.host}`, u.path),
         url: 'gs+xml:/' + u.path,
       };
     case 'middleauth+https':
@@ -78,6 +82,11 @@ export function parseSpecialUrl(url: string, credentialsManager: CredentialsMana
       return {
         credentialsProvider: getMiddleAuthCredentialsProvider(credentialsManager, url),
         url: url,
+      };
+    case 's3':
+      return {
+        credentialsProvider: getS3RegionCredentials(u.host),
+        url,
       };
     default:
       return {
@@ -116,6 +125,9 @@ export async function cancellableFetchSpecialOk<T>(
       return fetchWithOAuth2Credentials(
           credentialsProvider, `https://storage.googleapis.com/${u.host}${u.path}`, init,
           transformResponse, cancellationToken);
+    case 's3':
+      return cancellableFetchS3Ok(
+          credentialsProvider!, u.host, u.path, init, transformResponse, cancellationToken);
     default:
       return fetchWithOAuth2Credentials(
           credentialsProvider, url, init, transformResponse, cancellationToken);
