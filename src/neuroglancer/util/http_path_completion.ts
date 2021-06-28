@@ -18,9 +18,9 @@ import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult, Completion, CompletionWithDescription, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {getGcsPathCompletions} from 'neuroglancer/util/gcs_bucket_listing';
-import {parseUrl} from 'neuroglancer/util/http_request';
-import {cancellableFetchOk} from 'neuroglancer/util/http_request';
-import {getS3PathCompletions} from 'neuroglancer/util/s3_bucket_listing';
+import {cancellableFetchOk, parseUrl} from 'neuroglancer/util/http_request';
+import {getS3PathCompletions} from 'neuroglancer/util/s3';
+import {getS3CompatiblePathCompletions} from 'neuroglancer/util/s3_bucket_listing';
 import {parseSpecialUrl} from 'neuroglancer/util/special_protocol_request';
 
 /**
@@ -70,10 +70,23 @@ export async function getHtmlPathCompletions(
 const specialProtocolEmptyCompletions: CompletionWithDescription[] = [
   {value: 'gs://', description: 'Google Cloud Storage (JSON API)'},
   {value: 'gs+xml://', description: 'Google Cloud Storage (XML API)'},
-  {value: 'gs+ngauth+http://', description: 'Google Cloud Storage (JSON API) authenticated via ngauth'},
-  {value: 'gs+ngauth+https://', description: 'Google Cloud Storage (JSON API) authenticated via ngauth'},
-  {value: 'gs+xml+ngauth+http://', description: 'Google Cloud Storage (XML API) authenticated via ngauth'},
-  {value: 'gs+xml+ngauth+https://', description: 'Google Cloud Storage (XML API) authenticated via ngauth'},
+  {
+    value: 'gs+ngauth+http://',
+    description: 'Google Cloud Storage (JSON API) authenticated via ngauth'
+  },
+  {
+    value: 'gs+ngauth+https://',
+    description: 'Google Cloud Storage (JSON API) authenticated via ngauth'
+  },
+  {
+    value: 'gs+xml+ngauth+http://',
+    description: 'Google Cloud Storage (XML API) authenticated via ngauth'
+  },
+  {
+    value: 'gs+xml+ngauth+https://',
+    description: 'Google Cloud Storage (XML API) authenticated via ngauth'
+  },
+  {value: 's3://', description: 'Amazon Simple Storage Service (S3)'},
   {value: 'https://'},
   {value: 'http://'},
 ];
@@ -100,17 +113,19 @@ export async function completeHttpPath(
   const {protocol, host, path} = result;
   const completions = await (async () => {
     if (protocol === 'gs+xml' && path.length > 0) {
-      return await getS3PathCompletions(
+      return await getS3CompatiblePathCompletions(
           credentialsProvider, `${protocol}://${host}`, `https://storage.googleapis.com/${host}`,
           path, cancellationToken);
     } else if (protocol === 'gs' && path.length > 0) {
       return await getGcsPathCompletions(
           credentialsProvider, `${protocol}://${host}`, host, path, cancellationToken);
+    } else if (protocol === 's3' && path.length > 0) {
+      return await getS3PathCompletions(host, path, cancellationToken);
     }
     const s3Match = parsedUrl.match(
-        /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com))(\/.*)$/);
+        /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com|[^\/]+|[^\/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/);
     if (s3Match !== null) {
-      return await getS3PathCompletions(
+      return await getS3CompatiblePathCompletions(
           credentialsProvider, s3Match[1], s3Match[1], s3Match[2], cancellationToken);
     }
     if ((protocol === 'http' || protocol === 'https') && path.length > 0) {

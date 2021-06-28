@@ -124,3 +124,34 @@
 .neuroglancer-layer-item-prefetch-progress {
   bottom: 0px;
 }
+
+.neuroglancer-layer-item-value-container {
+  display: grid;
+  grid-template-columns: min-content;
+  align-items: center;
+}
+
+.neuroglancer-layer-item-value {
+  grid-row: 1;
+  grid-column: 1;
+  visibility: visible;
+}
+
+.neuroglancer-layer-item-button-container {
+  grid-row: 1;
+  grid-column: 1;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  visibility: hidden;
+  justify-self: right;
+}
+
+.neuroglancer-layer-panel:hover .neuroglancer-layer-item-value  {
+  visibility: hidden;
+}
+
+.neuroglancer-layer-panel:hover .neuroglancer-layer-item-button-container {
+  visibility: visible;
+}

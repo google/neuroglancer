@@ -55,7 +55,7 @@ export function parseRGBAColorSpecification(x: any) {
     const context = document.createElement('canvas').getContext('2d')!;
     context.fillStyle = x;
     const result = parseColorSerialization(context.fillStyle);
-    return new Float32Array(vec4.fromValues(result[0] / 255, result[1] / 255, result[2] / 255, result[3]));
+    return vec4.fromValues(result[0] / 255, result[1] / 255, result[2] / 255, result[3]);
   } catch (parseError) {
     throw new Error(`Failed to parse color specification: ${parseError.message}`);
   }
@@ -63,7 +63,7 @@ export function parseRGBAColorSpecification(x: any) {
 
 export function parseRGBColorSpecification(x: any) {
   const result = parseRGBAColorSpecification(x);
-  return result.subarray(0, 3);
+  return <vec3>result.subarray(0, 3);
 }
 
 /**
@@ -164,6 +164,31 @@ export class TrackableRGB extends WatchableValue<vec3> {
     const {value} = this;
     const newValue = parseRGBColorSpecification(x);
     if (!vec3.equals(value, newValue)) {
+      this.value = newValue;
+    }
+  }
+}
+
+export class TrackableOptionalRGB extends WatchableValue<vec3|undefined> {
+  constructor() {
+    super(undefined);
+  }
+  toJSON() {
+    const {value} = this;
+    if (value === undefined) return undefined;
+    return serializeColor(value);
+  }
+  reset() {
+    this.value = undefined;
+  }
+  restoreState(x: any) {
+    if (x === undefined) {
+      this.reset();
+      return;
+    }
+    const {value} = this;
+    const newValue = parseRGBColorSpecification(x);
+    if (value === undefined || !vec3.equals(value, newValue)) {
       this.value = newValue;
     }
   }

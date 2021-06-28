@@ -26,10 +26,10 @@
 
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {DataTypeInterval} from 'neuroglancer/util/lerp';
 import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {DataTypeInterval} from 'neuroglancer/webgl/lerp';
 import {FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_simpleFloatHash} from 'neuroglancer/webgl/shader_lib';

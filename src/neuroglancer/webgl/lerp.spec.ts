@@ -15,9 +15,10 @@
  */
 
 import {DATA_TYPE_ARRAY_CONSTRUCTOR, DataType} from 'neuroglancer/util/data_type';
+import {computeInvlerp, computeLerp, DataTypeInterval, defaultDataTypeRange} from 'neuroglancer/util/lerp';
 import {getRandomValues} from 'neuroglancer/util/random';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {computeInvlerp, computeLerp, DataTypeInterval, defaultDataTypeRange, defineInvlerpShaderFunction, defineLerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
+import {defineInvlerpShaderFunction, defineLerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 function getRandomValue(dataType: DataType) {

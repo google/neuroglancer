@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {AnnotationPropertySpec, AnnotationType, ensureUniqueAnnotationPropertyIds, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertyId, parseAnnotationPropertyType} from 'neuroglancer/annotation';
+import {AnnotationType, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
@@ -213,13 +213,22 @@ class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
       const stride = rank + 1;
       const chunkToMultiscaleTransform = new Float32Array(stride * stride);
       chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+      const {lowerBounds: baseLowerBound, upperBounds: baseUpperBound} =
+          this.info.modelSpace.boundingBoxes[0].box;
+      const lowerClipBound = new Float32Array(rank);
+      const upperClipBound = new Float32Array(rank);
       for (let i = 0; i < 3; ++i) {
         const relativeScale = resolution[i] / modelResolution[i];
         chunkToMultiscaleTransform[stride * i + i] = relativeScale;
-        chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
+        const voxelOffsetValue = scaleInfo.voxelOffset[i];
+        chunkToMultiscaleTransform[stride * rank + i] = voxelOffsetValue * relativeScale;
+        lowerClipBound[i] = baseLowerBound[i] / relativeScale - voxelOffsetValue;
+        upperClipBound[i] = baseUpperBound[i] / relativeScale - voxelOffsetValue;
       }
       if (rank === 4) {
         chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+        lowerClipBound[3] = baseLowerBound[3];
+        upperClipBound[3] = baseUpperBound[3];
       }
       return makeDefaultVolumeChunkSpecifications({
                rank,
@@ -243,6 +252,8 @@ class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
                    }
                  }),
                  chunkToMultiscaleTransform,
+                 lowerClipBound,
+                 upperClipBound,
                }));
     }));
   }
@@ -303,7 +314,7 @@ function getLegacyMeshSource(
 
 function parseTransform(data: any): mat4 {
   return verifyObjectProperty(data, 'transform', value => {
-    const transform = new Float32Array(mat4.create());
+    const transform = mat4.create();
     if (value !== undefined) {
       parseFixedLengthArray(transform.subarray(0, 12), value, verifyFiniteFloat);
     }
@@ -538,7 +549,7 @@ async function getVolumeDataSource(
         await getMeshSource(options.chunkManager, credentialsProvider, meshUrl);
     let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsourceToModelSubspaceTransform  = new Float32Array(subsourceToModelSubspaceTransform);
+    subsourceToModelSubspaceTransform  = subsourceToModelSubspaceTransform;
     subsources.push({
       id: 'mesh',
       default: true,
@@ -552,7 +563,7 @@ async function getVolumeDataSource(
         await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
     let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsourceToModelSubspaceTransform  = new Float32Array(subsourceToModelSubspaceTransform);
+    subsourceToModelSubspaceTransform  = subsourceToModelSubspaceTransform;
     subsources.push({
       id: 'skeletons',
       default: true,
@@ -599,21 +610,6 @@ function parseKeyAndShardingSpec(url: string, obj: any) {
     url: resolvePath(url, verifyObjectProperty(obj, 'key', verifyString)),
     sharding: verifyObjectProperty(obj, 'sharding', parseShardingParameters),
   };
-}
-
-function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
-  verifyObject(obj);
-  const identifier = verifyObjectProperty(obj, 'id', parseAnnotationPropertyId);
-  const type = verifyObjectProperty(obj, 'type', parseAnnotationPropertyType);
-  const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
-  let defaultValue = 0;
-  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
-}
-
-function parseAnnotationPropertySpecs(obj: unknown) {
-  const properties = parseArray(obj, parseAnnotationPropertySpec);
-  ensureUniqueAnnotationPropertyIds(properties);
-  return properties;
 }
 
 interface AnnotationSpatialIndexLevelMetadata {

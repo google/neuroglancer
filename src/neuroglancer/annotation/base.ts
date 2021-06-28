@@ -64,14 +64,14 @@ forEachVisibleAnnotationChunk<RLayer extends MultiscaleVolumetricDataRenderLayer
   const {displayDimensionRenderInfo, viewMatrix, projectionMat, width, height} =
       projectionParameters;
   const {voxelPhysicalScales} = displayDimensionRenderInfo;
-  const viewDet = mat3.determinant(mat3FromMat4(tempMat3, viewMatrix));
+  const viewDet = Math.abs(mat3.determinant(mat3FromMat4(tempMat3, viewMatrix)));
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
   const viewFrustrumVolume =
       getViewFrustrumVolume(projectionMat) / viewDet * canonicalToPhysicalScale;
 
   if (transformedSources.length === 0) return;
   const baseSource = transformedSources[0];
-  let sourceVolume = baseSource.chunkLayout.detTransform * canonicalToPhysicalScale;
+  let sourceVolume = Math.abs(baseSource.chunkLayout.detTransform) * canonicalToPhysicalScale;
   const {lowerClipDisplayBound, upperClipDisplayBound} = baseSource;
   for (let i = 0; i < 3; ++i) {
     sourceVolume *= (upperClipDisplayBound[i] - lowerClipDisplayBound[i]);
@@ -90,7 +90,7 @@ forEachVisibleAnnotationChunk<RLayer extends MultiscaleVolumetricDataRenderLayer
     const spec = transformedSource.source.spec as AnnotationGeometryChunkSpecification;
     const {chunkLayout} = transformedSource;
     const physicalVolume =
-        prod3(chunkLayout.size) * chunkLayout.detTransform * canonicalToPhysicalScale;
+        prod3(chunkLayout.size) * Math.abs(chunkLayout.detTransform) * canonicalToPhysicalScale;
     const {limit, rank} = spec;
     const {nonDisplayLowerClipBound, nonDisplayUpperClipBound} = transformedSource;
     let sliceFraction = 1;

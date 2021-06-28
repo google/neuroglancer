@@ -45,7 +45,7 @@ export function estimateSliceAreaPerChunk(chunkLayout: ChunkLayout, viewMatrix: 
   // Each chunk dimension `i` can independently affect the z projection by the dot product of column
   // `i` of `chunkLayout.transform` and row 2 of `viewMatrix`.
   let viewZProjection = 0;
-  let chunkVolume = chunkLayout.detTransform;
+  let chunkVolume = Math.abs(chunkLayout.detTransform);
   const {transform, size} = chunkLayout;
   for (let i = 0; i < 3; ++i) {
     let sum = 0;
@@ -221,7 +221,7 @@ export interface VisibleLayerSources<
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;
 }
 
-const tempChunkLayout = new ChunkLayout(vec3.create(), new Float32Array(mat4.create()), 0);
+const tempChunkLayout = new ChunkLayout(vec3.create(), mat4.create(), 0);
 
 export class SliceViewProjectionParameters extends ProjectionParameters {
   /**

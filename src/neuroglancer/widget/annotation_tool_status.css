@@ -14,7 +14,68 @@
  * limitations under the License.
  */
 
+.neuroglancer-annotation-tool-status {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  overflow-x: scroll;
+  scrollbar-width: none;
+}
+
+.neuroglancer-annotation-tool-status::-webkit-scrollbar {
+  display: none;
+}
+
+.neuroglancer-annotation-tool-status-widget + .neuroglancer-annotation-tool-status-widget {
+  margin-left: 3px;
+}
+
+.neuroglancer-annotation-tool-status-widget:hover {
+  outline: 1px solid #fff;
+}
+
 .neuroglancer-annotation-tool-status-widget {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.neuroglancer-annotation-tool-status-widget-layer-number {
+  display: inline-block;
+  font: 10pt sans-serif;
+  font-weight: bold;
+  background-color: #9a7518;
+}
+
+.neuroglancer-annotation-tool-status-widget-key {
+  display: inline-block;
+  font: 9pt monospace;
+  color: #0ff;
+}
+
+.neuroglancer-annotation-tool-status-widget-key::before {
+  content: "[";
+}
+
+.neuroglancer-annotation-tool-status-widget-key::after {
+  content: "]";
+}
+
+.neuroglancer-annotation-tool-status-widget-key::before, .neuroglancer-annotation-tool-status-widget-key::after {
+  color: #999;
+}
+
+.neuroglancer-annotation-tool-status-widget-description {
+  display: inline-block;
   color: #3c3;
   font: 10pt sans-serif;
+  white-space: nowrap;
+}
+
+.neuroglancer-annotation-tool-status-widget-delete {
+  visibility: hidden;
+}
+
+.neuroglancer-annotation-tool-status-widget:hover > .neuroglancer-annotation-tool-status-widget-delete {
+  visibility: inherit;
 }

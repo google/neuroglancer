@@ -16,27 +16,30 @@
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
+import {AnnotationType} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, emptyInvalidCoordinateSpace, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
-import {DataSourceSpecification, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
-import {DataSourceProviderRegistry, DataSubsource} from 'neuroglancer/datasource';
+import {DataSourceProviderRegistry, DataSourceSpecification, DataSubsource, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {LayerDataSource, layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {DisplayDimensions, Position, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {RenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {registerNested, TrackableRefCounted, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {registerNested, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
 import {SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION, UserLayerSidePanelsState} from 'neuroglancer/ui/layer_side_panel_state';
 import {DEFAULT_SIDE_PANEL_LOCATION, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
-import {restoreTool, Tool} from 'neuroglancer/ui/tool';
+import {LayerToolBinder, SelectedLegacyTool, ToolBinder} from 'neuroglancer/ui/tool';
+import {gatherUpdate} from 'neuroglancer/util/array';
 import {Borrowed, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {emptyToUndefined, parseArray, parseFixedLengthArray, verifyBoolean, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {MessageList} from 'neuroglancer/util/message_list';
+import {AnyConstructor} from 'neuroglancer/util/mixin';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Trackable} from 'neuroglancer/util/trackable';
@@ -48,6 +51,7 @@ import {TabSpecification} from 'neuroglancer/widget/tab_view';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 const TOOL_JSON_KEY = 'tool';
+const TOOL_BINDINGS_JSON_KEY = 'toolBindings';
 const LOCAL_POSITION_JSON_KEY = 'localPosition';
 const LOCAL_COORDINATE_SPACE_JSON_KEY = 'localDimensions';
 const SOURCE_JSON_KEY = 'source';
@@ -221,8 +225,8 @@ export class UserLayer extends RefCounted {
 
   tabs = this.registerDisposer(new TabSpecification());
   panels = new UserLayerSidePanelsState(this);
-  tool: TrackableRefCounted<Tool> = this.registerDisposer(
-      new TrackableRefCounted<Tool>(value => restoreTool(this, value), value => value.toJSON()));
+  tool = this.registerDisposer(new SelectedLegacyTool(this));
+  toolBinder = new LayerToolBinder(this);
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
@@ -237,6 +241,7 @@ export class UserLayer extends RefCounted {
     this.tabs.changed.add(this.specificationChanged.dispatch);
     this.panels.specificationChanged.add(this.specificationChanged.dispatch);
     this.tool.changed.add(this.specificationChanged.dispatch);
+    this.toolBinder.changed.add(this.specificationChanged.dispatch);
     this.localPosition.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.layersChanged.dispatch);
@@ -325,8 +330,10 @@ export class UserLayer extends RefCounted {
 
   getLegacyDataSourceSpecifications(
       sourceSpec: string|undefined, layerSpec: any,
-      legacyTransform: CoordinateTransformSpecification|undefined): DataSourceSpecification[] {
+      legacyTransform: CoordinateTransformSpecification|undefined,
+      explicitSpecs: DataSourceSpecification[]): DataSourceSpecification[] {
     layerSpec;
+    explicitSpecs;
     if (sourceSpec === undefined) return [];
     return [layerDataSourceSpecificationFromJson(sourceSpec, legacyTransform)];
   }
@@ -345,7 +352,7 @@ export class UserLayer extends RefCounted {
     });
     const legacyTransform = verifyObjectProperty(
         layerSpec, TRANSFORM_JSON_KEY, coordinateTransformSpecificationFromLegacyJson);
-    specs.push(...this.getLegacyDataSourceSpecifications(legacySpec, layerSpec, legacyTransform));
+    specs.push(...this.getLegacyDataSourceSpecifications(legacySpec, layerSpec, legacyTransform, specs));
     specs = specs.filter(spec => spec.url);
     if (specs.length === 0) {
       specs.push(makeEmptyDataSourceSpecification());
@@ -355,6 +362,7 @@ export class UserLayer extends RefCounted {
 
   restoreState(specification: any) {
     this.tool.restoreState(specification[TOOL_JSON_KEY]);
+    this.toolBinder.restoreState(specification[TOOL_BINDINGS_JSON_KEY]);
     this.panels.restoreState(specification);
     this.localCoordinateSpace.restoreState(specification[LOCAL_COORDINATE_SPACE_JSON_KEY]);
     this.localPosition.restoreState(specification[LOCAL_POSITION_JSON_KEY]);
@@ -404,8 +412,7 @@ export class UserLayer extends RefCounted {
     let {renderLayers} = this;
     let {pickedRenderLayer} = pickState;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      result =
-          pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
+      result = pickedRenderLayer.transformPickedValue(pickState);
       result = this.transformPickedValue(result);
       if (result != null) return result;
     }
@@ -427,6 +434,7 @@ export class UserLayer extends RefCounted {
       type: this.type,
       [SOURCE_JSON_KEY]: dataSourcesToJson(this.dataSources),
       [TOOL_JSON_KEY]: this.tool.toJSON(),
+      [TOOL_BINDINGS_JSON_KEY]: this.toolBinder.toJSON(),
       [LOCAL_COORDINATE_SPACE_JSON_KEY]: this.localCoordinateSpace.toJSON(),
       [LOCAL_POSITION_JSON_KEY]: this.localPosition.toJSON(),
       [PICK_JSON_KEY]: this.pick.toJSON(),
@@ -444,6 +452,15 @@ export class UserLayer extends RefCounted {
   selectedValueFromJson(json: any) {
     return json;
   }
+
+  setLayerPosition(modelTransform: RenderLayerTransform, layerPosition: Float32Array) {
+    const {globalPosition} = this.manager.root;
+    const {localPosition} = this;
+    gatherUpdate(globalPosition.value, layerPosition, modelTransform.globalToRenderLayerDimensions);
+    gatherUpdate(localPosition.value, layerPosition, modelTransform.localToRenderLayerDimensions);
+    localPosition.changed.dispatch();
+    globalPosition.changed.dispatch();
+  }
 }
 
 function dataSourcesToJson(sources: readonly LayerDataSource[]) {
@@ -457,6 +474,10 @@ export class ManagedUserLayer extends RefCounted {
   localCoordinateSpaceCombiner =
       new CoordinateSpaceCombiner(this.localCoordinateSpace, isLocalDimension);
   localPosition = this.registerDisposer(new Position(this.localCoordinateSpace));
+
+  // Index of layer within root layer manager, counting only non-archived layers.  This is the layer
+  // number shown in the layer bar and layer list panel.
+  nonArchivedLayerIndex = -1;
 
   readyStateChanged = new NullarySignal();
   layerChanged = new NullarySignal();
@@ -600,6 +621,7 @@ export class LayerManager extends RefCounted {
   specificationChanged = new NullarySignal();
   boundPositions = new WeakSet<Position>();
   numDirectUsers = 0;
+  nonArchivedLayerIndexGeneration = -1;
   private renderLayerToManagedLayerMapGeneration = -1;
   private renderLayerToManagedLayerMap_ = new Map<RenderLayer, ManagedUserLayer>();
 
@@ -610,6 +632,34 @@ export class LayerManager extends RefCounted {
 
   private scheduleRemoveLayersWithSingleRef =
       this.registerCancellable(debounce(() => this.removeLayersWithSingleRef(), 0));
+
+  updateNonArchivedLayerIndices() {
+    const generation = this.layersChanged.count;
+    if (generation === this.nonArchivedLayerIndexGeneration) return;
+    this.nonArchivedLayerIndexGeneration = generation;
+    let index = 0;
+    for (const layer of this.managedLayers) {
+      if (!layer.archived) {
+        layer.nonArchivedLayerIndex = index++;
+      }
+    }
+    for (const layer of this.managedLayers) {
+      if (layer.archived) {
+        layer.nonArchivedLayerIndex = index++;
+      }
+    }
+  }
+
+  getLayerByNonArchivedIndex(index: number): ManagedUserLayer|undefined {
+    let i = 0;
+    for (const layer of this.managedLayers) {
+      if (!layer.archived) {
+        if (i === index) return layer;
+        ++i;
+      }
+    }
+    return undefined;
+  }
 
   get renderLayerToManagedLayerMap() {
     const generation = this.layersChanged.count;
@@ -818,12 +868,18 @@ export interface PickState {
   pickedRenderLayer: RenderLayer|null;
   pickedValue: Uint64;
   pickedOffset: number;
+  pickedAnnotationLayer: AnnotationLayerState|undefined;
+  pickedAnnotationId: string|undefined;
+  pickedAnnotationBuffer: ArrayBuffer|undefined;
+  pickedAnnotationBufferOffset: number|undefined;
+  pickedAnnotationType: AnnotationType|undefined;
 }
 
 export class MouseSelectionState implements PickState {
   changed = new NullarySignal();
   coordinateSpace: CoordinateSpace = emptyInvalidCoordinateSpace;
   position: Float32Array = kEmptyFloat32Vec;
+  unsnappedPosition: Float32Array = kEmptyFloat32Vec;
   active = false;
   displayDimensions: DisplayDimensions|undefined = undefined;
   pickedRenderLayer: RenderLayer|null = null;
@@ -833,6 +889,7 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationId: string|undefined = undefined;
   pickedAnnotationBuffer: ArrayBuffer|undefined = undefined;
   pickedAnnotationBufferOffset: number|undefined = undefined;
+  pickedAnnotationType: AnnotationType|undefined = undefined;
   pageX: number;
   pageY: number;
 
@@ -1414,6 +1471,9 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     this.location.restoreState(obj);
     const layerName = verifyObjectProperty(obj, 'layer', verifyOptionalString);
     const layer = layerName !== undefined ? this.layerManager.getLayerByName(layerName) : undefined;
+    if (layer === undefined) {
+      this.visible = false;
+    }
     this.layer = layer;
   }
 
@@ -1714,7 +1774,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
       public selectionState: Borrowed<TrackableDataSelectionState>,
       public selectedLayer: Borrowed<SelectedLayerState>,
       public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
-      public globalPosition: Borrowed<Position>) {
+      public globalPosition: Borrowed<Position>, public toolBinder: Borrowed<ToolBinder>) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
     this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
@@ -1877,7 +1937,8 @@ export class LayerSubsetSpecification extends LayerListSpecification {
   }
 }
 
-export type UserLayerConstructor = typeof UserLayer;
+export type UserLayerConstructor<LayerType extends UserLayer = UserLayer> =
+    typeof UserLayer&AnyConstructor<LayerType>;
 
 export const layerTypes = new Map<string, UserLayerConstructor>();
 const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();

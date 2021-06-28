@@ -23,11 +23,12 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseFixedLengthArray, verifyFiniteFloat, verifyInt, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, normalizeDataTypeInterval, parseDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/util/lerp';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {GL} from 'neuroglancer/webgl/context';
 import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
-import {DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, defineInvlerpShaderFunction, enableLerpShaderFunction, normalizeDataTypeInterval, parseDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/webgl/lerp';
+import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 export interface ShaderSliderControl {
@@ -59,7 +60,8 @@ export interface ShaderCheckboxControl {
   default: boolean;
 }
 
-export type ShaderUiControl = ShaderSliderControl|ShaderColorControl|ShaderInvlerpControl|ShaderCheckboxControl;
+export type ShaderUiControl =
+    ShaderSliderControl|ShaderColorControl|ShaderInvlerpControl|ShaderCheckboxControl;
 
 export interface ShaderControlParseError {
   line: number;
@@ -476,7 +478,7 @@ function uniformName(controlName: string) {
 }
 
 export function addControlsToBuilder(
-  builderState: ShaderControlsBuilderState, builder: ShaderBuilder) {
+    builderState: ShaderControlsBuilderState, builder: ShaderBuilder) {
   const {builderValues} = builderState;
   for (const [name, control] of builderState.parseResult.controls) {
     const uName = uniformName(name);
@@ -615,11 +617,13 @@ function getControlTrackable(control: ShaderUiControl):
   }
 }
 
-export type ShaderControlMap = Map<string, {
-  control: ShaderUiControl,
-  trackable: TrackableValueInterface<any>,
-  getBuilderValue: (value: any) => any,
-}>;
+export interface SingleShaderControlState {
+  control: ShaderUiControl;
+  trackable: TrackableValueInterface<any>;
+  getBuilderValue: (value: any) => any;
+}
+
+export type ShaderControlMap = Map<string, SingleShaderControlState>;
 
 export type ShaderBuilderValues = {
   [key: string]: any

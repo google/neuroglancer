@@ -26,7 +26,6 @@ import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuro
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
 import {Signal} from 'neuroglancer/util/signal';
 import {VirtualList} from 'neuroglancer/widget/virtual_list';
-import ResizeObserver from 'resize-observer-polyfill';
 
 export type {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 

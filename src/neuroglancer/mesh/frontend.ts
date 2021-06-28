@@ -27,6 +27,8 @@ import {forEachVisibleSegmentToDraw, registerRedrawWhenSegmentationDisplayState3
 import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, scaleMat3Output, vec3, vec4} from 'neuroglancer/util/geom';
+import * as matrix from 'neuroglancer/util/matrix';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
@@ -36,6 +38,9 @@ import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
 
+// To validate the octrees and to determine the multiscale fragment responsible for each framebuffer
+// location, set `DEBUG_MULTISCALE_FRAGMENTS=true` and also set `DEBUG_PICKING=true` in
+// `src/neuroglancer/object_picking.ts`.
 const DEBUG_MULTISCALE_FRAGMENTS = false;
 
 function copyMeshDataToGpu(gl: GL, chunk: FragmentChunk|MultiscaleFragmentChunk) {
@@ -327,6 +332,10 @@ export class MeshLayer extends
     return displayState.objectAlpha.value < 1.0 || displayState.silhouetteRendering.value > 0;
   }
 
+  get transparentPickEnabled() {
+    return this.displayState.transparentPickEnabled.value;
+  }
+
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
   }
@@ -525,6 +534,10 @@ export class MultiscaleMeshLayer extends
     return displayState.objectAlpha.value < 1.0 || displayState.silhouetteRendering.value > 0;
   }
 
+  get transparentPickEnabled() {
+    return this.displayState.transparentPickEnabled.value;
+  }
+
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
   }
@@ -560,7 +573,7 @@ export class MultiscaleMeshLayer extends
     scaleMat3Output(
         tempMat3, tempMat3,
         renderContext.projectionParameters.displayDimensionRenderInfo.voxelPhysicalScales);
-    const scaleMultiplier = Math.pow(mat3.determinant(tempMat3), 1 / 3);
+    const scaleMultiplier = Math.pow(Math.abs(mat3.determinant(tempMat3)), 1 / 3);
 
     const {chunks} = this.source;
     const fragmentChunks = this.source.fragmentSource.chunks;
@@ -580,66 +593,86 @@ export class MultiscaleMeshLayer extends
     let totalManifestChunks = 0;
     let presentManifestChunks = 0;
 
-    forEachVisibleSegmentToDraw(displayState, this, renderContext.emitColor, renderContext.emitPickID ? renderContext.pickIDs : undefined, (objectId, color, pickIndex) => {
-      const key = getObjectKey(objectId);
-      const manifestChunk = chunks.get(key);
-      ++totalManifestChunks;
-      if (manifestChunk === undefined) return;
-      ++presentManifestChunks;
-      const {manifest} = manifestChunk;
-      const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
-      if (DEBUG_MULTISCALE_FRAGMENTS) {
-        validateOctree(octree);
-      }
-      if (renderContext.emitColor) {
-        meshShaderManager.setColor(gl, shader, color!);
-      }
-      if (renderContext.emitPickID) {
-        meshShaderManager.setPickID(gl, shader, pickIndex!);
-      }
-      if (DEBUG_MULTISCALE_FRAGMENTS) {
-        console.log('drawing object, numChunks=', manifest.octree.length / 5, manifest.octree);
-      }
-      getMultiscaleChunksToDraw(
-          manifest, modelViewProjection, clippingPlanes, detailCutoff, projectionParameters.width,
-          projectionParameters.height,
-          (lod, chunkIndex, renderScale) => {
-            const has = hasFragmentChunk(fragmentChunks, key, lod, chunkIndex);
-            if (renderContext.emitColor) {
-              renderScaleHistogram.add(
-                  manifest.lodScales[lod] * scaleMultiplier, renderScale, has ? 1 : 0, has ? 0 : 1);
+    forEachVisibleSegmentToDraw(
+        displayState, this, renderContext.emitColor,
+        renderContext.emitPickID ? renderContext.pickIDs : undefined,
+        (objectId, color, pickIndex) => {
+          const key = getObjectKey(objectId);
+          const manifestChunk = chunks.get(key);
+          ++totalManifestChunks;
+          if (manifestChunk === undefined) return;
+          ++presentManifestChunks;
+          const {manifest} = manifestChunk;
+          const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
+          if (DEBUG_MULTISCALE_FRAGMENTS) {
+            try {
+              validateOctree(octree);
+            } catch (e) {
+              console.log(`invalid octree for object=${objectId}: ${e.message}`)
             }
-            return has;
-          },
-          (lod, chunkIndex, subChunkBegin, subChunkEnd) => {
-            const fragmentKey = getMultiscaleFragmentKey(key, lod, chunkIndex);
-            const fragmentChunk = fragmentChunks.get(fragmentKey)!;
-            const x = octree[5 * chunkIndex], y = octree[5 * chunkIndex + 1],
-                  z = octree[5 * chunkIndex + 2];
-            const scale = 1 << lod;
-            if (fragmentRelativeVertices) {
-              gl.uniform3f(
-                  shader.uniform('uFragmentOrigin'),
-                  chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
-                      vertexOffsets[lod * 3 + 0],
-                  chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
-                      vertexOffsets[lod * 3 + 1],
-                  chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
-                      vertexOffsets[lod * 3 + 2]);
-              gl.uniform3f(
-                  shader.uniform('uFragmentShape'), chunkShape[0] * scale, chunkShape[1] * scale,
-                  chunkShape[2] * scale);
-            }
-
-            meshShaderManager.drawMultiscaleFragment(
-                gl,
-                shader,
-                fragmentChunk,
-                subChunkBegin,
-                subChunkEnd,
-            );
-          });
-    });
+          }
+          if (renderContext.emitColor) {
+            meshShaderManager.setColor(gl, shader, color!);
+          }
+          if (renderContext.emitPickID) {
+            meshShaderManager.setPickID(gl, shader, pickIndex!);
+          }
+          getMultiscaleChunksToDraw(
+              manifest, modelViewProjection, clippingPlanes, detailCutoff,
+              projectionParameters.width, projectionParameters.height,
+              (lod, chunkIndex, renderScale) => {
+                const has = hasFragmentChunk(fragmentChunks, key, lod, chunkIndex);
+                if (renderContext.emitColor) {
+                  renderScaleHistogram.add(
+                      manifest.lodScales[lod] * scaleMultiplier, renderScale, has ? 1 : 0,
+                      has ? 0 : 1);
+                }
+                return has;
+              },
+              (lod, chunkIndex, subChunkBegin, subChunkEnd) => {
+                const fragmentKey = getMultiscaleFragmentKey(key, lod, chunkIndex);
+                const fragmentChunk = fragmentChunks.get(fragmentKey)!;
+                const x = octree[5 * chunkIndex], y = octree[5 * chunkIndex + 1],
+                      z = octree[5 * chunkIndex + 2];
+                const scale = 1 << lod;
+                if (fragmentRelativeVertices) {
+                  gl.uniform3f(
+                      shader.uniform('uFragmentOrigin'),
+                      chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
+                          vertexOffsets[lod * 3 + 0],
+                      chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
+                          vertexOffsets[lod * 3 + 1],
+                      chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
+                          vertexOffsets[lod * 3 + 2]);
+                  gl.uniform3f(
+                      shader.uniform('uFragmentShape'), chunkShape[0] * scale,
+                      chunkShape[1] * scale, chunkShape[2] * scale);
+                }
+                if (DEBUG_MULTISCALE_FRAGMENTS) {
+                  const message = `lod=${lod}, chunkIndex=${chunkIndex}, subChunkBegin=${
+                      subChunkBegin}, subChunkEnd=${subChunkEnd}, uFragmentOrigin=${
+                          [chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
+                               vertexOffsets[lod * 3 + 0],
+                           chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
+                               vertexOffsets[lod * 3 + 1],
+                           chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
+                               vertexOffsets[lod * 3 + 2]]}, uFragmentShape=${
+                          [chunkShape[0] * scale, chunkShape[1] * scale, chunkShape[2] * scale]}`;
+                  const pickIndex =
+                      renderContext.pickIDs.registerUint64(this, objectId, 1, message);
+                  if (renderContext.emitPickID) {
+                    meshShaderManager.setPickID(gl, shader, pickIndex!);
+                  }
+                }
+                meshShaderManager.drawMultiscaleFragment(
+                    gl,
+                    shader,
+                    fragmentChunk,
+                    subChunkBegin,
+                    subChunkEnd,
+                );
+              });
+        });
     renderScaleHistogram.add(
         Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, presentManifestChunks,
         totalManifestChunks - presentManifestChunks);
@@ -688,6 +721,25 @@ export class MultiscaleMeshLayer extends
           }, () => {});
     });
     return hasAllChunks;
+  }
+
+  getObjectPosition(id: Uint64): Float32Array|undefined {
+    const transform = this.displayState.transform.value;
+    if (transform.error !== undefined) return undefined;
+    const chunk = this.source.chunks.get(getObjectKey(id));
+    if (chunk === undefined) return undefined;
+    const {manifest} = chunk;
+    const {clipLowerBound, clipUpperBound} = manifest;
+    const {rank} = transform;
+    // Center position, in model coordinates.
+    const modelCenter = new Float32Array(rank);
+    for (let i = 0; i < 3; ++i) {
+      modelCenter[i] = (clipLowerBound[i] + clipUpperBound[i]) / 2;
+    }
+    const layerCenter = new Float32Array(rank);
+    matrix.transformPoint(
+      layerCenter, transform.modelToRenderLayerTransform, rank + 1, modelCenter, rank);
+    return layerCenter;
   }
 }
 

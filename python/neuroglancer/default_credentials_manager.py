@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import credentials_provider, google_credentials, boss_credentials
+from . import credentials_provider, google_credentials, boss_credentials, dvid_credentials
 
 default_credentials_manager = credentials_provider.CredentialsManager()
 boss_credentials_provider = boss_credentials.BossCredentialsProvider()
@@ -31,6 +31,11 @@ default_credentials_manager.register(
 default_credentials_manager.register(
     u'boss',
     lambda _parameters: boss_credentials_provider
+)
+
+default_credentials_manager.register(
+    u'DVID',
+    lambda parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider(parameters)
 )
 
 def set_boss_token(token):

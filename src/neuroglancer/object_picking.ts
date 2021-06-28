@@ -46,8 +46,8 @@ export class PickIDManager {
     this.nextPickID = 1;
   }
 
-  registerUint64(renderLayer: RenderLayer, x: Uint64, count = 1): number {
-    return this.register(renderLayer, count, x.low, x.high);
+  registerUint64(renderLayer: RenderLayer, x: Uint64, count = 1, data: any = null): number {
+    return this.register(renderLayer, count, x.low, x.high, data);
   }
 
   register(renderLayer: RenderLayer, count = 1, low = 0, high = 0, data: any = null): number {
@@ -83,15 +83,24 @@ export class PickIDManager {
     const valuesOffset = lower * 3;
     const pickedOffset = mouseState.pickedOffset = pickID - values[valuesOffset];
     if (DEBUG_PICKING) {
-      console.log(`Looking up pick ID ${pickID}: renderLayer`, pickedRenderLayer, `offset=${pickedOffset}`);
+      console.log(
+          `Looking up pick ID ${pickID}: renderLayer`, pickedRenderLayer, `offset=${pickedOffset}`);
     }
     let {pickedValue} = mouseState;
     pickedValue.low = values[valuesOffset + 1];
     pickedValue.high = values[valuesOffset + 2];
     mouseState.pickedAnnotationId = undefined;
     mouseState.pickedAnnotationLayer = undefined;
+    mouseState.pickedAnnotationBuffer = undefined;
+    mouseState.pickedAnnotationBufferOffset = undefined;
+    mouseState.pickedAnnotationType = undefined;
+    const data = this.pickData[lower];
     if (pickedRenderLayer !== null) {
-      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset, this.pickData[lower]);
+      if (DEBUG_PICKING) {
+        console.log(
+            `Picked value=${pickedValue}, offset=${pickedOffset}, data=${this.pickData[lower]}`);
+      }
+      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset, data);
     }
   }
 }

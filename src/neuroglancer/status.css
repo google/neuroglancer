@@ -18,14 +18,23 @@
   position: absolute;
   bottom: 0px;
   z-index: 100;
-  background-color: grey;
+  background-color: #808080;
   color: white;
   margin: 0px;
   padding: 0px;
+  font: 10pt sans-serif;
 }
 
 #statusContainer li {
   width: 100vw;
   max-height: 25vh;
   overflow-y: auto;
+}
+
+.neuroglancer-status-header {
+  display: inline-block;
+  font: 10pt sans-serif;
+  font-weight: bold;
+  background-color: #333;
+  padding: 2px;
 }

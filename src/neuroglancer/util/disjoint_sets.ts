@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 const rankSymbol = Symbol('disjoint_sets:rank');
@@ -98,6 +99,7 @@ function isRootElement(v: any) {
  */
 export class DisjointUint64Sets {
   private map = new Map<string, Uint64>();
+  highBitRepresentative: WatchableValueInterface<boolean> = new WatchableValue<boolean>(false);
   generation = 0;
 
   get(x: Uint64): Uint64 {
@@ -128,6 +130,10 @@ export class DisjointUint64Sets {
     return findRepresentative(element);
   }
 
+  /**
+   * Union the sets containing `a` and `b`.
+   * @returns `false` if `a` and `b` are already in the same set, otherwise `true`.
+   */
   link(a: Uint64, b: Uint64): boolean {
     a = this.makeSet(a);
     b = this.makeSet(b);
@@ -139,8 +145,27 @@ export class DisjointUint64Sets {
     spliceCircularLists(a, b);
     let aMin = (<any>a)[minSymbol];
     let bMin = (<any>b)[minSymbol];
-    newNode[minSymbol] = Uint64.less(aMin, bMin) ? aMin : bMin;
+    newNode[minSymbol] = Uint64.less(aMin, bMin) !== this.highBitRepresentative.value ? aMin : bMin;
     return true;
+  }
+
+  linkAll(ids: Uint64[]) {
+    for (let i = 1, length = ids.length; i < length; ++i) {
+      this.link(ids[0], ids[i]);
+    }
+  }
+
+  /**
+   * Unlinks all members of the specified set.
+   */
+  deleteSet(x: Uint64) {
+    const {map} = this;
+    let changed = false;
+    for (const y of this.setElements(x)) {
+      map.delete(y.toString());
+      changed = true;
+    }
+    return changed;
   }
 
   * setElements(a: Uint64): IterableIterator<Uint64> {
@@ -172,6 +197,14 @@ export class DisjointUint64Sets {
       temp[0] = element;
       temp[1] = findRepresentative(element)[minSymbol];
       yield temp;
+    }
+  }
+
+  * roots() {
+    for (let element of this.map.values()) {
+      if (isRootElement(element)) {
+        yield element;
+      }
     }
   }
 

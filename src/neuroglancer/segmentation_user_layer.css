@@ -22,7 +22,6 @@
 
 .neuroglancer-segmentation-rendering-tab .neuroglancer-shader-code-widget {
   height: 6em;
-  width: 60ch;
 }
 
 .neuroglancer-segmentation-dropdown-skeleton-shader-header {
@@ -36,13 +35,19 @@
   height: 80vh;
 }
 
-.neuroglancer-segment-list-entry, .neuroglancer-selection-details-segment {
+.neuroglancer-segment-list-entry {
   display: flex;
   flex-direction: row;
   width: min-content;
   min-width: 100%;
   background-color: black;
-  align-items: center;
+  align-items: start;
+}
+
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-entry-double-line {
+  display: inline-flex;
+  min-width: initial;
+  background-color: initial;
 }
 
 .neuroglancer-segment-list-entry[data-selected="true"],
@@ -50,10 +55,20 @@
   background-color: #222;
 }
 
+.neuroglancer-segment-list-entry-copy-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-segment-list-entry-id-container {
+  order: 1;
+  align-self: center;
+}
+
+
 .neuroglancer-segment-list-entry-id,
 .neuroglancer-selection-details-segment-id {
-  order: 1;
-  display: inline-block;
+  display: block;
   font-family: monospace;
   font-size: medium;
   flex-shrink: 0;
@@ -72,7 +87,7 @@
 .neuroglancer-segment-list-entry-sticky {
   white-space: nowrap;
   flex-direction: row;
-  align-items: center;
+  align-items: start;
   background-color: inherit;
   display: flex;
 }
@@ -102,4 +117,12 @@
 .neuroglancer-selection-details-segment-property-value {
   text-align: right;
   flex: 1;
+}
+
+.neuroglancer-segmentation-toolbox {
+  display: inline-block;
+}
+
+.neuroglancer-segmentation-toolbox .neuroglancer-tool-button + .neuroglancer-tool-button {
+  margin-left: 1em;
 }

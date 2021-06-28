@@ -40,7 +40,7 @@ class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider
                 return credentials !== undefined && invalidGeneration !== credentials.generation;
               };
           if (isValidCredentials(validCredentials)) {
-            resolve(validCredentials);
+            resolve(validCredentials!);
             return;
           }
           this.invalidCredentials.value = invalidGeneration;
@@ -49,7 +49,7 @@ class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider
             const newCredentials = this.validCredentials.value;
             if (isValidCredentials(newCredentials)) {
               disposer();
-              resolve(newCredentials);
+              resolve(newCredentials!);
             }
           });
         });

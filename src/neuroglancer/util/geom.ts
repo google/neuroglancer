@@ -111,7 +111,7 @@ export function transformVectorByMat4Transpose(out: vec3, a: vec3, m: mat4) {
 
 export function translationRotationScaleZReflectionToMat4(
     out: mat4, translation: vec3, rotation: quat, scale: vec3, zReflection: number) {
-  const temp = out;
+  const temp: Float32Array = out;
   out[0] = scale[0];
   out[1] = scale[1];
   out[2] = scale[2] * zReflection;
@@ -363,4 +363,27 @@ export function disableZProjection(mat: mat4) {
   mat[10] = 0;
   mat[14] = 0;
   return mat;
+}
+
+const tempVec3 = vec3.create();
+
+// Determines the bounding box in world coordinates of the view frustrum for a given view-projection
+// matrix.
+//
+// https://gamedev.stackexchange.com/questions/29999/how-do-i-create-a-bounding-frustum-from-a-view-projection-matrix
+export function getViewFrustrumWorldBounds(
+  invViewProjectionMat: mat4, bounds: Float32Array) {
+  bounds[0] = bounds[1] = bounds[2] = Number.POSITIVE_INFINITY;
+  bounds[3] = bounds[4] = bounds[5] = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < 8; ++i) {
+    tempVec3[0] = 2 * (i & 1) - 1;
+    tempVec3[1] = 2 * ((i >>> 1) & 1) - 1;
+    tempVec3[2] = 2 * ((i >>> 2) & 1) - 1;
+    vec3.transformMat4(tempVec3, tempVec3, invViewProjectionMat);
+    for (let j = 0; j < 3; ++j) {
+      const x = tempVec3[j];
+      bounds[j] = Math.min(bounds[j], x);
+      bounds[j + 3] = Math.max(bounds[j + 3], x);
+    }
+  }
 }

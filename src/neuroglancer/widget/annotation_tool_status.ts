@@ -17,17 +17,35 @@
 import './annotation_tool_status.css';
 
 import {SelectedLayerState} from 'neuroglancer/layer';
+import {addToolKeyBindHandlers, LegacyTool, Tool, ToolBinder} from 'neuroglancer/ui/tool';
+import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {removeChildren} from 'neuroglancer/util/dom';
+import {defaultStringCompare} from 'neuroglancer/util/string';
 
 export class AnnotationToolStatusWidget extends RefCounted {
   element = document.createElement('div');
   private unbindPreviousLayer: (() => void)|undefined;
 
-  constructor(public selectedLayer: SelectedLayerState) {
+  get selectedTool(): LegacyTool|undefined {
+    const layer = this.selectedLayer.layer;
+    if (layer === undefined) {
+      return undefined;
+    }
+    const userLayer = layer.layer;
+    if (userLayer === null) {
+      return undefined;
+    }
+    return userLayer.tool.value;
+  }
+
+  constructor(public selectedLayer: SelectedLayerState, public toolBinder: ToolBinder) {
     super();
     const {element} = this;
-    element.className = 'neuroglancer-annotation-tool-status-widget';
+    element.className = 'neuroglancer-annotation-tool-status';
     this.registerDisposer(selectedLayer.changed.add(() => this.selectedLayerChanged()));
+    this.registerDisposer(toolBinder.changed.add(this.updateView));
+    this.registerDisposer(this.selectedLayer.layerManager.layersChanged.add(this.updateView));
     this.selectedLayerChanged();
   }
 
@@ -53,23 +71,60 @@ export class AnnotationToolStatusWidget extends RefCounted {
     this.unbindPreviousLayer = undefined;
   }
 
-  private getDescriptionText(): string|undefined {
-    const layer = this.selectedLayer.layer;
-    if (layer === undefined) {
-      return undefined;
+  private makeWidget(context: RefCounted, tool: Tool|LegacyTool): HTMLElement {
+    const element = document.createElement('div');
+    element.title = 'dblclick → unbind';
+    if (tool instanceof Tool) {
+      element.title += `, click → bind key`;
     }
-    const userLayer = layer.layer;
-    if (userLayer === null) {
-      return undefined;
+    element.className = 'neuroglancer-annotation-tool-status-widget';
+    const layerNumberElement = document.createElement('div');
+    layerNumberElement.className = 'neuroglancer-annotation-tool-status-widget-layer-number';
+    const {managedLayer} = tool.layer;
+    managedLayer.manager.rootLayers.updateNonArchivedLayerIndices();
+    const index = managedLayer.nonArchivedLayerIndex;
+    layerNumberElement.textContent = (index + 1).toString();
+    const descriptionElement = document.createElement('div');
+    descriptionElement.className = 'neuroglancer-annotation-tool-status-widget-description';
+    descriptionElement.textContent = tool.description;
+    element.addEventListener('dblclick', () => {
+      if (tool instanceof LegacyTool) {
+        tool.layer.tool.value = undefined;
+      } else {
+        this.toolBinder.set(tool.keyBinding!, undefined);
+      }
+    });
+    if (tool instanceof Tool) {
+      const keyElement = document.createElement('div');
+      keyElement.className = 'neuroglancer-annotation-tool-status-widget-key';
+      keyElement.textContent = tool.keyBinding!;
+      element.appendChild(keyElement);
+      addToolKeyBindHandlers(
+          context, element, key => tool.layer.toolBinder.set(key, tool.addRef()));
     }
-    const tool = userLayer.tool.value;
-    if (tool === undefined) {
-      return undefined;
-    }
-    return tool.description;
+    element.appendChild(layerNumberElement);
+    element.appendChild(descriptionElement);
+    return element;
   }
 
-  private updateView() {
-    this.element.textContent = this.getDescriptionText() || '';
-  }
+  private viewContext: RefCounted|undefined = undefined;
+
+  private updateView = this.registerCancellable(animationFrameDebounce(() => {
+    let {viewContext} = this;
+    if (viewContext !== undefined) {
+      this.unregisterDisposer(viewContext);
+      viewContext.dispose();
+    }
+    this.viewContext = viewContext = this.registerDisposer(new RefCounted());
+    removeChildren(this.element);
+    const {selectedTool} = this;
+    if (selectedTool !== undefined) {
+      this.element.appendChild(this.makeWidget(viewContext, selectedTool));
+    }
+    const bindings = Array.from(this.toolBinder.bindings);
+    bindings.sort(([a], [b]) => defaultStringCompare(a, b));
+    for (const [, tool] of bindings) {
+      this.element.appendChild(this.makeWidget(viewContext, tool));
+    }
+  }));
 }

@@ -22,13 +22,40 @@ const {Builder} = require('./esbuild');
 const path = require('path');
 const fs = require('fs');
 
+// yargs strips quotes from string values in config objects
+// (https://github.com/yargs/yargs-parser/issues/385).  As a workaround, we add
+// in extra quotes.
+function mungeConfig(config) {
+  if (Array.isArray(config)) {
+    return config.map(mungeConfig);
+  }
+  if (typeof config === 'object') {
+    const result = {};
+    for (const key of Object.keys(config)) {
+      result[key] = mungeConfig(config[key]);
+    }
+    return result;
+  }
+  if (typeof config !== 'string') {
+    return config;
+  }
+  return `"${config}"`;
+}
+
 function parseDefines(definesArg) {
   const defines = {};
+  if (typeof definesArg === 'object' && !Array.isArray(definesArg)) {
+    definesArg = [definesArg];
+  }
   let defineList = definesArg || [];
   if (typeof defineList === 'string') {
     defineList = [defineList];
   }
   for (const entry of defineList) {
+    if (typeof entry !== 'string') {
+      Object.assign(defines, entry);
+      continue;
+    }
     const splitPoint = entry.indexOf('=');
     let key, value;
     if (splitPoint === -1) {
@@ -39,6 +66,12 @@ function parseDefines(definesArg) {
       value = entry.substring(splitPoint + 1);
     }
     defines[key] = value;
+  }
+  for (const key of Object.keys(defines)) {
+    const value = defines[key];
+    if (typeof value !== 'string') {
+      defines[key] = JSON.stringify(value);
+    }
   }
   return defines;
 }
@@ -81,8 +114,9 @@ async function main(argv) {
     minify,
     python,
     module: moduleBuild,
-    define: parseDefines(argv.define),
+    define: argv.define,
     inject: argv.inject,
+    googleTagManager: argv.googleTagManager,
   });
   if (moduleBuild) {
     try {
@@ -107,7 +141,7 @@ async function main(argv) {
   }
 }
 if (require.main === module) {
-  const {argv} =
+  const argv =
       require('yargs')
           .options({
             config: {
@@ -124,6 +158,7 @@ if (require.main === module) {
             },
             define: {
               type: 'array',
+              coerce: parseDefines,
               default: [],
               description:
                   'JavaScript global identifiers to define when building.  Usage: `--define VARIABLE=EXPR`.',
@@ -159,11 +194,25 @@ if (require.main === module) {
               default: 8080,
               description: 'Port number for the development server',
             },
+            configfile: {
+              config: true,
+              description: 'Additional JSON/JavaScript config file to load.',
+              configParser: x => mungeConfig(require(x)),
+            },
+            ['google-tag-manager']: {
+              group: 'Customization',
+              type: 'string',
+              nargs: 1,
+              description: 'Google tag manager id to include in index.html',
+            },
           })
           .strict()
+          .config(mungeConfig(require('./config.js')))
           .demandCommand(0, 0)
           .version(false)
-          .help();
+          .env('NEUROGLANCER')
+          .help()
+          .parse();
   if (argv.serve) {
     argv.watch = true;
   }

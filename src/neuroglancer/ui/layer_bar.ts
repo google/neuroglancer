@@ -19,7 +19,7 @@ import './layer_bar.css';
 
 import svg_plus from 'ikonate/icons/plus.svg';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {addNewLayer, LayerListSpecification, makeLayer, ManagedUserLayer, SelectedLayerState} from 'neuroglancer/layer';
+import {addNewLayer, deleteLayer, LayerListSpecification, makeLayer, ManagedUserLayer, SelectedLayerState} from 'neuroglancer/layer';
 import {LinkedViewerNavigationState} from 'neuroglancer/layer_group_viewer';
 import {NavigationLinkType} from 'neuroglancer/navigation_state';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -29,6 +29,7 @@ import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {preventDrag} from 'neuroglancer/util/drag_and_drop';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
+import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 
@@ -64,15 +65,45 @@ class LayerWidget extends RefCounted {
     prefetchProgress.className = 'neuroglancer-layer-item-prefetch-progress';
     layerNumberElement.className = 'neuroglancer-layer-item-number';
     valueElement.className = 'neuroglancer-layer-item-value';
+
+    const valueContainer = document.createElement('div');
+    valueContainer.className = 'neuroglancer-layer-item-value-container';
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'neuroglancer-layer-item-button-container';
     const closeElement = makeCloseButton();
     closeElement.title = 'Remove layer from this layer group';
     closeElement.addEventListener('click', (event: MouseEvent) => {
-      this.panel.layerManager.removeManagedLayer(this.layer);
+      if (this.panel.layerManager === this.panel.manager.rootLayers) {
+        // The layer bar corresponds to a TopLevelLayerListSpecification.  That means there is just
+        // a single layer group, archive the layer unconditionally.
+        this.layer.setArchived(true);
+      } else {
+        // The layer bar corresponds to a LayerSubsetSpecification.  The layer is always contained
+        // in the root LayerManager, as well as the LayerManager for each LayerSubsetSpecification.
+        if (this.layer.containers.size > 2) {
+          // Layer is contained in at least one other layer group, just remove it from this layer
+          // group.
+          this.panel.layerManager.removeManagedLayer(this.layer);
+        } else {
+          // Layer is not contained in any other layer group.  Archive it.
+          this.layer.setArchived(true);
+        }
+      }
+      event.stopPropagation();
+    });
+    const deleteElement = makeDeleteButton();
+    deleteElement.title = 'Delete this layer';
+    deleteElement.addEventListener('click', (event: MouseEvent) => {
+      deleteLayer(this.layer);
       event.stopPropagation();
     });
     element.appendChild(layerNumberElement);
+    valueContainer.appendChild(valueElement);
+    valueContainer.appendChild(buttonContainer);
+    buttonContainer.appendChild(closeElement);
+    buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
-    element.appendChild(valueElement);
+    element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(new PositionWidget(
         layer.localPosition, layer.localCoordinateSpaceCombiner, {copyButton: false}));
     element.appendChild(positionWidget.element);
@@ -82,7 +113,6 @@ class LayerWidget extends RefCounted {
     positionWidget.element.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
     });
-    element.appendChild(closeElement);
     element.addEventListener('click', (event: MouseEvent) => {
       if (event.ctrlKey) {
         panel.selectedLayer.toggle(layer);
@@ -94,7 +124,8 @@ class LayerWidget extends RefCounted {
     });
 
     element.addEventListener('contextmenu', (event: MouseEvent) => {
-      panel.selectedLayer.toggle(layer);
+      panel.selectedLayer.layer = layer;
+      panel.selectedLayer.visible = true;
       event.stopPropagation();
       event.preventDefault();
     });
@@ -303,11 +334,12 @@ export class LayerBar extends RefCounted {
     let container = this.element;
     let layers = new Set();
     let nextChild = this.layerWidgetInsertionPoint.nextElementSibling;
+    this.manager.rootLayers.updateNonArchivedLayerIndices();
     for (const layer of this.manager.layerManager.managedLayers) {
       if (layer.archived && !this.dropLayers?.layers.has(layer)) continue;
       layers.add(layer);
       let widget = this.layerWidgets.get(layer);
-      const layerIndex = this.manager.rootLayers.managedLayers.indexOf(layer);
+      const layerIndex = layer.nonArchivedLayerIndex;
       if (widget === undefined) {
         widget = new LayerWidget(layer, this);
         this.layerWidgets.set(layer, widget);

@@ -19,14 +19,14 @@ import 'neuroglancer/annotation/line';
 import 'neuroglancer/annotation/point';
 import 'neuroglancer/annotation/ellipsoid';
 
-import {AnnotationBase, AnnotationSerializer, AnnotationSource, annotationTypeHandlers, annotationTypes, SerializedAnnotations} from 'neuroglancer/annotation';
+import {AnnotationBase, AnnotationSerializer, AnnotationSource, annotationTypeHandlers, annotationTypes, formatAnnotationPropertyValue, SerializedAnnotations} from 'neuroglancer/annotation';
 import {AnnotationLayerState, OptionalSegmentationDisplayState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID, forEachVisibleAnnotationChunk} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, AnnotationGeometryData, computeNumPickIds, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationRenderContext, AnnotationRenderHelper, getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {ChunkState, LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
-import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
+import {LayerView, MouseSelectionState, PickState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
@@ -43,6 +43,7 @@ import {crossSectionBoxWireFrameShader, projectionViewBoxWireFrameShader} from '
 import {constantWatchableValue, makeCachedDerivedWatchableValue, NestedStateManager, registerNested, registerNestedSync, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {ValueOrError} from 'neuroglancer/util/error';
 import {mat4} from 'neuroglancer/util/geom';
 import {MessageList, MessageSeverity} from 'neuroglancer/util/message_list';
@@ -497,6 +498,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
           mouseState.pickedAnnotationLayer = this.base.state;
           mouseState.pickedOffset = partIndex;
           mouseState.pickedAnnotationBuffer = serializedAnnotations.data.buffer;
+          mouseState.pickedAnnotationType = annotationType;
           mouseState.pickedAnnotationBufferOffset = serializedAnnotations.data.byteOffset +
               typeToOffset[annotationType] +
               instanceIndex *
@@ -535,8 +537,21 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
       }
     }
 
-    transformPickedValue(_pickedValue: Uint64, _pickedOffset: number) {
-      return undefined;
+    transformPickedValue(pickState: PickState) {
+      const {pickedAnnotationBuffer} = pickState;
+      if (pickedAnnotationBuffer === undefined) return undefined;
+      const {properties} = this.base.source;
+      if (properties.length === 0) return undefined;
+      const {pickedAnnotationBufferOffset, pickedAnnotationType} = pickState;
+      const handler = annotationTypeHandlers[pickedAnnotationType!];
+      const {rank, annotationPropertySerializer} = this.base.source;
+      const baseNumBytes = handler.serializedBytes(rank);
+      // Check if there are any properties.
+      const propertyValues = new Array(properties.length);
+      annotationPropertySerializer.deserialize(
+          new DataView(pickedAnnotationBuffer), pickedAnnotationBufferOffset! + baseNumBytes,
+          /*isLittleEndian=*/ Endianness.LITTLE === ENDIANNESS, propertyValues);
+      return formatAnnotationPropertyValue(properties[0], propertyValues[0]);
     }
 
     isReady() {

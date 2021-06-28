@@ -19,7 +19,6 @@ import {ArraySpliceOp, spliceArray} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent, updateChildren} from 'neuroglancer/util/dom';
 import {Signal} from 'neuroglancer/util/signal';
-import ResizeObserver from 'resize-observer-polyfill';
 
 // Must be a multiple of 2.
 const defaultNumItemsToRender = 10;
@@ -400,9 +399,6 @@ export class VirtualList extends RefCounted {
   }
 
   forEachRenderedItem(callback: (element: HTMLElement, index: number) => void) {
-    if (this.element.offsetParent === null) {
-      return;
-    }
     const {startIndex, endIndex} = this.renderParams;
     const {renderedItems} = this;
     for (let i = startIndex; i < endIndex; ++i) {

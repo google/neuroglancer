@@ -18,26 +18,6 @@
   outline: 0px;
 }
 
-.neuroglancer-viewer-context-menu > label {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-}
-
-.neuroglancer-viewer-context-menu > label > input::before {
-  flex: 1;
-  content: " ";
-}
-
-.neuroglancer-viewer-context-menu > label > input {
-  margin-left: 5px;
-  width: 11ch;
-}
-
-.neuroglancer-viewer-context-menu-limit-widget > input {
-  width: 11ch;
-}
-
 .neuroglancer-viewer-top-row {
   display: flex;
   flex-direction: row;

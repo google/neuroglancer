@@ -49,7 +49,7 @@ export async function getS3BucketListing(
   return results;
 }
 
-export async function getS3PathCompletions(
+export async function getS3CompatiblePathCompletions(
     credentialsProvider: SpecialProtocolCredentialsProvider, enteredBucketUrl: string,
     bucketUrl: string, path: string,
     cancellationToken: CancellationToken): Promise<BasicCompletionResult> {

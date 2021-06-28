@@ -14,42 +14,38 @@
  * limitations under the License.
  */
 
-import {TrackableValueInterface} from 'neuroglancer/trackable_value';
+import './range.css';
+
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 
-import './range.css';
+export interface RangeWidgetOptions {
+  min?: number;
+  max?: number;
+  step?: number;
+}
 
 export class RangeWidget extends RefCounted {
   element = document.createElement('label');
-  promptElement = document.createElement('span');
   inputElement = document.createElement('input');
   numericInputElement = document.createElement('input');
 
-  constructor(public value: TrackableValueInterface<number>, {min = 0, max = 1, step = 0.01} = {}) {
+  constructor(
+      public value: WatchableValueInterface<number>,
+      {min = 0, max = 1, step = 0.01}: RangeWidgetOptions = {}) {
     super();
-    let {element, promptElement, inputElement, numericInputElement} = this;
+    let {element, inputElement, numericInputElement} = this;
     element.className = 'range-slider';
-    promptElement.className = 'range-prompt';
     const initInputElement = (el: HTMLInputElement) => {
       el.min = '' + min;
       el.max = '' + max;
       el.step = '' + step;
       el.valueAsNumber = this.value.value;
-      const inputValueChanged = () => {
-        this.value.value = el.valueAsNumber;
-      };
-      this.registerEventListener(el, 'change', inputValueChanged);
-      this.registerEventListener(el, 'input', inputValueChanged);
+      this.registerEventListener(el, 'change', () => this.inputValueChanged(el));
+      this.registerEventListener(el, 'input', () => this.inputValueChanged(el));
       this.registerEventListener(el, 'wheel', (event: WheelEvent) => {
-        let {deltaY} = event;
-        if (deltaY > 0) {
-          el.stepUp();
-          inputValueChanged();
-        } else if (deltaY < 0) {
-          el.stepDown();
-          inputValueChanged();
-        }
+        this.adjustViaWheel(el, event);
       });
     };
     inputElement.type = 'range';
@@ -60,7 +56,6 @@ export class RangeWidget extends RefCounted {
         Math.max(min, max - step).toString().length);
     numericInputElement.style.width = (maxNumberWidth + 2) + 'ch';
     initInputElement(numericInputElement);
-    element.appendChild(promptElement);
     element.appendChild(inputElement);
     element.appendChild(numericInputElement);
     value.changed.add(() => {
@@ -68,6 +63,23 @@ export class RangeWidget extends RefCounted {
       this.numericInputElement.valueAsNumber = this.value.value;
     });
   }
+
+  private inputValueChanged(element: HTMLInputElement) {
+    this.value.value = element.valueAsNumber;
+  }
+
+  adjustViaWheel(element: HTMLInputElement, event: WheelEvent) {
+    const el = this.inputElement;
+    let {deltaY} = event;
+    if (deltaY > 0) {
+      el.stepUp();
+      this.inputValueChanged(element);
+    } else if (deltaY < 0) {
+      el.stepDown();
+      this.inputValueChanged(element);
+    }
+  }
+
   disposed() {
     removeFromParent(this.element);
     super.disposed();

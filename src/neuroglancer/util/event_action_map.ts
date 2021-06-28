@@ -89,6 +89,8 @@ export interface EventAction {
    * called on the triggering event regardless of the value of `preventDefault`.
    */
   preventDefault?: boolean;
+
+  originalEventIdentifier?: string;
 }
 
 export type EventActionMapInterface =
@@ -133,36 +135,133 @@ export function getStrokeIdentifier(keyName: string, modifiers: ModifierMask) {
   return identifier;
 }
 
-function normalizeModifiersAndBaseIdentifier(identifier: string): string|undefined {
-  let parts = identifier.split('+');
+function getStrokeIdentifierWithOptionalModifiers(
+    keyName: string, modifiers: ModifierMask, optionalModifiers: ModifierMask) {
+  let identifier = '';
+  if (modifiers & Modifiers.CONTROL) {
+    identifier += 'control+';
+  }
+  if (optionalModifiers & Modifiers.CONTROL) {
+    identifier += 'control?+';
+  }
+  if (modifiers & Modifiers.ALT) {
+    identifier += 'alt+';
+  }
+  if (optionalModifiers & Modifiers.ALT) {
+    identifier += 'alt?+';
+  }
+  if (modifiers & Modifiers.META) {
+    identifier += 'meta+';
+  }
+  if (optionalModifiers & Modifiers.META) {
+    identifier += 'meta?+';
+  }
+  if (modifiers & Modifiers.SHIFT) {
+    identifier += 'shift+';
+  }
+  if (optionalModifiers & Modifiers.SHIFT) {
+    identifier += 'shift?+';
+  }
+  identifier += keyName;
+  return identifier;
+}
+
+interface ParsedEventIdentifier {
+  phase: undefined|'at'|'bubble';
+  keyName: string;
+  modifiers: ModifierMask;
+  optionalModifiers: ModifierMask;
+}
+
+function parseEventIdentifier(identifier: string): ParsedEventIdentifier {
+  const firstColonOffset = identifier.indexOf(':');
+  let phase: string|undefined;
+  if (firstColonOffset !== -1) {
+    phase = identifier.substring(0, firstColonOffset);
+    // TODO(jbms): Support capture phase.
+    if (phase !== 'at' && phase !== 'bubble') {
+      throw new Error(`Invalid event phase: ${JSON.stringify(phase)}`);
+    }
+  }
+  const parts = identifier.substring(firstColonOffset + 1).split('+');
   let keyName: string|undefined;
   let modifiers = 0;
-  for (let part of parts) {
+  let optionalModifiers = 0;
+  loop: for (let part of parts) {
     switch (part) {
       case 'control':
         modifiers |= Modifiers.CONTROL;
         break;
+      case 'control?':
+        optionalModifiers |= Modifiers.CONTROL;
+        break;
       case 'alt':
         modifiers |= Modifiers.ALT;
+        break;
+      case 'alt?':
+        optionalModifiers |= Modifiers.ALT;
         break;
       case 'meta':
         modifiers |= Modifiers.META;
         break;
+      case 'meta?':
+        optionalModifiers |= Modifiers.META;
+        break;
       case 'shift':
         modifiers |= Modifiers.SHIFT;
+        break;
+      case 'shift?':
+        optionalModifiers |= Modifiers.SHIFT;
         break;
       default:
         if (keyName === undefined) {
           keyName = part;
         } else {
-          return undefined;
+          keyName = undefined;
+          break loop;
         }
     }
   }
-  if (keyName === undefined) {
-    return undefined;
+  if (keyName === undefined || (modifiers & optionalModifiers)) {
+    throw new Error(`Invalid event identifier: ${JSON.stringify(identifier)}`);
   }
-  return getStrokeIdentifier(keyName, modifiers);
+  return {phase: phase as ParsedEventIdentifier['phase'], keyName, modifiers, optionalModifiers};
+}
+
+function*
+    getNormalizedStrokeIdentifiers(
+        keyName: string, modifiers: ModifierMask, optionalModifiers: ModifierMask):
+        Iterable<string> {
+  if (optionalModifiers === 0) {
+    yield getStrokeIdentifier(keyName, modifiers);
+  }
+  for (let m = 0; m < 16; ++m) {
+    if ((m & (modifiers | optionalModifiers)) !== m) continue;
+    if ((m & modifiers) !== modifiers) continue;
+    yield getStrokeIdentifier(keyName, m);
+  }
+}
+
+/**
+ * Normalizes a user-specified EventIdentifier into a list of one or more corresponding
+ * NormalizedEventIdentifier strings.
+ */
+function*
+    getNormalizedEventIdentifiers(parsed: ParsedEventIdentifier):
+        Iterable<NormalizedEventIdentifier> {
+  const {phase} = parsed;
+  const strokeIdentifiers =
+      getNormalizedStrokeIdentifiers(parsed.keyName, parsed.modifiers, parsed.optionalModifiers);
+  if (phase === undefined) {
+    for (const suffix of strokeIdentifiers) {
+      yield `at:${suffix}`;
+      yield `bubble:${suffix}`;
+    }
+  } else {
+    for (const suffix of strokeIdentifiers) {
+      yield `${phase}:${suffix}`;
+    }
+  }
 }
 
 /**
@@ -173,37 +272,14 @@ type ActionOrEventAction = EventAction|ActionIdentifier;
 /**
  * Normalizes an ActionOrEventAction into an EventAction.
  */
-export function normalizeEventAction(action: ActionOrEventAction): EventAction {
+export function normalizeEventAction(
+    parsed: ParsedEventIdentifier, action: ActionOrEventAction): EventAction {
+  const identifier = getStrokeIdentifierWithOptionalModifiers(
+      parsed.keyName, parsed.modifiers, parsed.optionalModifiers);
   if (typeof action === 'string') {
-    return {action: action};
+    return {action: action, originalEventIdentifier: identifier};
   }
-  return action;
-}
-
-/**
- * Normalizes a user-specified EventIdentifier into a list of one or more corresponding
- * NormalizedEventIdentifier strings.
- */
-export function*
-    normalizeEventIdentifier(identifier: EventIdentifier):
-        IterableIterator<NormalizedEventIdentifier> {
-  const firstColonOffset = identifier.indexOf(':');
-  const suffix =
-      normalizeModifiersAndBaseIdentifier(identifier.substring(firstColonOffset + 1));
-  if (suffix === undefined) {
-    throw new Error(`Invalid event identifier: ${JSON.stringify(identifier)}`);
-  }
-  if (firstColonOffset !== -1) {
-    const prefix = identifier.substring(0, firstColonOffset);
-    // TODO(jbms): Support capture phase.
-    if (prefix !== 'at' && prefix !== 'bubble') {
-      throw new Error(`Invalid event phase: ${JSON.stringify(prefix)}`);
-    }
-    yield`${prefix}:${suffix}`;
-  } else {
-    yield`at:${suffix}`;
-    yield`bubble:${suffix}`;
-  }
+  return {...action, originalEventIdentifier: identifier};
 }
 
 /**
@@ -211,8 +287,9 @@ export function*
  * are used by KeyboardEventBinder and MouseEventBinder to dispatch an ActionEvent in response to an
  * input event.
  */
-export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, EventAction, EventActionMap>
-    implements EventActionMapInterface {
+export class EventActionMap extends
+    HierarchicalMap<NormalizedEventIdentifier, EventAction, EventActionMap> implements
+        EventActionMapInterface {
   label: string|undefined;
 
   /**
@@ -221,9 +298,10 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
    * The keys of the `bindings` object specify unnormalized event identifiers to be mapped to their
    * corresponding `ActionOrEventAction` values.
    */
-  static fromObject(
-      bindings: {[key: string]: ActionOrEventAction},
-      options: {label?: string, parents?: Iterable<[EventActionMap, number]>} = {}) {
+  static fromObject(bindings: {[key: string]: ActionOrEventAction}, options: {
+    label?: string,
+    parents?: Iterable<[EventActionMap, number]>
+  } = {}) {
     const map = new EventActionMap();
     map.label = options.label;
     if (options.parents !== undefined) {
@@ -232,14 +310,14 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
       }
     }
     for (const key of Object.keys(bindings)) {
-      map.set(key, normalizeEventAction(bindings[key]));
+      map.set(key, bindings[key]);
     }
     return map;
   }
 
   setFromObject(bindings: {[key: string]: ActionOrEventAction}) {
     for (const key of Object.keys(bindings)) {
-      this.set(key, normalizeEventAction(bindings[key]));
+      this.set(key, bindings[key]);
     }
   }
 
@@ -250,8 +328,9 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
    * normalized identifier.
    */
   set(identifier: EventIdentifier, action: ActionOrEventAction) {
-    const normalizedAction = normalizeEventAction(action);
-    for (const normalizedIdentifier of normalizeEventIdentifier(identifier)) {
+    const parsedIdentifier = parseEventIdentifier(identifier);
+    const normalizedAction = normalizeEventAction(parsedIdentifier, action);
+    for (const normalizedIdentifier of getNormalizedEventIdentifiers(parsedIdentifier)) {
       super.set(normalizedIdentifier, normalizedAction);
     }
   }
@@ -263,7 +342,8 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
    * identifier.
    */
   delete(identifier: EventIdentifier) {
-    for (const normalizedIdentifier of normalizeEventIdentifier(identifier)) {
+    for (const normalizedIdentifier of getNormalizedEventIdentifiers(
+             parseEventIdentifier(identifier))) {
       super.delete(normalizedIdentifier);
     }
   }
@@ -271,9 +351,8 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
   describe(): string {
     const bindings = [];
     const uniqueBindings = new Map<string, string>();
-    for (const [key, value] of this.entries()) {
-      const split = key.indexOf(':');
-      uniqueBindings.set(key.substring(split+1), value.action);
+    for (const [, value] of this.entries()) {
+      uniqueBindings.set(value.originalEventIdentifier!, value.action);
     }
     for (const [key, value] of uniqueBindings) {
       bindings.push(`${key}→${value}`);
@@ -283,7 +362,7 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
 }
 
 export function dispatchEventAction(
-      originalEvent: Event, detail: any, eventAction: EventAction|undefined) {
+    originalEvent: Event, detail: any, eventAction: EventAction|undefined) {
   if (eventAction === undefined) {
     return;
   }
@@ -304,7 +383,7 @@ eventPhaseNames[Event.CAPTURING_PHASE] = 'capture';
 eventPhaseNames[Event.BUBBLING_PHASE] = 'bubble';
 
 export function dispatchEvent(
-  baseIdentifier: EventIdentifier, originalEvent: Event, eventPhase: number, detail: any,
+    baseIdentifier: EventIdentifier, originalEvent: Event, eventPhase: number, detail: any,
     eventMap: EventActionMapInterface) {
   const eventIdentifier = eventPhaseNames[eventPhase] + ':' + baseIdentifier;
   const eventAction = eventMap.get(eventIdentifier);

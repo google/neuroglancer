@@ -21,7 +21,7 @@ import 'neuroglancer/uint64_map';
 
 import {ChunkRequester, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {IndexedSegmentProperty, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import { IndexedSegmentProperty, onTemporaryVisibleSegmentsStateChanged, onVisibleSegmentsStateChanged, VisibleSegmentsState, VISIBLE_SEGMENTS_STATE_PROPERTIES} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
@@ -60,6 +60,7 @@ export const withSegmentationLayerBackendState =
     const scheduleUpdateChunkPriorities = () => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     };
+    onTemporaryVisibleSegmentsStateChanged(this, this, scheduleUpdateChunkPriorities);
     onVisibleSegmentsStateChanged(this, this, scheduleUpdateChunkPriorities);
     this.registerDisposer(this.transform.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
