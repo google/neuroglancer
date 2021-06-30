@@ -226,5 +226,6 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - run: ./src/neuroglancer/mesh/draco/build.sh
+    - run: ./src/neuroglancer/sliceview/compresso/build.sh
     # Check that there are no differences.
     - run: git diff --exit-code
