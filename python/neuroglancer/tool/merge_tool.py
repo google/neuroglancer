@@ -356,6 +356,11 @@ class Annotator(object):
         return ids
 
     def add_segments_from_state(self, base_state):
+        try:
+            basestring
+        except NameError:
+            basestring = str
+            
         if isinstance(base_state, basestring):
             base_state = neuroglancer.parse_url(base_state)
         elif isinstance(base_state, dict):
