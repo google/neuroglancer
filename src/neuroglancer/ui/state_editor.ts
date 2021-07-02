@@ -30,6 +30,7 @@ import './state_editor.css';
 import CodeMirror from 'codemirror';
 import debounce from 'lodash/debounce';
 import {Overlay} from 'neuroglancer/overlay';
+import {StatusMessage} from 'neuroglancer/status';
 import {getCachedJson} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
 
@@ -55,6 +56,28 @@ export class StateEditorDialog extends Overlay {
     buttonClose.textContent = 'Close';
     this.content.appendChild(buttonClose);
     buttonClose.addEventListener('click', () => this.dispose());
+
+    const copy = document.createElement('button');
+    copy.textContent = 'Copy state';
+    copy.addEventListener('click', () => {
+      navigator.clipboard.writeText(this.textEditor.getValue());
+      StatusMessage.showTemporaryMessage('Copied to Clipboard.', 3000);
+    });
+
+    const iport = document.createElement('button');
+    iport.textContent = 'Import state';
+    iport.addEventListener('click', async () => {
+      const pasted = await navigator.clipboard.readText();
+      if (pasted.length) {
+        this.textEditor.setValue(pasted);
+        const applyWhenReady = () => {
+          this.applyChanges();
+        };
+        setTimeout(applyWhenReady, 200);
+      }
+    });
+
+    this.content.append(' ', copy, ' ', iport);
 
     this.textEditor = CodeMirror(_element => {}, <any>{
       value: '',
