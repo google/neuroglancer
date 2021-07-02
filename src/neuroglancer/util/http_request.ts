@@ -120,13 +120,77 @@ export function getByteRangeHeader(startOffset: Uint64|number, endOffset: Uint64
   return {'Range': `bytes=${startOffset}-${endOffsetStr}`};
 }
 
-export function parseUrl(url: string): {protocol: string, host: string, path: string} {
-  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)((?:\/.*)?)$/;
-  let match = url.match(urlProtocolPattern);
-  if (match === null) {
-    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
+export class ParsedUrl{
+  public readonly protocol: string;
+  public readonly host: string;
+  public readonly path: string;
+  public readonly search: string;
+  public readonly hash: string;
+  public readonly href: string;
+
+  public static readonly pattern = /^(?<protocol>[^:]+):\/\/(?<host>[^/]+)(?<path>\/[^?]*)(?<search>\?[^#]*)?(?<hash>#.*)?$/;
+
+  constructor({
+    protocol, host, path, search="", hash=""
+  }: {
+    protocol: string,
+    host: string,
+    path: string,
+    search: string,
+    hash: string,
+  }){
+    const pathParts = new Array<string>();
+    for(const part of `/${path}`.split('/')){
+        if(part == "."){
+            continue
+        }
+        if(part == ".."){
+            pathParts.pop()
+        }else{
+            pathParts.push(part)
+        }
+    }
+    this.protocol = protocol
+    this.host = host
+    this.path = pathParts.join("/").replace(/\/+/g, "/")
+    this.search = search
+    this.hash = hash
+    this.href = `${protocol}://${host}${path}${search}${hash}`
   }
-  return {protocol: match[1], host: match[2], path: match[3]};
+
+  public static parse(url: string): ParsedUrl{
+    let match = url.match(ParsedUrl.pattern);
+    if (match === null) {
+        throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
+    }
+    let groups = match.groups!;
+    return new ParsedUrl({
+        protocol: groups["protocol"],
+        host: groups["host"],
+        path: groups["path"],
+        search: groups["search"] || "",
+        hash: groups["hash"] || ""
+    });
+  }
+
+  public getParent(): ParsedUrl{
+    return new ParsedUrl({
+        ...this,
+        path: this.path.endsWith("/") ? this.path + "../" : this.path + "/..",
+    })
+  }
+
+  public concat(subpath: string): ParsedUrl{
+    const fullPath = subpath.startsWith("/") ? subpath : `${this.path}/${subpath}`
+    return new ParsedUrl({
+      ...this,
+      path: fullPath
+    })
+  }
+}
+
+export function parseUrl(url: string): ParsedUrl{
+  return ParsedUrl.parse(url)
 }
 
 export function isNotFoundError(e: any) {

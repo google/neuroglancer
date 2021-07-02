@@ -38,7 +38,7 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
-import {isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
+import {isNotFoundError, ParsedUrl, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
@@ -281,9 +281,11 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
         // computeChunkBounds.
         let chunkPosition = this.computeChunkBounds(chunk);
         let chunkDataSize = chunk.chunkDataSize!;
-        url = `${parameters.url}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+        url = ParsedUrl.parse(parameters.url).concat(
+            `${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
             `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
-            `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+            `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`
+        ).href;
       }
       response = await cancellableFetchSpecialOk(
           this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);

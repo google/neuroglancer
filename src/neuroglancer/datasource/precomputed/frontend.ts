@@ -36,7 +36,7 @@ import {DATA_TYPE_ARRAY_CONSTRUCTOR, DataType} from 'neuroglancer/util/data_type
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
+import {isNotFoundError, ParsedUrl, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -63,17 +63,7 @@ class PrecomputedSkeletonSource extends
 }
 
 function resolvePath(a: string, b: string) {
-  const outputParts = a.split('/');
-  for (const part of b.split('/')) {
-    if (part === '..') {
-      if (outputParts.length !== 0) {
-        outputParts.length = outputParts.length - 1;
-        continue;
-      }
-    }
-    outputParts.push(part);
-  }
-  return outputParts.join('/');
+  return ParsedUrl.parse(a).concat(b).href
 }
 
 class ScaleInfo {
@@ -498,7 +488,7 @@ function getJsonMetadata(
       {'type': 'precomputed:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
       async () => {
         return await cancellableFetchSpecialOk(
-            credentialsProvider, `${url}/info`, {}, responseJson);
+            credentialsProvider, ParsedUrl.parse(url).concat("info").href, {}, responseJson);
       });
 }
 
