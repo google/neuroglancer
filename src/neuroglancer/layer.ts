@@ -66,7 +66,11 @@ export interface UserLayerSelectionState {
   localPosition: Float32Array;
   localCoordinateSpace: CoordinateSpace|undefined;
 
+  rank: number;
+
   annotationId: string|undefined;
+  annotationType: AnnotationType|undefined;
+  annotationSerialized: Uint8Array|undefined;
   annotationSourceIndex: number|undefined;
   annotationSubsource: string|undefined;
   annotationPartIndex: number|undefined;
@@ -109,10 +113,13 @@ export class UserLayer extends RefCounted {
 
   initializeSelectionState(state: this['selectionState']) {
     state.generation = -1;
+    state.rank = -1;
     state.localPositionValid = false;
     state.localPosition = kEmptyFloat32Vec;
     state.localCoordinateSpace = undefined;
     state.annotationId = undefined;
+    state.annotationType = undefined;
+    state.annotationSerialized = undefined;
     state.annotationSourceIndex = undefined;
     state.annotationSubsource = undefined;
     state.annotationPartIndex = undefined;
@@ -198,6 +205,7 @@ export class UserLayer extends RefCounted {
 
   copySelectionState(dest: this['selectionState'], source: this['selectionState']) {
     dest.generation = source.generation;
+    dest.rank = source.rank;
     dest.localPositionValid = source.localPositionValid;
     dest.localCoordinateSpace = source.localCoordinateSpace;
     const curLocalPosition = source.localPosition;
@@ -208,6 +216,8 @@ export class UserLayer extends RefCounted {
       dest.localPosition.set(curLocalPosition);
     }
     dest.annotationId = source.annotationId;
+    dest.annotationType = source.annotationType;
+    dest.annotationSerialized = source.annotationSerialized;
     dest.annotationSourceIndex = source.annotationSourceIndex;
     dest.annotationSubsource = source.annotationSubsource;
     dest.annotationPartIndex = source.annotationPartIndex;

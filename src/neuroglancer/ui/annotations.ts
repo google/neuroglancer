@@ -20,7 +20,7 @@
 
 import './annotations.css';
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, formatNumericProperty, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, formatNumericProperty, Line} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer, SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -41,6 +41,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
 import {Borrowed, disposableOnce, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
+import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {ValueOrError} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
 import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
@@ -1316,7 +1317,13 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
           !this.annotationStates.states.includes(annotationLayer)) {
         return;
       }
+      state.rank = mouseState.coordinateSpace.rank;
+
       state.annotationId = mouseState.pickedAnnotationId;
+      state.annotationType = mouseState.pickedAnnotationType;
+      state.annotationSerialized =
+          new Uint8Array(
+	    mouseState.pickedAnnotationBuffer, mouseState.pickedAnnotationBufferOffset);
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -1341,13 +1348,31 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                                                     chunkTransform: annotationLayer.chunkTransform
                                                   }))),
                   ({annotation, chunkTransform}, parent, context) => {
-                    if (annotation == null) {
-                      const statusMessage = document.createElement('div');
-                      statusMessage.classList.add('neuroglancer-selection-annotation-status');
-                      statusMessage.textContent =
-                          (annotation === null) ? 'Annotation not found' : 'Loading...';
-                      parent.appendChild(statusMessage);
-                      return;
+		    if (annotation == null) {
+                      if (state.annotationType && state.annotationSerialized) {
+                        const handler = annotationTypeHandlers[state.annotationType];
+                        const baseNumBytes = handler.serializedBytes(state.rank);
+                        const offset = state.annotationSerialized.byteOffset + baseNumBytes;
+                        const dataView = new DataView(state.annotationSerialized.buffer);
+                        const isLittleEndian = Endianness.LITTLE === ENDIANNESS;
+                        const {properties} = annotationLayer.source;
+                        const annotationPropertySerializer =
+                            new AnnotationPropertySerializer(state.rank, properties);
+                        
+                        annotation =
+                            handler.deserialize(
+                              dataView, offset, isLittleEndian, state.rank, state.annotationId!);
+                        annotationPropertySerializer.deserialize(
+                          dataView, offset, isLittleEndian,
+                          annotation.properties = new Array(properties.length));
+                      } else {
+                        const statusMessage = document.createElement('div');
+                        statusMessage.classList.add('neuroglancer-selection-annotation-status');
+                        statusMessage.textContent =
+                            (annotation === null) ? 'Annotation not found' : 'Loading...';
+                        parent.appendChild(statusMessage);
+                        return;
+                      }
                     }
                     const layerRank =
                         chunkTransform.error === undefined ? chunkTransform.layerRank : 0;
