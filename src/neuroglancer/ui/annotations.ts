@@ -20,7 +20,7 @@
 
 import './annotations.css';
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, formatNumericProperty, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, formatNumericProperty, Line} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer, SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -34,13 +34,14 @@ import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChange
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultAnnotationListBindings} from 'neuroglancer/ui/default_input_event_bindings';
-import {registerLegacyTool, LegacyTool} from 'neuroglancer/ui/tool';
+import {LegacyTool, registerLegacyTool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, ArraySpliceOp} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
 import {Borrowed, disposableOnce, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
+import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {ValueOrError} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
 import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
@@ -430,7 +431,7 @@ export class AnnotationLayerView extends Tab {
     if (selectionState === undefined) return;
     const element = this.getRenderedAnnotationListElement(
         selectionState.annotationLayerState, selectionState.annotationId,
-        /*scrollIntoView=*/ selectionState.pin);
+        /*scrollIntoView=*/selectionState.pin);
     if (element !== undefined) {
       element.classList.add('neuroglancer-annotation-selected');
     }
@@ -829,7 +830,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
         type: AnnotationType.POINT,
         properties: annotationLayer.source.properties.map(x => x.default),
       };
-      const reference = annotationLayer.source.add(annotation, /*commit=*/ true);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/true);
       this.layer.selectAnnotation(annotationLayer, reference.id, true);
       reference.dispose();
     }
@@ -891,7 +892,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 
       if (this.inProgressAnnotation === undefined) {
         const reference = annotationLayer.source.add(
-            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/ false);
+            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/false);
         this.layer.selectAnnotation(annotationLayer, reference.id, true);
         const mouseDisposer = mouseState.changed.add(updatePointB);
         const disposer = () => {
@@ -1316,7 +1317,11 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
           !this.annotationStates.states.includes(annotationLayer)) {
         return;
       }
+
       state.annotationId = mouseState.pickedAnnotationId;
+      state.annotationType = mouseState.pickedAnnotationType;
+      state.annotationSerialized = new Uint8Array(
+          mouseState.pickedAnnotationBuffer!, mouseState.pickedAnnotationBufferOffset!);
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -1342,12 +1347,32 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                                                   }))),
                   ({annotation, chunkTransform}, parent, context) => {
                     if (annotation == null) {
-                      const statusMessage = document.createElement('div');
-                      statusMessage.classList.add('neuroglancer-selection-annotation-status');
-                      statusMessage.textContent =
-                          (annotation === null) ? 'Annotation not found' : 'Loading...';
-                      parent.appendChild(statusMessage);
-                      return;
+                      if (state.annotationType !== undefined &&
+                          state.annotationSerialized !== undefined) {
+                        const handler = annotationTypeHandlers[state.annotationType];
+                        const rank = annotationLayer.source.rank;
+                        const baseNumBytes = handler.serializedBytes(rank);
+                        const geometryOffset = state.annotationSerialized.byteOffset;
+                        const propertiesOffset = geometryOffset + baseNumBytes;
+                        const dataView = new DataView(state.annotationSerialized.buffer);
+                        const isLittleEndian = Endianness.LITTLE === ENDIANNESS;
+                        const {properties} = annotationLayer.source;
+                        const annotationPropertySerializer =
+                            new AnnotationPropertySerializer(rank, properties);
+
+                        annotation = handler.deserialize(
+                            dataView, geometryOffset, isLittleEndian, rank, state.annotationId!);
+                        annotationPropertySerializer.deserialize(
+                            dataView, propertiesOffset, isLittleEndian,
+                            annotation.properties = new Array(properties.length));
+                      } else {
+                        const statusMessage = document.createElement('div');
+                        statusMessage.classList.add('neuroglancer-selection-annotation-status');
+                        statusMessage.textContent =
+                            (annotation === null) ? 'Annotation not found' : 'Loading...';
+                        parent.appendChild(statusMessage);
+                        return;
+                      }
                     }
                     const layerRank =
                         chunkTransform.error === undefined ? chunkTransform.layerRank : 0;
@@ -1548,7 +1573,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                         description.addEventListener('change', () => {
                           const x = description.value;
                           annotationLayer.source.update(
-                              reference, {...annotation, description: x ? x : undefined});
+                              reference, {...annotation!, description: x ? x : undefined});
                           annotationLayer.source.commit(reference);
                         });
                         parent.appendChild(description);
