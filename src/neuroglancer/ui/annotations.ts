@@ -1323,7 +1323,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       state.annotationType = mouseState.pickedAnnotationType;
       state.annotationSerialized =
           new Uint8Array(
-	    mouseState.pickedAnnotationBuffer, mouseState.pickedAnnotationBufferOffset);
+	    mouseState.pickedAnnotationBuffer!, mouseState.pickedAnnotationBufferOffset!);
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -1573,7 +1573,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                         description.addEventListener('change', () => {
                           const x = description.value;
                           annotationLayer.source.update(
-                              reference, {...annotation, description: x ? x : undefined});
+                              reference, {...annotation!, description: x ? x : undefined});
                           annotationLayer.source.commit(reference);
                         });
                         parent.appendChild(description);
