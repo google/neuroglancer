@@ -20,8 +20,8 @@ Supported compressors:
 
 Filters are not supported.
 
-Dimension names may be specified using an `_ARRAY_DIMENSIONS` attribute, as defined by xarray:
-http://xarray.pydata.org/en/latest/internals.html#zarr-encoding-specification
+Dimension names may be specified using an `_ARRAY_DIMENSIONS` attribute, 
+[as defined by xarray](https://xarray.pydata.org/en/latest/internals/zarr-encoding-spec.html).
 
 Supported data types (little and big endian):
 
