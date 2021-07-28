@@ -34,7 +34,7 @@ import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChange
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultAnnotationListBindings} from 'neuroglancer/ui/default_input_event_bindings';
-import {registerLegacyTool, LegacyTool} from 'neuroglancer/ui/tool';
+import {LegacyTool, registerLegacyTool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, ArraySpliceOp} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
@@ -404,7 +404,7 @@ export class AnnotationLayerView extends Tab {
   private selectedAnnotationState = makeCachedLazyDerivedWatchableValue((selectionState, pin) => {
     if (selectionState === undefined) return undefined;
     const {layer} = this;
-    const layerSelectionState = selectionState.layers.find(s => s.layer === layer)?.state;
+    const layerSelectionState = selectionState.layers.find(s => s.layer === layer) ?.state;
     if (layerSelectionState === undefined) return undefined;
     const {annotationId} = layerSelectionState;
     if (annotationId === undefined) return undefined;
@@ -431,7 +431,7 @@ export class AnnotationLayerView extends Tab {
     if (selectionState === undefined) return;
     const element = this.getRenderedAnnotationListElement(
         selectionState.annotationLayerState, selectionState.annotationId,
-        /*scrollIntoView=*/ selectionState.pin);
+        /*scrollIntoView=*/selectionState.pin);
     if (element !== undefined) {
       element.classList.add('neuroglancer-annotation-selected');
     }
@@ -830,7 +830,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
         type: AnnotationType.POINT,
         properties: annotationLayer.source.properties.map(x => x.default),
       };
-      const reference = annotationLayer.source.add(annotation, /*commit=*/ true);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/true);
       this.layer.selectAnnotation(annotationLayer, reference.id, true);
       reference.dispose();
     }
@@ -892,7 +892,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 
       if (this.inProgressAnnotation === undefined) {
         const reference = annotationLayer.source.add(
-            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/ false);
+            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/false);
         this.layer.selectAnnotation(annotationLayer, reference.id, true);
         const mouseDisposer = mouseState.changed.add(updatePointB);
         const disposer = () => {
@@ -1321,9 +1321,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
 
       state.annotationId = mouseState.pickedAnnotationId;
       state.annotationType = mouseState.pickedAnnotationType;
-      state.annotationSerialized =
-          new Uint8Array(
-	    mouseState.pickedAnnotationBuffer!, mouseState.pickedAnnotationBufferOffset!);
+      state.annotationSerialized = new Uint8Array(
+          mouseState.pickedAnnotationBuffer!, mouseState.pickedAnnotationBufferOffset!);
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -1348,7 +1347,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                                                     chunkTransform: annotationLayer.chunkTransform
                                                   }))),
                   ({annotation, chunkTransform}, parent, context) => {
-		    if (annotation == null) {
+                    if (annotation == null) {
                       if (state.annotationType && state.annotationSerialized) {
                         const handler = annotationTypeHandlers[state.annotationType];
                         const baseNumBytes = handler.serializedBytes(state.rank);
@@ -1358,13 +1357,12 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                         const {properties} = annotationLayer.source;
                         const annotationPropertySerializer =
                             new AnnotationPropertySerializer(state.rank, properties);
-                        
-                        annotation =
-                            handler.deserialize(
-                              dataView, offset, isLittleEndian, state.rank, state.annotationId!);
+
+                        annotation = handler.deserialize(
+                            dataView, offset, isLittleEndian, state.rank, state.annotationId!);
                         annotationPropertySerializer.deserialize(
-                          dataView, offset, isLittleEndian,
-                          annotation.properties = new Array(properties.length));
+                            dataView, offset, isLittleEndian,
+                            annotation.properties = new Array(properties.length));
                       } else {
                         const statusMessage = document.createElement('div');
                         statusMessage.classList.add('neuroglancer-selection-annotation-status');

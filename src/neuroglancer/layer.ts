@@ -362,7 +362,8 @@ export class UserLayer extends RefCounted {
     });
     const legacyTransform = verifyObjectProperty(
         layerSpec, TRANSFORM_JSON_KEY, coordinateTransformSpecificationFromLegacyJson);
-    specs.push(...this.getLegacyDataSourceSpecifications(legacySpec, layerSpec, legacyTransform, specs));
+    specs.push(
+        ...this.getLegacyDataSourceSpecifications(legacySpec, layerSpec, legacyTransform, specs));
     specs = specs.filter(spec => spec.url);
     if (specs.length === 0) {
       specs.push(makeEmptyDataSourceSpecification());
@@ -1411,7 +1412,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     this.registerDisposer(layerManager);
     this.location.changed.add(() => {
       this.changed.dispatch();
-      const userLayer = this.layer?.layer ?? undefined;
+      const userLayer = this.layer ?.layer ? ? undefined;
       if (userLayer !== undefined) {
         const curLocation = this.location.value;
         if (curLocation.visible) {
@@ -1676,7 +1677,7 @@ export class LinkedLayerGroup extends RefCounted implements Trackable {
     if (otherUserLayer === this.layer) return;
     if (this.root_ === otherUserLayer) return;
     if (this.root_ !== this.layer) {
-      this.isolate(/*notifyChanged=*/ false);
+      this.isolate(/*notifyChanged=*/false);
     }
     const {getGroup} = this;
     const newRoot = getGroup(otherUserLayer).root_;
@@ -1689,7 +1690,7 @@ export class LinkedLayerGroup extends RefCounted implements Trackable {
   }
 
   disposed() {
-    this.isolate(/*notifyChanged=*/ false);
+    this.isolate(/*notifyChanged=*/false);
   }
 }
 
@@ -2046,7 +2047,7 @@ export function detectLayerType(userLayer: UserLayer): UserLayerConstructor|unde
       guess = getMaxPriorityGuess(guess, detectLayerTypeFromDataSubsource(subsource));
     }
   }
-  return guess?.layerConstructor;
+  return guess ?.layerConstructor;
 }
 
 function detectLayerTypeFromSubsources(subsources: Iterable<LoadedDataSubsource>): LayerTypeGuess|
@@ -2069,7 +2070,7 @@ export class NewUserLayer extends UserLayer {
   detectedLayerConstructor: UserLayerConstructor|undefined;
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    this.detectedLayerConstructor = detectLayerTypeFromSubsources(subsources)?.layerConstructor;
+    this.detectedLayerConstructor = detectLayerTypeFromSubsources(subsources) ?.layerConstructor;
   }
 }
 
@@ -2081,7 +2082,7 @@ export class AutoUserLayer extends UserLayer {
   static typeAbbreviation = 'auto';
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    const layerConstructor = detectLayerTypeFromSubsources(subsources)?.layerConstructor;
+    const layerConstructor = detectLayerTypeFromSubsources(subsources) ?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
     }
