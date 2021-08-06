@@ -23,6 +23,7 @@ import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
+import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {GL} from 'neuroglancer/webgl/context';
 import {ParameterizedContextDependentShaderGetter, parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -208,6 +209,9 @@ export abstract class AnnotationRenderHelper extends RefCounted {
         builder.addUniform('highp float', 'uModelClipBounds', rank * 2);
         builder.addUniform('highp uint', 'uPickID');
         builder.addVarying('highp uint', 'vPickID', 'flat');
+
+        builder.addVertexCode(glsl_COLORMAPS);
+
         builder.addVertexCode(`
 vec3 defaultColor() { return uColor; }
 highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }

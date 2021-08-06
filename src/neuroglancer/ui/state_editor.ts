@@ -39,16 +39,23 @@ export class StateEditorDialog extends Overlay {
   textEditor: CodeMirror.Editor;
   applyButton: HTMLButtonElement;
   exportButton: HTMLButtonElement;
+  closeButton: HTMLButtonElement;
   constructor(public viewer: Viewer) {
     super();
 
     this.content.classList.add('neuroglancer-state-editor');
 
-    const button = this.applyButton = document.createElement('button');
-    button.textContent = 'Apply changes';
-    this.content.appendChild(button);
-    button.addEventListener('click', () => this.applyChanges());
-    button.disabled = true;
+    const buttonApply = this.applyButton = document.createElement('button');
+    buttonApply.textContent = 'Apply changes';
+    this.content.appendChild(buttonApply);
+    buttonApply.addEventListener('click', () => this.applyChanges());
+    buttonApply.disabled = true;
+
+    const buttonClose = this.closeButton = document.createElement('button');
+    buttonClose.classList.add('close-button');
+    buttonClose.textContent = 'Close';
+    this.content.appendChild(buttonClose);
+    buttonClose.addEventListener('click', () => this.dispose());
 
     const exportButton = this.exportButton = document.createElement('button');
     exportButton.textContent = 'Export';

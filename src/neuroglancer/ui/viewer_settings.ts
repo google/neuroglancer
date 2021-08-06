@@ -20,10 +20,12 @@ import {TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {SidePanel, SidePanelManager} from 'neuroglancer/ui/side_panel';
 import {DEFAULT_SIDE_PANEL_LOCATION, SidePanelLocation, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
+import {vec3} from 'neuroglancer/util/geom';
 import {emptyToUndefined} from 'neuroglancer/util/json';
 import {Viewer} from 'neuroglancer/viewer';
+import {ColorWidget} from 'neuroglancer/widget/color';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
-import { TextInputWidget } from 'neuroglancer/widget/text_input';
+import {TextInputWidget} from 'neuroglancer/widget/text_input';
 
 const DEFAULT_SETTINGS_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,
@@ -92,5 +94,16 @@ export class ViewerSettingsPanel extends SidePanel {
     addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.location.watchableVisible);
     addCheckbox('Wire frame rendering', viewer.wireFrame);
     addCheckbox('Enable prefetching', viewer.chunkQueueManager.enablePrefetch);
+
+    const addColor = (label: string, value: WatchableValueInterface<vec3>) => {
+      const labelElement = document.createElement('label');
+      labelElement.textContent = label;
+      const widget = this.registerDisposer(new ColorWidget(value));
+      labelElement.appendChild(widget.element);
+      scroll.appendChild(labelElement);
+    };
+
+    addColor('Cross-section background', viewer.crossSectionBackgroundColor);
+    addColor('Projection background', viewer.perspectiveViewBackgroundColor);
   }
 }

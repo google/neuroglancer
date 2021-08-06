@@ -157,7 +157,7 @@ grid_size`, the compressed Morton code is computed as follows:
 2. For `i` from `0` to `n-1`, where `n` is the number of bits needed to encode the grid cell
    coordinates:
    - For `dim` in `0, 1, 2` (corresponding to `x`, `y`, `z`):
-     - If `2**i <= grid_size[dim]`:
+     - If `2**i < grid_size[dim]`:
        - Set output bit `j` of the compressed Morton code to bit `i` of `g[dim]`.
        - Set `j := j + 1`.
        
