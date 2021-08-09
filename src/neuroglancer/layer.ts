@@ -2078,7 +2078,7 @@ export class AutoUserLayer extends UserLayer {
   static typeAbbreviation = 'auto';
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    const layerConstructor = detectLayerTypeFromSubsources(subsources) ?.layerConstructor;
+    const layerConstructor = detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
     }
