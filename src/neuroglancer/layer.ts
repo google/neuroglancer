@@ -66,8 +66,6 @@ export interface UserLayerSelectionState {
   localPosition: Float32Array;
   localCoordinateSpace: CoordinateSpace|undefined;
 
-  rank: number;
-
   annotationId: string|undefined;
   annotationType: AnnotationType|undefined;
   annotationSerialized: Uint8Array|undefined;
@@ -113,7 +111,6 @@ export class UserLayer extends RefCounted {
 
   initializeSelectionState(state: this['selectionState']) {
     state.generation = -1;
-    state.rank = -1;
     state.localPositionValid = false;
     state.localPosition = kEmptyFloat32Vec;
     state.localCoordinateSpace = undefined;
@@ -205,7 +202,6 @@ export class UserLayer extends RefCounted {
 
   copySelectionState(dest: this['selectionState'], source: this['selectionState']) {
     dest.generation = source.generation;
-    dest.rank = source.rank;
     dest.localPositionValid = source.localPositionValid;
     dest.localCoordinateSpace = source.localCoordinateSpace;
     const curLocalPosition = source.localPosition;
@@ -1412,7 +1408,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     this.registerDisposer(layerManager);
     this.location.changed.add(() => {
       this.changed.dispatch();
-      const userLayer = this.layer?.layer ?? undefined;
+      const userLayer = this.layer ?.layer ? ? undefined;
       if (userLayer !== undefined) {
         const curLocation = this.location.value;
         if (curLocation.visible) {

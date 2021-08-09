@@ -1317,7 +1317,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
           !this.annotationStates.states.includes(annotationLayer)) {
         return;
       }
-      state.rank = mouseState.coordinateSpace.rank;
 
       state.annotationId = mouseState.pickedAnnotationId;
       state.annotationType = mouseState.pickedAnnotationType;
@@ -1350,16 +1349,17 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                     if (annotation == null) {
                       if (state.annotationType && state.annotationSerialized) {
                         const handler = annotationTypeHandlers[state.annotationType];
-                        const baseNumBytes = handler.serializedBytes(state.rank);
+                        const rank = annotationLayer.source.rank;
+                        const baseNumBytes = handler.serializedBytes(rank);
                         const offset = state.annotationSerialized.byteOffset + baseNumBytes;
                         const dataView = new DataView(state.annotationSerialized.buffer);
                         const isLittleEndian = Endianness.LITTLE === ENDIANNESS;
                         const {properties} = annotationLayer.source;
                         const annotationPropertySerializer =
-                            new AnnotationPropertySerializer(state.rank, properties);
+                            new AnnotationPropertySerializer(rank, properties);
 
                         annotation = handler.deserialize(
-                            dataView, offset, isLittleEndian, state.rank, state.annotationId!);
+                            dataView, offset, isLittleEndian, rank, state.annotationId!);
                         annotationPropertySerializer.deserialize(
                             dataView, offset, isLittleEndian,
                             annotation.properties = new Array(properties.length));
