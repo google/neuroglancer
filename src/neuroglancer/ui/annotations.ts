@@ -404,7 +404,7 @@ export class AnnotationLayerView extends Tab {
   private selectedAnnotationState = makeCachedLazyDerivedWatchableValue((selectionState, pin) => {
     if (selectionState === undefined) return undefined;
     const {layer} = this;
-    const layerSelectionState = selectionState.layers.find(s => s.layer === layer) ?.state;
+    const layerSelectionState = selectionState.layers.find(s => s.layer === layer)?.state;
     if (layerSelectionState === undefined) return undefined;
     const {annotationId} = layerSelectionState;
     if (annotationId === undefined) return undefined;

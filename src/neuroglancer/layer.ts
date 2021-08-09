@@ -2043,7 +2043,7 @@ export function detectLayerType(userLayer: UserLayer): UserLayerConstructor|unde
       guess = getMaxPriorityGuess(guess, detectLayerTypeFromDataSubsource(subsource));
     }
   }
-  return guess ?.layerConstructor;
+  return guess?.layerConstructor;
 }
 
 function detectLayerTypeFromSubsources(subsources: Iterable<LoadedDataSubsource>): LayerTypeGuess|
@@ -2066,7 +2066,7 @@ export class NewUserLayer extends UserLayer {
   detectedLayerConstructor: UserLayerConstructor|undefined;
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    this.detectedLayerConstructor = detectLayerTypeFromSubsources(subsources) ?.layerConstructor;
+    this.detectedLayerConstructor = detectLayerTypeFromSubsources(subsources)?.layerConstructor;
   }
 }
 
