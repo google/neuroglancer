@@ -1408,7 +1408,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     this.registerDisposer(layerManager);
     this.location.changed.add(() => {
       this.changed.dispatch();
-      const userLayer = this.layer ?.layer ? ? undefined;
+      const userLayer = this.layer?.layer ?? undefined;
       if (userLayer !== undefined) {
         const curLocation = this.location.value;
         if (curLocation.visible) {
