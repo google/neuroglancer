@@ -227,7 +227,7 @@ data-dependent alpha.
 ### Color maps
 
 You can map values in the range [0,1] to an RGB color using one of the color maps defined in
-[colormaps.glsl](../webgl/colormaps.glsl).
+[colormaps.ts](../webgl/colormaps.ts).
 
 ### Avoiding artifacts due to lossy compression
 
