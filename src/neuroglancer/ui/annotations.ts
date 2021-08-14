@@ -1347,7 +1347,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                                                   }))),
                   ({annotation, chunkTransform}, parent, context) => {
                     if (annotation == null) {
-                      if (state.annotationType && state.annotationSerialized) {
+                      if (state.annotationType !== undefined &&
+                          state.annotationSerialized !== undefined) {
                         const handler = annotationTypeHandlers[state.annotationType];
                         const rank = annotationLayer.source.rank;
                         const baseNumBytes = handler.serializedBytes(rank);
