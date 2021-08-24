@@ -103,6 +103,7 @@ export abstract class SliceViewRenderLayer<
     const info = visibleSources.get(source);
     if (info !== undefined) {
       ++info.refCount;
+      info.chunkTransform = chunkTransform;
     } else {
       visibleSources.set(source, {source, refCount: 1, chunkTransform});
       this.visibleSourcesList_.length = 0;
