@@ -374,6 +374,10 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     }
   }
 
+  hasNonSerializedProperties() {
+    return this.relationships.length > 0;
+  }
+
   getSources(_options: SliceViewSourceOptions):
       SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
     throw new Error('not implemented');

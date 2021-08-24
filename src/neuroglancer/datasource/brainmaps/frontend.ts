@@ -542,6 +542,11 @@ export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.credentialsProvider = this.registerDisposer(options.credentialsProvider.addRef());
   }
 
+  hasNonSerializedProperties() {
+    // Has description field.
+    return true;
+  }
+
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
     const {upperVoxelBound} = this.parameters;
     const spec = makeSliceViewChunkSpecification({
