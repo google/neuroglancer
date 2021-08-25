@@ -123,7 +123,7 @@ export async function completeHttpPath(
       return await getS3PathCompletions(host, path, cancellationToken);
     }
     const s3Match = parsedUrl.match(
-        /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com|[^\/]+|[^\/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/);
+        /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com|[^\/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/);
     if (s3Match !== null) {
       return await getS3CompatiblePathCompletions(
           credentialsProvider, s3Match[1], s3Match[1], s3Match[2], cancellationToken);
