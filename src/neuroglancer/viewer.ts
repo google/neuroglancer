@@ -31,7 +31,7 @@ import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_prov
 import {StateShare, stateShareEnabled} from 'neuroglancer/datasource/state_share';
 import {DisplayContext, TrackableWindowedViewport} from 'neuroglancer/display_context';
 import {HelpPanelState, InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
+import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState, ActionMode, ActionState} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
@@ -697,10 +697,60 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   /**
+   * Called after an edit is made to "deactivate" merge/split
+   */
+   deactivateEditMode() {
+    if (this.mouseState.actionState === ActionState.INACTIVE) {
+      this.mouseState.toggleAction();
+    }
+    this.handleModeChange(this.mouseState.actionMode === ActionMode.MERGE);
+  }
+
+  handleModeChange(merge: boolean) {
+    this.mouseState.toggleAction();
+
+    const mergeWhileInSplit = merge && this.mouseState.actionMode === ActionMode.SPLIT;
+    const splitWhileInMerge = !merge && this.mouseState.actionMode === ActionMode.MERGE;
+    const mergeOn = () => StatusMessage.showTemporaryMessage('Merge mode activated.');
+    const splitOn = () => StatusMessage.showTemporaryMessage('Split mode activated.');
+    const mergeOff = () => StatusMessage.showTemporaryMessage('Merge mode deactivated.');
+    const splitOff = () => StatusMessage.showTemporaryMessage('Split mode deactivated.');
+
+    if (mergeWhileInSplit) {
+      this.mouseState.setMode(ActionMode.MERGE);
+      mergeOn();
+      splitOff();
+      this.mouseState.toggleAction();
+    } else if (splitWhileInMerge) {
+      this.mouseState.setMode(ActionMode.SPLIT);
+      splitOn();
+      mergeOff();
+      this.mouseState.toggleAction();
+    } else if (this.mouseState.actionState === ActionState.INACTIVE) {
+      if (this.mouseState.actionMode === ActionMode.MERGE) {
+        mergeOff();
+      } else {
+        splitOff();
+      }
+      this.mouseState.setMode(ActionMode.NONE);
+    } else {
+      if (merge) {
+        this.mouseState.setMode(ActionMode.MERGE);
+        mergeOn();
+      } else {
+        this.mouseState.setMode(ActionMode.SPLIT);
+        splitOn();
+      }
+    }
+  }
+
+  /**
    * Called once by the constructor to register the action listeners.
    */
   private registerActionListeners() {
-    for (const action of ['recolor', 'clear-segments']) {
+    for (const action
+      of ['recolor', 'clear-segments',
+          'shatter-segment-equivalences']) {
       this.bindAction(action, () => {
         this.layerManager.invokeAction(action);
       });

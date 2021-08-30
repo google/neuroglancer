@@ -40,6 +40,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {makeFilterButton} from 'neuroglancer/widget/filter_button';
+import { TrackableBoolean } from '../trackable_boolean';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
@@ -757,7 +758,10 @@ export function getObjectColor(
 
 export function sendVisibleSegmentsState(state: VisibleSegmentsState, options: any = {}) {
   for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
-    options[property] = state[property].rpcId;
+    const value = state[property];
+    if (value) { // due to optional rootSegmentsAfterEdit
+      options[property] = value.rpcId;
+    }
   }
   return options;
 }
@@ -774,6 +778,9 @@ export class SegmentationLayerSharedObject extends Base {
     let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
     sendVisibleSegmentsState(displayState.segmentationGroupState.value, options);
+    if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined){
+      options['rootSegmentsAfterEdit'] = displayState.segmentationGroupState.value.rootSegmentsAfterEdit!.rpcId;
+    }
     options['transform'] =
         this.registerDisposer(SharedWatchableValue.makeFromExisting(
                                   this.chunkManager.rpc!, this.displayState.transform))

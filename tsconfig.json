@@ -3,8 +3,8 @@
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
-    "noUnusedParameters": true,
-    "noUnusedLocals": true,
+    "noUnusedParameters": false, // temp
+    "noUnusedLocals": false, // temp
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "strictNullChecks": true,

@@ -871,6 +871,18 @@ export class LayerManager extends RefCounted {
   }
 }
 
+export enum ActionState {
+  INACTIVE,
+  FIRST,   // Selecting elements for the first group.
+  SECOND,  // Selecting elements for the second group.
+}
+
+export enum ActionMode {
+  NONE,
+  MERGE,
+  SPLIT,
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer|null;
   pickedValue: Uint64;
@@ -880,6 +892,8 @@ export interface PickState {
   pickedAnnotationBuffer: ArrayBuffer|undefined;
   pickedAnnotationBufferOffset: number|undefined;
   pickedAnnotationType: AnnotationType|undefined;
+  actionMode: ActionMode;
+  actionState: ActionState;
 }
 
 export class MouseSelectionState implements PickState {
@@ -899,8 +913,50 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationType: AnnotationType|undefined = undefined;
   pageX: number;
   pageY: number;
+  
+  actionMode = ActionMode.NONE;
+  actionState = ActionState.INACTIVE;
 
   private forcerFunction: (() => void)|undefined = undefined;
+
+  setMode(mode: ActionMode) {
+    this.actionMode = mode;
+  }
+
+  toggleAction() {
+    if (this.actionState === ActionState.INACTIVE) {
+      this.actionState = ActionState.FIRST;
+    } else {
+      this.actionState = ActionState.INACTIVE;
+    }
+  }
+
+  updateAction() {
+    switch (this.actionMode) {
+      case ActionMode.MERGE: {
+        if (this.actionState === ActionState.FIRST) {
+          this.actionState = ActionState.SECOND;
+          return ['merge', 'first'];
+        } else {
+          this.actionState = ActionState.INACTIVE;
+          return ['merge', 'second'];
+        }
+      }
+      case ActionMode.SPLIT: {
+        if (this.actionState === ActionState.FIRST) {
+          this.actionState = ActionState.SECOND;
+          return ['split', 'first'];
+        } else {
+          this.actionState = ActionState.INACTIVE;
+          return ['split', 'second'];
+        }
+      }
+      default: {
+        // Should never happen
+        return [];
+      }
+    }
+  }
 
   removeForcer(forcer: (() => void)) {
     if (forcer === this.forcerFunction) {

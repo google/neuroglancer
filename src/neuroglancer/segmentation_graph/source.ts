@@ -18,6 +18,9 @@ import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import { RenderLayer } from '../renderlayer';
+import { RenderLayerTransformOrError } from '../render_coordinate_transform';
+import { MultiscaleVolumeChunkSource } from '../sliceview/volume/frontend';
 
 export abstract class SegmentationGraphSource {
   abstract connect(segmentsState: VisibleSegmentsState): Owned<SegmentationGraphSourceConnection>;
@@ -44,6 +47,18 @@ export abstract class SegmentationGraphSourceConnection<
     super();
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
+
+  select?(id: Uint64): void;
+
+  createRenderLayer(
+      transform: WatchableValueInterface<RenderLayerTransformOrError>,
+      localPosition: WatchableValueInterface<Float32Array>,
+      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer|undefined {
+    transform;
+    localPosition;
+    multiscaleSource;
+    return undefined;
+  };
 }
 
 export function trackWatchableValueSegment(

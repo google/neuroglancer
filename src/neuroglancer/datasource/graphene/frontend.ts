@@ -1,0 +1,1689 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import debounce from 'lodash/debounce';
+
+import {AnnotationType, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs} from 'neuroglancer/annotation';
+import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {BoundingBox, CoordinateSpace, coordinateSpaceFromJson, emptyValidCoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
+import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
+// import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {VertexPositionFormat} from 'neuroglancer/mesh/base';
+import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
+import {IndexedSegmentPropertySource, InlineSegmentProperty, InlineSegmentPropertyMap, normalizeInlineSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
+import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {makeSliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {transposeNestedArrays} from 'neuroglancer/util/array';
+import {DATA_TYPE_ARRAY_CONSTRUCTOR, DataType} from 'neuroglancer/util/data_type';
+import {Borrowed, Owned} from 'neuroglancer/util/disposable';
+import {mat4, vec3} from 'neuroglancer/util/geom';
+import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
+import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray, verifyNonnegativeInt} from 'neuroglancer/util/json';
+import * as matrix from 'neuroglancer/util/matrix';
+import {getObjectId} from 'neuroglancer/util/object_id';
+import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {cancellableFetchSpecialOk, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+
+import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
+import {IndexedSegmentPropertySourceParameters} from 'neuroglancer/datasource/graphene/base';
+import {ChunkedGraphChunkSource,/*, WithRootSegments*/
+ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
+import {StatusMessage} from 'neuroglancer/status';
+
+import {AnnotationSpatialIndexSourceParameters, AnnotationSourceParameters} from 'neuroglancer/datasource/graphene/base';
+import { makeChunkedGraphChunkSpecification } from 'src/neuroglancer/sliceview/chunked_graph/base';
+import { Uint64Set } from 'src/neuroglancer/uint64_set';
+import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID } from 'src/neuroglancer/segmentation_graph/source';
+import { VisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/base';
+import { TrackableValue, WatchableValueInterface } from 'src/neuroglancer/trackable_value';
+import { RenderLayerTransformOrError } from 'src/neuroglancer/render_coordinate_transform';
+import { RenderLayer } from 'src/neuroglancer/renderlayer';
+
+class GrapheneVolumeChunkSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
+
+class GrapheneChunkedGraphChunkSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
+
+class GrapheneMeshSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {}
+
+class GrapheneSkeletonSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(SkeletonSource), SkeletonSourceParameters)) {
+  get skeletonVertexCoordinatesInVoxels() {
+    return false;
+  }
+  get vertexAttributes() {
+    return this.parameters.metadata.vertexAttributes;
+  }
+}
+
+function resolvePath(a: string, b: string) {
+  const outputParts = a.split('/');
+  for (const part of b.split('/')) {
+    if (part === '..') {
+      if (outputParts.length !== 0) {
+        outputParts.length = outputParts.length - 1;
+        continue;
+      }
+    }
+    outputParts.push(part);
+  }
+  return outputParts.join('/');
+}
+
+class ScaleInfo {
+  key: string;
+  encoding: VolumeChunkEncoding;
+  resolution: Float64Array;
+  voxelOffset: Float32Array;
+  size: Float32Array;
+  chunkSizes: Uint32Array[];
+  compressedSegmentationBlockSize: vec3|undefined;
+  sharding: ShardingParameters|undefined;
+  constructor(obj: any, numChannels: number) {
+    verifyObject(obj);
+    const rank = (numChannels === 1) ? 3 : 4;
+    const resolution = this.resolution = new Float64Array(rank);
+    const voxelOffset = this.voxelOffset = new Float32Array(rank);
+    const size = this.size = new Float32Array(rank);
+    if (rank === 4) {
+      resolution[3] = 1;
+      size[3] = numChannels;
+    }
+    verifyObjectProperty(
+        obj, 'resolution',
+        x => parseFixedLengthArray(resolution.subarray(0, 3), x, verifyFinitePositiveFloat));
+    verifyOptionalObjectProperty(
+        obj, 'voxel_offset', x => parseFixedLengthArray(voxelOffset.subarray(0, 3), x, verifyInt));
+    verifyObjectProperty(
+        obj, 'size', x => parseFixedLengthArray(size.subarray(0, 3), x, verifyPositiveInt));
+    this.chunkSizes = verifyObjectProperty(
+        obj, 'chunk_sizes', x => parseArray(x, y => {
+                              const chunkSize = new Uint32Array(rank);
+                              if (rank === 4) chunkSize[3] = numChannels;
+                              parseFixedLengthArray(chunkSize.subarray(0, 3), y, verifyPositiveInt);
+                              return chunkSize;
+                            }));
+    if (this.chunkSizes.length === 0) {
+      throw new Error('No chunk sizes specified.');
+    }
+    this.sharding = verifyObjectProperty(obj, 'sharding', parseShardingParameters);
+    if (this.sharding !== undefined && this.chunkSizes.length !== 1) {
+      throw new Error('Sharding requires a single chunk size per scale');
+    }
+    let encoding = this.encoding =
+        verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
+    if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION) {
+      this.compressedSegmentationBlockSize = verifyObjectProperty(
+          obj, 'compressed_segmentation_block_size',
+          x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+    }
+    this.key = verifyObjectProperty(obj, 'key', verifyString);
+  }
+}
+
+class AppInfo {
+  segmentationUrl: string;
+  meshingUrl: string;
+  supported_api_versions: number[];
+  constructor(infoUrl: string, obj: any) {
+    // .../1.0/... is the legacy link style
+    // .../table/... is the current, version agnostic link style (for retrieving the info file)
+    const linkStyle = /^(https?:\/\/[.\w:\-\/]+)\/segmentation\/(?:1\.0|table)\/([^\/]+)\/?$/;
+    let match = infoUrl.match(linkStyle);
+    if (match === null) {
+      throw Error(`Graph URL invalid: ${infoUrl}`);
+    }
+    this.segmentationUrl = `${match[1]}/segmentation/api/v${PYCG_APP_VERSION}/table/${match[2]}`;
+    this.meshingUrl = `${match[1]}/meshing/api/v${PYCG_APP_VERSION}/table/${match[2]}`;
+
+    try {
+      verifyObject(obj);
+      this.supported_api_versions = verifyObjectProperty(
+          obj, 'supported_api_versions', x => parseArray(x, verifyNonnegativeInt));
+    } catch (error) {
+      // Dealing with a prehistoric graph server with no version information
+      this.supported_api_versions = [0];
+    }
+    if (PYCG_APP_VERSION in this.supported_api_versions === false) {
+      const redirectMsgBox = new StatusMessage();
+      const redirectMsg = `This Neuroglancer branch requires Graph Server version ${
+          PYCG_APP_VERSION}, but the server only supports version(s) ${
+          this.supported_api_versions}.`;
+
+      if (location.hostname.includes('neuromancer-seung-import.appspot.com')) {
+        const redirectLoc = new URL(location.href);
+        redirectLoc.hostname = `graphene-v${
+            this.supported_api_versions.slice(-1)[0]}-dot-neuromancer-seung-import.appspot.com`;
+        redirectMsgBox.setHTML(`Try <a href="${redirectLoc.href}">${redirectLoc.hostname}</a>?`);
+      }
+      throw new Error(redirectMsg);
+    }
+  }
+}
+
+class GraphInfo {
+  chunkSize: vec3;
+  constructor(obj: any) {
+    verifyObject(obj);
+    this.chunkSize = verifyObjectProperty(
+        obj, 'chunk_size', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+  }
+}
+
+interface MultiscaleVolumeInfo {
+  dataType: DataType;
+  volumeType: VolumeType;
+  mesh: string|undefined;
+  skeletons: string|undefined;
+  segmentPropertyMap: string|undefined;
+  scales: ScaleInfo[];
+  modelSpace: CoordinateSpace;
+  dataUrl: string;
+  app?: AppInfo;
+  graph?: GraphInfo;
+}
+
+export function parseSpecialUrlOld(url: string): string { // TODO: brought back old parseSpecialUrl
+  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
+  let match = url.match(urlProtocolPattern);
+  if (match === null) {
+    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
+  }
+  const protocol = match[1];
+  if (protocol === 'gs') {
+    const bucket = match[2];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return `https://storage.googleapis.com/${bucket}${path}`;
+  } else if (protocol === 's3') {
+    const bucket = match[2];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return `https://s3.amazonaws.com/${bucket}${path}`;
+  }
+  return url;
+}
+
+function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeInfo {
+  verifyObject(obj);
+  const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
+  const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
+  let volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
+  const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
+  const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
+  const segmentPropertyMap = verifyObjectProperty(obj, 'segment_properties', verifyOptionalString);
+  const scaleInfos =
+      verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
+  if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
+  const baseScale = scaleInfos[0];
+  const rank = (numChannels === 1) ? 3 : 4;
+  const scales = new Float64Array(rank);
+  const lowerBounds = new Float64Array(rank);
+  const upperBounds = new Float64Array(rank);
+  const names = ['x', 'y', 'z'];
+  const units = ['m', 'm', 'm'];
+
+  for (let i = 0; i < 3; ++i) {
+    scales[i] = baseScale.resolution[i] / 1e9;
+    lowerBounds[i] = baseScale.voxelOffset[i];
+    upperBounds[i] = lowerBounds[i] + baseScale.size[i];
+  }
+  if (rank === 4) {
+    scales[3] = 1;
+    upperBounds[3] = numChannels;
+    names[3] = 'c^';
+    units[3] = '';
+  }
+  const box: BoundingBox = {lowerBounds, upperBounds};
+  const modelSpace = makeCoordinateSpace({
+    rank,
+    names,
+    units,
+    scales,
+    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+  });
+
+  let dataUrl = url;
+  let app = undefined;
+  let graph = undefined;
+
+  if (volumeType !== VolumeType.IMAGE) {
+    console.warn("THIS IS HAPPENING!!!!!")
+    // volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
+    dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
+    app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
+    graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
+  }
+
+  
+
+  
+
+  return {
+    dataType,
+    volumeType,
+    mesh,
+    skeletons,
+    segmentPropertyMap,
+    scales: scaleInfos,
+    modelSpace,
+    app,
+    graph,
+    dataUrl,
+  };
+}
+
+class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+  // app: AppInfo;
+  // graph: GraphInfo;
+
+  // dataUrl: string;
+  // dataType: DataType;
+  // numChannels: number;
+  // volumeType: VolumeType;
+  // mesh: string|undefined;
+  // verifyMesh: boolean|undefined;
+  // skeletons: string|undefined;
+  // app: AppInfo;
+  // graph: GraphInfo;
+  // scales: ScaleInfo[];
+
+  // getChunkedGraphUrl(): [string, SpecialProtocolCredentialsProvider] | undefined { // DONT LIKE THIS
+  //   if (this.info.app) {
+  //     return [this.info.app!.segmentationUrl, this.credentialsProvider];
+  //   }
+  //   return undefined;
+  // }
+
+  // public async getTimestampLimit() {
+  //   const response =  await cancellableFetchSpecialOk(
+  //     this.credentialsProvider, `${this.getChunkedGraphUrl()![0]}/oldest_timestamp`, {}, responseJson);
+  //   return verifyObjectProperty(await response.json(), 'iso', verifyString);
+  // }
+
+  get dataType() {
+    return this.info.dataType;
+  }
+
+  get volumeType() {
+    return this.info.volumeType;
+  }
+
+  get rank() {
+    return this.info.modelSpace.rank;
+  }
+
+  constructor(
+      chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
+      public url: string, public info: MultiscaleVolumeInfo) {
+    super(chunkManager);
+  }
+
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
+    console.log("GrapheneMultiscaleVolumeChunkSource getSources");
+    const modelResolution = this.info.scales[0].resolution;
+    const {rank} = this;
+    return transposeNestedArrays(this.info.scales.map(scaleInfo => {
+      const {resolution} = scaleInfo;
+      const stride = rank + 1;
+      const chunkToMultiscaleTransform = new Float32Array(stride * stride);
+      chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+      for (let i = 0; i < 3; ++i) {
+        const relativeScale = resolution[i] / modelResolution[i];
+        chunkToMultiscaleTransform[stride * i + i] = relativeScale;
+        chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
+      }
+      if (rank === 4) {
+        chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+      }
+      const x = makeDefaultVolumeChunkSpecifications({
+               rank,
+               dataType: this.dataType,
+               chunkToMultiscaleTransform,
+               upperVoxelBound: scaleInfo.size,
+               volumeType: this.volumeType,
+               chunkDataSizes: scaleInfo.chunkSizes,
+               baseVoxelOffset: scaleInfo.voxelOffset,
+               compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
+               volumeSourceOptions,
+             })
+          .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
+                 chunkSource: this.chunkManager.getChunkSource(GrapheneVolumeChunkSource, {
+                   credentialsProvider: this.credentialsProvider,
+                   spec,
+                   parameters: {
+                     url: resolvePath(this.info.dataUrl, scaleInfo.key),
+                     encoding: scaleInfo.encoding,
+                     sharding: scaleInfo.sharding,
+                   }
+                 }),
+                 chunkToMultiscaleTransform,
+               }));
+
+      return x;
+    }));
+  }
+
+  getChunkedGraphSources(rootSegments: Uint64Set) {
+    const {rank} = this;
+    const scaleInfo = this.info.scales[0];
+
+    const spec = makeChunkedGraphChunkSpecification({
+      rank,
+      dataType: this.info.dataType,
+      upperVoxelBound: scaleInfo.size,
+      chunkDataSize: Uint32Array.from(this.info.graph!.chunkSize),
+      baseVoxelOffset: scaleInfo.voxelOffset,
+      // compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
+    });
+
+    const stride = rank + 1;
+    const chunkToMultiscaleTransform = new Float32Array(stride * stride);
+    chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+    const {lowerBounds: baseLowerBound, upperBounds: baseUpperBound} =
+          this.info.modelSpace.boundingBoxes[0].box;
+    const lowerClipBound = new Float32Array(rank);
+    const upperClipBound = new Float32Array(rank);
+
+    for (let i = 0; i < 3; ++i) {
+      const relativeScale = 1;
+      chunkToMultiscaleTransform[stride * i + i] = relativeScale;
+      chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i];
+      lowerClipBound[i] = baseLowerBound[i];
+      upperClipBound[i] = baseUpperBound[i];
+    }
+    return [[
+      {
+        chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
+          spec,
+          credentialsProvider: this.credentialsProvider,
+          rootSegments,
+          parameters: {url: `${this.info.app!.segmentationUrl}/node`}}),
+        chunkToMultiscaleTransform,
+        lowerClipBound,
+        upperClipBound,
+      }
+    ]];
+  }
+}
+
+const MultiscaleAnnotationSourceBase = (WithParameters(
+    WithCredentialsProvider<SpecialProtocolCredentials>()(MultiscaleAnnotationSource),
+    AnnotationSourceParameters));
+
+class GrapheneAnnotationSpatialIndexSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(AnnotationGeometryChunkSource), AnnotationSpatialIndexSourceParameters)) {}
+
+interface GrapheneAnnotationSourceOptions {
+  metadata: AnnotationMetadata;
+  parameters: AnnotationSourceParameters;
+  credentialsProvider: SpecialProtocolCredentialsProvider;
+}
+
+export class GrapheneAnnotationSource extends MultiscaleAnnotationSourceBase {
+  key: any;
+  metadata: AnnotationMetadata;
+  credentialsProvider: SpecialProtocolCredentialsProvider;
+  OPTIONS: GrapheneAnnotationSourceOptions;
+  constructor(chunkManager: ChunkManager, options: GrapheneAnnotationSourceOptions) {
+    const {parameters} = options;
+    super(chunkManager, {
+      rank: parameters.rank,
+      relationships: parameters.relationships.map(x => x.name),
+      properties: parameters.properties,
+      parameters,
+    } as any);
+    this.readonly = true;
+    this.metadata = options.metadata;
+    this.credentialsProvider = options.credentialsProvider;
+  }
+
+  getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
+    return [this.metadata.spatialIndices.map(spatialIndexLevel => {
+      const {spec} = spatialIndexLevel;
+      return {
+        chunkSource: this.chunkManager.getChunkSource(GrapheneAnnotationSpatialIndexSource, {
+          credentialsProvider: this.credentialsProvider,
+          parent: this,
+          spec,
+          parameters: spatialIndexLevel.parameters,
+        }),
+        chunkToMultiscaleTransform: spec.chunkToMultiscaleTransform,
+      };
+    })];
+  }
+}
+
+function getLegacyMeshSource(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    parameters: MeshSourceParameters) {
+  return chunkManager.getChunkSource(GrapheneMeshSource, {parameters, credentialsProvider});
+}
+
+function parseTransform(data: any): mat4 {
+  return verifyObjectProperty(data, 'transform', value => {
+    const transform = mat4.create();
+    if (value !== undefined) {
+      parseFixedLengthArray(transform.subarray(0, 12), value, verifyFiniteFloat);
+    }
+    mat4.transpose(transform, transform);
+    return transform;
+  });
+}
+
+interface ParsedMeshMetadata {
+  metadata: MultiscaleMeshMetadata|undefined;
+  segmentPropertyMap?: string|undefined;
+}
+
+function parseMeshMetadata(data: any): ParsedMeshMetadata {
+  verifyObject(data);
+  const t = verifyObjectProperty(data, '@type', verifyString);
+  let metadata: MultiscaleMeshMetadata|undefined;
+  if (t === 'neuroglancer_legacy_mesh') {
+    const sharding = verifyObjectProperty(data, 'sharding', parseGrapheneShardingParameters);
+    if (sharding === undefined) {
+      metadata = undefined;
+    } else {
+      const lodScaleMultiplier = 0;
+      const vertexQuantizationBits = 10;
+      const transform = parseTransform(data);
+      metadata = {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
+    }
+  } else if (t !== 'neuroglancer_multilod_draco') {
+    throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
+  } else {
+    const lodScaleMultiplier =
+        verifyObjectProperty(data, 'lod_scale_multiplier', verifyFinitePositiveFloat);
+    const vertexQuantizationBits =
+        verifyObjectProperty(data, 'vertex_quantization_bits', verifyPositiveInt);
+    const transform = parseTransform(data);
+    const sharding = verifyObjectProperty(data, 'sharding', parseGrapheneShardingParameters);
+    metadata = {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
+  }
+  const segmentPropertyMap = verifyObjectProperty(data, 'segment_properties', verifyOptionalString);
+  return {metadata, segmentPropertyMap};
+}
+
+async function getMeshMetadata(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string): Promise<ParsedMeshMetadata> {
+  let metadata: any;
+  try {
+    metadata = await getJsonMetadata(chunkManager, credentialsProvider, url);
+  } catch (e) {
+    if (isNotFoundError(e)) {
+      // If we fail to fetch the info file, assume it is the legacy
+      // single-resolution mesh format.
+      return {metadata: undefined};
+    }
+    throw e;
+  }
+  return parseMeshMetadata(metadata);
+}
+
+function parseShardingEncoding(y: any): DataEncoding {
+  if (y === undefined) return DataEncoding.RAW;
+  return verifyEnumString(y, DataEncoding);
+}
+
+function parseShardingParameters(shardingData: any): ShardingParameters|undefined {
+  if (shardingData === undefined) return undefined;
+  verifyObject(shardingData);
+  const t = verifyObjectProperty(shardingData, '@type', verifyString);
+  if (t !== 'neuroglancer_uint64_sharded_v1') {
+    throw new Error(`Unsupported sharding format: ${JSON.stringify(t)}`);
+  }
+  const hash =
+      verifyObjectProperty(shardingData, 'hash', y => verifyEnumString(y, ShardingHashFunction));
+  const preshiftBits = verifyObjectProperty(shardingData, 'preshift_bits', verifyInt);
+  const shardBits = verifyObjectProperty(shardingData, 'shard_bits', verifyInt);
+  const minishardBits = verifyObjectProperty(shardingData, 'minishard_bits', verifyInt);
+  const minishardIndexEncoding =
+      verifyObjectProperty(shardingData, 'minishard_index_encoding', parseShardingEncoding);
+  const dataEncoding = verifyObjectProperty(shardingData, 'data_encoding', parseShardingEncoding);
+  return {hash, preshiftBits, shardBits, minishardBits, minishardIndexEncoding, dataEncoding};
+}
+
+function parseGrapheneShardingParameters(shardingData: any): Array<ShardingParameters>|undefined {
+  if (shardingData === undefined) return undefined;
+  verifyObject(shardingData);
+  let grapheneShardingParameters = new Array<ShardingParameters>();
+  for (const layer in shardingData) {
+     let index = Number(layer);
+     grapheneShardingParameters[index] = parseShardingParameters(shardingData[index])!;
+  }
+  return grapheneShardingParameters;
+}
+
+interface ParsedSkeletonMetadata {
+  metadata: SkeletonMetadata;
+  segmentPropertyMap: string|undefined;
+}
+
+function parseSkeletonMetadata(data: any): ParsedSkeletonMetadata {
+  verifyObject(data);
+  const t = verifyObjectProperty(data, '@type', verifyString);
+  if (t !== 'neuroglancer_skeletons') {
+    throw new Error(`Unsupported skeleton type: ${JSON.stringify(t)}`);
+  }
+  const transform = parseTransform(data);
+  const vertexAttributes = new Map<string, VertexAttributeInfo>();
+  verifyObjectProperty(data, 'vertex_attributes', attributes => {
+    if (attributes === undefined) return;
+    parseArray(attributes, attributeData => {
+      verifyObject(attributeData);
+      const id = verifyObjectProperty(attributeData, 'id', verifyString);
+      if (id === '') throw new Error('vertex attribute id must not be empty');
+      if (vertexAttributes.has(id)) {
+        throw new Error(`duplicate vertex attribute id ${JSON.stringify(id)}`);
+      }
+      const dataType =
+          verifyObjectProperty(attributeData, 'data_type', y => verifyEnumString(y, DataType));
+      const numComponents =
+          verifyObjectProperty(attributeData, 'num_components', verifyPositiveInt);
+      vertexAttributes.set(id, {dataType, numComponents});
+    });
+  });
+
+  if (data.sharding === null) { /* our info file is returning null for this */
+    data.sharding = undefined;
+  }
+
+  const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+  const segmentPropertyMap = verifyObjectProperty(data, 'segment_properties', verifyOptionalString);
+  return {
+    metadata: {transform, vertexAttributes, sharding} as SkeletonMetadata,
+    segmentPropertyMap
+  };
+}
+
+async function getSkeletonMetadata(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string): Promise<ParsedSkeletonMetadata> {
+  const metadata = await getJsonMetadata(chunkManager, credentialsProvider, url);
+  return parseSkeletonMetadata(metadata);
+}
+
+function getDefaultCoordinateSpace() {
+  return makeCoordinateSpace(
+      {names: ['x', 'y', 'z'], units: ['m', 'm', 'm'], scales: Float64Array.of(1e-9, 1e-9, 1e-9)});
+}
+
+export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters, credentialsProvider: SpecialProtocolCredentialsProvider) {
+  return chunkManager.getChunkSource(GrapheneMeshSource, {parameters, credentialsProvider});
+}
+
+async function getMeshSource(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, fragmentUrl: string, sharding: boolean) {
+  const {metadata, segmentPropertyMap} =
+      await getMeshMetadata(chunkManager, credentialsProvider, fragmentUrl);
+  if (metadata === undefined) {
+    return {
+      source: getLegacyMeshSource(chunkManager, credentialsProvider, {
+        manifestUrl: url,//parseSpecialUrl(url, credentialsProvider),
+        fragmentUrl: fragmentUrl,//parseSpecialUrl(url, credentialsProvider),
+        lod: 0,
+        sharding: undefined,//sharding, TODO
+        verifyMesh: false,
+      }),
+      transform: mat4.create(),
+      segmentPropertyMap
+    };
+  }
+  // TODO: what is this
+  // let vertexPositionFormat: VertexPositionFormat;
+  // const {vertexQuantizationBits} = metadata;
+  // if (vertexQuantizationBits === 10) {
+  //   vertexPositionFormat = VertexPositionFormat.uint10;
+  // } else if (vertexQuantizationBits === 16) {
+  //   vertexPositionFormat = VertexPositionFormat.uint16;
+  // } else {
+  //   throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
+  // }
+  return {
+    source: getShardedMeshSource(chunkManager, {
+      manifestUrl: url,//parseSpecialUrl(url, credentialsProvider),
+      fragmentUrl: fragmentUrl,//parseSpecialUrl(url, credentialsProvider),
+      lod: 0,
+      sharding: metadata.sharding,
+      verifyMesh: false,
+    }, credentialsProvider)
+    /*chunkManager.getChunkSource(MultiscaleMeshSource, {
+      credentialsProvider,
+      parameters: {url, metadata},
+      format: {
+        fragmentRelativeVertices: true,
+        vertexPositionFormat,
+      }
+    })*/,
+    transform: metadata.transform,
+    segmentPropertyMap,
+  };
+}
+
+// async function getSkeletonSource(
+//     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string) {
+//   const {metadata, segmentPropertyMap} =
+//       await getSkeletonMetadata(chunkManager, undefined/*credentialsProvider*/, url);
+//   return {
+//     source: chunkManager.getChunkSource(GrapheneSkeletonSource, {
+//       credentialsProvider,
+//       parameters: {
+//         url,
+//         metadata,
+//       },
+//     }),
+//     transform: metadata.transform,
+//     segmentPropertyMap,
+//   };
+// }
+
+function getJsonMetadata(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string): Promise<any> {
+  return chunkManager.memoize.getUncounted(
+      {'type': 'graphene:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
+      async () => {
+        return await cancellableFetchSpecialOk(
+            credentialsProvider, `${url}/info`, {}, responseJson);
+      });
+}
+
+function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
+  const m = mat4.create();
+  const resolution = info.scales[0].resolution;
+  for (let i = 0; i < 3; ++i) {
+    m[5 * i] = 1 / resolution[i];
+  }
+  return m;
+}
+
+async function getVolumeDataSource(
+    options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, metadata: any): Promise<DataSource> {
+      console.log('getVolumeDataSource', metadata);
+  const info = parseMultiscaleVolumeInfo(metadata, url);
+  const volume = new GrapheneMultiscaleVolumeChunkSource(
+      options.chunkManager, credentialsProvider, url, info);
+  const segmentationGraph = new GrapheneGraphSource(info, credentialsProvider, volume);
+  const {modelSpace} = info;
+  const subsources: DataSubsourceEntry[] = [
+    {
+      id: 'default',
+      default: true,
+      subsource: {volume},
+    },
+    {
+      id: 'graph',
+      default: true,
+      subsource: {segmentationGraph},
+    },
+    // {
+    //   id: 'local',
+    //   default: true,
+    //   subsource: {local: 1},
+    // },
+    {
+      id: 'bounds',
+      default: true,
+      subsource: {
+        staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(modelSpace.bounds),
+      },
+    },
+  ];
+  if (info.segmentPropertyMap !== undefined) {
+    const mapUrl = resolvePath(url, info.segmentPropertyMap);
+    const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
+    const segmentPropertyMap =
+        getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
+    subsources.push({
+      id: 'properties',
+      default: true,
+      subsource: {segmentPropertyMap},
+    });
+  }
+  if (info.mesh !== undefined) {
+    const {source: meshSource, transform} =
+        await getMeshSource(options.chunkManager, credentialsProvider,
+          info.app!.meshingUrl,
+          resolvePath(info.dataUrl, info.mesh),
+          true); // TEMP TODO sharding  = true
+    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
+    subsources.push({
+      id: 'mesh',
+      default: true,
+      subsource: {mesh: meshSource},
+      subsourceToModelSubspaceTransform,
+    });
+  }
+  if (info.skeletons !== undefined && false) {/*
+    const skeletonsUrl = resolvePath(info.dataUrl, info.skeletons);
+    const {source: skeletonSource, transform} =
+        await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
+    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
+    subsources.push({
+      id: 'skeletons',
+      default: true,
+      subsource: {mesh: skeletonSource},
+      subsourceToModelSubspaceTransform,
+    });
+  */}
+  return {modelTransform: makeIdentityTransform(modelSpace), subsources};
+}
+
+// async function getSkeletonsDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string): Promise<DataSource> {
+//   const {source: skeletons, transform, segmentPropertyMap} =
+//       await getSkeletonSource(options.chunkManager, credentialsProvider, url);
+//   const subsources: DataSubsourceEntry[] = [
+//     {
+//       id: 'default',
+//       default: true,
+//       subsource: {mesh: skeletons},
+//       subsourceToModelSubspaceTransform: transform,
+//     },
+//   ];
+//   if (segmentPropertyMap !== undefined) {
+//     const mapUrl = resolvePath(url, segmentPropertyMap);
+//     const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
+//     const segmentPropertyMapData =
+//         getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
+//     subsources.push({
+//       id: 'properties',
+//       default: true,
+//       subsource: {segmentPropertyMap: segmentPropertyMapData},
+//     });
+//   }
+//   return {
+//     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
+//     subsources,
+//   };
+// }
+
+function parseKeyAndShardingSpec(url: string, obj: any) {
+  verifyObject(obj);
+  return {
+    url: resolvePath(url, verifyObjectProperty(obj, 'key', verifyString)),
+    sharding: verifyObjectProperty(obj, 'sharding', parseShardingParameters),
+  };
+}
+
+interface AnnotationSpatialIndexLevelMetadata {
+  parameters: AnnotationSpatialIndexSourceParameters;
+  limit: number;
+  spec: AnnotationGeometryChunkSpecification;
+}
+
+class AnnotationMetadata {
+  coordinateSpace: CoordinateSpace;
+  parameters: AnnotationSourceParameters;
+  spatialIndices: AnnotationSpatialIndexLevelMetadata[];
+  constructor(public url: string, metadata: any) {
+    verifyObject(metadata);
+    const baseCoordinateSpace =
+        verifyObjectProperty(metadata, 'dimensions', coordinateSpaceFromJson);
+    const {rank} = baseCoordinateSpace;
+    const lowerBounds = verifyObjectProperty(
+        metadata, 'lower_bound',
+        boundJson => parseFixedLengthArray(new Float64Array(rank), boundJson, verifyFiniteFloat));
+    const upperBounds = verifyObjectProperty(
+        metadata, 'upper_bound',
+        boundJson => parseFixedLengthArray(new Float64Array(rank), boundJson, verifyFiniteFloat));
+    this.coordinateSpace = makeCoordinateSpace({
+      rank,
+      names: baseCoordinateSpace.names,
+      units: baseCoordinateSpace.units,
+      scales: baseCoordinateSpace.scales,
+      boundingBoxes: [makeIdentityTransformedBoundingBox({lowerBounds, upperBounds})],
+    });
+    this.parameters = {
+      type: verifyObjectProperty(
+          metadata, 'annotation_type', typeObj => verifyEnumString(typeObj, AnnotationType)),
+      rank,
+      relationships: verifyObjectProperty(
+          metadata, 'relationships',
+          relsObj => parseArray(
+              relsObj,
+              relObj => {
+                const common = parseKeyAndShardingSpec(url, relObj);
+                const name = verifyObjectProperty(relObj, 'id', verifyString);
+                return {...common, name};
+              })),
+      properties: verifyObjectProperty(metadata, 'properties', parseAnnotationPropertySpecs),
+      byId: verifyObjectProperty(metadata, 'by_id', obj => parseKeyAndShardingSpec(url, obj)),
+    };
+    this.spatialIndices = verifyObjectProperty(
+        metadata, 'spatial',
+        spatialObj => parseArray(spatialObj, levelObj => {
+          const common: AnnotationSpatialIndexSourceParameters =
+              parseKeyAndShardingSpec(url, levelObj);
+          const gridShape = verifyObjectProperty(
+              levelObj, 'grid_shape',
+              j => parseFixedLengthArray(new Float32Array(rank), j, verifyPositiveInt));
+          const chunkShape = verifyObjectProperty(
+              levelObj, 'chunk_size',
+              j => parseFixedLengthArray(new Float32Array(rank), j, verifyFinitePositiveFloat));
+          const limit = verifyObjectProperty(levelObj, 'limit', verifyPositiveInt);
+          const gridShapeInVoxels = new Float32Array(rank);
+          for (let i = 0; i < rank; ++i) {
+            gridShapeInVoxels[i] = gridShape[i] * chunkShape[i];
+          }
+          const chunkToMultiscaleTransform = matrix.createIdentity(Float32Array, rank + 1);
+          for (let i = 0; i < rank; ++i) {
+            chunkToMultiscaleTransform[(rank + 1) * rank + i] = lowerBounds[i];
+          }
+          const spec: AnnotationGeometryChunkSpecification = {
+            limit,
+            chunkToMultiscaleTransform,
+            ...makeSliceViewChunkSpecification({
+              rank,
+              chunkDataSize: chunkShape,
+              upperVoxelBound: gridShapeInVoxels,
+            })
+          };
+          spec.upperChunkBound = gridShape;
+          return {
+            parameters: common,
+            spec,
+            limit,
+          };
+        }));
+    this.spatialIndices.reverse();
+  }
+}
+
+// async function getAnnotationDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string, metadata: any): Promise<DataSource> {
+//   const info = new AnnotationMetadata(url, metadata);
+//   const dataSource: DataSource = {
+//     modelTransform: makeIdentityTransform(info.coordinateSpace),
+//     subsources: [
+//       {
+//         id: 'default',
+//         default: true,
+//         subsource: {
+//           annotation: options.chunkManager.getChunkSource(GrapheneAnnotationSource, {
+//             credentialsProvider,
+//             metadata: info,
+//             parameters: info.parameters,
+//           }),
+//         }
+//       },
+//     ],
+//   };
+//   return dataSource;
+// }
+
+// async function getMeshDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string): Promise<DataSource> {
+//   const {source: mesh, transform, segmentPropertyMap} =
+//       await getMeshSource(options.chunkManager, credentialsProvider, url, url, false); // this is wrong 'url, url'
+//   const subsources: DataSubsourceEntry[] = [
+//     {
+//       id: 'default',
+//       default: true,
+//       subsource: {mesh},
+//       subsourceToModelSubspaceTransform: transform,
+//     },
+//   ];
+//   if (segmentPropertyMap !== undefined) {
+//     const mapUrl = resolvePath(url, segmentPropertyMap);
+//     const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
+//     const segmentPropertyMapData =
+//         getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
+//     subsources.push({
+//       id: 'properties',
+//       default: true,
+//       subsource: {segmentPropertyMap: segmentPropertyMapData},
+//     });
+//   }
+
+//   return {
+//     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
+//     subsources,
+//   };
+// }
+
+function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
+  verifyObject(data);
+  const tempUint64 = new Uint64();
+  const ids = verifyObjectProperty(data, 'ids', idsObj => {
+    idsObj = verifyStringArray(idsObj);
+    const numIds = idsObj.length;
+    const ids = new Uint32Array(numIds * 2);
+    for (let i = 0; i < numIds; ++i) {
+      if (!tempUint64.tryParseString(idsObj[i])) {
+        throw new Error(`Invalid uint64 id: ${JSON.stringify(idsObj[i])}`);
+      }
+      ids[2 * i] = tempUint64.low;
+      ids[2 * i + 1] = tempUint64.high;
+    }
+    return ids;
+  });
+  const numIds = ids.length / 2;
+  const properties = verifyObjectProperty(
+      data, 'properties',
+      propertiesObj => parseArray(propertiesObj, (propertyObj): InlineSegmentProperty => {
+        verifyObject(propertyObj);
+        const id = verifyObjectProperty(propertyObj, 'id', verifyString);
+        const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
+        const type = verifyObjectProperty(propertyObj, 'type', type => {
+          if (type !== 'label' && type !== 'description' && type !== 'string' && type !== 'tags' &&
+              type !== 'number') {
+            throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
+          }
+          return type;
+        });
+        if (type === 'tags') {
+          const tags = verifyObjectProperty(propertyObj, 'tags', verifyStringArray);
+          let tagDescriptions = verifyOptionalObjectProperty(propertyObj, 'tag_descriptions', verifyStringArray);
+          if (tagDescriptions === undefined) {
+            tagDescriptions = new Array(tags.length);
+            tagDescriptions.fill('');
+          } else {
+            if (tagDescriptions.length !== tags.length) {
+              throw new Error(`Expected tag_descriptions to have length: ${tags.length}`);
+            }
+          }
+          const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
+            if (!Array.isArray(valuesObj) || valuesObj.length !== numIds) {
+              throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
+            }
+            return valuesObj.map(tagIndices => {
+              return String.fromCharCode(...tagIndices);
+            });
+          });
+          return {id, description, type, tags, tagDescriptions, values};
+        }
+        if (type === 'number') {
+          const dataType = verifyObjectProperty(propertyObj, 'data_type', x => verifyEnumString(x, DataType));
+          if (dataType === DataType.UINT64) {
+            throw new Error('uint64 properties not supported');
+          }
+          const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
+            if (!Array.isArray(valuesObj) || valuesObj.length !== numIds) {
+              throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
+            }
+            return DATA_TYPE_ARRAY_CONSTRUCTOR[dataType].from(valuesObj);
+          });
+          let min = Infinity, max = -Infinity;
+          for (let i = values.length - 1; i >= 0; --i) {
+            const v = values[i];
+            if (v < min) min = v;
+            if (v > max) max = v;
+          }
+          return {id, description, type, dataType, values, bounds: [min, max]};
+        }
+        const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
+          verifyStringArray(valuesObj);
+          if (valuesObj.length !== numIds) {
+            throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
+          }
+          return valuesObj;
+        });
+        return {id, description, type, values};
+      }));
+  return normalizeInlineSegmentPropertyMap({ids, properties});
+}
+
+export const GrapheneIndexedSegmentPropertySource = WithParameters(
+    WithCredentialsProvider<SpecialProtocolCredentials>()(IndexedSegmentPropertySource),
+    IndexedSegmentPropertySourceParameters);
+
+// function parseIndexedPropertyMap(data: unknown): {
+//   sharding: ShardingParameters|undefined,
+//   properties: readonly Readonly<IndexedSegmentProperty>[]
+// } {
+//   verifyObject(data);
+//   const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+//   const properties = verifyObjectProperty(
+//       data, 'properties',
+//       propertiesObj => parseArray(propertiesObj, (propertyObj): IndexedSegmentProperty => {
+//         const id = verifyObjectProperty(propertyObj, 'id', verifyString);
+//         const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
+//         const type = verifyObjectProperty(propertyObj, 'type', type => {
+//           if (type !== 'string') {
+//             throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
+//           }
+//           return type;
+//         });
+//         return {id, description, type};
+//       }));
+//   return {sharding, properties};
+// }
+
+function getSegmentPropertyMap(
+    chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
+    data: unknown, url: string): SegmentPropertyMap {
+  chunkManager;
+  credentialsProvider;
+  url;
+  try {
+    const t = verifyObjectProperty(data, '@type', verifyString);
+    if (t !== 'neuroglancer_segment_properties') {
+      throw new Error(`Unsupported segment property map type: ${JSON.stringify(t)}`);
+    }
+    const inlineProperties = verifyOptionalObjectProperty(data, 'inline', parseInlinePropertyMap);
+    // const indexedProperties = verifyOptionalObjectProperty(data, 'indexed', indexedObj => {
+    //   const {sharding, properties} = parseIndexedPropertyMap(indexedObj);
+    //   return chunkManager.getChunkSource(
+    //       PrecomputedIndexedSegmentPropertySource,
+    //       {credentialsProvider, properties, parameters: {sharding, url}});
+    // });
+    return new SegmentPropertyMap({inlineProperties});
+  } catch (e) {
+    throw new Error(`Error parsing segment property map: ${e.message}`);
+  }
+}
+
+// async function getSegmentPropertyMapDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string, metadata: unknown): Promise<DataSource> {
+//   options;
+//   return {
+//     modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
+//     subsources: [
+//       {
+//         id: 'default',
+//         default: true,
+//         subsource: {
+//           segmentPropertyMap:
+//               getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, url)
+//         },
+//       },
+//     ],
+//   };
+// }
+
+const urlPattern = /^([^#]*)(?:#(.*))?$/;
+
+function parseProviderUrl(providerUrl: string) {
+  let [, url, fragment] = providerUrl.match(urlPattern)!;
+  if (url.endsWith('/')) {
+    url = url.substring(0, url.length - 1);
+  }
+  const parameters = parseQueryStringParameters(fragment || '');
+  return {url, parameters};
+}
+
+function unparseProviderUrl(url: string, parameters: any) {
+  const fragment = unparseQueryStringParameters(parameters);
+  if (fragment) {
+    url += `#${fragment}`;
+  }
+  return url;
+}
+
+export class GrapheneDataSource extends DataSourceProvider {
+  get description() {
+    return 'Graphene file-backed data source';
+  }
+
+  normalizeUrl(options: NormalizeUrlOptions): string {
+    const {url, parameters} = parseProviderUrl(options.providerUrl);
+    return options.providerProtocol + '://' + unparseProviderUrl(url, parameters);
+  }
+
+  convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
+    const {url, parameters} = parseProviderUrl(options.providerUrl);
+    if (options.type === 'mesh') {
+      parameters['type'] = 'mesh';
+    }
+    return options.providerProtocol + '://' + unparseProviderUrl(url, parameters);
+  }
+
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    console.log('GrapheneDataSource get');
+    const {url: providerUrl, parameters} = parseProviderUrl(options.providerUrl);
+    return options.chunkManager.memoize.getUncounted(
+        {'type': 'graphene:get', providerUrl, parameters}, async(): Promise<DataSource> => {
+          const {url, credentialsProvider} =
+              parseSpecialUrl(providerUrl, options.credentialsManager);
+          let metadata: any;
+          try {
+            metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, url);
+          } catch (e) {
+            if (isNotFoundError(e)) {
+              if (parameters['type'] === 'mesh') {
+                console.log('does this happen?');
+                // return await getMeshDataSource(options, credentialsProvider, url);
+              }
+            }
+            throw e;
+          }
+          verifyObject(metadata);
+          const redirect = verifyOptionalObjectProperty(metadata, 'redirect', verifyString);
+          if (redirect !== undefined) {
+            throw new RedirectError(redirect);
+          }
+          const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
+          switch (t) {
+            // TODO: are these used for graphene?
+            // case 'neuroglancer_skeletons':
+            //   return await getSkeletonsDataSource(options, credentialsProvider, url);
+            // case 'neuroglancer_multilod_draco':
+            // case 'neuroglancer_legacy_mesh':
+            //   return await getMeshDataSource(options, credentialsProvider, url);
+            // case 'neuroglancer_annotations_v1':
+            //   return await getAnnotationDataSource(options, credentialsProvider, url, metadata);
+            // case 'neuroglancer_segment_properties':
+            //   return await getSegmentPropertyMapDataSource(
+            //       options, credentialsProvider, url, metadata);
+            // case 'neuroglancer_multiscale_volume':
+            case undefined:
+              return await getVolumeDataSource(options, credentialsProvider, url, metadata);
+            default:
+              throw new Error(`Invalid type: ${JSON.stringify(t)}`);
+          }
+        });
+  }
+  completeUrl(options: CompleteUrlOptions) {
+    return completeHttpPath(
+        options.credentialsManager, options.providerUrl, options.cancellationToken);
+  }
+}
+
+
+
+
+// TODO, not sure if this can be used for graphene
+
+interface GraphSegmentInfo {
+  id: Uint64;
+  baseSegments: Uint64[];
+  baseSegmentParents: Uint64[];
+  name: string, tags: string[], numVoxels: number, bounds: number[], lastLogId: Uint64|null,
+}
+
+/// Base-10 string representation of a segment id, used as map key.
+type SegmentIdString = string;
+
+interface ActiveSegmentQuery {
+  id: Uint64;
+  current: GraphSegmentInfo|undefined;
+  addedEquivalences: boolean;
+  seenGeneration: number;
+  disposer: () => void;
+}
+
+// Generation used for checking if segments have been seen.
+let updateGeneration = 0;
+
+class GraphConnection extends SegmentationGraphSourceConnection {
+  // private ignoreVisibleSegmentsChanged = false; // TODO do we need this?
+
+  private chunkedGraphLayer: ChunkedGraphLayer|undefined; // maybe a temporary hack?
+
+  constructor(
+      graph: GrapheneGraphSource,
+      segmentsState: VisibleSegmentsState,
+      private chunkSource: GrapheneMultiscaleVolumeChunkSource,
+      private credentialsProvider: SpecialProtocolCredentialsProvider) {
+    super(graph, segmentsState);
+
+    segmentsState.visibleSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
+      if (segmentIds !== null) {
+        segmentIds = Array<Uint64>().concat(segmentIds);
+      }
+      this.visibleSegmentsChanged(segmentIds, add);
+    });
+
+        // const visibleSegmentsChanged = () => {
+    //   if (!this.ignoreVisibleSegmentsChanged) {
+    //     this.debouncedVisibleSegmentsChanged();
+    //   }
+    // };
+    // this.registerDisposer(segmentsState.visibleSegments.changed.add(visibleSegmentsChanged));
+    // this.registerDisposer(
+    //     segmentsState.temporaryVisibleSegments.changed.add(visibleSegmentsChanged));
+    // this.visibleSegmentsChanged();
+
+  }
+
+  createRenderLayer(
+      transform: WatchableValueInterface<RenderLayerTransformOrError>,
+      localPosition: WatchableValueInterface<Float32Array>,
+      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer|undefined {
+    const res =  new ChunkedGraphLayer(
+      this.chunkSource.info.app!.segmentationUrl,
+      this.chunkSource.getChunkedGraphSources(this.segmentsState.visibleSegments),
+      multiscaleSource,
+      {
+        ...this.segmentsState,
+        localPosition,
+        transform,
+      },
+      this.credentialsProvider);
+
+      this.chunkedGraphLayer = res;
+      return res;
+  };
+
+  getRootOfSelectedSupervoxel(segment: Uint64) {
+    // let {segmentSelectionState, timestamp} = this.displayState;
+    // let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
+
+    const tsValue = undefined;
+
+    // TODO why are we cloning this?
+    return this.chunkedGraphLayer!.getRoot(segment.clone(), tsValue);
+  }
+
+  select(segment: Uint64) {
+    const {visibleSegments: rootSegments} = this.segmentsState;
+    if (rootSegments.has(segment)) {
+      rootSegments.delete(segment);
+    } else if (this.chunkedGraphLayer) {
+      if (!this.chunkedGraphLayer.leafRequestsActive.value) {
+        StatusMessage.showTemporaryMessage(
+            'The selected segment will not be displayed in 2D at this current zoom level. ',
+            3000);
+      }
+      this.getRootOfSelectedSupervoxel(segment)
+          .then(rootSegment => {
+            rootSegments.add(rootSegment);
+          })
+          .catch((e: Error) => {
+            console.log(e);
+            StatusMessage.showTemporaryMessage(e.message, 3000);
+          });
+    } else {
+      StatusMessage.showTemporaryMessage(
+          `Can't fetch root segment - graph layer not initialized.`, 3000);
+    }
+  }
+
+  private lastDeselectionMessage: StatusMessage|undefined;
+  private lastDeselectionMessageExists = false;
+
+  private visibleSegmentsChanged(rootSegments: Uint64[]|null, added: boolean) {
+    if (rootSegments === null) {
+      if (added) {
+        return;
+      } else {
+        // Clear all segment sets
+        let leafSegmentCount = this.segmentsState.visibleSegments.size;
+        this.segmentsState.visibleSegments.clear();
+        this.segmentsState.segmentEquivalences.clear();
+        if (this.segmentsState.rootSegmentsAfterEdit !== undefined) {
+          this.segmentsState.rootSegmentsAfterEdit.clear();
+        }
+        StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+      }
+    } else if (added) {
+      this.segmentsState.visibleSegments.add(rootSegments);
+    } else if (!added) {
+      for (const rootSegment of rootSegments) {
+        const segments = [...this.segmentsState.segmentEquivalences.setElements(rootSegment)];
+        const segmentCount = segments.length;  // Approximation
+        this.segmentsState.visibleSegments.delete(rootSegment);
+        
+        this.segmentsState.segmentEquivalences.deleteSet(rootSegment);
+        if (this.lastDeselectionMessage && this.lastDeselectionMessageExists) {
+          this.lastDeselectionMessage.dispose();
+          this.lastDeselectionMessageExists = false;
+        }
+        this.lastDeselectionMessage =
+            StatusMessage.showMessage(`Deselected ${segmentCount} segments.`);
+        this.lastDeselectionMessageExists = true;
+        setTimeout(() => {
+          if (this.lastDeselectionMessageExists) {
+            this.lastDeselectionMessage!.dispose();
+            this.lastDeselectionMessageExists = false;
+          }
+        }, 2000);
+      }
+    }
+    // this.specificationChanged.dispatch(); TODO is this needed with the line in SegmentationUserLayerGroupState constructor?
+  }
+    
+  computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined {
+    console.log("GraphConnection.computeSplit");
+    return undefined;
+  }
+
+  private segmentQueries = new Map<SegmentIdString, ActiveSegmentQuery>();
+}
+
+export interface SegmentSelection {
+  segmentId: Uint64;
+  position: vec3;
+}
+
+export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
+
+class GrapheneGraphServerInterface {
+  constructor(private url: string, private credentialsProvider: SpecialProtocolCredentialsProvider) {}
+
+  async withErrorMessage(promise: Promise<Response>, options: {
+    initialMessage: string,
+    errorPrefix: string
+  }): Promise<Response> {
+    const status = new StatusMessage(true);
+    status.setText(options.initialMessage);
+    const dispose = status.dispose.bind(status);
+    try {
+      const response = await promise;
+      dispose();
+      return response;
+    } catch (e) {
+      if (e instanceof HttpError && e.response) {
+        let msg: string;
+        if (e.response.headers.get('content-type') === 'application/json') {
+          msg = (await e.response.json())['message'];
+        } else {
+          msg = await e.response.text();
+        }
+
+        const {errorPrefix = ''} = options;
+        status.setErrorMessage(errorPrefix + msg);
+        status.setVisible(true);
+        throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
+      }
+      throw e;
+    }
+  }
+
+  async mergeSegments(first: SegmentSelection, second: SegmentSelection): Promise<Uint64> {
+    const {url} = this;
+    if (url === '') {
+      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
+    }
+
+    const url2 = `${url}/merge?int64_as_str=1`;
+
+    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {
+      method: 'POST',
+      body: JSON.stringify([
+        [String(first.segmentId), ...first.position.values()],
+        [String(second.segmentId), ...second.position.values()]
+      ])
+    }, responseIdentity);
+
+    const response = await this.withErrorMessage(promise, {
+      initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
+      errorPrefix: 'Merge failed: '
+    });
+    const jsonResp = await response.json();
+    return Uint64.parseString(jsonResp['new_root_ids'][0]);
+  }
+}
+
+class GrapheneGraphSource extends SegmentationGraphSource {
+
+  private connections = new Set<GraphConnection>();
+  private graphServer: GrapheneGraphServerInterface;
+  public timestamp: TrackableValue<string> = new TrackableValue('', date => ((new Date(date)).valueOf() / 1000).toString());
+  public timestampLimit: TrackableValue<string> = new TrackableValue(
+    '',
+    date => {
+      let limit = new Date(date).valueOf().toString();
+      return limit === 'NaN' ? '' : limit;
+    },
+    '');
+
+  constructor(private info: MultiscaleVolumeInfo, public credentialsProvider: SpecialProtocolCredentialsProvider, private chunkSource: GrapheneMultiscaleVolumeChunkSource) {
+    super();
+    this.graphServer = new GrapheneGraphServerInterface(info.app!.segmentationUrl, this.credentialsProvider);
+    console.log("constructing GrapheneGraphSource");
+  }
+
+  connect(segmentsState: VisibleSegmentsState): Owned<SegmentationGraphSourceConnection> {
+    const connection = new GraphConnection(this, segmentsState, this.chunkSource, this.credentialsProvider);
+  
+    this.connections.add(connection);
+    connection.registerDisposer(() => {
+      this.connections.delete(connection);
+    });
+
+    return connection;
+  }
+
+  safeToSubmit(action: string) {
+    if (this.timestamp.value !== '') {
+      StatusMessage.showTemporaryMessage(
+          `${action} can not be performed with a segmentation at an older state.`);
+      return false;
+    }
+    return true;
+  }
+
+  async merge(a: Uint64, b: Uint64): Promise<Uint64> {
+    if (!this.safeToSubmit('Merge')) {
+      throw new Error('TODO');
+    }
+
+    const aSegmentSelection: SegmentSelection = {
+      segmentId: new Uint64(),
+      position: vec3.create(),
+    };
+
+    const bSegmentSelection: SegmentSelection = {
+      segmentId: new Uint64(),
+      position: vec3.create(),
+    };
+
+    aSegmentSelection.segmentId.assign(a);
+    bSegmentSelection.segmentId.assign(b);
+    
+    const mergedRoot = await this.graphServer.mergeSegments(aSegmentSelection, bSegmentSelection);
+    
+    for (const connection of this.connections) {
+      connection.segmentsState.rootSegmentsAfterEdit?.clear();
+      connection.segmentsState.visibleSegments.delete(a);
+      connection.segmentsState.visibleSegments.delete(b);
+      connection.segmentsState.visibleSegments.add(mergedRoot);
+      connection.segmentsState.rootSegmentsAfterEdit?.add(mergedRoot);
+    }
+
+    // TODO: Merge unsupported with edits
+        // const view = (<any>window)['viewer'];
+        // view.deactivateEditMode();
+        // view.differ.purgeHistory();
+        // view.differ.ignoreChanges();
+      // });
+
+
+    return mergedRoot;
+  }
+
+  async split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}> {
+    console.log('MGS splitting', include, 'and', exclude);
+    return {include, exclude};
+  }
+
+  trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void {
+    return () => {
+      console.log('trackSegment... do nothing', id, callback);
+    }
+  }
+
+  get highBitRepresentative(): boolean {
+    return true;
+  }
+}
+
+
+
+
+
+
+
+
+
+/*
+
+
+
+    safeToSubmit(action: string, callback: Function) {
+      if (this.displayState.timestamp.value !== '') {
+        StatusMessage.showTemporaryMessage(
+            `${action} can not be performed with a segmentation at an older state.`);
+        return;
+      }
+      return callback();
+    }
+
+case 'merge-select-first': {
+          this.mergeSelectFirst();
+          break;
+        }
+        case 'merge-select-second': {
+          this.mergeSelectSecond();
+          break;
+        }
+        case 'split-select-first': {
+          this.splitSelectFirst();
+          break;
+        }
+        case 'split-select-second': {
+          this.splitSelectSecond();
+          break;
+        }
+
+
+mergeSelectFirst() {
+      const {segmentSelectionState} = this.displayState;
+      if (segmentSelectionState.hasSelectedSegment) {
+        lastSegmentSelection.segmentId.assign(segmentSelectionState.selectedSegment);
+        lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
+        // console.log('rawSelectedSegment', segmentSelectionState.rawSelectedSegment);
+        // console.log('selectedSegment', segmentSelectionState.selectedSegment);
+        // console.log('lastSegmentSelection.position', lastSegmentSelection.position);
+        vec3.transformMat4(
+            lastSegmentSelection.position, this.getMousePositionSpatial(),
+            this.getInverseTransform()!);//this.transform.inverse);
+
+        StatusMessage.showTemporaryMessage(
+            `Selected ${lastSegmentSelection.segmentId} as source for merge. Pick a sink.`, 3000);
+      }
+    }
+
+    mergeSelectSecond() {
+      const {segmentSelectionState} = this.displayState;
+      const {rootSegments, rootSegmentsAfterEdit} = this.displayState.segmentationGroupState.value;
+      if (segmentSelectionState.hasSelectedSegment) {
+        const currentSegmentSelection: SegmentSelection = {
+          segmentId: segmentSelectionState.selectedSegment.clone(),
+          rootId: segmentSelectionState.selectedSegment.clone(),
+          position: vec3.transformMat4(
+              vec3.create(), this.getMousePositionSpatial(),
+              this.getInverseTransform()!)
+        };
+
+        StatusMessage.showTemporaryMessage(
+            `Selected ${currentSegmentSelection.segmentId} as sink for merge.`, 3000);
+
+        if (this.chunkedGraphLayer) {
+          const cgl = this.chunkedGraphLayer;
+          this.safeToSubmit('Merge', () => {
+            cgl.mergeSegments(lastSegmentSelection, currentSegmentSelection).then((mergedRoot) => {
+              rootSegmentsAfterEdit!.clear();
+              rootSegments.delete(lastSegmentSelection.rootId);
+              rootSegments.delete(currentSegmentSelection.rootId);
+              rootSegments.add(mergedRoot);
+              rootSegmentsAfterEdit!.add(mergedRoot);
+              // TODO: Merge unsupported with edits
+              const view = (<any>window)['viewer'];
+              view.deactivateEditMode();
+              view.differ.purgeHistory();
+              view.differ.ignoreChanges();
+            });
+          });
+        } else {
+          StatusMessage.showTemporaryMessage(
+              `Merge unsuccessful - graph layer not initialized.`, 3000);
+        }
+      }
+    }
+
+    splitSelectFirst() {
+      const {segmentSelectionState} = this.displayState;
+      if (segmentSelectionState.hasSelectedSegment) {
+        lastSegmentSelection.segmentId.assign(segmentSelectionState.selectedSegment);
+        lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
+        vec3.transformMat4(
+            lastSegmentSelection.position, this.getMousePositionSpatial(),
+            this.getInverseTransform()!);
+
+        StatusMessage.showTemporaryMessage(
+            `Selected ${lastSegmentSelection.segmentId} as source for split. Pick a sink.`, 3000);
+      }
+    }
+
+    splitSelectSecond() {
+      const {segmentSelectionState} = this.displayState;
+      const {rootSegments, rootSegmentsAfterEdit} = this.displayState.segmentationGroupState.value;
+      if (segmentSelectionState.hasSelectedSegment) {
+        const currentSegmentSelection: SegmentSelection = {
+          segmentId: segmentSelectionState.selectedSegment.clone(),
+          rootId: segmentSelectionState.selectedSegment.clone(),
+          position: vec3.transformMat4(
+              vec3.create(), this.getMousePositionSpatial(),
+              this.getInverseTransform()!)
+        };
+
+        StatusMessage.showTemporaryMessage(
+            `Selected ${currentSegmentSelection.segmentId} as sink for split.`, 3000);
+
+        if (this.chunkedGraphLayer) {
+          const cgl = this.chunkedGraphLayer;
+          this.safeToSubmit('Split', () => {
+            cgl.splitSegments([lastSegmentSelection], [currentSegmentSelection])
+                .then((splitRoots) => {
+                  if (splitRoots.length === 0) {
+                    StatusMessage.showTemporaryMessage(`No split found.`, 3000);
+                    return;
+                  }
+                  rootSegmentsAfterEdit!.clear();
+                  rootSegments.delete(currentSegmentSelection.rootId);
+                  rootSegments.add(splitRoots);
+                  rootSegmentsAfterEdit!.add(splitRoots);
+                  // TODO: Merge unsupported with edits
+                  const view = (<any>window)['viewer'];
+                  view.deactivateEditMode();
+                  view.differ.purgeHistory();
+                  view.differ.ignoreChanges();
+                });
+          });
+        } else {
+          StatusMessage.showTemporaryMessage(
+              `Split unsuccessful - graph layer not initialized.`, 3000);
+        }
+      }
+    }
+
+
+*/

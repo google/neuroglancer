@@ -20,7 +20,9 @@ import {Uint64} from 'neuroglancer/util/uint64';
 
 export const NUM_ALTERNATIVES = 3;
 
-const DEFAULT_LOAD_FACTOR = 0.9;
+// For 3 hash functions, a DEFAULT_LOAD_FACTOR of 0.8 reliably avoids
+// expensive rehashing caused by unresolvable collisions.
+const DEFAULT_LOAD_FACTOR = 0.8;
 
 const DEBUG = false;
 
@@ -134,17 +136,15 @@ export abstract class HashTableBase {
   /**
    * Iterates over the Uint64 keys contained in the hash set.
    *
-   * The same temp value will be modified and yielded at every iteration.
+   * Creates a new Uint64 object at every iteration (otherwise spread and Array.from() fail)
    */
-  * keys(temp = new Uint64()) {
+  * keys() {
     let {emptyLow, emptyHigh, entryStride} = this;
     let {table} = this;
     for (let i = 0, length = table.length; i < length; i += entryStride) {
       let low = table[i], high = table[i + 1];
       if (low !== emptyLow || high !== emptyHigh) {
-        temp.low = low;
-        temp.high = high;
-        yield temp;
+        yield new Uint64(low, high);
       }
     }
   }
@@ -249,6 +249,16 @@ export abstract class HashTableBase {
     ++this.generation;
     this.clearTable();
     return true;
+  }
+
+  reserve(x: number) {
+    if (x > this.capacity) {
+      this.backupPending();
+      this.grow(x);
+      this.restorePending();
+      return true;
+    }
+    return false;
   }
 
   protected swapPending(table: Uint32Array, offset: number) {
@@ -390,8 +400,8 @@ export class HashSetUint64 extends HashTableBase {
   }
 
   /**
-   * Iterates over the keys.  The same temporary value will be modified and yielded at every
-   * iteration.
+   * Iterates over the keys.
+   * Creates a new Uint64 object at every iteration (otherwise spread and Array.from() fail)
    */
   [Symbol.iterator]() {
     return this.keys();
@@ -458,29 +468,26 @@ export class HashMapUint64 extends HashTableBase {
   }
 
   /**
-   * Iterates over entries.  The same temporary value will be modified and yielded at every
-   * iteration.
+   * Iterates over entries.
+   * Creates new Uint64 objects at every iteration (otherwise spread and Array.from() fail)
    */
   [Symbol.iterator]() {
     return this.entries();
   }
 
   /**
-   * Iterates over entries.  The same temporary value will be modified and yielded at every
-   * iteration.
+   * Iterates over entries.
+   * Creates new Uint64 objects at every iteration (otherwise spread and Array.from() fail)
    */
-  * entries(temp: [Uint64, Uint64] = [new Uint64(), new Uint64()]) {
+  * entries() {
     let {emptyLow, emptyHigh, entryStride} = this;
     let {table} = this;
-    let [key, value] = temp;
     for (let i = 0, length = table.length; i < length; i += entryStride) {
       let low = table[i], high = table[i + 1];
       if (low !== emptyLow || high !== emptyHigh) {
-        key.low = low;
-        key.high = high;
-        value.low = table[i + 2];
-        value.high = table[i + 3];
-        yield temp;
+        let key = new Uint64(low, high);
+        let value = new Uint64(table[i + 2], table[i + 3]);
+        yield [key, value];
       }
     }
   }

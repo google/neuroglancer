@@ -79,6 +79,10 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     }
   }
 
+  has(x: Uint64): boolean {
+    return this.disjointSets.has(x);
+  }
+
   get(x: Uint64): Uint64 {
     return this.disjointSets.get(x);
   }

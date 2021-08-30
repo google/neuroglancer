@@ -47,7 +47,7 @@ import {Uint64Set} from 'neuroglancer/uint64_set';
 import {packColor, parseRGBColorSpecification, serializeColor, TrackableOptionalRGB, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
-import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -91,6 +91,7 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {specificationChanged} = this;
+    // this.rootSegments.changed.add(specificationChanged.dispatch);
     this.visibleSegments.changed.add(specificationChanged.dispatch);
     this.hideSegmentZero.changed.add(specificationChanged.dispatch);
     this.segmentQuery.changed.add(specificationChanged.dispatch);
@@ -159,6 +160,8 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
       this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
   useTemporarySegmentEquivalences =
       this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
+
+  rootSegmentsAfterEdit = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
 }
 
 export class SegmentationUserLayerColorGroupState extends RefCounted implements
@@ -363,6 +366,15 @@ export class SegmentationUserLayer extends Base {
     this.manager.root.selectedLayer.layer = this.managedLayer;
   };
 
+  // restoreSegmentMetadata( voxel count stuff?
+  //     segmentToVoxelCountMap: SegmentToVoxelCountMap, segmentCategoriesObj: any,
+  //     categorizedSegmentsObj: any) {
+  //   this.segmentMetadata = SegmentMetadata.restoreState(
+  //       segmentToVoxelCountMap, segmentCategoriesObj, categorizedSegmentsObj);
+  //   this.segmentMetadata.changed.add(this.specificationChanged.dispatch);
+  //   this.objectLayerStateChanged.dispatch();
+  // }
+
   displayState = new SegmentationUserLayerDisplayState(this);
 
   anchorSegment = new TrackableValue<Uint64|undefined>(
@@ -399,10 +411,22 @@ export class SegmentationUserLayer extends Base {
     this.tabs.add(
         'segments', {label: 'Seg.', order: -50, getter: () => new SegmentDisplayTab(this)});
     this.tabs.default = 'rendering';
+
+    // this.ignoreSegmentInteractions.changed.add(this.specificationChanged.dispatch); not doing this yet
   }
 
   get volumeOptions() {
     return {volumeType: VolumeType.SEGMENTATION};
+  }
+
+  someSegmentationRenderLayer() {
+    for (let x of this.renderLayers) {
+      if (x instanceof SegmentationRenderLayer) {
+        return x;
+      }
+    }
+
+    return undefined;
   }
 
   readonly has2dLayer = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
@@ -484,6 +508,17 @@ export class SegmentationUserLayer extends Base {
               refCounted.registerDisposer(() => {
                 this.graphConnection = undefined;
               });
+              const segmentationRenderlayer = this.someSegmentationRenderLayer();
+
+              if (segmentationRenderlayer) {
+                const transform = loadedSubsource.getRenderLayerTransform(segmentationRenderlayer.channelCoordinateSpace);
+                const localPosition = this.localPosition;
+
+                const graphRenderLayer = this.graphConnection.createRenderLayer(transform, localPosition, segmentationRenderlayer.multiscaleSource); // TODO, does it actually need the multiscale source?
+                if (graphRenderLayer) {
+                  loadedSubsource.addRenderLayer(graphRenderLayer);
+                }
+              }
             });
           }
         }
@@ -522,6 +557,8 @@ export class SegmentationUserLayer extends Base {
         layerSpec, MESH_JSON_KEY, x => x === null ? null : verifyString(x));
     const skeletonsPath = verifyOptionalObjectProperty(
         layerSpec, SKELETONS_JSON_KEY, x => x === null ? null : verifyString(x));
+    // const segmentToVoxelCountMapPath = this.segmentToVoxelCountMapPath = // is this segmentToVoxelCountMapPath stuff necessary?
+    //     verifyOptionalString(specification[SEGMENTS_TO_VOXEL_COUNT_MAP_PATH_JSON_KEY]);
     if (meshPath !== undefined || skeletonsPath !== undefined) {
       for (const spec of specs) {
         spec.enableDefaultSubsources = false;
@@ -641,6 +678,10 @@ export class SegmentationUserLayer extends Base {
       case 'clear-segments': {
         if (!this.pick.value) break;
         this.displayState.segmentationGroupState.value.visibleSegments.clear();
+        this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
+        if (this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
+          this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
+        }
         break;
       }
       case 'select': {
@@ -648,6 +689,12 @@ export class SegmentationUserLayer extends Base {
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
+
+          if (this.graphConnection?.select) {
+            this.graphConnection.select(segment);
+            break;
+          }
+
           const {visibleSegments} = this.displayState.segmentationGroupState.value;
           const newVisible = !visibleSegments.has(segment);
           if (newVisible || context.segmentationToggleSegmentState === undefined) {

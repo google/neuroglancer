@@ -30,12 +30,14 @@ extern void neuroglancer_draco_receive_decoded_mesh(unsigned int num_indices,
                                                     const void *subchunk_offsets);
 
 int neuroglancer_draco_decode(char *input, unsigned int input_size, bool partition,
-                              int vertex_quantization_bits) {
+                              int vertex_quantization_bits, bool skipDequantization) {
   std::unique_ptr<char[], FreeDeleter> input_deleter(input);
   draco::DecoderBuffer decoder_buffer;
   decoder_buffer.Init(input, input_size);
   draco::Decoder decoder;
-  decoder.SetSkipAttributeTransform(draco::GeometryAttribute::POSITION);
+  if (skipDequantization) {
+    decoder.SetSkipAttributeTransform(draco::GeometryAttribute::POSITION);
+  }
   auto decoded_mesh_statusor = decoder.DecodeMeshFromBuffer(&decoder_buffer);
   if (!decoded_mesh_statusor.ok()) return 1;
   auto *decoded_mesh = decoded_mesh_statusor.value().get();
@@ -52,7 +54,7 @@ int neuroglancer_draco_decode(char *input, unsigned int input_size, bool partiti
     return 3;
   }
   if (position_att->num_components() != 3) return 4;
-  if (position_att->data_type() != draco::DT_INT32) return 5;
+  if (position_att->data_type() != draco::DT_INT32 && position_att->data_type() != draco::DT_FLOAT32) return 5;
   if (decoded_mesh->GetAttributeElementType(position_att->unique_id()) !=
       draco::MESH_CORNER_ATTRIBUTE) {
     return 11;

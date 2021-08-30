@@ -102,6 +102,12 @@ export class DisjointUint64Sets {
   highBitRepresentative: WatchableValueInterface<boolean> = new WatchableValue<boolean>(false);
   generation = 0;
 
+  has(x: Uint64): boolean {
+    let key = x.toString();
+    let element = this.map.get(key);
+    return element !== undefined;
+  }
+
   get(x: Uint64): Uint64 {
     let key = x.toString();
     let element = this.map.get(key);

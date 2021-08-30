@@ -21,6 +21,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export interface VisibleSegmentsState {
+  rootSegmentsAfterEdit?: Uint64Set; // new roots generated as result of edit operation
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 
@@ -45,6 +46,8 @@ export function onVisibleSegmentsStateChanged(
     context: RefCounted, state: VisibleSegmentsState, callback: () => void) {
   context.registerDisposer(state.visibleSegments.changed.add(callback));
   context.registerDisposer(state.segmentEquivalences.changed.add(callback));
+
+  // context.registerDisposer(state.rootSegments.changed.add(callback));
 }
 
 export function onTemporaryVisibleSegmentsStateChanged(

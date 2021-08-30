@@ -450,7 +450,7 @@ export abstract class SliceViewChunkSource<
     SliceViewChunkSourceInterface {
   chunks: Map<string, ChunkType>;
 
-  OPTIONS: SliceViewChunkSourceOptions<Spec>;
+  OPTIONS: SliceViewChunkSourceOptions<Spec>; // TODO, figure out how this works T['OPTIONS]
 
   spec: Spec;
 
