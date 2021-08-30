@@ -18,13 +18,22 @@ import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {RenderLayer } from 'neuroglancer/renderlayer';
+import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
+import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+
+export enum VISIBLE_SEGMENT_TYPE {
+  SIMPLE_EQUIVALENCES = 1,
+  HIGH_BIT_REPRESENTATIVE_EXCLUDED,
+  HIGH_BIT_REPRESENTATIVE_ONLY
+}
 
 export abstract class SegmentationGraphSource {
-  abstract connect(segmentsState: VisibleSegmentsState): Owned<SegmentationGraphSourceConnection>;
+  abstract connect(segmentsState: VisibleSegmentsState, transform?: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection>;
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
-  abstract get highBitRepresentative(): boolean;
+  abstract get highBitRepresentative(): VISIBLE_SEGMENT_TYPE;
 }
 
 export interface ComputedSplit {
@@ -40,10 +49,20 @@ export interface ComputedSplit {
 
 export abstract class SegmentationGraphSourceConnection<
     SourceType extends SegmentationGraphSource = SegmentationGraphSource> extends RefCounted {
-  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState) {
+  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState, public transform?: WatchableValueInterface<RenderLayerTransformOrError>) {
     super();
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
+
+  createRenderLayers(
+      transform: WatchableValueInterface<RenderLayerTransformOrError>,
+      localPosition: WatchableValueInterface<Float32Array>,
+      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer[] {
+    transform;
+    localPosition;
+    multiscaleSource;
+    return [];
+  };
 }
 
 export function trackWatchableValueSegment(

@@ -18,17 +18,17 @@ import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult, Completion, CompletionWithDescription, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {getGcsPathCompletions} from 'neuroglancer/util/gcs_bucket_listing';
-import {cancellableFetchOk, parseUrl} from 'neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {parseUrl} from 'neuroglancer/util/http_request';
 import {getS3PathCompletions} from 'neuroglancer/util/s3';
 import {getS3CompatiblePathCompletions} from 'neuroglancer/util/s3_bucket_listing';
-import {parseSpecialUrl} from 'neuroglancer/util/special_protocol_request';
 
 /**
  * Obtains a directory listing from a server that supports HTML directory listings.
  */
 export async function getHtmlDirectoryListing(
-    url: string, cancellationToken: CancellationToken): Promise<string[]> {
-  const {text, contentType} = await cancellableFetchOk(
+    url: string, cancellationToken: CancellationToken, credentialsProvider?: SpecialProtocolCredentialsProvider): Promise<string[]> {
+  const {text, contentType} = await cancellableFetchSpecialOk(credentialsProvider,
       url,
       /*init=*/ {headers: {'accept': 'text/html'}},
       async x => ({text: await x.text(), contentType: x.headers.get('content-type')}),
@@ -51,10 +51,11 @@ export async function getHtmlDirectoryListing(
 }
 
 export async function getHtmlPathCompletions(
-    url: string, cancellationToken: CancellationToken): Promise<BasicCompletionResult> {
+    url: string, cancellationToken: CancellationToken, credentialsProvider?: SpecialProtocolCredentialsProvider): Promise<BasicCompletionResult> {
+  console.log('getHtmlPathCompletions');
   const m = url.match(/^([a-z]+:\/\/.*\/)([^\/?#]*)$/);
   if (m === null) throw null;
-  const entries = await getHtmlDirectoryListing(m[1], cancellationToken);
+  const entries = await getHtmlDirectoryListing(m[1], cancellationToken, credentialsProvider);
   const offset = m[1].length;
   const matches: Completion[] = [];
   for (const entry of entries) {
@@ -129,7 +130,7 @@ export async function completeHttpPath(
           credentialsProvider, s3Match[1], s3Match[1], s3Match[2], cancellationToken);
     }
     if ((protocol === 'http' || protocol === 'https') && path.length > 0) {
-      return await getHtmlPathCompletions(parsedUrl, cancellationToken);
+      return await getHtmlPathCompletions(parsedUrl, cancellationToken, credentialsProvider);
     }
     throw null;
   })();

@@ -20,6 +20,7 @@ import {parseArray} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {VISIBLE_SEGMENT_TYPE} from 'neuroglancer/segmentation_graph/source';
 
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';
@@ -40,7 +41,7 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     return this;
   }
 
-  static makeWithCounterpart(rpc: RPC, highBitRepresentative: WatchableValueInterface<boolean>) {
+  static makeWithCounterpart(rpc: RPC, highBitRepresentative: WatchableValueInterface<VISIBLE_SEGMENT_TYPE>) {
     let obj = new this();
     obj.disjointSets.highBitRepresentative = highBitRepresentative;
     obj.registerDisposer(highBitRepresentative.changed.add(() => {
@@ -77,6 +78,10 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     for (let i = 1, length = ids.length; i < length; ++i) {
       this.link(ids[0], ids[i]);
     }
+  }
+
+  has(x: Uint64): boolean {
+    return this.disjointSets.has(x);
   }
 
   get(x: Uint64): Uint64 {

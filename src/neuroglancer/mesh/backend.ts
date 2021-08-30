@@ -321,13 +321,17 @@ export class MeshSource extends ChunkSource {
     return chunk;
   }
 
+  getFragmentKey(objectKey: string|null, fragmentId: string) {
+    return {key:`${objectKey}/${fragmentId}`, fragmentId: fragmentId};
+  }
+
   getFragmentChunk(manifestChunk: ManifestChunk, fragmentId: FragmentId) {
-    let key = `${manifestChunk.key}/${fragmentId}`;
-    let fragmentSource = this.fragmentSource;
-    let chunk = <FragmentChunk>fragmentSource.chunks.get(key);
+    const fragmentSource = this.fragmentSource;
+    const {key: fragmentKey, fragmentId: parsedFragmentId} = this.getFragmentKey(manifestChunk.key, fragmentId);
+    let chunk = <FragmentChunk>fragmentSource.chunks.get(fragmentKey);
     if (chunk === undefined) {
       chunk = fragmentSource.getNewChunk_(FragmentChunk);
-      chunk.initializeFragmentChunk(key, manifestChunk, fragmentId);
+      chunk.initializeFragmentChunk(fragmentKey, manifestChunk, parsedFragmentId);
       fragmentSource.addChunk(chunk);
     }
     return chunk;

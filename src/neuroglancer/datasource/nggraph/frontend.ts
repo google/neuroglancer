@@ -21,7 +21,7 @@ import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_reque
 import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {Credentials, NggraphCredentialsProvider} from 'neuroglancer/datasource/nggraph/credentials_provider';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {ComputedSplit, isBaseSegmentId, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID} from 'neuroglancer/segmentation_graph/source';
+import {ComputedSplit, isBaseSegmentId, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID, VISIBLE_SEGMENT_TYPE} from 'neuroglancer/segmentation_graph/source';
 import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
@@ -301,7 +301,7 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
   }
 
   get highBitRepresentative() {
-    return true;
+    return VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_EXCLUDED;
   }
 
   private startWebsocket() {
