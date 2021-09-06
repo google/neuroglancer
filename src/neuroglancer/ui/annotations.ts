@@ -1473,10 +1473,9 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                             break;
                           }
                           case 'rgba': {
-                            const colorVec = unpackRGB(value >>> 8);
+                            const colorVec = unpackRGB(value);
                             valueElement.textContent = serializeColor(unpackRGBA(value));
-                            valueElement.style.backgroundColor =
-                                serializeColor(unpackRGB(value >>> 8));
+                            valueElement.style.backgroundColor = serializeColor(unpackRGB(value));
                             valueElement.style.color =
                                 useWhiteBackground(colorVec) ? 'white' : 'black';
                             break;
