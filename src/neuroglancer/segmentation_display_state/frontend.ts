@@ -77,8 +77,8 @@ export class SegmentSelectionState extends RefCounted {
     if (value == null) {
       hasSelectedSegment = false;
     } else if (typeof value === 'number') {
-      newLow = newBaseLow = value;
-      newHigh = newBaseHigh = 0;
+      newLow = newBaseLow = (value >>> 0);
+      newHigh = newBaseHigh = value < 0 ? 0xffffffff : 0;
       hasSelectedSegment = true;
     } else if (value instanceof Uint64MapEntry) {
       const valueMapped = value.value || value.key;
@@ -181,7 +181,7 @@ export function maybeAugmentSegmentId(
   let mapped: Uint64|undefined;
   let label: string|undefined;
   if (typeof value === 'number') {
-    id = new Uint64(value, 0);
+    id = new Uint64((value >>> 0), value < 0 ? 0xffffffff : 0);
   } else if (typeof value === 'string') {
     id = Uint64.parseString(value);
   } else {

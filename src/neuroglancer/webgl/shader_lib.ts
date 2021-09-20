@@ -61,7 +61,8 @@ uint64x2_t unpackUint64leFromUint32(highp uvec4 x) {
   result.value = x;
   return result;
 }
-`];
+`
+];
 
 export const glsl_equalUint64 = [
   glsl_uint64, `
@@ -106,7 +107,7 @@ uint64_t add(uint64_t a, uint64_t b) {
 ];
 
 export const glsl_addSaturateUint64 = [
-  glsl_addUint64, glsl_compareLessThanUint64,  `
+  glsl_addUint64, glsl_compareLessThanUint64, `
 uint64_t addSaturate(uint64_t a, uint64_t b) {
   a = add(a, b);
   if (compareLessThan(a, b)) {
@@ -118,7 +119,7 @@ uint64_t addSaturate(uint64_t a, uint64_t b) {
 ];
 
 export const glsl_subtractSaturateUint64 = [
-  glsl_subtractUint64, glsl_compareLessThanUint64,  `
+  glsl_subtractUint64, glsl_compareLessThanUint64, `
 uint64_t subtractSaturate(uint64_t a, uint64_t b) {
   b = subtract(a, b);
   if (compareLessThan(a, b)) {
@@ -195,7 +196,8 @@ uint8_t uint8FromFloat(highp float x) {
 ];
 
 
-export const glsl_int8 = `
+export const glsl_int8 = [
+  glsl_uint64, `
 struct int8_t {
   highp int value;
 };
@@ -215,10 +217,17 @@ highp int toRaw(int8_t x) { return x.value; }
 highp ivec2 toRaw(int8x2_t x) { return x.value; }
 highp ivec3 toRaw(int8x3_t x) { return x.value; }
 highp ivec4 toRaw(int8x4_t x) { return x.value; }
+uint64_t toUint64(int8_t x) {
+  uint64_t result;
+  result.value[0] = uint(x.value);
+  result.value[1] = uint(x.value >> 31);
+  return result;
+}
 int8_t int8FromFloat(highp float x) {
   return int8_t(int(clamp(x, -128.0, 127.0)));
 }
-`;
+`
+];
 
 
 export const glsl_float = `
@@ -259,7 +268,8 @@ uint16_t uint16FromFloat(highp float x) {
 `
 ];
 
-export const glsl_int16 = `
+export const glsl_int16 = [
+  glsl_uint64, `
 struct int16_t {
   highp int value;
 };
@@ -271,10 +281,17 @@ int16_t mixLinear(int16_t x, int16_t y, highp float a) {
 }
 highp int toRaw(int16_t x) { return x.value; }
 highp ivec2 toRaw(int16x2_t x) { return x.value; }
+uint64_t toUint64(int16_t x) {
+  uint64_t result;
+  result.value[0] = uint(x.value);
+  result.value[1] = uint(x.value >> 31);
+  return result;
+}
 int16_t int16FromFloat(highp float x) {
   return int16_t(int(clamp(x, -32768.0, 32767.0)));
 }
-`;
+`
+];
 
 export const glsl_uint32 = [
   glsl_uint64, `
@@ -298,7 +315,8 @@ uint32_t uint32FromFloat(highp float x) {
 `
 ];
 
-export const glsl_int32 = `
+export const glsl_int32 = [
+  glsl_uint64, `
 struct int32_t {
   highp int value;
 };
@@ -306,10 +324,17 @@ int32_t mixLinear(int32_t x, int32_t y, highp float a) {
   return int32_t(int(round(mix(float(x.value), float(y.value), a))));
 }
 highp int toRaw(int32_t x) { return x.value; }
+uint64_t toUint64(int32_t x) {
+  uint64_t result;
+  result.value[0] = uint(x.value);
+  result.value[1] = uint(x.value >> 31);
+  return result;
+}
 int32_t int32FromFloat(highp float x) {
   return int32_t(int(clamp(x, 2147483648.0, 2147483647.0)));
 }
-`;
+`
+];
 
 export var glsl_getFortranOrderIndex = `
 highp int getFortranOrderIndex(ivec3 subscripts, ivec3 size) {
@@ -387,7 +412,8 @@ highp uint subtractSaturate(highp uint x, highp uint y) {
 }
 `;
 
-export const glsl_addSaturateInt32 = [glsl_addSaturateUint32, `
+export const glsl_addSaturateInt32 = [
+  glsl_addSaturateUint32, `
 highp int addSaturate(highp int x, highp uint y) {
   if (x >= 0) {
     return int(min(addSaturate(y, uint(x)), 0x7fffffffu));
@@ -397,9 +423,11 @@ highp int addSaturate(highp int x, highp uint y) {
     return -int(min(uint(-x) - y, 0x80000000u));
   }
 }
-`];
+`
+];
 
-export const glsl_subtractSaturateInt32 = [glsl_addSaturateUint32, `
+export const glsl_subtractSaturateInt32 = [
+  glsl_addSaturateUint32, `
 highp int subtractSaturate(highp int x, highp uint y) {
   if (x < 0) {
     return -int(min(addSaturate(uint(-x), uint(y)), 0x80000000u));
@@ -409,7 +437,8 @@ highp int subtractSaturate(highp int x, highp uint y) {
     return -int(min(y - uint(x), 0x80000000u));
   }
 }
-`];
+`
+];
 
 export function getShaderType(dataType: DataType, numComponents: number = 1) {
   switch (dataType) {
