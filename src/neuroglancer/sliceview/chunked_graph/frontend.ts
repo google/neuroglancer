@@ -122,25 +122,6 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     return RENDER_RATIO_LIMIT;
   }
 
-  async getRoot(segmentId: Uint64, timestamp?: string): Promise<Uint64> {
-    const {url} = this;
-    if (url === '') {
-      return Promise.resolve(segmentId);
-    }
-
-    const url2 = `${url}/node/${String(segmentId)}/root?int64_as_str=1${
-      timestamp ? `&timestamp=${timestamp}` : ``}`
-
-    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {}, responseIdentity);
-
-    const response = await this.withErrorMessage(promise, {
-      initialMessage: `Retrieving root for segment ${segmentId}`,
-      errorPrefix: `Could not fetch root: `
-    });
-    const jsonResp = await response.json();
-    return Uint64.parseString(jsonResp['root_id']);
-  }
-
   async mergeSegments(first: SegmentSelection, second: SegmentSelection): Promise<Uint64> {
     const {url} = this;
     if (url === '') {

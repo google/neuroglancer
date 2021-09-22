@@ -20,14 +20,18 @@ import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import { RenderLayer } from '../renderlayer';
 import { RenderLayerTransformOrError } from '../render_coordinate_transform';
+import { SegmentationUserLayer } from '../segmentation_user_layer';
 import { MultiscaleVolumeChunkSource } from '../sliceview/volume/frontend';
+import { Tab } from '../widget/tab_view';
 
 export abstract class SegmentationGraphSource {
-  abstract connect(segmentsState: VisibleSegmentsState): Owned<SegmentationGraphSourceConnection>;
+  abstract connect(segmentsState: VisibleSegmentsState, transform?: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection>;
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
   abstract get highBitRepresentative(): boolean;
+
+  tab?(layer: SegmentationUserLayer): Tab;
 }
 
 export interface ComputedSplit {
@@ -43,12 +47,10 @@ export interface ComputedSplit {
 
 export abstract class SegmentationGraphSourceConnection<
     SourceType extends SegmentationGraphSource = SegmentationGraphSource> extends RefCounted {
-  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState) {
+  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState, public transform?: WatchableValueInterface<RenderLayerTransformOrError>) {
     super();
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
-
-  select?(id: Uint64): void;
 
   createRenderLayer(
       transform: WatchableValueInterface<RenderLayerTransformOrError>,

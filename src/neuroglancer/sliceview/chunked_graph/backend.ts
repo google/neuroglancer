@@ -28,6 +28,7 @@ import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'n
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 import * as vector from 'neuroglancer/util/vector';
+import { isBaseSegmentId } from 'src/neuroglancer/datasource/graphene/base';
 
 export class ChunkedGraphChunk extends SliceViewChunk {
   backendOnly = true;
@@ -41,10 +42,12 @@ export class ChunkedGraphChunk extends SliceViewChunk {
   updateRootSegments(rootSegments: Uint64Set) {
     let changed = false;
     for (const rootObjectId of rootSegments) {
-      const key = rootObjectId.toString();
-      if (!this.mappings!.has(key)) {
-        changed = true;
-        this.mappings!.set(key, null);
+      if (!isBaseSegmentId(rootObjectId, 8)) {// TODO this.source.info.nBitsPerLayer
+        const key = rootObjectId.toString();
+        if (!this.mappings!.has(key)) {
+          changed = true;
+          this.mappings!.set(key, null);
+        }
       }
     }
     return changed;
@@ -103,6 +106,7 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSourceBackend impleme
     super(rpc, options);
     const rank = this.spec.rank;
     this.rootSegments = rpc.get(options['rootSegments']);
+    console.log('ChunkedGraphChunkSource options', options);
     this.tempChunkDataSize = new Uint32Array(rank);
     this.tempChunkPosition = new Float32Array(rank);
   }
@@ -200,7 +204,6 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.graphurl = options['url'];
-    // this.rootSegments = <Uint64Set>rpc.get(options['rootSegments']);
     this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
     
@@ -227,6 +230,19 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
 
   filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
       Iterable<TransformedSource> {
+    // If the pixel nm size in the slice is bigger than the smallest dimension of the
+    // highest resolution voxel size (e.g. 4nm if the highest res is 4x4x40nm) by
+    // a certain ratio (right now semi-arbitarily set as a constant in chunked_graph/base.ts)
+    // we do not request the ChunkedGraph for root -> supervoxel mappings, and
+    // instead display a message to the user
+
+    // using similar logic as in sliceview/base.ts filterVisibleSources
+    const pixelSize = sliceView.projectionParameters.value.pixelSize * 1.1;
+    const smallestVoxelSize = sources[0].effectiveVoxelSize;
+    if (this.renderRatioLimit < pixelSize / Math.min(...smallestVoxelSize)) {
+      sources = [];
+    }
+
     // TODO filterVisibleSources isn't always called before the first updateDisplayState (when initially adding a graphene layer)
     const filteredSources = filterVisibleSources(sliceView, this, sources);
     this.sources = [];

@@ -41,6 +41,7 @@ import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {makeFilterButton} from 'neuroglancer/widget/filter_button';
 import { TrackableBoolean } from '../trackable_boolean';
+import { Uint64Set } from '../uint64_set';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
@@ -151,6 +152,7 @@ export interface SegmentationDisplayState {
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
   baseSegmentColoring: WatchableValueInterface<boolean>;
+  baseSegmentHighlighting: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
 
@@ -161,8 +163,11 @@ export interface SegmentationDisplayState {
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: WatchableValueInterface<number>;
-  segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  segmentStatedColors: WatchableValueInterface<Uint64Map>; //  ?? what is thhis
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+
+  showFocusSegments: WatchableValueInterface<boolean>;
+  focusSegments: WatchableValueInterface<Uint64Set>;
 }
 
 export function resetTemporaryVisibleSegmentsState(state: VisibleSegmentsState) {

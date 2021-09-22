@@ -413,6 +413,9 @@ async function decodeDracoFragmentChunk(
   protected minishardIndexSources: MinishardIndexSource[];
 
   async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
+    cancellationToken.add(() => {
+      console.log('GrapheneMeshSource cancelled');
+    });
     const {parameters} = this;
     let url = `${parameters.manifestUrl}/manifest`;
     let manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;

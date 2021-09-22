@@ -44,7 +44,7 @@ import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {cancellableFetchSpecialOk, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {cancellableFetchSpecialOk, isBaseSegmentId, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {IndexedSegmentPropertySourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -57,9 +57,20 @@ import { makeChunkedGraphChunkSpecification } from 'src/neuroglancer/sliceview/c
 import { Uint64Set } from 'src/neuroglancer/uint64_set';
 import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID } from 'src/neuroglancer/segmentation_graph/source';
 import { VisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/base';
-import { TrackableValue, WatchableValueInterface } from 'src/neuroglancer/trackable_value';
+import { observeWatchable, TrackableValue, WatchableValueInterface } from 'src/neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'src/neuroglancer/render_coordinate_transform';
 import { RenderLayer } from 'src/neuroglancer/renderlayer';
+import { getSegmentPropertyMap } from '../precomputed/frontend';
+import { SegmentationUserLayer } from 'src/neuroglancer/segmentation_user_layer';
+import { Tab } from 'src/neuroglancer/widget/tab_view';
+import { DependentViewWidget } from 'src/neuroglancer/widget/dependent_view_widget';
+import { makeToolActivationStatusMessageWithHeader, makeToolButton, registerLayerTool, Tool, ToolActivation } from 'src/neuroglancer/ui/tool';
+import { ANNOTATE_MERGE_SEGMENTS_TOOL_ID } from 'src/neuroglancer/ui/segment_split_merge_tools';
+import { EventActionMap } from 'src/neuroglancer/util/event_action_map';
+import { addLayerControlToOptionsTab, LayerControlFactory, LayerControlTool, registerLayerControl } from 'src/neuroglancer/widget/layer_control';
+import { TextInputWidget } from 'src/neuroglancer/widget/text_input';
+import { DateTimeInputWidget } from 'src/neuroglancer/widget/datetime_input';
+import { makeCloseButton } from 'src/neuroglancer/widget/close_button';
 
 class GrapheneVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -185,12 +196,18 @@ class AppInfo {
   }
 }
 
+const N_BITS_FOR_LAYER_ID_DEFAULT = 8;
+
 class GraphInfo {
   chunkSize: vec3;
+  nBitsForLayerId: number;
   constructor(obj: any) {
     verifyObject(obj);
     this.chunkSize = verifyObjectProperty(
         obj, 'chunk_size', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+    console.log('obj', obj);
+    this.nBitsForLayerId = verifyOptionalObjectProperty(
+        obj, 'n_bits_for_layer_id', verifyPositiveInt, N_BITS_FOR_LAYER_ID_DEFAULT);
   }
 }
 
@@ -312,19 +329,6 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   // graph: GraphInfo;
   // scales: ScaleInfo[];
 
-  // getChunkedGraphUrl(): [string, SpecialProtocolCredentialsProvider] | undefined { // DONT LIKE THIS
-  //   if (this.info.app) {
-  //     return [this.info.app!.segmentationUrl, this.credentialsProvider];
-  //   }
-  //   return undefined;
-  // }
-
-  // public async getTimestampLimit() {
-  //   const response =  await cancellableFetchSpecialOk(
-  //     this.credentialsProvider, `${this.getChunkedGraphUrl()![0]}/oldest_timestamp`, {}, responseJson);
-  //   return verifyObjectProperty(await response.json(), 'iso', verifyString);
-  // }
-
   get dataType() {
     return this.info.dataType;
   }
@@ -344,7 +348,6 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
-    console.log("GrapheneMultiscaleVolumeChunkSource getSources");
     const modelResolution = this.info.scales[0].resolution;
     const {rank} = this;
     return transposeNestedArrays(this.info.scales.map(scaleInfo => {
@@ -732,6 +735,7 @@ async function getVolumeDataSource(
   const info = parseMultiscaleVolumeInfo(metadata, url);
   const volume = new GrapheneMultiscaleVolumeChunkSource(
       options.chunkManager, credentialsProvider, url, info);
+  console.log('created GrapheneGraphSource');
   const segmentationGraph = new GrapheneGraphSource(info, credentialsProvider, volume);
   const {modelSpace} = info;
   const subsources: DataSubsourceEntry[] = [
@@ -976,88 +980,6 @@ class AnnotationMetadata {
 //   };
 // }
 
-function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
-  verifyObject(data);
-  const tempUint64 = new Uint64();
-  const ids = verifyObjectProperty(data, 'ids', idsObj => {
-    idsObj = verifyStringArray(idsObj);
-    const numIds = idsObj.length;
-    const ids = new Uint32Array(numIds * 2);
-    for (let i = 0; i < numIds; ++i) {
-      if (!tempUint64.tryParseString(idsObj[i])) {
-        throw new Error(`Invalid uint64 id: ${JSON.stringify(idsObj[i])}`);
-      }
-      ids[2 * i] = tempUint64.low;
-      ids[2 * i + 1] = tempUint64.high;
-    }
-    return ids;
-  });
-  const numIds = ids.length / 2;
-  const properties = verifyObjectProperty(
-      data, 'properties',
-      propertiesObj => parseArray(propertiesObj, (propertyObj): InlineSegmentProperty => {
-        verifyObject(propertyObj);
-        const id = verifyObjectProperty(propertyObj, 'id', verifyString);
-        const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
-        const type = verifyObjectProperty(propertyObj, 'type', type => {
-          if (type !== 'label' && type !== 'description' && type !== 'string' && type !== 'tags' &&
-              type !== 'number') {
-            throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
-          }
-          return type;
-        });
-        if (type === 'tags') {
-          const tags = verifyObjectProperty(propertyObj, 'tags', verifyStringArray);
-          let tagDescriptions = verifyOptionalObjectProperty(propertyObj, 'tag_descriptions', verifyStringArray);
-          if (tagDescriptions === undefined) {
-            tagDescriptions = new Array(tags.length);
-            tagDescriptions.fill('');
-          } else {
-            if (tagDescriptions.length !== tags.length) {
-              throw new Error(`Expected tag_descriptions to have length: ${tags.length}`);
-            }
-          }
-          const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
-            if (!Array.isArray(valuesObj) || valuesObj.length !== numIds) {
-              throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
-            }
-            return valuesObj.map(tagIndices => {
-              return String.fromCharCode(...tagIndices);
-            });
-          });
-          return {id, description, type, tags, tagDescriptions, values};
-        }
-        if (type === 'number') {
-          const dataType = verifyObjectProperty(propertyObj, 'data_type', x => verifyEnumString(x, DataType));
-          if (dataType === DataType.UINT64) {
-            throw new Error('uint64 properties not supported');
-          }
-          const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
-            if (!Array.isArray(valuesObj) || valuesObj.length !== numIds) {
-              throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
-            }
-            return DATA_TYPE_ARRAY_CONSTRUCTOR[dataType].from(valuesObj);
-          });
-          let min = Infinity, max = -Infinity;
-          for (let i = values.length - 1; i >= 0; --i) {
-            const v = values[i];
-            if (v < min) min = v;
-            if (v > max) max = v;
-          }
-          return {id, description, type, dataType, values, bounds: [min, max]};
-        }
-        const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
-          verifyStringArray(valuesObj);
-          if (valuesObj.length !== numIds) {
-            throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
-          }
-          return valuesObj;
-        });
-        return {id, description, type, values};
-      }));
-  return normalizeInlineSegmentPropertyMap({ids, properties});
-}
-
 export const GrapheneIndexedSegmentPropertySource = WithParameters(
     WithCredentialsProvider<SpecialProtocolCredentials>()(IndexedSegmentPropertySource),
     IndexedSegmentPropertySourceParameters);
@@ -1083,30 +1005,6 @@ export const GrapheneIndexedSegmentPropertySource = WithParameters(
 //       }));
 //   return {sharding, properties};
 // }
-
-function getSegmentPropertyMap(
-    chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
-    data: unknown, url: string): SegmentPropertyMap {
-  chunkManager;
-  credentialsProvider;
-  url;
-  try {
-    const t = verifyObjectProperty(data, '@type', verifyString);
-    if (t !== 'neuroglancer_segment_properties') {
-      throw new Error(`Unsupported segment property map type: ${JSON.stringify(t)}`);
-    }
-    const inlineProperties = verifyOptionalObjectProperty(data, 'inline', parseInlinePropertyMap);
-    // const indexedProperties = verifyOptionalObjectProperty(data, 'indexed', indexedObj => {
-    //   const {sharding, properties} = parseIndexedPropertyMap(indexedObj);
-    //   return chunkManager.getChunkSource(
-    //       PrecomputedIndexedSegmentPropertySource,
-    //       {credentialsProvider, properties, parameters: {sharding, url}});
-    // });
-    return new SegmentPropertyMap({inlineProperties});
-  } catch (e) {
-    throw new Error(`Error parsing segment property map: ${e.message}`);
-  }
-}
 
 // async function getSegmentPropertyMapDataSource(
 //     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
@@ -1215,43 +1113,53 @@ export class GrapheneDataSource extends DataSourceProvider {
   }
 }
 
-
-
-
-// TODO, not sure if this can be used for graphene
-
-interface GraphSegmentInfo {
-  id: Uint64;
-  baseSegments: Uint64[];
-  baseSegmentParents: Uint64[];
-  name: string, tags: string[], numVoxels: number, bounds: number[], lastLogId: Uint64|null,
+interface MulticutState {
+  focusSegment: TrackableValue<Uint64|undefined>;
+  blueTeam: boolean,
+  blueTeamPoints: Uint64Set;
+  redTeamPoints: Uint64Set;
 }
-
-/// Base-10 string representation of a segment id, used as map key.
-type SegmentIdString = string;
-
-interface ActiveSegmentQuery {
-  id: Uint64;
-  current: GraphSegmentInfo|undefined;
-  addedEquivalences: boolean;
-  seenGeneration: number;
-  disposer: () => void;
-}
-
-// Generation used for checking if segments have been seen.
-let updateGeneration = 0;
 
 class GraphConnection extends SegmentationGraphSourceConnection {
-  // private ignoreVisibleSegmentsChanged = false; // TODO do we need this?
+  // TODO move to a multicut state class/object
+  multicutState: MulticutState;
 
-  private chunkedGraphLayer: ChunkedGraphLayer|undefined; // maybe a temporary hack?
 
   constructor(
-      graph: GrapheneGraphSource,
+      public graph: GrapheneGraphSource,
       segmentsState: VisibleSegmentsState,
+      public transform: WatchableValueInterface<RenderLayerTransformOrError>,
       private chunkSource: GrapheneMultiscaleVolumeChunkSource,
       private credentialsProvider: SpecialProtocolCredentialsProvider) {
     super(graph, segmentsState);
+
+    this.multicutState = {
+      focusSegment: new TrackableValue<Uint64|undefined>(undefined, x => x),
+      blueTeam: true,
+      blueTeamPoints: new Uint64Set(),
+      redTeamPoints: new Uint64Set(),
+    };
+
+    const multicutStateChanged = (x: Uint64|Uint64[]|null, add: boolean) => {
+      const empty = this.multicutState.blueTeamPoints.size === 0 &&
+        this.multicutState.redTeamPoints.size === 0;
+      
+      segmentsState.useTemporaryVisibleSegments.value = !empty;
+      segmentsState.useTemporarySegmentEquivalences.value = !empty;
+
+      segmentsState.temporaryVisibleSegments.clear();
+
+      for (const segment of this.multicutState.blueTeamPoints) {
+        segmentsState.temporaryVisibleSegments.add(segment);
+      }
+
+      for (const segment of this.multicutState.redTeamPoints) {
+        segmentsState.temporaryVisibleSegments.add(segment);
+      }
+    };
+
+    this.multicutState.blueTeamPoints.changed.add(multicutStateChanged);
+    this.multicutState.redTeamPoints.changed.add(multicutStateChanged);
 
     segmentsState.visibleSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
       if (segmentIds !== null) {
@@ -1260,23 +1168,22 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       this.visibleSegmentsChanged(segmentIds, add);
     });
 
-        // const visibleSegmentsChanged = () => {
-    //   if (!this.ignoreVisibleSegmentsChanged) {
-    //     this.debouncedVisibleSegmentsChanged();
-    //   }
-    // };
-    // this.registerDisposer(segmentsState.visibleSegments.changed.add(visibleSegmentsChanged));
-    // this.registerDisposer(
-    //     segmentsState.temporaryVisibleSegments.changed.add(visibleSegmentsChanged));
-    // this.visibleSegmentsChanged();
+    // TODO temporary
+  }
 
+  clearMulticutState() {
+    const {multicutState} = this;
+    multicutState.focusSegment.value = undefined;
+    multicutState.blueTeam = true;
+    multicutState.blueTeamPoints.clear();
+    multicutState.redTeamPoints.clear();
   }
 
   createRenderLayer(
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
       localPosition: WatchableValueInterface<Float32Array>,
       multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer|undefined {
-    const res =  new ChunkedGraphLayer(
+    return new ChunkedGraphLayer(
       this.chunkSource.info.app!.segmentationUrl,
       this.chunkSource.getChunkedGraphSources(this.segmentsState.visibleSegments),
       multiscaleSource,
@@ -1286,71 +1193,46 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         transform,
       },
       this.credentialsProvider);
-
-      this.chunkedGraphLayer = res;
-      return res;
   };
-
-  getRootOfSelectedSupervoxel(segment: Uint64) {
-    // let {segmentSelectionState, timestamp} = this.displayState;
-    // let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
-
-    const tsValue = undefined;
-
-    // TODO why are we cloning this?
-    return this.chunkedGraphLayer!.getRoot(segment.clone(), tsValue);
-  }
-
-  select(segment: Uint64) {
-    const {visibleSegments: rootSegments} = this.segmentsState;
-    if (rootSegments.has(segment)) {
-      rootSegments.delete(segment);
-    } else if (this.chunkedGraphLayer) {
-      if (!this.chunkedGraphLayer.leafRequestsActive.value) {
-        StatusMessage.showTemporaryMessage(
-            'The selected segment will not be displayed in 2D at this current zoom level. ',
-            3000);
-      }
-      this.getRootOfSelectedSupervoxel(segment)
-          .then(rootSegment => {
-            rootSegments.add(rootSegment);
-          })
-          .catch((e: Error) => {
-            console.log(e);
-            StatusMessage.showTemporaryMessage(e.message, 3000);
-          });
-    } else {
-      StatusMessage.showTemporaryMessage(
-          `Can't fetch root segment - graph layer not initialized.`, 3000);
-    }
-  }
 
   private lastDeselectionMessage: StatusMessage|undefined;
   private lastDeselectionMessageExists = false;
 
-  private visibleSegmentsChanged(rootSegments: Uint64[]|null, added: boolean) {
-    if (rootSegments === null) {
+  private visibleSegmentsChanged(segments: Uint64[]|null, added: boolean) {
+    const {segmentsState} = this;
+    console.log('visibleSegmentsChanged', segments, added);
+
+    if (segments === null) {
+      const leafSegmentCount = this.segmentsState.visibleSegments.size;
+      this.segmentsState.segmentEquivalences.clear();
+      StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+
       if (added) {
-        return;
-      } else {
-        // Clear all segment sets
-        let leafSegmentCount = this.segmentsState.visibleSegments.size;
-        this.segmentsState.visibleSegments.clear();
-        this.segmentsState.segmentEquivalences.clear();
-        if (this.segmentsState.rootSegmentsAfterEdit !== undefined) {
-          this.segmentsState.rootSegmentsAfterEdit.clear();
-        }
-        StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+        console.error("does this actually happen?");
       }
-    } else if (added) {
-      this.segmentsState.visibleSegments.add(rootSegments);
-    } else if (!added) {
-      for (const rootSegment of rootSegments) {
-        const segments = [...this.segmentsState.segmentEquivalences.setElements(rootSegment)];
-        const segmentCount = segments.length;  // Approximation
-        this.segmentsState.visibleSegments.delete(rootSegment);
-        
-        this.segmentsState.segmentEquivalences.deleteSet(rootSegment);
+      return;
+    }
+
+    for (const segmentId of segments) {
+      const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph!.nBitsForLayerId);
+
+      if (added) {
+        if (isBaseSegment) {
+          console.log('doing something');
+          this.graph.getRoot(segmentId).then(rootId => {
+            if (segmentId === rootId) {
+              console.error('when does this happen?');
+            }
+            segmentsState.visibleSegments.delete(segmentId);
+            segmentsState.visibleSegments.add(rootId);
+          });
+        }
+      } else if (!isBaseSegment) {
+        // removed and not a base segment
+        const segmentCount = [...segmentsState.segmentEquivalences.setElements(segmentId)].length; // Approximation
+
+        segmentsState.segmentEquivalences.deleteSet(segmentId);
+
         if (this.lastDeselectionMessage && this.lastDeselectionMessageExists) {
           this.lastDeselectionMessage.dispose();
           this.lastDeselectionMessageExists = false;
@@ -1366,15 +1248,12 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         }, 2000);
       }
     }
-    // this.specificationChanged.dispatch(); TODO is this needed with the line in SegmentationUserLayerGroupState constructor?
   }
     
   computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined {
     console.log("GraphConnection.computeSplit");
     return undefined;
   }
-
-  private segmentQueries = new Map<SegmentIdString, ActiveSegmentQuery>();
 }
 
 export interface SegmentSelection {
@@ -1416,6 +1295,25 @@ class GrapheneGraphServerInterface {
     }
   }
 
+  async getRoot(segment: Uint64, timestamp = '') {
+    const timestampEpoch = (new Date(timestamp)).valueOf() / 1000;
+
+    const url = `${this.url}/node/${String(segment)}/root?int64_as_str=1${
+      Number.isNaN(timestampEpoch) ? '' : `&timestamp=${timestampEpoch}`}`
+
+    const promise = cancellableFetchSpecialOk(
+      this.credentialsProvider,
+      url,
+      {}, responseIdentity);
+
+    const response = await this.withErrorMessage(promise, {
+      initialMessage: `Retrieving root for segment ${segment}`,
+      errorPrefix: `Could not fetch root: `
+    });
+    const jsonResp = await response.json();
+    return Uint64.parseString(jsonResp['root_id']);
+  }
+
   async mergeSegments(first: SegmentSelection, second: SegmentSelection): Promise<Uint64> {
     const {url} = this;
     if (url === '') {
@@ -1442,26 +1340,43 @@ class GrapheneGraphServerInterface {
 }
 
 class GrapheneGraphSource extends SegmentationGraphSource {
-
   private connections = new Set<GraphConnection>();
   private graphServer: GrapheneGraphServerInterface;
-  public timestamp: TrackableValue<string> = new TrackableValue('', date => ((new Date(date)).valueOf() / 1000).toString());
+  public timestamp: TrackableValue<string> = new TrackableValue('', date => {
+    console.log('timestamp changed', date);
+    return date;
+  });
   public timestampLimit: TrackableValue<string> = new TrackableValue(
     '',
     date => {
       let limit = new Date(date).valueOf().toString();
+      console.log('timestamplimit', date, limit);
       return limit === 'NaN' ? '' : limit;
     },
     '');
 
-  constructor(private info: MultiscaleVolumeInfo, public credentialsProvider: SpecialProtocolCredentialsProvider, private chunkSource: GrapheneMultiscaleVolumeChunkSource) {
+  constructor(public info: MultiscaleVolumeInfo, public credentialsProvider: SpecialProtocolCredentialsProvider, private chunkSource: GrapheneMultiscaleVolumeChunkSource) {
     super();
     this.graphServer = new GrapheneGraphServerInterface(info.app!.segmentationUrl, this.credentialsProvider);
-    console.log("constructing GrapheneGraphSource");
+    
+    this.getTimestampLimit().then((limit) => {
+      this.timestampLimit.value = limit;
+    });
   }
 
-  connect(segmentsState: VisibleSegmentsState): Owned<SegmentationGraphSourceConnection> {
-    const connection = new GraphConnection(this, segmentsState, this.chunkSource, this.credentialsProvider);
+  private async getTimestampLimit() {
+    const response = await cancellableFetchSpecialOk(
+      this.credentialsProvider, `${this.info.app!.segmentationUrl}/oldest_timestamp`, {}, responseJson);
+
+    return verifyObjectProperty(response, 'iso', verifyString);
+  }
+
+  tab(layer: SegmentationUserLayer) {
+    return new GrapheneTab(layer);
+  }
+
+  connect(segmentsState: VisibleSegmentsState, transform: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection> {
+    const connection = new GraphConnection(this, segmentsState, transform, this.chunkSource, this.credentialsProvider);
   
     this.connections.add(connection);
     connection.registerDisposer(() => {
@@ -1469,6 +1384,10 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     });
 
     return connection;
+  }
+
+  getRoot(segment: Uint64) {
+    return this.graphServer.getRoot(segment, this.timestamp.value);
   }
 
   safeToSubmit(action: string) {
@@ -1534,6 +1453,369 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     return true;
   }
 }
+
+// export const ANNOTATE_MERGE_SEGMENTS_TOOL_ID = 'mergeSegments';
+export const ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID = 'multicutSegments';
+
+export class GrapheneTab extends Tab {
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    console.log('construcrting GrapheneTab');
+    const {element} = this;
+    element.classList.add('neuroglancer-graphene-tab');
+    element.appendChild(
+        this.registerDisposer(new DependentViewWidget(
+                                  layer.displayState.segmentationGroupState.value.graph,
+                                  (graph, parent, context) => {
+                                    if (graph === undefined) return;
+                                    if (!(graph instanceof GrapheneGraphSource)) return;
+                                    const toolbox = document.createElement('div');
+                                    toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                      toolJson: ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
+                                      label: 'Merge',
+                                      title: 'Merge segments'
+                                    }));
+                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                      toolJson: ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID,
+                                      label: 'Multicut',
+                                      title: 'Multicut segments'
+                                    }));
+                                    parent.appendChild(toolbox);
+                                  }))
+            .element);
+    
+    element.appendChild(
+        this.registerDisposer(new DependentViewWidget(
+                                  layer.displayState.segmentationGroupState.value.graph,
+                                  (graph, parent, context) => {
+                                    if (graph === undefined) return;
+                                    if (!(graph instanceof GrapheneGraphSource)) return;
+                                    const toolbox = document.createElement('div');
+                                    toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                    toolbox.appendChild(makeCloseButton({
+                                      title: 'Unlink layer',
+                                      onClick: () => {
+                                        console.log('clear multicut');
+                                        if (!(layer.graphConnection instanceof GraphConnection)) return;
+                                        layer.graphConnection.clearMulticutState();
+                                      }}));
+                                    parent.appendChild(toolbox);
+                                  }))
+            .element);
+    
+
+    element.appendChild(addLayerControlToOptionsTab(this, layer, this.visibility, timeControl));
+  }
+}
+
+const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  'at:shift?+mousedown0': {action: 'set-anchor'},
+  // 'at:shift?+mousedown2': {action: 'set-anchor'},
+});
+
+function timeLayerControl(): LayerControlFactory<SegmentationUserLayer> {
+  // const randomize = (layer: SegmentationUserLayer) => {
+  //   layer.displayState.segmentationColorGroupState.value.segmentColorHash.randomize();
+  // };
+  return {
+    makeControl: (layer, context, {labelTextContainer}) => {
+      const segmentationGroupState = layer.displayState.segmentationGroupState.value;
+      const {graph: {value: graph}} = segmentationGroupState;
+
+      layer.graphConnection
+
+
+      const timestamp = graph instanceof GrapheneGraphSource ? graph.timestamp : new TrackableValue<string>('', x => x);
+
+      const timestampLimit = graph instanceof GrapheneGraphSource ? graph.timestampLimit : new TrackableValue<string>('0', x => x);
+      
+      
+      // const checkbox = document.createElement('input');
+      // checkbox.type = 'radio';
+      // checkbox.addEventListener('change', () => {
+      //   chooseColorMode(layer, !checkbox.checked);
+      // });
+      // labelTextContainer.prepend(checkbox);
+      const controlElement = document.createElement('div');
+      controlElement.classList.add('neuroglancer-time-control');
+      const widget =
+          context.registerDisposer(new DateTimeInputWidget(timestamp, new Date(timestampLimit.value), new Date()));
+
+      timestampLimit.changed.add(() => {
+        widget.setMin(new Date(timestampLimit.value));
+      });
+
+      timestamp.changed.add(() => {
+        layer.displayState.segmentationGroupState.value.visibleSegments.clear();
+        layer.displayState.segmentationGroupState.value.temporaryVisibleSegments.clear();
+      });
+
+      console.log('limit', timestampLimit);
+
+      controlElement.appendChild(widget.element);
+
+      context.registerDisposer(observeWatchable(value => {
+        const isVisible = value === undefined;
+        controlElement.style.visibility = isVisible ? '' : 'hidden';
+        // checkbox.checked = isVisible;
+      }, layer.displayState.segmentDefaultColor));
+      return {controlElement, control: widget};
+    },
+    activateTool: activation => {
+      console.log('activate timeLayerControl');
+      const {layer} = activation.tool;
+      // chooseColorMode(layer, false);
+      // randomize(layer);
+    },
+  };
+}
+
+export class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {  
+  grapheneConnection?: GraphConnection;
+
+  toJSON() {
+    return ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID;
+  }
+
+  activate(activation: ToolActivation<this>) {
+    // Ensure we use the same segmentationGroupState while activated.
+    const segmentationGroupState = this.layer.displayState.segmentationGroupState.value;
+
+    const {graphConnection} = this.layer;
+
+    if (graphConnection && graphConnection instanceof GraphConnection) {
+      this.grapheneConnection = graphConnection;
+
+      const {multicutState} = this.grapheneConnection;
+
+      multicutState.focusSegment.changed.add(() => {
+        console.log('multicutState.focusSegment.changed');
+        const focusSegment = multicutState.focusSegment.value;
+        this.layer.displayState.showFocusSegments.value = focusSegment !== undefined;
+        this.layer.displayState.focusSegments.clear();
+
+        if (focusSegment) {
+          this.layer.displayState.focusSegments.add(focusSegment);
+        }
+      });
+    } else {
+      this.grapheneConnection = undefined;
+    }
+
+    const getAnchorSegment = (): {anchorSegment: Uint64|undefined, error: string|undefined} => {
+      let anchorSegment = this.layer.anchorSegment.value;
+      if (anchorSegment === undefined) {
+        return {anchorSegment: undefined, error: 'Select anchor segment for split'};
+      }
+      const anchorGraphSegment = segmentationGroupState.segmentEquivalences.get(anchorSegment);
+      if (!segmentationGroupState.visibleSegments.has(anchorGraphSegment)) {
+        return {anchorSegment, error: 'Anchor segment must be in visible set'};
+      }
+      return {anchorSegment, error: undefined};
+    };
+
+    const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
+    header.textContent = 'Multicut segments';
+    body.classList.add('neuroglancer-merge-segments-status');
+    activation.bindInputEventMap(MULTICUT_SEGMENTS_INPUT_EVENT_MAP);
+    const getSplitRequest = (): {
+      anchorSegment: Uint64|undefined,
+      otherSegment: Uint64|undefined,
+      anchorSegmentValid: boolean,
+      error: string|undefined
+    } => {
+      let {anchorSegment, error} = getAnchorSegment();
+      if (anchorSegment === undefined || error !== undefined) {
+        return {anchorSegment, error, otherSegment: undefined, anchorSegmentValid: false};
+      }
+      const {displayState} = this.layer;
+      const otherSegment = displayState.segmentSelectionState.baseValue;
+      if (otherSegment === undefined ||
+          !Uint64.equal(
+              displayState.segmentSelectionState.selectedSegment,
+              segmentationGroupState.segmentEquivalences.get(anchorSegment)) ||
+          Uint64.equal(otherSegment, anchorSegment)) {
+        return {
+          anchorSegment,
+          otherSegment: undefined,
+          anchorSegmentValid: true,
+          error: 'Hover over base segment to seed split'
+        };
+      }
+      return {anchorSegment, otherSegment, anchorSegmentValid: true, error: undefined};
+    };
+    activation.registerDisposer(() => {
+      // resetTemporaryVisibleSegmentsState(segmentationGroupState);
+    });
+    const updateStatus = () => {
+      // removeChildren(body);
+      // const {displayState} = this.layer;
+      // let {anchorSegment, otherSegment, anchorSegmentValid, error} = getSplitRequest();
+      // let anchorSegmentAugmented: Uint64MapEntry|undefined;
+      // let otherSegmentAugmented: Uint64MapEntry|undefined;
+      // const updateTemporaryState = () => {
+      //   const {segmentEquivalences} = segmentationGroupState;
+      //   const {graphConnection} = this.layer;
+      //   if (!anchorSegmentValid || graphConnection === undefined) {
+      //     resetTemporaryVisibleSegmentsState(segmentationGroupState);
+      //     return;
+      //   } else {
+      //     segmentationGroupState.useTemporaryVisibleSegments.value = true;
+      //     if (otherSegment !== undefined) {
+      //       const splitResult = graphConnection.computeSplit(anchorSegment!, otherSegment);
+      //       if (splitResult !== undefined) {
+      //         anchorSegmentAugmented =
+      //             new Uint64MapEntry(anchorSegment!, splitResult.includeRepresentative);
+      //         otherSegmentAugmented =
+      //             new Uint64MapEntry(otherSegment, splitResult.excludeRepresentative);
+      //         segmentationGroupState.useTemporarySegmentEquivalences.value = true;
+      //         const retainedGraphSegment = splitResult.includeRepresentative;
+      //         const excludedGraphSegment = splitResult.excludeRepresentative;
+      //         const tempEquivalences = segmentationGroupState.temporarySegmentEquivalences;
+      //         tempEquivalences.clear();
+      //         for (const segment of splitResult.includeBaseSegments) {
+      //           tempEquivalences.link(segment, retainedGraphSegment);
+      //         }
+      //         for (const segment of splitResult.excludeBaseSegments) {
+      //           tempEquivalences.link(segment, excludedGraphSegment);
+      //         }
+      //         const tempVisibleSegments = segmentationGroupState.temporaryVisibleSegments;
+      //         tempVisibleSegments.clear();
+      //         tempVisibleSegments.add(retainedGraphSegment);
+      //         tempVisibleSegments.add(excludedGraphSegment);
+      //         return;
+      //       }
+      //     }
+      //     segmentationGroupState.useTemporarySegmentEquivalences.value = false;
+      //     const tempVisibleSegments = segmentationGroupState.temporaryVisibleSegments;
+      //     tempVisibleSegments.clear();
+      //     tempVisibleSegments.add(segmentEquivalences.get(anchorSegment!));
+      //   }
+      // };
+      // updateTemporaryState();
+      // const makeWidget = (id: Uint64MapEntry) => {
+      //   const row = makeSegmentWidget(this.layer.displayState, id);
+      //   row.classList.add('neuroglancer-segment-list-entry-double-line');
+      //   return row;
+      // };
+      // if (anchorSegment !== undefined) {
+      //   body.appendChild(
+      //       makeWidget(anchorSegmentAugmented ?? augmentSegmentId(displayState, anchorSegment)));
+      // }
+      // if (error !== undefined) {
+      //   const msg = document.createElement('span');
+      //   msg.textContent = error;
+      //   body.appendChild(msg);
+      // }
+      // if (otherSegmentAugmented !== undefined) {
+      //   const msg = document.createElement('span');
+      //   msg.textContent = ' split ';
+      //   body.appendChild(msg);
+      //   body.appendChild(makeWidget(otherSegmentAugmented));
+      // }
+    };
+    // activation.registerDisposer(bindSegmentListWidth(this.layer.displayState, body));
+    updateStatus();
+    // const debouncedUpdateStatus =
+    //     activation.registerCancellable(animationFrameDebounce(updateStatus));
+    // registerCallbackWhenSegmentationDisplayStateChanged(
+    //     this.layer.displayState, activation, debouncedUpdateStatus);
+    // activation.registerDisposer(this.layer.anchorSegment.changed.add(debouncedUpdateStatus));
+
+    activation.bindAction('split-segments', event => {
+      event.stopPropagation();
+      console.log('split-segments');
+      // (async () => {
+      //   const {graph: {value: graph}} = segmentationGroupState;
+      //   if (graph === undefined) return;
+      //   const {anchorSegment, otherSegment, error} = getSplitRequest();
+      //   if (anchorSegment === undefined || otherSegment === undefined || error !== undefined) {
+      //     return;
+      //   }
+      //   try {
+      //     await graph.split(anchorSegment, otherSegment);
+      //     StatusMessage.showTemporaryMessage(`Split performed`);
+      //   } catch (e) {
+      //     StatusMessage.showTemporaryMessage(`Split failed: ${e}`);
+      //   }
+      // })();
+    });
+    activation.bindAction('set-anchor', event => {
+      event.stopPropagation();
+
+      if (!this.grapheneConnection) return;
+
+      const {multicutState} = this.grapheneConnection;
+
+      const activeTeam = multicutState.blueTeam ? multicutState.blueTeamPoints : multicutState.redTeamPoints;
+      
+      const {segmentSelectionState: {baseValue, value}} = this.layer.displayState;
+
+      if (!baseValue || !value) return; // could this happen or is this just for type checking
+
+      // console.log('selected', segmentSelectionState.value?.toJSON(), segmentSelectionState.baseValue?.toJSON(), segmentSelectionState.selectedSegment.toJSON(), segmentSelectionState.baseSelectedSegment.toJSON());
+      
+      if (this.layer.displayState.segmentationGroupState.value.visibleSegments.has(value)) {
+        if (multicutState.focusSegment.value === undefined) {
+          multicutState.focusSegment.value = value.clone();
+        }
+
+        if (Uint64.equal(multicutState.focusSegment.value, value)) {
+          console.log('this is a valid segment to select');
+
+          activeTeam.add(baseValue);
+
+          return;
+        }
+      }
+
+      console.log('this is not a valid segment to select');
+
+
+      // segmentationGroupState.visibleSegments.add(other);
+      // const existingAnchor = this.layer.anchorSegment.value;
+      // if (existingAnchor === undefined || !Uint64.equal(existingAnchor, other)) {
+      //   this.layer.anchorSegment.value = other.clone();
+      //   return;
+      // }
+    });
+  }
+
+  get description() {
+    return `multicut`;
+  }
+}
+
+const TIME_JSON_KEY = 'graphTime';
+
+const timeControl = {
+  label: 'Time',
+  title: 'View segmentation at earlier point of time',
+  toolJson: TIME_JSON_KEY,
+  ...timeLayerControl(),
+};
+
+// export function registerGrapheneTools() {
+  registerLayerTool(SegmentationUserLayer, ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID, layer => {
+    console.log('creating MulticutSegmentsTool');
+    return new MulticutSegmentsTool(layer);
+  });
+
+  // const {toolJson} = options;
+  // const toolId = (typeof toolJson === 'string') ? toolJson : toolJson.type;
+  // registerLayerTool(layerType, toolId, layer => new LayerControlTool<LayerType>(layer, options));
+
+  // registerLayerTool(SegmentationUserLayer, TIMELINE_JSON_KEY, layer => new LayerControlTool<SegmentationUserLayer>(layer, {
+  //   label: 'Color seed',
+  //   title: 'Color segments based on a hash of their id',
+  //   toolJson: TIMELINE_JSON_KEY,
+  //   ...timelineLayerControl(),
+  // }));
+
+  registerLayerControl(SegmentationUserLayer, timeControl);
+  
+// }
 
 
 

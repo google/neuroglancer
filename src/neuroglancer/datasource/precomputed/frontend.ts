@@ -856,7 +856,7 @@ export const PrecomputedIndexedSegmentPropertySource = WithParameters(
 //   return {sharding, properties};
 // }
 
-function getSegmentPropertyMap(
+export function getSegmentPropertyMap(
     chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
     data: unknown, url: string): SegmentPropertyMap {
   chunkManager;

@@ -177,6 +177,7 @@ export class DisjointUint64Sets {
   * setElements(a: Uint64): IterableIterator<Uint64> {
     let key = a.toString();
     let element = this.map.get(key);
+    // console.log('setElemeents', key, element);
     if (element === undefined) {
       yield a;
     } else {

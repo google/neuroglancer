@@ -317,6 +317,8 @@ export class MeshLayer extends
       public displayState: MeshDisplayState) {
     super();
 
+    console.log('MeshLayer constructed');
+
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
     this.registerDisposer(displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch));
 

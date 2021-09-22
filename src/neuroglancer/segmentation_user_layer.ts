@@ -59,6 +59,7 @@ import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
 import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
+import { GrapheneTab } from './datasource/graphene/frontend';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -66,6 +67,7 @@ const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
 const BASE_SEGMENT_COLORING_JSON_KEY = 'baseSegmentColoring';
+const BASE_SEGMENT_HIGHLIGHTING_JSON_KEY = 'baseSegmentHighlighting';
 const IGNORE_NULL_VISIBLE_SET_JSON_KEY = 'ignoreNullVisibleSet';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
@@ -291,6 +293,13 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   selectSegment = this.layer.selectSegment;
   transparentPickEnabled = this.layer.pick;
   baseSegmentColoring = new TrackableBoolean(false, false);
+  baseSegmentHighlighting = new TrackableBoolean(false, false);
+
+  showFocusSegments = new TrackableBoolean(false, false);
+
+  // focusSegments = new Uint64Set();
+
+  focusSegments = this.layer.registerDisposer(new Uint64Set());
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 
@@ -396,6 +405,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.baseSegmentColoring.changed.add(this.specificationChanged.dispatch);
+    this.displayState.baseSegmentHighlighting.changed.add(this.specificationChanged.dispatch);
     this.displayState.ignoreNullVisibleSet.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
@@ -411,6 +421,10 @@ export class SegmentationUserLayer extends Base {
     this.tabs.add(
         'segments', {label: 'Seg.', order: -50, getter: () => new SegmentDisplayTab(this)});
     this.tabs.default = 'rendering';
+
+    this.tabs.changed.add(() => {
+      console.log('tabs changed');
+    })
 
     // this.ignoreSegmentInteractions.changed.add(this.specificationChanged.dispatch); not doing this yet
   }
@@ -503,6 +517,16 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
+              if (segmentationGraph.tab) {
+                const graphTab = segmentationGraph.tab;
+                this.tabs.add(
+                  'graph', {label: 'Graph', order: -25, getter: () => {
+                    console.log('gettr called');
+                    return graphTab(this);
+                    }});
+                this.panels.updateTabs();
+              }
+
               this.graphConnection = refCounted.registerDisposer(
                   segmentationGraph.connect(this.displayState.segmentationGroupState.value));
               refCounted.registerDisposer(() => {
@@ -518,6 +542,12 @@ export class SegmentationUserLayer extends Base {
                 if (graphRenderLayer) {
                   loadedSubsource.addRenderLayer(graphRenderLayer);
                 }
+
+                // if (graph.tabs) {
+                //   for 
+
+                  
+                // }
               }
             });
           }
@@ -602,6 +632,8 @@ export class SegmentationUserLayer extends Base {
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.baseSegmentColoring.restoreState(
         specification[BASE_SEGMENT_COLORING_JSON_KEY]);
+    this.displayState.baseSegmentHighlighting.restoreState(
+        specification[BASE_SEGMENT_HIGHLIGHTING_JSON_KEY]);
     this.displayState.silhouetteRendering.restoreState(
         specification[MESH_SILHOUETTE_RENDERING_JSON_KEY]);
     this.displayState.ignoreNullVisibleSet.restoreState(
@@ -639,6 +671,7 @@ export class SegmentationUserLayer extends Base {
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[BASE_SEGMENT_COLORING_JSON_KEY] = this.displayState.baseSegmentColoring.toJSON();
+    x[BASE_SEGMENT_HIGHLIGHTING_JSON_KEY] = this.displayState.baseSegmentHighlighting.toJSON();
     x[IGNORE_NULL_VISIBLE_SET_JSON_KEY] = this.displayState.ignoreNullVisibleSet.toJSON();
     x[MESH_SILHOUETTE_RENDERING_JSON_KEY] = this.displayState.silhouetteRendering.toJSON();
     x[ANCHOR_SEGMENT_JSON_KEY] = this.anchorSegment.toJSON();
@@ -689,11 +722,6 @@ export class SegmentationUserLayer extends Base {
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
-
-          if (this.graphConnection?.select) {
-            this.graphConnection.select(segment);
-            break;
-          }
 
           const {visibleSegments} = this.displayState.segmentationGroupState.value;
           const newVisible = !visibleSegments.has(segment);
@@ -942,6 +970,12 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     toolJson: BASE_SEGMENT_COLORING_JSON_KEY,
     title: 'Color base segments individually',
     ...checkboxLayerControl(layer => layer.displayState.baseSegmentColoring),
+  },
+  {
+    label: 'Highlight base segments',
+    toolJson: BASE_SEGMENT_HIGHLIGHTING_JSON_KEY,
+    title: 'Highlight base segments individually',
+    ...checkboxLayerControl(layer => layer.displayState.baseSegmentHighlighting),
   },
   {
     label: 'Show all by default',

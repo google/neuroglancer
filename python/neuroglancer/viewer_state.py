@@ -196,6 +196,10 @@ class BaseSegmentColoringTool(Tool):
     __slots__ = ()
     TOOL_TYPE = 'baseSegmentColoring'
 
+@export_tool
+class BaseSegmentHighlightingTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'baseSegmentHighlighting'
 
 @export_tool
 class IgnoreNullVisibleSetTool(Tool):

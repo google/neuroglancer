@@ -54,6 +54,7 @@ export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
   }
 
   copyToGPU() {
+    console.log('copy hash table to gpu', this);
     let {hashTable} = this;
     let {generation} = hashTable;
     if (this.generation === generation) {

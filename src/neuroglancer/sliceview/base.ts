@@ -590,6 +590,7 @@ export function*
     filterVisibleSources(
         sliceView: SliceViewBase, renderLayer: SliceViewRenderLayer,
         sources: readonly TransformedSource[]): Iterable<TransformedSource> {
+  if (!sources.length) return;
   // Increase pixel size by a small margin.
   const pixelSize = sliceView.projectionParameters.value.pixelSize * 1.1;
   // At the smallest scale, all alternative sources must have the same voxel size, which is

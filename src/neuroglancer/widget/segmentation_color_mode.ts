@@ -79,6 +79,7 @@ export function fixedColorLayerControl():
   return {
     ...options,
     makeControl: (layer, context, labelElements) => {
+      console.log('make control');
       const result = options.makeControl(layer, context, labelElements);
       const {controlElement} = result;
       const checkbox = document.createElement('input');
@@ -98,8 +99,8 @@ export function fixedColorLayerControl():
       return result;
     },
     activateTool: (activation, control) => {
-      chooseColorMode(activation.tool.layer, true);
-      options.activateTool(activation, control);
+      // chooseColorMode(activation.tool.layer, true);
+      // options.activateTool(activation, control);
     },
   };
 }

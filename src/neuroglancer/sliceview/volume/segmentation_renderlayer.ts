@@ -56,6 +56,7 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
 interface ShaderParameters {
   hasEquivalences: boolean;
   baseSegmentColoring: boolean;
+  baseSegmentHighlighting: boolean;
   hasSegmentStatedColors: boolean;
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
@@ -68,6 +69,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       new SegmentStatedColorShaderManager('segmentStatedColor');
   private gpuSegmentStatedColorHashTable: GPUHashTable<HashMapUint64>|undefined;
   private hashTableManager = new HashSetShaderManager('visibleSegments');
+  private hashTableManagerFocusSegments = new HashSetShaderManager('focusSegments');
+  private gpuHashTableFocusSegments = this.registerDisposer(
+      GPUHashTable.get(this.gl, this.displayState.focusSegments.value.hashTable));
   private gpuHashTable = this.registerDisposer(
       GPUHashTable.get(this.gl, this.segmentationGroupState.visibleSegments.hashTable));
   private gpuTemporaryHashTable =
@@ -97,6 +101,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
                 x => x !== undefined, [displayState.segmentDefaultColor])),
             hideSegmentZero: displayState.hideSegmentZero,
             baseSegmentColoring: displayState.baseSegmentColoring,
+            baseSegmentHighlighting: displayState.baseSegmentHighlighting,
           })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
@@ -122,6 +127,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
     this.hashTableManager.defineShader(builder);
+    this.hashTableManagerFocusSegments.defineShader(builder);
     let getUint64Code = `
 uint64_t getUint64DataValue() {
   uint64_t x = toUint64(getDataValue());
@@ -149,10 +155,12 @@ uint64_t getMappedObjectId(uint64_t value) {
 `);
     }
     builder.addUniform('highp uvec2', 'uSelectedSegment');
+    builder.addUniform('highp uvec2', 'uBaseSelectedSegment');
     builder.addUniform('highp uint', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addUniform('highp float', 'uSaturation');
+    builder.addUniform('highp uint', 'uFocusSegments');
     let fragmentMain = `
   uint64_t baseValue = getUint64DataValue();
   uint64_t value = getMappedObjectId(baseValue);
@@ -160,6 +168,18 @@ uint64_t getMappedObjectId(uint64_t value) {
 
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
+`;
+    fragmentMain += `
+  if (uFocusSegments == 1u) {
+    bool has = uShowAllSegments != 0u ? true : ${
+        this.hashTableManagerFocusSegments.hasFunctionName}(value);
+    if (!has) {
+      emit(vec4(0.0, 0.0, 0.0, 0.5)); //uOtherSegmentsAlpha));
+    } else {
+      emit(vec4(0.0, 0.0, 0.0, 0.0));
+    }
+    return;
+  } else {
 `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
@@ -170,7 +190,8 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     }
     fragmentMain += `
-  bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
+  bool isVisible = ${this.hashTableManager.hasFunctionName}(value);
+  bool has = uShowAllSegments != 0u ? true : isVisible;
   if (uSelectedSegment == value.value) {
     float adjustment = has ? 0.5 : 0.75;
     if (saturation > adjustment) {
@@ -178,6 +199,15 @@ uint64_t getMappedObjectId(uint64_t value) {
     } else {
       saturation += adjustment;
     }
+`;
+    if (parameters.baseSegmentHighlighting) {
+      fragmentMain += `
+    if (uBaseSelectedSegment == baseValue.value && isVisible) {
+      saturation *= 0.25;
+    }
+`;
+    }
+    fragmentMain += `
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
@@ -213,6 +243,10 @@ uint64_t getMappedObjectId(uint64_t value) {
   vec3 rgb = getMappedIdColor(valueForColor);
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
 `;
+
+    fragmentMain += `
+  }
+`;
     builder.setFragmentMain(fragmentMain);
   }
 
@@ -224,22 +258,33 @@ uint64_t getMappedObjectId(uint64_t value) {
     const visibleSegments = getVisibleSegments(segmentationGroupState);
     const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
+    let baseSelectedSegmentLow = 0, baseSelectedSegmentHigh = 0;
     if (segmentSelectionState.hasSelectedSegment) {
       let seg = segmentSelectionState.selectedSegment;
       selectedSegmentLow = seg.low;
       selectedSegmentHigh = seg.high;
+      let baseSeg = segmentSelectionState.baseSelectedSegment;
+      baseSelectedSegmentLow = baseSeg.low;
+      baseSelectedSegmentHigh = baseSeg.high;
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), displayState.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uSaturation'), displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
+    gl.uniform2ui(shader.uniform('uBaseSelectedSegment'), baseSelectedSegmentLow, baseSelectedSegmentHigh);
     gl.uniform1ui(
         shader.uniform('uShowAllSegments'),
         visibleSegments.hashTable.size || !ignoreNullSegmentSet ? 0 : 1);
+    gl.uniform1ui(
+        shader.uniform('uFocusSegments'),
+        this.displayState.showFocusSegments.value ? 1 : 0);
     this.hashTableManager.enable(
         gl, shader,
         segmentationGroupState.useTemporaryVisibleSegments.value ? this.gpuTemporaryHashTable :
                                                                    this.gpuHashTable);
+    this.hashTableManagerFocusSegments.enable(gl, shader, this.gpuHashTableFocusSegments);
+    console.log('focus segments', this.displayState.focusSegments.value.toJSON());
+    console.log('focus segments', this.gpuHashTableFocusSegments.hashTable.size, this.gpuHashTableFocusSegments.hashTable.hasPair(22143943, 167772160));
     if (parameters.hasEquivalences) {
       const useTemp = segmentationGroupState.useTemporarySegmentEquivalences.value;
       (useTemp ? this.temporaryEquivalencesHashMap : this.equivalencesHashMap).update();
@@ -267,6 +312,7 @@ uint64_t getMappedObjectId(uint64_t value) {
   endSlice(sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters) {
     const {gl} = this;
     this.hashTableManager.disable(gl, shader);
+    this.hashTableManagerFocusSegments.disable(gl, shader);
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.disable(gl, shader);
     }
