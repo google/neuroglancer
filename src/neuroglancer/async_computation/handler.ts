@@ -16,18 +16,33 @@
 
 import {AsyncComputationSpec} from 'neuroglancer/async_computation';
 
-const handlers = new Map<string, (...args: any[]) => Promise<{value: any, transfer?: Transferable[]}>>();
+const handlers =
+    new Map<string, (...args: any[]) => Promise<{value: any, transfer?: Transferable[]}>>();
 
-(self as any).onmessage = (msg: any) => {
-  const {t, id, args} = msg.data as {t: string, id: number, args: any[]};
-  const handler = handlers.get(t)!;
-  handler(...args).then(
-      ({value, transfer}) => (self as any).postMessage({id, value}, transfer),
-      error => (self as any).postMessage({
-        id,
-        error: (error instanceof Error) ? error.message : error.toString()
-      }));
-};
+function setupChannel(port: MessagePort|any) {
+  port.onmessage = (msg: any) => {
+    {
+      // On most Firefox and Chrome, async computation workers can be created directly from the
+      // chunk queue worker.  On Safari, though, since workers cannot themselves create additional
+      // workers, instead async computation workers are created by the main thread, and we
+      // communicate with the chunk queue worker via a separate `MessagePort`, which is provided in
+      // an additional message with a `port` member.
+      const newPort = msg.data.port;
+      if (newPort !== undefined) {
+        setupChannel(newPort);
+        return;
+      }
+    }
+    const {t, id, args} = msg.data as {t: string, id: number, args: any[]};
+    const handler = handlers.get(t)!;
+    handler(...args).then(
+        ({value, transfer}) => port.postMessage({id, value}, transfer),
+        error => port.postMessage(
+            {id, error: (error instanceof Error) ? error.message : error.toString()}));
+  };
+}
+
+setupChannel(self);
 
 export function registerAsyncComputation<Signature extends(...args: any) => any>(
     request: AsyncComputationSpec<Signature>,

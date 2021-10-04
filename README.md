@@ -44,6 +44,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 
 - Chrome >= 51
 - Firefox >= 46
+- Safari >= 15.0
 
 # Keyboard and mouse bindings
 
