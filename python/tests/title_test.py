@@ -15,6 +15,7 @@
 
 import neuroglancer
 import numpy as np
+import pytest
 
 
 def test_title(webdriver):
