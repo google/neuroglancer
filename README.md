@@ -171,6 +171,7 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   as a useful example for converting other datasets.
 - [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
 - [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
+- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/neuroglancer/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
 
 # Contributing
 
