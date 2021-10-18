@@ -93,7 +93,7 @@ export class Url{
 
         `(?<protocol>${protocols.join("|").replace("+", "\\+")})` + "://" +
 
-        String.raw`(?<hostname>[a-z\-\.]+)` +
+        String.raw`(?<hostname>[0-9a-z\-\.]+)` +
 
         "(:" +
             String.raw`(?<port>\d+)` +
