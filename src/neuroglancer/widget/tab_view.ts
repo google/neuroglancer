@@ -304,7 +304,6 @@ export class TabView extends RefCounted {
     element.appendChild(stack.element);
     this.registerDisposer(options.tabs.changed.add(this.debouncedUpdateView));
     this.registerDisposer(options.selectedTab.changed.add(() => this.updateTabLabelStyles()));
-    console.log('options.tabs', options.tabs);
     this.updateTabs();
   }
 
@@ -316,7 +315,6 @@ export class TabView extends RefCounted {
   }
 
   private updateTabs() {
-    console.log('update tabs');
     if (this.tabsGeneration !== this.tabs.changed.count) {
       this.destroyTabs();
       if (this.visible) {

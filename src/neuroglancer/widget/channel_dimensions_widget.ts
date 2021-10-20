@@ -101,6 +101,7 @@ export class ChannelDimensionsWidget extends RefCounted {
   }
 
   private makeNewDimensionWidget(id: DimensionId) {
+    console.log('hi');
     const widget = new DimensionWidget(id);
     widget.nameContainer.addEventListener('dragstart', (event: DragEvent) => {
       this.dragSource = widget;

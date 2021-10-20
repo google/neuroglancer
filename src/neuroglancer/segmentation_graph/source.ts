@@ -18,6 +18,8 @@ import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import { AnnotationSource } from '../annotation';
+import { WatchableCoordinateSpaceTransform } from '../coordinate_transform';
 import { RenderLayer } from '../renderlayer';
 import { RenderLayerTransformOrError } from '../render_coordinate_transform';
 import { SegmentationUserLayer } from '../segmentation_user_layer';
@@ -52,14 +54,19 @@ export abstract class SegmentationGraphSourceConnection<
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
 
-  createRenderLayer(
+  // createAnnotationSource(transform: WatchableCoordinateSpaceTransform): AnnotationSource|undefined {
+  //   transform;
+  //   return undefined;
+  // }
+
+  createRenderLayers(
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
       localPosition: WatchableValueInterface<Float32Array>,
-      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer|undefined {
+      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer[] {
     transform;
     localPosition;
     multiscaleSource;
-    return undefined;
+    return [];
   };
 }
 

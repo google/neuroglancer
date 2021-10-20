@@ -295,6 +295,7 @@ return decodeSupervoxelArray(chunk, rootObjectKey, response);
 
     for (const [key, val] of chunk.mappings!.entries()) {
       if (val === null) {
+        // should this be moved to chunked graph interface?
         promise = cancellableFetchSpecialOk(this.credentialsProvider,
             `${parameters.url}/${key}/leaves?int64_as_str=1&bounds=${bounds}`, {}, responseIdentity,
             cancellationToken);

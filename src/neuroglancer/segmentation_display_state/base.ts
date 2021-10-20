@@ -82,6 +82,7 @@ export function getSegmentEquivalences(state: VisibleSegmentsState) {
 
 export function forEachVisibleSegment(
     state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
+      // console.log('forEachVisibleSegment');
   const visibleSegments = getVisibleSegments(state);
   const segmentEquivalences = getSegmentEquivalences(state);
   const highBitRepresentative = segmentEquivalences.disjointSets.highBitRepresentative.value;
@@ -89,7 +90,7 @@ export function forEachVisibleSegment(
     let rootObjectId2 = segmentEquivalences.get(rootObjectId);
     // console.log('forEachVisibleSegment', rootObjectId.toString(), rootObjectId2.toString());
     callback(rootObjectId, rootObjectId2);
-    return;
+    continue;
 
     // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
     if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {

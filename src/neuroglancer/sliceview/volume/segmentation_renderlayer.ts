@@ -169,18 +169,16 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
-    fragmentMain += `
-  if (uFocusSegments == 1u) {
-    bool has = uShowAllSegments != 0u ? true : ${
-        this.hashTableManagerFocusSegments.hasFunctionName}(value);
-    if (!has) {
-      emit(vec4(0.0, 0.0, 0.0, 0.5)); //uOtherSegmentsAlpha));
-    } else {
-      emit(vec4(0.0, 0.0, 0.0, 0.0));
-    }
-    return;
-  } else {
-`;
+//     fragmentMain += `
+//   if (uFocusSegments == 1u) {
+//     bool has = uShowAllSegments != 0u ? true : ${
+//         this.hashTableManagerFocusSegments.hasFunctionName}(value);
+//     if (!has) {
+//       emit(vec4(0.0, 0.0, 0.0, 0.5));
+//       return;
+//     }
+//   }
+// `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
   if (value.value[0] == 0u && value.value[1] == 0u) {
@@ -209,7 +207,9 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     fragmentMain += `
   } else if (!has) {
-    alpha = uNotSelectedAlpha;
+    // alpha = uNotSelectedAlpha;
+    emit(vec4(0.0, 0.0, 0.0, 0.5));
+    return;
   }
 `;
 
@@ -242,10 +242,6 @@ uint64_t getMappedObjectId(uint64_t value) {
     fragmentMain += `
   vec3 rgb = getMappedIdColor(valueForColor);
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
-`;
-
-    fragmentMain += `
-  }
 `;
     builder.setFragmentMain(fragmentMain);
   }
@@ -283,14 +279,19 @@ uint64_t getMappedObjectId(uint64_t value) {
         segmentationGroupState.useTemporaryVisibleSegments.value ? this.gpuTemporaryHashTable :
                                                                    this.gpuHashTable);
     this.hashTableManagerFocusSegments.enable(gl, shader, this.gpuHashTableFocusSegments);
-    console.log('focus segments', this.displayState.focusSegments.value.toJSON());
-    console.log('focus segments', this.gpuHashTableFocusSegments.hashTable.size, this.gpuHashTableFocusSegments.hashTable.hasPair(22143943, 167772160));
+    // console.log('focus segments', this.displayState.focusSegments.value.toJSON());
+    // console.log('focus segments', this.gpuHashTableFocusSegments.hashTable.size, this.gpuHashTableFocusSegments.hashTable.hasPair(22143943, 167772160));
+
+    // console.log('visib segments', [...this.gpuHashTable.hashTable]);
+    // console.log('visib segments', [...this.gpuTemporaryHashTable.hashTable]);
+    // console.log('focus segments', [...this.gpuHashTableFocusSegments.hashTable]);
     if (parameters.hasEquivalences) {
       const useTemp = segmentationGroupState.useTemporarySegmentEquivalences.value;
       (useTemp ? this.temporaryEquivalencesHashMap : this.equivalencesHashMap).update();
       this.equivalencesShaderManager.enable(
           gl, shader,
           useTemp ? this.gpuTemporaryEquivalencesHashTable : this.gpuEquivalencesHashTable);
+    } else {
     }
     if (segmentDefaultColor === undefined) {
       this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);

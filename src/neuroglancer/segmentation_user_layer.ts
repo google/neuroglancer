@@ -59,7 +59,6 @@ import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
 import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
-import { GrapheneTab } from './datasource/graphene/frontend';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -297,8 +296,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
   showFocusSegments = new TrackableBoolean(false, false);
 
-  // focusSegments = new Uint64Set();
-
   focusSegments = this.layer.registerDisposer(new Uint64Set());
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
@@ -422,10 +419,6 @@ export class SegmentationUserLayer extends Base {
         'segments', {label: 'Seg.', order: -50, getter: () => new SegmentDisplayTab(this)});
     this.tabs.default = 'rendering';
 
-    this.tabs.changed.add(() => {
-      console.log('tabs changed');
-    })
-
     // this.ignoreSegmentInteractions.changed.add(this.specificationChanged.dispatch); not doing this yet
   }
 
@@ -516,12 +509,13 @@ export class SegmentationUserLayer extends Base {
             loadedSubsource.deactivate('Only one segmentation graph is supported');
           } else {
             updatedGraph = segmentationGraph;
+            console.log('MulticutSegmentsTool updatedGraph = segmentationGraph');
             loadedSubsource.activate(refCounted => {
+              console.log('MulticutSegmentsTool loadedSubsource.activate');
               if (segmentationGraph.tab) {
                 const graphTab = segmentationGraph.tab;
                 this.tabs.add(
                   'graph', {label: 'Graph', order: -25, getter: () => {
-                    console.log('gettr called');
                     return graphTab(this);
                     }});
                 this.panels.updateTabs();
@@ -532,22 +526,19 @@ export class SegmentationUserLayer extends Base {
               refCounted.registerDisposer(() => {
                 this.graphConnection = undefined;
               });
+              this.graphConnection.registerDisposer(() => {
+                console.log('this.graphConnection.registerDisposer');
+              });
               const segmentationRenderlayer = this.someSegmentationRenderLayer();
 
               if (segmentationRenderlayer) {
                 const transform = loadedSubsource.getRenderLayerTransform(segmentationRenderlayer.channelCoordinateSpace);
                 const localPosition = this.localPosition;
 
-                const graphRenderLayer = this.graphConnection.createRenderLayer(transform, localPosition, segmentationRenderlayer.multiscaleSource); // TODO, does it actually need the multiscale source?
-                if (graphRenderLayer) {
-                  loadedSubsource.addRenderLayer(graphRenderLayer);
+                const graphRenderLayers = this.graphConnection.createRenderLayers(transform, localPosition, segmentationRenderlayer.multiscaleSource); // TODO, does it actually need the multiscale source?
+                for (const renderLayer of graphRenderLayers) {
+                  this.addRenderLayer(renderLayer);
                 }
-
-                // if (graph.tabs) {
-                //   for 
-
-                  
-                // }
               }
             });
           }

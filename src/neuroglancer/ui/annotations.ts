@@ -194,6 +194,7 @@ export class AnnotationLayerView extends Tab {
       new Map<AnnotationLayerState, AnnotationLayerViewAttachedState>();
 
   private updateAttachedAnnotationLayerStates() {
+    console.log('updateAttachedAnnotationLayerStates');
     const states = this.annotationStates.states;
     const {attachedAnnotationStates} = this;
     const newAttachedAnnotationStates =
@@ -279,6 +280,7 @@ export class AnnotationLayerView extends Tab {
       public layer: Borrowed<UserLayerWithAnnotations>,
       public displayState: AnnotationDisplayState) {
     super();
+    console.log('constructed AnnotationLayerView');
     this.element.classList.add('neuroglancer-annotation-layer-view');
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(
@@ -477,6 +479,7 @@ export class AnnotationLayerView extends Tab {
   }
 
   private updateView() {
+    console.log('updateView annotations')
     if (!this.visible) {
       return;
     }
@@ -845,7 +848,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
   }
 }
 
-function getMousePositionInAnnotationCoordinates(
+export function getMousePositionInAnnotationCoordinates(
     mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Float32Array|
     undefined {
   const chunkTransform = annotationLayer.chunkTransform.value;
@@ -1569,6 +1572,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
     addLocalAnnotations(
         loadedSubsource: LoadedDataSubsource, source: AnnotationSource, role: RenderLayerRole) {
       const {subsourceEntry} = loadedSubsource;
+      console.log('addLocalAnnotations', loadedSubsource.getRenderLayerTransform());
       const state = new AnnotationLayerState({
         localPosition: this.localPosition,
         transform: loadedSubsource.getRenderLayerTransform(),
