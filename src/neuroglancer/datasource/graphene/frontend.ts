@@ -1882,39 +1882,43 @@ export class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
         
         segmentsState.useTemporaryVisibleSegments.value = !empty;
         segmentsState.useTemporarySegmentEquivalences.value = !empty;
+        displayState.showFocusSegments.value = !empty;
 
         segmentsState.temporaryVisibleSegments.clear();
         segmentsState.temporarySegmentEquivalences.clear();
         displayState.segmentStatedColors.value.clear();
+        displayState.focusSegments.clear();
         // displayState.segmentStatedColors.value.delete(focusSegment); // TODO, need to fix deselection
         
         if (focusSegment === undefined) return;
 
+        // add to focus segments and temporary sets
+        displayState.focusSegments.add(focusSegment);
         segmentsState.temporaryVisibleSegments.add(focusSegment);
 
-        const whiteColor = new Uint64(packColor(vec3.fromValues(1, 1, 1)));
-        const blueColor = new Uint64(packColor(vec3.fromValues(0, 0, 1)));
-        const redColor = new Uint64(packColor(vec3.fromValues(1, 0, 0)));
-
-        displayState.segmentStatedColors.value.set(focusSegment, whiteColor);
-
-        for (const segment of multicutState.blueSegments) {
+        for (const segment of multicutState.segments) {
           segmentsState.temporaryVisibleSegments.add(segment);
-          displayState.segmentStatedColors.value.set(segment, blueColor);
+          displayState.focusSegments.add(segment);
         }
 
-        for (const segment of multicutState.redSegments) {
-          segmentsState.temporaryVisibleSegments.add(segment);
-          displayState.segmentStatedColors.value.set(segment, redColor);
-        }
-
+        // all other segments are added to the focus segment equivalences
         for (const equivalence of segmentsState.segmentEquivalences.setElements(focusSegment)) {
           if (!segmentsState.temporaryVisibleSegments.has(equivalence)) {
             segmentsState.temporarySegmentEquivalences.link(focusSegment, equivalence);
           }
         }
-        // trying this to fix mesh
-        // segmentsState.temporarySegmentEquivalences.link(focusSegment, focusSegment);
+
+        // set colors
+        const blueColor = new Uint64(packColor(vec3.fromValues(0, 0, 1)));
+        const redColor = new Uint64(packColor(vec3.fromValues(1, 0, 0)));
+
+        for (const segment of multicutState.blueSegments) {
+          displayState.segmentStatedColors.value.set(segment, blueColor);
+        }
+
+        for (const segment of multicutState.redSegments) {
+          displayState.segmentStatedColors.value.set(segment, redColor);
+        }
       });
     } else {
       console.log('MulticutSegmentsTool this is a bad thing maybe or uesless');

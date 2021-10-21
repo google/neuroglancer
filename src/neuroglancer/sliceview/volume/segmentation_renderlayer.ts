@@ -169,16 +169,6 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
-//     fragmentMain += `
-//   if (uFocusSegments == 1u) {
-//     bool has = uShowAllSegments != 0u ? true : ${
-//         this.hashTableManagerFocusSegments.hasFunctionName}(value);
-//     if (!has) {
-//       emit(vec4(0.0, 0.0, 0.0, 0.5));
-//       return;
-//     }
-//   }
-// `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
   if (value.value[0] == 0u && value.value[1] == 0u) {
@@ -207,9 +197,12 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     fragmentMain += `
   } else if (!has) {
-    // alpha = uNotSelectedAlpha;
-    emit(vec4(0.0, 0.0, 0.0, 0.5));
-    return;
+    if (uFocusSegments == 1u) {
+      emit(vec4(0.0, 0.0, 0.0, 0.5));
+      return;
+    } else {
+      alpha = uNotSelectedAlpha;
+    }
   }
 `;
 
@@ -224,6 +217,12 @@ uint64_t getMappedObjectId(uint64_t value) {
     return rgb;
   }
 `;
+      fragmentMain += `
+  vec3 rgb_unused;
+  if (uFocusSegments == 1u && !${this.segmentStatedColorShaderManager.getFunctionName}(value, rgb_unused)) {
+    alpha = 0.0;
+  }
+`;
     }
     if (parameters.hasSegmentDefaultColor) {
       builder.addUniform('highp vec3', 'uSegmentDefaultColor');
@@ -231,7 +230,8 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     } else {
       this.segmentColorShaderManager.defineShader(builder);
-      getMappedIdColor += `  return segmentColorHash(value);
+      getMappedIdColor += `
+        return segmentColorHash(value);
 `;
     }
     getMappedIdColor += `
