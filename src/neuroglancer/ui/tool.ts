@@ -389,11 +389,9 @@ export class ToolBindingWidget<LayerType extends UserLayer> extends RefCounted {
     });
     addToolKeyBindHandlers(this, element, key => this.layer.toolBinder.setJson(key, this.toolJson));
     if (defaultKey) {
-      // TODO: Need to check if it was already set by the user,
-      // but jsonToKey does not appear to be populated
-      const key = this.layer.toolBinder.jsonToKey.get(this.toolJson);
+      const key = this.layer.toolBinder.jsonToKey.get(JSON.stringify(toolJson));
       if (key === undefined) {
-        this.layer.toolBinder.setJson(defaultKey, this.toolJson);
+        this.layer.toolBinder.setJson(defaultKey, toolJson);
       }
     }
   }
