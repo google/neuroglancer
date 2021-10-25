@@ -376,7 +376,7 @@ export class LayerToolBinder {
 export class ToolBindingWidget<LayerType extends UserLayer> extends RefCounted {
   element = document.createElement('div');
   private toolJsonString = JSON.stringify(this.toolJson);
-  constructor(public layer: LayerType, public toolJson: any) {
+  constructor(public layer: LayerType, public toolJson: any, defaultKey?: string) {
     super();
     const {element} = this;
     element.classList.add('neuroglancer-tool-key-binding');
@@ -388,6 +388,14 @@ export class ToolBindingWidget<LayerType extends UserLayer> extends RefCounted {
       this.layer.toolBinder.removeJsonString(this.toolJsonString);
     });
     addToolKeyBindHandlers(this, element, key => this.layer.toolBinder.setJson(key, this.toolJson));
+    if (defaultKey) {
+      // TODO: Need to check if it was already set by the user,
+      // but jsonToKey does not appear to be populated
+      const key = this.layer.toolBinder.jsonToKey.get(this.toolJson);
+      if (key === undefined) {
+        this.layer.toolBinder.setJson(defaultKey, this.toolJson);
+      }
+    }
   }
 
   private updateView() {
@@ -434,11 +442,11 @@ export function addToolKeyBindHandlers(
 
 export function makeToolButton(
     context: RefCounted, layer: UserLayer,
-    options: {toolJson: any, label: string, title?: string}) {
+    options: {toolJson: any, label: string, title?: string, defaultKey?: string}) {
   const element = document.createElement('div');
   element.classList.add('neuroglancer-tool-button');
   element.appendChild(
-      context.registerDisposer(new ToolBindingWidget(layer, options.toolJson)).element);
+      context.registerDisposer(new ToolBindingWidget(layer, options.toolJson, options.defaultKey)).element);
   const labelElement = document.createElement('div');
   labelElement.classList.add('neuroglancer-tool-button-label');
   labelElement.textContent = options.label;

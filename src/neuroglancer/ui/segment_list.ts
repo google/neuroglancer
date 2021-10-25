@@ -788,12 +788,14 @@ export class SegmentDisplayTab extends Tab {
                                     toolbox.appendChild(makeToolButton(context, layer, {
                                       toolJson: ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
                                       label: 'Merge',
-                                      title: 'Merge segments'
+                                      title: 'Merge segments',
+                                      defaultKey: 'M'
                                     }));
                                     toolbox.appendChild(makeToolButton(context, layer, {
                                       toolJson: ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
                                       label: 'Split',
-                                      title: 'Split segments'
+                                      title: 'Split segments',
+                                      defaultKey: 'S'
                                     }));
                                     parent.appendChild(toolbox);
                                   }))
