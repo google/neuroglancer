@@ -32,7 +32,7 @@ import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
-import {fetchSpecialHttpByteRange, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {fetchSpecialHttpByteRange, GRAPHENE_MANIFEST_REFRESH_PROMISE, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
@@ -45,7 +45,7 @@ import {SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'ne
 import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
-import {registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
 
 import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChunkedGraphSourceParameters, DataEncoding, GRAPHENE_MANIFEST_SHARDED, IndexedSegmentPropertySourceParameters, MeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 
@@ -456,6 +456,16 @@ async function decodeDracoFragmentChunk(
     }
   }
 }
+
+registerPromiseRPC(
+    GRAPHENE_MANIFEST_REFRESH_PROMISE, function(x, cancellationToken): RPCPromise<any> {
+      let obj = <GrapheneMeshSource>this.get(x['rpcId']);
+      let manifestChunk = obj.getChunk(Uint64.parseString(x['segment']));
+      return obj.download(manifestChunk, cancellationToken).then(() => {
+        manifestChunk.downloadSucceeded();
+        return {value: JSON.stringify(new Response())};
+      }) as RPCPromise<any>;
+    });
 
 // async function fetchByUint64(
 //     credentialsProvider: SpecialProtocolCredentialsProvider, url: string, chunk: Chunk,

@@ -54,11 +54,6 @@ export abstract class SegmentationGraphSourceConnection<
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
 
-  // createAnnotationSource(transform: WatchableCoordinateSpaceTransform): AnnotationSource|undefined {
-  //   transform;
-  //   return undefined;
-  // }
-
   createRenderLayers(
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
       localPosition: WatchableValueInterface<Float32Array>,

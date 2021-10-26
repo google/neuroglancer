@@ -99,8 +99,8 @@ export function fixedColorLayerControl():
       return result;
     },
     activateTool: (activation, control) => {
-      // chooseColorMode(activation.tool.layer, true);
-      // options.activateTool(activation, control);
+      chooseColorMode(activation.tool.layer, true);
+      options.activateTool(activation, control);
     },
   };
 }
