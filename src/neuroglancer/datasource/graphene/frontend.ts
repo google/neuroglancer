@@ -2147,6 +2147,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
                 value.toString()}, but the supervoxels already selected have root ${
                 multicutState.focusSegment.value.toString()}`,
             12000);
+        return;
       }
       const {mouseState} = this;
 
