@@ -1283,6 +1283,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   private lastDeselectionMessageExists = false;
 
   private visibleSegmentsChanged(segments: Uint64[]|null, added: boolean) {
+    console.log('visibleSegmentsChanged, added: ', added, segments?.toString());
     const {segmentsState} = this;
 
     if (segments === null) {
@@ -1299,15 +1300,25 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     for (const segmentId of segments) {
       const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph!.nBitsForLayerId);
 
+      const segmentConst = segmentId.clone();
+
       if (added) {
         if (isBaseSegment) {
           console.log('doing something');
-          this.graph.getRoot(segmentId).then(rootId => {
-            if (segmentId === rootId) {
+          this.graph.getRoot(segmentConst).then(rootId => {
+            if (segmentConst === rootId) {
               console.error('when does this happen?');
             }
-            segmentsState.visibleSegments.delete(segmentId);
+            segmentsState.visibleSegments.delete(segmentConst);
             segmentsState.visibleSegments.add(rootId);
+
+            if (!Uint64.equal(segmentConst, segmentId)) {
+              console.log('hello sven', segmentConst.toJSON(), segmentId.toJSON());
+            }
+
+            console.log('replacing', segmentConst.toJSON(), 'with', rootId.toJSON());
+
+            console.log('added now', segmentsState.visibleSegments.toJSON());
           });
         }
       } else if (!isBaseSegment) {
