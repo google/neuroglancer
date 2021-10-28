@@ -34,7 +34,7 @@ export const siPrefixes: readonly SiPrefix[] = [
   // {prefix: 'da', exponent: 1},
   {prefix: '', exponent: 0},
   // {prefix: 'd', exponent: -1},
-  {prefix: 'c', exponent: -2},
+  // {prefix: 'c', exponent: -2},
   {prefix: 'm', exponent: -3},
   {prefix: 'µ', exponent: -6},
   {prefix: 'n', exponent: -9},
@@ -46,6 +46,8 @@ export const siPrefixes: readonly SiPrefix[] = [
 ];
 
 const siPrefixesWithAlternatives = [
+  // Parse 'c' for centi, but don't pick it.
+  {prefix: 'c', exponent: -2},
   {prefix: 'u', exponent: -6},  // Also allow "u" for micro
   ...siPrefixes,
 ];
