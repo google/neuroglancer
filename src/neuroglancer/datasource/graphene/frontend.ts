@@ -255,6 +255,7 @@ export function parseSpecialUrlOld(url: string): string { // TODO: brought back 
 }
 
 function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeInfo {
+  console.log('parseMultiscaleVolumeInfo', obj);
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
@@ -299,7 +300,6 @@ function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeI
 
   if (volumeType !== VolumeType.IMAGE) {
     console.warn("THIS IS HAPPENING!!!!!")
-    // volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
     dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
     app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
     graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
@@ -1164,7 +1164,7 @@ class MulticutState extends RefCounted {
 
   constructor(layer: SegmentationUserLayer,
       public focusSegment = new TrackableValue<Uint64|undefined>(undefined, x => x),
-      public blueGroup = false,
+      private blueGroup = new WatchableValue<boolean>(false),
     ) {
     super();
     const loadedSubsource = getGraphLoadedSubsource(layer)!;
@@ -1177,6 +1177,8 @@ class MulticutState extends RefCounted {
     this.redGroupAnnotationState.source.changed.add(this.changed.dispatch);
     this.blueGroupAnnotationState.source.changed.add(this.changed.dispatch);
 
+    this.blueGroup.changed.add(this.changed.dispatch);
+
     this.registerDisposer(focusSegment.changed.add(this.changed.dispatch));
   }
   
@@ -1188,8 +1190,12 @@ class MulticutState extends RefCounted {
     }
   }
 
+  swapGroup() {
+    this.blueGroup.value = !this.blueGroup.value;
+  }
+
   get annotationState() {
-    return this.blueGroup ? this.blueGroupAnnotationState : this.redGroupAnnotationState;
+    return this.blueGroup.value ? this.blueGroupAnnotationState : this.redGroupAnnotationState;
   }
 
   get segments() {
@@ -1212,12 +1218,8 @@ class MulticutState extends RefCounted {
     return ([...this.blueGroupAnnotationState.source] as Point[]).map((x) => this.pointToSegmentSelection(x));
   }
 
-  swapGroup() {
-    this.blueGroup = !this.blueGroup;
-  }
-
   addPoint(selection: SegmentSelection) {
-    const activeGroup = this.blueGroup ? this.blueGroupAnnotationState : this.redGroupAnnotationState;
+    const activeGroup = this.annotationState;
     const annotations = activeGroup.source;
 
     const annotation: Point = {
@@ -1233,7 +1235,7 @@ class MulticutState extends RefCounted {
 
   clear() {
     this.focusSegment.value = undefined;
-    this.blueGroup = false;
+    this.blueGroup.value = false;
     (this.blueGroupAnnotationState.source as LocalAnnotationSource).clear();
     (this.redGroupAnnotationState.source as LocalAnnotationSource).clear();
   }
@@ -2085,8 +2087,16 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       displayState.showFocusSegments.value = false;
       displayState.segmentStatedColors.value.clear(); // TODO, should only clear those that are in temp sets
       displayState.focusSegments.clear();
+
+      displayState.highlightColor.value = undefined;
       
       if (focusSegment === undefined) return;
+
+      this.layer.displayState.baseSegmentHighlighting.value = true; // revert to previous value when exiting
+
+      const activeColor = multicutState.annotationState.displayState.color;
+
+      displayState.highlightColor.value = activeColor.value;
 
       segmentsState.useTemporaryVisibleSegments.value = true;
       segmentsState.useTemporarySegmentEquivalences.value = true;

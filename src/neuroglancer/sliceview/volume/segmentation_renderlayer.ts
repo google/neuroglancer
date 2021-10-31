@@ -60,6 +60,7 @@ interface ShaderParameters {
   hasSegmentStatedColors: boolean;
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
+  hasHighlightColor: boolean;
 }
 
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
@@ -99,6 +100,8 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
                 x => x.size !== 0, [displayState.segmentStatedColors])),
             hasSegmentDefaultColor: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
                 x => x !== undefined, [displayState.segmentDefaultColor])),
+            hasHighlightColor: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
+                x => x !== undefined, [displayState.highlightColor])),
             hideSegmentZero: displayState.hideSegmentZero,
             baseSegmentColoring: displayState.baseSegmentColoring,
             baseSegmentHighlighting: displayState.baseSegmentHighlighting,
@@ -166,6 +169,9 @@ uint64_t getMappedObjectId(uint64_t value) {
   uint64_t value = getMappedObjectId(baseValue);
   uint64_t valueForColor = ${parameters.baseSegmentColoring?'baseValue':'value'};
 
+  highp uvec2 segmentForHighlight = ${parameters.baseSegmentHighlighting?'uBaseSelectedSegment':'uSelectedSegment'};
+  uint64_t valueForHighlight = ${parameters.baseSegmentHighlighting?'baseValue':'value'};
+
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
@@ -180,7 +186,7 @@ uint64_t getMappedObjectId(uint64_t value) {
     fragmentMain += `
   bool isVisible = ${this.hashTableManager.hasFunctionName}(value);
   bool has = uShowAllSegments != 0u ? true : isVisible;
-  if (uSelectedSegment == value.value) {
+  if (segmentForHighlight == valueForHighlight.value) {
     float adjustment = has ? 0.5 : 0.75;
     if (saturation > adjustment) {
       saturation -= adjustment;
@@ -188,11 +194,12 @@ uint64_t getMappedObjectId(uint64_t value) {
       saturation += adjustment;
     }
 `;
-    if (parameters.baseSegmentHighlighting) {
+    if (parameters.hasHighlightColor) {
+      builder.addUniform('highp vec3', 'uHighlightColor');
+      console.log('has highlight color!');
       fragmentMain += `
-    if (uBaseSelectedSegment == baseValue.value && isVisible) {
-      saturation *= 0.25;
-    }
+    emit(vec4(mix(vec3(1.0,1.0,1.0), uHighlightColor, 1.0), alpha));
+    return;
 `;
     }
     fragmentMain += `
@@ -250,7 +257,8 @@ uint64_t getMappedObjectId(uint64_t value) {
     const {gl} = this;
     const {displayState, segmentationGroupState} = this;
     const {segmentSelectionState} = this.displayState;
-    const {segmentDefaultColor: {value: segmentDefaultColor}, segmentColorHash: {value: segmentColorHash}} = this.displayState;
+    const {segmentDefaultColor: {value: segmentDefaultColor}, segmentColorHash: {value: segmentColorHash},
+      highlightColor: {value: highlightColor}} = this.displayState;
     const visibleSegments = getVisibleSegments(segmentationGroupState);
     const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
@@ -308,6 +316,9 @@ uint64_t getMappedObjectId(uint64_t value) {
             GPUHashTable.get(gl, segmentStatedColors.hashTable);
       }
       this.segmentStatedColorShaderManager.enable(gl, shader, gpuSegmentStatedColorHashTable);
+    }
+    if (highlightColor !== undefined) {
+      gl.uniform3fv(shader.uniform('uHighlightColor'), highlightColor);
     }
   }
   endSlice(sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters) {

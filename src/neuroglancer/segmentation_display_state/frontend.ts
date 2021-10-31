@@ -163,8 +163,9 @@ export interface SegmentationDisplayState {
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: WatchableValueInterface<number>;
-  segmentStatedColors: WatchableValueInterface<Uint64Map>; //  ?? what is thhis
+  segmentStatedColors: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+  highlightColor: WatchableValueInterface<vec3|undefined>;
 
   showFocusSegments: WatchableValueInterface<boolean>;
   focusSegments: WatchableValueInterface<Uint64Set>;

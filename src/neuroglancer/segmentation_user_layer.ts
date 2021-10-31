@@ -59,6 +59,7 @@ import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
 import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
+import { colorLayerControl } from './widget/layer_control_color';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -83,6 +84,7 @@ const MESH_SILHOUETTE_RENDERING_JSON_KEY = 'meshSilhouetteRendering';
 const LINKED_SEGMENTATION_GROUP_JSON_KEY = 'linkedSegmentationGroup';
 const LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY = 'linkedSegmentationColorGroup';
 const SEGMENT_DEFAULT_COLOR_JSON_KEY = 'segmentDefaultColor';
+const HIGHLIGHT_COLOR_JSON_KEY = 'highlightColor';
 const ANCHOR_SEGMENT_JSON_KEY = 'anchorSegment';
 
 export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID = 'skeletonShaderControl';
@@ -174,6 +176,7 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     this.segmentColorHash.changed.add(specificationChanged.dispatch);
     this.segmentStatedColors.changed.add(specificationChanged.dispatch);
     this.segmentDefaultColor.changed.add(specificationChanged.dispatch);
+    this.highlightColor.changed.add(specificationChanged.dispatch);
   }
 
   restoreState(specification: unknown) {
@@ -182,6 +185,9 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     verifyOptionalObjectProperty(
         specification, SEGMENT_DEFAULT_COLOR_JSON_KEY,
         value => this.segmentDefaultColor.restoreState(value));
+    verifyOptionalObjectProperty(
+        specification, HIGHLIGHT_COLOR_JSON_KEY,
+        value => this.highlightColor.restoreState(value));
     verifyOptionalObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
       let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
       for (let [idStr, colorVec] of result) {
@@ -196,6 +202,7 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     const x: any = {};
     x[COLOR_SEED_JSON_KEY] = this.segmentColorHash.toJSON();
     x[SEGMENT_DEFAULT_COLOR_JSON_KEY] = this.segmentDefaultColor.toJSON();
+    x[HIGHLIGHT_COLOR_JSON_KEY] = this.highlightColor.toJSON();
     const {segmentStatedColors} = this;
     if (segmentStatedColors.size > 0) {
       const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
@@ -210,11 +217,13 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     this.segmentColorHash.value = other.segmentColorHash.value;
     this.segmentStatedColors.assignFrom(other.segmentStatedColors);
     this.segmentDefaultColor.value = other.segmentDefaultColor.value;
+    this.highlightColor.value = other.highlightColor.value;
   }
 
   segmentColorHash = SegmentColorHash.getDefault();
   segmentStatedColors = this.registerDisposer(new Uint64Map());
   segmentDefaultColor = new TrackableOptionalRGB();
+  highlightColor = new TrackableOptionalRGB();
 }
 
 class LinkedSegmentationGroupState<State extends SegmentationUserLayerGroupState|
@@ -272,6 +281,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         this.segmentationColorGroupState, group => group.segmentStatedColors));
     this.segmentDefaultColor = this.layer.registerDisposer(new IndirectTrackableValue(
         this.segmentationColorGroupState, group => group.segmentDefaultColor));
+    this.highlightColor = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.highlightColor));
     this.segmentQuery = this.layer.registerDisposer(
         new IndirectWatchableValue(this.segmentationGroupState, group => group.segmentQuery));
     this.segmentPropertyMap = this.layer.registerDisposer(
@@ -328,6 +339,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   segmentColorHash: TrackableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+  highlightColor: WatchableValueInterface<vec3|undefined>;
   segmentQuery: WatchableValueInterface<string>;
   segmentPropertyMap: WatchableValueInterface<PreprocessedSegmentPropertyMap|undefined>;
 }
@@ -519,6 +531,10 @@ export class SegmentationUserLayer extends Base {
                     return graphTab(this);
                     }});
                 this.panels.updateTabs();
+
+                // this.graphConnection?.registerDisposer(() => {
+                //   this.tabs...
+                // });
               }
 
               this.graphConnection = refCounted.registerDisposer(
@@ -967,6 +983,12 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     toolJson: BASE_SEGMENT_HIGHLIGHTING_JSON_KEY,
     title: 'Highlight base segments individually',
     ...checkboxLayerControl(layer => layer.displayState.baseSegmentHighlighting),
+  },
+  {
+    label: 'Highlight Color',
+    title: 'Choose a color to overlay on the segment when hovering.',
+    toolJson: HIGHLIGHT_COLOR_JSON_KEY,
+    ...colorLayerControl(layer => layer.displayState.highlightColor),
   },
   {
     label: 'Show all by default',
