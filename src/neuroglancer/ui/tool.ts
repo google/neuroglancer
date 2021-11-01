@@ -258,11 +258,13 @@ export class ToolBinder extends RefCounted {
     }
     this.debounceDeactivate.cancel();
     if (tool === this.activeTool?.tool) {
+      this.deactivate();
       return;
     }
     const activation = new ToolActivation(tool, inputEventMapBinder);
     this.activeTool = activation;
-    const expectedCode = `Key${key}`;
+    //Old method (hold to activate):
+    /*const expectedCode = `Key${key}`;
     activation.registerEventListener(window, 'keyup', (event: KeyboardEvent) => {
       if (event.code === expectedCode) {
         this.debounceDeactivate();
@@ -270,7 +272,7 @@ export class ToolBinder extends RefCounted {
     });
     activation.registerEventListener(window, 'blur', () => {
       this.debounceDeactivate();
-    });
+    });*/
     tool.activate(activation);
     return tool;
   }
