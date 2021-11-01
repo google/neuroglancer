@@ -2021,8 +2021,8 @@ const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
 class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
   grapheneConnection?: GraphConnection;
 
-  constructor(public layer: SegmentationUserLayer) {
-    super(layer);
+  constructor(public layer: SegmentationUserLayer, public toggle: boolean = false) {
+    super(layer, toggle);
 
     console.log('MulticutSegmentsTool create', this.layer);
 
@@ -2186,17 +2186,17 @@ const timeControl = {
 
 registerLayerTool(SegmentationUserLayer, ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID, layer => {
   console.log('creating MulticutSegmentsTool');
-  return new MulticutSegmentsTool(layer);
+  return new MulticutSegmentsTool(layer, true);
 });
 
 registerLayerTool(SegmentationUserLayer, GRAPHENE_MERGE_SEGMENTS_TOOL_ID, layer => {
   console.log('creating MergeSegmentsTool');
-  return new MergeSegmentsTool(layer);
+  return new MergeSegmentsTool(layer, true);
 });
 
 registerLayerTool(SegmentationUserLayer, GRAPHENE_SPLIT_SEGMENTS_TOOL_ID, layer => {
   console.log('creating SplitSegmentsTool');
-  return new SplitSegmentsTool(layer);
+  return new SplitSegmentsTool(layer, true);
 });
 
 registerLayerTool(SegmentationUserLayer, REFRESH_MESH_TOOL_ID, layer => {

@@ -50,7 +50,7 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
 export abstract class Tool<LayerType extends UserLayer = UserLayer> extends RefCounted {
   changed = new Signal();
   keyBinding: string|undefined = undefined;
-  constructor(public layer: LayerType) {
+  constructor(public layer: LayerType, public toggle: boolean = false) {
     super();
   }
   get mouseState() {
@@ -258,21 +258,24 @@ export class ToolBinder extends RefCounted {
     }
     this.debounceDeactivate.cancel();
     if (tool === this.activeTool?.tool) {
-      this.deactivate();
+      if (tool.toggle) {
+        this.deactivate();
+      }
       return;
     }
     const activation = new ToolActivation(tool, inputEventMapBinder);
     this.activeTool = activation;
-    //Old method (hold to activate):
-    /*const expectedCode = `Key${key}`;
-    activation.registerEventListener(window, 'keyup', (event: KeyboardEvent) => {
-      if (event.code === expectedCode) {
+    if (!tool.toggle) {
+      const expectedCode = `Key${key}`;
+      activation.registerEventListener(window, 'keyup', (event: KeyboardEvent) => {
+        if (event.code === expectedCode) {
+          this.debounceDeactivate();
+        }
+      });
+      activation.registerEventListener(window, 'blur', () => {
         this.debounceDeactivate();
-      }
-    });
-    activation.registerEventListener(window, 'blur', () => {
-      this.debounceDeactivate();
-    });*/
+      });
+    }
     tool.activate(activation);
     return tool;
   }
