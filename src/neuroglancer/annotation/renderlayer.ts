@@ -694,6 +694,7 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
             this.backend.rpc!.invoke(ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, {
               layer: this.backend.rpcId,
               view: attachment.view.rpcId,
+              displayDimensionRenderInfo,
               sources: serializeAllTransformedSources(transformedSources),
             });
             this.redrawNeeded.dispatch();
