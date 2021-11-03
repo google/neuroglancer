@@ -1931,7 +1931,6 @@ const maybeGetSelection = (tool: Tool<SegmentationUserLayer>, visibleSegments: U
 
 const MERGE_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'merge-segments'},
-  'at:shift?+mousedown2': {action: 'set-anchor'},
 });
 
 class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
@@ -1983,17 +1982,16 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
             // view.differ.ignoreChanges();
           }
         }
-      })()
-    });
-    activation.bindAction('set-anchor', event => {
-      event.stopPropagation();
-      const selection = maybeGetSelection(this, segmentationGroupState.visibleSegments);
+        else {
+          const selection = maybeGetSelection(this, segmentationGroupState.visibleSegments);
 
-      if (selection) {
-        this.lastAnchorSelection.value = selection;
-        StatusMessage.showTemporaryMessage(
-          `Selected ${selection.segmentId} as source for merge. Pick a sink.`, 3000);
-      }
+          if (selection) {
+            this.lastAnchorSelection.value = selection;
+            StatusMessage.showTemporaryMessage(
+              `Selected ${selection.segmentId} as source for merge. Pick a sink.`, 3000);
+          }
+        }
+      })()
     });
   }
 
