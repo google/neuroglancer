@@ -263,6 +263,9 @@ export class ToolBinder extends RefCounted {
       }
       return;
     }
+    else if (this.activeTool) {
+      return;
+    }
     const activation = new ToolActivation(tool, inputEventMapBinder);
     this.activeTool = activation;
     if (!tool.toggle) {
