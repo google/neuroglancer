@@ -1,0 +1,11 @@
+.neuroglancer-graphene-tab .neuroglancer-annotation-toolbox {
+  display: none;
+}
+
+.neuroglancer-graphene-tab div[data-color="#ff0000"] > .neuroglancer-annotation-position {
+  color: red;
+}
+
+.neuroglancer-graphene-tab div[data-color="#0000ff"] > .neuroglancer-annotation-position {
+  color: #4444ff;
+}

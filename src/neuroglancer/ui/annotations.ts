@@ -284,7 +284,7 @@ export class AnnotationLayerView extends Tab {
     this.element.classList.add('neuroglancer-annotation-layer-view');
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(
-        layer.annotationStates.changed.add(() => this.updateAttachedAnnotationLayerStates()));
+        this.annotationStates.changed.add(() => this.updateAttachedAnnotationLayerStates()));
     this.headerRow.classList.add('neuroglancer-annotation-list-header');
 
     const toolbox = document.createElement('div');
@@ -657,6 +657,7 @@ export class AnnotationLayerView extends Tab {
     const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
     const element = document.createElement('div');
     element.classList.add('neuroglancer-annotation-list-entry');
+    element.dataset.color = state.displayState.color.toString();
     element.style.gridTemplateColumns = this.gridTemplate;
     const icon = document.createElement('div');
     icon.className = 'neuroglancer-annotation-icon';

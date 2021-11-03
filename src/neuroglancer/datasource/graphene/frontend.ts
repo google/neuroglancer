@@ -16,6 +16,8 @@
 
 import debounce from 'lodash/debounce';
 
+import './graphene.css';
+
 import {Annotation, AnnotationSource, AnnotationType, LocalAnnotationSource, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs, Point} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
@@ -81,6 +83,8 @@ import { LayerDataSource, LoadedDataSubsource } from 'src/neuroglancer/layer_dat
 import { makeIcon } from 'src/neuroglancer/widget/icon';
 import { makeValueOrError, valueOrThrow } from 'src/neuroglancer/util/error';
 import { resetTemporaryVisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/frontend';
+import { Uint64Map } from 'src/neuroglancer/uint64_map';
+import { AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotations } from 'src/neuroglancer/ui/annotations';
 
 class GrapheneVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -1157,8 +1161,8 @@ function makeColoredAnnotationState(layer: SegmentationUserLayer, loadedSubsourc
 class MulticutState extends RefCounted {
   changed = new NullarySignal();
 
-  private redGroupAnnotationState: AnnotationLayerState;
-  private blueGroupAnnotationState: AnnotationLayerState;
+  public redGroupAnnotationState: AnnotationLayerState;
+  public blueGroupAnnotationState: AnnotationLayerState;
 
   private annotationToNanometers: Float64Array;
 
@@ -1203,11 +1207,11 @@ class MulticutState extends RefCounted {
   }
 
   get redSegments() {
-    return this.sinks.filter(x => x.segmentId !== x.rootId).map(x => x.segmentId);
+    return this.sinks.filter(x => !Uint64.equal(x.segmentId, x.rootId)).map(x => x.segmentId);
   }
 
   get blueSegments() {
-    return this.sources.filter(x => x.segmentId !== x.rootId).map(x => x.segmentId);
+    return this.sources.filter(x => !Uint64.equal(x.segmentId, x.rootId)).map(x => x.segmentId);
   }
 
   get sinks(): SegmentSelection[] {
@@ -1236,13 +1240,23 @@ class MulticutState extends RefCounted {
   clear() {
     this.focusSegment.value = undefined;
     this.blueGroup.value = false;
-    (this.blueGroupAnnotationState.source as LocalAnnotationSource).clear();
-    (this.redGroupAnnotationState.source as LocalAnnotationSource).clear();
+
+    for (const annotation of this.redGroupAnnotationState.source) {
+      this.redGroupAnnotationState.source.delete(this.redGroupAnnotationState.source.getReference(annotation.id));
+    }
+
+    for (const annotation of this.blueGroupAnnotationState.source) {
+      this.blueGroupAnnotationState.source.delete(this.blueGroupAnnotationState.source.getReference(annotation.id));
+    }
+    
+    // using .clear does not remove annotations from the list
+    // (this.blueGroupAnnotationState.source as LocalAnnotationSource).clear();
+    // (this.redGroupAnnotationState.source as LocalAnnotationSource).clear();
   }
 }
 
 class GraphConnection extends SegmentationGraphSourceConnection {
-  multicutState?: MulticutState;
+  multicutState = new WatchableValue<MulticutState|undefined>(undefined);
 
 
   constructor(
@@ -1261,8 +1275,8 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   }
 
   initializeMulticutState(layer: SegmentationUserLayer) {
-    if (this.multicutState) return;
-    this.multicutState = new MulticutState(layer);
+    if (this.multicutState.value) return;
+    this.multicutState.value = new MulticutState(layer);
   }
 
   createRenderLayers(
@@ -1313,14 +1327,6 @@ class GraphConnection extends SegmentationGraphSourceConnection {
             }
             segmentsState.visibleSegments.delete(segmentConst);
             segmentsState.visibleSegments.add(rootId);
-
-            if (!Uint64.equal(segmentConst, segmentId)) {
-              console.log('hello sven', segmentConst.toJSON(), segmentId.toJSON());
-            }
-
-            console.log('replacing', segmentConst.toJSON(), 'with', rootId.toJSON());
-
-            console.log('added now', segmentsState.visibleSegments.toJSON());
           });
         }
       } else if (!isBaseSegment) {
@@ -1352,8 +1358,9 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   }
 
   async submitMulticut(): Promise<void> {
-    if (this.multicutState) {
-      const {sinks, sources} = this.multicutState;
+    const multicutState = this.multicutState.value;
+    if (multicutState) {
+      const {sinks, sources} = multicutState;
       if (sinks.length === 0 || sources.length === 0) {
         StatusMessage.showTemporaryMessage('Must select both red and blue groups to perform a multi-cut.', 7000);
       } else if (this.graph.safeToSubmit('Multicut')) {
@@ -1655,87 +1662,150 @@ const REFRESH_MESH_TOOL_ID = 'refreshMesh';
 const GRAPHENE_MERGE_SEGMENTS_TOOL_ID = 'grapheneMergeSegments';
 const GRAPHENE_SPLIT_SEGMENTS_TOOL_ID = 'grapheneSplitSegments';
 
+class MulticutAnnotationLayerView extends AnnotationLayerView {
+  private _annotationStates: MergedAnnotationStates;
+
+  constructor(
+      public layer: Borrowed<UserLayerWithAnnotations>,
+      public displayState: AnnotationDisplayState) {
+    super(layer, displayState);
+  }
+
+  get annotationStates() {
+    if (this._annotationStates === undefined) {
+      this._annotationStates = this.registerDisposer(new MergedAnnotationStates());
+    }
+    return this._annotationStates;
+  }
+}
+
 export class GrapheneTab extends Tab {
+  private redGroupAnnotationLayer =
+      this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
+  private blueGroupAnnotationLayer =
+      this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
+
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {element} = this;
+
+    const {graphConnection} = layer;
+
+    if (graphConnection instanceof GraphConnection) {
+      const createAnnotationLayerViews = () => {
+        console.log('createAnnotationLayerViews');
+        const {multicutState: {value: multicutState}} = graphConnection;
+        if (multicutState) {
+          const {redGroupAnnotationState, blueGroupAnnotationState} = multicutState;
+          // this.redGroupAnnotationLayer.annotationStates.add(redGroupAnnotationState);
+
+          // const redGroupAnnotationLayer = this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
+
+          this.redGroupAnnotationLayer.annotationStates.add(redGroupAnnotationState);
+          this.redGroupAnnotationLayer.annotationStates.add(blueGroupAnnotationState);
+          // this.blueGroupAnnotationLayer.annotationStates.add(blueGroupAnnotationState);
+
+          // console.log('append child', redGroupAnnotationLayer.element, element);
+          // element.appendChild(redGroupAnnotationLayer.element);
+        }
+      }
+
+      if (graphConnection.multicutState.value) {
+        createAnnotationLayerViews();
+      } else {
+        graphConnection.multicutState.changed.add(() => {
+          console.log('graphConnection.multicutState.changed');
+          createAnnotationLayerViews();
+        });
+      }
+    }
+
+    this.redGroupAnnotationLayer.element.classList.add('redGroup');
+    this.blueGroupAnnotationLayer.element.classList.add('blueGroup');
+
+    element.classList.add('neuroglancer-annotations-tab');
     element.classList.add('neuroglancer-graphene-tab');
     element.appendChild(addLayerControlToOptionsTab(this, layer, this.visibility, timeControl));
     element.appendChild(
-    this.registerDisposer(new DependentViewWidget(
-                              layer.displayState.segmentationGroupState.value.graph,
-                              (graph, parent, context) => {
-                                if (graph === undefined) return;
-                                if (!(graph instanceof GrapheneGraphSource)) return;
-                                const toolbox = document.createElement('div');
-                                toolbox.className = 'neuroglancer-segmentation-toolbox';
-                                toolbox.appendChild(makeToolButton(context, layer, {
-                                  toolJson: GRAPHENE_MERGE_SEGMENTS_TOOL_ID,
-                                  label: 'Merge',
-                                  title: 'Merge segments'
-                                }));
-                                toolbox.appendChild(makeToolButton(context, layer, {
-                                  toolJson: GRAPHENE_SPLIT_SEGMENTS_TOOL_ID,
-                                  label: 'Split',
-                                  title: 'Split segments'
-                                }));
-                                parent.appendChild(toolbox);
-                                  }))
-            .element);
+      this.registerDisposer(new DependentViewWidget(
+                                layer.displayState.segmentationGroupState,
+                                (graph, parent, context) => {
+                                  // if (graph === undefined) return;
+                                  // if (!(graph instanceof GrapheneGraphSource)) return;
+                                  const toolbox = document.createElement('div');
+                                  // toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                  toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolJson: REFRESH_MESH_TOOL_ID,
+                                    label: 'Refresh Mesh',
+                                    title: 'Refresh Meshes'
+                                  }));
+                                  parent.appendChild(toolbox);
+                                }))
+          .element);
     element.appendChild(
-        this.registerDisposer(new DependentViewWidget(
-                                  layer.displayState.segmentationGroupState.value.graph,
-                                  (graph, parent, context) => {
-                                    if (graph === undefined) return;
-                                    if (!(graph instanceof GrapheneGraphSource)) return;
-                                    const toolbox = document.createElement('div');
-                                    toolbox.className = 'neuroglancer-segmentation-toolbox';
-                                    toolbox.appendChild(makeToolButton(context, layer, {
-                                      toolJson: ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID,
-                                      label: 'Multicut',
-                                      title: 'Multicut segments'
-                                    }));
-                                    toolbox.appendChild(makeIcon({
-                                      text: 'Swap',
-                                      title: 'Swap group',
-                                      onClick: () => {
-                                        if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                        layer.graphConnection.multicutState?.swapGroup();
-                                      }}));
-                                    toolbox.appendChild(makeIcon({
-                                      text: 'Submit',
-                                      title: 'Submit multicut',
-                                      onClick: () => {
-                                        console.log('submit multicut');
-                                        if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                        layer.graphConnection.submitMulticut();
-                                      }}));
-                                    toolbox.appendChild(makeCloseButton({
-                                      title: 'Unlink layer',
-                                      onClick: () => {
-                                        console.log('clear multicut');
-                                        if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                        layer.graphConnection.multicutState?.clear();
-                                      }}));
-                                    parent.appendChild(toolbox);
-                                  }))
-            .element);
-        element.appendChild(
-        this.registerDisposer(new DependentViewWidget(
-                                  layer.displayState.segmentationGroupState,
-                                  (graph, parent, context) => {
-                                    // if (graph === undefined) return;
-                                    // if (!(graph instanceof GrapheneGraphSource)) return;
-                                    const toolbox = document.createElement('div');
-                                    // toolbox.className = 'neuroglancer-segmentation-toolbox';
-                                    toolbox.appendChild(makeToolButton(context, layer, {
-                                      toolJson: REFRESH_MESH_TOOL_ID,
-                                      label: 'Refresh Mesh',
-                                      title: 'Refresh Meshes'
-                                    }));
-                                    parent.appendChild(toolbox);
-                                  }))
-            .element);
+      this.registerDisposer(new DependentViewWidget(
+                                layer.displayState.segmentationGroupState.value.graph,
+                                (graph, parent, context) => {
+                                  if (graph === undefined) return;
+                                  if (!(graph instanceof GrapheneGraphSource)) return;
+                                  const toolbox = document.createElement('div');
+                                  toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                  toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolJson: GRAPHENE_MERGE_SEGMENTS_TOOL_ID,
+                                    label: 'Merge',
+                                    title: 'Merge segments'
+                                  }));
+                                  toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolJson: GRAPHENE_SPLIT_SEGMENTS_TOOL_ID,
+                                    label: 'Split',
+                                    title: 'Split segments'
+                                  }));
+                                  parent.appendChild(toolbox);
+                                    }))
+              .element);
+    element.appendChild(
+      this.registerDisposer(new DependentViewWidget(
+                                layer.displayState.segmentationGroupState.value.graph,
+                                (graph, parent, context) => {
+                                  if (graph === undefined) return;
+                                  if (!(graph instanceof GrapheneGraphSource)) return;
+                                  const toolbox = document.createElement('div');
+                                  toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                  toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolJson: ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID,
+                                    label: 'Multicut',
+                                    title: 'Multicut segments'
+                                  }));
+                                  toolbox.appendChild(makeIcon({
+                                    text: 'Swap',
+                                    title: 'Swap group',
+                                    onClick: () => {
+                                      if (!(layer.graphConnection instanceof GraphConnection)) return;
+                                      layer.graphConnection.multicutState.value?.swapGroup();
+                                    }}));
+                                  toolbox.appendChild(makeIcon({
+                                    text: 'Submit',
+                                    title: 'Submit multicut',
+                                    onClick: () => {
+                                      console.log('submit multicut');
+                                      if (!(layer.graphConnection instanceof GraphConnection)) return;
+                                      layer.graphConnection.submitMulticut();
+                                    }}));
+                                  toolbox.appendChild(makeCloseButton({
+                                    title: 'Unlink layer',
+                                    onClick: () => {
+                                      console.log('clear multicut');
+                                      if (!(layer.graphConnection instanceof GraphConnection)) return;
+                                      layer.graphConnection.multicutState.value?.clear();
+                                    }}));
+                                  parent.appendChild(toolbox);
+                                }))
+        .element);
+
+        // const annotationsContainer = document.createElement('div');
+        element.appendChild(this.redGroupAnnotationLayer.element);
+        // annotationsContainer.appendChild(this.blueGroupAnnotationLayer.element);
+        // element.appendChild(annotationsContainer);
   }
 }
 
@@ -1787,7 +1857,12 @@ const REFRESH_MESH_INPUT_EVENT_MAP = EventActionMap.fromObject({
 
 class RefreshMeshTool extends Tool<SegmentationUserLayer> {
   activate(activation: ToolActivation<this>) {
-    activation.bindInputEventMap(REFRESH_MESH_INPUT_EVENT_MAP);
+    const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
+    header.textContent = 'Refresh mesh';
+    body.classList.add('neuroglancer-merge-segments-status');
+
+    activation.bindInputEventMap(REFRESH_MESH_INPUT_EVENT_MAP); // has to be after makeToolActivationStatusMessageWithHeader
+
 
     const someMeshLayer = (layer: SegmentationUserLayer) => {
       for (let x of layer.renderLayers) {
@@ -2027,8 +2102,8 @@ function getMousePositionInAnnotationCoordinates(
 }
 
 const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
-  'at:shift?+mousedown0': {action: 'set-anchor'},
-  'at:shift?+mousedown2': {action: 'swap-group'},
+  'at:shift?+control+mousedown0': {action: 'set-anchor'},
+  'at:shift?+keys': {action: 'swap-group'},
 });
 
 class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
@@ -2067,32 +2142,43 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
   }
 
   activate(activation: ToolActivation<this>) {
+    if (!this.grapheneConnection) return;
+    const {multicutState: {value: multicutState}, segmentsState} = this.grapheneConnection;
+    if (multicutState === undefined) return;
+
     // Ensure we use the same segmentationGroupState while activated. // TODO why is this necessary rather than just accesing through this.layer?
     const segmentationGroupState = this.layer.displayState.segmentationGroupState.value;
     console.log('activate MulticutSegmentsTool', activation);
 
-    const {displayState} = this.layer;
-
-    if (!this.grapheneConnection) return;
-    const {multicutState, segmentsState} = this.grapheneConnection;
-    if (multicutState === undefined) return;
-
     const blueColor = new Uint64(packColor(vec3.fromValues(0, 0, 1)));
     const redColor = new Uint64(packColor(vec3.fromValues(1, 0, 0)));
 
-    multicutState.changed.add(() => {
-      const focusSegment = multicutState.focusSegment.value;
+    const {displayState} = this.layer;
 
+    const priorBaseSegmentHighlighting = displayState.baseSegmentHighlighting.value;
+    const priorSegmentStatedColors = new Uint64Map();
+    priorSegmentStatedColors.assignFrom(displayState.segmentStatedColors.value);
+    const priorFocusSegments = new Uint64Set();
+    priorFocusSegments.assignFrom(displayState.focusSegments);
+    
+
+    // TODO, focusSegments should probably be a watchable value
+    // also watchable value vs trackable value
+
+    const resetMulticutDisplay = () => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
       displayState.showFocusSegments.value = false;
       displayState.segmentStatedColors.value.clear(); // TODO, should only clear those that are in temp sets
       displayState.focusSegments.clear();
-
       displayState.highlightColor.value = undefined;
-      
+    };
+
+    const updateMulticutDisplay = () => {
+      resetMulticutDisplay();
+      const focusSegment = multicutState.focusSegment.value;
       if (focusSegment === undefined) return;
 
-      this.layer.displayState.baseSegmentHighlighting.value = true; // revert to previous value when exiting
+      displayState.baseSegmentHighlighting.value = true;
 
       const activeColor = multicutState.annotationState.displayState.color;
 
@@ -2126,29 +2212,61 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       for (const segment of multicutState.redSegments) {
         displayState.segmentStatedColors.value.set(segment, redColor);
       }
-    });
+    };
+
+    updateMulticutDisplay();
+
+    activation.registerDisposer(multicutState.changed.add(updateMulticutDisplay));
 
     const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
     header.textContent = 'Multicut segments';
     body.classList.add('neuroglancer-merge-segments-status');
+
+    body.appendChild(makeIcon({
+      text: 'Swap',
+      title: 'Swap group',
+      onClick: () => {
+        this.grapheneConnection?.multicutState.value?.swapGroup();
+      }}));
+
+    body.appendChild(makeIcon({
+      text: 'Submit',
+      title: 'Submit multicut',
+      onClick: () => {
+        console.log('submit multicut');
+        // if (!(graphConnection instanceof GraphConnection)) return;
+        this.grapheneConnection?.submitMulticut();
+      }}));
+    
+    body.appendChild(makeCloseButton({
+      title: 'Unlink layer',
+      onClick: () => {
+        console.log('clear multicut');
+        this.grapheneConnection?.multicutState.value?.clear();
+      }}));
+
+
     activation.bindInputEventMap(MULTICUT_SEGMENTS_INPUT_EVENT_MAP);
     activation.registerDisposer(() => {
-      resetTemporaryVisibleSegmentsState(segmentationGroupState);
+      resetMulticutDisplay();
+      displayState.baseSegmentHighlighting.value = priorBaseSegmentHighlighting;
+      displayState.segmentStatedColors.value.assignFrom(priorSegmentStatedColors);
+      displayState.focusSegments.assignFrom(priorFocusSegments);
     });
 
     activation.bindAction('swap-group', event => {
       event.stopPropagation();
       if (this.grapheneConnection) {
-        this.grapheneConnection.multicutState?.swapGroup();
+        multicutState.swapGroup();
       }
     });
 
     activation.bindAction('set-anchor', event => {
       event.stopPropagation();
 
-      if (!this.grapheneConnection) return;
-      const {multicutState} = this.grapheneConnection;
-      if (!multicutState) return;
+      // if (!this.grapheneConnection) return;
+      // const {multicutState} = this.grapheneConnection;
+      // if (!multicutState) return;
       
       const {segmentSelectionState: {baseValue, value}} = this.layer.displayState;
       if (!baseValue || !value) return; // could this happen or is this just for type checking
