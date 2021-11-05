@@ -18,8 +18,8 @@
   background-color: #393;
 }
 
-[data-neuroglancer-layer-panel-pinned="true"] .neuroglancer-side-panel-titlebar.neuroglancer-layer-side-panel-title {
-/*  background-color: #933; */
+[data-neuroglancer-layer-visible="false"] .neuroglancer-side-panel-titlebar.neuroglancer-layer-side-panel-title input {
+  text-decoration: line-through;
 }
 
 .neuroglancer-layer-side-panel-name {

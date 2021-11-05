@@ -120,6 +120,14 @@ class LayerSidePanel extends SidePanel {
     titleBar.classList.add('neuroglancer-layer-side-panel-title');
     titleBar.appendChild(this.registerDisposer(new LayerTypeWidget(layer)).element);
     titleBar.appendChild(this.registerDisposer(new LayerNameWidget(layer.managedLayer)).element);
+    this.registerDisposer(observeWatchable(visible => {
+      element.dataset.neuroglancerLayerVisible = visible.toString();
+    }, {
+      get value() {
+        return layer.managedLayer.visible;
+      },
+      changed: layer.managedLayer.layerChanged,
+    }));
     const pickButton = this.registerDisposer(new CheckboxIcon(
         {
           get value() {
