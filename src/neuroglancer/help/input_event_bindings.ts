@@ -40,6 +40,7 @@ export function formatKeyName(name: string) {
 
 export function formatKeyStroke(stroke: string) {
   let parts = stroke.split('+');
+  parts = parts.filter(x => !x.endsWith('?'));
   return parts.map(formatKeyName).join('+');
 }
 

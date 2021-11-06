@@ -521,9 +521,7 @@ export class SegmentationUserLayer extends Base {
             loadedSubsource.deactivate('Only one segmentation graph is supported');
           } else {
             updatedGraph = segmentationGraph;
-            console.log('MulticutSegmentsTool updatedGraph = segmentationGraph');
             loadedSubsource.activate(refCounted => {
-              console.log('MulticutSegmentsTool loadedSubsource.activate');
               if (segmentationGraph.tab) {
                 const graphTab = segmentationGraph.tab;
                 this.tabs.add(
@@ -541,6 +539,7 @@ export class SegmentationUserLayer extends Base {
                   segmentationGraph.connect(this.displayState.segmentationGroupState.value));
               refCounted.registerDisposer(() => {
                 this.graphConnection = undefined;
+                console.log('graph conn disposed');
               });
               this.graphConnection.registerDisposer(() => {
                 console.log('this.graphConnection.registerDisposer');

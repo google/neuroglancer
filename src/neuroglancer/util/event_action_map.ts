@@ -16,6 +16,7 @@
 
 import {registerEventListener} from 'neuroglancer/util/disposable';
 import {HierarchicalMap, HierarchicalMapInterface} from 'neuroglancer/util/hierarchical_map';
+import { formatKeyStroke } from '../help/input_event_bindings';
 
 /**
  * @file Facilities for dispatching user-defined actions in response to input events.
@@ -349,13 +350,23 @@ export class EventActionMap extends
   }
 
   describe(): string {
+    const humanReadable = (key: string): string => {
+      let keys = key.split('+');
+
+      keys = keys.filter(x => !x.endsWith('?'));
+
+      keys = keys.map(x => x.startsWith('key') ? `key:${x.slice(3)}` : x);
+
+      return keys.join('+');
+    }
+
     const bindings = [];
     const uniqueBindings = new Map<string, string>();
     for (const [, value] of this.entries()) {
       uniqueBindings.set(value.originalEventIdentifier!, value.action);
     }
     for (const [key, value] of uniqueBindings) {
-      bindings.push(`${key}→${value}`);
+      bindings.push(`${formatKeyStroke(key)}→${value}`);
     }
     return bindings.join(', ');
   }

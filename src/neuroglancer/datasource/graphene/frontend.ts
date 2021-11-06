@@ -1377,6 +1377,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
           segmentsState.rootSegmentsAfterEdit!.clear();
           segmentsState.visibleSegments.add(splitRoots);
           segmentsState.rootSegmentsAfterEdit!.add(splitRoots);
+          multicutState.clear();
 
           // TODO: Merge unsupported with edits
           // const view = (<any>window)['viewer'];
@@ -1680,10 +1681,10 @@ class MulticutAnnotationLayerView extends AnnotationLayerView {
 }
 
 export class GrapheneTab extends Tab {
-  private redGroupAnnotationLayer =
+  private annotationLayerView =
       this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
-  private blueGroupAnnotationLayer =
-      this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
+  // private blueGroupAnnotationLayer =
+  //     this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
 
   constructor(public layer: SegmentationUserLayer) {
     super();
@@ -1701,8 +1702,8 @@ export class GrapheneTab extends Tab {
 
           // const redGroupAnnotationLayer = this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
 
-          this.redGroupAnnotationLayer.annotationStates.add(redGroupAnnotationState);
-          this.redGroupAnnotationLayer.annotationStates.add(blueGroupAnnotationState);
+          this.annotationLayerView.annotationStates.add(redGroupAnnotationState);
+          this.annotationLayerView.annotationStates.add(blueGroupAnnotationState);
           // this.blueGroupAnnotationLayer.annotationStates.add(blueGroupAnnotationState);
 
           // console.log('append child', redGroupAnnotationLayer.element, element);
@@ -1719,9 +1720,6 @@ export class GrapheneTab extends Tab {
         });
       }
     }
-
-    this.redGroupAnnotationLayer.element.classList.add('redGroup');
-    this.blueGroupAnnotationLayer.element.classList.add('blueGroup');
 
     element.classList.add('neuroglancer-annotations-tab');
     element.classList.add('neuroglancer-graphene-tab');
@@ -1803,7 +1801,7 @@ export class GrapheneTab extends Tab {
         .element);
 
         // const annotationsContainer = document.createElement('div');
-        element.appendChild(this.redGroupAnnotationLayer.element);
+        element.appendChild(this.annotationLayerView.element);
         // annotationsContainer.appendChild(this.blueGroupAnnotationLayer.element);
         // element.appendChild(annotationsContainer);
   }
@@ -1843,10 +1841,7 @@ function timeLayerControl(): LayerControlFactory<SegmentationUserLayer> {
       return {controlElement, control: widget};
     },
     activateTool: activation => {
-      // console.log('activate timeLayerControl');
-      // const {layer} = activation.tool;
-      // // chooseColorMode(layer, false);
-      // // randomize(layer);
+      // maybe  I should open up the widget
     },
   };
 }
@@ -2172,6 +2167,41 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
     priorSegmentStatedColors.assignFrom(displayState.segmentStatedColors.value);
     const priorFocusSegments = new Uint64Set();
     priorFocusSegments.assignFrom(displayState.focusSegments);
+
+    const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
+    header.textContent = 'Multicut segments';
+    body.classList.add('neuroglancer-merge-segments-status');
+
+    body.appendChild(makeIcon({
+      text: 'Swap',
+      title: 'Swap group',
+      onClick: () => {
+        multicutState.swapGroup();
+      }}));
+
+    body.appendChild(makeIcon({
+      text: 'Submit',
+      title: 'Submit multicut',
+      onClick: () => {
+        this.grapheneConnection?.submitMulticut();
+      }}));
+    
+    body.appendChild(makeCloseButton({
+      title: 'Unlink layer',
+      onClick: () => {
+        console.log('clear multicut');
+        multicutState.clear();
+      }}));
+
+
+
+    activation.bindInputEventMap(MULTICUT_SEGMENTS_INPUT_EVENT_MAP);
+    activation.registerDisposer(() => {
+      resetMulticutDisplay();
+      displayState.baseSegmentHighlighting.value = priorBaseSegmentHighlighting;
+      displayState.segmentStatedColors.value.assignFrom(priorSegmentStatedColors);
+      displayState.focusSegments.assignFrom(priorFocusSegments);
+    });
     
 
     // TODO, focusSegments should probably be a watchable value
@@ -2230,56 +2260,13 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
     activation.registerDisposer(multicutState.changed.add(updateMulticutDisplay));
 
-    const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = 'Multicut segments';
-    body.classList.add('neuroglancer-merge-segments-status');
-
-    body.appendChild(makeIcon({
-      text: 'Swap',
-      title: 'Swap group',
-      onClick: () => {
-        this.grapheneConnection?.multicutState.value?.swapGroup();
-      }}));
-
-    body.appendChild(makeIcon({
-      text: 'Submit',
-      title: 'Submit multicut',
-      onClick: () => {
-        console.log('submit multicut');
-        // if (!(graphConnection instanceof GraphConnection)) return;
-        this.grapheneConnection?.submitMulticut();
-        this.layer.manager.root.toolBinder.deactivate();
-      }}));
-    
-    body.appendChild(makeCloseButton({
-      title: 'Unlink layer',
-      onClick: () => {
-        console.log('clear multicut');
-        this.grapheneConnection?.multicutState.value?.clear();
-      }}));
-
-
-    activation.bindInputEventMap(MULTICUT_SEGMENTS_INPUT_EVENT_MAP);
-    activation.registerDisposer(() => {
-      resetMulticutDisplay();
-      displayState.baseSegmentHighlighting.value = priorBaseSegmentHighlighting;
-      displayState.segmentStatedColors.value.assignFrom(priorSegmentStatedColors);
-      displayState.focusSegments.assignFrom(priorFocusSegments);
-    });
-
     activation.bindAction('swap-group', event => {
       event.stopPropagation();
-      if (this.grapheneConnection) {
         multicutState.swapGroup();
-      }
     });
 
     activation.bindAction('set-anchor', event => {
       event.stopPropagation();
-
-      // if (!this.grapheneConnection) return;
-      // const {multicutState} = this.grapheneConnection;
-      // if (!multicutState) return;
       
       const {segmentSelectionState: {baseValue, value}} = this.layer.displayState;
       if (!baseValue || !value) return; // could this happen or is this just for type checking
