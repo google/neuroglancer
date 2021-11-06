@@ -264,6 +264,7 @@ export class ToolBinder extends RefCounted {
       return;
     }
     else if (this.activeTool) {
+      StatusMessage.showTemporaryMessage(`Can't activate tool ${tool} while tool ${this.activeTool} is active`);
       return;
     }
     const activation = new ToolActivation(tool, inputEventMapBinder);
@@ -295,11 +296,12 @@ export class ToolBinder extends RefCounted {
     super.disposed();
   }
 
-  private deactivate() {
+  deactivate() {
     this.debounceDeactivate.cancel();
     const activation = this.activeTool;
     if (activation === undefined) return;
     this.activeTool = undefined;
+    activation.tool.deactivate();
     activation.dispose();
   }
 }

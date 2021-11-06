@@ -1980,6 +1980,8 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
             // view.deactivateEditMode();
             // view.differ.purgeHistory();
             // view.differ.ignoreChanges();
+
+            this.layer.manager.root.toolBinder.deactivate();
           }
         }
         else {
@@ -1993,6 +1995,11 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
         }
       })()
     });
+  }
+
+  deactivate() {
+    super.deactivate();
+    this.lastAnchorSelection.value = undefined;
   }
 
   toJSON() {
@@ -2060,6 +2067,8 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
             // view.deactivateEditMode();
             // view.differ.purgeHistory();
             // view.differ.ignoreChanges();
+
+            this.layer.manager.root.toolBinder.deactivate();
           }
         }
       })()
@@ -2082,6 +2091,11 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
 
   get description() {
     return `split segments`;
+  }
+
+  deactivate() {
+    super.deactivate();
+    this.lastAnchorSelection.value = undefined;
   }
 }
 
@@ -2234,6 +2248,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
         console.log('submit multicut');
         // if (!(graphConnection instanceof GraphConnection)) return;
         this.grapheneConnection?.submitMulticut();
+        this.layer.manager.root.toolBinder.deactivate();
       }}));
     
     body.appendChild(makeCloseButton({
