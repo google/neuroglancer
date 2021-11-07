@@ -184,8 +184,7 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     }
     fragmentMain += `
-  bool isVisible = ${this.hashTableManager.hasFunctionName}(value);
-  bool has = uShowAllSegments != 0u ? true : isVisible;
+  bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (segmentForHighlight == valueForHighlight.value) {
     float adjustment = has ? 0.5 : 0.75;
     if (saturation > adjustment) {
@@ -196,7 +195,6 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     if (parameters.hasHighlightColor) {
       builder.addUniform('highp vec3', 'uHighlightColor');
-      console.log('has highlight color!');
       fragmentMain += `
     emit(vec4(mix(vec3(1.0,1.0,1.0), uHighlightColor, 1.0), alpha));
     return;
@@ -237,8 +235,7 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     } else {
       this.segmentColorShaderManager.defineShader(builder);
-      getMappedIdColor += `
-        return segmentColorHash(value);
+      getMappedIdColor += `  return segmentColorHash(value);
 `;
     }
     getMappedIdColor += `
@@ -287,19 +284,12 @@ uint64_t getMappedObjectId(uint64_t value) {
         segmentationGroupState.useTemporaryVisibleSegments.value ? this.gpuTemporaryHashTable :
                                                                    this.gpuHashTable);
     this.hashTableManagerFocusSegments.enable(gl, shader, this.gpuHashTableFocusSegments);
-    // console.log('focus segments', this.displayState.focusSegments.value.toJSON());
-    // console.log('focus segments', this.gpuHashTableFocusSegments.hashTable.size, this.gpuHashTableFocusSegments.hashTable.hasPair(22143943, 167772160));
-
-    // console.log('visib segments', [...this.gpuHashTable.hashTable]);
-    // console.log('visib segments', [...this.gpuTemporaryHashTable.hashTable]);
-    // console.log('focus segments', [...this.gpuHashTableFocusSegments.hashTable]);
     if (parameters.hasEquivalences) {
       const useTemp = segmentationGroupState.useTemporarySegmentEquivalences.value;
       (useTemp ? this.temporaryEquivalencesHashMap : this.equivalencesHashMap).update();
       this.equivalencesShaderManager.enable(
           gl, shader,
           useTemp ? this.gpuTemporaryEquivalencesHashTable : this.gpuEquivalencesHashTable);
-    } else {
     }
     if (segmentDefaultColor === undefined) {
       this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
