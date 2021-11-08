@@ -1788,13 +1788,16 @@ export class GrapheneTab extends Tab {
                                       console.log('submit multicut');
                                       if (!(layer.graphConnection instanceof GraphConnection)) return;
                                       layer.graphConnection.submitMulticut();
+                                      layer.graphConnection.multicutState.value?.clear();
+                                      this.layer.manager.root.toolBinder.deactivate();
                                     }}));
                                   toolbox.appendChild(makeCloseButton({
-                                    title: 'Unlink layer',
+                                    title: 'Cancel multicut',
                                     onClick: () => {
                                       console.log('clear multicut');
                                       if (!(layer.graphConnection instanceof GraphConnection)) return;
                                       layer.graphConnection.multicutState.value?.clear();
+                                      this.layer.manager.root.toolBinder.deactivate();
                                     }}));
                                   parent.appendChild(toolbox);
                                 }))
@@ -2184,13 +2187,16 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       title: 'Submit multicut',
       onClick: () => {
         this.grapheneConnection?.submitMulticut();
+        multicutState.clear();
+        this.layer.manager.root.toolBinder.deactivate();
       }}));
     
     body.appendChild(makeCloseButton({
-      title: 'Unlink layer',
+      title: 'Cancel multicut',
       onClick: () => {
         console.log('clear multicut');
         multicutState.clear();
+        this.layer.manager.root.toolBinder.deactivate();
       }}));
 
 
