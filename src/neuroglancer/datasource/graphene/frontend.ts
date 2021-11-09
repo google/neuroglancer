@@ -1357,16 +1357,18 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
-  async submitMulticut(): Promise<void> {
+  async submitMulticut(): Promise<boolean> {
     const multicutState = this.multicutState.value;
     if (multicutState) {
       const {sinks, sources} = multicutState;
       if (sinks.length === 0 || sources.length === 0) {
         StatusMessage.showTemporaryMessage('Must select both red and blue groups to perform a multi-cut.', 7000);
+        return false;
       } else if (this.graph.safeToSubmit('Multicut')) {
         const splitRoots = await this.graph.graphServer.splitSegments(sinks, sources);
         if (splitRoots.length === 0) {
           StatusMessage.showTemporaryMessage(`No split found.`, 3000);
+          return false;
         } else {
           const {segmentsState} = this;
 
@@ -1383,9 +1385,12 @@ class GraphConnection extends SegmentationGraphSourceConnection {
           // const view = (<any>window)['viewer'];
           // view.differ.purgeHistory();
           // view.differ.ignoreChanges();
+
+          return true;
         }
       }
     }
+    return false;
   }
 }
 
@@ -1787,9 +1792,11 @@ export class GrapheneTab extends Tab {
                                     onClick: () => {
                                       console.log('submit multicut');
                                       if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                      layer.graphConnection.submitMulticut();
-                                      layer.graphConnection.multicutState.value?.clear();
-                                      this.layer.manager.root.toolBinder.deactivate();
+                                      layer.graphConnection.submitMulticut().then(success => {
+                                        if (success) {
+                                          this.layer.manager.root.toolBinder.deactivate();
+                                        }
+                                      });
                                     }}));
                                   toolbox.appendChild(makeCloseButton({
                                     title: 'Cancel multicut',
@@ -2186,9 +2193,11 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       text: 'Submit',
       title: 'Submit multicut',
       onClick: () => {
-        this.grapheneConnection?.submitMulticut();
-        multicutState.clear();
-        this.layer.manager.root.toolBinder.deactivate();
+        this.grapheneConnection?.submitMulticut().then(success => {
+          if (success) {
+            this.layer.manager.root.toolBinder.deactivate();
+          }
+        });
       }}));
     
     body.appendChild(makeCloseButton({
