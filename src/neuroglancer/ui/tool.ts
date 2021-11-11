@@ -264,7 +264,8 @@ export class ToolBinder extends RefCounted {
       return;
     }
     else if (this.activeTool) {
-      StatusMessage.showTemporaryMessage(`Can't activate tool ${tool} while tool ${this.activeTool} is active`);
+      StatusMessage.showTemporaryMessage(
+        `Can't activate tool ${tool.description} while tool ${this.activeTool.tool.description} is active`);
       return;
     }
     const activation = new ToolActivation(tool, inputEventMapBinder);
