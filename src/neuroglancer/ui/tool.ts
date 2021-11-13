@@ -58,7 +58,6 @@ export abstract class Tool<LayerType extends UserLayer = UserLayer> extends RefC
   }
   abstract activate(activation: ToolActivation<this>): void;
   abstract toJSON(): any;
-  deactivate(): void {}
   abstract description: string;
   unbind() {
     const {layer} = this;
@@ -302,7 +301,6 @@ export class ToolBinder extends RefCounted {
     const activation = this.activeTool;
     if (activation === undefined) return;
     this.activeTool = undefined;
-    activation.tool.deactivate();
     activation.dispose();
   }
 }
