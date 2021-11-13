@@ -2000,11 +2000,10 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
         }
       })()
     });
-  }
 
-  deactivate() {
-    super.deactivate();
-    this.lastAnchorSelection.value = undefined;
+    activation.registerDisposer(() => {
+      this.lastAnchorSelection.value = undefined;
+    });
   }
 
   toJSON() {
@@ -2088,6 +2087,9 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
             `Selected ${selection.segmentId} as source for split. Pick a sink.`, 3000);
       }
     });
+    activation.registerDisposer(() => {
+      this.lastAnchorSelection.value = undefined;
+    })
   }
 
   toJSON() {
@@ -2096,11 +2098,6 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
 
   get description() {
     return `split segments`;
-  }
-
-  deactivate() {
-    super.deactivate();
-    this.lastAnchorSelection.value = undefined;
   }
 }
 
@@ -2152,10 +2149,6 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
   toJSON() {
     return ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID;
-  }
-
-  deactivate() {
-    console.log('deactivate MulticutSegmentsTool');
   }
 
   activate(activation: ToolActivation<this>) {
