@@ -213,7 +213,7 @@ export class ToolBinder extends RefCounted {
   bindings = new Map<string, Borrowed<Tool>>();
   changed = new Signal();
   private activeTool: Owned<ToolActivation>|undefined;
-  private queuedTool: ToolActivation|undefined;
+  private queuedTool: Tool|undefined;
   private debounceDeactivate = this.registerCancellable(debounce(() => this.deactivate_(), 1));
   private debounceReactivate = this.registerCancellable(debounce(
     (inputEventMapBinder: InputEventMapBinder) => this.reactivateQueuedTool(inputEventMapBinder), 1));
@@ -271,7 +271,7 @@ export class ToolBinder extends RefCounted {
     }
     else if (this.activeTool) {
       if (this.activeTool.tool.toggle && !tool.toggle) {
-        this.queuedTool = this.activeTool;
+        this.queuedTool = this.activeTool.tool;
       }
       this.deactivate_();
     }
@@ -296,9 +296,9 @@ export class ToolBinder extends RefCounted {
 
   private reactivateQueuedTool(inputEventMapBinder: InputEventMapBinder) {
     if (this.queuedTool) {
-      const activation = new ToolActivation(this.queuedTool.tool, inputEventMapBinder);
+      const activation = new ToolActivation(this.queuedTool, inputEventMapBinder);
       this.activeTool = activation;
-      this.queuedTool.tool.activate(activation);
+      this.queuedTool.activate(activation);
       this.queuedTool = undefined;
     }
   }
