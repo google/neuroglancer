@@ -45,6 +45,9 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
   bindInputEventMap(inputEventMap: EventActionMap) {
     this.inputEventMapBinder(inputEventMap, this);
   }
+  cancel() {
+    this.tool.layer.manager.root.toolBinder.deactivate_();
+  }
 }
 
 export abstract class Tool<LayerType extends UserLayer = UserLayer> extends RefCounted {
@@ -211,7 +214,7 @@ export class ToolBinder extends RefCounted {
   changed = new Signal();
   private activeTool: Owned<ToolActivation>|undefined;
   private queuedTool: ToolActivation|undefined;
-  private debounceDeactivate = this.registerCancellable(debounce(() => this.deactivate(), 1));
+  private debounceDeactivate = this.registerCancellable(debounce(() => this.deactivate_(), 1));
   private debounceReactivate = this.registerCancellable(debounce(
     (inputEventMapBinder: InputEventMapBinder) => this.reactivateQueuedTool(inputEventMapBinder), 1));
 
@@ -255,14 +258,14 @@ export class ToolBinder extends RefCounted {
   activate(key: string, inputEventMapBinder: InputEventMapBinder): Borrowed<Tool>|undefined {
     const tool = this.get(key);
     if (tool === undefined) {
-      this.deactivate();
+      this.deactivate_();
       return;
     }
     this.debounceDeactivate.cancel();
     this.debounceReactivate.cancel();
     if (tool === this.activeTool?.tool) {
       if (tool.toggle) {
-        this.deactivate();
+        this.deactivate_();
       }
       return;
     }
@@ -270,7 +273,7 @@ export class ToolBinder extends RefCounted {
       if (this.activeTool.tool.toggle && !tool.toggle) {
         this.queuedTool = this.activeTool;
       }
-      this.deactivate();
+      this.deactivate_();
     }
     const activation = new ToolActivation(tool, inputEventMapBinder);
     this.activeTool = activation;
@@ -302,17 +305,18 @@ export class ToolBinder extends RefCounted {
 
   destroyTool(tool: Owned<Tool>) {
     if (this.activeTool?.tool === tool) {
-      this.deactivate();
+      this.deactivate_();
     }
     tool.dispose();
   }
 
   disposed() {
-    this.deactivate();
+    this.deactivate_();
     super.disposed();
   }
 
-  deactivate() {
+  deactivate_() {
+    // For internal use only- should only be called by ToolBinder and ToolActivation.cancel()
     this.debounceDeactivate.cancel();
     const activation = this.activeTool;
     if (activation === undefined) return;
