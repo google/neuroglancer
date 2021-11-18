@@ -309,6 +309,9 @@ export class ToolBinder extends RefCounted {
   }
 
   destroyTool(tool: Owned<Tool>) {
+    if (this.queuedTool === tool) {
+      this.queuedTool = undefined;
+    }
     if (this.activeTool_?.tool === tool) {
       this.deactivate_();
     }
