@@ -302,7 +302,6 @@ export class Viewer extends RefCounted implements ViewerState {
       new TrackableDataSelectionState(this.coordinateSpace, this.layerSelectedValues));
   selectedStateServer = new TrackableValue<string>('', verifyString);
   layerListPanelState = new LayerListPanelState();
-  toolBinder = this.registerDisposer(new ToolBinder());
 
   resetInitiated = new NullarySignal();
 
@@ -827,8 +826,10 @@ export class Viewer extends RefCounted implements ViewerState {
           inputEventMap, Number.POSITIVE_INFINITY));
   };
 
+  private toolBinder = this.registerDisposer(new ToolBinder(this.toolInputEventMapBinder));
+
   activateTool(uppercase: string) {
-    this.toolBinder.activate(uppercase, this.toolInputEventMapBinder);
+    this.toolBinder.activate(uppercase);
   }
 
   editJsonState() {

@@ -1779,33 +1779,6 @@ export class GrapheneTab extends Tab {
                                     label: 'Multicut',
                                     title: 'Multicut segments'
                                   }));
-                                  toolbox.appendChild(makeIcon({
-                                    text: 'Swap',
-                                    title: 'Swap group',
-                                    onClick: () => {
-                                      if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                      layer.graphConnection.multicutState.value?.swapGroup();
-                                    }}));
-                                  toolbox.appendChild(makeIcon({
-                                    text: 'Submit',
-                                    title: 'Submit multicut',
-                                    onClick: () => {
-                                      console.log('submit multicut');
-                                      if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                      layer.graphConnection.submitMulticut().then(success => {
-                                        if (success) {
-                                          this.layer.manager.root.toolBinder.deactivate();
-                                        }
-                                      });
-                                    }}));
-                                  toolbox.appendChild(makeCloseButton({
-                                    title: 'Cancel multicut',
-                                    onClick: () => {
-                                      console.log('clear multicut');
-                                      if (!(layer.graphConnection instanceof GraphConnection)) return;
-                                      layer.graphConnection.multicutState.value?.clear();
-                                      this.layer.manager.root.toolBinder.deactivate();
-                                    }}));
                                   parent.appendChild(toolbox);
                                 }))
         .element);
@@ -1952,6 +1925,7 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
     activation.bindInputEventMap(MERGE_SEGMENTS_INPUT_EVENT_MAP);
     activation.registerDisposer(() => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
+      this.lastAnchorSelection.value = undefined;
     });
 
     activation.bindAction('merge-segments', event => {
@@ -1986,7 +1960,7 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
             // view.differ.purgeHistory();
             // view.differ.ignoreChanges();
 
-            this.layer.manager.root.toolBinder.deactivate();
+            activation.cancel();
           }
         }
         else {
@@ -1999,10 +1973,6 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
           }
         }
       })()
-    });
-
-    activation.registerDisposer(() => {
-      this.lastAnchorSelection.value = undefined;
     });
   }
 
@@ -2034,6 +2004,7 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
     activation.bindInputEventMap(SPLIT_SEGMENTS_INPUT_EVENT_MAP);
     activation.registerDisposer(() => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
+      this.lastAnchorSelection.value = undefined;
     });
 
     activation.bindAction('split-segments', event => {
@@ -2072,7 +2043,7 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
             // view.differ.purgeHistory();
             // view.differ.ignoreChanges();
 
-            this.layer.manager.root.toolBinder.deactivate();
+            activation.cancel();
           }
         }
       })()
@@ -2087,9 +2058,6 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
             `Selected ${selection.segmentId} as source for split. Pick a sink.`, 3000);
       }
     });
-    activation.registerDisposer(() => {
-      this.lastAnchorSelection.value = undefined;
-    })
   }
 
   toJSON() {
@@ -2188,7 +2156,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       onClick: () => {
         this.grapheneConnection?.submitMulticut().then(success => {
           if (success) {
-            this.layer.manager.root.toolBinder.deactivate();
+            activation.cancel();
           }
         });
       }}));
@@ -2198,7 +2166,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       onClick: () => {
         console.log('clear multicut');
         multicutState.clear();
-        this.layer.manager.root.toolBinder.deactivate();
+        activation.cancel();
       }}));
 
 
