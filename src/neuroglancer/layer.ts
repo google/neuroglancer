@@ -338,7 +338,6 @@ export class UserLayer extends RefCounted {
       sourceSpec: string|undefined, layerSpec: any,
       legacyTransform: CoordinateTransformSpecification|undefined,
       explicitSpecs: DataSourceSpecification[]): DataSourceSpecification[] {
-    layerSpec;
     explicitSpecs;
     if (sourceSpec === undefined) return [];
     return [layerDataSourceSpecificationFromJson(sourceSpec, legacyTransform)];

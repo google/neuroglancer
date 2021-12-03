@@ -18,7 +18,7 @@ import debounce from 'lodash/debounce';
 
 import './graphene.css';
 
-import {Annotation, AnnotationSource, AnnotationType, LocalAnnotationSource, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs, Point} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, LocalAnnotationSource, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs, Point} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
@@ -41,7 +41,7 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray, verifyNonnegativeInt} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray, verifyNonnegativeInt, verify3dVec} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
@@ -58,8 +58,8 @@ import { makeChunkedGraphChunkSpecification } from 'src/neuroglancer/sliceview/c
 import { Uint64Set } from 'src/neuroglancer/uint64_set';
 import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID } from 'src/neuroglancer/segmentation_graph/source';
 import { VisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/base';
-import { observeWatchable, TrackableValue, WatchableValue, WatchableValueInterface } from 'src/neuroglancer/trackable_value';
-import { getChunkPositionFromCombinedGlobalLocalPositions, RenderLayerTransformOrError } from 'src/neuroglancer/render_coordinate_transform';
+import { observeWatchable, TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface } from 'src/neuroglancer/trackable_value';
+import { getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError } from 'src/neuroglancer/render_coordinate_transform';
 import { RenderLayer, RenderLayerRole } from 'src/neuroglancer/renderlayer';
 import { getSegmentPropertyMap } from '../precomputed/frontend';
 import { SegmentationUserLayer } from 'src/neuroglancer/segmentation_user_layer';
@@ -85,6 +85,7 @@ import { makeValueOrError, valueOrThrow } from 'src/neuroglancer/util/error';
 import { resetTemporaryVisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/frontend';
 import { Uint64Map } from 'src/neuroglancer/uint64_map';
 import { AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotations } from 'src/neuroglancer/ui/annotations';
+import { Trackable } from 'src/neuroglancer/util/trackable';
 
 class GrapheneVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -303,7 +304,6 @@ function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeI
   let graph = undefined;
 
   if (volumeType !== VolumeType.IMAGE) {
-    console.warn("THIS IS HAPPENING!!!!!")
     dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
     app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
     graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
@@ -749,7 +749,14 @@ async function getVolumeDataSource(
   const volume = new GrapheneMultiscaleVolumeChunkSource(
       options.chunkManager, credentialsProvider, url, info);
   console.log('created GrapheneGraphSource');
-  const segmentationGraph = new GrapheneGraphSource(info, credentialsProvider, volume);
+
+  const state = new GrapheneState()
+
+  if (options.state) {
+    state.restoreState(options.state)
+  }
+
+  const segmentationGraph = new GrapheneGraphSource(info, credentialsProvider, volume, state);
   const {modelSpace} = info;
   const subsources: DataSubsourceEntry[] = [
     {
@@ -809,7 +816,7 @@ async function getVolumeDataSource(
       subsourceToModelSubspaceTransform,
     });
   */}
-  return {modelTransform: makeIdentityTransform(modelSpace), subsources};
+  return {modelTransform: makeIdentityTransform(modelSpace), subsources, state};
 }
 
 // async function getSkeletonsDataSource(
@@ -1071,7 +1078,7 @@ export class GrapheneDataSource extends DataSourceProvider {
   }
 
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    console.log('GrapheneDataSource get');
+    console.log('GrapheneDataSource ge t');
     const {url: providerUrl, parameters} = parseProviderUrl(options.providerUrl);
     return options.chunkManager.memoize.getUncounted(
         {'type': 'graphene:get', providerUrl, parameters}, async(): Promise<DataSource> => {
@@ -1095,7 +1102,6 @@ export class GrapheneDataSource extends DataSourceProvider {
             throw new RedirectError(redirect);
           }
           const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
-          console.log('GrapheneDataSource get case', t);
           switch (t) {
             // TODO: are these used for graphene?
             // case 'neuroglancer_skeletons':
@@ -1158,39 +1164,121 @@ function makeColoredAnnotationState(layer: SegmentationUserLayer, loadedSubsourc
   return state;
 }
 
-class MulticutState extends RefCounted {
+const MULTICUT_JSON_KEY = "multicut";
+const FOCUS_SEGMENT_JSON_KEY = "focusSegment";
+const SINKS_JSON_KEY = "sinks";
+const SOURCES_JSON_KEY = "sources";
+
+const SEGMENT_ID_JSON_KEY = "segmentId";
+const ROOT_ID_JSON_KEY = "rootId";
+const POSITION_JSON_KEY = "position";
+
+function restoreSegmentSelection(obj: any): SegmentSelection {
+  function getUint64(key: string) {
+    return verifyObjectProperty(obj, key, value => Uint64.parseString(String(value)));
+  }
+  const segmentId = getUint64(SEGMENT_ID_JSON_KEY);
+  const rootId = getUint64(ROOT_ID_JSON_KEY);
+  const position = verifyObjectProperty(
+    obj, POSITION_JSON_KEY, value => {
+      return verify3dVec(value);
+    });
+    return {
+      segmentId,
+      rootId,
+      position,
+    }
+}
+
+class GrapheneState implements Trackable {
   changed = new NullarySignal();
 
-  public redGroupAnnotationState: AnnotationLayerState;
-  public blueGroupAnnotationState: AnnotationLayerState;
+  public multicutState = new MulticutState();
 
-  private annotationToNanometers: Float64Array;
+  constructor() {
+    this.multicutState.changed.add(() => {
+      this.changed.dispatch();
+    });
+  }
 
-  constructor(layer: SegmentationUserLayer,
+  reset() {
+    this.multicutState.reset();
+  }
+
+  toJSON() {
+    console.log('GrapheneState.toJSON()');
+    return {
+      [MULTICUT_JSON_KEY]: this.multicutState.toJSON(),
+    }
+  }
+
+  restoreState(x: any) {
+    verifyOptionalObjectProperty(x, MULTICUT_JSON_KEY, value => {
+      this.multicutState.restoreState(value);
+    });
+  }
+}
+
+
+class MulticutState extends RefCounted implements Trackable {
+  changed = new NullarySignal();
+
+  sinks = new WatchableSet<SegmentSelection>();
+  sources = new WatchableSet<SegmentSelection>();
+
+  constructor(
       public focusSegment = new TrackableValue<Uint64|undefined>(undefined, x => x),
-      private blueGroup = new WatchableValue<boolean>(false),
-    ) {
+      public blueGroup = new WatchableValue<boolean>(false)) {
     super();
-    const loadedSubsource = getGraphLoadedSubsource(layer)!;
-
-    this.redGroupAnnotationState = makeColoredAnnotationState(layer, loadedSubsource, 1, 0, 0);
-    this.blueGroupAnnotationState = makeColoredAnnotationState(layer, loadedSubsource, 0, 0, 1);
-
-    this.annotationToNanometers = loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
-
-    this.redGroupAnnotationState.source.changed.add(this.changed.dispatch);
-    this.blueGroupAnnotationState.source.changed.add(this.changed.dispatch);
-
-    this.blueGroup.changed.add(this.changed.dispatch);
 
     this.registerDisposer(focusSegment.changed.add(this.changed.dispatch));
+    this.registerDisposer(this.blueGroup.changed.add(this.changed.dispatch));
+    this.registerDisposer(this.sinks.changed.add(this.changed.dispatch));
+    this.registerDisposer(this.sources.changed.add(this.changed.dispatch));
   }
-  
-  private pointToSegmentSelection(point: Point): SegmentSelection {
+
+  reset() {
+    this.clear(); // ???? do i want both reset and clear?
+  }
+
+  toJSON() {
+    const {focusSegment, sinks, sources} = this;
+
+    const segmentSelectionToJSON = (x: SegmentSelection) => {
+      return {
+        [SEGMENT_ID_JSON_KEY]: x.segmentId.toJSON(),
+        [ROOT_ID_JSON_KEY]: x.rootId.toJSON(),
+        [POSITION_JSON_KEY]: [...x.position],
+      }
+    }
+
     return {
-      position: point.point.map((p, i) => p * this.annotationToNanometers[i]),
-      segmentId: point.relatedSegments![0][0],
-      rootId: point.relatedSegments![0][1],
+      [FOCUS_SEGMENT_JSON_KEY]: focusSegment.toJSON(),
+      [SINKS_JSON_KEY]: [...sinks].map(segmentSelectionToJSON),
+      [SOURCES_JSON_KEY]: [...sources].map(segmentSelectionToJSON),
+    };
+  }
+
+  restoreState(x: any) {
+    const segmentSelectionsValidator = (value: any) => {
+      return parseArray(value, x => {
+        return restoreSegmentSelection(x);
+      });
+    };
+
+    verifyOptionalObjectProperty(
+        x, FOCUS_SEGMENT_JSON_KEY, value => {
+          this.focusSegment.restoreState(Uint64.parseString(String(value)));
+        });
+    const sinks = verifyObjectProperty(x, SINKS_JSON_KEY, segmentSelectionsValidator);
+    const sources = verifyObjectProperty(x, SOURCES_JSON_KEY, segmentSelectionsValidator);
+
+    for (const sink of sinks) {
+      this.sinks.add(sink);
+    }
+
+    for (const source of sources) {
+      this.sources.add(source);
     }
   }
 
@@ -1198,8 +1286,8 @@ class MulticutState extends RefCounted {
     this.blueGroup.value = !this.blueGroup.value;
   }
 
-  get annotationState() {
-    return this.blueGroup.value ? this.blueGroupAnnotationState : this.redGroupAnnotationState;
+  get activeGroup() {
+    return this.blueGroup.value ? this.sources : this.sinks;
   }
 
   get segments() {
@@ -1207,63 +1295,28 @@ class MulticutState extends RefCounted {
   }
 
   get redSegments() {
-    return this.sinks.filter(x => !Uint64.equal(x.segmentId, x.rootId)).map(x => x.segmentId);
+    return [...this.sinks].filter(x => !Uint64.equal(x.segmentId, x.rootId)).map(x => x.segmentId);
   }
 
   get blueSegments() {
-    return this.sources.filter(x => !Uint64.equal(x.segmentId, x.rootId)).map(x => x.segmentId);
-  }
-
-  get sinks(): SegmentSelection[] {
-    return ([...this.redGroupAnnotationState.source] as Point[]).map((x) => this.pointToSegmentSelection(x));
-  }
-
-  get sources(): SegmentSelection[] {
-    return ([...this.blueGroupAnnotationState.source] as Point[]).map((x) => this.pointToSegmentSelection(x));
-  }
-
-  addPoint(selection: SegmentSelection) {
-    const activeGroup = this.annotationState;
-    const annotations = activeGroup.source;
-
-    const annotation: Point = {
-      id: '',
-      point: selection.position,
-      type: AnnotationType.POINT,
-      properties: [],
-      relatedSegments: [[selection.segmentId, selection.rootId]],
-    };
-
-    annotations.add(annotation);
+    return [...this.sources].filter(x => !Uint64.equal(x.segmentId, x.rootId)).map(x => x.segmentId);
   }
 
   clear() {
     this.focusSegment.value = undefined;
     this.blueGroup.value = false;
-
-    for (const annotation of this.redGroupAnnotationState.source) {
-      this.redGroupAnnotationState.source.delete(this.redGroupAnnotationState.source.getReference(annotation.id));
-    }
-
-    for (const annotation of this.blueGroupAnnotationState.source) {
-      this.blueGroupAnnotationState.source.delete(this.blueGroupAnnotationState.source.getReference(annotation.id));
-    }
-    
-    // using .clear does not remove annotations from the list
-    // (this.blueGroupAnnotationState.source as LocalAnnotationSource).clear();
-    // (this.redGroupAnnotationState.source as LocalAnnotationSource).clear();
+    this.sinks.clear();
+    this.sources.clear();
   }
 }
 
 class GraphConnection extends SegmentationGraphSourceConnection {
-  multicutState = new WatchableValue<MulticutState|undefined>(undefined);
-
-
   constructor(
       public graph: GrapheneGraphSource,
       segmentsState: VisibleSegmentsState,
       public transform: WatchableValueInterface<RenderLayerTransformOrError>,
-      private chunkSource: GrapheneMultiscaleVolumeChunkSource) {
+      private chunkSource: GrapheneMultiscaleVolumeChunkSource,
+      public state: GrapheneState) {
     super(graph, segmentsState);
 
     segmentsState.visibleSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
@@ -1272,11 +1325,6 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       }
       this.visibleSegmentsChanged(segmentIds, add);
     });
-  }
-
-  initializeMulticutState(layer: SegmentationUserLayer) {
-    if (this.multicutState.value) return;
-    this.multicutState.value = new MulticutState(layer);
   }
 
   createRenderLayers(
@@ -1357,37 +1405,63 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
-  async submitMulticut(): Promise<boolean> {
-    const multicutState = this.multicutState.value;
-    if (multicutState) {
-      const {sinks, sources} = multicutState;
-      if (sinks.length === 0 || sources.length === 0) {
-        StatusMessage.showTemporaryMessage('Must select both red and blue groups to perform a multi-cut.', 7000);
+  //
+  private annotationLayerStates: AnnotationLayerState[] = [];
+
+  initializeAnnotations(layer: SegmentationUserLayer) {
+    const {annotationLayerStates} = this;
+    if (!annotationLayerStates.length) {
+      const loadedSubsource = getGraphLoadedSubsource(layer)!;
+      const redGroup = makeColoredAnnotationState(layer, loadedSubsource, 1, 0, 0);
+      const blueGroup = makeColoredAnnotationState(layer, loadedSubsource, 0, 0, 1);
+      synchronizeAnnotationSource(this.state.multicutState.sinks, redGroup);
+      synchronizeAnnotationSource(this.state.multicutState.sources, blueGroup)
+      annotationLayerStates.push(redGroup, blueGroup);
+    }
+
+    return annotationLayerStates;
+  }
+
+  async submitMulticut(annotationToNanometers: Float64Array): Promise<boolean> {
+    const {multicutState} = this.state;
+
+    const scaleSegmentSelection = (segmentSelection: SegmentSelection): SegmentSelection => {
+      const {position, segmentId, rootId} = segmentSelection;
+      return {
+        position: position.map((val, i) => val * annotationToNanometers[i]),
+        segmentId,
+        rootId,
+      };
+    }
+
+    const sinks = [...multicutState.sinks].map(scaleSegmentSelection);
+    const sources = [...multicutState.sources].map(scaleSegmentSelection);
+    if (sinks.length === 0 || sources.length === 0) {
+      StatusMessage.showTemporaryMessage('Must select both red and blue groups to perform a multi-cut.', 7000);
+      return false;
+    } else if (this.graph.safeToSubmit('Multicut')) {
+      const splitRoots = await this.graph.graphServer.splitSegments(sinks, sources);
+      if (splitRoots.length === 0) {
+        StatusMessage.showTemporaryMessage(`No split found.`, 3000);
         return false;
-      } else if (this.graph.safeToSubmit('Multicut')) {
-        const splitRoots = await this.graph.graphServer.splitSegments(sinks, sources);
-        if (splitRoots.length === 0) {
-          StatusMessage.showTemporaryMessage(`No split found.`, 3000);
-          return false;
-        } else {
-          const {segmentsState} = this;
+      } else {
+        const {segmentsState} = this;
 
-          for (const segment of [...sinks, ...sources]) {
-            segmentsState.visibleSegments.delete(segment.rootId);
-          }
-
-          segmentsState.rootSegmentsAfterEdit!.clear();
-          segmentsState.visibleSegments.add(splitRoots);
-          segmentsState.rootSegmentsAfterEdit!.add(splitRoots);
-          multicutState.clear();
-
-          // TODO: Merge unsupported with edits
-          // const view = (<any>window)['viewer'];
-          // view.differ.purgeHistory();
-          // view.differ.ignoreChanges();
-
-          return true;
+        for (const segment of [...sinks, ...sources]) {
+          segmentsState.visibleSegments.delete(segment.rootId);
         }
+
+        segmentsState.rootSegmentsAfterEdit!.clear();
+        segmentsState.visibleSegments.add(splitRoots);
+        segmentsState.rootSegmentsAfterEdit!.add(splitRoots);
+        multicutState.clear();
+
+        // TODO: Merge unsupported with edits
+        // const view = (<any>window)['viewer'];
+        // view.differ.purgeHistory();
+        // view.differ.ignoreChanges();
+
+        return true;
       }
     }
     return false;
@@ -1398,6 +1472,7 @@ export interface SegmentSelection {
   segmentId: Uint64;
   rootId: Uint64;
   position: Float32Array;
+  annotationReference?: AnnotationReference;
 }
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
@@ -1600,7 +1675,10 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     },
     '');
 
-  constructor(public info: MultiscaleVolumeInfo, credentialsProvider: SpecialProtocolCredentialsProvider, private chunkSource: GrapheneMultiscaleVolumeChunkSource) {
+  constructor(public info: MultiscaleVolumeInfo,
+              credentialsProvider: SpecialProtocolCredentialsProvider,
+              private chunkSource: GrapheneMultiscaleVolumeChunkSource,
+              public state: GrapheneState) {
     super();
     this.graphServer = new GrapheneGraphServerInterface(info.app!.segmentationUrl, credentialsProvider);
 
@@ -1614,7 +1692,7 @@ class GrapheneGraphSource extends SegmentationGraphSource {
   }
 
   connect(segmentsState: VisibleSegmentsState, transform: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection> {
-    const connection = new GraphConnection(this, segmentsState, transform, this.chunkSource);
+    const connection = new GraphConnection(this, segmentsState, transform, this.chunkSource, this.state);
   
     this.connections.add(connection);
     connection.registerDisposer(() => {
@@ -1685,44 +1763,66 @@ class MulticutAnnotationLayerView extends AnnotationLayerView {
   }
 }
 
+const synchronizeAnnotationSource = (source: WatchableSet<SegmentSelection>, state: AnnotationLayerState) => {
+  const annotationSource = state.source;
+
+  annotationSource.childDeleted.add(annotationId => {
+    const selection = [...source].find(selection => selection.annotationReference?.id === annotationId)
+    if (selection) source.delete(selection); 
+  });
+
+  const addSelection = (selection: SegmentSelection) => {
+    const annotation: Point = {
+      id: '',
+      point: selection.position,
+      type: AnnotationType.POINT,
+      properties: [],
+      relatedSegments: [[selection.segmentId, selection.rootId]],
+    };
+    const ref = annotationSource.add(annotation);
+    selection.annotationReference = ref;
+  }
+
+  source.changed.add((x, add) => {
+    if (x === null) {
+      for (const annotation of annotationSource) {
+        // using .clear does not remove annotations from the list
+        // (this.blueGroupAnnotationState.source as LocalAnnotationSource).clear();
+        annotationSource.delete(annotationSource.getReference(annotation.id));
+      }
+      return;
+    }
+
+    if (add) {
+      addSelection(x);
+    } else if (x.annotationReference) {
+      annotationSource.delete(x.annotationReference);
+    }
+  });
+
+  // load initial state
+  for (const selection of source) {
+    addSelection(selection);
+  }
+}
+
 export class GrapheneTab extends Tab {
   private annotationLayerView =
       this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
-  // private blueGroupAnnotationLayer =
-  //     this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
 
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {element} = this;
 
+    console.log('constructed grapheneTab');
+
     const {graphConnection} = layer;
 
     if (graphConnection instanceof GraphConnection) {
-      const createAnnotationLayerViews = () => {
-        console.log('createAnnotationLayerViews');
-        const {multicutState: {value: multicutState}} = graphConnection;
-        if (multicutState) {
-          const {redGroupAnnotationState, blueGroupAnnotationState} = multicutState;
-          // this.redGroupAnnotationLayer.annotationStates.add(redGroupAnnotationState);
+      const states = graphConnection.initializeAnnotations(this.layer);
 
-          // const redGroupAnnotationLayer = this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
-
-          this.annotationLayerView.annotationStates.add(redGroupAnnotationState);
-          this.annotationLayerView.annotationStates.add(blueGroupAnnotationState);
-          // this.blueGroupAnnotationLayer.annotationStates.add(blueGroupAnnotationState);
-
-          // console.log('append child', redGroupAnnotationLayer.element, element);
-          // element.appendChild(redGroupAnnotationLayer.element);
-        }
-      }
-
-      if (graphConnection.multicutState.value) {
-        createAnnotationLayerViews();
-      } else {
-        graphConnection.multicutState.changed.add(() => {
-          console.log('graphConnection.multicutState.changed');
-          createAnnotationLayerViews();
-        });
+      for (const state of states) {
+        this.annotationLayerView.annotationStates.add(state);
       }
     }
 
@@ -1782,11 +1882,7 @@ export class GrapheneTab extends Tab {
                                   parent.appendChild(toolbox);
                                 }))
         .element);
-
-        // const annotationsContainer = document.createElement('div');
-        element.appendChild(this.annotationLayerView.element);
-        // annotationsContainer.appendChild(this.blueGroupAnnotationLayer.element);
-        // element.appendChild(annotationsContainer);
+    element.appendChild(this.annotationLayerView.element);
   }
 }
 
@@ -1884,7 +1980,7 @@ class RefreshMeshTool extends Tool<SegmentationUserLayer> {
   }
 }
 
-const getMousePoisitionInNanometers = (mouseState: MouseSelectionState) => {
+const getMousePositionInNanometers = (mouseState: MouseSelectionState) => {
   const {position, coordinateSpace: {scales}} = mouseState;
   return position.map((x, i) => x * scales[i] * 1e9);
 }
@@ -1901,7 +1997,7 @@ const maybeGetSelection = (tool: Tool<SegmentationUserLayer>, visibleSegments: U
     return {
       rootId: value.clone(),
       segmentId: baseValue.clone(),
-      position: getMousePoisitionInNanometers(mouseState),
+      position: getMousePositionInNanometers(mouseState),
     };
   }
   return;
@@ -2013,19 +2109,14 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
         const {graph: {value: graph}} = segmentationGroupState;
         if (graph === undefined) return;
         if (!(graph instanceof GrapheneGraphSource)) return;
-
         const lastSegmentSelection = this.lastAnchorSelection.value;
-
         if (lastSegmentSelection) {
           const currentSegmentSelection = maybeGetSelection(this, segmentationGroupState.visibleSegments);
           if (currentSegmentSelection) {
             StatusMessage.showTemporaryMessage(
               `Selected ${currentSegmentSelection.segmentId} as sink for split.`, 3000);
-            
             if (!graph.safeToSubmit('Split')) return;
-
             const splitRoots = await graph.graphServer.splitSegments([lastSegmentSelection], [currentSegmentSelection]);
-
             if (splitRoots.length === 0) {
               StatusMessage.showTemporaryMessage(`No split found.`, 3000);
               return;
@@ -2039,7 +2130,6 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
             this.lastAnchorSelection.value = undefined;
             // TODO: Merge unsupported with edits
             // const view = (<any>window)['viewer'];
-            // view.deactivateEditMode();
             // view.differ.purgeHistory();
             // view.differ.ignoreChanges();
 
@@ -2069,14 +2159,16 @@ class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
   }
 }
 
-function getMousePositionInAnnotationCoordinates(
-    unsnappedPosition: Float32Array, annotationLayer: AnnotationLayerState): Float32Array|
+function getMousePositionInLayerCoordinates(
+    unsnappedPosition: Float32Array, layer: SegmentationUserLayer): Float32Array|
     undefined {
-  const chunkTransform = annotationLayer.chunkTransform.value;
+  const loadedSubsource = getGraphLoadedSubsource(layer)!;
+  const modelTransform = loadedSubsource.getRenderLayerTransform();
+  const chunkTransform = makeValueOrError(() => getChunkTransformParameters(valueOrThrow(modelTransform.value)));
   if (chunkTransform.error !== undefined) return undefined;
   const chunkPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
   if (!getChunkPositionFromCombinedGlobalLocalPositions(
-          chunkPosition, unsnappedPosition, annotationLayer.localPosition.value,
+          chunkPosition, unsnappedPosition, layer.localPosition.value,
           chunkTransform.layerRank, chunkTransform.combinedGlobalLocalToChunkTransform)) {
     return undefined;
   }
@@ -2093,8 +2185,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
   constructor(public layer: SegmentationUserLayer, public toggle: boolean = false) {
     super(layer, toggle);
-
-    console.log('MulticutSegmentsTool create', this.layer);
+    console.log('MulticutSegmentsTool constructor', layer, toggle);
 
     const maybeCreateMulticutState = () => {
       if (this.grapheneConnection) return;
@@ -2102,7 +2193,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
       if (graphConnection && graphConnection instanceof GraphConnection) {
         this.grapheneConnection = graphConnection;
-        this.grapheneConnection.initializeMulticutState(this.layer);
+        this.grapheneConnection.initializeAnnotations(layer);
       }
     };
     this.layer.dataSourcesChanged.add(() => {
@@ -2121,15 +2212,12 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
   activate(activation: ToolActivation<this>) {
     if (!this.grapheneConnection) return;
-    const {multicutState: {value: multicutState}, segmentsState} = this.grapheneConnection;
+    const {state: {multicutState}, segmentsState} = this.grapheneConnection;
     if (multicutState === undefined) return;
 
     // Ensure we use the same segmentationGroupState while activated. // TODO why is this necessary rather than just accesing through this.layer?
     const segmentationGroupState = this.layer.displayState.segmentationGroupState.value;
     console.log('activate MulticutSegmentsTool', activation);
-
-    const blueColor = new Uint64(packColor(vec3.fromValues(0, 0, 1)));
-    const redColor = new Uint64(packColor(vec3.fromValues(1, 0, 0)));
 
     const {displayState} = this.layer;
 
@@ -2154,7 +2242,9 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       text: 'Submit',
       title: 'Submit multicut',
       onClick: () => {
-        this.grapheneConnection?.submitMulticut().then(success => {
+        const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
+        const annotationToNanometers = loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
+        this.grapheneConnection?.submitMulticut(annotationToNanometers).then(success => {
           if (success) {
             activation.cancel();
           }
@@ -2168,8 +2258,6 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
         multicutState.clear();
         activation.cancel();
       }}));
-
-
 
     activation.bindInputEventMap(MULTICUT_SEGMENTS_INPUT_EVENT_MAP);
     activation.registerDisposer(() => {
@@ -2191,6 +2279,11 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       displayState.highlightColor.value = undefined;
     };
 
+    const redColor = vec3.fromValues(1, 0, 0);
+    const blueColor = vec3.fromValues(0, 0, 1);
+    const redColorPacked = new Uint64(packColor(redColor));
+    const blueColorPacked = new Uint64(packColor(blueColor));
+
     const updateMulticutDisplay = () => {
       resetMulticutDisplay();
       const focusSegment = multicutState.focusSegment.value;
@@ -2198,9 +2291,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
       displayState.baseSegmentHighlighting.value = true;
 
-      const activeColor = multicutState.annotationState.displayState.color;
-
-      displayState.highlightColor.value = activeColor.value;
+      displayState.highlightColor.value = multicutState.blueGroup.value ? blueColor : redColor;
 
       segmentsState.useTemporaryVisibleSegments.value = true;
       segmentsState.useTemporarySegmentEquivalences.value = true;
@@ -2223,12 +2314,11 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       }
 
       // set colors
-      for (const segment of multicutState.blueSegments) {
-        displayState.segmentStatedColors.value.set(segment, blueColor);
-      }
-
       for (const segment of multicutState.redSegments) {
-        displayState.segmentStatedColors.value.set(segment, redColor);
+        displayState.segmentStatedColors.value.set(segment, redColorPacked);
+      }
+      for (const segment of multicutState.blueSegments) {
+        displayState.segmentStatedColors.value.set(segment, blueColorPacked);
       }
     };
 
@@ -2238,7 +2328,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
     activation.bindAction('swap-group', event => {
       event.stopPropagation();
-        multicutState.swapGroup();
+      multicutState.swapGroup();
     });
 
     activation.bindAction('set-anchor', event => {
@@ -2255,7 +2345,6 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       if (multicutState.focusSegment.value === undefined) {
         multicutState.focusSegment.value = value.clone();
       }
-
       if (!Uint64.equal(multicutState.focusSegment.value, value)) {
         StatusMessage.showTemporaryMessage(
             `The selected supervoxel has root segment ${
@@ -2264,10 +2353,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
             12000);
         return;
       }
-      const {mouseState} = this;
-
       const isRoot = Uint64.equal(baseValue, value);
-
       if (!isRoot) {
         for (const segment of multicutState.segments) {
           if (Uint64.equal(segment, baseValue)) {
@@ -2277,11 +2363,18 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
           }
         }
       }
-
+      const {mouseState} = this;
       if (mouseState.updateUnconditionally()) {
-        const point = getMousePositionInAnnotationCoordinates(mouseState.unsnappedPosition, multicutState.annotationState);
+        const mousePositionNanometers = getMousePositionInNanometers(mouseState);
+
+        const point = getMousePositionInLayerCoordinates(mouseState.unsnappedPosition, this.layer);
+        console.log('mousePositionCompare', mousePositionNanometers, point);
         if (point === undefined) return;
-        multicutState.addPoint({position: point, segmentId: baseValue.clone(), rootId: value.clone()});
+        multicutState.activeGroup.add({
+          position: point,
+          segmentId: baseValue.clone(),
+          rootId: value.clone()
+        })
       }
     });
   }

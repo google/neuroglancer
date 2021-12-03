@@ -527,7 +527,7 @@ export class SegmentationUserLayer extends Base {
                 this.tabs.add(
                   'graph', {label: 'Graph', order: -25, getter: () => {
                     return graphTab(this);
-                    }});
+                  }});
                 this.panels.updateTabs();
 
                 // this.graphConnection?.registerDisposer(() => {
@@ -552,7 +552,7 @@ export class SegmentationUserLayer extends Base {
 
                 const graphRenderLayers = this.graphConnection.createRenderLayers(transform, localPosition, segmentationRenderlayer.multiscaleSource); // TODO, does it actually need the multiscale source?
                 for (const renderLayer of graphRenderLayers) {
-                  this.addRenderLayer(renderLayer);
+                  loadedSubsource.addRenderLayer(renderLayer);
                 }
               }
             });
@@ -593,8 +593,6 @@ export class SegmentationUserLayer extends Base {
         layerSpec, MESH_JSON_KEY, x => x === null ? null : verifyString(x));
     const skeletonsPath = verifyOptionalObjectProperty(
         layerSpec, SKELETONS_JSON_KEY, x => x === null ? null : verifyString(x));
-    // const segmentToVoxelCountMapPath = this.segmentToVoxelCountMapPath = // is this segmentToVoxelCountMapPath stuff necessary?
-    //     verifyOptionalString(specification[SEGMENTS_TO_VOXEL_COUNT_MAP_PATH_JSON_KEY]);
     if (meshPath !== undefined || skeletonsPath !== undefined) {
       for (const spec of specs) {
         spec.enableDefaultSubsources = false;
