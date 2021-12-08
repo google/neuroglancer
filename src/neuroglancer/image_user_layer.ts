@@ -50,10 +50,18 @@ import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {TrackableRGB} from 'neuroglancer/util/color';
+import {ColorWidget} from 'neuroglancer/widget/color';
+import {vec3} from 'neuroglancer/util/geom';
+import {RangeWidget} from './widget/range';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
 const SHADER_JSON_KEY = 'shader';
+const COLOR_JSON_KEY = 'color';
+const USE_CUSTOM_SHADER_JSON_KEY = 'use_custom_shader';
+const MIN_JSON_KEY = 'min';
+const MAX_JSON_KEY = 'max';
 const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
@@ -70,6 +78,12 @@ export class ImageUserLayer extends Base {
   blendMode = trackableBlendModeValue();
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
+  color = new TrackableRGB(vec3.fromValues(1, 1, 1));
+  useCustomShader = new TrackableBoolean(false);
+  renderLayer: ImageRenderLayer;
+  min = trackableAlphaValue(0.0);
+  max = trackableAlphaValue(1.0);
+  shaderEditorUpdate: () => void;
   dataType = new WatchableValue<DataType|undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
@@ -129,6 +143,30 @@ export class ImageUserLayer extends Base {
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
     this.tabs.default = 'rendering';
+    this.shaderEditorUpdate = () => {
+      if (!this.useCustomShader.value) {
+        let shaderString = `float scale(float x) {
+  float min = ${this.min.value.toPrecision(2)};
+  float max = ${this.max.value.toPrecision(2)};
+  return (x - min) / (max - min);
+}
+void main() {
+  emitRGB(
+    vec3(
+      scale(toNormalized(getDataValue()))*${this.color.value[0].toPrecision(3)},
+      scale(toNormalized(getDataValue()))*${this.color.value[1].toPrecision(3)},
+      scale(toNormalized(getDataValue()))*${this.color.value[2].toPrecision(3)}
+    )
+  );
+}`;
+        this.fragmentMain.value = shaderString;
+      }
+    };
+
+    // EAP: Kludge to update the shader & trigger a change event
+    this.color.changed.add(this.shaderEditorUpdate);
+    this.min.changed.add(this.shaderEditorUpdate);
+    this.max.changed.add(this.shaderEditorUpdate);
   }
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
@@ -193,14 +231,22 @@ export class ImageUserLayer extends Base {
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
   }
   toJSON() {
+    // merge conflict may have broken this
     const x = super.toJSON();
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
-    x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
-    x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
-    x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
-    x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
-    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
+    x[USE_CUSTOM_SHADER_JSON_KEY] = this.useCustomShader.toJSON();
+    if (this.useCustomShader.value) {
+      x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
+      x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
+      x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
+      x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
+      x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
+    } else {
+      x[COLOR_JSON_KEY] = this.color.toJSON();
+      x[MIN_JSON_KEY] = this.min.toJSON();
+      x[MAX_JSON_KEY] = this.max.toJSON();
+    }
     return x;
   }
 
@@ -330,6 +376,10 @@ for (const control of LAYER_CONTROLS) {
 
 class RenderingOptionsTab extends Tab {
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  colorPicker = this.registerDisposer(new ColorWidget(this.layer.color));
+  minWidget = this.registerDisposer(new RangeWidget(this.layer.min));
+  maxWidget = this.registerDisposer(new RangeWidget(this.layer.max));
+
   constructor(public layer: ImageUserLayer) {
     super();
     const {element} = this;

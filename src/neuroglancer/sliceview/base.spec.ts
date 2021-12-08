@@ -69,7 +69,7 @@ describe('sliceview/base', () => {
           3, 0, 0,  //
           0, 3, 0,  //
           0, 0, 30),
-      upperVoxelBound: vec3.fromValues(1, 128, 128),
+      upperVoxelBound: new Float32Array([1, 128, 128]),
       maxVoxelsPerChunkLog2: 8
     })).toEqual(Uint32Array.of(1, 64, 4));
   });

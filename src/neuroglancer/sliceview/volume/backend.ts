@@ -16,7 +16,6 @@
 
 import {SliceViewChunk, SliceViewChunkSourceBackend} from 'neuroglancer/sliceview/backend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
-import {vec3} from 'neuroglancer/util/geom';
 import * as vector from 'neuroglancer/util/vector';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -28,7 +27,7 @@ export class VolumeChunk extends SliceViewChunk {
     super();
   }
 
-  initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
+  initializeVolumeChunk(key: string, chunkGridPosition: Float32Array) {
     super.initializeVolumeChunk(key, chunkGridPosition);
     this.chunkDataSize = null;
     this.data = null;

@@ -17,9 +17,6 @@
 /**
  * @file
  * This implements a CredentialsProvider based on Keycloak.
- * The current implementation uses the implicit flow for ease of implementation.
- * TODO: Implement the authorization or hybrid flows.
- * TODO: Use an iframe to test for immediate login (active session).
  */
 
 import {CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
@@ -151,42 +148,42 @@ export function authenticateKeycloakOIDC(
   return promise;
 }
 
-
-
 export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
-  constructor(public authServer: string) {
-    super();
-  }
+   
+   constructor(public authServer: string) {
+       super();
+   }
 
-  get = makeCredentialsGetter(cancellationToken => {
-    const status = new StatusMessage(/*delay=*/true);
-    let cancellationSource: CancellationTokenSource|undefined;
-    return new Promise<BossToken>((resolve, reject) => {
-      const dispose = () => {
-        cancellationSource = undefined;
-        status.dispose();
-      };
-      cancellationToken.add(() => {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-          cancellationSource = undefined;
-          status.dispose();
-          reject(CANCELED);
-        }
-      });
-      function writeLoginStatus(
-          msg = 'Boss authorization required.', linkMessage = 'Request authorization.') {
-        status.setText(msg + ' ');
-        let button = document.createElement('button');
-        button.textContent = linkMessage;
-        status.element.appendChild(button);
-        button.addEventListener('click', () => {
-          login();
-        });
-        status.setVisible(true);
-      }
-      let authServer = this.authServer;
-      function login() {
+   get = makeCredentialsGetter(cancellationToken => {
+        const status = new StatusMessage(/*delay=*/true);
+        let cancellationSource: CancellationTokenSource|undefined;
+        return new Promise<BossToken>((resolve, reject) => {
+            const dispose = () => {
+                cancellationSource = undefined;
+                status.dispose();
+
+            };
+            cancellationToken.add(() => {
+                if (cancellationSource !== undefined) {
+                    cancellationSource.cancel();
+                    cancellationSource = undefined;
+                    status.dispose();
+                    reject(CANCELED);
+                }
+            });
+            function writeLoginStatus(msg = 'Boss authorization required.', linkMessage = 'Request authorization.') {
+                if (status) 
+                   status.setText(msg + ' ');
+                   let button = document.createElement('button');
+                   button.textContent = linkMessage;
+                   status.element.appendChild(button);
+                   button.addEventListener('click', () => {
+                       login();
+                   });
+                   status.setVisible(true);
+            }
+            let authServer = this.authServer;
+            function login() {
         if (cancellationSource !== undefined) {
           cancellationSource.cancel();
         }
@@ -207,8 +204,8 @@ export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
                     writeLoginStatus(`Boss authorization failed: ${reason}.`, 'Retry');
                   }
                 });
-      }
-      writeLoginStatus();
+            }
+            writeLoginStatus();
+        });
     });
-  });
 }

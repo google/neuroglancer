@@ -675,8 +675,7 @@ function parseObjectLabels(obj: any): Uint64[][]|undefined {
 }
 
 function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Annotation {
-  const corner =
-      verifyObjectProperty(entry, 'corner', x => parseCommaSeparatedPoint(verifyString(x)));
+  const corner = verifyObjectProperty(entry, 'corner', x => parseCommaSeparatedPoint(verifyString(x)));
   const size = verifyObjectProperty(entry, 'size', x => parseCommaSeparatedPoint(verifyString(x)));
   const description = verifyObjectProperty(entry, 'payload', verifyOptionalString);
   const spatialAnnotationType = verifyObjectProperty(entry, 'type', verifyString);
@@ -715,7 +714,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
         type: AnnotationType.LINE,
         id,
         pointA: corner,
-        pointB: vec3.add(vec3.create(), corner, size),
+        pointB: new Float32Array(vec3.add(vec3.create(), corner, size)),
         description,
         relatedSegments: segments,
         properties: [],
@@ -725,7 +724,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
         type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
         id,
         pointA: corner,
-        pointB: vec3.add(vec3.create(), corner, size),
+        pointB: new Float32Array(vec3.add(vec3.create(), corner, size)),
         description,
         relatedSegments: segments,
         properties: [],
@@ -804,8 +803,9 @@ function annotationToBrainmaps(annotation: Annotation): any {
     }
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX: {
       const {pointA, pointB} = annotation;
-      const minPoint = vector.min(vec3.create(), pointA, pointB);
-      const maxPoint = vector.max(vec3.create(), pointA, pointB);
+      const emptyVec3 = vec3.create();
+      const minPoint = vector.min(emptyVec3, pointA, pointB);
+      const maxPoint = vector.max(emptyVec3, pointA, pointB);
       const size = vec3.subtract(maxPoint, maxPoint, minPoint);
       return {
         type: 'VOLUME',

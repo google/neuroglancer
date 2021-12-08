@@ -37,10 +37,15 @@ function encodeFragment(fragment: string) {
   });
 }
 
-export interface UrlHashBindingOptions {
-  defaultFragment?: string;
-  updateDelayMilliseconds?: number;
-}
+// export function removeParameterFromUrl(url: string, parameter: string) {
+//   return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
+//       .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
+// }
+
+// export interface UrlHashBindingOptions {
+//   defaultFragment?: string;
+//   updateDelayMilliseconds?: number;
+// }
 
 /**
  * An instance of this class manages a binding between a Trackable value and the URL hash state.
@@ -62,18 +67,14 @@ export class UrlHashBinding extends RefCounted {
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
 
-  private defaultFragment: string;
-
   constructor(
       public root: Trackable, public credentialsManager: CredentialsManager,
-      options: UrlHashBindingOptions = {}) {
+      updateDelayMilliseconds = 200) {
     super();
-    const {updateDelayMilliseconds = 200, defaultFragment = '{}'} = options;
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
     this.registerDisposer(root.changed.add(throttledSetUrlHash));
     this.registerDisposer(() => throttledSetUrlHash.cancel());
-    this.defaultFragment = defaultFragment;
   }
 
   /**
@@ -82,6 +83,8 @@ export class UrlHashBinding extends RefCounted {
   setUrlHash() {
     const cacheState = getCachedJson(this.root);
     const {generation} = cacheState;
+    // history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
       let stateString = encodeFragment(JSON.stringify(cacheState.value));
@@ -96,16 +99,42 @@ export class UrlHashBinding extends RefCounted {
     }
   }
 
+
+  /**
+   * Extract the proper URL string after a Keycloak redirect.
+   * Keycloak will place the original fragment in the redirect_fragment
+   * query parameter and add another query parameter.
+   *
+   * Return a tuple with the first value being true if the redirect_fragment
+   * was present.  The second value will contain that fragment with '#'
+   * prepended.
+   */
+  // checkRedirectFragment(): [boolean, string] {
+  //   const justQuery = location.href.replace(/^.*\?/, '');
+  //   const params = new URLSearchParams(justQuery);
+  //   if(!params.has('redirect_fragment')) {
+  //     return [false, ''];
+  //   }
+
+  //   return [true, `#${params.get('redirect_fragment')}`];
+  // }
+
   /**
    * Sets the current state to match the URL hash.  If it is desired to initialize the state based
    * on the URL hash, then this should be called immediately after construction.
    */
   updateFromUrlHash() {
     try {
-      let s = location.href.replace(/^[^#]+/, '');
-      if (s === '' || s === '#' || s === '#!') {
-        s = '#!' + this.defaultFragment;
-      }
+      let s: string;
+      // const [ found, fragment ] = this.checkRedirectFragment();
+      // if(!found) {
+        s = location.href.replace(/^[^#]+/, '');
+        if (s === '' || s === '#' || s === '#!') {
+          s = '#!{}';
+        }
+      // } else {
+      //   s = fragment;
+      // }
       // Handle remote JSON state
       if (s.match(/^#!([a-z][a-z\d+-.]*):\/\//)) {
         const url = s.substring(2);

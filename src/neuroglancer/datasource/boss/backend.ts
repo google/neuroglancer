@@ -29,6 +29,7 @@ import {Endianness} from 'neuroglancer/util/endian';
 import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
+// TODO (rodrilm): Add logic to use the jpeg header and decoder if the data is uint8 and use npygz if it is uint16
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('npz', decodeBossNpzChunk);
 chunkDecoders.set('jpeg', decodeJpegChunk);

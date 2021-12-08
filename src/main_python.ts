@@ -120,7 +120,7 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('screenshot', screenshotHandler.requestState);
 
   let sharedState: Trackable|undefined = viewer.state;
-
+  // viewer.loadFromJsonUrl();
   if (window.location.hash) {
     const hashBinding =
         viewer.registerDisposer(new UrlHashBinding(viewer.state, credentialsManager));

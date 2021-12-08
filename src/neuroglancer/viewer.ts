@@ -54,6 +54,7 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
+import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
 import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -64,11 +65,16 @@ import {GL} from 'neuroglancer/webgl/context';
 import {AnnotationToolStatusWidget} from 'neuroglancer/widget/annotation_tool_status';
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeIcon} from 'neuroglancer/widget/icon';
+import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
+
+export function validateStateServer(obj: any) {
+  return obj;
+}
 
 interface CreditLink {
   url: string;
@@ -117,6 +123,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   'showLayerSidePanelButton',
   'showLocation',
   'showAnnotationToolStatus',
+  'showJsonPostButton'
 ] as const;
 
 export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
@@ -143,6 +150,7 @@ export function makeViewerUIConfiguration(): ViewerUIConfiguration {
   return Object.fromEntries(VIEWER_UI_CONFIG_OPTIONS.map(
              key => [key, new TrackableBoolean(true)])) as ViewerUIConfiguration;
 }
+
 
 function setViewerUiConfiguration(
     config: ViewerUIConfiguration, options: Partial<ViewerUIOptions>) {
@@ -316,6 +324,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layout: RootLayoutContainer;
   sidePanelManager: SidePanelManager;
 
+  jsonStateServer = new TrackableValue<string>('', validateStateServer);
   state: TrackableViewerState;
 
   dataContext: Owned<DataManagementContext>;
@@ -586,6 +595,15 @@ export class Viewer extends RefCounted implements ViewerState {
           this.uiControlVisibility.showEditStateButton, button));
       topRow.appendChild(button);
     }
+    {
+      const button = makeTextIconButton('⇧', 'Post JSON to state server');
+      this.registerEventListener(button, 'click', () => {
+        this.postJsonState();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showJsonPostButton, button));
+      topRow.appendChild(button);
+    }
 
     {
       const {helpPanelState} = this;
@@ -767,6 +785,44 @@ export class Viewer extends RefCounted implements ViewerState {
 
   toggleHelpPanel() {
     this.helpPanelState.location.visible = !this.helpPanelState.location.visible;
+  }
+
+  promptJsonStateServer(message: string): void {
+    let json_server_input = prompt(message, 'https://json.neurodata.io/v1');
+    if (json_server_input !== null) {
+      this.jsonStateServer.value = json_server_input;
+      console.log('entered for JSON server:', this.jsonStateServer.value);
+    } else {
+      this.jsonStateServer.reset();
+      console.log('cancelled');
+    }
+  }
+
+  postJsonState() {
+    // if jsonStateServer is not present prompt for value and store it in state
+    if (!this.jsonStateServer.value) {
+      this.promptJsonStateServer('No state server found. Please enter a server URL, or hit OK to use the default server.');
+    }
+    // upload state to jsonStateServer (only if it's defined)
+    if (this.jsonStateServer.value) {
+      StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+      cancellableFetchOk(
+          this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())},
+          responseJson)
+          .then(response => {
+            console.log(response.uri);
+            history.replaceState(
+                null, '',
+                window.location.origin + window.location.pathname + '?json_url=' + response.uri);
+          })
+          // catch errors with upload and prompt the user if there was an error
+          .catch(() => {
+            this.promptJsonStateServer('state server not responding, enter a new one?');
+            if (this.jsonStateServer.value) {
+              this.postJsonState();
+            }
+          });
+    }
   }
 
   private toolInputEventMapBinder = (inputEventMap: EventActionMap, context: RefCounted) => {

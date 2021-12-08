@@ -351,7 +351,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
     const {rank} = this;
     return transposeNestedArrays(this.scales.map((volumeInfo, scaleIndex) => {
       vec3.divide(relativeVoxelSize, volumeInfo.voxelSize, baseScale.voxelSize);
-      let upperVoxelBound: Float32Array = volumeInfo.upperVoxelBound;
+      let upperVoxelBound: Float32Array = new Float32Array(volumeInfo.upperVoxelBound);
       let minBlockSize: Uint32Array|undefined;
       let {numChannels} = volumeInfo;
       const transform = new Float32Array((rank + 1) ** 2);
@@ -407,7 +407,7 @@ function getNanometersToVoxelsTransform(info: MultiscaleVolumeInfo) {
   for (let i = 0; i < 3; ++i) {
     transform[5 * i] = 1 / baseVoxelSize[i];
   }
-  return transform;
+  return new Float32Array(transform);
 }
 
 export function parseVolumeKey(key: string): {
@@ -554,7 +554,7 @@ export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
       chunkDataSize: upperVoxelBound,
       upperVoxelBound,
     });
-    const chunkToMultiscaleTransform = mat4.create();
+    const chunkToMultiscaleTransform = new Float32Array(mat4.create());
     return [[{
       chunkSource: this.chunkManager.getChunkSource(BrainmapsAnnotationSpatialIndexSource, {
         parent: this,
@@ -672,8 +672,8 @@ export class BrainmapsDataSource extends DataSourceProvider {
             annotationSet.add({
               type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
               description: boundingBox.metadata,
-              pointA: boundingBox.corner,
-              pointB: vec3.add(vec3.create(), boundingBox.corner, boundingBox.size),
+              pointA: new Float32Array(boundingBox.corner),
+              pointB: new Float32Array(vec3.add(vec3.create(), boundingBox.corner, boundingBox.size)),
               id: `boundingBox${i}`,
               properties: [],
             });
@@ -760,7 +760,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
                     volumeId,
                     changestack: changeSpec.changeStackId,
                     instance: this.instance,
-                    upperVoxelBound: multiscaleVolumeInfo.scales[0].upperVoxelBound,
+                    upperVoxelBound: new Float32Array(multiscaleVolumeInfo.scales[0].upperVoxelBound),
                   },
                   credentialsProvider: this.credentialsProvider,
                 })

@@ -190,7 +190,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       let alternatives =
           makeDefaultVolumeChunkSpecifications({
             rank: 3,
-            chunkToMultiscaleTransform,
+            chunkToMultiscaleTransform: new Float32Array(chunkToMultiscaleTransform),
             dataType: this.dataType,
 
             baseVoxelOffset: lowerVoxelBound,
@@ -205,7 +205,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
           }).map(spec => ({
                    chunkSource: chunkManager.getChunkSource(
                        DVIDVolumeChunkSource, {spec, parameters: volParameters, credentialsProvider}),
-                   chunkToMultiscaleTransform,
+                   chunkToMultiscaleTransform: new Float32Array(chunkToMultiscaleTransform),
                  }));
       sources.push(alternatives);
     }
@@ -435,7 +435,7 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
     }],
   };
   if (info.meshSrc) {
-    const subsourceToModelSubspaceTransform = mat4.create();
+    const subsourceToModelSubspaceTransform = new Float32Array(mat4.create());
     for (let i = 0; i < 3; ++i) {
       subsourceToModelSubspaceTransform[5 * i] = 1 / info.voxelSize[i];
     }

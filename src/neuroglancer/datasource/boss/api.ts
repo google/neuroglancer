@@ -17,7 +17,7 @@
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {ResponseTransform} from 'neuroglancer/util/http_request';
+import {ResponseTransform, cancellableFetchOk} from 'neuroglancer/util/http_request';
 
 export type BossToken = string;
 
@@ -27,14 +27,26 @@ export type BossToken = string;
 export const credentialsKey = 'boss';
 
 export function fetchWithBossCredentials<T>(
-    credentialsProvider: CredentialsProvider<BossToken>, input: RequestInfo, init: RequestInit,
-    transformResponse: ResponseTransform<T>,
-    cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
-  return fetchWithCredentials(
+  credentialsProvider: CredentialsProvider<BossToken>, input: RequestInfo, init: RequestInit,
+  transformResponse: ResponseTransform<T>,
+  cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
+  return cancellableFetchOk(input, init, transformResponse, cancellationToken).catch((error) => {
+    if (error.status !== 500 && error.status !== 401 && error.status !== 403 && error.status !== 504) {
+      // Prevent an infinite loop of error = 0 where the request
+      // has been cancelled
+      throw error;
+    }
+    return fetchWithCredentials(
       credentialsProvider, input, init, transformResponse,
       credentials => {
         const headers = new Headers(init.headers);
-        headers.set('Authorization', `Bearer ${credentials}`);
+        if (typeof(credentials) === "string") {
+          headers.set('Authorization', `Bearer ${credentials}`);
+        }
+        else {
+          //@ts-ignore
+          headers.set('Authorization', `${credentials.tokenType} ${credentials.accessToken}`); 
+        }
         return {...init, headers};
       },
       error => {
@@ -50,4 +62,5 @@ export function fetchWithBossCredentials<T>(
         throw error;
       },
       cancellationToken);
+  });
 }
