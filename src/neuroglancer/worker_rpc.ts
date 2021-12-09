@@ -278,6 +278,19 @@ registerRPC('SharedObject.dispose', function(x) {
   obj.rpc = null;
 });
 
+// RPC ID used to request the other thread to create a worker.
+//
+// On Safari, workers cannot themselves create additional workers.  As a workaround, workers can
+// send the main thread a worker URL and a `MessagePort` and the main thread will create the worker
+// and send it the message port.
+export const WORKER_RPC_ID = 'Worker';
+
+registerRPC(WORKER_RPC_ID, function(x) {
+  const {port, path} = x;
+  const worker = new Worker(path);
+  worker.postMessage({port}, [port]);
+});
+
 registerRPC('SharedObject.refCountReachedZero', function(x) {
   let obj = <SharedObject>this.get(x['id']);
   let generation = <number>x['gen'];

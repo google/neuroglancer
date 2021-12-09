@@ -33,10 +33,10 @@ export async function getHtmlDirectoryListing(
       /*init=*/ {headers: {'accept': 'text/html'}},
       async x => ({text: await x.text(), contentType: x.headers.get('content-type')}),
       cancellationToken);
-  if (contentType !== 'text/html') {
+  if (contentType === null || /\btext\/html\b/i.exec(contentType) === null) {
     return [];
   }
-  const doc = new DOMParser().parseFromString(text, contentType);
+  const doc = new DOMParser().parseFromString(text, "text/html");
   const nodes =
       doc.evaluate('//a/@href', doc, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
   const results: string[] = [];
@@ -123,7 +123,7 @@ export async function completeHttpPath(
       return await getS3PathCompletions(host, path, cancellationToken);
     }
     const s3Match = parsedUrl.match(
-        /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com|[^\/]+|[^\/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/);
+        /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com|[^\/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/);
     if (s3Match !== null) {
       return await getS3CompatiblePathCompletions(
           credentialsProvider, s3Match[1], s3Match[1], s3Match[2], cancellationToken);

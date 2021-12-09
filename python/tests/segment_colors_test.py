@@ -90,6 +90,7 @@ def test_segment_colors(webdriver):
         s.show_axis_lines = False
         assert list(s.layers[0].segment_colors.keys()) == [42]
         assert s.layers[0].segment_colors[42] == '#f00'
+    webdriver.sync()
     screenshot_response = webdriver.viewer.screenshot(size=[10, 10])
     assert screenshot_response.viewer_state.layers[0].segment_colors[42] == '#ff0000'
     screenshot = screenshot_response.screenshot
@@ -97,6 +98,7 @@ def test_segment_colors(webdriver):
                                   np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
     with webdriver.viewer.txn() as s:
         s.layers[0].segment_colors[42] = '#0f0'
+    webdriver.sync()
     screenshot_response = webdriver.viewer.screenshot(size=[10, 10])
     assert screenshot_response.viewer_state.layers[0].segment_colors[42] == '#00ff00'
     screenshot = screenshot_response.screenshot
@@ -106,6 +108,7 @@ def test_segment_colors(webdriver):
     # Changing segment_default_color does not affect the color since an explicit color is specified.
     with webdriver.viewer.txn() as s:
         s.layers[0].segment_default_color = '#fff'
+    webdriver.sync()
     screenshot_response = webdriver.viewer.screenshot(size=[10, 10])
     assert screenshot_response.viewer_state.layers[0].segment_default_color == '#ffffff'
     screenshot = screenshot_response.screenshot
@@ -115,6 +118,7 @@ def test_segment_colors(webdriver):
     # Removing the explicit color causes the default color to be used.
     with webdriver.viewer.txn() as s:
         del s.layers[0].segment_colors[42]
+    webdriver.sync()
     screenshot_response = webdriver.viewer.screenshot(size=[10, 10])
     screenshot = screenshot_response.screenshot
     np.testing.assert_array_equal(

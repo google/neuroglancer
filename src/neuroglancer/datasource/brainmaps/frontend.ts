@@ -15,14 +15,13 @@
  */
 
 import {AnnotationType, makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
-import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
-import {AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
+import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
-import {BrainmapsCredentialsProvider, BrainmapsInstance, OAuth2Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
+import {BrainmapsCredentialsProvider, BrainmapsInstance, makeRequest, OAuth2Credentials} from 'neuroglancer/datasource/brainmaps/api';
 import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshInfo, MultiscaleMeshSourceParameters, SingleMeshInfo, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
@@ -332,7 +331,8 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     let encoding = VolumeChunkEncoding.RAW;
-    if (this.dataType === DataType.UINT64 && this.volumeType === VolumeType.SEGMENTATION) {
+    if ((this.dataType === DataType.UINT64 || this.dataType === DataType.UINT32) &&
+        this.volumeType === VolumeType.SEGMENTATION && this.encoding !== VolumeChunkEncoding.RAW) {
       encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
     } else if (
         this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8 &&
@@ -540,6 +540,11 @@ export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
       ...options,
     });
     this.credentialsProvider = this.registerDisposer(options.credentialsProvider.addRef());
+  }
+
+  hasNonSerializedProperties() {
+    // Has description field.
+    return true;
   }
 
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {

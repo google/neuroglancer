@@ -15,9 +15,12 @@
 
 import neuroglancer
 import numpy as np
+import pytest
 
 
 def test_title(webdriver):
+    if webdriver.browser == 'firefox':
+        pytest.skip('test can hang under firefox')
     a = np.array([[[255]]], dtype=np.uint8)
     with webdriver.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y", "z"],

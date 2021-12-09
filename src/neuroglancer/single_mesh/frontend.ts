@@ -395,6 +395,14 @@ export class SingleMeshLayer extends
     return this.source.gl;
   }
 
+  isReady() {
+    let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
+    if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
+      return false;
+    }
+    return true;
+  }
+
   draw(
       renderContext: PerspectiveViewRenderContext,
       attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {

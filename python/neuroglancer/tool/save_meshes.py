@@ -34,7 +34,7 @@ except ImportError:
     sys.exit(1)
 
 
-def save_meshes(state, output_dir, output_format):
+def save_meshes(state, output_dir, output_format, lod):
     for layer in state.layers:
         if not isinstance(layer.layer, neuroglancer.SegmentationLayer): continue
         if not layer.visible: return False
@@ -43,11 +43,24 @@ def save_meshes(state, output_dir, output_format):
                 continue
             vol = cloudvolume.CloudVolume(source.url, parallel=True, progress=True)
             if len(layer.segments) == 0: continue
+            get_mesh_kwargs = {}
+            if lod != 0:
+                get_mesh_kwargs.update(lod=lod)
             for segment in layer.segments:
                 output_path = os.path.join(output_dir, '%d.%s' % (segment, output_format))
                 print('Saving layer %r object %s -> %s' % (layer.name, segment, output_path))
                 os.makedirs(output_dir, exist_ok=True)
-                vol.mesh.save(segment, output_path, file_format=output_format)
+                mesh = vol.mesh.get(segment, **get_mesh_kwargs)
+                if isinstance(mesh, dict):
+                    mesh = list(mesh.values())[0]
+                if output_format == 'obj':
+                    data = mesh.to_obj()
+                elif output_format == 'ply':
+                    data = mesh.to_ply()
+                elif output_format == 'precomputed':
+                    data = mesh.to_precomputed()
+                with open(output_path, 'wb') as f:
+                    f.write(data)
             return
     print('No segmentation layer found')
     sys.exit(1)
@@ -57,11 +70,13 @@ def main(args=None):
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_state_arguments(ap, required=True)
     ap.add_argument('--format', choices=['obj', 'ply'], default='obj')
+    ap.add_argument('--lod', type=int, default=0, help='Mesh level of detail to download')
     ap.add_argument('--output-dir', default='.')
     parsed_args = ap.parse_args()
     save_meshes(state=parsed_args.state,
                 output_dir=parsed_args.output_dir,
-                output_format=parsed_args.format)
+                output_format=parsed_args.format,
+                lod=parsed_args.lod)
 
 
 if __name__ == '__main__':

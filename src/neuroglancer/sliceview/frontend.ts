@@ -730,7 +730,7 @@ export function getVolumetricTransformedSources(
           const effectiveVoxelSize =
               chunkLayout.localSpatialVectorToGlobal(vec3.create(), /*baseVoxelSize=*/ kOneVec);
           for (let i = 0; i < displayRank; ++i) {
-            effectiveVoxelSize[i] *= globalScales[i];
+            effectiveVoxelSize[i] = Math.abs(effectiveVoxelSize[i] * globalScales[i]);
           }
           effectiveVoxelSize.fill(1, displayRank);
           return {

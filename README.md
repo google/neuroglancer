@@ -4,6 +4,7 @@ Neuroglancer: Web-based volumetric data visualization
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![PyPI](https://img.shields.io/pypi/v/neuroglancer)](https://pypi.org/project/neuroglancer)
 ![Build](https://github.com/google/neuroglancer/workflows/Build/badge.svg)
+[![DOI](https://zenodo.org/badge/59798355.svg)](https://zenodo.org/badge/latestdoi/59798355)
 
 Neuroglancer is a WebGL-based viewer for volumetric data.  It is capable of displaying arbitrary (non axis-aligned) cross-sectional views of volumetric data, as well as 3-D meshes and line-segment based models (skeletons).
 
@@ -44,6 +45,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 
 - Chrome >= 51
 - Firefox >= 46
+- Safari >= 15.0
 
 # Keyboard and mouse bindings
 
@@ -169,6 +171,7 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   as a useful example for converting other datasets.
 - [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
 - [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
+- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/neuroglancer/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
 
 # Contributing
 

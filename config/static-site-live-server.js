@@ -125,6 +125,7 @@ class LiveServer {
       var injectCandidates =
           [new RegExp('</body>', 'i'), new RegExp('</svg>'), new RegExp('</head>', 'i')];
       var injectTag = null;
+      var fileExt = "";
 
       const directory = () => {
         var pathname = url.parse(req.originalUrl).pathname;
@@ -134,14 +135,15 @@ class LiveServer {
       };
 
       const file = (filepath /*, stat*/) => {
-        var x = path.extname(filepath).toLocaleLowerCase(), match,
-            possibleExtensions = ['', '.html', '.htm', '.xhtml', '.php', '.svg'];
-        if (hasNoOrigin && (possibleExtensions.indexOf(x) > -1)) {
+        fileExt = path.extname(filepath).toLocaleLowerCase();
+        var possibleExtensions = [ "", ".html", ".htm", ".xhtml", ".php", ".svg" ];
+
+        if (hasNoOrigin && (possibleExtensions.indexOf(fileExt) > -1)) {
           // TODO: Sync file read here is not nice, but we need to determine if the html should be
           // injected or not
           var contents = fs.readFileSync(filepath, 'utf8');
           for (var i = 0; i < injectCandidates.length; ++i) {
-            match = injectCandidates[i].exec(contents);
+            let match = injectCandidates[i].exec(contents);
             if (match) {
               injectTag = match[0];
               break;
@@ -161,6 +163,9 @@ class LiveServer {
       };
 
       const inject = (stream) => {
+        if (fileExt == ".wasm") {
+          res.setHeader('Content-Type', 'application/wasm');
+        }
         if (injectTag) {
           const injectedCode = getInjectedCode(this.generation);
           // We need to modify the length given to browser

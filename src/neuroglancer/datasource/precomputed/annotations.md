@@ -188,7 +188,7 @@ The spatial index levels should be computed as follows:
     - This spatial index level maps `cell` to the list of annotations in `emitted(level, cell)`.
       The annotations are encoded in the [multiple annotation
       encoding](#multiple-annotation-encoding) also used by the related object id index; the list
-      should be ordered by bit-reserved Morton code.
+      should be ordered randomly (or perhaps pseudo-randomly based on the annotation id).
     - For each `child_cell` in level `level+1` contained within `cell`: Compute the set
       `remaining_annotations(level+1, child_cell)` of annotations within
       `remaining_annotations(level, cell) - emitted(level, cell)` that intersect `child_cell`.

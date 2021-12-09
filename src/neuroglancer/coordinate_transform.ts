@@ -1543,7 +1543,7 @@ export function getInferredOutputScale(transform: CoordinateSpaceTransform, outp
   const inputDims = getDependentTransformInputDimensions(transformMatrix, rank, [outputDim]);
   if (inputDims.length !== 1) return undefined;
   const [inputDim] = inputDims;
-  const coeff = transformMatrix[(rank + 1) * inputDim + outputDim];
+  const coeff = Math.abs(transformMatrix[(rank + 1) * inputDim + outputDim]);
   const {inputSpace} = transform;
   return {scale: inputSpace.scales[inputDim] * coeff, unit: inputSpace.units[inputDim]};
 }

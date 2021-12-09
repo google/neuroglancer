@@ -39,7 +39,7 @@ export function getDefaultGlobalBindings() {
     for (let i = 0; i < 26; ++i) {
       const lowercase = String.fromCharCode(97 + i);
       const uppercase = String.fromCharCode(65 + i);
-      map.set(`shift+key${lowercase}`, `tool-${uppercase}`);
+      map.set(`alt?+control?+shift+key${lowercase}`, `tool-${uppercase}`);
     }
 
     map.set('keyn', 'add-layer');
