@@ -33,6 +33,17 @@ import {Signal} from 'neuroglancer/util/signal';
 
 const TOOL_KEY_PATTERN = /^[A-Z]$/;
 
+type DefaultKeybindsForLayerType = {
+  [key: string]: any
+};
+
+type DefaultKeybinds = {
+  [layerType: string]: DefaultKeybindsForLayerType
+};
+
+declare const DEFAULT_KEYBINDS: DefaultKeybinds|undefined;
+
+
 export type InputEventMapBinder = (eventActionMap: EventActionMap, context: RefCounted) => void;
 
 export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
@@ -395,6 +406,25 @@ export class LayerToolBinder {
 
   reset() {
     this.clear();
+  }
+
+  loadDefaultKeybinds() {
+    if (typeof DEFAULT_KEYBINDS !== 'undefined') {
+      const obj: DefaultKeybindsForLayerType = {};
+      const defaultKeybindsForLayer = DEFAULT_KEYBINDS[this.layer.type] || {};
+      for (const [key, value] of Object.entries(defaultKeybindsForLayer)) {
+        const toolAlreadyBound = [...this.bindings.values()].includes(value);
+        if (toolAlreadyBound) {
+          continue;
+        }
+        const existingTool = this.globalBinder.get(key);
+        if (existingTool && !existingTool.layer.managedLayer.archived) {
+          continue;
+        }
+        obj[key] = value;
+      }
+      this.restoreState(obj);
+    }
   }
 
   restoreState(obj: any) {
