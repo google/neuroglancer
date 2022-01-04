@@ -59,6 +59,7 @@ import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
 import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
+import { registerSegmentSelectTools } from './ui/segment_select_tools';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -927,3 +928,4 @@ registerLayerShaderControlsTool(
     SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID);
 
 registerSegmentSplitMergeTools();
+registerSegmentSelectTools();
