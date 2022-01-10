@@ -151,7 +151,14 @@ export class InputEventBindingHelpDialog extends SidePanel {
         layerBindings = [];
         layerToolBindingsMap.set(tool.layer, layerBindings);
       }
-      layerBindings.push([`shift+key${key.toLowerCase()}`, tool.description]);
+      const globalBindings = [...bindings][0][1].parents[0];
+      const bindingsForTool = [...globalBindings.bindings.entries()].filter(([event, eventAction]) => {
+        return eventAction.action === `tool-${key.toUpperCase()}` && event.startsWith('at');
+      });
+      const bindingIdentifiersForTool = bindingsForTool.map(([event, eventAction]) => {
+        return eventAction.originalEventIdentifier || event;
+      });
+      layerBindings.push([bindingIdentifiersForTool.join(', '), tool.description]);
     }
     const layerToolBindings = Array.from(layerToolBindingsMap.entries());
     if (layerToolBindings.length > 0) {
