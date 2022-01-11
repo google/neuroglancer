@@ -64,7 +64,7 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
           break;
         case ToolState.SELECT:
         case ToolState.DESELECT:
-          header.textContent = `${state == ToolState.SELECT ? 'select' : 'deselect'} segments`;
+          header.textContent = `${state == ToolState.SELECT ? 'Select' : 'Deselect'} segments`;
           msg.textContent = `Drag to ${state == ToolState.SELECT ? 'select' : 'deselect'} segments (${layer.displayState.segmentationGroupState.value.visibleSegments.size} selected).`;
       }
       body.appendChild(msg);
