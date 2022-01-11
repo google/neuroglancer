@@ -22,60 +22,121 @@
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
+import { EventActionMap } from '../util/event_action_map';
 
 export const SELECT_SEGMENTS_TOOLS_ID = 'selectSegments';
-export const DESELECT_SEGMENTS_TOOLS_ID = 'deselectSegments';
 
-export class SelectSegmentsTool extends Tool<SegmentationUserLayer>
-{
-  constructor(layer: SegmentationUserLayer, private selecting: boolean) {
+const selectEvent = 'mousedown0';
+const deselectEvent = 'mousedown2';
+const SELECT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  [`at:shift?+${selectEvent}`]: 'drag-select-segments',
+  [`at:shift?+${deselectEvent}`]: 'drag-deselect-segments',
+  'at:shift?+mouseup0': 'deactivate-drag-select-segments',
+  'at:shift?+mouseup2': 'deactivate-drag-deselect-segments',
+});
+
+enum ToolState {
+  IGNORE,
+  SELECT,
+  DESELECT,
+};
+
+export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
+  constructor(layer: SegmentationUserLayer, private state: ToolState) {
     super(layer);
   }
 
   toJSON() {
-    return this.selecting ? SELECT_SEGMENTS_TOOLS_ID : DESELECT_SEGMENTS_TOOLS_ID;
+    return SELECT_SEGMENTS_TOOLS_ID;
   }
 
   activate(activation: ToolActivation<this>) {
     const {layer} = this;
     const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = `${this.selecting ? 'Select' : 'Deselect'} segments`;
+    activation.bindInputEventMap(SELECT_SEGMENTS_INPUT_EVENT_MAP);
     const updateStatus = () => {
       removeChildren(body);
       const msg = document.createElement('span');
-      msg.textContent = `Move mouse to ${this.selecting ? 'select' : 'deselect'} segments`;
+      switch (this.state) {
+        case ToolState.IGNORE:
+          header.textContent = 'Select/Deselect segments';
+          msg.textContent = `${selectEvent} to select segments; ${deselectEvent} to deselect segments.`;
+          break;
+        case ToolState.SELECT:
+        case ToolState.DESELECT:
+          header.textContent = `${this.state == ToolState.SELECT ? 'select' : 'deselect'} segments`;
+          msg.textContent = `Drag to ${this.state == ToolState.SELECT ? 'select' : 'deselect'} segments (${layer.displayState.segmentationGroupState.value.visibleSegments.size} selected).`;
+      }
       body.appendChild(msg);
     };
     updateStatus();
 
     const trySelectSegment = () => {
-      console.log(layer.displayState.segmentSelectionState);
+      if (this.state == ToolState.IGNORE) {
+        return;
+      }
       const {segmentSelectionState} = layer.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
         const segment = segmentSelectionState.selectedSegment;
         const {visibleSegments} = layer.displayState.segmentationGroupState.value;
-        if (visibleSegments.has(segment)) {
-          if (!this.selecting) {
-            visibleSegments.delete(segment);
-          }
-        } else if (this.selecting) {
-          visibleSegments.add(segment);
+        switch (this.state) {
+          case ToolState.SELECT:
+            visibleSegments.add(segment);
+            break;
+          case ToolState.DESELECT:
+            if (visibleSegments.has(segment)) {
+              visibleSegments.delete(segment);
+            }
         }
       }
-    }
-    activation.registerDisposer(layer.displayState.segmentSelectionState.changed.add(trySelectSegment));
+    };
+
+    const startSelecting = () => {
+      updateStatus();
+      trySelectSegment();
+      activation.registerDisposer(
+        layer.displayState.segmentSelectionState.changed.add(trySelectSegment));
+      activation.registerDisposer(
+        layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(updateStatus));
+    };
+
+    activation.bindAction('drag-select-segments', event => {
+      event.stopPropagation();
+      this.state = ToolState.SELECT;
+      startSelecting();
+    });
+    activation.bindAction('drag-deselect-segments', event => {
+      event.stopPropagation();
+      this.state = ToolState.DESELECT;
+      startSelecting();
+    });
+    activation.bindAction('deactivate-drag-select-segments', event => {
+      event.stopPropagation();
+      if (this.state == ToolState.SELECT) {
+        this.state = ToolState.IGNORE;
+        updateStatus();
+      }
+    });
+    activation.bindAction('deactivate-drag-deselect-segments', event => {
+      event.stopPropagation();
+      if (this.state == ToolState.DESELECT) {
+        this.state = ToolState.IGNORE;
+        updateStatus();
+      }
+    });
+
+    activation.registerDisposer(() => {
+      this.state = ToolState.IGNORE;
+    });
   }
 
   get description() {
-    return this.selecting ? 'select' : 'deselect';
+    return 'select/deselect segments';
   }
 }
 
 export function registerSegmentSelectTools() {
   registerLayerTool(SegmentationUserLayer, SELECT_SEGMENTS_TOOLS_ID, layer => {
-    return new SelectSegmentsTool(layer, true);
-  });
-  registerLayerTool(SegmentationUserLayer, DESELECT_SEGMENTS_TOOLS_ID, layer => {
-    return new SelectSegmentsTool(layer, false);
+    return new SelectSegmentsTool(layer, ToolState.IGNORE);
   });
 }

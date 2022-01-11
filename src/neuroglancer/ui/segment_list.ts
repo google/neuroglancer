@@ -41,7 +41,7 @@ import {clampToInterval, computeInvlerp, dataTypeCompare, DataTypeInterval, data
 import {CdfController, getUpdatedRangeAndWindowParameters, RangeAndWindowIntervals} from 'neuroglancer/widget/invlerp';
 import {makeToolButton} from 'neuroglancer/ui/tool';
 import {ANNOTATE_MERGE_SEGMENTS_TOOL_ID, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID} from 'neuroglancer/ui/segment_split_merge_tools';
-import { SELECT_SEGMENTS_TOOLS_ID, DESELECT_SEGMENTS_TOOLS_ID } from './segment_select_tools';
+import { SELECT_SEGMENTS_TOOLS_ID } from './segment_select_tools';
 
 const tempUint64 = new Uint64();
 
@@ -806,12 +806,7 @@ export class SegmentDisplayTab extends Tab {
     toolbox.appendChild(makeToolButton(this, layer, {
       toolJson: SELECT_SEGMENTS_TOOLS_ID,
       label: 'Select',
-      title: 'Select segments'
-    }));
-    toolbox.appendChild(makeToolButton(this, layer, {
-      toolJson: DESELECT_SEGMENTS_TOOLS_ID,
-      label: 'Deselect',
-      title: 'Deselect segments'
+      title: 'Select/Deselect segments'
     }));
     element.appendChild(toolbox);
 
