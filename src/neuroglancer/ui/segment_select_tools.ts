@@ -42,7 +42,7 @@ enum ToolState {
 };
 
 export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
-  constructor(layer: SegmentationUserLayer, private state: ToolState) {
+  constructor(layer: SegmentationUserLayer) {
     super(layer);
   }
 
@@ -53,33 +53,34 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
   activate(activation: ToolActivation<this>) {
     const {layer} = this;
     const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
+    let state = ToolState.IGNORE;
     activation.bindInputEventMap(SELECT_SEGMENTS_INPUT_EVENT_MAP);
     const updateStatus = () => {
       removeChildren(body);
       const msg = document.createElement('span');
-      switch (this.state) {
+      switch (state) {
         case ToolState.IGNORE:
           header.textContent = 'Select/Deselect segments';
           msg.textContent = `${selectEvent} to select segments; ${deselectEvent} to deselect segments.`;
           break;
         case ToolState.SELECT:
         case ToolState.DESELECT:
-          header.textContent = `${this.state == ToolState.SELECT ? 'select' : 'deselect'} segments`;
-          msg.textContent = `Drag to ${this.state == ToolState.SELECT ? 'select' : 'deselect'} segments (${layer.displayState.segmentationGroupState.value.visibleSegments.size} selected).`;
+          header.textContent = `${state == ToolState.SELECT ? 'select' : 'deselect'} segments`;
+          msg.textContent = `Drag to ${state == ToolState.SELECT ? 'select' : 'deselect'} segments (${layer.displayState.segmentationGroupState.value.visibleSegments.size} selected).`;
       }
       body.appendChild(msg);
     };
     updateStatus();
 
     const trySelectSegment = () => {
-      if (this.state == ToolState.IGNORE) {
+      if (state == ToolState.IGNORE) {
         return;
       }
       const {segmentSelectionState} = layer.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
         const segment = segmentSelectionState.selectedSegment;
         const {visibleSegments} = layer.displayState.segmentationGroupState.value;
-        switch (this.state) {
+        switch (state) {
           case ToolState.SELECT:
             visibleSegments.add(segment);
             break;
@@ -101,31 +102,31 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
 
     activation.bindAction('drag-select-segments', event => {
       event.stopPropagation();
-      this.state = ToolState.SELECT;
+      state = ToolState.SELECT;
       startSelecting();
     });
     activation.bindAction('drag-deselect-segments', event => {
       event.stopPropagation();
-      this.state = ToolState.DESELECT;
+      state = ToolState.DESELECT;
       startSelecting();
     });
     activation.bindAction('deactivate-drag-select-segments', event => {
       event.stopPropagation();
-      if (this.state == ToolState.SELECT) {
-        this.state = ToolState.IGNORE;
+      if (state == ToolState.SELECT) {
+        state = ToolState.IGNORE;
         updateStatus();
       }
     });
     activation.bindAction('deactivate-drag-deselect-segments', event => {
       event.stopPropagation();
-      if (this.state == ToolState.DESELECT) {
-        this.state = ToolState.IGNORE;
+      if (state == ToolState.DESELECT) {
+        state = ToolState.IGNORE;
         updateStatus();
       }
     });
 
     activation.registerDisposer(() => {
-      this.state = ToolState.IGNORE;
+      state = ToolState.IGNORE;
     });
   }
 
@@ -136,6 +137,6 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
 
 export function registerSegmentSelectTools() {
   registerLayerTool(SegmentationUserLayer, SELECT_SEGMENTS_TOOLS_ID, layer => {
-    return new SelectSegmentsTool(layer, ToolState.IGNORE);
+    return new SelectSegmentsTool(layer);
   });
 }
