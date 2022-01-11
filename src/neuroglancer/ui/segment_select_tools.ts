@@ -22,7 +22,8 @@
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
-import {EventActionMap} from 'neuroglancer/util/event_action_map';
+import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
+import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 
 export const SELECT_SEGMENTS_TOOLS_ID = 'selectSegments';
 
@@ -31,8 +32,6 @@ const deselectEvent = 'mousedown2';
 const SELECT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   [`at:shift?+${selectEvent}`]: 'drag-select-segments',
   [`at:shift?+${deselectEvent}`]: 'drag-deselect-segments',
-  'at:shift?+mouseup0': 'deactivate-drag-select-segments',
-  'at:shift?+mouseup2': 'deactivate-drag-deselect-segments',
 });
 
 enum ToolState {
@@ -91,42 +90,32 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
       }
     };
 
-    const startSelecting = () => {
+    const startSelecting = (event: ActionEvent<MouseEvent>) => {
       updateStatus();
       trySelectSegment();
       activation.registerDisposer(
         layer.displayState.segmentSelectionState.changed.add(trySelectSegment));
       activation.registerDisposer(
         layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(updateStatus));
+      startRelativeMouseDrag(
+        event.detail,
+        (_event, _deltaX, _deltaY) => {},
+        (_event) => {
+          state = ToolState.IGNORE;
+          updateStatus();
+        }
+      );
     };
 
-    activation.bindAction('drag-select-segments', event => {
+    activation.bindAction('drag-select-segments', (event: ActionEvent<MouseEvent>) => {
       event.stopPropagation();
       state = ToolState.SELECT;
-      startSelecting();
+      startSelecting(event);
     });
-    activation.bindAction('drag-deselect-segments', event => {
+    activation.bindAction('drag-deselect-segments', (event: ActionEvent<MouseEvent>) => {
       event.stopPropagation();
       state = ToolState.DESELECT;
-      startSelecting();
-    });
-    activation.bindAction('deactivate-drag-select-segments', event => {
-      event.stopPropagation();
-      if (state == ToolState.SELECT) {
-        state = ToolState.IGNORE;
-        updateStatus();
-      }
-    });
-    activation.bindAction('deactivate-drag-deselect-segments', event => {
-      event.stopPropagation();
-      if (state == ToolState.DESELECT) {
-        state = ToolState.IGNORE;
-        updateStatus();
-      }
-    });
-
-    activation.registerDisposer(() => {
-      state = ToolState.IGNORE;
+      startSelecting(event);
     });
   }
 
