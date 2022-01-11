@@ -22,7 +22,7 @@
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
-import { EventActionMap } from '../util/event_action_map';
+import {EventActionMap} from 'neuroglancer/util/event_action_map';
 
 export const SELECT_SEGMENTS_TOOLS_ID = 'selectSegments';
 
