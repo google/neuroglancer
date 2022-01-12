@@ -413,12 +413,7 @@ export class LayerToolBinder {
       const obj: DefaultKeybindsForLayerType = {};
       const defaultKeybindsForLayer = DEFAULT_KEYBINDS[this.layer.type] || {};
       for (const [key, value] of Object.entries(defaultKeybindsForLayer)) {
-        const toolAlreadyBound = [...this.bindings.values()].includes(value);
-        if (toolAlreadyBound) {
-          continue;
-        }
-        const existingTool = this.globalBinder.get(key);
-        if (existingTool && !existingTool.layer.managedLayer.archived) {
+        if (this.globalBinder.get(key)) {
           continue;
         }
         obj[key] = value;
