@@ -321,6 +321,7 @@ function changeLayerTypeToDetected(userLayer: UserLayer) {
     const layerConstructor = userLayer.detectedLayerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(userLayer.managedLayer, layerConstructor);
+      userLayer.managedLayer.layer!.toolBinder.loadDefaultKeybinds();
       return true;
     }
   }
@@ -362,7 +363,6 @@ export class LayerDataSourcesTab extends Tab {
       layerTypeDetection.classList.add('neuroglancer-layer-data-sources-tab-type-detection');
       layerTypeDetection.addEventListener('click', () => {
         changeLayerTypeToDetected(layer);
-        layer.managedLayer.layer!.toolBinder.loadDefaultKeybinds();
       });
     }
     const reRender = this.reRender = animationFrameDebounce(() => this.updateView());
