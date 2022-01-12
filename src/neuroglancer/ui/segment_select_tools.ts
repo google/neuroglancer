@@ -22,20 +22,19 @@
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
-import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
+import {ActionEvent, EventActionMap, Modifiers} from 'neuroglancer/util/event_action_map';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {globalModifiers} from 'neuroglancer/util/keyboard_bindings';
 
 export const SELECT_SEGMENTS_TOOLS_ID = 'selectSegments';
 
 const selectEvent = 'mousedown0';
-const deselectEvent = 'mousedown2';
 const SELECT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
-  [`at:shift?+${selectEvent}`]: 'drag-select-segments',
-  [`at:shift?+${deselectEvent}`]: 'drag-deselect-segments',
+  [`at:alt?+shift?+${selectEvent}`]: 'drag-select-segments',
 });
 
 enum ToolState {
-  IGNORE,
+  IDLE,
   SELECT,
   DESELECT,
 };
@@ -52,34 +51,47 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
   activate(activation: ToolActivation<this>) {
     const {layer} = this;
     const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
-    let state = ToolState.IGNORE;
+    let currentState = ToolState.IDLE;
+    let painting = false;
     activation.bindInputEventMap(SELECT_SEGMENTS_INPUT_EVENT_MAP);
+
+    const getNewState = () => {
+      return (globalModifiers.value & Modifiers.ALT) ? ToolState.DESELECT : ToolState.SELECT;
+    };
+    const setCurrentState = (state: ToolState) => {
+      if (currentState !== state) {
+        currentState = state;
+        painting = false;
+        updateStatus();
+      }
+    };
+
     const updateStatus = () => {
       removeChildren(body);
       const msg = document.createElement('span');
-      switch (state) {
-        case ToolState.IGNORE:
+      switch (currentState) {
+        case ToolState.IDLE:
           header.textContent = 'Select/Deselect segments';
-          msg.textContent = `${selectEvent} to select segments; ${deselectEvent} to deselect segments.`;
+          msg.textContent = `${selectEvent} to select segments; alt+${selectEvent} to deselect segments.`;
           break;
         case ToolState.SELECT:
         case ToolState.DESELECT:
-          header.textContent = `${state == ToolState.SELECT ? 'Select' : 'Deselect'} segments`;
-          msg.textContent = `Drag to ${state == ToolState.SELECT ? 'select' : 'deselect'} segments (${layer.displayState.segmentationGroupState.value.visibleSegments.size} selected).`;
+          header.textContent = `${currentState == ToolState.SELECT ? 'Select' : 'Deselect'} segments`;
+          msg.textContent = `Drag to ${currentState == ToolState.SELECT ? 'select' : 'deselect'} segments (${layer.displayState.segmentationGroupState.value.visibleSegments.size} selected).`;
       }
       body.appendChild(msg);
     };
     updateStatus();
 
     const trySelectSegment = () => {
-      if (state == ToolState.IGNORE) {
+      if (currentState == ToolState.IDLE) {
         return;
       }
       const {segmentSelectionState} = layer.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
         const segment = segmentSelectionState.selectedSegment;
         const {visibleSegments} = layer.displayState.segmentationGroupState.value;
-        switch (state) {
+        switch (currentState) {
           case ToolState.SELECT:
             visibleSegments.add(segment);
             break;
@@ -90,37 +102,51 @@ export class SelectSegmentsTool extends Tool<SegmentationUserLayer> {
       }
     };
 
-    const startSelecting = (event: ActionEvent<MouseEvent>) => {
-      updateStatus();
+    activation.registerDisposer(
+      layer.displayState.segmentSelectionState.changed.add(() => {
+        if (painting) {
+          trySelectSegment();
+        }
+      }));
+    activation.registerDisposer(
+      layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(updateStatus));
+    activation.registerDisposer(
+      globalModifiers.changed.add(() => {
+        if (currentState != ToolState.IDLE) {
+          setCurrentState(getNewState());
+        }
+      }));
+
+    const startSelecting = (event: ActionEvent<MouseEvent>, state: ToolState) => {
+      event.stopPropagation();
+      setCurrentState(state);
       trySelectSegment();
-      activation.registerDisposer(
-        layer.displayState.segmentSelectionState.changed.add(trySelectSegment));
-      activation.registerDisposer(
-        layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(updateStatus));
+      const baseScreenX = event.detail.screenX;
+      const baseScreenY = event.detail.screenY;
       startRelativeMouseDrag(
         event.detail,
-        (_event, _deltaX, _deltaY) => {},
+        (event, _deltaX, _deltaY) => {
+          if (!painting) {
+            const deltaScreenX = event.screenX - baseScreenX;
+            const deltaScreenY = event.screenY - baseScreenY;
+            if (deltaScreenX * deltaScreenX + deltaScreenY * deltaScreenY > 25) {
+              trySelectSegment();
+              painting = true;
+            }
+          }
+        },
         (_event) => {
-          state = ToolState.IGNORE;
-          updateStatus();
+          painting = false;
+          setCurrentState(ToolState.IDLE);
         }
       );
     };
 
-    activation.bindAction('drag-select-segments', (event: ActionEvent<MouseEvent>) => {
-      event.stopPropagation();
-      state = ToolState.SELECT;
-      startSelecting(event);
-    });
-    activation.bindAction('drag-deselect-segments', (event: ActionEvent<MouseEvent>) => {
-      event.stopPropagation();
-      state = ToolState.DESELECT;
-      startSelecting(event);
-    });
+    activation.bindAction('drag-select-segments', (event: ActionEvent<MouseEvent>) =>  startSelecting(event, getNewState()));
   }
 
   get description() {
-    return 'select/deselect segments';
+    return 'select';
   }
 }
 
