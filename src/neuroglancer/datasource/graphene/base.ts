@@ -48,7 +48,6 @@ export class MeshSourceParameters {
   fragmentUrl: string;
   lod: number;
   sharding: Array<ShardingParameters>|undefined;
-  verifyMesh: boolean;
 
   static RPC_ID = 'graphene/MeshSource';
 }
@@ -120,9 +119,9 @@ temporary solution to deal with cors error if the middle auth credential is pass
 because the authorization header is not in Access-Control-Allow-Headers
 */
 
-import {cancellableFetchSpecialOk as cancellableFetchSpecialOkOrig, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
-import { CancellationToken, uncancelableToken } from 'src/neuroglancer/util/cancellation';
-import { ResponseTransform } from 'src/neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk as cancellableFetchSpecialOkOrig, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import { CancellationToken, uncancelableToken } from 'neuroglancer/util/cancellation';
+import { ResponseTransform } from 'neuroglancer/util/http_request';
 
 const GCS_ORIGIN = 'https://storage.googleapis.com';
 
@@ -138,7 +137,7 @@ export async function cancellableFetchSpecialOk<T>(
 }
 
 import {fetchSpecialHttpByteRange as fetchSpecialHttpByteRangeOrig} from 'neuroglancer/util/byte_range_http_requests';
-import { Uint64 } from 'src/neuroglancer/util/uint64';
+import { Uint64 } from 'neuroglancer/util/uint64';
 
 export function fetchSpecialHttpByteRange(
   credentialsProvider: SpecialProtocolCredentialsProvider, url: string,

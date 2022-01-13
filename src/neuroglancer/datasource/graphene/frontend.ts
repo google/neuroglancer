@@ -14,21 +14,16 @@
  * limitations under the License.
  */
 
-import debounce from 'lodash/debounce';
-
 import './graphene.css';
 
-import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, LocalAnnotationSource, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs, Point} from 'neuroglancer/annotation';
+import {AnnotationReference, AnnotationType, LocalAnnotationSource, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs, Point} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, CoordinateSpace, coordinateSpaceFromJson, emptyValidCoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
-// import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshLayer, MeshSource, MultiscaleMeshLayer, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
-import {IndexedSegmentPropertySource, InlineSegmentProperty, InlineSegmentPropertyMap, normalizeInlineSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {makeSliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
@@ -36,7 +31,7 @@ import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
-import {DATA_TYPE_ARRAY_CONSTRUCTOR, DataType} from 'neuroglancer/util/data_type';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
@@ -49,43 +44,37 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {cancellableFetchSpecialOk, GRAPHENE_MANIFEST_REFRESH_PROMISE, isBaseSegmentId, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
-import {IndexedSegmentPropertySourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {ChunkedGraphChunkSource, ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 
 import {AnnotationSpatialIndexSourceParameters, AnnotationSourceParameters} from 'neuroglancer/datasource/graphene/base';
-import { makeChunkedGraphChunkSpecification } from 'src/neuroglancer/sliceview/chunked_graph/base';
-import { Uint64Set } from 'src/neuroglancer/uint64_set';
-import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID } from 'src/neuroglancer/segmentation_graph/source';
-import { VisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/base';
-import { observeWatchable, TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface } from 'src/neuroglancer/trackable_value';
-import { getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError } from 'src/neuroglancer/render_coordinate_transform';
-import { RenderLayer, RenderLayerRole } from 'src/neuroglancer/renderlayer';
+import { makeChunkedGraphChunkSpecification } from 'neuroglancer/sliceview/chunked_graph/base';
+import { Uint64Set } from 'neuroglancer/uint64_set';
+import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID } from 'neuroglancer/segmentation_graph/source';
+import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/base';
+import { observeWatchable, TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface } from 'neuroglancer/trackable_value';
+import { getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
+import { RenderLayer, RenderLayerRole } from 'neuroglancer/renderlayer';
 import { getSegmentPropertyMap } from '../precomputed/frontend';
-import { SegmentationUserLayer } from 'src/neuroglancer/segmentation_user_layer';
-import { Tab } from 'src/neuroglancer/widget/tab_view';
-import { DependentViewWidget } from 'src/neuroglancer/widget/dependent_view_widget';
-import { makeToolActivationStatusMessageWithHeader, makeToolButton, registerLayerTool, Tool, ToolActivation } from 'src/neuroglancer/ui/tool';
-import { ANNOTATE_MERGE_SEGMENTS_TOOL_ID } from 'src/neuroglancer/ui/segment_split_merge_tools';
-import { EventActionMap } from 'src/neuroglancer/util/event_action_map';
-import { addLayerControlToOptionsTab, LayerControlFactory, LayerControlTool, registerLayerControl } from 'src/neuroglancer/widget/layer_control';
-import { TextInputWidget } from 'src/neuroglancer/widget/text_input';
-import { DateTimeInputWidget } from 'src/neuroglancer/widget/datetime_input';
-import { makeCloseButton } from 'src/neuroglancer/widget/close_button';
-import { NullarySignal } from 'src/neuroglancer/util/signal';
-import { packColor, TrackableRGB } from 'src/neuroglancer/util/color';
-import { makeAddButton } from 'src/neuroglancer/widget/add_button';
-import { AnnotationLayer, SliceViewAnnotationLayer } from 'src/neuroglancer/annotation/renderlayer';
-import { AnnotationDisplayState, AnnotationLayerState } from 'src/neuroglancer/annotation/annotation_layer_state';
-import { trackableAlphaValue } from 'src/neuroglancer/trackable_alpha';
-import { MouseSelectionState } from 'src/neuroglancer/layer';
-import { LayerDataSource, LoadedDataSubsource } from 'src/neuroglancer/layer_data_source';
-import { makeIcon } from 'src/neuroglancer/widget/icon';
-import { makeValueOrError, valueOrThrow } from 'src/neuroglancer/util/error';
-import { resetTemporaryVisibleSegmentsState } from 'src/neuroglancer/segmentation_display_state/frontend';
-import { Uint64Map } from 'src/neuroglancer/uint64_map';
-import { AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotations } from 'src/neuroglancer/ui/annotations';
-import { Trackable } from 'src/neuroglancer/util/trackable';
+import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
+import { Tab } from 'neuroglancer/widget/tab_view';
+import { DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
+import { makeToolActivationStatusMessageWithHeader, makeToolButton, registerLayerTool, Tool, ToolActivation } from 'neuroglancer/ui/tool';
+import { EventActionMap } from 'neuroglancer/util/event_action_map';
+import { addLayerControlToOptionsTab, LayerControlFactory, LayerControlTool, registerLayerControl } from 'neuroglancer/widget/layer_control';
+import { DateTimeInputWidget } from 'neuroglancer/widget/datetime_input';
+import { makeCloseButton } from 'neuroglancer/widget/close_button';
+import { NullarySignal } from 'neuroglancer/util/signal';
+import { packColor } from 'neuroglancer/util/color';
+import { AnnotationDisplayState, AnnotationLayerState } from 'neuroglancer/annotation/annotation_layer_state';
+import { MouseSelectionState } from 'neuroglancer/layer';
+import { LoadedDataSubsource } from 'neuroglancer/layer_data_source';
+import { makeIcon } from 'neuroglancer/widget/icon';
+import { makeValueOrError, valueOrThrow } from 'neuroglancer/util/error';
+import { resetTemporaryVisibleSegmentsState } from 'neuroglancer/segmentation_display_state/frontend';
+import { Uint64Map } from 'neuroglancer/uint64_map';
+import { AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotations } from 'neuroglancer/ui/annotations';
+import { Trackable } from 'neuroglancer/util/trackable';
 
 class GrapheneVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -95,16 +84,6 @@ class GrapheneChunkedGraphChunkSource extends
 
 class GrapheneMeshSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {}
-
-class GrapheneSkeletonSource extends
-(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(SkeletonSource), SkeletonSourceParameters)) {
-  get skeletonVertexCoordinatesInVoxels() {
-    return false;
-  }
-  get vertexAttributes() {
-    return this.parameters.metadata.vertexAttributes;
-  }
-}
 
 function resolvePath(a: string, b: string) {
   const outputParts = a.split('/');
@@ -328,20 +307,6 @@ function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeI
 }
 
 class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
-  // app: AppInfo;
-  // graph: GraphInfo;
-
-  // dataUrl: string;
-  // dataType: DataType;
-  // numChannels: number;
-  // volumeType: VolumeType;
-  // mesh: string|undefined;
-  // verifyMesh: boolean|undefined;
-  // skeletons: string|undefined;
-  // app: AppInfo;
-  // graph: GraphInfo;
-  // scales: ScaleInfo[];
-
   get dataType() {
     return this.info.dataType;
   }
@@ -656,70 +621,32 @@ export function getShardedMeshSource(chunkManager: ChunkManager, parameters: Mes
 
 async function getMeshSource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, fragmentUrl: string, sharding: boolean) {
+    url: string, fragmentUrl: string) {
   const {metadata, segmentPropertyMap} =
       await getMeshMetadata(chunkManager, credentialsProvider, fragmentUrl);
   if (metadata === undefined) {
     return {
       source: getLegacyMeshSource(chunkManager, credentialsProvider, {
-        manifestUrl: url,//parseSpecialUrl(url, credentialsProvider),
-        fragmentUrl: fragmentUrl,//parseSpecialUrl(url, credentialsProvider),
+        manifestUrl: url,
+        fragmentUrl: fragmentUrl,
         lod: 0,
-        sharding: undefined,//sharding, TODO
-        verifyMesh: false,
+        sharding: undefined,
       }),
       transform: mat4.create(),
       segmentPropertyMap
     };
   }
-  // TODO: what is this
-  // let vertexPositionFormat: VertexPositionFormat;
-  // const {vertexQuantizationBits} = metadata;
-  // if (vertexQuantizationBits === 10) {
-  //   vertexPositionFormat = VertexPositionFormat.uint10;
-  // } else if (vertexQuantizationBits === 16) {
-  //   vertexPositionFormat = VertexPositionFormat.uint16;
-  // } else {
-  //   throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
-  // }
   return {
     source: getShardedMeshSource(chunkManager, {
-      manifestUrl: url,//parseSpecialUrl(url, credentialsProvider),
-      fragmentUrl: fragmentUrl,//parseSpecialUrl(url, credentialsProvider),
+      manifestUrl: url,
+      fragmentUrl: fragmentUrl,
       lod: 0,
       sharding: metadata.sharding,
-      verifyMesh: false,
-    }, credentialsProvider)
-    /*chunkManager.getChunkSource(MultiscaleMeshSource, {
-      credentialsProvider,
-      parameters: {url, metadata},
-      format: {
-        fragmentRelativeVertices: true,
-        vertexPositionFormat,
-      }
-    })*/,
+    }, credentialsProvider),
     transform: metadata.transform,
     segmentPropertyMap,
   };
 }
-
-// async function getSkeletonSource(
-//     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-//     url: string) {
-//   const {metadata, segmentPropertyMap} =
-//       await getSkeletonMetadata(chunkManager, undefined/*credentialsProvider*/, url);
-//   return {
-//     source: chunkManager.getChunkSource(GrapheneSkeletonSource, {
-//       credentialsProvider,
-//       parameters: {
-//         url,
-//         metadata,
-//       },
-//     }),
-//     transform: metadata.transform,
-//     segmentPropertyMap,
-//   };
-// }
 
 function getJsonMetadata(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
@@ -792,8 +719,7 @@ async function getVolumeDataSource(
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider,
           info.app!.meshingUrl,
-          resolvePath(info.dataUrl, info.mesh),
-          true); // TEMP TODO sharding  = true
+          resolvePath(info.dataUrl, info.mesh));
     const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
     subsources.push({
@@ -803,51 +729,8 @@ async function getVolumeDataSource(
       subsourceToModelSubspaceTransform,
     });
   }
-  if (info.skeletons !== undefined && false) {/*
-    const skeletonsUrl = resolvePath(info.dataUrl, info.skeletons);
-    const {source: skeletonSource, transform} =
-        await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
-    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
-    mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsources.push({
-      id: 'skeletons',
-      default: true,
-      subsource: {mesh: skeletonSource},
-      subsourceToModelSubspaceTransform,
-    });
-  */}
   return {modelTransform: makeIdentityTransform(modelSpace), subsources, state};
 }
-
-// async function getSkeletonsDataSource(
-//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-//     url: string): Promise<DataSource> {
-//   const {source: skeletons, transform, segmentPropertyMap} =
-//       await getSkeletonSource(options.chunkManager, credentialsProvider, url);
-//   const subsources: DataSubsourceEntry[] = [
-//     {
-//       id: 'default',
-//       default: true,
-//       subsource: {mesh: skeletons},
-//       subsourceToModelSubspaceTransform: transform,
-//     },
-//   ];
-//   if (segmentPropertyMap !== undefined) {
-//     const mapUrl = resolvePath(url, segmentPropertyMap);
-//     const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
-//     const segmentPropertyMapData =
-//         getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
-//     subsources.push({
-//       id: 'properties',
-//       default: true,
-//       subsource: {segmentPropertyMap: segmentPropertyMapData},
-//     });
-//   }
-//   return {
-//     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
-//     subsources,
-//   };
-// }
 
 function parseKeyAndShardingSpec(url: string, obj: any) {
   verifyObject(obj);
@@ -941,105 +824,6 @@ class AnnotationMetadata {
   }
 }
 
-// async function getAnnotationDataSource(
-//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-//     url: string, metadata: any): Promise<DataSource> {
-//   const info = new AnnotationMetadata(url, metadata);
-//   const dataSource: DataSource = {
-//     modelTransform: makeIdentityTransform(info.coordinateSpace),
-//     subsources: [
-//       {
-//         id: 'default',
-//         default: true,
-//         subsource: {
-//           annotation: options.chunkManager.getChunkSource(GrapheneAnnotationSource, {
-//             credentialsProvider,
-//             metadata: info,
-//             parameters: info.parameters,
-//           }),
-//         }
-//       },
-//     ],
-//   };
-//   return dataSource;
-// }
-
-// async function getMeshDataSource(
-//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-//     url: string): Promise<DataSource> {
-//   const {source: mesh, transform, segmentPropertyMap} =
-//       await getMeshSource(options.chunkManager, credentialsProvider, url, url, false); // this is wrong 'url, url'
-//   const subsources: DataSubsourceEntry[] = [
-//     {
-//       id: 'default',
-//       default: true,
-//       subsource: {mesh},
-//       subsourceToModelSubspaceTransform: transform,
-//     },
-//   ];
-//   if (segmentPropertyMap !== undefined) {
-//     const mapUrl = resolvePath(url, segmentPropertyMap);
-//     const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
-//     const segmentPropertyMapData =
-//         getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
-//     subsources.push({
-//       id: 'properties',
-//       default: true,
-//       subsource: {segmentPropertyMap: segmentPropertyMapData},
-//     });
-//   }
-
-//   return {
-//     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
-//     subsources,
-//   };
-// }
-
-export const GrapheneIndexedSegmentPropertySource = WithParameters(
-    WithCredentialsProvider<SpecialProtocolCredentials>()(IndexedSegmentPropertySource),
-    IndexedSegmentPropertySourceParameters);
-
-// function parseIndexedPropertyMap(data: unknown): {
-//   sharding: ShardingParameters|undefined,
-//   properties: readonly Readonly<IndexedSegmentProperty>[]
-// } {
-//   verifyObject(data);
-//   const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
-//   const properties = verifyObjectProperty(
-//       data, 'properties',
-//       propertiesObj => parseArray(propertiesObj, (propertyObj): IndexedSegmentProperty => {
-//         const id = verifyObjectProperty(propertyObj, 'id', verifyString);
-//         const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
-//         const type = verifyObjectProperty(propertyObj, 'type', type => {
-//           if (type !== 'string') {
-//             throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
-//           }
-//           return type;
-//         });
-//         return {id, description, type};
-//       }));
-//   return {sharding, properties};
-// }
-
-// async function getSegmentPropertyMapDataSource(
-//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-//     url: string, metadata: unknown): Promise<DataSource> {
-//   options;
-//   return {
-//     modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
-//     subsources: [
-//       {
-//         id: 'default',
-//         default: true,
-//         subsource: {
-//           segmentPropertyMap:
-//               getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, url)
-//         },
-//       },
-//     ],
-//   };
-// }
-
 const urlPattern = /^([^#]*)(?:#(.*))?$/;
 
 function parseProviderUrl(providerUrl: string) {
@@ -1091,7 +875,6 @@ export class GrapheneDataSource extends DataSourceProvider {
             if (isNotFoundError(e)) {
               if (parameters['type'] === 'mesh') {
                 console.log('does this happen?');
-                // return await getMeshDataSource(options, credentialsProvider, url);
               }
             }
             throw e;
@@ -1103,18 +886,6 @@ export class GrapheneDataSource extends DataSourceProvider {
           }
           const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
           switch (t) {
-            // TODO: are these used for graphene?
-            // case 'neuroglancer_skeletons':
-            //   return await getSkeletonsDataSource(options, credentialsProvider, url);
-            // case 'neuroglancer_multilod_draco':
-            // case 'neuroglancer_legacy_mesh':
-            //   return await getMeshDataSource(options, credentialsProvider, url);
-            // case 'neuroglancer_annotations_v1':
-            //   return await getAnnotationDataSource(options, credentialsProvider, url, metadata);
-            // case 'neuroglancer_segment_properties':
-            //   return await getSegmentPropertyMapDataSource(
-            //       options, credentialsProvider, url, metadata);
-            // case 'neuroglancer_multiscale_volume':
             case undefined:
               return await getVolumeDataSource(options, credentialsProvider, url, metadata);
             default:

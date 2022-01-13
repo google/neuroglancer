@@ -14,19 +14,12 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationPropertySerializer, annotationTypeHandlers, annotationTypes} from 'neuroglancer/annotation';
-import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
-import {AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {Chunk, ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-// import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, computeOctreeChildOffsets, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, generateHigherOctreeLevel, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
-import {IndexedSegmentPropertySourceBackend} from 'neuroglancer/segmentation_display_state/backend';
-import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
-import {decodeSkeletonChunk} from 'neuroglancer/skeleton/decode_precomputed_skeleton';
+import {assignMeshFragmentData, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -36,20 +29,17 @@ import {fetchSpecialHttpByteRange, GRAPHENE_MANIFEST_REFRESH_PROMISE, responseId
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {vec3} from 'neuroglancer/util/geom';
-import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
-import {cancellableFetchOk, HttpError, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
 import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
 
-import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChunkedGraphSourceParameters, DataEncoding, GRAPHENE_MANIFEST_SHARDED, IndexedSegmentPropertySourceParameters, MeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
+import {ChunkedGraphSourceParameters, DataEncoding, GRAPHENE_MANIFEST_SHARDED, MeshSourceParameters, ShardingParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 
-import { ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray } from 'src/neuroglancer/sliceview/chunked_graph/backend';
+import { ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray } from 'neuroglancer/sliceview/chunked_graph/backend';
 
 
 interface ShardInfo {
@@ -466,197 +456,3 @@ registerPromiseRPC(
         return {value: JSON.stringify(new Response())};
       }) as RPCPromise<any>;
     });
-
-// async function fetchByUint64(
-//     credentialsProvider: SpecialProtocolCredentialsProvider, url: string, chunk: Chunk,
-//     minishardIndexSource: MinishardIndexSource|undefined, id: Uint64,
-//     cancellationToken: CancellationToken) {
-//   if (minishardIndexSource === undefined) {
-//     try {
-//       return await cancellableFetchSpecialOk(
-//           credentialsProvider, `${url}/${id}`, {}, responseArrayBuffer, cancellationToken);
-//     } catch (e) {
-//       if (isNotFoundError(e)) return undefined;
-//       throw e;
-//     }
-//   }
-//   const result = await getShardedData(minishardIndexSource, chunk, id, cancellationToken);
-//   if (result === undefined) return undefined;
-//   return result.data;
-// }
-
-// @registerSharedObject() //
-// export class GrapheneSkeletonSource extends
-// (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(SkeletonSource), SkeletonSourceParameters)) {
-//   private minishardIndexSource = getMinishardIndexDataSource(
-//       this.chunkManager, this.credentialsProvider,
-//       {url: this.parameters.url, sharding: this.parameters.metadata.sharding, layer: 0});
-//   async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
-//     const {parameters} = this;
-//     const response = getOrNotFoundError(await fetchByUint64(
-//         this.credentialsProvider, parameters.url, chunk, this.minishardIndexSource, chunk.objectId,
-//         cancellationToken));
-//     decodeSkeletonChunk(chunk, response, parameters.metadata.vertexAttributes);
-//   }
-// }
-
-// function parseAnnotations(
-//     buffer: ArrayBuffer, parameters: AnnotationSourceParameters,
-//     propertySerializer: AnnotationPropertySerializer): AnnotationGeometryData {
-//   const dv = new DataView(buffer);
-//   if (buffer.byteLength <= 8) throw new Error('Expected at least 8 bytes');
-//   const countLow = dv.getUint32(0, /*littleEndian=*/ true);
-//   const countHigh = dv.getUint32(4, /*littleEndian=*/ true);
-//   if (countHigh !== 0) throw new Error('Annotation count too high');
-//   const numBytes = annotationTypeHandlers[parameters.type].serializedBytes(parameters.rank) +
-//       propertySerializer.serializedBytes;
-//   const expectedBytes = 8 + (numBytes + 8) * countLow;
-//   if (buffer.byteLength !== expectedBytes) {
-//     throw new Error(`Expected ${expectedBytes} bytes, but received: ${buffer.byteLength} bytes`);
-//   }
-//   const idOffset = 8 + numBytes * countLow;
-//   const id = new Uint64();
-//   const ids = new Array<string>(countLow);
-//   for (let i = 0; i < countLow; ++i) {
-//     id.low = dv.getUint32(idOffset + i * 8, /*littleEndian=*/ true);
-//     id.high = dv.getUint32(idOffset + i * 8 + 4, /*littleEndian=*/ true);
-//     ids[i] = id.toString();
-//   }
-//   const geometryData = new AnnotationGeometryData();
-//   const data = geometryData.data = new Uint8Array(buffer, 8, numBytes * countLow);
-//   convertEndian32(data, Endianness.LITTLE);
-//   const typeToOffset = geometryData.typeToOffset = new Array<number>(annotationTypes.length);
-//   typeToOffset.fill(0);
-//   typeToOffset[parameters.type] = 0;
-//   const typeToIds = geometryData.typeToIds = new Array<string[]>(annotationTypes.length);
-//   const typeToIdMaps = geometryData.typeToIdMaps =
-//       new Array<Map<string, number>>(annotationTypes.length);
-//   typeToIds.fill([]);
-//   typeToIds[parameters.type] = ids;
-//   typeToIdMaps.fill(new Map());
-//   typeToIdMaps[parameters.type] = new Map(ids.map((id, i) => [id, i]));
-//   return geometryData;
-// }
-
-// function parseSingleAnnotation(
-//     buffer: ArrayBuffer, parameters: AnnotationSourceParameters,
-//     propertySerializer: AnnotationPropertySerializer, id: string): Annotation {
-//   const handler = annotationTypeHandlers[parameters.type];
-//   const baseNumBytes = handler.serializedBytes(parameters.rank);
-//   const numRelationships = parameters.relationships.length;
-//   const minNumBytes = baseNumBytes + 4 * numRelationships;
-//   if (buffer.byteLength < minNumBytes) {
-//     throw new Error(`Expected at least ${minNumBytes} bytes, but received: ${buffer.byteLength}`);
-//   }
-//   const dv = new DataView(buffer);
-//   const annotation = handler.deserialize(dv, 0, /*isLittleEndian=*/ true, parameters.rank, id);
-//   propertySerializer.deserialize(
-//       dv, baseNumBytes, /*isLittleEndian=*/ true,
-//       annotation.properties = new Array(parameters.properties.length));
-//   let offset = baseNumBytes + propertySerializer.serializedBytes;
-//   const relatedSegments: Uint64[][] = annotation.relatedSegments = [];
-//   relatedSegments.length = numRelationships;
-//   for (let i = 0; i < numRelationships; ++i) {
-//     const count = dv.getUint32(offset, /*littleEndian=*/ true);
-//     if (buffer.byteLength < minNumBytes + count * 8) {
-//       throw new Error(`Expected at least ${minNumBytes} bytes, but received: ${buffer.byteLength}`);
-//     }
-//     offset += 4;
-//     const segments: Uint64[] = relatedSegments[i] = [];
-//     for (let j = 0; j < count; ++j) {
-//       segments[j] = new Uint64(
-//           dv.getUint32(offset, /*littleEndian=*/ true),
-//           dv.getUint32(offset + 4, /*littleEndian=*/ true));
-//       offset += 8;
-//     }
-//   }
-//   if (offset !== buffer.byteLength) {
-//     throw new Error(`Expected ${offset} bytes, but received: ${buffer.byteLength}`);
-//   }
-//   return annotation;
-// }
-
-// @registerSharedObject() //
-// export class GrapheneAnnotationSpatialIndexSourceBackend extends (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(AnnotationGeometryChunkSourceBackend), AnnotationSpatialIndexSourceParameters)) {
-//   private minishardIndexSource =
-//       getMinishardIndexDataSource(this.chunkManager, this.credentialsProvider, this.parameters);
-//   parent: GrapheneAnnotationSourceBackend;
-//   async download(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
-//     const {parameters} = this;
-
-//     const {minishardIndexSource} = this;
-//     const {parent} = this;
-//     let response: ArrayBuffer|undefined;
-//     const {chunkGridPosition} = chunk;
-//     if (minishardIndexSource === undefined) {
-//       const url = `${parameters.url}/${chunkGridPosition.join('_')}`;
-//       try {
-//         response = await cancellableFetchSpecialOk(
-//             this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
-//       } catch (e) {
-//         if (!isNotFoundError(e)) throw e;
-//       }
-//     } else {
-//       const {upperChunkBound} = this.spec;
-//       const {chunkGridPosition} = chunk;
-//       const xBits = Math.ceil(Math.log2(upperChunkBound[0])),
-//             yBits = Math.ceil(Math.log2(upperChunkBound[1])),
-//             zBits = Math.ceil(Math.log2(upperChunkBound[2]));
-//       const chunkIndex = encodeZIndexCompressed(
-//           new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
-//           chunkGridPosition[2]);
-//       const result =
-//           await getShardedData(minishardIndexSource, chunk, chunkIndex, cancellationToken);
-//       if (result !== undefined) response = result.data;
-//     }
-//     if (response !== undefined) {
-//       chunk.data =
-//           parseAnnotations(response, parent.parameters, parent.annotationPropertySerializer);
-//     }
-//   }
-// }
-
-// @registerSharedObject() //
-// export class GrapheneAnnotationSourceBackend extends (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(AnnotationSource), AnnotationSourceParameters)) {
-//   private byIdMinishardIndexSource = getMinishardIndexDataSource(
-//       this.chunkManager, this.credentialsProvider, this.parameters.byId);
-//   private relationshipIndexSource = this.parameters.relationships.map(
-//       x => getMinishardIndexDataSource(this.chunkManager, this.credentialsProvider, x));
-//   annotationPropertySerializer =
-//       new AnnotationPropertySerializer(this.parameters.rank, this.parameters.properties);
-
-//   async downloadSegmentFilteredGeometry(
-//       chunk: AnnotationSubsetGeometryChunk, relationshipIndex: number,
-//       cancellationToken: CancellationToken) {
-//     const {parameters} = this;
-//     const response = await fetchByUint64(
-//         this.credentialsProvider, parameters.relationships[relationshipIndex].url, chunk,
-//         this.relationshipIndexSource[relationshipIndex], chunk.objectId, cancellationToken);
-//     if (response !== undefined) {
-//       chunk.data = parseAnnotations(response, this.parameters, this.annotationPropertySerializer);
-//     }
-//   }
-
-//   async downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
-//     const {parameters} = this;
-//     const id = Uint64.parseString(chunk.key!);
-//     const response = await fetchByUint64(
-//         this.credentialsProvider, parameters.byId.url, chunk, this.byIdMinishardIndexSource, id,
-//         cancellationToken);
-//     if (response === undefined) {
-//       chunk.annotation = null;
-//     } else {
-//       chunk.annotation = parseSingleAnnotation(
-//           response, this.parameters, this.annotationPropertySerializer, chunk.key!);
-//     }
-//   }
-// }
-
-// @registerSharedObject()
-// export class GrapheneIndexedSegmentPropertySourceBackend extends WithParameters
-// (WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-//      IndexedSegmentPropertySourceBackend),
-//  IndexedSegmentPropertySourceParameters) {
-//   minishardIndexSource =
-//       getMinishardIndexDataSource(this.chunkManager, this.credentialsProvider, this.parameters);
-// }
