@@ -43,7 +43,36 @@ export class MouseEventBinder<EventMap extends EventActionMapInterface> extends 
     });
     this.registerEventListener(target, 'mousedown', (event: MouseEvent) => {
       if (commonHandler !== undefined) commonHandler(event);
-      this.dispatch(`mousedown${event.button}`, event);
+      let button = event.button;
+      // Under Firefox on macOS, pressing the left mouse button while holding
+      // control results in a mouse event with `button` set to 2 (incorrectly
+      // indicating the right mouse button) but `buttons` set to 1 (correctly
+      // indicating that only the left mouse button is down).  This attempts to
+      // reverse that translation.
+      //
+      // https://github.com/google/neuroglancer/issues/365
+      //
+      // Notes:
+      //
+      // - If both the left and right mouse buttons are both pressed at the same
+      //   time, this method of disambiguation does not work.
+      //
+      // - Firefox seems to "remember" that this translation of the button
+      //   number was done, and also sends the `mouseup` event with a button
+      //   number of 2, even if the control key was released before releasing
+      //   the mouse button.  That means `mouse_drag.ts` works unmodified with
+      //   this translation (since it waits for a mouseup event with the same
+      //   button number).
+      //
+      // - This method of disambiguation does not work for `mouseup` events,
+      //   since the button has already been released and therefore is not
+      //   included in `buttons` anyway.  Fortunately `mouseup` events are not
+      //   commonly used in Neuroglancer.
+      if (button === 2 && (event.buttons & 3) === 1) {
+        // `button` is 2 (right button), but only the left button is currently pressed.
+        button = 0;
+      }
+      this.dispatch(`mousedown${button}`, event);
     });
     this.registerEventListener(target, 'mouseup', (event: MouseEvent) => {
       if (commonHandler !== undefined) commonHandler(event);
