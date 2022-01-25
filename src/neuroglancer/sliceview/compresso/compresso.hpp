@@ -96,7 +96,7 @@ public:
 	static constexpr size_t header_size{36};
 
 	static constexpr char magic[4]{ 'c', 'p', 's', 'o' }; 
-	static constexpr uint8_t format_version{0};
+	uint8_t format_version; // 0: no z index ; 1: with z index
 	uint8_t data_width; // label width in bits
 	uint16_t sx;
 	uint16_t sy;
@@ -110,7 +110,7 @@ public:
 	uint8_t connectivity; // 4 or 6 connected CLL algorithm (almost always 4)
 
 	CompressoHeader() :
-		data_width(8), 
+		format_version(0), data_width(8), 
 		sx(1), sy(1), sz(1), 
 		xstep(8), ystep(8), zstep(1),
 		id_size(0), value_size(0), location_size(0),
@@ -118,12 +118,13 @@ public:
 	{}
 
 	CompressoHeader(
-		const uint8_t _data_width,
+		const uint8_t _format_version, const uint8_t _data_width,
 		const uint16_t _sx, const uint16_t _sy, const uint16_t _sz,
 		const uint8_t _xstep = 4, const uint8_t _ystep = 4, const uint8_t _zstep = 1,
 		const uint64_t _id_size = 0, const uint32_t _value_size = 0, 
 		const uint64_t _location_size = 0, const uint8_t _connectivity = 4
 	) : 
+		format_version(_format_version),
 		data_width(_data_width), 
 		sx(_sx), sy(_sy), sz(_sz), 
 		xstep(_xstep), ystep(_ystep), zstep(_zstep),
@@ -132,6 +133,7 @@ public:
 	{}
 
 	CompressoHeader(unsigned char* buf) {
+		format_version = buf[4];
 		data_width = ctoi<uint8_t>(buf, 5);
 		sx = ctoi<uint16_t>(buf, 6); 
 		sy = ctoi<uint16_t>(buf, 8); 
@@ -152,13 +154,31 @@ public:
 		uint8_t connect = ctoi<uint8_t>(buf, 35);
 
 		bool valid_dtype = (dwidth == 1 || dwidth == 2 || dwidth == 4 || dwidth == 8);
-		bool valid_connectivity = (connect == 4 || connect == 6);
+		bool valid_connectivity = (connect == 4 || (format_version == 0 && connect == 6));
 
-		return valid_magic && (format_version == 0) && valid_dtype && valid_connectivity;
+		return valid_magic && (format_version <= 1) && valid_dtype && valid_connectivity;
 	}
 
 	static CompressoHeader fromchars(unsigned char* buf) {
 		return CompressoHeader(buf);
+	}
+
+	size_t index_byte_width() const {
+		const size_t sxy = sx * sy;
+		const size_t worst_case = 2 * sxy;
+
+		if (worst_case < std::numeric_limits<uint8_t>::max()) {
+			return 1;
+		}
+		else if (worst_case < std::numeric_limits<uint16_t>::max()) {
+			return 2;
+		}
+		else if (worst_case < std::numeric_limits<uint32_t>::max()) {
+			return 4;
+		}
+		else {
+			return 8;
+		}
 	}
 };
 
@@ -377,6 +397,8 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output) {
 	const size_t xstep = header.xstep;
 	const size_t ystep = header.ystep;
 	const size_t zstep = header.zstep;
+	const size_t index_width = header.index_byte_width();
+	const bool random_access_z_index = (header.format_version == 1);
 
 	if (sx * sy * sz == 0) {
 		return 11;
@@ -393,6 +415,8 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output) {
 			- (header.id_size * sizeof(LABEL))  
 			- (header.value_size * sizeof(WINDOW))
 			- (header.location_size * sizeof(LABEL))
+			- (sz * index_width * random_access_z_index) // components index
+			- (sz * index_width * random_access_z_index) // locations index
 	);
 	size_t num_condensed_windows = window_bytes / sizeof(WINDOW);
 
