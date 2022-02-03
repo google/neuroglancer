@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 William Silvermsith
+ * Copyright 2022 William Silvermsith
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -52,7 +52,7 @@ export async function decompressPng(buffer: Uint8Array)
   );
   if (nbytes < 0) {
     (m.instance.exports.free as Function)(bufPtr);
-    throw new Error(`Failed to decode png image. image size: ${nbytes}`);
+    throw new Error(`Failed to decode png image size. image size: ${nbytes}`);
   }
 
   const imagePtr = (m.instance.exports.malloc as Function)(nbytes);

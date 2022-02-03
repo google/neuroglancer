@@ -22,31 +22,25 @@ long int png_nbytes(
 	unsigned char* buf, unsigned int num_bytes
 ) {
 	if (buf == NULL) { return -1; }
-	if (num_bytes < 8) { return -1; }
+	if (num_bytes < 8) { return -2; }
 
 	/* Create a decoder context */
 	spng_ctx *ctx = spng_ctx_new(0);
-    if (ctx == NULL) { return -1; }
+    if (ctx == NULL) { return -3; }
 
 	/* Set an input buffer */
 	if (spng_set_png_buffer(ctx, buf, num_bytes)) {
-		RET(-1);
+		RET(-4);
 	}
 
     struct spng_ihdr ihdr;
     if (spng_get_ihdr(ctx, &ihdr)) {
-    	RET(-1);
+    	RET(-5);
     }
 
-    // The png is encoded with a type that is stored in the
-    // ihdr.color_type, but spng asks us whether we'd like
-    // to render the image as a given type. Here I think we'd
-    // want to match the png format.
-    // int fmt = grayscale ? SPNG_FMT_G8 : SPNG_FMT_RGB8;
-
     size_t size = 0;
-    if (spng_decoded_image_size(ctx, ihdr.color_type, &size)) {
-    	RET(-1);
+    if (spng_decoded_image_size(ctx, SPNG_FMT_PNG, &size)) {
+    	RET(-6);
     }
 
     return (long int)size;
@@ -77,7 +71,7 @@ int png_decompress(
     }
 
     size_t size = 0;
-    if (spng_decoded_image_size(ctx, ihdr.color_type, &size)) {
+    if (spng_decoded_image_size(ctx, SPNG_FMT_PNG, &size)) {
     	RET(7);
     }
 
@@ -86,7 +80,7 @@ int png_decompress(
     // to render the image as a given type. Here I think we'd
     // want to match the png format.
     const int decode_flags = 0; // no special treatment, no alpha decode
-    if (spng_decode_image(ctx, out, size, ihdr.color_type, decode_flags)) {
+    if (spng_decode_image(ctx, out, size, SPNG_FMT_PNG, decode_flags)) {
     	RET(8);
     }
 
