@@ -16,8 +16,6 @@
 
 #include "./spng/spng.h"
 
-// extern "C" {
-
 #define RET(val) spng_ctx_free(ctx); return (val);
 
 long int png_nbytes(
@@ -95,6 +93,4 @@ int png_decompress(
     RET(0);
 }
 
-// }
-
-// #undef RET
+#undef RET

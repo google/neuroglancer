@@ -52,7 +52,7 @@ export async function decompressPng(buffer: Uint8Array)
   );
   if (nbytes < 0) {
     (m.instance.exports.free as Function)(bufPtr);
-    throw new Error(`Failed to decode compresso image. image size: ${nbytes}`);
+    throw new Error(`Failed to decode png image. image size: ${nbytes}`);
   }
 
   const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
@@ -68,7 +68,7 @@ export async function decompressPng(buffer: Uint8Array)
 
   try {
     if (code !== 0) {
-      throw new Error(`Failed to decode compresso image. decoder code: ${code}`);
+      throw new Error(`Failed to decode png image. decoder code: ${code}`);
     }
 
     // Likewise, we reference memory.buffer instead of heap.buffer
