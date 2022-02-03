@@ -42,6 +42,10 @@ const enum PngColorSpace {
   RGBA = 6
 }
 
+// header constants
+const magicSpec = [ 137, 80, 78, 71, 13, 10, 26, 10 ];
+const validHeaderCode = [ 'I', 'H', 'D', 'R' ];
+
 // not a full implementation of read header, just the parts we need
 // References: 
 // 1. Overall PNG structure: http://www.libpng.org/pub/png/spec/1.2/PNG-Structure.html
@@ -56,7 +60,6 @@ function readHeader(buffer: Uint8Array)
   }
 
   // check for header for magic sequence
-  const magicSpec = [ 137, 80, 78, 71, 13, 10, 26, 10 ];
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
   if (!validMagic) {
     throw new Error(`png: didn't match magic numbers: {buffer.slice(0,8)}`);
@@ -74,7 +77,6 @@ function readHeader(buffer: Uint8Array)
   const chunkCode = [ 4, 5, 6, 7 ].map( 
     (i) => String.fromCharCode(bufview.getUint8(i)) 
   );
-  const validHeaderCode = [ 'I', 'H', 'D', 'R' ];
 
   if (!arrayEqualTrucated(chunkCode, validHeaderCode)) {
     throw new Error(`png: Invalid header code (should be IHDR): ${chunkCode}`);
