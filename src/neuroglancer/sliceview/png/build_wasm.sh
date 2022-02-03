@@ -1,13 +1,16 @@
 #!/bin/bash -xve
 
+SPNG=/usr/src/spng/spng
+MINIZ=/usr/src/miniz
+
 compile_options=(
-    -Iminiz -DMINIZ_NO_STDIO=1
-    miniz/miniz_zip.c miniz/miniz_tinfl.c miniz/miniz_tdef.c miniz/miniz.c
+    -I$MINIZ -DMINIZ_NO_STDIO=1
+    $MINIZ/miniz_zip.c $MINIZ/miniz_tinfl.c $MINIZ/miniz_tdef.c $MINIZ/miniz.c
     # spng defaults to zlib if we don't force miniz
     # it also prints a warning about SIMD if we don't disable SIMD
     # using the SPNG_DISABLE_OPT flag.
     # As of this writng, WASM doesn't support SIMD by default anyway.
-    -Ispng -DSPNG_USE_MINIZ=1 -DSPNG_DISABLE_OPT=1 spng/spng.c
+    -I$SPNG -DSPNG_USE_MINIZ=1 -DSPNG_DISABLE_OPT=1 $SPNG/spng.c
     png_wasm.c
      -O2
      -DNDEBUG
