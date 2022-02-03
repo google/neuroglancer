@@ -34,32 +34,125 @@ const pngModulePromise = (async () => {
   return m;
 })();
 
+const enum PngColorSpace {
+  GRAYSCALE = 0,
+  RGB = 2,
+  PALETTE = 3,
+  GRAYSCALE_ALPHA = 4,
+  RGBA = 6
+}
+
+// not a full implementation of read header, just the parts we need
+// References: 
+// 1. Overall PNG structure: http://www.libpng.org/pub/png/spec/1.2/PNG-Structure.html
+// 2. Header structure: http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
+function readHeader(buffer: Uint8Array) 
+  : {sx:number,sy:number,dataWidth:number,numChannels:number} 
+{
+
+  if (buffer.length < 8 + 13) {
+    throw new Error(`png: Invalid image size: {buffer.length}`);
+  }
+
+  const arrayEqualTrucated = (a,b) => a.every((val, idx) => val === b[idx]);
+
+
+  // check for header for magic sequence
+  const magicSpec = [ 137, 80, 78, 71, 13, 10, 26, 10 ];
+  const validMagic = arrayEqualTrucated(magicSpec, buffer);
+  if (!validMagic) {
+    throw new Error(`png: didn't match magic numbers: {buffer.slice(0,8)}`);
+  }
+  
+  // offset into IHDR chunk so we can read more naturally
+  const bufview = new DataView(buffer.buffer, magicSpec.length); 
+  const chunkLength = bufview.getUint32(0, /*littleEndian=*/false);
+  
+  const chunkCode = [ 4, 5, 6, 7 ].map( 
+    (i) => String.fromCharCode(bufview.getUint8(i)) 
+  );
+  const validHeaderCode = [ 'I', 'H', 'D', 'R' ];
+
+  if (!arrayEqualTrucated(chunkCode, validHeaderCode)) {
+    throw new Error(`png: Invalid header code (should be IHDR): ${chunkCode}`);
+  }
+
+  const sx = bufview.getUint32(8, /*littleEndian=*/false);
+  const sy = bufview.getUint32(12, /*littleEndian=*/false);
+  const bitDepth = bufview.getUint8(16);
+  const colorSpace = bufview.getUint8(17);
+  const compressionMethod = bufview.getUint8(18);
+  const filterMethod = bufview.getUint8(19);
+  const interlaceMethod = bufview.getUint8(20);
+
+  if (sx === 0 || sy == 0) {
+    throw new Error(`png: 0 is not a valid width or height. width: ${sx} height: ${sy}`)
+  }
+  if (compressionMethod !== 0) {
+    throw new Error(`png: Invalid compression method Only 0 is supported (DEFLATE). Got: ${compressionMethod}`);
+  }
+  if (filterMethod !== 0) {
+    throw new Error(`png: Invalid filter method. Only 0 (adaptive filtering) is supported. Got: ${filterMethod}`)
+  }
+  if (interlaceMethod > 1) {
+    throw new Error(`png: invalid interlace method. Only 0 (no interlace) and 1 (adam7) are supported. Got: ${interlaceMethod}`);
+  }
+
+  const validBitDepths = [ 1, 2, 4, 8, 16 ];
+  if (validBitDepths.indexOf(bitDepth) === -1) {
+    throw new Error(`png: invalid bit depth. Got: ${bitDepth} Valid Depths: ${validBitDepths}`);
+  }
+
+  let dataWidth = (bitDepth <= 8) ? 1 : 2;
+  let numChannels = 1;
+  if (colorSpace === PngColorSpace.GRAYSCALE) {
+    // do nothing, defaults are fine.
+  }
+  else if (colorSpace === PngColorSpace.RGB) {
+    if (bitDepth !== 8 && bitDepth !== 16) {
+      throw new Error(`png: invalid bit depth for RGB colorspace. Got: ${bitDepth}`);
+    }
+    numChannels = 3;
+  }
+  else if (colorSpace === PngColorSpace.PALETTE) {
+    dataWidth = 1;
+    numChannels = 3;
+  }
+  else if (colorSpace === PngColorSpace.RGBA) {
+    if (bitDepth !== 8 && bitDepth !== 16) {
+      throw new Error(`png: invalid bit depth for RGBA colorspace. Got: ${bitDepth}`);
+    }
+    numChannels = 4;
+  }
+  else if (colorSpace === PngColorSpace.GRAYSCALE_ALPHA) {
+    if (bitDepth !== 8 && bitDepth !== 16) {
+      throw new Error(`png: invalid bit depth for grayscale + alpha channel colorspace. Got: ${bitDepth}`);
+    }
+    numChannels = 4;
+  }
+  else {
+    throw new Error(`png: Invalid color space: ${colorSpace}`);
+  }
+
+  return {sx,sy,dataWidth,numChannels};
+}
+
 export async function decompressPng(buffer: Uint8Array) 
   : Promise<Uint8Array> {
   
   const m = await pngModulePromise;
-  
-  // heap must be referenced after creating bufPtr because
-  // memory growth can detatch the buffer.
-  let bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
-  let heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
-  heap.set(buffer, bufPtr);
+  const {sx,sy,dataWidth,numChannels} = readHeader(buffer);
 
-  // Using a C call here because it's tricky to discover the
-  // final size of a PNG by inspecting headers.
-  const nbytes = (m.instance.exports.png_nbytes as Function)(
-    bufPtr, buffer.byteLength
-  );
+  const nbytes = sx * sy * dataWidth * numChannels;
   if (nbytes < 0) {
-    (m.instance.exports.free as Function)(bufPtr);
     throw new Error(`Failed to decode png image size. image size: ${nbytes}`);
   }
 
-  const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
-
-  // heap must be redefined after creating imagePtr because
+  // heap must be referenced after creating bufPtr and imagePtr because
   // memory growth can detatch the buffer.
-  heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
+  let bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
+  const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
+  let heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, bufPtr);
 
   const code = (m.instance.exports.png_decompress as Function)(
