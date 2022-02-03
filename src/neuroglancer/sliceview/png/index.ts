@@ -53,7 +53,9 @@ const validHeaderCode = [ 'I', 'H', 'D', 'R' ];
 function readHeader(buffer: Uint8Array) 
   : {sx:number,sy:number,dataWidth:number,numChannels:number} 
 {
-  const arrayEqualTrucated = (a,b) => a.every((val, idx) => val === b[idx]);
+  const arrayEqualTrucated = (a:Array, b:Array) => a.every(
+    (val:number, idx:number) => val === b[idx]
+  );
 
   if (buffer.length < 8 + 4) {
     throw new Error(`png: Invalid image size: {buffer.length}`);
