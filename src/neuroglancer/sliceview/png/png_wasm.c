@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "./spng/spng.h"
+#include "spng.h"
 
 #define RET(val) spng_ctx_free(ctx); return (val);
 
