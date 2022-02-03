@@ -49,13 +49,7 @@ const enum PngColorSpace {
 function readHeader(buffer: Uint8Array) 
   : {sx:number,sy:number,dataWidth:number,numChannels:number} 
 {
-
-  if (buffer.length < 8 + 13) {
-    throw new Error(`png: Invalid image size: {buffer.length}`);
-  }
-
   const arrayEqualTrucated = (a,b) => a.every((val, idx) => val === b[idx]);
-
 
   // check for header for magic sequence
   const magicSpec = [ 137, 80, 78, 71, 13, 10, 26, 10 ];
@@ -67,7 +61,12 @@ function readHeader(buffer: Uint8Array)
   // offset into IHDR chunk so we can read more naturally
   const bufview = new DataView(buffer.buffer, magicSpec.length); 
   const chunkLength = bufview.getUint32(0, /*littleEndian=*/false);
-  
+  const chunkHeaderLength = 12; // len (4), code (4), CRC (4)
+
+  if (buffer.length < magicSpec.length + chunkLength + chunkHeaderLength) {
+    throw new Error(`png: Invalid image size: {buffer.length}`);
+  }
+
   const chunkCode = [ 4, 5, 6, 7 ].map( 
     (i) => String.fromCharCode(bufview.getUint8(i)) 
   );
