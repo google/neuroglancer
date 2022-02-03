@@ -75,10 +75,6 @@ int png_decompress(
     	RET(7);
     }
 
-	// The png is encoded with a type that is stored in the
-    // ihdr.color_type, but spng asks us whether we'd like
-    // to render the image as a given type. Here I think we'd
-    // want to match the png format.
     const int decode_flags = 0; // no special treatment, no alpha decode
     if (spng_decode_image(ctx, out, size, SPNG_FMT_PNG, decode_flags)) {
     	RET(8);
