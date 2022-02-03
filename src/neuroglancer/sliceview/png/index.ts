@@ -51,6 +51,10 @@ function readHeader(buffer: Uint8Array)
 {
   const arrayEqualTrucated = (a,b) => a.every((val, idx) => val === b[idx]);
 
+  if (buffer.length < 8 + 4) {
+    throw new Error(`png: Invalid image size: {buffer.length}`);
+  }
+
   // check for header for magic sequence
   const magicSpec = [ 137, 80, 78, 71, 13, 10, 26, 10 ];
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
