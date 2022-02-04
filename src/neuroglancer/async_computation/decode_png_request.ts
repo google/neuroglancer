@@ -13,7 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import {asyncComputation} from 'neuroglancer/async_computation';
 
-export const decodePng = asyncComputation<(data: Uint8Array) => Uint8Array>('decodePng');
+export const decodePng = asyncComputation<( 
+    data: Uint8Array, width: number, height: number, 
+    numComponents: number, bytesPerPixel:number, 
+    convertToGrayscale: boolean
+) => Uint8Array>('decodePng');

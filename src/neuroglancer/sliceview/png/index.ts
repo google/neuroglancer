@@ -145,15 +145,38 @@ function readHeader(buffer: Uint8Array)
   return {sx,sy,dataWidth,numChannels};
 }
 
-export async function decompressPng(buffer: Uint8Array) 
-  : Promise<Uint8Array> {
+export async function decompressPng(
+  buffer: Uint8Array, width: number, height: number, 
+  numComponents: number, bytesPerPixel:number, 
+  convertToGrayscale: boolean
+) : Promise<Uint8Array> {
   
   const m = await pngModulePromise;
-  const {sx,sy,dataWidth,numChannels} = readHeader(buffer);
+  let {sx,sy,dataWidth,numChannels} = readHeader(buffer);
+
+  if (convertToGrayscale) {
+    dataWidth = 1;
+    numChannels = 1;
+  }
+
+  if (
+    sx !== width 
+    || sy !== height 
+    || numComponents !== numChannels
+    || bytesPerPixel !== dataWidth
+  ) {
+    throw new Error(
+      `png: Image decode parameters did not match expected chunk parameters.
+         Expected: width: ${width} height: ${height} channels: ${numComponents} bytes per pixel: ${bytesPerPixel} 
+         Decoded:  width: ${sx} height: ${sy} channels: ${numChannels} bytes per pixel: ${dataWidth}
+         Convert to Grayscale? ${convertToGrayscale}
+        `
+    );
+  }
 
   const nbytes = sx * sy * dataWidth * numChannels;
   if (nbytes < 0) {
-    throw new Error(`Failed to decode png image size. image size: ${nbytes}`);
+    throw new Error(`png: Failed to decode png image size. image size: ${nbytes}`);
   }
 
   // heap must be referenced after creating bufPtr and imagePtr because
@@ -164,12 +187,12 @@ export async function decompressPng(buffer: Uint8Array)
   heap.set(buffer, bufPtr);
 
   const code = (m.instance.exports.png_decompress as Function)(
-    bufPtr, buffer.byteLength, imagePtr
+    bufPtr, buffer.byteLength, imagePtr, convertToGrayscale
   );
 
   try {
     if (code !== 0) {
-      throw new Error(`Failed to decode png image. decoder code: ${code}`);
+      throw new Error(`png: Failed to decode png image. decoder code: ${code}`);
     }
 
     // Likewise, we reference memory.buffer instead of heap.buffer

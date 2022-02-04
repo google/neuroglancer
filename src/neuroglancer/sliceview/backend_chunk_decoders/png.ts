@@ -24,8 +24,15 @@ import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 export async function decodePngChunk(
     chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
   
+  const chunkDataSize = chunk.chunkDataSize!;
   let image : TypedArray = await requestAsyncComputation(
-    decodePng, cancellationToken, [response], new Uint8Array(response)
+    decodePng, cancellationToken, [response],
+    /*buffer=*/(new Uint8Array(response)),
+    /*width=*/chunkDataSize[0],
+    /*height=*/chunkDataSize[1] * chunkDataSize[2],
+    /*numComponents=*/chunkDataSize[3] || 1,
+    /*bytesPerPixel=*/1,
+    /*convertToGrayscale=*/false
   );
 
   await decodeRawChunk(chunk, cancellationToken, image.buffer);

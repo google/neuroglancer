@@ -15,12 +15,13 @@
  */
 
 #include "spng.h"
+#include <stdbool.h>
 
 #define RET(val) spng_ctx_free(ctx); return (val);
 
 int png_decompress(
 	unsigned char* buf, unsigned int num_bytes, 
-	void* out
+    void* out, bool convert_to_grayscale
 ) {
 	if (buf == NULL) { return 1; }
 	if (out == NULL) { return 2; }
@@ -42,13 +43,17 @@ int png_decompress(
     	RET(6);
     }
 
+    int fmt = convert_to_grayscale 
+        ? SPNG_FMT_G8 
+        : SPNG_FMT_PNG;
+
     size_t size = 0;
-    if (spng_decoded_image_size(ctx, SPNG_FMT_PNG, &size)) {
+    if (spng_decoded_image_size(ctx, fmt, &size)) {
     	RET(7);
     }
 
     const int decode_flags = 0; // no special treatment, no alpha decode
-    if (spng_decode_image(ctx, out, size, SPNG_FMT_PNG, decode_flags)) {
+    if (spng_decode_image(ctx, out, size, fmt, decode_flags)) {
     	RET(8);
     }
 
