@@ -15,6 +15,7 @@
  */
 
 import {TypedArray} from 'neuroglancer/util/array';
+import {DATA_TYPE_BYTES} from 'neuroglancer/util/data_type';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -25,13 +26,14 @@ export async function decodePngChunk(
     chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
   
   const chunkDataSize = chunk.chunkDataSize!;
+  const dataType = chunk.source!.spec.dataType;
   let image : TypedArray = await requestAsyncComputation(
     decodePng, cancellationToken, [response],
     /*buffer=*/(new Uint8Array(response)),
     /*width=*/chunkDataSize[0],
     /*height=*/chunkDataSize[1] * chunkDataSize[2],
     /*numComponents=*/chunkDataSize[3] || 1,
-    /*bytesPerPixel=*/1,
+    /*bytesPerPixel=*/DATA_TYPE_BYTES[dataType],
     /*convertToGrayscale=*/false
   );
 
