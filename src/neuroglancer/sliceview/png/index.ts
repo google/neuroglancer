@@ -187,7 +187,7 @@ export async function decompressPng(
   heap.set(buffer, bufPtr);
 
   const code = (m.instance.exports.png_decompress as Function)(
-    bufPtr, buffer.byteLength, imagePtr, convertToGrayscale
+    bufPtr, buffer.byteLength, imagePtr, nbytes, convertToGrayscale
   );
 
   try {

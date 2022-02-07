@@ -19,7 +19,8 @@
 
 int png_decompress(
 	unsigned char* buf, unsigned int num_bytes, 
-    void* out, bool convert_to_grayscale
+    void* out, unsigned int num_out_bytes,
+    bool convert_to_grayscale
 ) {
 	if (buf == NULL) { return 1; }
 	if (out == NULL) { return 2; }
@@ -55,9 +56,14 @@ int png_decompress(
         goto done;
     }
 
+    if (size != num_out_bytes) {
+        retval = 8;
+        goto done;
+    }
+
     const int decode_flags = 0; // no special treatment, no alpha decode
     if (spng_decode_image(ctx, out, size, fmt, decode_flags)) {
-    	retval = 8; 
+    	retval = 9; 
         goto done;
     }
 
