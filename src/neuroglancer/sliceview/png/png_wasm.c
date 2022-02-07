@@ -17,8 +17,6 @@
 #include "spng.h"
 #include <stdbool.h>
 
-#define RET(val) spng_ctx_free(ctx); return (val);
-
 int png_decompress(
 	unsigned char* buf, unsigned int num_bytes, 
     void* out, bool convert_to_grayscale
@@ -33,14 +31,18 @@ int png_decompress(
 	spng_ctx *ctx = spng_ctx_new(0);
     if (ctx == NULL) { return 4; }
 
+    int retval = 0;
+
 	/* Set an input buffer */
 	if (spng_set_png_buffer(ctx, buf, num_bytes)) {
-		RET(5);
+		retval = 5; 
+        goto done;
 	}
 
     struct spng_ihdr ihdr;
     if (spng_get_ihdr(ctx, &ihdr)) {
-    	RET(6);
+    	retval = 6; 
+        goto done;
     }
 
     int fmt = convert_to_grayscale 
@@ -49,15 +51,17 @@ int png_decompress(
 
     size_t size = 0;
     if (spng_decoded_image_size(ctx, fmt, &size)) {
-    	RET(7);
+    	retval = 7; 
+        goto done;
     }
 
     const int decode_flags = 0; // no special treatment, no alpha decode
     if (spng_decode_image(ctx, out, size, fmt, decode_flags)) {
-    	RET(8);
+    	retval = 8; 
+        goto done;
     }
 
-    RET(0);
+done:
+    spng_ctx_free(ctx);
+    return retval;
 }
-
-#undef RET
