@@ -85,23 +85,6 @@ export class ManifestChunk extends Chunk {
   toString() {
     return this.objectId.toString();
   }
-
-  extractFragmentKey(fragmentId: FragmentId) {
-    if (this.manifestType === GRAPHENE_MANIFEST_SHARDED) {
-      return this.extractGrapheneFragmentKey(fragmentId);
-    }
-    return {key:fragmentId, id: fragmentId}
-  }
-
-  extractGrapheneFragmentKey(fragmentId: FragmentId) {
-    // extract segment ID from fragment ID
-    // use it as key, the rest is information for reading the fragment
-    // ignores tilde at 0 index
-    let parts = fragmentId.substr(1).split(/:(.+)/);
-    let key = parts[0];
-    fragmentId = parts[1];
-    return {key:key, id: fragmentId}
-  }
 }
 
 export interface RawMeshData {
@@ -345,17 +328,19 @@ export class MeshSource extends ChunkSource {
     return chunk;
   }
 
+  getFragmentKey(objectKey: string|null, fragmentId: string) {
+    return {key:`${objectKey}/${fragmentId}`, fragmentId: fragmentId};
+  }
+
   getFragmentChunk(manifestChunk: ManifestChunk, fragmentId: FragmentId) {
-    let fragmentSource = this.fragmentSource;
-    let extractInfo = manifestChunk.extractFragmentKey(fragmentId);
-    let key = extractInfo.key;
-    fragmentId = extractInfo.id;
-    let chunk = <FragmentChunk>fragmentSource.chunks.get(key);
+    const fragmentSource = this.fragmentSource;
+    const {key: fragmentKey, fragmentId: parsedFragmentId} = this.getFragmentKey(manifestChunk.key, fragmentId);
+    let chunk = <FragmentChunk>fragmentSource.chunks.get(fragmentKey);
     if (chunk === undefined) {
       let verifyFragment = manifestChunk.verifyFragments;
       if (verifyFragment === undefined) verifyFragment = true;
       chunk = fragmentSource.getNewChunk_(FragmentChunk);
-      chunk.initializeFragmentChunk(key, manifestChunk, fragmentId, verifyFragment);
+      chunk.initializeFragmentChunk(fragmentKey, manifestChunk, parsedFragmentId, verifyFragment);
       fragmentSource.addChunk(chunk);
     }
     return chunk;

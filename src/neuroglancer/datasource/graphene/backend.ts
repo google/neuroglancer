@@ -25,7 +25,7 @@ import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
-import {fetchSpecialHttpByteRange, GRAPHENE_MANIFEST_REFRESH_PROMISE, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {fetchSpecialHttpByteRange, getGrapheneFragmentKey, GRAPHENE_MANIFEST_REFRESH_PROMISE, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
@@ -444,6 +444,11 @@ async function decodeDracoFragmentChunk(
       }
       Promise.reject(e);
     }
+  }
+
+  getFragmentKey(objectKey: string|null, fragmentId: string) {
+    objectKey;
+    return getGrapheneFragmentKey(fragmentId);
   }
 }
 

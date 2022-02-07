@@ -393,9 +393,8 @@ export class MeshLayer extends
           totalChunks += manifestChunk.fragmentIds.length;
 
           for (const fragmentId of manifestChunk.fragmentIds) {
-            if (fragmentId.charAt(0) === '~') manifestChunk.manifestType = GRAPHENE_MANIFEST_SHARDED;
-            const key = manifestChunk.extractFragmentKey(fragmentId).key;
-            const fragment = fragmentChunks.get(key);
+            const {key: fragmentKey} = this.source.getFragmentKey(key, fragmentId);
+            const fragment = fragmentChunks.get(fragmentKey);
             if (fragment !== undefined && fragment.state === ChunkState.GPU_MEMORY) {
               meshShaderManager.drawFragment(gl, shader, fragment);
               ++presentChunks;
@@ -425,9 +424,8 @@ export class MeshLayer extends
         return;
       }
       for (const fragmentId of manifestChunk.fragmentIds) {
-        if (fragmentId.charAt(0) === '~') manifestChunk.manifestType = GRAPHENE_MANIFEST_SHARDED;
-        const key = manifestChunk.extractFragmentKey(fragmentId).key;
-        const fragmentChunk = fragmentChunks.get(key);
+        const {key: fragmentKey} = this.source.getFragmentKey(key, fragmentId);
+        const fragmentChunk = fragmentChunks.get(fragmentKey);
         if (fragmentChunk === undefined || fragmentChunk.state !== ChunkState.GPU_MEMORY) {
           ready = false;
           return;
@@ -445,23 +443,6 @@ export class ManifestChunk extends Chunk {
   constructor(source: MeshSource, x: any) {
     super(source);
     this.fragmentIds = x.fragmentIds;
-  }
-
-  extractFragmentKey(fragmentId: FragmentId) {
-    if (this.manifestType === GRAPHENE_MANIFEST_SHARDED) {
-      return this.extractGrapheneFragmentKey(fragmentId);
-    }
-    return {key:fragmentId, id: fragmentId}
-  }
-
-  extractGrapheneFragmentKey(fragmentId: FragmentId) {
-    // extract segment ID from fragment ID
-    // use it as key, the rest is information for reading the fragment
-    // ignores tilde at 0 index
-    let parts = fragmentId.substr(1).split(/:(.+)/);
-    let key = parts[0];
-    fragmentId = parts[1];
-    return {key:key, id: fragmentId}
   }
 }
 
@@ -505,6 +486,9 @@ export class MeshSource extends ChunkSource {
   }
   getChunk(x: any) {
     return new ManifestChunk(this, x);
+  }
+  getFragmentKey(objectKey: string, fragmentId: string) {
+    return {key:`${objectKey}/${fragmentId}`, fragmentId: fragmentId}
   }
 }
 

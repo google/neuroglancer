@@ -156,3 +156,14 @@ export function isBaseSegmentId(segmentId: Uint64, nBitsForLayerId: number) {
   const layerId = Uint64.rshift(new Uint64(), segmentId, 64 - nBitsForLayerId);
   return Uint64.equal(layerId, Uint64.ONE);
 }
+
+export function getGrapheneFragmentKey(fragmentId: string) {
+  const sharded = fragmentId.charAt(0) === '~';
+
+  if (sharded) {
+    const parts = fragmentId.substring(1).split(/:(.+)/);
+    return {key:parts[0], fragmentId: parts[1]};
+  } else {
+    return {key:fragmentId, fragmentId: fragmentId};
+  }
+}
