@@ -522,27 +522,20 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
-              if (segmentationGraph.tab) {
-                const graphTab = segmentationGraph.tab;
+              const graphTab = segmentationGraph.tab;
+              if (graphTab) {
                 this.tabs.add(
                   'graph', {label: 'Graph', order: -25, getter: () => {
                     return graphTab(this);
                   }});
                 this.panels.updateTabs();
-
-                // this.graphConnection?.registerDisposer(() => {
-                //   this.tabs...
-                // });
               }
 
               this.graphConnection = refCounted.registerDisposer(
                   segmentationGraph.connect(this.displayState.segmentationGroupState.value));
               refCounted.registerDisposer(() => {
-                this.graphConnection = undefined;
-                console.log('graph conn disposed');
-              });
-              this.graphConnection.registerDisposer(() => {
-                console.log('this.graphConnection.registerDisposer');
+                this.tabs.remove('graph');
+                this.panels.updateTabs();
               });
               const segmentationRenderlayer = this.someSegmentationRenderLayer();
 

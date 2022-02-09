@@ -106,6 +106,10 @@ export class OptionSpecification<T> extends RefCounted implements Trackable {
     }
   }
 
+  remove(id: string) {
+    this.options.delete(id);
+  }
+
   toJSON() {
     const {value, defaultValue} = this;
     if (value === defaultValue) {
