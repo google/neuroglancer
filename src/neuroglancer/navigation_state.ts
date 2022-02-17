@@ -215,7 +215,7 @@ export class Position extends RefCounted {
   }
 
   toJSON() {
-    if (!this.valid) return undefined;
+    if (!this.valid && this.coordinates_.length === 0) return undefined;
     this.handleCoordinateSpaceChanged();
     const {value} = this;
     if (value.length === 0) return undefined;

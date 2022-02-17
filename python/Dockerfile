@@ -13,7 +13,7 @@ RUN wget -O /tmp/chromedriver.zip http://chromedriver.storage.googleapis.com/`cu
   unzip /tmp/chromedriver.zip chromedriver -d /usr/local/bin/ && \
   rm -f /tmp/chromedriver.zip
 
-RUN pip install numpy Pillow requests tornado sockjs-tornado six google-apitools selenium
+RUN pip install numpy Pillow requests tornado six google-apitools selenium
 
 # Install Neuroglancer
 ADD . python

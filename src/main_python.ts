@@ -23,13 +23,13 @@ import debounce from 'lodash/debounce';
 import {CachingCredentialsManager} from 'neuroglancer/credentials_provider';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {PythonDataSource} from 'neuroglancer/datasource/python/frontend';
-import {TrackableBasedCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
+import {Client, ClientStateReceiver, ClientStateSynchronizer} from 'neuroglancer/python_integration/api';
+import {PythonCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
 import {TrackableBasedEventActionMap} from 'neuroglancer/python_integration/event_action_map';
 import {PrefetchManager} from 'neuroglancer/python_integration/prefetch';
 import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
 import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
 import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
-import {ServerConnection} from 'neuroglancer/python_integration/server_connection';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
@@ -89,11 +89,9 @@ function makeTrackableBasedSourceGenerationHandler(pythonDataSource: PythonDataS
 
 window.addEventListener('DOMContentLoaded', () => {
   const configState = new CompoundTrackable();
-  const privateState = new CompoundTrackable();
+  const client = new Client();
 
-  const credentialsManager = new TrackableBasedCredentialsManager();
-  configState.add('credentials', credentialsManager.inputState);
-  privateState.add('credentials', credentialsManager.outputState);
+  const credentialsManager = new PythonCredentialsManager(client);
 
   const dataSourceProvider = getDefaultDataSourceProvider(
       {credentialsManager: new CachingCredentialsManager(credentialsManager)});
@@ -167,13 +165,18 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('resize', updateSize);
   size.changed.add(debounce(() => updateSize(), 0));
 
-  const serverConnection = new ServerConnection(sharedState, privateState, configState);
+  const states = new Map<string, ClientStateSynchronizer>();
+  states.set('c', new ClientStateSynchronizer(client, configState, null));
+  if (sharedState !== undefined) {
+    states.set('s', new ClientStateSynchronizer(client, sharedState, 100));
+  }
+  new ClientStateReceiver(client, states);
   remoteActionHandler.sendActionRequested.add(
-      (action, state) => serverConnection.sendActionNotification(action, state));
+      (action, state) => client.sendActionNotification(action, state));
   screenshotHandler.sendScreenshotRequested.add(
-      state => serverConnection.sendActionNotification('screenshot', state));
+      state => client.sendActionNotification('screenshot', state));
   screenshotHandler.sendStatisticsRequested.add(
-      state => serverConnection.sendActionNotification('screenshotStatistics', state));
+      state => client.sendActionNotification('screenshotStatistics', state));
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
