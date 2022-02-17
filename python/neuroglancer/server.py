@@ -62,6 +62,22 @@ global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
 
 debug = False
 
+
+def _get_server_url(bind_address: str, port: int) -> str:
+    if 'google.colab' in sys.modules:
+        return _get_colab_server_url(port)
+    if bind_address == '0.0.0.0' or bind_address == '::':
+        hostname = socket.getfqdn()
+    else:
+        hostname = bind_address
+    return f'http://{hostname}:{port}'
+
+
+def _get_colab_server_url(port: int) -> str:
+    import google.colab.output
+    return google.colab.output.eval_js(f'google.colab.kernel.proxyPort({port})')
+
+
 class Server(object):
     def __init__(self, ioloop, bind_address='127.0.0.1', bind_port=0):
         self.viewers = weakref.WeakValueDictionary()
@@ -105,12 +121,7 @@ class Server(object):
         if global_static_content_source is None:
             global_static_content_source = static.get_default_static_content_source()
 
-        if bind_address == '0.0.0.0' or bind_address == '::':
-            hostname = socket.getfqdn()
-        else:
-            hostname = bind_address
-
-        self.server_url = 'http://%s:%s' % (hostname, actual_port)
+        self.server_url = _get_server_url(bind_address, actual_port)
 
     def get_volume(self, key):
         dot_index = key.find('.')
