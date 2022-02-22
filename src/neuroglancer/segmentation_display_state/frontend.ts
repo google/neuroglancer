@@ -31,7 +31,7 @@ import {observeWatchable, registerNestedSync, TrackableValue, WatchableValueInte
 import {isWithinSelectionPanel} from 'neuroglancer/ui/selection_details';
 import {Uint64Map} from 'neuroglancer/uint64_map';
 import {setClipboard} from 'neuroglancer/util/clipboard';
-import {useWhiteBackground} from 'neuroglancer/util/color';
+import {packColor, serializeColor, TrackableRGB, useWhiteBackground} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {measureElementClone} from 'neuroglancer/util/dom';
 import {kOneVec, vec3, vec4} from 'neuroglancer/util/geom';
@@ -40,6 +40,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {makeFilterButton} from 'neuroglancer/widget/filter_button';
+import {ColorWidget} from 'neuroglancer/widget/color';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
@@ -273,6 +274,10 @@ const segmentWidgetTemplate = (() => {
   filterElement.classList.add('neuroglancer-segment-list-entry-filter');
   const filterIndex = template.childElementCount;
   template.appendChild(filterElement);
+
+  const colorWidgetIndex = template.childElementCount;
+  template.appendChild(ColorWidget.template());
+
   return {
     template,
     copyContainerIndex,
@@ -282,6 +287,7 @@ const segmentWidgetTemplate = (() => {
     idIndex,
     labelIndex,
     filterIndex,
+    colorWidgetIndex,
     unmappedIdIndex: -1,
     unmappedCopyIndex: -1
   };
@@ -414,6 +420,20 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     stickyChildren[template.visibleIndex].addEventListener('click', visibleCheckboxHandler);
     children[template.filterIndex].addEventListener('click', filterHandler);
     element.addEventListener('action:select-position', selectHandler);
+
+    const trackableRGB = new TrackableRGB(vec3.fromValues(0, 0, 0));
+    trackableRGB.changed.add(() => {
+      const testU = new Uint64(packColor(trackableRGB.value));
+
+      const idString = element.dataset.id!;
+      const id = tempStatedColor;
+      id.tryParseString(idString);
+      displayState.segmentStatedColors.value.delete(id);
+      displayState.segmentStatedColors.value.set(id, testU);
+    });
+
+    // TODO, need to reigster disposer?
+    new ColorWidget(trackableRGB, undefined, children[template.colorWidgetIndex] as HTMLInputElement);
   };
 }
 
@@ -505,13 +525,14 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
                                   Uint64.equal(segmentSelectionState.selectedSegment, mapped))
                                      .toString();
     const idContainer = stickyChildren[template.idContainerIndex] as HTMLElement;
+    let color = getBaseObjectColor(this.displayState, mapped) as vec3;
     setSegmentIdElementStyle(
         (idContainer.children[template.idIndex] as HTMLElement),
-        getBaseObjectColor(this.displayState, mapped) as vec3);
+        color);
+    setColorWidgetColor(children[template.colorWidgetIndex] as HTMLInputElement, color);
     const {unmappedIdIndex} = template;
     if (unmappedIdIndex !== -1) {
       let unmappedIdString: string|undefined;
-      let color: vec3;
       if (displayState!.baseSegmentColoring.value &&
           (unmappedIdString = container.dataset.unmappedId) !== undefined) {
         const unmappedId = tempStatedColor;
@@ -521,6 +542,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
         color = kOneVec;
       }
       setSegmentIdElementStyle(idContainer.children[unmappedIdIndex] as HTMLElement, color);
+      setColorWidgetColor(children[template.colorWidgetIndex] as HTMLInputElement, color);
     }
   }
 }
@@ -528,6 +550,10 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
 function setSegmentIdElementStyle(element: HTMLElement, color: vec3) {
   element.style.backgroundColor = getCssColor(color);
   element.style.color = useWhiteBackground(color) ? 'white' : 'black';
+}
+
+function setColorWidgetColor(element: HTMLInputElement, color: vec3) {
+  element.value = serializeColor(color, true);
 }
 
 export class SegmentWidgetWithExtraColumnsFactory extends
