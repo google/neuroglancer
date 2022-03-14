@@ -242,7 +242,6 @@ setuptools.setup(
         "numpy>=1.11.0",
         'requests',
         'tornado',
-        'sockjs-tornado',
         'six',
         'google-apitools',
         'google-auth',

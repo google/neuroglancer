@@ -53,6 +53,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
       'neuroglancer/async_computation/decode_jpeg',
       'neuroglancer/async_computation/decode_gzip',
       'neuroglancer/async_computation/decode_compresso',
+      'neuroglancer/async_computation/decode_png',
     ],
   },
   {

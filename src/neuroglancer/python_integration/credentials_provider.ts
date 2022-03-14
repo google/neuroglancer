@@ -19,40 +19,29 @@
  */
 
 import {AnonymousFirstCredentialsProvider, CredentialsManager, CredentialsProvider, CredentialsWithGeneration, makeCachedCredentialsGetter} from 'neuroglancer/credentials_provider';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {stableStringify} from 'neuroglancer/util/json';
+import {Client} from 'neuroglancer/python_integration/api';
+import {fetchOk} from 'neuroglancer/util/http_request';
+import {stableStringify, verifyInt, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Memoize} from 'neuroglancer/util/memoize';
-import {PersistentCompoundTrackable} from 'neuroglancer/util/trackable';
 
-class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider<Credentials> {
-  invalidCredentials = new TrackableValue<number|null|undefined>(undefined, x => x);
-  validCredentials =
-      new TrackableValue<CredentialsWithGeneration<Credentials>|undefined>(undefined, x => x);
+class PythonCredentialsProvider<Credentials> extends CredentialsProvider<Credentials> {
+  constructor(private client: Client, private key: string, private parameters: any) {
+    super();
+  }
 
-  get =
-      makeCachedCredentialsGetter((invalidCredentials?: CredentialsWithGeneration<Credentials>) => {
-        return new Promise<CredentialsWithGeneration<Credentials>>(resolve => {
-          const validCredentials = this.validCredentials.value;
-          const invalidGeneration =
-              invalidCredentials !== undefined ? invalidCredentials.generation : null;
-          const isValidCredentials =
-              (credentials: CredentialsWithGeneration<Credentials>|undefined) => {
-                return credentials !== undefined && invalidGeneration !== credentials.generation;
-              };
-          if (isValidCredentials(validCredentials)) {
-            resolve(validCredentials!);
-            return;
-          }
-          this.invalidCredentials.value = invalidGeneration;
-          let disposer: () => void;
-          disposer = this.validCredentials.changed.add(() => {
-            const newCredentials = this.validCredentials.value;
-            if (isValidCredentials(newCredentials)) {
-              disposer();
-              resolve(newCredentials!);
-            }
-          });
+  get = makeCachedCredentialsGetter(
+      async(invalidCredentials?: CredentialsWithGeneration<Credentials>): Promise<
+          CredentialsWithGeneration<Credentials>> => {
+        const response = await fetchOk(this.client.urls.credentials, {
+          method: 'POST',
+          body: JSON.stringify(
+              {key: this.key, parameters: this.parameters, invalid: invalidCredentials?.generation})
         });
+        const json = await response.json();
+        verifyObject(json);
+        const generation = verifyObjectProperty(json, 'generation', verifyInt);
+        const credentials = json['credentials'] as Credentials;
+        return {generation, credentials};
       });
 }
 
@@ -63,9 +52,8 @@ class GcsCredentialsProvider extends AnonymousFirstCredentialsProvider<any> {
   }
 }
 
-export class TrackableBasedCredentialsManager implements CredentialsManager {
-  inputState = new PersistentCompoundTrackable();
-  outputState = new PersistentCompoundTrackable();
+export class PythonCredentialsManager implements CredentialsManager {
+  constructor(private client: Client) {}
   private memoize = new Memoize<string, CredentialsProvider<any>>();
 
   getCredentialsProvider<Credentials>(key: string, parameters?: any) {
@@ -74,9 +62,7 @@ export class TrackableBasedCredentialsManager implements CredentialsManager {
     }
     const combinedKey = stableStringify({key, parameters});
     return this.memoize.get(combinedKey, () => {
-      const provider = new TrackableBasedCredentialsProvider<Credentials>();
-      provider.registerDisposer(this.inputState.add(combinedKey, provider.validCredentials));
-      provider.registerDisposer(this.outputState.add(combinedKey, provider.invalidCredentials));
+      const provider = new PythonCredentialsProvider<Credentials>(this.client, key, parameters);
       if (key === 'gcs') {
         return new GcsCredentialsProvider(provider);
       }

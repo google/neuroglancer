@@ -47,7 +47,7 @@ function readHeader(buffer: Uint8Array)
     throw new Error("compresso: didn't match magic numbers")
   }
   const format = buffer[4];
-  if (format !== 0) {
+  if (format > 1) {
     throw new Error("compresso: didn't match format version")
   }
 
