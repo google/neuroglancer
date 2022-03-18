@@ -54,7 +54,7 @@ import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/ba
 import { observeWatchable, TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer, RenderLayerRole } from 'neuroglancer/renderlayer';
-import { getSegmentPropertyMap } from '../precomputed/frontend';
+import { getSegmentPropertyMap, PrecomputedVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
 import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
 import { Tab } from 'neuroglancer/widget/tab_view';
 import { DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
@@ -74,9 +74,6 @@ import { resetTemporaryVisibleSegmentsState } from 'neuroglancer/segmentation_di
 import { Uint64Map } from 'neuroglancer/uint64_map';
 import { AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotations } from 'neuroglancer/ui/annotations';
 import { Trackable } from 'neuroglancer/util/trackable';
-
-class GrapheneVolumeChunkSource extends
-(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 class GrapheneChunkedGraphChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
@@ -352,8 +349,8 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
                volumeSourceOptions,
              })
           .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
-                 chunkSource: this.chunkManager.getChunkSource(GrapheneVolumeChunkSource, {
-                   credentialsProvider: this.credentialsProvider,
+                 chunkSource: this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
+                   credentialsProvider: undefined,
                    spec,
                    parameters: {
                      url: resolvePath(this.info.dataUrl, scaleInfo.key),
@@ -870,6 +867,7 @@ export class GrapheneDataSource extends DataSourceProvider {
           }
           const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
           switch (t) {
+            case 'neuroglancer_multiscale_volume':
             case undefined:
               return await getVolumeDataSource(options, credentialsProvider, url, metadata);
             default:

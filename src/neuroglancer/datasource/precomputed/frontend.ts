@@ -43,7 +43,7 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 
-class PrecomputedVolumeChunkSource extends
+export class PrecomputedVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 class PrecomputedMeshSource extends

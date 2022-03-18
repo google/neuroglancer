@@ -235,36 +235,6 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedSegmentationChunk);
 
-@registerSharedObject() export class GrapheneVolumeChunkSource extends
-(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {
-  chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
-  // private minishardIndexSource =
-  //     getMinishardIndexDataSource(this.chunkManager, this.credentialsProvider, this.parameters);
-
-  gridShape = (() => {
-    const gridShape = new Uint32Array(3);
-    const {upperVoxelBound, chunkDataSize} = this.spec;
-    for (let i = 0; i < 3; ++i) {
-      gridShape[i] = Math.ceil(upperVoxelBound[i] / chunkDataSize[i]);
-    }
-    return gridShape;
-  })();
-
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken): Promise<void> {
-    const {parameters} = this;
-    // chunkPosition must not be captured, since it will be invalidated by the next call to
-    // computeChunkBounds.
-    const chunkPosition = this.computeChunkBounds(chunk);
-    const chunkDataSize = chunk.chunkDataSize!;
-    const url = `${parameters.url}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
-        `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
-        `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
-    const response = await cancellableFetchSpecialOk(
-      this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
-    await this.chunkDecoder(chunk, cancellationToken, response);
-  }
-}
-
 export function decodeChunkedGraphChunk(
   chunk: ChunkedGraphChunk, rootObjectKey: string, response: Response) {
 return decodeSupervoxelArray(chunk, rootObjectKey, response);
