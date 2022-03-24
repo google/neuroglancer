@@ -63,7 +63,7 @@ export class HttpError extends Error {
 export async function fetchOk(input: RequestInfo, init?: RequestInit): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(input, init);
+    response = await fetch(input, { ...init, credentials: 'include' });
   } catch (error) {
     throw HttpError.fromRequestError(input, error);
   }
