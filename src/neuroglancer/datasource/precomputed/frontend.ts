@@ -186,7 +186,7 @@ export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   };
 }
 
-class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
   }

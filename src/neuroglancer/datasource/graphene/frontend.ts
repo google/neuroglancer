@@ -20,10 +20,8 @@ import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
-import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {transposeNestedArrays} from 'neuroglancer/util/array';
+import {VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
@@ -43,7 +41,7 @@ import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/ba
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer } from 'neuroglancer/renderlayer';
-import { getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
+import { getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
 
 class GrapheneChunkedGraphChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
@@ -171,67 +169,11 @@ function parseGrapheneMultiscaleVolumeInfo(obj: unknown, url: string): GrapheneM
   };
 }
 
-class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
-  get dataType() {
-    return this.info.dataType;
-  }
-
-  get volumeType() {
-    return this.info.volumeType;
-  }
-
-  get rank() {
-    return this.info.modelSpace.rank;
-  }
-
+class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChunkSource {
   constructor(
-      chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
-      public url: string, public info: GrapheneMultiscaleVolumeInfo) {
-    super(chunkManager);
-  }
-
-  getSources(volumeSourceOptions: VolumeSourceOptions) {
-    const modelResolution = this.info.scales[0].resolution;
-    const {rank} = this;
-    return transposeNestedArrays(this.info.scales.map(scaleInfo => {
-      const {resolution} = scaleInfo;
-      const stride = rank + 1;
-      const chunkToMultiscaleTransform = new Float32Array(stride * stride);
-      chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
-      for (let i = 0; i < 3; ++i) {
-        const relativeScale = resolution[i] / modelResolution[i];
-        chunkToMultiscaleTransform[stride * i + i] = relativeScale;
-        chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
-      }
-      if (rank === 4) {
-        chunkToMultiscaleTransform[stride * 3 + 3] = 1;
-      }
-      const x = makeDefaultVolumeChunkSpecifications({
-               rank,
-               dataType: this.dataType,
-               chunkToMultiscaleTransform,
-               upperVoxelBound: scaleInfo.size,
-               volumeType: this.volumeType,
-               chunkDataSizes: scaleInfo.chunkSizes,
-               baseVoxelOffset: scaleInfo.voxelOffset,
-               compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
-               volumeSourceOptions,
-             })
-          .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
-                 chunkSource: this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
-                   credentialsProvider: undefined,
-                   spec,
-                   parameters: {
-                     url: resolvePath(this.info.dataUrl, scaleInfo.key),
-                     encoding: scaleInfo.encoding,
-                     sharding: scaleInfo.sharding,
-                   }
-                 }),
-                 chunkToMultiscaleTransform,
-               }));
-
-      return x;
-    }));
+      chunkManager: ChunkManager, public chunkedGraphCredentialsProvider: SpecialProtocolCredentialsProvider,
+      public info: GrapheneMultiscaleVolumeInfo) {
+    super(chunkManager, undefined, info.dataUrl, info);
   }
 
   getChunkedGraphSources(rootSegments: Uint64Set) {
@@ -265,7 +207,7 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       {
         chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
           spec,
-          credentialsProvider: this.credentialsProvider,
+          credentialsProvider: this.chunkedGraphCredentialsProvider,
           rootSegments,
           parameters: {url: `${this.info.app!.segmentationUrl}/node`}}),
         chunkToMultiscaleTransform,
@@ -436,7 +378,7 @@ async function getVolumeDataSource(
     url: string, metadata: any): Promise<DataSource> {
   const info = parseGrapheneMultiscaleVolumeInfo(metadata, url);
   const volume = new GrapheneMultiscaleVolumeChunkSource(
-      options.chunkManager, credentialsProvider, url, info);
+      options.chunkManager, credentialsProvider, info);
 
   const segmentationGraph = new GrapheneGraphSource(info, credentialsProvider, volume);
   const {modelSpace} = info;
