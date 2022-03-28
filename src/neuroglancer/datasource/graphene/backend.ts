@@ -14,158 +14,19 @@
  * limitations under the License.
  */
 
-import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
-import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
-import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
+import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {assignMeshFragmentData, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {fetchSpecialHttpByteRange, getGrapheneFragmentKey, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Borrowed} from 'neuroglancer/util/disposable';
-import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {cancellableFetchOk, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
-import {stableStringify} from 'neuroglancer/util/json';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 import {ChunkedGraphSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/graphene/base';
-import {DataEncoding, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray} from 'neuroglancer/sliceview/chunked_graph/backend';
-import {DecodedMinishardIndex, decodeManifestChunk} from 'neuroglancer/datasource/precomputed/backend';
-
-interface MinishardIndexSource extends
-    GenericSharedDataSource<string, DecodedMinishardIndex|undefined> {
-  sharding: ShardingParameters;
-  credentialsProvider: SpecialProtocolCredentialsProvider;
-}
-
-function getMinishardIndexDataSource(
-    chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
-    parameters: {url: string, sharding: ShardingParameters|undefined, layer:number}): MinishardIndexSource|
-    undefined {
-  const {url, sharding, layer} = parameters;
-  if (sharding === undefined) return undefined;
-  const source =
-      GenericSharedDataSource.get<string, DecodedMinishardIndex|undefined>(
-          chunkManager, stableStringify({
-            type: 'graphene:shardedDataSource',
-            url,
-            sharding,
-            credentialsProvider: getObjectId(credentialsProvider),
-          }),
-          {
-            download: async function(
-                shardFileAndMiniShard: string, cancellationToken: CancellationToken) {
-              const parts = shardFileAndMiniShard.split(':');
-              const shardFile = parts[0];
-              const miniShard: Uint64 = Uint64.parseString(parts[1]);
-              const shardUrl = `${url}/initial/${layer}/${shardFile}`;
-              // Retrive miniShard index start/end offsets.
-
-              const shardIndexSize = new Uint64(16);
-              Uint64.lshift(shardIndexSize, shardIndexSize, sharding.minishardBits);
-
-              // Multiply miniShard by 16.
-              const shardIndexStart = Uint64.lshift(new Uint64(), miniShard, 4);
-              const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 16);
-              const shardIndexResponse = await fetchSpecialHttpByteRange(undefined,
-                  shardUrl, shardIndexStart, shardIndexEnd, cancellationToken);
-              if (shardIndexResponse.byteLength !== 16) {
-                throw new Error(`Failed to retrieve miniShard offset`);
-              }
-              const shardIndexDv = new DataView(shardIndexResponse);
-              const minishardStartOffset = new Uint64(
-                  shardIndexDv.getUint32(0, /*littleEndian=*/true),
-                  shardIndexDv.getUint32(4, /*littleEndian=*/true));
-              const minishardEndOffset = new Uint64(
-                  shardIndexDv.getUint32(8, /*littleEndian=*/true),
-                  shardIndexDv.getUint32(12, /*littleEndian=*/true));
-              if (Uint64.equal(minishardStartOffset, minishardEndOffset)) {
-                throw new Error('Object not found')
-              }
-              // The start/end offsets in the shard index are relative to the end of the shard
-              // index.
-              Uint64.add(minishardStartOffset, minishardStartOffset, shardIndexSize);
-              Uint64.add(minishardEndOffset, minishardEndOffset, shardIndexSize);
-
-              let minishardIndexResponse = await fetchSpecialHttpByteRange(undefined,
-                  shardUrl, minishardStartOffset, minishardEndOffset, cancellationToken);
-              if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
-                minishardIndexResponse =
-                    (await requestAsyncComputation(
-                        decodeGzip, cancellationToken, [minishardIndexResponse],
-                        new Uint8Array(minishardIndexResponse)))
-                        .buffer;
-              }
-              if ((minishardIndexResponse.byteLength % 24) !== 0) {
-                throw new Error(
-                    `Invalid miniShard index length: ${minishardIndexResponse.byteLength}`);
-              }
-              const minishardIndex = new Uint32Array(minishardIndexResponse);
-              convertEndian32(minishardIndex, Endianness.LITTLE);
-
-              const minishardIndexSize = minishardIndex.byteLength / 24;
-              let prevEntryKeyLow = 0, prevEntryKeyHigh = 0;
-              // Offsets in the miniShard index are relative to the end of the shard index.
-              let prevStartLow = shardIndexSize.low, prevStartHigh = shardIndexSize.high;
-              for (let i = 0; i < minishardIndexSize; ++i) {
-                let entryKeyLow = prevEntryKeyLow + minishardIndex[i * 2];
-                let entryKeyHigh = prevEntryKeyHigh + minishardIndex[i * 2 + 1];
-                if (entryKeyLow >= 4294967296) {
-                  entryKeyLow -= 4294967296;
-                  entryKeyHigh += 1;
-                }
-                prevEntryKeyLow = minishardIndex[i * 2] = entryKeyLow;
-                prevEntryKeyHigh = minishardIndex[i * 2 + 1] = entryKeyHigh;
-                let startLow = prevStartLow + minishardIndex[(minishardIndexSize + i) * 2];
-                let startHigh = prevStartHigh + minishardIndex[(minishardIndexSize + i) * 2 + 1];
-                if (startLow >= 4294967296) {
-                  startLow -= 4294967296;
-                  startHigh += 1;
-                }
-                minishardIndex[(minishardIndexSize + i) * 2] = startLow;
-                minishardIndex[(minishardIndexSize + i) * 2 + 1] = startHigh;
-                const sizeLow = minishardIndex[(2 * minishardIndexSize + i) * 2];
-                const sizeHigh = minishardIndex[(2 * minishardIndexSize + i) * 2 + 1];
-                let endLow = startLow + sizeLow;
-                let endHigh = startHigh + sizeHigh;
-                if (endLow >= 4294967296) {
-                  endLow -= 4294967296;
-                  endHigh += 1;
-                }
-                prevStartLow = endLow;
-                prevStartHigh = endHigh;
-                minishardIndex[(2 * minishardIndexSize + i) * 2] = endLow;
-                minishardIndex[(2 * minishardIndexSize + i) * 2 + 1] = endHigh;
-              }
-              return {data: {data: minishardIndex, shardUrl}, size: minishardIndex.byteLength};
-            },
-            encodeKey: (key: string) => key,
-            sourceQueueLevel: 1,
-          }) as MinishardIndexSource;
-  source.sharding = sharding;
-  source.credentialsProvider = credentialsProvider;
-  return source;
-}
-
-function getGrapheneMinishardIndexDataSources(
-  chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
-  parameters: {url: string, sharding: Array<ShardingParameters>|undefined}): Array<MinishardIndexSource>|
-  undefined {
-  const {url, sharding} = parameters;
-  if (sharding === undefined) return undefined;
-  const sources = new Array<MinishardIndexSource>();
-  for (const index in sharding)
-  {
-    const layer = Number(index);
-     sources[layer] = getMinishardIndexDataSource(
-       chunkManager, credentialsProvider, {url: url, sharding: sharding[layer], layer:layer})!;
-  }
-  return sources;
-}
+import {decodeManifestChunk} from 'neuroglancer/datasource/precomputed/backend';
 
 export function decodeChunkedGraphChunk(
   chunk: ChunkedGraphChunk, rootObjectKey: string, response: Response) {
@@ -240,21 +101,11 @@ function getVerifiedFragmentPromise(
 function getFragmentDownloadPromise(
   chunk: FragmentChunk,
   parameters: MeshSourceParameters,
-  minishardIndexSources: MinishardIndexSource[],
   cancellationToken: CancellationToken
 ) {
   let fragmentDownloadPromise;
   if (parameters.sharding){
-    minishardIndexSources;
-    // if (chunk.verifyFragment !== undefined && !chunk.verifyFragment) {
-    //   // Download shard fragments without verification
-    //   fragmentDownloadPromise =
-    //     getUnverifiedFragmentPromise(chunk, parameters, minishardIndexSources, cancellationToken);
-    // }
-    // else {
-      // Download shard fragments with verification (response contains size and offset)
-      fragmentDownloadPromise = getVerifiedFragmentPromise(chunk, parameters, cancellationToken);
-    // }
+    fragmentDownloadPromise = getVerifiedFragmentPromise(chunk, parameters, cancellationToken);
   } else {
     fragmentDownloadPromise = cancellableFetchOk(
       `${parameters.fragmentUrl}/${chunk.fragmentId}`, {}, responseArrayBuffer,
@@ -272,8 +123,6 @@ async function decodeDracoFragmentChunk(
 
 @registerSharedObject() export class GrapheneMeshSource extends
 (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {
-  protected minishardIndexSources: MinishardIndexSource[];
-
   async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     cancellationToken.add(() => {
       console.log('GrapheneMeshSource cancelled');
@@ -282,33 +131,16 @@ async function decodeDracoFragmentChunk(
     let url = `${parameters.manifestUrl}/manifest`;
     let manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
 
-    // commented out verifyFragments code until graphene proofreading is added
-
-    // speculative manifest isn't working all the time
-    // race condition is the prime suspect so use verify=true
-    // chunk.verifyFragments = true;
-
-    // parameters.sharding is a proxy for mesh format
-    // if undefined, mesh format is old else new
-    if (parameters.sharding !== undefined) {
-      if (this.minishardIndexSources === undefined) {
-        this.minishardIndexSources = getGrapheneMinishardIndexDataSources(
-          this.chunkManager, undefined, {url: parameters.fragmentUrl, sharding: parameters.sharding})!;
-      }
-      // if (!chunk.verifyFragments) {
-      //   manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=0&prepend_seg_ids=1`;
-      // }
-    }
     await cancellableFetchSpecialOk(this.credentialsProvider, manifestUrl, {}, responseJson, cancellationToken)
         .then(response => decodeManifestChunk(chunk, response));
   }
 
   async downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
-    const {parameters, minishardIndexSources} = this;
+    const {parameters} = this;
 
     try {
       const response = await getFragmentDownloadPromise(
-        chunk, parameters, minishardIndexSources, cancellationToken);
+        chunk, parameters, cancellationToken);
       await decodeDracoFragmentChunk(chunk, response);
     } catch (e) {
       if (isNotFoundError(e)) {

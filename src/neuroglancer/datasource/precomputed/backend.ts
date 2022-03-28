@@ -66,7 +66,7 @@ interface ShardInfo {
   offset: Uint64;
 }
 
-export interface DecodedMinishardIndex {
+interface DecodedMinishardIndex {
   data: Uint32Array;
   shardUrl: string;
 }
@@ -197,7 +197,7 @@ function getMinishardIndexDataSource(
   return source;
 }
 
-export function findMinishardEntry(minishardIndex: DecodedMinishardIndex, key: Uint64):
+function findMinishardEntry(minishardIndex: DecodedMinishardIndex, key: Uint64):
     {startOffset: Uint64, endOffset: Uint64}|undefined {
   const minishardIndexData = minishardIndex.data;
   const minishardIndexSize = minishardIndexData.length / 6;
