@@ -56,41 +56,7 @@ export class MultiscaleMeshMetadata {
   sharding: Array<ShardingParameters>|undefined;
 }
 
-/*
-temporary solution to deal with cors error if the middle auth credential is passed to fetch request to GCS.
-because the authorization header is not in Access-Control-Allow-Headers
-*/
-
-import {cancellableFetchSpecialOk as cancellableFetchSpecialOkOrig, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
-import { CancellationToken, uncancelableToken } from 'neuroglancer/util/cancellation';
-import { ResponseTransform } from 'neuroglancer/util/http_request';
-
-const GCS_ORIGIN = 'https://storage.googleapis.com';
-
-export async function cancellableFetchSpecialOk<T>(
-  credentialsProvider: SpecialProtocolCredentialsProvider, url: string, init: RequestInit,
-  transformResponse: ResponseTransform<T>,
-  cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
-    if ((new URL(url)).origin === GCS_ORIGIN) {
-      credentialsProvider = undefined;
-    }
-
-    return cancellableFetchSpecialOkOrig(credentialsProvider, url, init, transformResponse, cancellationToken);
-}
-
-import {fetchSpecialHttpByteRange as fetchSpecialHttpByteRangeOrig} from 'neuroglancer/util/byte_range_http_requests';
 import { Uint64 } from 'neuroglancer/util/uint64';
-
-export function fetchSpecialHttpByteRange(
-  credentialsProvider: SpecialProtocolCredentialsProvider, url: string,
-  startOffset: Uint64|number, endOffset: Uint64|number,
-  cancellationToken: CancellationToken): Promise<ArrayBuffer> {
-    if ((new URL(url)).origin === GCS_ORIGIN) {
-      credentialsProvider = undefined;
-    }
-
-    return fetchSpecialHttpByteRangeOrig(credentialsProvider, url, startOffset, endOffset, cancellationToken);
-}
 
 export const responseIdentity = async (x: any) => x;
 

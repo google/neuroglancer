@@ -17,16 +17,16 @@
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {assignMeshFragmentData, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
-import {fetchSpecialHttpByteRange, getGrapheneFragmentKey, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {getGrapheneFragmentKey, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {cancellableFetchOk, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
-import {SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
-import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
+import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 import {ChunkedGraphSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray} from 'neuroglancer/sliceview/chunked_graph/backend';
 import {decodeManifestChunk} from 'neuroglancer/datasource/precomputed/backend';
+import {fetchSpecialHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
 
 export function decodeChunkedGraphChunk(
   chunk: ChunkedGraphChunk, rootObjectKey: string, response: Response) {
