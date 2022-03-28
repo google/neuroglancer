@@ -16,7 +16,7 @@
 
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
@@ -24,7 +24,6 @@ import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
-import {DataType} from 'neuroglancer/util/data_type';
 import {Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
@@ -33,7 +32,7 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {cancellableFetchSpecialOk, getGrapheneFragmentKey, isBaseSegmentId, responseIdentity} from 'neuroglancer/datasource/graphene/base';
-import {ChunkedGraphSourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, VolumeChunkEncoding} from 'neuroglancer/datasource/graphene/base';
+import {ChunkedGraphSourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION} from 'neuroglancer/datasource/graphene/base';
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {ChunkedGraphChunkSource, ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -44,7 +43,7 @@ import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/ba
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer } from 'neuroglancer/renderlayer';
-import { getSegmentPropertyMap, parseProviderUrl, PrecomputedDataSource, PrecomputedVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
+import { getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
 
 class GrapheneChunkedGraphChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
@@ -69,57 +68,6 @@ function resolvePath(a: string, b: string) {
     outputParts.push(part);
   }
   return outputParts.join('/');
-}
-
-class ScaleInfo {
-  key: string;
-  encoding: VolumeChunkEncoding;
-  resolution: Float64Array;
-  voxelOffset: Float32Array;
-  size: Float32Array;
-  chunkSizes: Uint32Array[];
-  compressedSegmentationBlockSize: vec3|undefined;
-  sharding: ShardingParameters|undefined;
-  constructor(obj: any, numChannels: number) {
-    verifyObject(obj);
-    const rank = (numChannels === 1) ? 3 : 4;
-    const resolution = this.resolution = new Float64Array(rank);
-    const voxelOffset = this.voxelOffset = new Float32Array(rank);
-    const size = this.size = new Float32Array(rank);
-    if (rank === 4) {
-      resolution[3] = 1;
-      size[3] = numChannels;
-    }
-    verifyObjectProperty(
-        obj, 'resolution',
-        x => parseFixedLengthArray(resolution.subarray(0, 3), x, verifyFinitePositiveFloat));
-    verifyOptionalObjectProperty(
-        obj, 'voxel_offset', x => parseFixedLengthArray(voxelOffset.subarray(0, 3), x, verifyInt));
-    verifyObjectProperty(
-        obj, 'size', x => parseFixedLengthArray(size.subarray(0, 3), x, verifyPositiveInt));
-    this.chunkSizes = verifyObjectProperty(
-        obj, 'chunk_sizes', x => parseArray(x, y => {
-                              const chunkSize = new Uint32Array(rank);
-                              if (rank === 4) chunkSize[3] = numChannels;
-                              parseFixedLengthArray(chunkSize.subarray(0, 3), y, verifyPositiveInt);
-                              return chunkSize;
-                            }));
-    if (this.chunkSizes.length === 0) {
-      throw new Error('No chunk sizes specified.');
-    }
-    this.sharding = verifyObjectProperty(obj, 'sharding', parseShardingParameters);
-    if (this.sharding !== undefined && this.chunkSizes.length !== 1) {
-      throw new Error('Sharding requires a single chunk size per scale');
-    }
-    let encoding = this.encoding =
-        verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
-    if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION) {
-      this.compressedSegmentationBlockSize = verifyObjectProperty(
-          obj, 'compressed_segmentation_block_size',
-          x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
-    }
-    this.key = verifyObjectProperty(obj, 'key', verifyString);
-  }
 }
 
 class AppInfo {
@@ -176,14 +124,7 @@ class GraphInfo {
   }
 }
 
-interface MultiscaleVolumeInfo {
-  dataType: DataType;
-  volumeType: VolumeType;
-  mesh: string|undefined;
-  skeletons: string|undefined;
-  segmentPropertyMap: string|undefined;
-  scales: ScaleInfo[];
-  modelSpace: CoordinateSpace;
+interface GrapheneMultiscaleVolumeInfo extends MultiscaleVolumeInfo {
   dataUrl: string;
   app?: AppInfo;
   graph?: GraphInfo;
@@ -210,63 +151,20 @@ function parseSpecialUrlOld(url: string): string { // TODO: brought back old par
   return url;
 }
 
-function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeInfo {
-  verifyObject(obj);
-  const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
-  const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
-  let volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
-  const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
-  const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
-  const segmentPropertyMap = verifyObjectProperty(obj, 'segment_properties', verifyOptionalString);
-  const scaleInfos =
-      verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
-  if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
-  const baseScale = scaleInfos[0];
-  const rank = (numChannels === 1) ? 3 : 4;
-  const scales = new Float64Array(rank);
-  const lowerBounds = new Float64Array(rank);
-  const upperBounds = new Float64Array(rank);
-  const names = ['x', 'y', 'z'];
-  const units = ['m', 'm', 'm'];
-
-  for (let i = 0; i < 3; ++i) {
-    scales[i] = baseScale.resolution[i] / 1e9;
-    lowerBounds[i] = baseScale.voxelOffset[i];
-    upperBounds[i] = lowerBounds[i] + baseScale.size[i];
-  }
-  if (rank === 4) {
-    scales[3] = 1;
-    upperBounds[3] = numChannels;
-    names[3] = 'c^';
-    units[3] = '';
-  }
-  const box: BoundingBox = {lowerBounds, upperBounds};
-  const modelSpace = makeCoordinateSpace({
-    rank,
-    names,
-    units,
-    scales,
-    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
-  });
-
+function parseGrapheneMultiscaleVolumeInfo(obj: unknown, url: string): GrapheneMultiscaleVolumeInfo {
+  const volumeInfo = parseMultiscaleVolumeInfo(obj);
   let dataUrl = url;
   let app = undefined;
   let graph = undefined;
 
-  if (volumeType !== VolumeType.IMAGE) {
+  if (volumeInfo.volumeType !== VolumeType.IMAGE) {
     dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
     app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
     graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
   }
 
   return {
-    dataType,
-    volumeType,
-    mesh,
-    skeletons,
-    segmentPropertyMap,
-    scales: scaleInfos,
-    modelSpace,
+    ...volumeInfo,
     app,
     graph,
     dataUrl,
@@ -288,7 +186,7 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 
   constructor(
       chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
-      public url: string, public info: MultiscaleVolumeInfo) {
+      public url: string, public info: GrapheneMultiscaleVolumeInfo) {
     super(chunkManager);
   }
 
@@ -536,7 +434,7 @@ function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
 async function getVolumeDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, metadata: any): Promise<DataSource> {
-  const info = parseMultiscaleVolumeInfo(metadata, url);
+  const info = parseGrapheneMultiscaleVolumeInfo(metadata, url);
   const volume = new GrapheneMultiscaleVolumeChunkSource(
       options.chunkManager, credentialsProvider, url, info);
 
@@ -774,7 +672,7 @@ class GrapheneGraphSource extends SegmentationGraphSource {
   private connections = new Set<GraphConnection>();
   public graphServer: GrapheneGraphServerInterface;
 
-  constructor(public info: MultiscaleVolumeInfo,
+  constructor(public info: GrapheneMultiscaleVolumeInfo,
               credentialsProvider: SpecialProtocolCredentialsProvider,
               private chunkSource: GrapheneMultiscaleVolumeChunkSource) {
     super();

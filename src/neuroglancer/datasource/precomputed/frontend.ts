@@ -127,7 +127,7 @@ class ScaleInfo {
   }
 }
 
-interface MultiscaleVolumeInfo {
+export interface MultiscaleVolumeInfo {
   dataType: DataType;
   volumeType: VolumeType;
   mesh: string|undefined;
@@ -137,7 +137,7 @@ interface MultiscaleVolumeInfo {
   modelSpace: CoordinateSpace;
 }
 
-function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
+export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
