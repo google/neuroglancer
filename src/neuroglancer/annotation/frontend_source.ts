@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypeHandlers, annotationTypes, fixAnnotationAfterStructuredCloning, makeAnnotationId, SerializedAnnotations} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypeHandlers, annotationTypes, fixAnnotationAfterStructuredCloning, makeAnnotationId, makeAnnotationPropertySerializers, SerializedAnnotations} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
@@ -228,52 +228,94 @@ export class AnnotationMetadataChunkSource extends ChunkSource {
   }
 }
 
+function copyOtherAnnotations(
+    serializedAnnotations: SerializedAnnotations,
+    propertySerializers: AnnotationPropertySerializer[], excludedType: AnnotationType,
+    excludedTypeAdjustment: number): Uint8Array {
+  const newData = new Uint8Array(serializedAnnotations.data.length + excludedTypeAdjustment);
+  // Copy all other annotation types
+  for (const otherType of annotationTypes) {
+    if (otherType === excludedType) continue;
+    let otherTypeOffset = serializedAnnotations.typeToOffset![otherType];
+    let newTypeOffset = otherTypeOffset;
+    if (otherType > excludedType) {
+      newTypeOffset += excludedTypeAdjustment;
+      serializedAnnotations.typeToOffset![otherType] = newTypeOffset;
+    }
+    newData.set(
+        serializedAnnotations.data.subarray(
+            otherTypeOffset,
+            otherTypeOffset +
+                serializedAnnotations.typeToIds[otherType].length *
+                    propertySerializers[otherType].serializedBytes),
+        newTypeOffset);
+  }
+  return newData;
+}
+
+function copyAnnotationSlice(
+    serializedAnnotations: SerializedAnnotations,
+    propertySerializers: AnnotationPropertySerializer[], type: AnnotationType, dest: Uint8Array,
+    sourceBeginIndex: number, sourceEndIndex: number, destBeginIndex: number, destCount: number) {
+  const typeOffset = serializedAnnotations.typeToOffset[type];
+  let sourceGroupOffset = typeOffset;
+  let destGroupOffset = typeOffset;
+  const {propertyGroupBytes} = propertySerializers[type];
+  const numGroups = propertyGroupBytes.length;
+  const count = serializedAnnotations.typeToIds[type].length;
+  for (let groupIndex = 0; groupIndex < numGroups; ++groupIndex) {
+    const groupBytes = propertyGroupBytes[groupIndex];
+    dest.set(
+        serializedAnnotations.data.subarray(
+            sourceGroupOffset + sourceBeginIndex * groupBytes,
+            sourceGroupOffset + sourceEndIndex * groupBytes),
+        destGroupOffset + destBeginIndex * groupBytes);
+    sourceGroupOffset += groupBytes * count;
+    destGroupOffset += groupBytes * destCount;
+  }
+}
+
 export function updateAnnotation(
     chunk: AnnotationGeometryData, annotation: Annotation,
-    propertySerializer: AnnotationPropertySerializer) {
+    propertySerializers: AnnotationPropertySerializer[]) {
   // Find insertion point.
-  const {rank} = propertySerializer;
   const type = annotation.type;
+  const {rank} = propertySerializers[type];
   const {serializedAnnotations} = chunk;
   const ids = serializedAnnotations.typeToIds[type];
   const idMap = serializedAnnotations.typeToIdMaps[type];
   const handler = annotationTypeHandlers[type];
-  const numGeometryBytes = handler.serializedBytes(rank);
-  const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
+  const numBytes = propertySerializers[type].serializedBytes;
   let index = idMap.get(annotation.id);
-  let offset = 0;
   if (index === undefined) {
     // Doesn't already exist.
     index = idMap.size;
-    ids.push(annotation.id);
     idMap.set(annotation.id, index);
-    const newData = new Uint8Array(serializedAnnotations.data.length + numBytes);
-    offset = serializedAnnotations.typeToOffset[type] + numBytes * index;
-    newData.set(serializedAnnotations.data.subarray(0, offset), 0);
-    newData.set(serializedAnnotations.data.subarray(offset), offset + numBytes);
+    const newData =
+        copyOtherAnnotations(serializedAnnotations, propertySerializers, type, numBytes);
+    copyAnnotationSlice(
+        serializedAnnotations, propertySerializers, type, newData, /*sourceBeginIndex=*/ 0,
+        /*sourceEndIndex=*/ index, /*destBeginIndex=*/ 0, /*destCount=*/ index + 1);
+    ids.push(annotation.id);
     serializedAnnotations.data = newData;
-    for (const otherType of annotationTypes) {
-      if (otherType > type) {
-        serializedAnnotations.typeToOffset![otherType] += numBytes;
-      }
-    }
-  } else {
-    offset = serializedAnnotations.typeToOffset[type] + numBytes * index;
   }
+  const bufferOffset = serializedAnnotations.typeToOffset![type];
   const dv = new DataView(
       serializedAnnotations.data.buffer, serializedAnnotations.data.byteOffset,
       serializedAnnotations.data.byteLength);
-  let bufferOffset = serializedAnnotations.typeToOffset[type] + index * numBytes;
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
-  handler.serialize(dv, bufferOffset, isLittleEndian, rank, annotation);
-  bufferOffset += numGeometryBytes;
-  propertySerializer.serialize(dv, bufferOffset, isLittleEndian, annotation.properties);
+  const propertySerializer = propertySerializers[type];
+  handler.serialize(
+      dv, bufferOffset + propertySerializer.propertyGroupBytes[0] * index, isLittleEndian, rank,
+      annotation);
+  propertySerializer.serialize(
+      dv, bufferOffset, index, ids.length, isLittleEndian, annotation.properties);
   chunk.bufferValid = false;
 }
 
 export function deleteAnnotation(
     chunk: AnnotationGeometryData, type: AnnotationType, id: AnnotationId,
-    propertySerializer: AnnotationPropertySerializer): boolean {
+    propertySerializers: AnnotationPropertySerializer[]): boolean {
   const {serializedAnnotations} = chunk;
   const idMap = serializedAnnotations.typeToIdMaps[type];
   const index = idMap.get(id);
@@ -281,27 +323,20 @@ export function deleteAnnotation(
     return false;
   }
   const ids = serializedAnnotations.typeToIds[type];
-  const handler = annotationTypeHandlers[type];
-  const {rank} = propertySerializer;
-  const numGeometryBytes = handler.serializedBytes(rank);
-  const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
+  const numBytes = propertySerializers[type].serializedBytes;
+  const newData = copyOtherAnnotations(serializedAnnotations, propertySerializers, type, -numBytes);
+  copyAnnotationSlice(
+      serializedAnnotations, propertySerializers, type, newData, /*sourceBeginIndex=*/ 0,
+      /*sourceEndIndex=*/ index, /*destBeginIndex=*/ 0, /*destCount=*/ ids.length - 1);
+  copyAnnotationSlice(
+      serializedAnnotations, propertySerializers, type, newData, /*sourceBeginIndex=*/ index + 1,
+      /*sourceEndIndex=*/ ids.length, /*destBeginIndex=*/ index, /*destCount=*/ ids.length - 1);
   ids.splice(index, 1);
   idMap.delete(id);
   for (let i = index, count = ids.length; i < count; ++i) {
     idMap.set(ids[i], i);
   }
-  const {typeToOffset} = serializedAnnotations;
-  const offset = typeToOffset[type] + numBytes * index;
-  const {data} = serializedAnnotations;
-  const newData = new Uint8Array(data.length - numBytes);
-  newData.set(data.subarray(0, offset), 0);
-  newData.set(data.subarray(offset + numBytes), offset);
   serializedAnnotations.data = newData;
-  for (const otherType of annotationTypes) {
-    if (otherType > type) {
-      typeToOffset[otherType] -= numBytes;
-    }
-  }
   chunk.bufferValid = false;
   return true;
 }
@@ -353,7 +388,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   rank: number;
   readonly relationships: readonly string[];
   readonly properties: Readonly<AnnotationPropertySpec>[];
-  readonly annotationPropertySerializer: AnnotationPropertySerializer;
+  readonly annotationPropertySerializers: AnnotationPropertySerializer[];
   constructor(public chunkManager: Borrowed<ChunkManager>, options: {
     rank: number,
     relationships: readonly string[],
@@ -362,8 +397,8 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     super();
     this.rank = options.rank;
     this.properties = options.properties;
-    this.annotationPropertySerializer =
-        new AnnotationPropertySerializer(this.rank, this.properties);
+    this.annotationPropertySerializers =
+        makeAnnotationPropertySerializers(this.rank, this.properties);
     const segmentFilteredSources: Owned<AnnotationSubsetGeometryChunkSource>[] =
         this.segmentFilteredSources = [];
     const {relationships} = options;
@@ -435,21 +470,22 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       this.forEachPossibleChunk(annotation, chunk => {
         const {data} = chunk;
         if (data === undefined) return;
-        deleteAnnotation(data, annotation.type, id, this.annotationPropertySerializer);
+        const annotationType = annotation.type;
+        deleteAnnotation(data, annotationType, id, this.annotationPropertySerializers);
       });
       if (newAnnotation !== null) {
         // Add to temporary chunk.
-        updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializer);
+        updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializers);
       }
     } else {
       if (newAnnotation === null) {
         // Annotation has a local update already, so we need to delete it from the temporary chunk.
         deleteAnnotation(
             this.temporary.data!, annotation.type, annotation.id,
-            this.annotationPropertySerializer);
+            this.annotationPropertySerializers);
       } else {
         // Modify existing entry in temporary chunk.
-        updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializer);
+        updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializers);
       }
       reference.value = newAnnotation;
     }
@@ -632,9 +668,9 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       if (localUpdate.reference.value !== null) {
         localUpdate.reference.value!.id = newAnnotation.id;
         deleteAnnotation(
-            this.temporary.data!, localUpdate.type, id, this.annotationPropertySerializer);
+            this.temporary.data!, localUpdate.type, id, this.annotationPropertySerializers);
         updateAnnotation(
-            this.temporary.data!, localUpdate.reference.value!, this.annotationPropertySerializer);
+            this.temporary.data!, localUpdate.reference.value!, this.annotationPropertySerializers);
       }
       localUpdate.reference.changed.dispatch();
     }
@@ -693,13 +729,13 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   private revertLocalUpdate(localUpdate: LocalUpdateUndoState) {
     deleteAnnotation(
         this.temporary.data!, localUpdate.type, localUpdate.reference.id,
-        this.annotationPropertySerializer);
+        this.annotationPropertySerializers);
     const {existingAnnotation} = localUpdate;
     if (existingAnnotation !== undefined) {
       this.forEachPossibleChunk(existingAnnotation, chunk => {
         const {data} = chunk;
         if (data === undefined) return;
-        updateAnnotation(data, existingAnnotation, this.annotationPropertySerializer);
+        updateAnnotation(data, existingAnnotation, this.annotationPropertySerializers);
       });
     }
     const {reference} = localUpdate;

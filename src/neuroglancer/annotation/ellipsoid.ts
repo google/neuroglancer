@@ -86,7 +86,7 @@ void setEllipsoidFillColor(vec4 color) {
       const binder = shader.vertexShaderInputBinders['CenterAndRadii'];
       binder.enable(1);
       this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
-      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      binder.bind(this.geometryDataStride, context.bufferOffset);
       callback(shader);
       binder.disable();
     });

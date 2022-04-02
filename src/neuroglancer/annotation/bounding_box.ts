@@ -160,7 +160,7 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const {gl} = this;
       gl.uniform3fv(shader.uniform('uModelSpaceBoundOffsets'), tempWorldBounds);
       gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
-      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      binder.bind(this.geometryDataStride, context.bufferOffset);
       const {vertexIdHelper} = this;
       vertexIdHelper.enable();
       callback(shader);

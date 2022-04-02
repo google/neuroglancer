@@ -155,7 +155,7 @@ emitAnnotation(color);
       const binder = shader.vertexShaderInputBinders['VertexPosition'];
       binder.enable(1);
       this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
-      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      binder.bind(this.geometryDataStride, context.bufferOffset);
       const {vertexIdHelper} = this;
       vertexIdHelper.enable();
       callback(shader);

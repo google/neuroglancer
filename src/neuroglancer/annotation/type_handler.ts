@@ -129,7 +129,9 @@ export abstract class AnnotationRenderHelper extends RefCounted {
   targetIsSliceView: boolean;
   readonly serializedBytesPerAnnotation: number;
   readonly serializedGeometryBytesPerAnnotation: number;
-  readonly propertyOffsets: number[];
+  readonly propertyOffsets: {group: number, offset: number}[];
+  readonly propertyGroupBytes: number[];
+  readonly geometryDataStride: number;
 
   constructor(
       public gl: GL, public annotationType: AnnotationType, public rank: number,
@@ -140,11 +142,12 @@ export abstract class AnnotationRenderHelper extends RefCounted {
     super();
     const serializedGeometryBytesPerAnnotation = this.serializedGeometryBytesPerAnnotation =
         annotationTypeHandlers[annotationType].serializedBytes(rank);
-    const {offsets, serializedBytes: serializedPropertyBytes} =
-        getPropertyOffsets(rank, properties);
-    this.serializedBytesPerAnnotation =
-        serializedPropertyBytes + serializedGeometryBytesPerAnnotation;
+    const {offsets, serializedBytes: serializedBytesPerAnnotation, propertyGroupBytes} =
+        getPropertyOffsets(rank, serializedGeometryBytesPerAnnotation, properties);
+    this.serializedBytesPerAnnotation = serializedBytesPerAnnotation;
     this.propertyOffsets = offsets;
+    this.propertyGroupBytes = propertyGroupBytes;
+    this.geometryDataStride = propertyGroupBytes[0];
   }
 
   getDependentShader(memoizeKey: any, defineShader: (builder: ShaderBuilder) => void):
@@ -174,6 +177,13 @@ export abstract class AnnotationRenderHelper extends RefCounted {
           handler.defineShader(builder, property.identifier, rank);
         }
         const {propertyOffsets} = this;
+        const {propertyGroupBytes} = this;
+        const propertyGroupCumulativeBytes = new Array<number>(propertyGroupBytes.length);
+        propertyGroupCumulativeBytes[0] = 0;
+        for (let i = 1; i < propertyGroupBytes.length; ++i) {
+          propertyGroupCumulativeBytes[i] =
+              propertyGroupCumulativeBytes[i - 1] + propertyGroupBytes[i - 1];
+        }
         builder.addInitializer(shader => {
           const binders = referencedProperties.map(
               i => shader.vertexShaderInputBinders[`prop_${properties[i].identifier}`]);
@@ -186,7 +196,11 @@ export abstract class AnnotationRenderHelper extends RefCounted {
             },
             bind(stride: number, offset: number) {
               for (let i = 0; i < numProperties; ++i) {
-                binders[i].bind(stride, offset + propertyOffsets[referencedProperties[i]]);
+                let {group, offset: propertyOffset} = propertyOffsets[referencedProperties[i]];
+                binders[i].bind(
+                    /*stride=*/ propertyGroupBytes[group],
+                    /*offset=*/ offset + propertyOffset +
+                        propertyGroupCumulativeBytes[group] * stride);
               }
             },
             disable() {
@@ -413,9 +427,7 @@ if (ng_discardValue) {
     const binder = shader.vertexShaderInputBinders['properties'];
     binder.enable(1);
     gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
-    binder.bind(
-        this.serializedBytesPerAnnotation,
-        context.bufferOffset + this.serializedGeometryBytesPerAnnotation);
+    binder.bind(/*stride=*/ context.count, context.bufferOffset);
     callback(shader);
     binder.disable();
   }

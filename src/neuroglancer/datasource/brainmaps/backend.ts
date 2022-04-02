@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationSerializer, AnnotationType} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType, makeAnnotationPropertySerializers} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryChunkSourceBackend, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
@@ -742,11 +742,12 @@ function parseAnnotationResponse(response: any, idPrefix: string, expectedId?: s
   return parseAnnotation(entry, idPrefix, expectedId);
 }
 
-const annotationPropertySerializer = new AnnotationPropertySerializer(3, []);
+const annotationPropertySerializers =
+    makeAnnotationPropertySerializers(/*rank=*/ 3, /*propertySpecs=*/[]);
 
 function parseAnnotations(
     chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk, responses: any[]) {
-  const serializer = new AnnotationSerializer(annotationPropertySerializer);
+  const serializer = new AnnotationSerializer(annotationPropertySerializers);
   const source = <BrainmapsAnnotationSource>chunk.source.parent;
   const idPrefix = getIdPrefix(source.parameters);
   responses.forEach((response, responseIndex) => {
