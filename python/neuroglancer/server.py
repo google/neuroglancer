@@ -64,7 +64,7 @@ _IS_GOOGLE_COLAB = 'google.colab' in sys.modules
 def _get_server_url(bind_address: str, port: int) -> str:
     if _IS_GOOGLE_COLAB:
         return _get_colab_server_url(port)
-    return _get_regular_url(bind_address, port)
+    return _get_regular_server_url(bind_address, port)
 
 
 def _get_regular_server_url(bind_address: str, port: int) -> str:
