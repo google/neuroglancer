@@ -547,9 +547,8 @@ async function getVolumeDataSource(
     const meshUrl = resolvePath(url, info.mesh);
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider, meshUrl);
-    let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsourceToModelSubspaceTransform  = subsourceToModelSubspaceTransform;
     subsources.push({
       id: 'mesh',
       default: true,
@@ -561,9 +560,8 @@ async function getVolumeDataSource(
     const skeletonsUrl = resolvePath(url, info.skeletons);
     const {source: skeletonSource, transform} =
         await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
-    let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsourceToModelSubspaceTransform  = subsourceToModelSubspaceTransform;
     subsources.push({
       id: 'skeletons',
       default: true,
