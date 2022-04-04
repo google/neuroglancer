@@ -13,9 +13,6 @@
 # limitations under the License.
 """Tests WebGL context lose/restore handling."""
 
-# This test currently does not work, so we have commented it out.
-
-"""
 import numpy as np
 import neuroglancer
 import time
@@ -55,5 +52,3 @@ window.webglLoseContext.restoreContext();
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
     np.testing.assert_array_equal(screenshot.image_pixels,
                                   np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
-
-"""
