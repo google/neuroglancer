@@ -40,13 +40,7 @@ export function fetchWithBossCredentials<T>(
       credentialsProvider, input, init, transformResponse,
       credentials => {
         const headers = new Headers(init.headers);
-        if (typeof(credentials) === "string") {
-          headers.set('Authorization', `Bearer ${credentials}`);
-        }
-        else {
-          //@ts-ignore
-          headers.set('Authorization', `${credentials.tokenType} ${credentials.accessToken}`); 
-        }
+        headers.set('Authorization', `Bearer ${credentials}`);
         return {...init, headers};
       },
       error => {

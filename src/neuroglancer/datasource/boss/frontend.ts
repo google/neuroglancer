@@ -35,7 +35,7 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {vec2, vec3} from 'neuroglancer/util/geom';
 import {responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString,verifyString} from 'neuroglancer/util/json';
-import { SliceViewSingleResolutionSource } from 'src/neuroglancer/sliceview/frontend';
+import { SliceViewSingleResolutionSource } from 'neuroglancer/sliceview/frontend';
 
 class BossVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<BossToken>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -205,10 +205,6 @@ function parseExperimentInfo(
 
 export class BossMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
-    // if (this.channelInfo.dataType === DataType.UINT16) {
-    //   16-bit channels automatically rescaled to uint8 by The Boss
-    //   return DataType.UINT16;
-    // }
     return this.channelInfo.dataType;
   }
   get volumeType() {
