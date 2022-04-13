@@ -15,62 +15,50 @@
  */
 
 import debounce from 'lodash/debounce';
-import {cancelChunkDownload, startChunkDownload, withChunkManager, ChunkRenderLayerBackend} from 'neuroglancer/chunk_manager/backend';
+import {withChunkManager, ChunkRenderLayerBackend, Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {SliceViewChunk, SliceViewChunkSourceBackend} from 'neuroglancer/sliceview/backend';
-import {SliceViewRenderLayer as SliceViewRenderLayerInterface, filterVisibleSources, SliceViewBase, TransformedSource} from 'neuroglancer/sliceview/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
+import {SliceViewRenderLayer as SliceViewRenderLayerInterface, filterVisibleSources, SliceViewBase, TransformedSource, SliceViewChunkSpecification, forEachPlaneIntersectingVolumetricChunk, getNormalizedChunkLayout, SliceViewProjectionParameters} from 'neuroglancer/sliceview/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 import * as vector from 'neuroglancer/util/vector';
+import { SliceViewChunk, SliceViewChunkSourceBackend, SliceViewRenderLayerBackend } from '../backend';
+import { getBasePriority, getPriorityTier } from 'neuroglancer/visibility_priority/backend';
 import {isBaseSegmentId} from 'neuroglancer/datasource/graphene/base';
 
-export class ChunkedGraphChunk extends SliceViewChunk {
+export class ChunkedGraphChunk extends Chunk {
   backendOnly = true;
+  chunkGridPosition: Float32Array;
   source: ChunkedGraphChunkSource|null = null;
-  mappings: Map<string, Uint64[]|null>|null = null;
+  segment: Uint64;
+  leaves: Uint64[] = [];
   chunkDataSize: Uint32Array|null;
+  
   constructor() {
     super();
   }
 
-  updateRootSegments(rootSegments: Uint64Set) {
-    let changed = false;
-    for (const rootObjectId of rootSegments) {
-      if (!isBaseSegmentId(rootObjectId, 8)) {// TODO this.source.info.nBitsPerLayer, also may need to look at highBitRepresentaiton
-        const key = rootObjectId.toString();
-        if (!this.mappings!.has(key)) {
-          changed = true;
-          this.mappings!.set(key, null);
-        }
-      }
-    }
-    return changed;
+  initializeVolumeChunk(key: string, chunkGridPosition: Float32Array) {
+    super.initialize(key);
+    this.chunkGridPosition = Float32Array.from(chunkGridPosition);
   }
 
-  initializeChunkedGraphChunk(key: string, chunkGridPosition: vec3, rootSegments: Uint64Set) {
-    super.initializeVolumeChunk(key, chunkGridPosition);
+  initializeChunkedGraphChunk(key: string, chunkGridPosition: Float32Array, segment: Uint64) {
+    this.initializeVolumeChunk(key, chunkGridPosition);
     this.chunkDataSize = null;
-    this.mappings = new Map<string, Uint64[]|null>();
-    this.systemMemoryBytes = 0;
+    this.systemMemoryBytes = 16;
     this.gpuMemoryBytes = 0;
-
-    this.updateRootSegments(rootSegments);
+    this.segment = segment;
   }
 
   downloadSucceeded() {
-    this.systemMemoryBytes = 0;
-    for (const supervoxelIds of this.mappings!.values()) {
-      if (supervoxelIds !== null) {
-        // Each supervoxel ID is a Uint64, consisting of two `number`s (8 Byte)
-        this.systemMemoryBytes += 16 * supervoxelIds.length;
-      }
-    }
+    this.systemMemoryBytes = 16; // this.segment
+    this.systemMemoryBytes += 16 * this.leaves.length;
     this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
@@ -79,54 +67,42 @@ export class ChunkedGraphChunk extends SliceViewChunk {
   }
 
   freeSystemMemory() {
-    this.mappings = new Map<string, Uint64[]|null>();
+    this.leaves = [];
   }
 }
 
-export async function decodeSupervoxelArray(
-    chunk: ChunkedGraphChunk, rootObjectKey: string, data: Response) {
-  const leaves = (await data.json())['leaf_ids'];
+export function decodeSupervoxelArray(leaves: string[]) {
   const final: Uint64[] = new Array(leaves.length);
   for (let i = 0; i < final.length; ++i) {
     final[i] = Uint64.parseString(leaves[i]);
   }
-  chunk.mappings!.set(rootObjectKey, final);
+  return final;
 }
 
-export class ChunkedGraphChunkSource extends SliceViewChunkSourceBackend implements
+export class ChunkedGraphChunkSource extends ChunkSource implements
     ChunkedGraphChunkSourceInterface {
   spec: ChunkedGraphChunkSpecification;
   chunks: Map<string, ChunkedGraphChunk>;
-  rootSegments: Uint64Set;
 
   private tempChunkDataSize: Uint32Array;
   private tempChunkPosition: Float32Array;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
+    this.spec = options.spec;
     const rank = this.spec.rank;
-    this.rootSegments = rpc.get(options['rootSegments']);
-    console.log('ChunkedGraphChunkSource options', options);
     this.tempChunkDataSize = new Uint32Array(rank);
     this.tempChunkPosition = new Float32Array(rank);
   }
 
-  getChunk(chunkGridPosition: vec3) {
-    let key = vec3Key(chunkGridPosition);
+  getChunk(chunkGridPosition: Float32Array, segment: Uint64) {
+    const key = `${vec3Key(chunkGridPosition)}-${segment}`;
     let chunk = <ChunkedGraphChunk>this.chunks.get(key);
 
     if (chunk === undefined) {
       chunk = this.getNewChunk_(ChunkedGraphChunk);
-      chunk.initializeChunkedGraphChunk(key, chunkGridPosition, this.rootSegments);
+      chunk.initializeChunkedGraphChunk(key, chunkGridPosition, segment);
       this.addChunk(chunk);
-    } else {
-      if (chunk.updateRootSegments(this.rootSegments)) {
-        if (chunk.downloadCancellationToken !== undefined) {
-          cancelChunkDownload(chunk);
-        }
-        this.chunkManager.queueManager.updateChunkState(chunk, ChunkState.DOWNLOADING);
-        startChunkDownload(chunk);
-      }
     }
     return chunk;
   }
@@ -178,8 +154,6 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSourceBackend impleme
     return chunkPosition;
   }
 }
-ChunkedGraphChunkSource.prototype.chunkConstructor = ChunkedGraphChunk;
-
 
 const Base = withChunkManager(SharedObjectCounterpart);
 
@@ -211,9 +185,10 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
     this.localPosition = rpc.get(options.localPosition);
 
-    this.registerDisposer(this.visibleSegments.changed.add(() => {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    }));
+    // no longer needed?
+    // this.registerDisposer(this.visibleSegments.changed.add(() => {
+    //   this.chunkManager.scheduleUpdateChunkPriorities();
+    // }));
 
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.debouncedupdateDisplayState();
@@ -272,14 +247,14 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
 
   private forEachSelectedRootWithLeaves(
     callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
+      callback;
+
     for (const source of this.sources) {
       for (const chunk of source.chunks.values()) {
         if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER &&
             chunk.priorityTier < ChunkPriorityTier.RECENT) {
-          for (const [rootObjectKey, leaves] of chunk.mappings!) {
-            if (this.visibleSegments.has(Uint64.parseString(rootObjectKey)) && leaves !== null) {
-              callback(rootObjectKey, leaves);
-            }
+          if (this.visibleSegments.has(chunk.segment) && chunk.leaves.length) {
+            callback(chunk.segment.toString(), chunk.leaves);
           }
         }
       }
@@ -328,7 +303,64 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
   }
 }
 
-registerRPC(CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, function(x: any) {
-  const chunkedGraphChunkSource = <ChunkedGraphChunkSource>this.get(x.id);
-  chunkedGraphChunkSource.rootSegments = this.get(x.rootSegments);
-});
+const tempChunkPosition = vec3.create();
+const tempCenter = vec3.create();
+const tempChunkSize = vec3.create();
+
+export const handleChunkedGraphLayer = (layer: ChunkedGraphLayer, sources: TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend<SliceViewChunkSpecification<Uint32Array | Float32Array>, SliceViewChunk>>[],
+    projectionParameters: SliceViewProjectionParameters,
+    visibility: number) => {
+
+  if (sources.length > 1) {
+    console.error('we have more than 1 source!', sources);
+  }
+  const tsource = sources[0];
+
+  const localCenter = tempCenter;
+  const {centerDataPosition} = projectionParameters;
+
+  const {chunkLayout} = tsource;
+  chunkLayout.globalToLocalSpatial(localCenter, centerDataPosition);
+  const {size, finiteRank} = chunkLayout;
+
+  const chunkSize = tempChunkSize;
+
+  vec3.copy(chunkSize, size);
+  for (let i = finiteRank; i < 3; ++i) {
+    chunkSize[i] = 0;
+    localCenter[i] = 0;
+  }
+
+  const {chunkManager} = layer;
+
+  const priorityTier = getPriorityTier(visibility);
+  let basePriority = getBasePriority(visibility);
+
+  const sourceBasePriority = basePriority; // since we only have 1 source
+
+  forEachPlaneIntersectingVolumetricChunk(
+    projectionParameters, tsource.renderLayer.localPosition.value, tsource,
+    getNormalizedChunkLayout(projectionParameters, tsource.chunkLayout),
+    positionInChunks => {
+      vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
+      let priority = -vec3.distance(localCenter, tempChunkPosition);
+      const {curPositionInChunks} = tsource;
+      const source = tsource.source as unknown as  ChunkedGraphChunkSource;
+
+      for (const segment of layer.visibleSegments) {
+        if (isBaseSegmentId(segment, 8)) return; // TODO this.source.info.nBitsPerLayer, also may need to look at highBitRepresentaiton
+        let chunk = source.getChunk(curPositionInChunks, segment);
+        chunkManager.requestChunk(chunk, priorityTier, sourceBasePriority + priority);
+        ++layer.numVisibleChunksNeeded;
+        if (chunk.state === ChunkState.GPU_MEMORY) {
+          ++layer.numVisibleChunksAvailable;
+        }
+      }
+
+        
+      // curVisibleChunks.push(chunk);
+      // Mark visible chunks to avoid duplicate work when prefetching.  Once we hit a
+      // visible chunk, we don't continue prefetching in the same direction.
+      // chunk.markGeneration = curMarkGeneration;
+    });
+}

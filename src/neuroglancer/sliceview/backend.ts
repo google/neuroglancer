@@ -27,6 +27,7 @@ import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {VelocityEstimator} from 'neuroglancer/util/velocity_estimation';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import { ChunkedGraphLayer, handleChunkedGraphLayer } from 'neuroglancer/sliceview/chunked_graph/backend';
 
 export const BASE_PRIORITY = -1e12;
 export const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -96,6 +97,11 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
     const curVisibleChunks: SliceViewChunk[] = [];
     this.velocityEstimator.addSample(this.projectionParameters.value.globalPosition);
     for (const [layer, visibleLayerSources] of this.visibleLayers) {
+      if (layer instanceof ChunkedGraphLayer) {
+        const {visibleSources} = visibleLayerSources;
+        handleChunkedGraphLayer(layer, visibleSources, projectionParameters, visibility);
+        continue;
+      }
       chunkManager.registerLayer(layer);
       const {visibleSources} = visibleLayerSources;
       for (let i = 0, numVisibleSources = visibleSources.length; i < numVisibleSources; ++i) {

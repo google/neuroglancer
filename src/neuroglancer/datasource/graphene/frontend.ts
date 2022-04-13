@@ -35,7 +35,6 @@ import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglanc
 import {ChunkedGraphChunkSource, ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import { makeChunkedGraphChunkSpecification } from 'neuroglancer/sliceview/chunked_graph/base';
-import { Uint64Set } from 'neuroglancer/uint64_set';
 import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VISIBLE_SEGMENT_TYPE } from 'neuroglancer/segmentation_graph/source';
 import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/base';
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
@@ -176,7 +175,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
     super(chunkManager, undefined, info.dataUrl, info);
   }
 
-  getChunkedGraphSources(rootSegments: Uint64Set) {
+  getChunkedGraphSources() {
     const {rank} = this;
     const scaleInfo = this.info.scales[0];
 
@@ -208,7 +207,6 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
         chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
           spec,
           credentialsProvider: this.chunkedGraphCredentialsProvider,
-          rootSegments,
           parameters: {url: `${this.info.app!.segmentationUrl}/node`}}),
         chunkToMultiscaleTransform,
         lowerClipBound,
@@ -491,7 +489,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
 
     return [new ChunkedGraphLayer(
       this.chunkSource.info.app!.segmentationUrl,
-      this.chunkSource.getChunkedGraphSources(this.segmentsState.visibleSegments),
+      this.chunkSource.getChunkedGraphSources(),
       multiscaleSource,
       {
         ...this.segmentsState,

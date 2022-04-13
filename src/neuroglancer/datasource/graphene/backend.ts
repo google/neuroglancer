@@ -28,9 +28,8 @@ import {ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray} from 
 import {decodeManifestChunk} from 'neuroglancer/datasource/precomputed/backend';
 import {fetchSpecialHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
 
-export function decodeChunkedGraphChunk(
-  chunk: ChunkedGraphChunk, rootObjectKey: string, response: Response) {
-return decodeSupervoxelArray(chunk, rootObjectKey, response);
+export function decodeChunkedGraphChunk(leaves: string[]) {
+  return decodeSupervoxelArray(leaves);
 }
 
 @registerSharedObject() export class GrapheneChunkedGraphChunkSource extends
@@ -43,22 +42,16 @@ return decodeSupervoxelArray(chunk, rootObjectKey, response);
         `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
         `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
 
-    let promises = Array<Promise<any>>();
-    let promise: Promise<any>;
-
-    for (const [key, val] of chunk.mappings!.entries()) {
-      if (val === null) {
-        // should this be moved to chunked graph interface?
-        promise = cancellableFetchSpecialOk(this.credentialsProvider,
-            `${parameters.url}/${key}/leaves?int64_as_str=1&bounds=${bounds}`, {}, responseIdentity,
-            cancellationToken);
-        promises.push(this.withErrorMessage(
-                              promise, `Fetching leaves of segment ${key} in region ${bounds}: `)
-                          .then(res => decodeChunkedGraphChunk(chunk, key, res))
-                          .catch(err => console.error(err)));
-      }
-    }
-    await Promise.all(promises);
+    const request = cancellableFetchSpecialOk(this.credentialsProvider,
+        `${parameters.url}/${chunk.segment}/leaves?int64_as_str=1&bounds=${bounds}`, {}, responseIdentity,
+        cancellationToken);
+    await this.withErrorMessage(
+        request, `Fetching leaves of segment ${chunk.segment} in region ${bounds}: `)
+      .then(res => res.json())
+      .then(res => {
+        chunk.leaves = decodeChunkedGraphChunk(res['leaf_ids'])
+      })
+      .catch(err => console.error(err));
   }
 
   async withErrorMessage(promise: Promise<Response>, errorPrefix: string): Promise<Response> {

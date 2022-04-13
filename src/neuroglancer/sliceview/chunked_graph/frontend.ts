@@ -16,13 +16,11 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
 import {SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderLayer, SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {Uint64Set} from 'neuroglancer/uint64_set';
-import {RPC} from 'neuroglancer/worker_rpc';
 import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {HttpError} from 'neuroglancer/util/http_request';
@@ -33,28 +31,13 @@ export const responseIdentity = async (x: any) => x;
 
 export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
     ChunkedGraphChunkSourceInterface {
-  rootSegments: Uint64Set;
   spec: ChunkedGraphChunkSpecification;
-  OPTIONS: {rootSegments: Uint64Set, spec: ChunkedGraphChunkSpecification};
+  OPTIONS: {spec: ChunkedGraphChunkSpecification};
 
   constructor(chunkManager: ChunkManager, options: {
     spec: ChunkedGraphChunkSpecification,
-    rootSegments: Uint64Set
   }) {
     super(chunkManager, options);
-    this.rootSegments = options.rootSegments;
-  }
-
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['rootSegments'] = this.rootSegments.rpcId;
-    super.initializeCounterpart(rpc, options);
-  }
-
-  updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
-    this.rootSegments = rootSegments;
-    rpc.invoke(
-        CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
-        {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
   }
 }
 

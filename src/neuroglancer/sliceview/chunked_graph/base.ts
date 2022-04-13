@@ -18,8 +18,6 @@ import {ChunkLayoutOptions, makeSliceViewChunkSpecification, SliceViewChunkSourc
 import {DataType} from 'neuroglancer/sliceview/base';
 
 export const CHUNKED_GRAPH_LAYER_RPC_ID = 'ChunkedGraphLayer';
-export const CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID =
-    'ChunkedGraphSourceUpdateRootSegments';
 export const RENDER_RATIO_LIMIT = 5.0;
 
 export interface ChunkedGraphChunkSpecificationBaseOptions extends
@@ -33,12 +31,6 @@ export interface ChunkedGraphChunkSpecificationBaseOptions extends
    */
   baseVoxelOffset?: Float32Array;
   dataType: DataType;
-
-  /**
-   * If set, indicates that the chunk is in compressed segmentation format with the specified block
-   * size.
-   */
-  // compressedSegmentationBlockSize?: vec3;
 }
 
 export interface ChunkedGraphChunkSpecificationOptions extends
@@ -54,7 +46,7 @@ export interface ChunkedGraphChunkSpecificationGetDefaultsOptions extends
  * Specifies a chunk layout and voxel size.
  */
 export interface ChunkedGraphChunkSpecification extends SliceViewChunkSpecification<Uint32Array> {
-  baseVoxelOffset: Float32Array; //vec3;
+  baseVoxelOffset: Float32Array;
   dataType: DataType;
 }
 
