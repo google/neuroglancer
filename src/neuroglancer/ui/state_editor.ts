@@ -38,6 +38,7 @@ const valueUpdateDelay = 100;
 export class StateEditorDialog extends Overlay {
   textEditor: CodeMirror.Editor;
   applyButton: HTMLButtonElement;
+  downloadButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
   constructor(public viewer: Viewer) {
     super();
@@ -56,6 +57,12 @@ export class StateEditorDialog extends Overlay {
     this.content.appendChild(buttonClose);
     buttonClose.addEventListener('click', () => this.dispose());
 
+    const downloadButton = this.downloadButton = document.createElement('button');
+    downloadButton.textContent = 'Download';
+    downloadButton.title = 'Download state as a JSON file'
+    this.content.appendChild(downloadButton);
+    downloadButton.addEventListener('click', () => this.downloadState());
+
     this.textEditor = CodeMirror(_element => {}, <any>{
       value: '',
       mode: {'name': 'javascript', json: true},
@@ -73,6 +80,16 @@ export class StateEditorDialog extends Overlay {
 
     this.content.appendChild(this.textEditor.getWrapperElement());
     this.textEditor.refresh();
+  }
+
+  private downloadState() {
+    const downloadLink = document.createElement('a');
+    const blob = new Blob([this.getJson()], {type: 'text/json'});
+    const blobUrl = URL.createObjectURL(blob);
+    downloadLink.href = blobUrl;
+    downloadLink.download = 'state.json';
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
   }
 
   private applyChanges() {

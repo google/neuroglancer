@@ -32,9 +32,10 @@ import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, Vol
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {mat4, vec2, vec3} from 'neuroglancer/util/geom';
+import {vec2, vec3} from 'neuroglancer/util/geom';
 import {responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString,verifyString} from 'neuroglancer/util/json';
+import { SliceViewSingleResolutionSource } from 'neuroglancer/sliceview/frontend';
 
 class BossVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<BossToken>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -58,6 +59,7 @@ interface ChannelInfo {
   scales: ScaleInfo[];
   description: string;
   key: string;
+  baseResolution: number;
 }
 
 interface CoordinateFrameInfo {
@@ -164,6 +166,7 @@ function parseChannelInfo(obj: any): ChannelInfo {
     downsampled: downsampleStatus,
     scales: [],
     key: verifyObjectProperty(obj, 'name', verifyString),
+    baseResolution: verifyObjectProperty(obj, 'base_resolution', verifyInt),
   };
 }
 
@@ -202,10 +205,6 @@ function parseExperimentInfo(
 
 export class BossMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
-    if (this.channelInfo.dataType === DataType.UINT16) {
-      // 16-bit channels automatically rescaled to uint8 by The Boss
-      return DataType.UINT8;
-    }
     return this.channelInfo.dataType;
   }
   get volumeType() {
@@ -311,29 +310,40 @@ export class BossMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
+    // Hannah change Feb 2021
+    // Replaced scale calculations with those from ../precomputed
+    const modelResolution = this.scales[0].downsampleFactors;
+    const {rank} = this;
     return transposeNestedArrays(this.scales.map(scaleInfo => {
-      let {downsampleFactors, imageSize} = scaleInfo;
       let voxelOffset = this.coordinateFrame.voxelOffsetBase;
       let baseVoxelOffset = vec3.create();
       for (let i = 0; i < 3; ++i) {
         baseVoxelOffset[i] = Math.ceil(voxelOffset[i]);
       }
-      const chunkToMultiscaleTransform = mat4.create();
+      const resolution = scaleInfo.downsampleFactors;
+      const stride = rank + 1;
+      const chunkToMultiscaleTransform = new Float32Array(stride * stride);
+      chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
       for (let i = 0; i < 3; ++i) {
-        chunkToMultiscaleTransform[5 * i] = downsampleFactors[i];
-        chunkToMultiscaleTransform[12 + i] = voxelOffset[i];
+        const relativeScale = resolution[i] / modelResolution[i];
+        chunkToMultiscaleTransform[stride * i + i] = relativeScale;
+        chunkToMultiscaleTransform[stride * rank + i] = baseVoxelOffset[i] * relativeScale;
       }
+      if (rank === 4) {
+        chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+      }
+      let imageSize = scaleInfo.imageSize;
       return makeDefaultVolumeChunkSpecifications({
                rank: 3,
                volumeType: this.volumeType,
                dataType: this.dataType,
-               chunkToMultiscaleTransform,
+               chunkToMultiscaleTransform: chunkToMultiscaleTransform,
                chunkDataSizes: [DEFAULT_CUBOID_SIZE],
-               baseVoxelOffset,
+               baseVoxelOffset: baseVoxelOffset,
                upperVoxelBound: imageSize,
                volumeSourceOptions,
              })
-          .map(spec => ({
+          .map( (spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
                  chunkSource: this.chunkManager.getChunkSource(BossVolumeChunkSource, {
                    credentialsProvider: this.credentialsProvider,
                    spec,
@@ -421,7 +431,7 @@ export function getDownsampleInfoForChannel(
           },
           () => fetchWithBossCredentials(
               credentialsProvider,
-              `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}/`, {},
+              `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}`, {},
               responseJson))
       .then(downsampleObj => {
         return parseDownsampleInfoForChannel(downsampleObj, experimentInfo, channel);
@@ -450,7 +460,7 @@ export function parseDownsampleScales(
     }
     const downsampleFactors = new Float32Array(3);
     for (let i = 0; i < 3; ++i) {
-      downsampleFactors[i] = voxelSize[i] = voxelSizeBaseInOriginalUnits[i];
+      downsampleFactors[i] = voxelSize[i] / voxelSizeBaseInOriginalUnits[i];
     }
     scaleInfo[i] = {downsampleFactors, imageSize, key};
   }

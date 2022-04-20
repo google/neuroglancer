@@ -24,3 +24,4 @@ from .screenshot import ScreenshotSaver
 from . import skeleton
 from . import server
 from . import segment_colors
+from .default_credentials_manager import set_boss_token
