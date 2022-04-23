@@ -42,6 +42,7 @@ import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
+import { Url } from 'neuroglancer/util/url';
 
 class PrecomputedVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -63,17 +64,7 @@ class PrecomputedSkeletonSource extends
 }
 
 function resolvePath(a: string, b: string) {
-  const outputParts = a.split('/');
-  for (const part of b.split('/')) {
-    if (part === '..') {
-      if (outputParts.length !== 0) {
-        outputParts.length = outputParts.length - 1;
-        continue;
-      }
-    }
-    outputParts.push(part);
-  }
-  return outputParts.join('/');
+  return Url.parse(a).joinPath(b).raw
 }
 
 class ScaleInfo {
@@ -498,7 +489,7 @@ function getJsonMetadata(
       {'type': 'precomputed:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
       async () => {
         return await cancellableFetchSpecialOk(
-            credentialsProvider, `${url}/info`, {}, responseJson);
+            credentialsProvider, Url.parse(url).joinPath("info").schemeless_raw, {}, responseJson);
       });
 }
 
