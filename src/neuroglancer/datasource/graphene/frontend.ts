@@ -20,8 +20,6 @@ import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
@@ -32,7 +30,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {getGrapheneFragmentKey, isBaseSegmentId, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {ChunkedGraphSourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION} from 'neuroglancer/datasource/graphene/base';
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
-import {ChunkedGraphChunkSource, ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
+import {ChunkedGraphChunkSource, ChunkedGraphLayerDisplayState, SliceViewPanelChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import { makeChunkedGraphChunkSpecification } from 'neuroglancer/sliceview/chunked_graph/base';
 import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VISIBLE_SEGMENT_TYPE } from 'neuroglancer/segmentation_graph/source';
@@ -123,8 +121,8 @@ class GraphInfo {
 
 interface GrapheneMultiscaleVolumeInfo extends MultiscaleVolumeInfo {
   dataUrl: string;
-  app?: AppInfo;
-  graph?: GraphInfo;
+  app: AppInfo;
+  graph: GraphInfo;
 }
 
 function parseSpecialUrlOld(url: string): string { // TODO: brought back old parseSpecialUrl
@@ -150,16 +148,9 @@ function parseSpecialUrlOld(url: string): string { // TODO: brought back old par
 
 function parseGrapheneMultiscaleVolumeInfo(obj: unknown, url: string): GrapheneMultiscaleVolumeInfo {
   const volumeInfo = parseMultiscaleVolumeInfo(obj);
-  let dataUrl = url;
-  let app = undefined;
-  let graph = undefined;
-
-  if (volumeInfo.volumeType !== VolumeType.IMAGE) {
-    dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
-    app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
-    graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
-  }
-
+  const dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
+  const app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
+  const graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
   return {
     ...volumeInfo,
     app,
@@ -175,7 +166,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
     super(chunkManager, undefined, info.dataUrl, info);
   }
 
-  getChunkedGraphSources() {
+  getChunkedGraphSource() {
     const {rank} = this;
     const scaleInfo = this.info.scales[0];
 
@@ -183,7 +174,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
       rank,
       dataType: this.info.dataType,
       upperVoxelBound: scaleInfo.size,
-      chunkDataSize: Uint32Array.from(this.info.graph!.chunkSize),
+      chunkDataSize: Uint32Array.from(this.info.graph.chunkSize),
       baseVoxelOffset: scaleInfo.voxelOffset,
     });
 
@@ -202,8 +193,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
       lowerClipBound[i] = baseLowerBound[i];
       upperClipBound[i] = baseUpperBound[i];
     }
-    return [[
-      {
+    return {
         chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
           spec,
           credentialsProvider: this.chunkedGraphCredentialsProvider,
@@ -211,8 +201,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
         chunkToMultiscaleTransform,
         lowerClipBound,
         upperClipBound,
-      }
-    ]];
+      };
   }
 }
 
@@ -483,19 +472,16 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   }
 
   createRenderLayers(
-      transform: WatchableValueInterface<RenderLayerTransformOrError>,
-      localPosition: WatchableValueInterface<Float32Array>,
-      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer[] {
-
-    return [new ChunkedGraphLayer(
-      this.chunkSource.info.app!.segmentationUrl,
-      this.chunkSource.getChunkedGraphSources(),
-      multiscaleSource,
-      {
-        ...this.segmentsState,
-        localPosition,
-        transform,
-      }),];
+      chunkManager: ChunkManager,
+      displayState: ChunkedGraphLayerDisplayState,
+      localPosition: WatchableValueInterface<Float32Array>): RenderLayer[] {
+    return [new SliceViewPanelChunkedGraphLayer(
+      chunkManager,
+      this.chunkSource.getChunkedGraphSource(),
+      displayState, // FIXME will displayState always match this.segmentsState?
+      localPosition,
+      this.graph.info.graph.nBitsForLayerId,
+    )];
   };
 
   private lastDeselectionMessage: StatusMessage|undefined;
@@ -512,7 +498,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     }
 
     for (const segmentId of segments) {
-      const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph!.nBitsForLayerId);
+      const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph.nBitsForLayerId);
 
       const segmentConst = segmentId.clone();
 

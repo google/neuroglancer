@@ -18,6 +18,7 @@ import {ChunkLayoutOptions, makeSliceViewChunkSpecification, SliceViewChunkSourc
 import {DataType} from 'neuroglancer/sliceview/base';
 
 export const CHUNKED_GRAPH_LAYER_RPC_ID = 'ChunkedGraphLayer';
+export const CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID = 'ChunkedGraphLayer:updateSources'
 export const RENDER_RATIO_LIMIT = 5.0;
 
 export interface ChunkedGraphChunkSpecificationBaseOptions extends

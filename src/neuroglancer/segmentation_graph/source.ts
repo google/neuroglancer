@@ -20,7 +20,8 @@ import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RenderLayer } from 'neuroglancer/renderlayer';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
+import { ChunkedGraphLayerDisplayState } from 'neuroglancer/sliceview/chunked_graph/frontend';
 
 export enum VISIBLE_SEGMENT_TYPE {
   SIMPLE_EQUIVALENCES = 1,
@@ -55,12 +56,12 @@ export abstract class SegmentationGraphSourceConnection<
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
 
   createRenderLayers(
-      transform: WatchableValueInterface<RenderLayerTransformOrError>,
-      localPosition: WatchableValueInterface<Float32Array>,
-      multiscaleSource: MultiscaleVolumeChunkSource): RenderLayer[] {
-    transform;
+      chunkManager: ChunkManager,
+      displayState: ChunkedGraphLayerDisplayState,
+      localPosition: WatchableValueInterface<Float32Array>): RenderLayer[] {
+    chunkManager;
+    displayState;
     localPosition;
-    multiscaleSource;
     return [];
   };
 }

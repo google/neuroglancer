@@ -406,16 +406,6 @@ export class SegmentationUserLayer extends Base {
     return {volumeType: VolumeType.SEGMENTATION};
   }
 
-  someSegmentationRenderLayer() {
-    for (let x of this.renderLayers) {
-      if (x instanceof SegmentationRenderLayer) {
-        return x;
-      }
-    }
-
-    return undefined;
-  }
-
   readonly has2dLayer = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
       layers => layers.some(x => x instanceof SegmentationRenderLayer),
       {changed: this.layersChanged, value: this.renderLayers}));
@@ -492,13 +482,16 @@ export class SegmentationUserLayer extends Base {
             loadedSubsource.activate(refCounted => {
               this.graphConnection = refCounted.registerDisposer(
                   segmentationGraph.connect(this.displayState.segmentationGroupState.value));
-              const segmentationRenderlayer = this.someSegmentationRenderLayer();
-              if (segmentationRenderlayer) {
-                const transform = loadedSubsource.getRenderLayerTransform(segmentationRenderlayer.channelCoordinateSpace);
-                const graphRenderLayers = this.graphConnection.createRenderLayers(transform, this.localPosition, segmentationRenderlayer.multiscaleSource);
-                for (const renderLayer of graphRenderLayers) {
-                  loadedSubsource.addRenderLayer(renderLayer);
-                }
+              const displayState = {
+                ...this.displayState,
+                transform: loadedSubsource.getRenderLayerTransform(),
+              };
+
+              const graphRenderLayers = this.graphConnection.createRenderLayers(
+                this.manager.chunkManager, displayState, this.localPosition
+              );
+              for (const renderLayer of graphRenderLayers) {
+                loadedSubsource.addRenderLayer(renderLayer);
               }
             });
           }

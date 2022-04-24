@@ -15,15 +15,19 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
-import {SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
-import {SliceViewRenderLayer, SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
-import {StatusMessage} from 'neuroglancer/status';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {HttpError} from 'neuroglancer/util/http_request';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID} from 'neuroglancer/sliceview/chunked_graph/base';
+import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import { RefCounted } from 'neuroglancer/util/disposable';
+import { LayerChunkProgressInfo } from 'neuroglancer/chunk_manager/base';
+import { SegmentationDisplayState3D, SegmentationLayerSharedObject } from 'neuroglancer/segmentation_display_state/frontend';
+import { LayerView, VisibleLayerInfo } from 'neuroglancer/layer';
+import { ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
+import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
+import { makeValueOrError, ValueOrError, valueOrThrow } from 'neuroglancer/util/error';
+import { makeCachedLazyDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface } from 'neuroglancer/trackable_value';
+import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
+import { StatusMessage } from 'neuroglancer/status';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
@@ -41,74 +45,84 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
   }
 }
 
-export class ChunkedGraphLayer extends SliceViewRenderLayer {
-  private graphurl: string;
-  private leafRequestsStatusMessage: StatusMessage|undefined;
-  leafRequestsActive = new TrackableBoolean(true, true);
+export interface ChunkedGraphLayerDisplayState extends SegmentationDisplayState3D {}
 
-  constructor(
-      url: string,
-      public sources: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>[][],
-      multiscaleSource: MultiscaleVolumeChunkSource,
-      displayState: VisibleSegmentsState&SliceViewRenderLayerOptions) {
-    super(multiscaleSource.chunkManager, multiscaleSource, {
-      rpcTransfer: {
-        'chunkManager': multiscaleSource.chunkManager.rpcId,
-        'url': url,
-        'visibleSegments': displayState.visibleSegments.rpcId,
-        'segmentEquivalences': displayState.segmentEquivalences.rpcId,
-      },
-      transform: displayState.transform,
-      localPosition: displayState.localPosition,
+interface TransformedChunkedGraphSource extends
+    FrontendTransformedSource<SliceViewRenderLayer, ChunkedGraphChunkSource> {}
+
+interface AttachmentState {
+  chunkTransform: ValueOrError<ChunkTransformParameters>;
+  displayDimensionRenderInfo: DisplayDimensionRenderInfo;
+  source?: NestedStateManager<TransformedChunkedGraphSource>;
+}
+
+export class SliceViewPanelChunkedGraphLayer extends SliceViewPanelRenderLayer {
+  layerChunkProgressInfo = new LayerChunkProgressInfo();
+  private sharedObject: SegmentationLayerSharedObject;
+  readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
+
+  private leafRequestsActive: SharedWatchableValue<boolean>;
+  private leafRequestsStatusMessage: StatusMessage|undefined;
+
+  constructor(public chunkManager: ChunkManager, public source: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>,
+      public displayState: ChunkedGraphLayerDisplayState,
+      public localPosition: WatchableValueInterface<Float32Array>,
+      nBitsForLayerId: number) {
+    super();
+    this.leafRequestsActive = this.registerDisposer(SharedWatchableValue.make(chunkManager.rpc!, true));
+    this.chunkTransform = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
+        modelTransform =>
+            makeValueOrError(() => getChunkTransformParameters(valueOrThrow(modelTransform))),
+        this.displayState.transform));
+    let sharedObject = this.sharedObject = this.backend = this.registerDisposer(
+        new SegmentationLayerSharedObject(chunkManager, displayState, this.layerChunkProgressInfo));
+    sharedObject.RPC_TYPE_ID = CHUNKED_GRAPH_LAYER_RPC_ID;
+    sharedObject.initializeCounterpartWithChunkManager({
+      source: source.chunkSource.addCounterpartRef(),
+      localPosition: this.registerDisposer(SharedWatchableValue.makeFromExisting(chunkManager.rpc!, this.localPosition))
+                         .rpcId,
+      leafRequestsActive: this.leafRequestsActive.rpcId,
+      nBitsForLayerId: this.registerDisposer(SharedWatchableValue.make(chunkManager.rpc!, nBitsForLayerId)).rpcId,
     });
+    this.registerDisposer(sharedObject.visibility.add(this.visibility));
+
     this.registerDisposer(this.leafRequestsActive.changed.add(() => {
       this.showOrHideMessage(this.leafRequestsActive.value);
     }));
-    this.graphurl = url;
-    this.initializeCounterpart();
   }
 
-  getSources(_options: SliceViewSourceOptions) { // do we need to override this?
-    return this.sources;
+  attach(attachment: VisibleLayerInfo<LayerView, AttachmentState>) {
+    super.attach(attachment);
+    const chunkTransform = this.chunkTransform.value;
+    const displayDimensionRenderInfo = attachment.view.displayDimensionRenderInfo.value;
+    attachment.state = {
+      chunkTransform,
+      displayDimensionRenderInfo,
+    };
+    attachment.state!.source = attachment.registerDisposer(registerNested(
+        (context: RefCounted, transform: RenderLayerTransformOrError,
+         displayDimensionRenderInfo: DisplayDimensionRenderInfo) => {
+          const transformedSources =
+              getVolumetricTransformedSources(
+                  displayDimensionRenderInfo, transform,
+                  _options =>
+                      [[this.source]],
+                  attachment.messages, this) as TransformedChunkedGraphSource[][];
+          attachment.view.flushBackendProjectionParameters();
+          this.sharedObject.rpc!.invoke(CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, {
+            layer: this.sharedObject.rpcId,
+            view: attachment.view.rpcId,
+            displayDimensionRenderInfo,
+            sources: serializeAllTransformedSources(transformedSources),
+          });
+          context;
+          return transformedSources[0][0];
+        },
+        this.displayState.transform, attachment.view.displayDimensionRenderInfo));
   }
 
-  get url() {
-    return this.graphurl;
-  }
-
-  get renderRatioLimit() {
-    return RENDER_RATIO_LIMIT;
-  }
-
-  draw() {}
-
-  async withErrorMessage(promise: Promise<Response>, options: {
-    initialMessage: string,
-    errorPrefix: string
-  }): Promise<Response> {
-    const status = new StatusMessage(true);
-    status.setText(options.initialMessage);
-    const dispose = status.dispose.bind(status);
-    try {
-      const response = await promise;
-      dispose();
-      return response;
-    } catch (e) {
-      if (e instanceof HttpError && e.response) {
-        let msg: string;
-        if (e.response.headers.get('content-type') === 'application/json') {
-          msg = (await e.response.json())['message'];
-        } else {
-          msg = await e.response.text();
-        }
-
-        const {errorPrefix = ''} = options;
-        status.setErrorMessage(errorPrefix + msg);
-        status.setVisible(true);
-        throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
-      }
-      throw e;
-    }
+  isReady() {
+    return true;
   }
 
   private showOrHideMessage(leafRequestsActive: boolean) {
@@ -122,5 +136,3 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     }
   }
 }
-
-ChunkedGraphLayer.prototype.RPC_TYPE_ID = CHUNKED_GRAPH_LAYER_RPC_ID;
