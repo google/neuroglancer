@@ -66,6 +66,10 @@ export class Uint64Map extends SharedObjectCounterpart implements
     return this.hashTable.entries();
   }
 
+  unsafeEntries() {
+    return this.hashTable.unsafeEntries();
+  }
+
   delete_(key: Uint64) {
     return this.hashTable.delete(key);
   }
@@ -86,7 +90,7 @@ export class Uint64Map extends SharedObjectCounterpart implements
 
   assignFrom(other: Uint64Map) {
     this.clear();
-    for (const [key, value] of other) {
+    for (const [key, value] of other.unsafeEntries()) {
       this.set(key, value);
     }
   }
@@ -103,7 +107,7 @@ export class Uint64Map extends SharedObjectCounterpart implements
 
   toJSON() {
     let result: {[key: string]: string} = {};
-    for (let [key, value] of this.hashTable.entries()) {
+    for (let [key, value] of this.hashTable.unsafeEntries()) {
       result[key.toString()] = value.toString();
     }
     return result;

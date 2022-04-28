@@ -253,7 +253,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     const {segmentQueries} = this;
     const generation = ++updateGeneration;
     const processVisibleSegments = (visibleSegments: Uint64Set) => {
-      for (const segmentId of visibleSegments) {
+      for (const segmentId of visibleSegments.unsafeKeys()) {
         if (Uint64.equal(segmentId, UNKNOWN_NEW_SEGMENT_ID)) continue;
         const segmentIdString = segmentId.toString();
         const existingQuery = segmentQueries.get(segmentIdString);

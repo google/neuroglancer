@@ -24,7 +24,7 @@ describe('gpu_hash/hash_table', () => {
 
     function compareViaIterate() {
       let htValues = new Set<string>();
-      for (let v of ht) {
+      for (let v of ht.unsafeKeys()) {
         let s = v.toString();
         expect(htValues.has(s)).toBe(false, `Duplicate key in hash table: ${s}`);
         expect(set.has(s)).toBe(true, `Unexpected key ${s} in hash table`);

@@ -84,6 +84,10 @@ export class Uint64Set extends SharedObjectCounterpart implements
     return this.hashTable.keys();
   }
 
+  unsafeKeys() {
+    return this.hashTable.unsafeKeys();
+  }
+
   delete_(x: Uint64[]) {
     let changed = false;
     for (const v of x) {
@@ -119,7 +123,7 @@ export class Uint64Set extends SharedObjectCounterpart implements
 
   toJSON() {
     let result = new Array<string>();
-    for (let id of this) {
+    for (let id of this.unsafeKeys()) {
       result.push(id.toString());
     }
     // Need to sort entries, otherwise serialization changes every time.
@@ -129,7 +133,7 @@ export class Uint64Set extends SharedObjectCounterpart implements
 
   assignFrom(other: Uint64Set) {
     this.clear();
-    for (const key of other) {
+    for (const key of other.unsafeKeys()) {
       this.add(key);
     }
   }

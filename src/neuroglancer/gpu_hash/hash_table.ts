@@ -149,6 +149,24 @@ export abstract class HashTableBase {
     }
   }
 
+  /**
+   * Iterates over the Uint64 keys contained in the hash set.
+   *
+   * The same temp value will be modified and yielded at every iteration.
+   */
+  * unsafeKeys(temp = new Uint64()) {
+    let {emptyLow, emptyHigh, entryStride} = this;
+    let {table} = this;
+    for (let i = 0, length = table.length; i < length; i += entryStride) {
+      let low = table[i], high = table[i + 1];
+      if (low !== emptyLow || high !== emptyHigh) {
+        temp.low = low;
+        temp.high = high;
+        yield temp;
+      }
+    }
+  }
+
   indexOfPair(low: number, high: number) {
     let {table, emptyLow, emptyHigh} = this;
     if (low === emptyLow && high === emptyHigh) {
@@ -404,7 +422,7 @@ export class HashSetUint64 extends HashTableBase {
    * Creates a new Uint64 object at every iteration (otherwise spread and Array.from() fail)
    */
   [Symbol.iterator]() {
-    return this.keys();
+    return this.unsafeKeys();
   }
 }
 HashSetUint64.prototype.entryStride = 2;
@@ -468,11 +486,11 @@ export class HashMapUint64 extends HashTableBase {
   }
 
   /**
-   * Iterates over entries.
-   * Creates new Uint64 objects at every iteration (otherwise spread and Array.from() fail)
+   * Iterates over entries.  The same temporary value will be modified and yielded at every
+   * iteration.
    */
   [Symbol.iterator]() {
-    return this.entries();
+    return this.unsafeEntries();
   }
 
   /**
@@ -488,6 +506,26 @@ export class HashMapUint64 extends HashTableBase {
         let key = new Uint64(low, high);
         let value = new Uint64(table[i + 2], table[i + 3]);
         yield [key, value];
+      }
+    }
+  }
+
+  /**
+   * Iterates over entries.  The same temporary value will be modified and yielded at every
+   * iteration.
+   */
+  * unsafeEntries(temp: [Uint64, Uint64] = [new Uint64(), new Uint64()]) {
+    let {emptyLow, emptyHigh, entryStride} = this;
+    let {table} = this;
+    let [key, value] = temp;
+    for (let i = 0, length = table.length; i < length; i += entryStride) {
+      let low = table[i], high = table[i + 1];
+      if (low !== emptyLow || high !== emptyHigh) {
+        key.low = low;
+        key.high = high;
+        value.low = table[i + 2];
+        value.high = table[i + 3];
+        yield temp;
       }
     }
   }

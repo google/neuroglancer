@@ -258,7 +258,7 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
 
 function normalizeSegmentSet(segmentSet: Uint64Set, equivalences: DisjointUint64Sets) {
   const add: Uint64[] = [];
-  for (const id of segmentSet) {
+  for (const id of segmentSet.unsafeKeys()) {
     const rootId = equivalences.get(id);
     if (!Uint64.equal(id, rootId)) {
       add.push(rootId);

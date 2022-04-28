@@ -77,7 +77,7 @@ describe('Uint64Set', () => {
     s.add(v3);
 
     let iterated = [];
-    for (let v of s) {
+    for (let v of s.unsafeKeys()) {
       iterated.push(v.clone());
     }
     iterated.sort();

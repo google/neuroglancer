@@ -83,7 +83,7 @@ export function forEachVisibleSegment(
   const visibleSegments = getVisibleSegments(state);
   const segmentEquivalences = getSegmentEquivalences(state);
   const highBitRepresentative = segmentEquivalences.disjointSets.highBitRepresentative.value;
-  for (let rootObjectId of visibleSegments) {
+  for (let rootObjectId of visibleSegments.unsafeKeys()) {
     if (highBitRepresentative === VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_ONLY) {
       const rootObjectId2 = segmentEquivalences.get(rootObjectId);
       callback(rootObjectId, rootObjectId2);

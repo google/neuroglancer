@@ -268,7 +268,7 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState
         const priority = -vec3.distance(localCenter, tempChunkPosition);
         const {curPositionInChunks} = tsource;
 
-        for (const segment of this.visibleSegments) {
+        for (const segment of this.visibleSegments.unsafeKeys()) {
           if (isBaseSegmentId(segment, this.nBitsForLayerId.value)) return; // TODO maybe support highBitRepresentation?
           const chunk = source.getChunk(curPositionInChunks, segment);
           chunkManager.requestChunk(chunk, priorityTier, basePriority + priority);
