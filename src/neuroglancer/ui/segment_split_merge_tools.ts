@@ -17,7 +17,7 @@
 import './segment_split_merge_tools.css';
 
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, registerCallbackWhenSegmentationDisplayStateChanged, resetTemporaryVisibleSegmentsState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
-import {isBaseSegmentId, VISIBLE_SEGMENT_TYPE} from 'neuroglancer/segmentation_graph/source';
+import {isBaseSegmentId, VisibleSegmentType} from 'neuroglancer/segmentation_graph/source';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
@@ -59,8 +59,8 @@ export class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
       const base = segmentSelectionState.baseSelectedSegment;
       const isBase = isBaseSegmentId(base);
       const highBitVal = segmentEquivalences.disjointSets.highBitRepresentative.value;
-      if ((isBase && highBitVal === VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_EXCLUDED) ||
-          (!isBase && highBitVal === VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_ONLY)) {
+      if ((isBase && highBitVal === VisibleSegmentType.HIGH_BIT_REPRESENTATIVE_EXCLUDED) ||
+          (!isBase && highBitVal === VisibleSegmentType.HIGH_BIT_REPRESENTATIVE_ONLY)) {
         return;
       }
       this.lastAnchorBaseSegment.value = base.clone();

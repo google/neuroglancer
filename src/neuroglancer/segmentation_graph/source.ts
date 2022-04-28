@@ -23,10 +23,10 @@ import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transf
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
 import { ChunkedGraphLayerDisplayState } from 'neuroglancer/sliceview/chunked_graph/frontend';
 
-export enum VISIBLE_SEGMENT_TYPE {
-  SIMPLE_EQUIVALENCES = 1,
-  HIGH_BIT_REPRESENTATIVE_EXCLUDED,
-  HIGH_BIT_REPRESENTATIVE_ONLY
+export enum VisibleSegmentType {
+  SIMPLE_EQUIVALENCES = 1,          // all members of a set are accessed as individual elements
+  HIGH_BIT_REPRESENTATIVE_EXCLUDED, // equivalences with the highest bit set are ignored
+  HIGH_BIT_REPRESENTATIVE_ONLY      // only the representive
 }
 
 export abstract class SegmentationGraphSource {
@@ -34,7 +34,7 @@ export abstract class SegmentationGraphSource {
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
-  abstract get highBitRepresentative(): VISIBLE_SEGMENT_TYPE;
+  abstract get highBitRepresentative(): VisibleSegmentType;
 }
 
 export interface ComputedSplit {

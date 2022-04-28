@@ -16,7 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VISIBLE_SEGMENT_TYPE} from 'neuroglancer/segmentation_graph/source';
+import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentType} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
@@ -138,7 +138,7 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
   }
 
   get highBitRepresentative() {
-    return VISIBLE_SEGMENT_TYPE.SIMPLE_EQUIVALENCES;
+    return VisibleSegmentType.SIMPLE_EQUIVALENCES;
   }
 
   async merge(a: Uint64, b: Uint64): Promise<Uint64> {

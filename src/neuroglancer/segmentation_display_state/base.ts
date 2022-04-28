@@ -19,7 +19,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {VISIBLE_SEGMENT_TYPE} from 'neuroglancer/segmentation_graph/source';
+import {VisibleSegmentType} from 'neuroglancer/segmentation_graph/source';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
@@ -84,7 +84,7 @@ export function forEachVisibleSegment(
   const segmentEquivalences = getSegmentEquivalences(state);
   const highBitRepresentative = segmentEquivalences.disjointSets.highBitRepresentative.value;
   for (let rootObjectId of visibleSegments.unsafeKeys()) {
-    if (highBitRepresentative === VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_ONLY) {
+    if (highBitRepresentative === VisibleSegmentType.HIGH_BIT_REPRESENTATIVE_ONLY) {
       const rootObjectId2 = segmentEquivalences.get(rootObjectId);
       callback(rootObjectId, rootObjectId2);
     } else {
@@ -93,7 +93,8 @@ export function forEachVisibleSegment(
         continue;
       }
       for (let objectId of segmentEquivalences.setElements(rootObjectId)) {
-        if (highBitRepresentative === VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_EXCLUDED && isHighBitSegment(objectId)) {
+        if (highBitRepresentative === VisibleSegmentType.HIGH_BIT_REPRESENTATIVE_EXCLUDED &&
+            isHighBitSegment(objectId)) {
           continue;
         }
         callback(objectId, rootObjectId);

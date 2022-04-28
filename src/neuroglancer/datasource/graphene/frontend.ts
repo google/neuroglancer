@@ -33,7 +33,7 @@ import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglanc
 import {ChunkedGraphChunkSource, ChunkedGraphLayerDisplayState, SliceViewPanelChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import { makeChunkedGraphChunkSpecification } from 'neuroglancer/sliceview/chunked_graph/base';
-import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VISIBLE_SEGMENT_TYPE } from 'neuroglancer/segmentation_graph/source';
+import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentType } from 'neuroglancer/segmentation_graph/source';
 import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/base';
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
@@ -617,7 +617,7 @@ class GrapheneGraphSource extends SegmentationGraphSource {
   }
 
   get highBitRepresentative() {
-    return VISIBLE_SEGMENT_TYPE.HIGH_BIT_REPRESENTATIVE_ONLY;
+    return VisibleSegmentType.HIGH_BIT_REPRESENTATIVE_ONLY;
   }
 
   getRoot(segment: Uint64) {

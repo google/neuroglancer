@@ -16,7 +16,7 @@
 
 import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {VISIBLE_SEGMENT_TYPE} from 'neuroglancer/segmentation_graph/source';
+import {VisibleSegmentType} from 'neuroglancer/segmentation_graph/source';
 
 const rankSymbol = Symbol('disjoint_sets:rank');
 const parentSymbol = Symbol('disjoint_sets:parent');
@@ -100,7 +100,7 @@ function isRootElement(v: any) {
  */
 export class DisjointUint64Sets {
   private map = new Map<string, Uint64>();
-  highBitRepresentative: WatchableValueInterface<VISIBLE_SEGMENT_TYPE> = new WatchableValue<VISIBLE_SEGMENT_TYPE>(VISIBLE_SEGMENT_TYPE.SIMPLE_EQUIVALENCES);
+  highBitRepresentative: WatchableValueInterface<VisibleSegmentType> = new WatchableValue<VisibleSegmentType>(VisibleSegmentType.SIMPLE_EQUIVALENCES);
   generation = 0;
 
   has(x: Uint64): boolean {
@@ -152,7 +152,7 @@ export class DisjointUint64Sets {
     spliceCircularLists(a, b);
     let aMin = (<any>a)[minSymbol];
     let bMin = (<any>b)[minSymbol];
-    const isSimple = this.highBitRepresentative.value === VISIBLE_SEGMENT_TYPE.SIMPLE_EQUIVALENCES;
+    const isSimple = this.highBitRepresentative.value === VisibleSegmentType.SIMPLE_EQUIVALENCES;
     newNode[minSymbol] = Uint64.less(aMin, bMin) === isSimple ? aMin : bMin;
     return true;
   }
