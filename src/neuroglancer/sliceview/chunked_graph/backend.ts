@@ -32,6 +32,7 @@ import { withSegmentationLayerBackendState } from 'neuroglancer/segmentation_dis
 import { RenderedViewBackend, RenderLayerBackend, RenderLayerBackendAttachment } from 'neuroglancer/render_layer_backend';
 import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
 import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
+import { forEachVisibleSegment } from 'neuroglancer/segmentation_display_state/base';
 
 export class ChunkedGraphChunk extends Chunk {
   backendOnly = true;
@@ -268,15 +269,15 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState
         const priority = -vec3.distance(localCenter, tempChunkPosition);
         const {curPositionInChunks} = tsource;
 
-        for (const segment of this.visibleSegments.unsafeKeys()) {
+        forEachVisibleSegment(this, (segment, _) => {
           if (isBaseSegmentId(segment, this.nBitsForLayerId.value)) return; // TODO maybe support highBitRepresentation?
-          const chunk = source.getChunk(curPositionInChunks, segment);
+          const chunk = source.getChunk(curPositionInChunks, segment.clone());
           chunkManager.requestChunk(chunk, priorityTier, basePriority + priority);
           ++this.numVisibleChunksNeeded;
           if (chunk.state === ChunkState.GPU_MEMORY) {
             ++this.numVisibleChunksAvailable;
           }
-        }
+        });
       });
     }
   }
