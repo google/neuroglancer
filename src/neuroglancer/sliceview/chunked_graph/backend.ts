@@ -24,7 +24,6 @@ import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
-import * as vector from 'neuroglancer/util/vector';
 import { deserializeTransformedSources, SliceViewChunkSourceBackend } from 'neuroglancer/sliceview/backend';
 import { getBasePriority, getPriorityTier, withSharedVisibility } from 'neuroglancer/visibility_priority/backend';
 import {isBaseSegmentId} from 'neuroglancer/datasource/graphene/base';
@@ -33,6 +32,7 @@ import { RenderedViewBackend, RenderLayerBackend, RenderLayerBackendAttachment }
 import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
 import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
 import { forEachVisibleSegment } from 'neuroglancer/segmentation_display_state/base';
+import { computeChunkBounds } from 'neuroglancer/sliceview/volume/backend';
 
 export class ChunkedGraphChunk extends Chunk {
   backendOnly = true;
@@ -110,51 +110,9 @@ export class ChunkedGraphChunkSource extends ChunkSource implements
     return chunk;
   }
 
-  /**
-   * Helper function for computing the voxel bounds of a chunk based on its chunkGridPosition.
-   *
-   * This assumes that the grid of chunk positions starts at this.baseVoxelOffset.  Chunks are
-   * clipped to lie within upperVoxelBound, but are not clipped to lie within lowerVoxelBound.  (The
-   * frontend code currently cannot handle chunks clipped at their lower corner, and the chunk
-   * layout can generally be chosen so that lowerVoxelBound lies on a chunk boundary.)
-   *
-   * This sets chunk.chunkDataSize to a copy of the returned chunkDataSize if it differs from
-   * this.spec.chunkDataSize; otherwise, it is set to this.spec.chunkDataSize.
-   *
-   * @returns A globally-allocated Vec3 containing the chunk corner position in voxel coordinates.
-   * The returned Vec3 will be invalidated by any subsequent call to this method, even on a
-   * different VolumeChunkSource instance.
-   */
   computeChunkBounds(chunk: ChunkedGraphChunk) {
-    const {spec} = this;
-    const {upperVoxelBound} = spec;
-
-    let origChunkDataSize = spec.chunkDataSize;
-    let newChunkDataSize = this.tempChunkDataSize;
-
-    // Chunk start position in voxel coordinates.
-    let chunkPosition =
-        vector.multiply(this.tempChunkPosition, chunk.chunkGridPosition, origChunkDataSize);
-
-    // Specifies whether the chunk only partially fits within the data bounds.
-    let partial = false;
-    for (let i = 0; i < 3; ++i) {
-      let upper = Math.min(upperVoxelBound[i], chunkPosition[i] + origChunkDataSize[i]);
-      let size = newChunkDataSize[i] = upper - chunkPosition[i];
-      if (size !== origChunkDataSize[i]) {
-        partial = true;
-      }
-    }
-
-    vector.add(chunkPosition, chunkPosition, this.spec.baseVoxelOffset);
-
-    if (partial) {
-      chunk.chunkDataSize = Uint32Array.from(newChunkDataSize);
-    } else {
-      chunk.chunkDataSize = origChunkDataSize;
-    }
-
-    return chunkPosition;
+    const {spec, tempChunkDataSize, tempChunkPosition} = this;
+    return computeChunkBounds(chunk, spec, tempChunkDataSize, tempChunkPosition);
   }
 }
 
