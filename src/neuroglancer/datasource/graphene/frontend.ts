@@ -213,12 +213,6 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
   }
 }
 
-function getLegacyMeshSource(
-    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    parameters: MeshSourceParameters) {
-  return chunkManager.getChunkSource(GrapheneMeshSource, {parameters, credentialsProvider});
-}
-
 function parseTransform(data: any): mat4 {
   return verifyObjectProperty(data, 'transform', value => {
     const transform = mat4.create();
@@ -321,29 +315,20 @@ function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSource
 
 async function getMeshSource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, fragmentUrl: string) {
+    url: string, fragmentUrl: string, nBitsForLayerId: number) {
   const {metadata, segmentPropertyMap} =
       await getMeshMetadata(chunkManager, credentialsProvider, fragmentUrl);
-  if (metadata === undefined) {
-    return {
-      source: getLegacyMeshSource(chunkManager, credentialsProvider, {
-        manifestUrl: url,
-        fragmentUrl: fragmentUrl,
-        lod: 0,
-        sharding: undefined,
-      }),
-      transform: mat4.create(),
-      segmentPropertyMap
-    };
-  }
+  const parameters: MeshSourceParameters = {
+    manifestUrl: url,
+    fragmentUrl: fragmentUrl,
+    lod: 0,
+    sharding: metadata?.sharding,
+    nBitsForLayerId,
+  };
+  const transform = metadata?.transform || mat4.create();
   return {
-    source: getShardedMeshSource(chunkManager, {
-      manifestUrl: url,
-      fragmentUrl: fragmentUrl,
-      lod: 0,
-      sharding: metadata.sharding,
-    }, credentialsProvider),
-    transform: metadata.transform,
+    source: getShardedMeshSource(chunkManager, parameters, credentialsProvider),
+    transform,
     segmentPropertyMap,
   };
 }
@@ -411,7 +396,8 @@ async function getVolumeDataSource(
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider,
           info.app!.meshingUrl,
-          resolvePath(info.dataUrl, info.mesh));
+          resolvePath(info.dataUrl, info.mesh),
+          info.graph.nBitsForLayerId);
     const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
     subsources.push({

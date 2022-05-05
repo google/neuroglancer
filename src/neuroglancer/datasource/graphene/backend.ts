@@ -92,6 +92,9 @@ async function decodeDracoFragmentChunk(
 (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {
   async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
+    if (isBaseSegmentId(chunk.objectId, parameters.nBitsForLayerId)) {
+      return decodeManifestChunk(chunk, {fragments: []});
+    }
     let url = `${parameters.manifestUrl}/manifest`;
     let manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
 
