@@ -30,18 +30,26 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {getGrapheneFragmentKey, isBaseSegmentId, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {ChunkedGraphSourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION} from 'neuroglancer/datasource/graphene/base';
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
-import {ChunkedGraphChunkSource, ChunkedGraphLayerDisplayState, SliceViewPanelChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import { makeChunkedGraphChunkSpecification } from 'neuroglancer/sliceview/chunked_graph/base';
+import { makeChunkedGraphChunkSpecification } from 'neuroglancer/datasource/graphene/base';
 import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentType } from 'neuroglancer/segmentation_graph/source';
 import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/base';
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer } from 'neuroglancer/renderlayer';
 import { getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
-
-class GrapheneChunkedGraphChunkSource extends
-(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID} from 'neuroglancer/datasource/graphene/base';
+import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import { RefCounted } from 'neuroglancer/util/disposable';
+import { LayerChunkProgressInfo } from 'neuroglancer/chunk_manager/base';
+import { SegmentationDisplayState3D, SegmentationLayerSharedObject } from 'neuroglancer/segmentation_display_state/frontend';
+import { LayerView, VisibleLayerInfo } from 'neuroglancer/layer';
+import { ChunkTransformParameters, getChunkTransformParameters } from 'neuroglancer/render_coordinate_transform';
+import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
+import { makeValueOrError, ValueOrError, valueOrThrow } from 'neuroglancer/util/error';
+import { makeCachedLazyDerivedWatchableValue, NestedStateManager, registerNested } from 'neuroglancer/trackable_value';
+import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
 
 class GrapheneMeshSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {
@@ -473,7 +481,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
 
   createRenderLayers(
       chunkManager: ChunkManager,
-      displayState: ChunkedGraphLayerDisplayState,
+      displayState: SegmentationDisplayState3D,
       localPosition: WatchableValueInterface<Float32Array>): RenderLayer[] {
     return [new SliceViewPanelChunkedGraphLayer(
       chunkManager,
@@ -639,6 +647,113 @@ class GrapheneGraphSource extends SegmentationGraphSource {
   trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void {
     return () => {
       console.log('trackSegment... do nothing', id, callback);
+    }
+  }
+}
+
+class ChunkedGraphChunkSource extends SliceViewChunkSource implements
+    ChunkedGraphChunkSourceInterface {
+  spec: ChunkedGraphChunkSpecification;
+  OPTIONS: {spec: ChunkedGraphChunkSpecification};
+
+  constructor(chunkManager: ChunkManager, options: {
+    spec: ChunkedGraphChunkSpecification,
+  }) {
+    super(chunkManager, options);
+  }
+}
+
+class GrapheneChunkedGraphChunkSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
+
+interface ChunkedGraphLayerDisplayState extends SegmentationDisplayState3D {}
+
+interface TransformedChunkedGraphSource extends
+    FrontendTransformedSource<SliceViewRenderLayer, ChunkedGraphChunkSource> {}
+
+interface AttachmentState {
+  chunkTransform: ValueOrError<ChunkTransformParameters>;
+  displayDimensionRenderInfo: DisplayDimensionRenderInfo;
+  source?: NestedStateManager<TransformedChunkedGraphSource>;
+}
+
+class SliceViewPanelChunkedGraphLayer extends SliceViewPanelRenderLayer {
+  layerChunkProgressInfo = new LayerChunkProgressInfo();
+  private sharedObject: SegmentationLayerSharedObject;
+  readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
+
+  private leafRequestsActive: SharedWatchableValue<boolean>;
+  private leafRequestsStatusMessage: StatusMessage|undefined;
+
+  constructor(public chunkManager: ChunkManager, public source: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>,
+      public displayState: ChunkedGraphLayerDisplayState,
+      public localPosition: WatchableValueInterface<Float32Array>,
+      nBitsForLayerId: number) {
+    super();
+    this.leafRequestsActive = this.registerDisposer(SharedWatchableValue.make(chunkManager.rpc!, true));
+    this.chunkTransform = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
+        modelTransform =>
+            makeValueOrError(() => getChunkTransformParameters(valueOrThrow(modelTransform))),
+        this.displayState.transform));
+    let sharedObject = this.sharedObject = this.backend = this.registerDisposer(
+        new SegmentationLayerSharedObject(chunkManager, displayState, this.layerChunkProgressInfo));
+    sharedObject.RPC_TYPE_ID = CHUNKED_GRAPH_LAYER_RPC_ID;
+    sharedObject.initializeCounterpartWithChunkManager({
+      source: source.chunkSource.addCounterpartRef(),
+      localPosition: this.registerDisposer(SharedWatchableValue.makeFromExisting(chunkManager.rpc!, this.localPosition))
+                         .rpcId,
+      leafRequestsActive: this.leafRequestsActive.rpcId,
+      nBitsForLayerId: this.registerDisposer(SharedWatchableValue.make(chunkManager.rpc!, nBitsForLayerId)).rpcId,
+    });
+    this.registerDisposer(sharedObject.visibility.add(this.visibility));
+
+    this.registerDisposer(this.leafRequestsActive.changed.add(() => {
+      this.showOrHideMessage(this.leafRequestsActive.value);
+    }));
+  }
+
+  attach(attachment: VisibleLayerInfo<LayerView, AttachmentState>) {
+    super.attach(attachment);
+    const chunkTransform = this.chunkTransform.value;
+    const displayDimensionRenderInfo = attachment.view.displayDimensionRenderInfo.value;
+    attachment.state = {
+      chunkTransform,
+      displayDimensionRenderInfo,
+    };
+    attachment.state!.source = attachment.registerDisposer(registerNested(
+        (context: RefCounted, transform: RenderLayerTransformOrError,
+         displayDimensionRenderInfo: DisplayDimensionRenderInfo) => {
+          const transformedSources =
+              getVolumetricTransformedSources(
+                  displayDimensionRenderInfo, transform,
+                  _options =>
+                      [[this.source]],
+                  attachment.messages, this) as TransformedChunkedGraphSource[][];
+          attachment.view.flushBackendProjectionParameters();
+          this.sharedObject.rpc!.invoke(CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, {
+            layer: this.sharedObject.rpcId,
+            view: attachment.view.rpcId,
+            displayDimensionRenderInfo,
+            sources: serializeAllTransformedSources(transformedSources),
+          });
+          context;
+          return transformedSources[0][0];
+        },
+        this.displayState.transform, attachment.view.displayDimensionRenderInfo));
+  }
+
+  isReady() {
+    return true;
+  }
+
+  private showOrHideMessage(leafRequestsActive: boolean) {
+    if (this.leafRequestsStatusMessage && leafRequestsActive) {
+      this.leafRequestsStatusMessage.dispose();
+      this.leafRequestsStatusMessage = undefined;
+      StatusMessage.showTemporaryMessage('Loading chunked graph segmentation...', 3000);
+    } else if ((!this.leafRequestsStatusMessage) && (!leafRequestsActive)) {
+      this.leafRequestsStatusMessage = StatusMessage.showMessage(
+          'At this zoom level, chunked graph segmentation will not be loaded. Please zoom in if you wish to load it.');
     }
   }
 }

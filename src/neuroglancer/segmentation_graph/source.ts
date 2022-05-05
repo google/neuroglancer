@@ -21,7 +21,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {RenderLayer } from 'neuroglancer/renderlayer';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
-import { ChunkedGraphLayerDisplayState } from 'neuroglancer/sliceview/chunked_graph/frontend';
+import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
 
 export enum VisibleSegmentType {
   SIMPLE_EQUIVALENCES = 1,          // all members of a set are accessed as individual elements
@@ -57,7 +57,7 @@ export abstract class SegmentationGraphSourceConnection<
 
   createRenderLayers(
       chunkManager: ChunkManager,
-      displayState: ChunkedGraphLayerDisplayState,
+      displayState: SegmentationDisplayState3D,
       localPosition: WatchableValueInterface<Float32Array>): RenderLayer[] {
     chunkManager;
     displayState;
