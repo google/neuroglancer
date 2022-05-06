@@ -67,6 +67,12 @@ interface SliceViewChunkSpecWithOffsetAndDatatype extends SliceViewChunkSpecific
   dataType: DataType;
 }
 
+interface ChunkSourceForChunkBounds {
+  spec: SliceViewChunkSpecWithOffsetAndDatatype;
+  tempChunkDataSize: Uint32Array;
+  tempChunkPosition: Float32Array;
+}
+
 /**
  * Helper function for computing the voxel bounds of a chunk based on its chunkGridPosition.
  *
@@ -76,16 +82,16 @@ interface SliceViewChunkSpecWithOffsetAndDatatype extends SliceViewChunkSpecific
  * layout can generally be chosen so that lowerVoxelBound lies on a chunk boundary.)
  *
  * This sets chunk.chunkDataSize to a copy of the returned chunkDataSize if it differs from
- * this.spec.chunkDataSize; otherwise, it is set to this.spec.chunkDataSize.
+ * source.spec.chunkDataSize; otherwise, it is set to source.spec.chunkDataSize.
  *
  * @returns A globally-allocated Vec3 containing the chunk corner position in voxel coordinates.
  * The returned Vec3 will be invalidated by any subsequent call to this method, even on a
  * different VolumeChunkSource instance.
  */
 export function computeChunkBounds(
-    chunk: ChunkWithGridPositionAndDataSize,
-    spec: SliceViewChunkSpecWithOffsetAndDatatype,
-    tempChunkDataSize: Uint32Array, tempChunkPosition: Float32Array) {
+    source: ChunkSourceForChunkBounds,
+    chunk: ChunkWithGridPositionAndDataSize) {
+  const {spec, tempChunkDataSize, tempChunkPosition} = source;
   const {upperVoxelBound, rank, baseVoxelOffset} = spec;
 
   let origChunkDataSize = spec.chunkDataSize;
@@ -120,8 +126,8 @@ export function computeChunkBounds(
 export class VolumeChunkSource extends SliceViewChunkSourceBackend implements
     VolumeChunkSourceInterface {
   spec: VolumeChunkSpecification;
-  private tempChunkDataSize: Uint32Array;
-  private tempChunkPosition: Float32Array;
+  tempChunkDataSize: Uint32Array;
+  tempChunkPosition: Float32Array;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     const rank = this.spec.rank;
@@ -130,8 +136,7 @@ export class VolumeChunkSource extends SliceViewChunkSourceBackend implements
   }
 
   computeChunkBounds(chunk: VolumeChunk) {
-    const {spec, tempChunkDataSize, tempChunkPosition} = this;
-    return computeChunkBounds(chunk, spec, tempChunkDataSize, tempChunkPosition);
+    return computeChunkBounds(this, chunk);
   }
 }
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

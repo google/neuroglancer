@@ -171,9 +171,8 @@ function decodeChunkedGraphChunk(leaves: string[]) {
 (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(ChunkSource), ChunkedGraphSourceParameters)) {
   spec: ChunkedGraphChunkSpecification;
   chunks: Map<string, ChunkedGraphChunk>;
-
-  private tempChunkDataSize: Uint32Array;
-  private tempChunkPosition: Float32Array;
+  tempChunkDataSize: Uint32Array;
+  tempChunkPosition: Float32Array;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -216,8 +215,7 @@ function decodeChunkedGraphChunk(leaves: string[]) {
   }
 
   computeChunkBounds(chunk: ChunkedGraphChunk) {
-    const {spec, tempChunkDataSize, tempChunkPosition} = this;
-    return computeChunkBounds(chunk, spec, tempChunkDataSize, tempChunkPosition);
+    return computeChunkBounds(this, chunk);
   }
 
   async withErrorMessage(promise: Promise<Response>, errorPrefix: string): Promise<Response> {
