@@ -32,7 +32,7 @@ import {ChunkedGraphSourceParameters, MeshSourceParameters, MultiscaleMeshMetada
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {StatusMessage} from 'neuroglancer/status';
 import { makeChunkedGraphChunkSpecification } from 'neuroglancer/datasource/graphene/base';
-import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentType } from 'neuroglancer/segmentation_graph/source';
+import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy } from 'neuroglancer/segmentation_graph/source';
 import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/base';
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
@@ -610,8 +610,9 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     return connection;
   }
 
-  get highBitRepresentative() {
-    return VisibleSegmentType.HIGH_BIT_REPRESENTATIVE_ONLY;
+  get visibleSegmentEquivalencePolicy() {
+    return VisibleSegmentEquivalencePolicy.MAX_REPRESENTATIVE |
+           VisibleSegmentEquivalencePolicy.NONREPRESENTATIVE_EXCLUDED;
   }
 
   getRoot(segment: Uint64) {

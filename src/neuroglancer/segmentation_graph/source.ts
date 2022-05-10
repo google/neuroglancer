@@ -23,10 +23,11 @@ import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transf
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
 import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
 
-export enum VisibleSegmentType {
-  SIMPLE_EQUIVALENCES = 1,          // all members of a set are accessed as individual elements
-  HIGH_BIT_REPRESENTATIVE_EXCLUDED, // equivalences with the highest bit set are ignored
-  HIGH_BIT_REPRESENTATIVE_ONLY      // only the representive
+export enum VisibleSegmentEquivalencePolicy {
+  MIN_REPRESENTATIVE = 0, // defafult, representative elmement is the minimum element in equivalence set
+  MAX_REPRESENTATIVE = 1, // representative elmement is the maximum element in equivalence set
+  REPRESENTATIVE_EXCLUDED = 1 << 1, // filter out the representative element when iterating over visible segments
+  NONREPRESENTATIVE_EXCLUDED = 1 << 2, // filter out non representative elements when iterating over visible segments
 }
 
 export abstract class SegmentationGraphSource {
@@ -34,7 +35,7 @@ export abstract class SegmentationGraphSource {
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
-  abstract get highBitRepresentative(): VisibleSegmentType;
+  abstract get visibleSegmentEquivalencePolicy(): VisibleSegmentEquivalencePolicy;
 }
 
 export interface ComputedSplit {
