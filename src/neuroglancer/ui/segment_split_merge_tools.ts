@@ -58,9 +58,11 @@ export class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
       if (!Uint64.equal(segmentSelectionState.selectedSegment, mappedAnchorSegment)) return;
       const base = segmentSelectionState.baseSelectedSegment;
       const isBase = isBaseSegmentId(base);
-      const highBitVal = segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy.value;
-      if ((highBitVal & VisibleSegmentEquivalencePolicy.NONREPRESENTATIVE_EXCLUDED && isBase) ||
-          (highBitVal & VisibleSegmentEquivalencePolicy.REPRESENTATIVE_EXCLUDED && !isBase)) {
+      // TODO: This would ideally rely on a separate HIGH_BIT_REPRESENTATIVE flag,
+      // but it nonetheless still works correctly for nggraph and local equivalences.
+      const equivalencePolicy = segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy.value;
+      if ((equivalencePolicy & VisibleSegmentEquivalencePolicy.NONREPRESENTATIVE_EXCLUDED && isBase) ||
+          (equivalencePolicy & VisibleSegmentEquivalencePolicy.REPRESENTATIVE_EXCLUDED && !isBase)) {
         return;
       }
       this.lastAnchorBaseSegment.value = base.clone();
