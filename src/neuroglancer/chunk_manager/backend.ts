@@ -411,7 +411,7 @@ function startChunkDownload(chunk: Chunk) {
           });
 }
 
-export function cancelChunkDownload(chunk: Chunk) {
+function cancelChunkDownload(chunk: Chunk) {
   const token = chunk.downloadCancellationToken!;
   chunk.downloadCancellationToken = undefined;
   token.cancel();
