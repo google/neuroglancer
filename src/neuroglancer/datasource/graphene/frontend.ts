@@ -50,6 +50,7 @@ import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
 import { makeValueOrError, ValueOrError, valueOrThrow } from 'neuroglancer/util/error';
 import { makeCachedLazyDerivedWatchableValue, NestedStateManager, registerNested } from 'neuroglancer/trackable_value';
 import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
+import { CredentialsManager } from 'src/neuroglancer/credentials_provider';
 
 class GrapheneMeshSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {
@@ -111,30 +112,9 @@ interface GrapheneMultiscaleVolumeInfo extends MultiscaleVolumeInfo {
   graph: GraphInfo;
 }
 
-function parseSpecialUrlOld(url: string): string { // TODO: brought back old parseSpecialUrl
-  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
-  let match = url.match(urlProtocolPattern);
-  if (match === null) {
-    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
-  }
-  const protocol = match[1];
-  if (protocol === 'gs') {
-    const bucket = match[2];
-    let path = match[3];
-    if (path === undefined) path = '';
-    return `https://storage.googleapis.com/${bucket}${path}`;
-  } else if (protocol === 's3') {
-    const bucket = match[2];
-    let path = match[3];
-    if (path === undefined) path = '';
-    return `https://s3.amazonaws.com/${bucket}${path}`;
-  }
-  return url;
-}
-
-function parseGrapheneMultiscaleVolumeInfo(obj: unknown, url: string): GrapheneMultiscaleVolumeInfo {
+function parseGrapheneMultiscaleVolumeInfo(obj: unknown, url: string, credentialsManager: CredentialsManager): GrapheneMultiscaleVolumeInfo {
   const volumeInfo = parseMultiscaleVolumeInfo(obj);
-  const dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
+  const dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrl(x, credentialsManager)).url;
   const app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
   const graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
   return {
@@ -295,7 +275,7 @@ async function getMeshSource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, fragmentUrl: string, nBitsForLayerId: number) {
   const {metadata, segmentPropertyMap} =
-      await getMeshMetadata(chunkManager, credentialsProvider, fragmentUrl);
+      await getMeshMetadata(chunkManager, undefined, fragmentUrl);
   const parameters: MeshSourceParameters = {
     manifestUrl: url,
     fragmentUrl: fragmentUrl,
@@ -334,7 +314,7 @@ function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
 async function getVolumeDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, metadata: any): Promise<DataSource> {
-  const info = parseGrapheneMultiscaleVolumeInfo(metadata, url);
+  const info = parseGrapheneMultiscaleVolumeInfo(metadata, url, options.credentialsManager);
   const volume = new GrapheneMultiscaleVolumeChunkSource(
       options.chunkManager, credentialsProvider, info);
 

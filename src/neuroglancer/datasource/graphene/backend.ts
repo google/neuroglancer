@@ -19,8 +19,8 @@ import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials
 import {assignMeshFragmentData, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {getGrapheneFragmentKey, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {cancellableFetchOk, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
-import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
+import {isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 import {ChunkedGraphSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -46,6 +46,7 @@ import { forEachVisibleSegment } from 'neuroglancer/segmentation_display_state/b
 import { computeChunkBounds } from 'neuroglancer/sliceview/volume/backend';
 
 function getVerifiedFragmentPromise(
+    credentialsProvider: SpecialProtocolCredentialsProvider,
     chunk: FragmentChunk,
     parameters: MeshSourceParameters,
     cancellationToken: CancellationToken) {
@@ -54,27 +55,30 @@ function getVerifiedFragmentPromise(
     let startOffset: Uint64|number, endOffset: Uint64|number;
     startOffset = Number(parts[1]);
     endOffset = startOffset+Number(parts[2]);
-    return fetchSpecialHttpByteRange(undefined,
+    return fetchSpecialHttpByteRange(credentialsProvider,
       `${parameters.fragmentUrl}/initial/${parts[0]}`,
       startOffset,
       endOffset,
       cancellationToken
     );
   }
-  return cancellableFetchOk(
+  return cancellableFetchSpecialOk(
+    credentialsProvider,
     `${parameters.fragmentUrl}/dynamic/${chunk.fragmentId}`, {}, responseArrayBuffer,
     cancellationToken);
 }
 
 function getFragmentDownloadPromise(
+    credentialsProvider: SpecialProtocolCredentialsProvider,
     chunk: FragmentChunk,
     parameters: MeshSourceParameters,
     cancellationToken: CancellationToken) {
   let fragmentDownloadPromise;
   if (parameters.sharding){
-    fragmentDownloadPromise = getVerifiedFragmentPromise(chunk, parameters, cancellationToken);
+    fragmentDownloadPromise = getVerifiedFragmentPromise(credentialsProvider, chunk, parameters, cancellationToken);
   } else {
-    fragmentDownloadPromise = cancellableFetchOk(
+    fragmentDownloadPromise = cancellableFetchSpecialOk(
+      credentialsProvider,
       `${parameters.fragmentUrl}/${chunk.fragmentId}`, {}, responseArrayBuffer,
       cancellationToken);
   }
@@ -107,7 +111,7 @@ async function decodeDracoFragmentChunk(
 
     try {
       const response = await getFragmentDownloadPromise(
-        chunk, parameters, cancellationToken);
+        undefined, chunk, parameters, cancellationToken);
       await decodeDracoFragmentChunk(chunk, response);
     } catch (e) {
       if (isNotFoundError(e)) {
