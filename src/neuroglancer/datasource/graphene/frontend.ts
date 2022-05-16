@@ -37,7 +37,7 @@ import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/ba
 import { WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer } from 'neuroglancer/renderlayer';
-import { getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource } from 'neuroglancer/datasource/precomputed/frontend';
+import { getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource, resolvePath } from 'neuroglancer/datasource/precomputed/frontend';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID} from 'neuroglancer/datasource/graphene/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
@@ -57,20 +57,6 @@ class GrapheneMeshSource extends
     objectKey;
     return getGrapheneFragmentKey(fragmentId);
   }
-}
-
-function resolvePath(a: string, b: string) {
-  const outputParts = a.split('/');
-  for (const part of b.split('/')) {
-    if (part === '..') {
-      if (outputParts.length !== 0) {
-        outputParts.length = outputParts.length - 1;
-        continue;
-      }
-    }
-    outputParts.push(part);
-  }
-  return outputParts.join('/');
 }
 
 class AppInfo {
@@ -97,17 +83,9 @@ class AppInfo {
       this.supported_api_versions = [0];
     }
     if (PYCG_APP_VERSION in this.supported_api_versions === false) {
-      const redirectMsgBox = new StatusMessage();
       const redirectMsg = `This Neuroglancer branch requires Graph Server version ${
           PYCG_APP_VERSION}, but the server only supports version(s) ${
           this.supported_api_versions}.`;
-
-      if (location.hostname.includes('neuromancer-seung-import.appspot.com')) {
-        const redirectLoc = new URL(location.href);
-        redirectLoc.hostname = `graphene-v${
-            this.supported_api_versions.slice(-1)[0]}-dot-neuromancer-seung-import.appspot.com`;
-        redirectMsgBox.setHTML(`Try <a href="${redirectLoc.href}">${redirectLoc.hostname}</a>?`);
-      }
       throw new Error(redirectMsg);
     }
   }

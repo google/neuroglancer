@@ -62,7 +62,7 @@ class PrecomputedSkeletonSource extends
   }
 }
 
-function resolvePath(a: string, b: string) {
+export function resolvePath(a: string, b: string) {
   const outputParts = a.split('/');
   for (const part of b.split('/')) {
     if (part === '..') {
