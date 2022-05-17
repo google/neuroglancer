@@ -166,6 +166,7 @@ public:
   template <typename T>
   int dekempress_algo(T *data) {
 		const size_t nvx = nvoxels();
+		const size_t nxy = nx * ny;
 
 		// Reverse loss of one bit by subtracting 2.0
 		for (size_t i = 0; i < nvx; i++) {
@@ -175,28 +176,16 @@ public:
 		// Change axes XYCZ to XYZC (C-order)
 
 		std::unique_ptr<T[]> dekempressed(new T[nvx]());
-		// T *src;
-		// T *dest;
-
-		const size_t xysize = nx * ny;
-		int offset = 0;
 
 		for (size_t channel = 0; channel < nf; channel++) {
 		  for (size_t z = 0; z < nz; z++) {
-				for (size_t y = 0; y < ny; y++) {
-					for (size_t x = 0; x < nx; x++) {
-						size_t src = x + nx * (y + ny * (z + nz * channel));
-						size_t dest = x + nx * (y + ny * (channel + nf * z));
-						dekempressed[dest] = data[src];
-					}
-		  	}
-				// src = &data[ z * xysize * (nf + channel) ];
-				// dest = &dekempressed[ z * xysize + offset ];
-				// std::memcpy(dest, src, xysize * sizeof(T)); 
+				T* src = &data[ nx * ny * (z + nz * channel) ];
+				T* dest = &dekempressed[ nx * ny * (channel + nf * z) ];
+				std::memcpy(dest, src, nxy * sizeof(T)); 
 		  }
 		}
-
 		std::memcpy(data, dekempressed.get(), nvx * sizeof(T));
+		
 		return 0;
   }
 };
