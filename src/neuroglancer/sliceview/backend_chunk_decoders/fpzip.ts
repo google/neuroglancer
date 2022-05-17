@@ -19,7 +19,7 @@ import {DATA_TYPE_BYTES} from 'neuroglancer/util/data_type';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {decodeFpzip} from 'neuroglancer/async_computation/decode_fpzip_request';
+import {decodeFpzip, decodeKempressed} from 'neuroglancer/async_computation/decode_fpzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 
 export async function decodeFpzipChunk(
@@ -29,6 +29,24 @@ export async function decodeFpzipChunk(
   const dataType = chunk.source!.spec.dataType;
   let image : TypedArray = await requestAsyncComputation(
     decodeFpzip, cancellationToken, [response],
+    /*buffer=*/(new Uint8Array(response)),
+    /*width=*/chunkDataSize[0],
+    /*height=*/chunkDataSize[1],
+    /*depth=*/chunkDataSize[2],
+    /*numComponents=*/chunkDataSize[3] || 1,
+    /*bytesPerPixel=*/DATA_TYPE_BYTES[dataType],
+  );
+
+  await decodeRawChunk(chunk, cancellationToken, image.buffer);
+}
+
+export async function decodeKempressedChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
+  
+  const chunkDataSize = chunk.chunkDataSize!;
+  const dataType = chunk.source!.spec.dataType;
+  let image : TypedArray = await requestAsyncComputation(
+    decodeKempressed, cancellationToken, [response],
     /*buffer=*/(new Uint8Array(response)),
     /*width=*/chunkDataSize[0],
     /*height=*/chunkDataSize[1],

@@ -84,7 +84,8 @@ async function decompress_helper(
   try {
     const is_valid = (m.instance.exports.check_valid as Function)(
       bufPtr, width, height, depth, 
-      numComponents, bytesPerPixel
+      numComponents, bytesPerPixel,
+      kempressed
     );
 
     if (!is_valid) {

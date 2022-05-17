@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {decompressFpzip} from 'neuroglancer/sliceview/fpzip';
-import {decodeFpzip} from 'neuroglancer/async_computation/decode_fpzip_request';
+import {decompressFpzip, decompressKempressed} from 'neuroglancer/sliceview/fpzip';
+import {decodeFpzip, decodeKempressed} from 'neuroglancer/async_computation/decode_fpzip_request';
 import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
 
 registerAsyncComputation(
@@ -26,6 +26,21 @@ registerAsyncComputation(
       numComponents: number, bytesPerPixel:number, 
     ) {   
       const result = await decompressFpzip(
+        data, 
+        width, height, depth, 
+        numComponents, bytesPerPixel
+      );
+      return { value: result, transfer: [result.buffer] };
+    });
+
+registerAsyncComputation(
+    decodeKempressed,
+    async function(
+      data: Uint8Array, 
+      width: number, height: number, depth: number,
+      numComponents: number, bytesPerPixel:number, 
+    ) {   
+      const result = await decompressKempressed(
         data, 
         width, height, depth, 
         numComponents, bytesPerPixel

@@ -21,3 +21,9 @@ export const decodeFpzip = asyncComputation<(
     width: number, height: number, depth: number,
     numComponents: number, bytesPerPixel:number
 ) => Float32Array>('decodeFpzip');
+
+export const decodeKempressed = asyncComputation<(
+    data: Uint8Array, 
+    width: number, height: number, depth: number,
+    numComponents: number, bytesPerPixel:number
+) => Float32Array>('decodeKempressed');
