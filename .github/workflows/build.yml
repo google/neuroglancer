@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         node-version:
-          - '15.x'
+          - '16.x'
         os:
           - 'ubuntu-latest'
           - 'windows-latest'
@@ -61,7 +61,7 @@ jobs:
           - '3.8'
           - '3.9'
         node-version:
-          - '15.x'
+          - '16.x'
         os:
           - 'ubuntu-latest'
           - 'windows-latest'
@@ -114,7 +114,7 @@ jobs:
     strategy:
       matrix:
         node-version:
-          - '15.x'
+          - '16.x'
         os:
           - 'ubuntu-latest'
           - 'windows-latest'
