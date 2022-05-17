@@ -33,7 +33,7 @@ import {decodeCompressoChunk} from 'neuroglancer/sliceview/backend_chunk_decoder
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodePngChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/png';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {decodeFpzipChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {decodeFpzipChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/fpzip';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {fetchSpecialHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
 import {CancellationToken} from 'neuroglancer/util/cancellation';

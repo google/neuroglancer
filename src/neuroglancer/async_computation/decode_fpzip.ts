@@ -20,7 +20,15 @@ import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
 
 registerAsyncComputation(
     decodeFpzip,
-    async function(data: Uint8Array) {      
-      const result = await decompressFpzip(data);
+    async function(
+      data: Uint8Array, 
+      width: number, height: number, depth: number,
+      numComponents: number, bytesPerPixel:number, 
+    ) {   
+      const result = await decompressFpzip(
+        data, 
+        width, height, depth, 
+        numComponents, bytesPerPixel
+      );
       return { value: result, transfer: [result.buffer] };
     });

@@ -16,4 +16,8 @@
 
 import {asyncComputation} from 'neuroglancer/async_computation';
 
-export const decodeFpzip = asyncComputation<(data: Uint8Array) => Uint8Array>('decodeFpzip');
+export const decodeFpzip = asyncComputation<(
+    data: Uint8Array, 
+    width: number, height: number, depth: number,
+    numComponents: number, bytesPerPixel:number
+) => Float32Array>('decodeFpzip');
