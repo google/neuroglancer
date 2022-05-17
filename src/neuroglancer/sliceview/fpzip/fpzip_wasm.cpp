@@ -222,7 +222,15 @@ int fpzip_decompress(
 	unsigned char* buf, unsigned int num_bytes, 
 	void* out, unsigned int num_out_bytes
 ) {
+	if (num_bytes == 0) {
+		return 1;
+	}
+
 	Fpzip decoder(buf);
+	if (num_out_bytes < decoder.nbytes()) {
+		return 2;
+	}
+
 	decoder.decompress(buf, num_bytes, reinterpret_cast<unsigned char*>(out), num_out_bytes);
 	return 0;
 }
@@ -231,7 +239,15 @@ int fpzip_dekempress(
 	unsigned char* buf, unsigned int num_bytes, 
 	void* out, unsigned int num_out_bytes
 ) {
+	if (num_bytes == 0) {
+		return 1;
+	}
+	
 	Fpzip decoder(buf);
+	if (num_out_bytes < decoder.nbytes()) {
+		return 2;
+	}
+
 	decoder.dekempress(buf, num_bytes, reinterpret_cast<unsigned char*>(out), num_out_bytes);
 	return 0;
 }
