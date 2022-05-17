@@ -27,32 +27,32 @@ public:
   size_t nf;
 
   Fpzip () {
-	type = 0;
-	prec = 0;
-	nx = 0;
-	ny = 0;
-	nz = 0;
-	nf = 0;
+		type = 0;
+		prec = 0;
+		nx = 0;
+		ny = 0;
+		nz = 0;
+		nf = 0;
   }
 
   Fpzip (unsigned char* buf) {
-	type = 0;
-	prec = 0;
-	nx = 0;
-	ny = 0;
-	nz = 0;
-	nf = 0;
+		type = 0;
+		prec = 0;
+		nx = 0;
+		ny = 0;
+		nz = 0;
+		nf = 0;
 
-	decode_headers(buf);
+		decode_headers(buf);
   }
 
   Fpzip(Fpzip &orig) {
-	type = orig.type;
-	prec = orig.prec;
-	nx = orig.nx;
-	ny = orig.ny;
-	nz = orig.nz;
-	nf = orig.nf;
+		type = orig.type;
+		prec = orig.prec;
+		nx = orig.nx;
+		ny = orig.ny;
+		nz = orig.nz;
+		nf = orig.nf;
   }
 
   ~Fpzip() {
@@ -76,22 +76,22 @@ public:
   size_t get_nf() { return nf; }
 
   void decode_headers(unsigned char *data) {
-	// char errorstr[128];
+		// char errorstr[128];
 
-	FPZ* fpz = fpzip_read_from_buffer(static_cast<void*>(data));
-	if (!fpzip_read_header(fpz)) {
-	  // sprintf(errorstr, "cannot read header: %s\n", fpzip_errstr[fpzip_errno]);
-	  goto close;
-	}
-	type = fpz->type;
-	prec = fpz->prec;
-	nx = fpz->nx;
-	ny = fpz->ny;
-	nz = fpz->nz;
-	nf = fpz->nf;
-	
-	close:
-		fpzip_read_close(fpz);
+		FPZ* fpz = fpzip_read_from_buffer(static_cast<void*>(data));
+		if (!fpzip_read_header(fpz)) {
+		  // sprintf(errorstr, "cannot read header: %s\n", fpzip_errstr[fpzip_errno]);
+		  goto close;
+		}
+		type = fpz->type;
+		prec = fpz->prec;
+		nx = fpz->nx;
+		ny = fpz->ny;
+		nz = fpz->nz;
+		nf = fpz->nf;
+		
+		close:
+			fpzip_read_close(fpz);
   }
 
   // int check_length() {
@@ -218,6 +218,23 @@ public:
 };
 
 extern "C" {
+
+int check_valid(
+	unsigned char* buf,
+	const size_t sx, const size_t sy, const size_t sz, 
+	const size_t num_channels, const size_t bytes_per_pixel
+) {
+	Fpzip decoder(buf);
+
+	unsigned int type = (bytes_per_pixel == 4)
+		? 0
+		: 1;
+
+	return (
+		(decoder.nx == sx) && (decoder.ny == sy) && (decoder.nz == sz)
+		&& (decoder.nf == num_channels) && (decoder.type == type)
+	);
+}
 
 int fpzip_decompress(
 	unsigned char* buf, unsigned int num_bytes, 

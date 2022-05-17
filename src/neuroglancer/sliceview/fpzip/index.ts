@@ -34,54 +34,6 @@ const fpzipModulePromise = (async () => {
   return m;
 })();
 
-const magicSpec = [ 'f', 'p', 'z', '\0' ];
-
-const enum FpzipDataWidth {
-  FLOAT = 0,
-  DOUBLE = 1
-}
-
-function readHeader(buffer: Uint8Array) 
-  : {sx:number,sy:number,sz:number,dataWidth:number,numChannels:number} { 
-
-  function arrayEqualTrucated(a:any, b:any) : boolean {
-    return a.every((val:number, idx:number) => String.fromCharCode(val) === b[idx]);
-  }
-
-  if (buffer.length < 164) {
-    throw new Error(`fpzip: Invalid image size: ${buffer.length}`);
-  }
-
-  // check for header for magic sequence
-  const validMagic = arrayEqualTrucated(magicSpec, buffer);
-  if (!validMagic) {
-    throw new Error(`fpzip: didn't match magic numbers: ${buffer.slice(0,4)}`);
-  }
-
-  const bufview = new DataView(buffer.buffer, magicSpec.length); 
-  const major_ver = bufview.getUint16(0, /*littleEndian=*/true);
-  const minor_ver = bufview.getUint8(2);
-
-  if (major_ver !== 1 || minor_ver != 3) {
-    throw new Error(`fpzip: Invalid version: ${major_ver}.${minor_ver} (expected 1.3)`);
-  }
-
-  const type_prec = bufview.getUint8(4);
-  const type = (0b10000000 & type_prec) >>> 7; // 0: float, 1: double
-  // const prec = type_prec & 0b01111111; // not necessary here
-
-  const sx = bufview.getUint32(1);
-  const sy = bufview.getUint32(2);
-  const sz = bufview.getUint32(3);
-  const numChannels = bufview.getUint32(4);
-
-  const dataWidth = (type === FpzipDataWidth.FLOAT)
-    ? 4
-    : 8;
-
-  return { sx, sy, sz, dataWidth, numChannels };
-}
-
 export async function decompressFpzip(
   buffer: Uint8Array, 
   width: number, height: number, depth: number,
@@ -89,23 +41,6 @@ export async function decompressFpzip(
 ) : Promise<Float32Array> {
   
   const m = await fpzipModulePromise;
-  // let {sx,sy,sz,dataWidth,numChannels} = readHeader(buffer);
-  // console.log(sx,sy,sz,dataWidth,numChannels);
-
-  // if (
-  //   sx !== width 
-  //   || sy !== height
-  //   || sz !== depth
-  //   || numComponents !== numChannels
-  //   || bytesPerPixel !== dataWidth
-  // ) {
-  //   throw new Error(
-  //     `fpzip: Image decode parameters did not match expected chunk parameters.
-  //        Expected: width: ${width} height: ${height} depth: ${depth} channels: ${numComponents} bytes per pixel: ${bytesPerPixel} 
-  //        Decoded:  width: ${sx} height: ${sy} depth: ${sz} channels: ${numChannels} bytes per pixel: ${dataWidth}
-  //       `
-  //   );
-  // }
 
   const nbytes = width * height * depth * bytesPerPixel * numComponents;
   if (nbytes < 0) {
@@ -119,11 +54,24 @@ export async function decompressFpzip(
   let heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, bufPtr);
 
-  const code = (m.instance.exports.fpzip_decompress as Function)(
-    bufPtr, buffer.byteLength, imagePtr, nbytes
-  );
-
   try {
+    const is_valid = (m.instance.exports.check_valid as Function)(
+      bufPtr, width, height, depth, 
+      numComponents, bytesPerPixel
+    );
+
+    if (!is_valid) {
+      throw new Error(
+        `fpzip: Image decode parameters did not match expected chunk parameters.
+           Expected: width: ${width} height: ${height} depth: ${depth} channels: ${numComponents} bytes per pixel: ${bytesPerPixel}
+        `
+      );
+    }
+
+    const code = (m.instance.exports.fpzip_decompress as Function)(
+      bufPtr, buffer.byteLength, imagePtr, nbytes
+    );
+
     if (code !== 0) {
       throw new Error(`fpzip: Failed to decode fpzip image. decoder code: ${code}`);
     }

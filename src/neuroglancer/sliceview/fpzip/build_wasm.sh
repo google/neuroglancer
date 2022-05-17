@@ -4,7 +4,7 @@ FPZIP=/usr/src/fpzip
 SRC=$FPZIP/src
 
 compile_options=(
-    -O2
+    -Oz # O2 + drops vectorization, but WASM doesn't support vectorization anyway
     -I$FPZIP/include 
 
     $SRC/error.cpp $SRC/rcdecoder.cpp $SRC/rcencoder.cpp 
@@ -20,7 +20,7 @@ compile_options=(
      -s ALLOW_MEMORY_GROWTH=1 
      -s TOTAL_STACK=32768
      -s TOTAL_MEMORY=64kb
-     -s EXPORTED_FUNCTIONS='["_fpzip_decompress","_fpzip_dekempress","_malloc","_free"]'
+     -s EXPORTED_FUNCTIONS='["_fpzip_decompress","_fpzip_dekempress","_check_valid","_malloc","_free"]'
      -s MALLOC=emmalloc
      -s ENVIRONMENT=worker
      -s STANDALONE_WASM=1
