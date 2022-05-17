@@ -227,5 +227,6 @@ jobs:
     - run: ./src/neuroglancer/mesh/draco/build.sh
     - run: ./src/neuroglancer/sliceview/compresso/build.sh
     - run: ./src/neuroglancer/sliceview/png/build.sh
+    - run: ./src/neuroglancer/sliceview/fpzip/build.sh
     # Check that there are no differences.
     - run: git diff --exit-code
