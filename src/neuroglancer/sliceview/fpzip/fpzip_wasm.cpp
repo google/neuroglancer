@@ -60,12 +60,12 @@ public:
   }
 
   size_t nvoxels() {
-	return nx * ny * nz * nf;
+		return nx * ny * nz * nf;
   }
 
   size_t nbytes() {
-	// type: 0 = float, 1 = double
-	return nvoxels() * (type + 1) * sizeof(float);
+		// type: 0 = float, 1 = double
+		return nvoxels() * (type + 1) * sizeof(float);
   }
 
   size_t get_type() { return type; }
@@ -76,11 +76,8 @@ public:
   size_t get_nf() { return nf; }
 
   void decode_headers(unsigned char *data) {
-		// char errorstr[128];
-
 		FPZ* fpz = fpzip_read_from_buffer(static_cast<void*>(data));
 		if (!fpzip_read_header(fpz)) {
-		  // sprintf(errorstr, "cannot read header: %s\n", fpzip_errstr[fpzip_errno]);
 		  goto close;
 		}
 		type = fpz->type;
@@ -94,18 +91,6 @@ public:
 			fpzip_read_close(fpz);
   }
 
-  // int check_length() {
-		// // char errorstr[512];
-
-		// if (stream_bytes < nbytes()) {
-		//   // sprintf(errorstr, "Javascript TypedArray (%u bytes) should be at least %u bytes long.", 
-		//   //   (unsigned int)buf.length(), (unsigned int)nbytes());
-		//   // NBIND_ERR(errorstr);
-		//   return 1;
-		// }
-		// return 0;
-  // }
-
   int decompress(
 		unsigned char *encoded, 
 		const size_t in_bytes, 
@@ -113,11 +98,7 @@ public:
 		const size_t out_bytes
 	) {
 		decode_headers(encoded);
-		// if (!check_length(decoded)) {
-		// 	return 1;
-		// }
-		dfpz(encoded, in_bytes, decoded, out_bytes);
-		return 0;
+		return dfpz(encoded, in_bytes, decoded, out_bytes);
   }
 
   /* fpzip decompression + dekempression.
@@ -137,18 +118,19 @@ public:
 		const size_t out_bytes
 	) {
 		decode_headers(encoded);
-		// check_length(decoded);
 
-		dfpz(encoded, in_bytes, decoded, out_bytes);
+		int code = dfpz(encoded, in_bytes, decoded, out_bytes);
+
+		if (code) {
+			return code;
+		}
 
 		if (type == FPZIP_TYPE_FLOAT) {  
-		  dekempress_algo<float>( reinterpret_cast<float*>(decoded) );
+		  return dekempress_algo<float>( reinterpret_cast<float*>(decoded) );
 		}
 		else {
-		  dekempress_algo<double>( reinterpret_cast<double*>(decoded) );
+		  return dekempress_algo<double>( reinterpret_cast<double*>(decoded) );
 		}
-
-		return 0;
   }
 
   /* Standard fpzip decompression. 
@@ -157,63 +139,61 @@ public:
   * DecodedImage *di = decompress(buffer);
   * float* img = (float*)di->data;
   */
-	void dfpz(
+	int dfpz(
 		unsigned char *encoded, 
 		const size_t in_bytes, 
 		unsigned char *decoded,
 		const size_t out_bytes
 	) {
-		// char errorstr[128];
-
-		// unsigned char* buffer = encoded.data();
-
+		int ret = 0;
 		FPZ* fpz = fpzip_read_from_buffer(static_cast<void*>(encoded));
 
 		if (!fpzip_read_header(fpz)) {
-		  // sprintf(errorstr, "cannot read header: %s\n", fpzip_errstr[fpzip_errno]);
-		  // NBIND_ERR(errorstr);
+		  ret = 1;
 		  goto close;
 		}
 
-		// perform actual decompression
 		if (!fpzip_read(fpz, static_cast<void*>(decoded))) {
-		  // sprintf(errorstr, "decompression failed: %s\n", fpzip_errstr[fpzip_errno]);
-		  // NBIND_ERR(errorstr);
+		  ret = 2;
+		  goto close;
 		}
 
 		close:
 			fpzip_read_close(fpz);
+			return ret;
   }
 
   template <typename T>
-  void dekempress_algo(T *data) {
-	const size_t nvx = nvoxels();
+  int dekempress_algo(T *data) {
+		const size_t nvx = nvoxels();
 
-	// Reverse loss of one bit by subtracting 2.0
-	for (size_t i = 0; i < nvx; i++) {
-	  data[i] -= 2.0;
-	}
+		// Reverse loss of one bit by subtracting 2.0
+		for (size_t i = 0; i < nvx; i++) {
+		  data[i] -= 2.0;
+		}
 
-	// Change axes XYCZ to XYZC
+		// Change axes XYCZ to XYZC
 
-	T *dekempressed = new T[nvx]();
-	T *src;
-	T *dest;
+		T *dekempressed = new T[nvx]();
+		T *src;
+		T *dest;
 
-	const size_t xysize = nx * ny;
-	int offset = 0;
+		const size_t xysize = nx * ny;
+		int offset = 0;
 
-	for (size_t channel = 0; channel < nf; channel++) {
-	  offset = nx * ny * nz * channel;
+		for (size_t channel = 0; channel < nf; channel++) {
+		  offset = nx * ny * nz * channel;
 
-	  for (size_t z = 0; z < nz; z++) {
-		src = &data[ z * xysize * (nf + channel) ];
-		dest = &dekempressed[ z * xysize + offset ];
-		memcpy(dest, src, xysize * sizeof(T)); 
-	  }
-	}
+		  for (size_t z = 0; z < nz; z++) {
+			src = &data[ z * xysize * (nf + channel) ];
+			dest = &dekempressed[ z * xysize + offset ];
+			memcpy(dest, src, xysize * sizeof(T)); 
+		  }
+		}
 
-	memcpy(data, dekempressed, nvx * sizeof(T));
+		memcpy(data, dekempressed, nvx * sizeof(T));
+
+		return 0;
   }
 };
 
@@ -253,6 +233,5 @@ int fpzip_dekempress(
 	decoder.dekempress(buf, num_bytes, reinterpret_cast<unsigned char*>(out), num_out_bytes);
 	return 0;
 }
-
 
 }
