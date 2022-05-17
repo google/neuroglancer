@@ -86,7 +86,7 @@ describe('Uint64Map', () => {
     m.set(k3, v3);
 
     let iterated = [];
-    for (let [k, v] of m) {
+    for (let [k, v] of m.unsafeEntries()) {
       iterated.push([k.clone(), v.clone()]);
     }
     iterated.sort((a, b) => Uint64.compare(a[0], b[0]));

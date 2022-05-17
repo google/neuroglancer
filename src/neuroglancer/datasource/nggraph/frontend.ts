@@ -21,7 +21,7 @@ import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_reque
 import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {Credentials, NggraphCredentialsProvider} from 'neuroglancer/datasource/nggraph/credentials_provider';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {ComputedSplit, isBaseSegmentId, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID} from 'neuroglancer/segmentation_graph/source';
+import {ComputedSplit, isBaseSegmentId, SegmentationGraphSource, SegmentationGraphSourceConnection, UNKNOWN_NEW_SEGMENT_ID, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
@@ -253,7 +253,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     const {segmentQueries} = this;
     const generation = ++updateGeneration;
     const processVisibleSegments = (visibleSegments: Uint64Set) => {
-      for (const segmentId of visibleSegments) {
+      for (const segmentId of visibleSegments.unsafeKeys()) {
         if (Uint64.equal(segmentId, UNKNOWN_NEW_SEGMENT_ID)) continue;
         const segmentIdString = segmentId.toString();
         const existingQuery = segmentQueries.get(segmentIdString);
@@ -300,8 +300,9 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
     super();
   }
 
-  get highBitRepresentative() {
-    return true;
+  get visibleSegmentEquivalencePolicy() {
+    return VisibleSegmentEquivalencePolicy.MAX_REPRESENTATIVE |
+           VisibleSegmentEquivalencePolicy.REPRESENTATIVE_EXCLUDED;
   }
 
   private startWebsocket() {

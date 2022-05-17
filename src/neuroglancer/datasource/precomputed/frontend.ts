@@ -43,7 +43,7 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 
-class PrecomputedVolumeChunkSource extends
+export class PrecomputedVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 class PrecomputedMeshSource extends
@@ -62,7 +62,7 @@ class PrecomputedSkeletonSource extends
   }
 }
 
-function resolvePath(a: string, b: string) {
+export function resolvePath(a: string, b: string) {
   const outputParts = a.split('/');
   for (const part of b.split('/')) {
     if (part === '..') {
@@ -127,7 +127,7 @@ class ScaleInfo {
   }
 }
 
-interface MultiscaleVolumeInfo {
+export interface MultiscaleVolumeInfo {
   dataType: DataType;
   volumeType: VolumeType;
   mesh: string|undefined;
@@ -137,7 +137,7 @@ interface MultiscaleVolumeInfo {
   modelSpace: CoordinateSpace;
 }
 
-function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
+export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
@@ -186,7 +186,7 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   };
 }
 
-class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
   }
@@ -856,7 +856,7 @@ export const PrecomputedIndexedSegmentPropertySource = WithParameters(
 //   return {sharding, properties};
 // }
 
-function getSegmentPropertyMap(
+export function getSegmentPropertyMap(
     chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
     data: unknown, url: string): SegmentPropertyMap {
   chunkManager;
@@ -901,7 +901,7 @@ async function getSegmentPropertyMapDataSource(
 
 const urlPattern = /^([^#]*)(?:#(.*))?$/;
 
-function parseProviderUrl(providerUrl: string) {
+export function parseProviderUrl(providerUrl: string) {
   let [, url, fragment] = providerUrl.match(urlPattern)!;
   if (url.endsWith('/')) {
     url = url.substring(0, url.length - 1);

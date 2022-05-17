@@ -16,7 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection} from 'neuroglancer/segmentation_graph/source';
+import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
@@ -137,8 +137,8 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     return sets.map(set => set.map(element => element.toString()));
   }
 
-  get highBitRepresentative() {
-    return false;
+  get visibleSegmentEquivalencePolicy() {
+    return VisibleSegmentEquivalencePolicy.MIN_REPRESENTATIVE;
   }
 
   async merge(a: Uint64, b: Uint64): Promise<Uint64> {
@@ -258,7 +258,7 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
 
 function normalizeSegmentSet(segmentSet: Uint64Set, equivalences: DisjointUint64Sets) {
   const add: Uint64[] = [];
-  for (const id of segmentSet) {
+  for (const id of segmentSet.unsafeKeys()) {
     const rootId = equivalences.get(id);
     if (!Uint64.equal(id, rootId)) {
       add.push(rootId);

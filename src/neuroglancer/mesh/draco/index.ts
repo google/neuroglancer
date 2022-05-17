@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {RawPartitionedMeshData} from 'neuroglancer/mesh/backend';
+import {RawPartitionedMeshData, RawMeshData} from 'neuroglancer/mesh/backend';
 
 import dracoWasmUrl from './neuroglancer_draco.wasm';
 
@@ -68,11 +68,29 @@ export async function decodeDracoPartitioned(
   heap.set(buffer, offset);
   numPartitions = partition ? 8 : 1;
   const code = (m.instance.exports.neuroglancer_draco_decode as Function)(
-      offset, buffer.byteLength, partition, vertexQuantizationBits);
+      offset, buffer.byteLength, partition, vertexQuantizationBits, true);
   if (code === 0) {
     const r = decodeResult;
     decodeResult = undefined;
     if (r instanceof Error) throw r;
+    return r!;
+  }
+  throw new Error(`Failed to decode draco mesh: ${code}`);
+}
+
+export async function decodeDraco(
+    buffer: Uint8Array): Promise<RawMeshData> {
+  const m = await dracoModulePromise;
+  const offset = (m.instance.exports.malloc as Function)(buffer.byteLength);
+  const heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
+  heap.set(buffer, offset);
+  const code = (m.instance.exports.neuroglancer_draco_decode as Function)(
+      offset, buffer.byteLength, false, 0, false);
+  if (code === 0) {
+    const r = decodeResult;
+    decodeResult = undefined;
+    if (r instanceof Error) throw r;
+    r!.vertexPositions = new Float32Array(r!.vertexPositions.buffer)
     return r!;
   }
   throw new Error(`Failed to decode draco mesh: ${code}`);

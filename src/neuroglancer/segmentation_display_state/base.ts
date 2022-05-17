@@ -19,6 +19,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
@@ -81,17 +82,24 @@ export function forEachVisibleSegment(
     state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   const visibleSegments = getVisibleSegments(state);
   const segmentEquivalences = getSegmentEquivalences(state);
-  const highBitRepresentative = segmentEquivalences.disjointSets.highBitRepresentative.value;
-  for (let rootObjectId of visibleSegments) {
-    // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
-    if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {
-      continue;
-    }
-    for (let objectId of segmentEquivalences.setElements(rootObjectId)) {
-      if (highBitRepresentative && isHighBitSegment(objectId)) {
+  const equivalencePolicy = segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy.value;
+  for (let rootObjectId of visibleSegments.unsafeKeys()) {
+    if (equivalencePolicy & VisibleSegmentEquivalencePolicy.NONREPRESENTATIVE_EXCLUDED) {
+      const rootObjectId2 = segmentEquivalences.get(rootObjectId);
+      callback(rootObjectId, rootObjectId2);
+    } else {
+      // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
+      if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {
         continue;
       }
-      callback(objectId, rootObjectId);
+      for (let objectId of segmentEquivalences.setElements(rootObjectId)) {
+        if (equivalencePolicy & VisibleSegmentEquivalencePolicy.REPRESENTATIVE_EXCLUDED &&
+            equivalencePolicy & VisibleSegmentEquivalencePolicy.MAX_REPRESENTATIVE &&
+            isHighBitSegment(objectId)) {
+          continue;
+        }
+        callback(objectId, rootObjectId);
+      }
     }
   }
 }
