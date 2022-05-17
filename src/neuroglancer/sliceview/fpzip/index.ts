@@ -39,6 +39,33 @@ export async function decompressFpzip(
   width: number, height: number, depth: number,
   numComponents: number, bytesPerPixel:number,
 ) : Promise<Float32Array> {
+  return decompress_helper(
+    buffer, 
+    width, height, depth, 
+    numComponents, bytesPerPixel,
+    /*kempressed=*/false
+  );
+}
+
+export async function decompressKempressed(
+  buffer: Uint8Array, 
+  width: number, height: number, depth: number,
+  numComponents: number, bytesPerPixel:number,
+) : Promise<Float32Array> {
+  return decompress_helper(
+    buffer, 
+    width, height, depth, 
+    numComponents, bytesPerPixel,
+    /*kempressed=*/true
+  );
+}
+
+async function decompress_helper(
+  buffer: Uint8Array, 
+  width: number, height: number, depth: number,
+  numComponents: number, bytesPerPixel:number,
+  kempressed: boolean
+) : Promise<Float32Array> {
   
   const m = await fpzipModulePromise;
 
@@ -68,7 +95,11 @@ export async function decompressFpzip(
       );
     }
 
-    const code = (m.instance.exports.fpzip_decompress as Function)(
+    const fn = kempressed 
+      ? (m.instance.exports.fpzip_dekempress as Function)
+      : (m.instance.exports.fpzip_decompress as Function)
+
+    const code = fn(
       bufPtr, buffer.byteLength, imagePtr, nbytes
     );
 
