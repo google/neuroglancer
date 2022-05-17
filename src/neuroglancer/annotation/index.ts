@@ -80,6 +80,18 @@ export interface AnnotationNumericPropertySpec extends AnnotationPropertySpecBas
   step?: number;
 }
 
+export const propertyTypeDataType: Record<AnnotationPropertySpec['type'], DataType|undefined> = {
+  'float32': DataType.FLOAT32,
+  'uint32': DataType.UINT32,
+  'int32': DataType.INT32,
+  'uint16': DataType.UINT16,
+  'int16': DataType.INT16,
+  'uint8': DataType.UINT8,
+  'int8': DataType.INT8,
+  'rgb': undefined,
+  'rgba': undefined,
+};
+
 export type AnnotationPropertySpec = AnnotationColorPropertySpec|AnnotationNumericPropertySpec;
 
 export interface AnnotationPropertyTypeHandler {

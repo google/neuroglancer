@@ -20,26 +20,16 @@ import {Position} from 'neuroglancer/navigation_state';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
-import {EventActionMap} from 'neuroglancer/util/event_action_map';
-import {dataTypeIntervalEqual} from 'neuroglancer/util/lerp';
-import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
-import {InvlerpParameters} from 'neuroglancer/webgl/shader_ui_controls';
-import {adjustInvlerpBrightnessContrast, adjustInvlerpContrast, invertInvlerpRange, InvlerpWidget} from 'neuroglancer/widget/invlerp';
+import {ImageInvlerpParameters} from 'neuroglancer/webgl/shader_ui_controls';
+import {activateInvlerpTool, InvlerpWidget} from 'neuroglancer/widget/invlerp';
 import {LayerControlFactory} from 'neuroglancer/widget/layer_control';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 import {LegendShaderOptions} from 'neuroglancer/widget/shader_controls';
 
-const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
-  'at:shift+wheel': {action: 'adjust-contrast-via-wheel'},
-  'at:shift+mousedown0': {action: 'adjust-via-drag'},
-  'at:shift+mousedown2': {action: 'invert-range'},
-});
-
 export function channelInvlerpLayerControl<LayerType extends UserLayer>(
     getter: (layer: LayerType) => {
-      watchableValue: WatchableValueInterface<InvlerpParameters>,
+      watchableValue: WatchableValueInterface<ImageInvlerpParameters>,
       dataType: DataType,
       defaultChannel: number[],
       channelCoordinateSpaceCombiner: CoordinateSpaceCombiner | undefined,
@@ -89,39 +79,7 @@ export function channelInvlerpLayerControl<LayerType extends UserLayer>(
       return {control, controlElement: control.element};
     },
     activateTool: (activation, control) => {
-      activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
-      activation.bindAction<WheelEvent>('adjust-contrast-via-wheel', event => {
-        event.stopPropagation();
-        const zoomAmount = getWheelZoomAmount(event.detail);
-        adjustInvlerpContrast(control.dataType, control.trackable, zoomAmount);
-      });
-      activation.bindAction<MouseEvent>('adjust-via-drag', event => {
-        event.stopPropagation();
-        let baseScreenX = event.detail.screenX, baseScreenY = event.detail.screenY;
-        let baseRange = control.trackable.value.range;
-        let prevRange = baseRange;
-        let prevScreenX = baseScreenX, prevScreenY = baseScreenY;
-        startRelativeMouseDrag(event.detail, newEvent => {
-          const curRange = control.trackable.value.range;
-          const curScreenX = newEvent.screenX, curScreenY = newEvent.screenY;
-          if (!dataTypeIntervalEqual(control.dataType, curRange, prevRange)) {
-            baseRange = curRange;
-            baseScreenX = prevScreenX;
-            baseScreenY = prevScreenY;
-          }
-          adjustInvlerpBrightnessContrast(
-              control.dataType, control.trackable, baseRange,
-              (curScreenY - baseScreenY) * 2 / screen.height,
-              (curScreenX - baseScreenX) * 4 / screen.width);
-          prevRange = control.trackable.value.range;
-          prevScreenX = curScreenX;
-          prevScreenY = curScreenY;
-        });
-      });
-      activation.bindAction('invert-range', event => {
-        event.stopPropagation();
-        invertInvlerpRange(control.trackable);
-      });
+      activateInvlerpTool(activation, control);
     },
   };
 }

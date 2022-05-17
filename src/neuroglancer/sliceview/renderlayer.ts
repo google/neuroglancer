@@ -80,9 +80,7 @@ export abstract class SliceViewRenderLayer<
   dataHistogramSpecifications: HistogramSpecifications;
 
   getDataHistogramCount() {
-    const {dataHistogramSpecifications} = this;
-    if (!dataHistogramSpecifications.visibility.visible) return 0;
-    return dataHistogramSpecifications.bounds.value.length;
+    return this.dataHistogramSpecifications.visibleHistograms;
   }
 
   /**
@@ -154,7 +152,8 @@ export abstract class SliceViewRenderLayer<
     this.rpcTransfer = options.rpcTransfer || {};
     this.dataHistogramSpecifications = this.registerDisposer(
         options.dataHistogramSpecifications ??
-        new HistogramSpecifications(constantWatchableValue([]), constantWatchableValue([])));
+        new HistogramSpecifications(
+            constantWatchableValue([]), constantWatchableValue([]), constantWatchableValue([])));
     this.registerDisposer(
         this.dataHistogramSpecifications.visibility.changed.add(this.redrawNeeded.dispatch));
   }

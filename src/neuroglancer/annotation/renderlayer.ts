@@ -353,6 +353,8 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
       this.role = base.state.role;
       this.registerDisposer(base.redrawNeeded.add(this.redrawNeeded.dispatch));
       this.handleRankChanged();
+      this.registerDisposer(this.base.state.displayState.shaderControls.histogramSpecifications
+                                .producerVisibility.add(this.visibility));
     }
 
     attach(attachment: VisibleLayerInfo<LayerView, AttachmentState>) {
@@ -453,6 +455,8 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
         renderSubspaceInvModelMatrix: chunkDisplayTransform.displaySubspaceInvModelMatrix,
         chunkDisplayTransform,
       };
+      const computeHistograms =
+          this.base.state.displayState.shaderControls.histogramSpecifications.visibleHistograms > 0;
       for (const annotationType of annotationTypes) {
         const idMap = typeToIdMaps[annotationType];
         let count = idMap.size;
@@ -471,7 +475,12 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
           context.count = count;
           context.bufferOffset = typeToOffset[annotationType];
           context.selectedIndex = selectedIndex;
-          this.renderHelpers[annotationType].draw(context);
+          const renderHelper = this.renderHelpers[annotationType];
+          renderHelper.draw(context);
+          if (computeHistograms) {
+            renderHelper.computeHistograms(context, renderContext.frameNumber);
+            renderContext.bindFramebuffer();
+          }
           context.basePickId += count * handler.pickIdsPerInstance;
         }
       }

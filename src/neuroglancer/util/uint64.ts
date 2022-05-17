@@ -333,4 +333,10 @@ export class Uint64 {
       this.high = Math.floor(value / 0x100000000);
     }
   }
+
+  static fromNumber(value: number) {
+    const x = new Uint64();
+    x.setFromNumber(value);
+    return x;
+  }
 }

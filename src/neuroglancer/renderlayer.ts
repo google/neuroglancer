@@ -95,6 +95,8 @@ export interface ThreeDimensionalReadyRenderContext {
 export interface ThreeDimensionalRenderContext extends ThreeDimensionalReadyRenderContext {
   pickIDs: PickIDManager;
   wireFrame: boolean;
+  bindFramebuffer: () => void;
+  frameNumber: number;
 }
 
 
