@@ -93,8 +93,7 @@ function getInt32InvlerpImpl(dataType: DataType) {
     dataTypeShaderDefinition[dataType],
     glsl_dataTypeLerpParameters[dataType],
     `
-float computeInvlerp(${shaderDataType} inputValue, ${pType} p) {
-  ${scalarType} v = toRaw(inputValue);
+float computeInvlerp(${scalarType} v, ${pType} p) {
   uint x;
   if (v >= p.offset) {
     x = uint(v - p.offset);

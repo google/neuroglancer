@@ -371,7 +371,6 @@ function parseImageInvlerpDirective(
   let clamp = true;
   let range = defaultDataTypeRange[dataType];
   let window: DataTypeInterval|undefined;
-  let property: string|undefined;
   for (let [key, value] of parameters) {
     try {
       switch (key) {
@@ -411,7 +410,7 @@ function parseImageInvlerpDirective(
       type: 'imageInvlerp',
       dataType,
       clamp,
-      default: {range, window: window ?? normalizeDataTypeInterval(range), channel, property},
+      default: {range, window: window ?? normalizeDataTypeInterval(range), channel},
     } as ShaderImageInvlerpControl,
     errors: undefined,
   };

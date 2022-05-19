@@ -167,7 +167,7 @@ void main() {
       errors: [],
       controls: new Map([[
         'normalized', {
-          type: 'invlerp',
+          type: 'imageInvlerp',
           dataType: DataType.UINT8,
           clamp: true,
           default: {
@@ -199,7 +199,7 @@ void main() {
       errors: [],
       controls: new Map([[
         'normalized', {
-          type: 'invlerp',
+          type: 'imageInvlerp',
           dataType: DataType.UINT8,
           clamp: true,
           default: {
@@ -231,7 +231,7 @@ void main() {
       errors: [],
       controls: new Map([[
         'normalized', {
-          type: 'invlerp',
+          type: 'imageInvlerp',
           dataType: DataType.UINT8,
           clamp: true,
           default: {
@@ -263,7 +263,7 @@ void main() {
       errors: [],
       controls: new Map([[
         'normalized', {
-          type: 'invlerp',
+          type: 'imageInvlerp',
           dataType: DataType.UINT8,
           clamp: true,
           default: {
@@ -295,7 +295,7 @@ void main() {
       errors: [],
       controls: new Map([[
         'normalized', {
-          type: 'invlerp',
+          type: 'imageInvlerp',
           dataType: DataType.UINT8,
           clamp: true,
           default: {
@@ -327,13 +327,149 @@ void main() {
       errors: [],
       controls: new Map([[
         'normalized', {
-          type: 'invlerp',
+          type: 'imageInvlerp',
           dataType: DataType.UINT8,
           clamp: true,
           default: {
             range: [0, 255],
             window: [0, 255],
             channel: [1, 2],
+          },
+        }
+      ]]),
+    });
+  });
+
+  it('handles property invlerp control without property', () => {
+    const code = `
+#uicontrol invlerp red
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const properties = new Map([['p1', DataType.UINT8], ['p2', DataType.FLOAT32]]);
+    expect(parseShaderUiControls(code, {
+      properties
+    })).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'red', {
+          type: 'propertyInvlerp',
+          properties,
+          clamp: true,
+          default: {
+            range: undefined,
+            window: undefined,
+            dataType: DataType.UINT8,
+            property: "p1",
+          },
+        }
+      ]]),
+    });
+  });
+
+  it('handles property invlerp control with property', () => {
+    const code = `
+#uicontrol invlerp red(property="p2")
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const properties = new Map([['p1', DataType.UINT8], ['p2', DataType.FLOAT32]]);
+    expect(parseShaderUiControls(code, {
+      properties
+    })).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'red', {
+          type: 'propertyInvlerp',
+          properties,
+          clamp: true,
+          default: {
+            range: undefined,
+            window: undefined,
+            dataType: DataType.FLOAT32,
+            property: "p2",
+          },
+        }
+      ]]),
+    });
+  });
+
+  it('handles property invlerp control with range', () => {
+    const code = `
+#uicontrol invlerp red(property="p2", range=[1, 10])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const properties = new Map([['p1', DataType.UINT8], ['p2', DataType.FLOAT32]]);
+    expect(parseShaderUiControls(code, {
+      properties
+    })).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'red', {
+          type: 'propertyInvlerp',
+          properties,
+          clamp: true,
+          default: {
+            range: [1, 10],
+            window: undefined,
+            dataType: DataType.FLOAT32,
+            property: "p2",
+          },
+        }
+      ]]),
+    });
+  });
+
+  it('handles property invlerp control with window', () => {
+    const code = `
+#uicontrol invlerp red(property="p2", window=[1, 10])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const properties = new Map([['p1', DataType.UINT8], ['p2', DataType.FLOAT32]]);
+    expect(parseShaderUiControls(code, {
+      properties
+    })).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'red', {
+          type: 'propertyInvlerp',
+          properties,
+          clamp: true,
+          default: {
+            range: undefined,
+            window: [1, 10],
+            dataType: DataType.FLOAT32,
+            property: "p2",
           },
         }
       ]]),
