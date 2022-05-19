@@ -627,9 +627,16 @@ function objectFromEntries(entries: Iterable<[string, any]>) {
   return obj;
 }
 
+function replaceMap(_key: string, value: unknown) {
+  if (value instanceof Map) {
+    return Array.from(value.entries());
+  }
+  return value;
+}
+
 function encodeControls(controls: Controls|undefined) {
   if (controls === undefined) return undefined;
-  return JSON.stringify(objectFromEntries(controls));
+  return JSON.stringify(objectFromEntries(controls), replaceMap);
 }
 
 export class WatchableShaderUiControls implements WatchableValueInterface<Controls|undefined> {
