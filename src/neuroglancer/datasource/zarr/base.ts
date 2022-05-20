@@ -33,6 +33,7 @@ export class VolumeChunkSourceParameters {
   url: string;
   encoding: ZarrEncoding;
   separator: ZarrSeparator;
+  order: 'C'|'F';
 
   static RPC_ID = 'zarr/VolumeChunkSource';
 }
