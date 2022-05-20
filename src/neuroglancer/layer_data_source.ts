@@ -58,6 +58,7 @@ export function layerDataSourceSpecificationFromJson(
         obj, 'subsources',
         subsourcesObj => verifyObjectAsMap(subsourcesObj, parseDataSubsourceSpecificationFromJson),
         new Map<string, DataSubsourceSpecification>()),
+    state: verifyOptionalObjectProperty(obj, 'state', verifyObject),
   };
 }
 
@@ -76,7 +77,10 @@ export function layerDataSourceSpecificationToJson(spec: DataSourceSpecification
       emptySubsources = false;
     }
   }
-  if (transform === undefined && emptySubsources && spec.enableDefaultSubsources === true) {
+  if (transform === undefined &&
+      emptySubsources &&
+      spec.enableDefaultSubsources === true &&
+      spec.state === undefined) {
     return spec.url;
   }
   return {
@@ -84,6 +88,7 @@ export function layerDataSourceSpecificationToJson(spec: DataSourceSpecification
     transform,
     subsources: emptySubsources ? undefined : subsourcesJson,
     enableDefaultSubsources: spec.enableDefaultSubsources === true ? undefined : false,
+    state: spec.state,
   };
 }
 
@@ -254,6 +259,7 @@ export class LayerDataSource extends RefCounted {
                   }
                 ];
               })),
+          state: this.spec.state,
         };
       }
     }
@@ -305,6 +311,7 @@ export class LayerDataSource extends RefCounted {
           cancellationToken,
           globalCoordinateSpace: layer.manager.root.coordinateSpace,
           transform: spec.transform,
+          state: spec.state,
         })
         .then((source: DataSource) => {
           if (refCounted.wasDisposed) return;
@@ -315,6 +322,12 @@ export class LayerDataSource extends RefCounted {
           this.loadState_ = loaded;
           loaded.registerDisposer(loaded.enabledSubsourcesChanged.add(this.changed.dispatch));
           this.changed.dispatch();
+          if (source.state) {
+            refCounted.registerDisposer(source.state.changed.add(() => {
+              this.spec.state = source.state?.toJSON();
+              layer.specificationChanged.dispatch();
+            }));
+          }
           retainer();
         })
         .catch((error: Error) => {
@@ -358,6 +371,7 @@ export class LayerDataSource extends RefCounted {
               }
             ];
           })),
+      state: this.spec.state,
     });
   }
 }

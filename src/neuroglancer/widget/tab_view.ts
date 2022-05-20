@@ -106,6 +106,15 @@ export class OptionSpecification<T> extends RefCounted implements Trackable {
     }
   }
 
+  remove(id: string) {
+    const {options} = this;
+    if (!options.has(id)) {
+      throw new Error(`Option is not defined: ${JSON.stringify(id)}.`);
+    }
+    options.delete(id);
+    this.optionsChanged.dispatch();
+  }
+
   toJSON() {
     const {value, defaultValue} = this;
     if (value === defaultValue) {

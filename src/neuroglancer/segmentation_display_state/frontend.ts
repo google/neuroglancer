@@ -150,6 +150,7 @@ export interface SegmentationDisplayState {
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
   baseSegmentColoring: WatchableValueInterface<boolean>;
+  baseSegmentHighlighting: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
 
@@ -162,6 +163,9 @@ export interface SegmentationDisplayState {
   segmentColorHash: WatchableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+  highlightColor: WatchableValueInterface<vec3|undefined>;
+
+  showFocusSegments: WatchableValueInterface<boolean>;
 }
 
 export function resetTemporaryVisibleSegmentsState(state: VisibleSegmentsState) {

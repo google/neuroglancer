@@ -31,6 +31,10 @@ export interface VisibleSegmentsState {
   temporarySegmentEquivalences: SharedDisjointUint64Sets;
   useTemporaryVisibleSegments: SharedWatchableValue<boolean>;
   useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
+
+  // TODO explanation, currently they cause non focus segments to be hidden in 2d, segmentation rendered transparent, with everything else darkened
+  // to bring attention to the EM for that segment
+  focusSegments: Uint64Set;
 }
 
 export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
