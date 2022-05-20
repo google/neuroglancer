@@ -17,7 +17,7 @@
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 
-const DEBUG_SHADER = true;
+const DEBUG_SHADER = false;
 
 export enum ShaderType {
   VERTEX = WebGL2RenderingContext.VERTEX_SHADER,
