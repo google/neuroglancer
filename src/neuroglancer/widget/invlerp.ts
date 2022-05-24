@@ -20,12 +20,13 @@ import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
 import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
 import {DisplayContext, IndirectRenderedPanel} from 'neuroglancer/display_context';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {ToolActivation} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {DataType} from 'neuroglancer/util/data_type';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {updateInputFieldWidth} from 'neuroglancer/util/dom';
+import {Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {removeChildren, updateInputFieldWidth} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/util/lerp';
+import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -42,6 +43,7 @@ import {InvlerpParameters} from 'neuroglancer/webgl/shader_ui_controls';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {makeIcon} from 'neuroglancer/widget/icon';
+import {LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {LegendShaderOptions} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
@@ -574,4 +576,84 @@ export class InvlerpWidget extends Tab {
     invertArrows[reversed ? 1 : 0].style.display = '';
     invertArrows[reversed ? 0 : 1].style.display = 'none';
   }
+}
+
+export class VariableDataTypeInvlerpWidget extends Tab {
+  invlerpWidget: Owned<InvlerpWidget>;
+  constructor(
+      visibility: WatchableVisibilityPriority, public display: DisplayContext,
+      public watchableDataType: WatchableValueInterface<DataType>,
+      public trackable: WatchableValueInterface<InvlerpParameters>,
+      public histogramSpecifications: HistogramSpecifications, public histogramIndex: number,
+      public legendShaderOptions: LegendShaderOptions|undefined) {
+    super(visibility);
+    this.invlerpWidget = this.makeInvlerpWidget();
+    this.registerDisposer(watchableDataType.changed.add(() => {
+      removeChildren(this.element);
+      this.invlerpWidget.dispose();
+      this.invlerpWidget = this.makeInvlerpWidget();
+    }));
+  }
+
+  get dataType() {
+    return this.watchableDataType.value;
+  }
+
+  disposed() {
+    this.invlerpWidget.dispose();
+    super.disposed();
+  }
+
+  private makeInvlerpWidget() {
+    const {dataType} = this;
+    const widget = new InvlerpWidget(
+        this.visibility, this.display, dataType, this.trackable, this.histogramSpecifications,
+        this.histogramIndex, this.legendShaderOptions);
+    this.element.appendChild(widget.element);
+    return widget;
+  }
+}
+
+const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  'at:shift+wheel': {action: 'adjust-contrast-via-wheel'},
+  'at:shift+mousedown0': {action: 'adjust-via-drag'},
+  'at:shift+mousedown2': {action: 'invert-range'},
+});
+
+export function activateInvlerpTool(
+    activation: ToolActivation<LayerControlTool>,
+    control: InvlerpWidget|VariableDataTypeInvlerpWidget) {
+  activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
+  activation.bindAction<WheelEvent>('adjust-contrast-via-wheel', event => {
+    event.stopPropagation();
+    const zoomAmount = getWheelZoomAmount(event.detail);
+    adjustInvlerpContrast(control.dataType, control.trackable, zoomAmount);
+  });
+  activation.bindAction<MouseEvent>('adjust-via-drag', event => {
+    event.stopPropagation();
+    let baseScreenX = event.detail.screenX, baseScreenY = event.detail.screenY;
+    let baseRange = control.trackable.value.range;
+    let prevRange = baseRange;
+    let prevScreenX = baseScreenX, prevScreenY = baseScreenY;
+    startRelativeMouseDrag(event.detail, newEvent => {
+      const curRange = control.trackable.value.range;
+      const curScreenX = newEvent.screenX, curScreenY = newEvent.screenY;
+      if (!dataTypeIntervalEqual(control.dataType, curRange, prevRange)) {
+        baseRange = curRange;
+        baseScreenX = prevScreenX;
+        baseScreenY = prevScreenY;
+      }
+      adjustInvlerpBrightnessContrast(
+          control.dataType, control.trackable, baseRange,
+          (curScreenY - baseScreenY) * 2 / screen.height,
+          (curScreenX - baseScreenX) * 4 / screen.width);
+      prevRange = control.trackable.value.range;
+      prevScreenX = curScreenX;
+      prevScreenY = curScreenY;
+    });
+  });
+  activation.bindAction('invert-range', event => {
+    event.stopPropagation();
+    invertInvlerpRange(control.trackable);
+  });
 }

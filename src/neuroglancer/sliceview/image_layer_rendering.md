@@ -89,16 +89,27 @@ either `false` or `true` according to the state of the checkbox.
 
 ### `invlerp` controls
 
-The `invlerp` control type allows the user to specify an interval of the layer's data type that is
-linearly mapped to a `float` in the interval `[0, 1]`.  The name `invlerp` refers to *inverse linear
-interpolation*.  To aid the selection of the interval, an empirical cumulative distribution function
-(ECDF) of the currently displayed data is plotted as part of the control.  Additionally, if there
-are no channel dimensions, a color legend is also displayed.
+The `invlerp` control type allows the user to specify an numerical interval that is linearly mapped
+to a `float` in the interval `[0, 1]`.  The name `invlerp` refers to *inverse linear interpolation*.
+To aid the selection of the interval, an empirical cumulative distribution function (ECDF) of the
+currently displayed data is plotted as part of the control.
+
+
+This control is supported both for image layers and annotation layers.
+
+- For image layers, if there are channel dimensions, the ECDF is always computed over just a single
+  channel; the default channel is specified by the `channel` parameter and may be adjusted using the
+  UI.  If there are no channel dimensions, a color legend is also displayed that shows the output
+  color for each input value in the ECDF domain.
+
+- For annotation layers, the ECDF is computed over a single numerical property; the default property
+  is specified by the `property` parameter and may be adjusted using the UI.
 
 Directive syntax:
 
 ```glsl
 #uicontrol invlerp <name>(range=[3, 75], window=[0, 100], channel=[1,2], clamp=false)
+#uicontrol invlerp <name>(range=[3, 75], window=[0, 100], property="e1", clamp=false)
 ```
 
 The following parameters are supported:
@@ -111,10 +122,14 @@ The following parameters are supported:
 - `window`: Optional.  The default interval over which the ECDF will be shown.  May be overridden
   using the UI control.  If not specified, defaults to the interval specified for `range`.
 
-- `channel`: Optional.  The channel for which to compute the ECDF.  If the rank of the channel
-  coordinate space is 1, may be specified as a single number, e.g. `channel=2`.  Otherwise, must be
-  specified as an array, e.g. `channel=[2, 3]`.  May be overriden using the UI control.  If not
-  specified, defaults to all-zero channel coordinates.
+- `channel`: Optional.  The channel for which to compute the ECDF (supported for image layers only).
+  If the rank of the channel coordinate space is 1, may be specified as a single number,
+  e.g. `channel=2`.  Otherwise, must be specified as an array, e.g. `channel=[2, 3]`.  May be
+  overriden using the UI control.  If not specified, defaults to all-zero channel coordinates.
+
+- `property`: Optional.  The property for which to compute the ECDF (supported for annotation layers
+  only).  Must be specified as a string, e.g. `property="e1"`.  May be overriden using the UI
+  control.  If not specified, defaults to the first numerical property.
 
 - `clamp`: Optional.  Indicates whether to clamp the result to `[0, 1]`.  Defaults to `true`.  If
   `false`, the result will be outside `[0, 1]` if the input value is outside the configured range.
@@ -124,15 +139,22 @@ This directive makes the following shader functions available:
 
 ```glsl
 float <name>(T value);
+
+// For image layers
 float <name>() {
   return <name>(getDataValue(channel...));
 }
+
+// For annotation layers
+float <name>() {
+  return <name>(prop_<property>());
+}
 ```
 
-where `T` is the data type returned by `getDataValue`.  The one-parameter overload simply computes
-the inverse linear interpolation of the specified value within the range specified by the control.
-The zero-parameter overload returns the inverse linear interpolation of the data value for
-configured channel.
+where `T` is the data type returned by `getDataValue` (for image layers) or `prop_<property>` (for
+annotation layers).  The one-parameter overload simply computes the inverse linear interpolation of
+the specified value within the range specified by the control.  The zero-parameter overload returns
+the inverse linear interpolation of the data value for configured channel/property.
 
 ## API
 

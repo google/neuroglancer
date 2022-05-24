@@ -109,6 +109,13 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   {
     source: 'neuroglancer/datasource/nggraph',
   },
+  {
+    source: 'neuroglancer/datasource/graphene',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+      'neuroglancer/async_computation/decode_gzip',
+    ],
+  },
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [

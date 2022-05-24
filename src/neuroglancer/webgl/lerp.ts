@@ -18,7 +18,7 @@
  * @file Defines lerp/invlerp functionality for all supported data types.
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
+import {DataType, DATA_TYPE_SIGNED} from 'neuroglancer/util/data_type';
 import {DataTypeInterval} from 'neuroglancer/util/lerp';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -66,17 +66,23 @@ struct Uint64LerpParameters {
   ],
 };
 
-
-function getFloatInvlerpImpl(dataType: DataType) {
-  const shaderDataType = getShaderType(dataType);
-  let code = `
-float computeInvlerp(${shaderDataType} inputValue, vec2 p) {
-  float outputValue = float(toRaw(inputValue));
+const glsl_computeInvlerpFloat = `
+float computeInvlerp(float inputValue, vec2 p) {
+  float outputValue = inputValue;
   outputValue = (outputValue - p[0]) * p[1];
   return outputValue;
 }
 `;
-  return [dataTypeShaderDefinition[dataType], code];
+
+
+function getIntFloatInvlerpImpl(dataType: DataType) {
+  const shaderDataType = getShaderType(dataType);
+  let code = `
+float computeInvlerp(${shaderDataType} inputValue, vec2 p) {
+  return computeInvlerp(float(toRaw(inputValue)), p);
+}
+`;
+  return [dataTypeShaderDefinition[dataType], glsl_computeInvlerpFloat, code];
 }
 
 function getInt32InvlerpImpl(dataType: DataType) {
@@ -87,8 +93,7 @@ function getInt32InvlerpImpl(dataType: DataType) {
     dataTypeShaderDefinition[dataType],
     glsl_dataTypeLerpParameters[dataType],
     `
-float computeInvlerp(${shaderDataType} inputValue, ${pType} p) {
-  ${scalarType} v = toRaw(inputValue);
+float computeInvlerp(${scalarType} v, ${pType} p) {
   uint x;
   if (v >= p.offset) {
     x = uint(v - p.offset);
@@ -99,16 +104,19 @@ float computeInvlerp(${shaderDataType} inputValue, ${pType} p) {
   x >>= p.shift;
   return float(x) * p.multiplier;
 }
+float computeInvlerp(${shaderDataType} inputValue, ${pType} p) {
+  return computeInvlerp(toRaw(inputValue), p);
+}
 `,
   ];
 }
 
 export const glsl_dataTypeComputeInvlerp: Record<DataType, ShaderCodePart> = {
-  [DataType.UINT8]: getFloatInvlerpImpl(DataType.UINT8),
-  [DataType.INT8]: getFloatInvlerpImpl(DataType.INT8),
-  [DataType.UINT16]: getFloatInvlerpImpl(DataType.UINT16),
-  [DataType.INT16]: getFloatInvlerpImpl(DataType.INT16),
-  [DataType.FLOAT32]: getFloatInvlerpImpl(DataType.FLOAT32),
+  [DataType.UINT8]: getIntFloatInvlerpImpl(DataType.UINT8),
+  [DataType.INT8]: getIntFloatInvlerpImpl(DataType.INT8),
+  [DataType.UINT16]: getIntFloatInvlerpImpl(DataType.UINT16),
+  [DataType.INT16]: getIntFloatInvlerpImpl(DataType.INT16),
+  [DataType.FLOAT32]: glsl_computeInvlerpFloat,
   [DataType.UINT32]: getInt32InvlerpImpl(DataType.UINT32),
   [DataType.INT32]: getInt32InvlerpImpl(DataType.INT32),
   [DataType.UINT64]: [
@@ -247,18 +255,28 @@ function defineLerpUniforms(
 }
 
 export function defineInvlerpShaderFunction(
-    builder: ShaderBuilder, name: string, dataType: DataType, clamp = false): ShaderCodePart {
-  return [
-    dataTypeShaderDefinition[dataType],
-    defineLerpUniforms(builder, name, dataType),
-    glsl_dataTypeComputeInvlerp[dataType],
-    `
-float ${name}(${getShaderType(dataType)} inputValue) {
+  builder: ShaderBuilder, name: string, dataType: DataType, clamp = false): ShaderCodePart {
+  const shaderType = getShaderType(dataType);
+  let code = `
+float ${name}(${shaderType} inputValue) {
   float v = computeInvlerp(inputValue, uLerpParams_${name});
   ${!clamp ? '' : 'v = clamp(v, 0.0, 1.0);'}
   return v;
 }
-`,
+`;
+  if (dataType !== DataType.UINT64 && dataType !== DataType.FLOAT32) {
+    const scalarType = DATA_TYPE_SIGNED[dataType] ? 'int' : 'uint';
+    code += `
+float ${name}(${scalarType} inputValue) {
+  return ${name}(${shaderType}(inputValue));
+}
+`;
+  }
+  return [
+    dataTypeShaderDefinition[dataType],
+    defineLerpUniforms(builder, name, dataType),
+    glsl_dataTypeComputeInvlerp[dataType],
+    code,
   ];
 }
 

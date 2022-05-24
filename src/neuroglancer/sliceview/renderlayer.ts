@@ -45,6 +45,8 @@ export interface SliceViewRenderLayerOptions {
    */
   localPosition: WatchableValueInterface<Float32Array>;
   dataHistogramSpecifications?: HistogramSpecifications;
+
+  rpcTransfer?: {[index: string]: number|string|null};
 }
 
 export interface VisibleSourceInfo<Source extends SliceViewChunkSource> {
@@ -63,6 +65,7 @@ export abstract class SliceViewRenderLayer<
     Source extends SliceViewChunkSource = SliceViewChunkSource, SourceOptions extends
         SliceViewSourceOptions = SliceViewSourceOptions> extends RenderLayer {
   rpcId: RpcId|null = null;
+  rpcTransfer: {[index: string]: number|string|null} = {};
 
   localPosition: WatchableValueInterface<Float32Array>;
   channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
@@ -77,9 +80,7 @@ export abstract class SliceViewRenderLayer<
   dataHistogramSpecifications: HistogramSpecifications;
 
   getDataHistogramCount() {
-    const {dataHistogramSpecifications} = this;
-    if (!dataHistogramSpecifications.visibility.visible) return 0;
-    return dataHistogramSpecifications.bounds.value.length;
+    return this.dataHistogramSpecifications.visibleHistograms;
   }
 
   /**
@@ -148,9 +149,11 @@ export abstract class SliceViewRenderLayer<
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = options.transform;
     this.localPosition = options.localPosition;
+    this.rpcTransfer = options.rpcTransfer || {};
     this.dataHistogramSpecifications = this.registerDisposer(
         options.dataHistogramSpecifications ??
-        new HistogramSpecifications(constantWatchableValue([]), constantWatchableValue([])));
+        new HistogramSpecifications(
+            constantWatchableValue([]), constantWatchableValue([]), constantWatchableValue([])));
     this.registerDisposer(
         this.dataHistogramSpecifications.visibility.changed.add(this.redrawNeeded.dispatch));
   }
@@ -169,6 +172,7 @@ export abstract class SliceViewRenderLayer<
       renderScaleTarget:
           this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
               .rpcId,
+      ...this.rpcTransfer,
     });
     this.rpcId = sharedObject.rpcId;
   }

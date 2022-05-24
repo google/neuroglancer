@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationPropertySpec, AnnotationType, annotationTypeHandlers, getPropertyOffsets} from 'neuroglancer/annotation';
+import {Annotation, AnnotationPropertySpec, AnnotationType, annotationTypeHandlers, getPropertyOffsets, propertyTypeDataType} from 'neuroglancer/annotation';
 import {AnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {ChunkDisplayTransformParameters} from 'neuroglancer/render_coordinate_transform';
@@ -26,8 +26,11 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {GL} from 'neuroglancer/webgl/context';
 import {ParameterizedContextDependentShaderGetter, parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+
+const DEBUG_HISTOGRAMS = false;
 
 export type AnnotationShaderGetter =
     ParameterizedContextDependentShaderGetter<ShaderModule, ShaderControlsBuilderState>;
@@ -124,21 +127,17 @@ const annotationPropertyTypeRenderHandlers:
       'int8': makeIntegerPropertyRenderHandler('highp int', 1, WebGL2RenderingContext.BYTE),
     };
 
-export abstract class AnnotationRenderHelper extends RefCounted {
-  pickIdsPerInstance: number;
-  targetIsSliceView: boolean;
+class AnnotationRenderHelperBase extends RefCounted {
   readonly serializedBytesPerAnnotation: number;
   readonly serializedGeometryBytesPerAnnotation: number;
   readonly propertyOffsets: {group: number, offset: number}[];
   readonly propertyGroupBytes: number[];
+  readonly propertyGroupCumulativeBytes: number[];
   readonly geometryDataStride: number;
 
   constructor(
       public gl: GL, public annotationType: AnnotationType, public rank: number,
-      public properties: readonly Readonly<AnnotationPropertySpec>[],
-      public shaderControlState: ShaderControlState,
-      public fallbackShaderParameters: WatchableValueInterface<ShaderControlsBuilderState>,
-      public shaderError: WatchableShaderError) {
+      public properties: readonly Readonly<AnnotationPropertySpec>[]) {
     super();
     const serializedGeometryBytesPerAnnotation = this.serializedGeometryBytesPerAnnotation =
         annotationTypeHandlers[annotationType].serializedBytes(rank);
@@ -148,6 +147,63 @@ export abstract class AnnotationRenderHelper extends RefCounted {
     this.propertyOffsets = offsets;
     this.propertyGroupBytes = propertyGroupBytes;
     this.geometryDataStride = propertyGroupBytes[0];
+    const propertyGroupCumulativeBytes = this.propertyGroupCumulativeBytes =
+        new Array<number>(propertyGroupBytes.length);
+    propertyGroupCumulativeBytes[0] = 0;
+    for (let i = 1; i < propertyGroupBytes.length; ++i) {
+      propertyGroupCumulativeBytes[i] =
+          propertyGroupCumulativeBytes[i - 1] + propertyGroupBytes[i - 1];
+    }
+  }
+
+  protected defineProperties(builder: ShaderBuilder, referencedProperties: number[]) {
+    const {properties, rank} = this;
+    for (const i of referencedProperties) {
+      const property = properties[i];
+      const handler = annotationPropertyTypeRenderHandlers[property.type];
+      handler.defineShader(builder, property.identifier, rank);
+    }
+    const {propertyOffsets} = this;
+    const {propertyGroupBytes, propertyGroupCumulativeBytes} = this;
+    builder.addInitializer(shader => {
+      const binders = referencedProperties.map(
+          i => shader.vertexShaderInputBinders[`prop_${properties[i].identifier}`]);
+      const numProperties = binders.length;
+      shader.vertexShaderInputBinders['properties'] = {
+        enable(divisor: number) {
+          for (let i = 0; i < numProperties; ++i) {
+            binders[i].enable(divisor);
+          }
+        },
+        bind(stride: number, offset: number) {
+          for (let i = 0; i < numProperties; ++i) {
+            const {group, offset: propertyOffset} = propertyOffsets[referencedProperties[i]];
+            binders[i].bind(
+                /*stride=*/ propertyGroupBytes[group],
+                /*offset=*/ offset + propertyOffset + propertyGroupCumulativeBytes[group] * stride);
+          }
+        },
+        disable() {
+          for (let i = 0; i < numProperties; ++i) {
+            binders[i].disable();
+          }
+        },
+      };
+    });
+  }
+}
+
+export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase {
+  pickIdsPerInstance: number;
+  targetIsSliceView: boolean;
+
+  constructor(
+      gl: GL, annotationType: AnnotationType, rank: number,
+      properties: readonly Readonly<AnnotationPropertySpec>[],
+      public shaderControlState: ShaderControlState,
+      public fallbackShaderParameters: WatchableValueInterface<ShaderControlsBuilderState>,
+      public shaderError: WatchableShaderError) {
+    super(gl, annotationType, rank, properties);
   }
 
   getDependentShader(memoizeKey: any, defineShader: (builder: ShaderBuilder) => void):
@@ -167,49 +223,18 @@ export abstract class AnnotationRenderHelper extends RefCounted {
       defineShader: (builder: ShaderBuilder, parameters: ShaderControlsBuilderState) => {
         const {rank, properties} = this;
         const referencedProperties: number[] = [];
+        const controlsReferencedProperties = parameters.referencedProperties;
         const processedCode = parameters.parseResult.code;
         for (let i = 0, numProperties = properties.length; i < numProperties; ++i) {
           const property = properties[i];
           const functionName = `prop_${property.identifier}`;
-          if (!processedCode.match(new RegExp(`\\b${functionName}\\b`))) continue;
+          if (!controlsReferencedProperties.includes(property.identifier) &&
+              !processedCode.match(new RegExp(`\\b${functionName}\\b`))) {
+            continue;
+          }
           referencedProperties.push(i);
-          const handler = annotationPropertyTypeRenderHandlers[property.type];
-          handler.defineShader(builder, property.identifier, rank);
         }
-        const {propertyOffsets} = this;
-        const {propertyGroupBytes} = this;
-        const propertyGroupCumulativeBytes = new Array<number>(propertyGroupBytes.length);
-        propertyGroupCumulativeBytes[0] = 0;
-        for (let i = 1; i < propertyGroupBytes.length; ++i) {
-          propertyGroupCumulativeBytes[i] =
-              propertyGroupCumulativeBytes[i - 1] + propertyGroupBytes[i - 1];
-        }
-        builder.addInitializer(shader => {
-          const binders = referencedProperties.map(
-              i => shader.vertexShaderInputBinders[`prop_${properties[i].identifier}`]);
-          const numProperties = binders.length;
-          shader.vertexShaderInputBinders['properties'] = {
-            enable(divisor: number) {
-              for (let i = 0; i < numProperties; ++i) {
-                binders[i].enable(divisor);
-              }
-            },
-            bind(stride: number, offset: number) {
-              for (let i = 0; i < numProperties; ++i) {
-                let {group, offset: propertyOffset} = propertyOffsets[referencedProperties[i]];
-                binders[i].bind(
-                    /*stride=*/ propertyGroupBytes[group],
-                    /*offset=*/ offset + propertyOffset +
-                        propertyGroupCumulativeBytes[group] * stride);
-              }
-            },
-            disable() {
-              for (let i = 0; i < numProperties; ++i) {
-                binders[i].disable();
-              }
-            },
-          };
-        });
+        this.defineProperties(builder, referencedProperties);
         builder.addUniform('highp vec3', 'uColor');
         builder.addUniform('highp uint', 'uSelectedIndex');
         builder.addVarying('highp vec4', 'vColor');
@@ -433,6 +458,103 @@ if (ng_discardValue) {
   }
 
   abstract draw(context: AnnotationRenderContext): void;
+
+  private histogramShaders = new Map<AnnotationPropertySpec['type'], ShaderProgram>();
+
+  private getHistogramShader(propertyType: AnnotationPropertySpec['type']): ShaderProgram {
+    const {histogramShaders} = this;
+    let shader = histogramShaders.get(propertyType);
+    if (shader === undefined) {
+      const {gl} = this;
+      shader = gl.memoize.get(
+          JSON.stringify({t: 'propertyHistogramGenerator', propertyType}), () => {
+            const builder = new ShaderBuilder(gl);
+            this.defineHistogramShader(builder, propertyType);
+            return builder.build();
+          });
+      histogramShaders.set(propertyType, shader);
+    }
+    return shader;
+  }
+
+  private defineHistogramShader(builder: ShaderBuilder, propertyType: AnnotationPropertySpec['type']) {
+    const handler = annotationPropertyTypeRenderHandlers[propertyType];
+    // TODO(jbms): If rank-dependent properties are added, this will need to change to support
+    // histograms.
+    handler.defineShader(builder, 'histogram', /*rank=*/ 0);
+    builder.addOutputBuffer('vec4', 'out_histogram', 0);
+    const invlerpName = `invlerpForHistogram`;
+    const dataType = propertyTypeDataType[propertyType]!;
+    builder.addVertexCode(
+        defineInvlerpShaderFunction(builder, invlerpName, dataType, /*clamp=*/ false));
+    builder.setVertexMain(`
+float x = invlerpForHistogram(prop_histogram());
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
+gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
+gl_PointSize = 1.0;
+`);
+    builder.setFragmentMain(`out_histogram = vec4(1.0, 1.0, 1.0, 1.0);`);
+  }
+
+  computeHistograms(context: AnnotationRenderContext, frameNumber: number) {
+    const {histogramSpecifications} = this.shaderControlState;
+    const histogramProperties = histogramSpecifications.properties.value;
+    const numHistograms = histogramProperties.length;
+    const {properties} = this;
+    const numProperties = properties.length;
+    const {propertyOffsets} = this;
+    const {propertyGroupBytes, propertyGroupCumulativeBytes} = this;
+    const {gl} = this;
+    gl.enable(WebGL2RenderingContext.BLEND);
+    gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
+    gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+    gl.blendFunc(WebGL2RenderingContext.ONE, WebGL2RenderingContext.ONE);
+    const outputFramebuffers = histogramSpecifications.getFramebuffers(gl);
+    const oldFrameNumber = histogramSpecifications.frameNumber;
+    histogramSpecifications.frameNumber = frameNumber;
+    gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
+    for (let histogramIndex = 0; histogramIndex < numHistograms; ++histogramIndex) {
+      const propertyIdentifier = histogramProperties[histogramIndex];
+      for (let propertyIndex = 0; propertyIndex < numProperties; ++propertyIndex) {
+        const property = properties[propertyIndex];
+        if (property.identifier !== propertyIdentifier) continue;
+        const propertyType = property.type;
+        const dataType = propertyTypeDataType[propertyType]!;
+        const shader = this.getHistogramShader(propertyType);
+        shader.bind();
+        const binder = shader.vertexShaderInputBinders['prop_histogram'];
+        binder.enable(0);
+        const {group, offset: propertyOffset} = propertyOffsets[propertyIndex];
+        enableLerpShaderFunction(
+          shader, `invlerpForHistogram`, dataType, histogramSpecifications.bounds.value[histogramIndex]);
+        binder.bind(
+            /*stride=*/ propertyGroupBytes[group],
+            /*offset=*/ context.bufferOffset + propertyOffset +
+                propertyGroupCumulativeBytes[group] * context.count);
+        outputFramebuffers[histogramIndex].bind(256, 1);
+        if (frameNumber !== oldFrameNumber) {
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+        }
+        gl.drawArrays(WebGL2RenderingContext.POINTS, 0, context.count);
+        if (DEBUG_HISTOGRAMS) {
+          const tempBuffer = new Float32Array(256 * 4);
+          gl.readPixels(
+              0, 0, 256, 1, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.FLOAT, tempBuffer);
+          const tempBuffer2 = new Float32Array(256);
+          for (let j = 0; j < 256; ++j) {
+            tempBuffer2[j] = tempBuffer[j * 4];
+          }
+          console.log('histogram', tempBuffer2.join(' '));
+        }
+        binder.disable();
+        break;
+      }
+    }
+    gl.disable(WebGL2RenderingContext.BLEND);
+  }
 }
 
 interface AnnotationRenderHelperConstructor {

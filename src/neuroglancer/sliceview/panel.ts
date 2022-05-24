@@ -255,6 +255,15 @@ export class SliceViewPanel extends RenderedDataPanel {
     let {pickIDs} = this;
     pickIDs.clear();
 
+    const bindFramebuffer = () => {
+      gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
+      gl.enable(WebGL2RenderingContext.BLEND);
+      gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
+      this.offscreenFramebuffer.bind(width, height);
+    };
+
+    bindFramebuffer();
+
     const renderContext: SliceViewPanelRenderContext = {
       wireFrame: this.viewer.wireFrame.value,
       projectionParameters,
@@ -263,10 +272,9 @@ export class SliceViewPanel extends RenderedDataPanel {
       emitColor: true,
       emitPickID: true,
       sliceView,
+      bindFramebuffer,
+      frameNumber: this.context.frameNumber,
     };
-    this.offscreenFramebuffer.bind(width, height);
-    gl.enable(WebGL2RenderingContext.BLEND);
-    gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     for (const [renderLayer, attachment] of visibleLayers) {
       renderLayer.draw(renderContext, attachment);
     }

@@ -27,7 +27,7 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationColorGroupState, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {getPreprocessedSegmentPropertyMap, PreprocessedSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {LocalSegmentationGraphSource} from 'neuroglancer/segmentation_graph/local';
-import {SegmentationGraphSource, SegmentationGraphSourceConnection} from 'neuroglancer/segmentation_graph/source';
+import {SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
@@ -145,7 +145,7 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   segmentEquivalences = this.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(
       this.layer.manager.rpc,
       this.layer.registerDisposer(makeCachedDerivedWatchableValue(
-          x => x !== undefined && x.highBitRepresentative, [this.graph]))));
+          x => (x && x.visibleSegmentEquivalencePolicy) || VisibleSegmentEquivalencePolicy.MIN_REPRESENTATIVE, [this.graph]))));
   localSegmentEquivalences: boolean = false;
   maxIdLength = new WatchableValue(1);
   hideSegmentZero = new TrackableBoolean(true, true);
@@ -155,7 +155,7 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
       this.layer.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   temporarySegmentEquivalences =
       this.layer.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(
-          this.layer.manager.rpc, this.segmentEquivalences.disjointSets.highBitRepresentative));
+          this.layer.manager.rpc, this.segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy));
   useTemporaryVisibleSegments =
       this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
   useTemporarySegmentEquivalences =
@@ -196,7 +196,7 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     const {segmentStatedColors} = this;
     if (segmentStatedColors.size > 0) {
       const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
-      for (const [key, value] of segmentStatedColors) {
+      for (const [key, value] of segmentStatedColors.unsafeEntries()) {
         j[key.toString()] = serializeColor(unpackRGB(value.low));
       }
     }
@@ -482,9 +482,17 @@ export class SegmentationUserLayer extends Base {
             loadedSubsource.activate(refCounted => {
               this.graphConnection = refCounted.registerDisposer(
                   segmentationGraph.connect(this.displayState.segmentationGroupState.value));
-              refCounted.registerDisposer(() => {
-                this.graphConnection = undefined;
-              });
+              const displayState = {
+                ...this.displayState,
+                transform: loadedSubsource.getRenderLayerTransform(),
+              };
+
+              const graphRenderLayers = this.graphConnection.createRenderLayers(
+                this.manager.chunkManager, displayState, this.localPosition
+              );
+              for (const renderLayer of graphRenderLayers) {
+                loadedSubsource.addRenderLayer(renderLayer);
+              }
             });
           }
         }

@@ -29,7 +29,7 @@ import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {makeCachedLazyDerivedWatchableValue, WatchableValue} from 'neuroglancer/trackable_value';
+import {makeCachedLazyDerivedWatchableValue} from 'neuroglancer/trackable_value';
 import {AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -317,7 +317,6 @@ export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource|undefined;
   private localAnnotationProperties: AnnotationPropertySpec[]|undefined;
   private localAnnotationRelationships: string[];
-  annotationProperties = new WatchableValue<AnnotationPropertySpec[]|undefined>(undefined);
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
   linkedSegmentationLayers = this.registerDisposer(new LinkedSegmentationLayers(
@@ -477,9 +476,9 @@ export class AnnotationUserLayer extends Base {
       }
       loadedSubsource.deactivate('Not compatible with annotation layer');
     }
-    const prevAnnotationProperties = this.annotationProperties.value;
+    const prevAnnotationProperties = this.annotationDisplayState.annotationProperties.value;
     if (stableStringify(prevAnnotationProperties) !== stableStringify(properties)) {
-      this.annotationProperties.value = properties;
+      this.annotationDisplayState.annotationProperties.value = properties;
     }
   }
 
@@ -575,7 +574,7 @@ class RenderingOptionsTab extends Tab {
     element.appendChild(
         this
             .registerDisposer(new DependentViewWidget(
-                layer.annotationProperties,
+                layer.annotationDisplayState.annotationProperties,
                 (properties, parent) => {
                   if (properties === undefined || properties.length === 0) return;
                   const propertyList = document.createElement('div');

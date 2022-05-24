@@ -20,6 +20,7 @@ import {parseArray} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';
@@ -40,9 +41,9 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     return this;
   }
 
-  static makeWithCounterpart(rpc: RPC, highBitRepresentative: WatchableValueInterface<boolean>) {
+  static makeWithCounterpart(rpc: RPC, highBitRepresentative: WatchableValueInterface<VisibleSegmentEquivalencePolicy>) {
     let obj = new this();
-    obj.disjointSets.highBitRepresentative = highBitRepresentative;
+    obj.disjointSets.visibleSegmentEquivalencePolicy = highBitRepresentative;
     obj.registerDisposer(highBitRepresentative.changed.add(() => {
       updateHighBitRepresentative(obj);
     }));
@@ -77,6 +78,10 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     for (let i = 1, length = ids.length; i < length; ++i) {
       this.link(ids[0], ids[i]);
     }
+  }
+
+  has(x: Uint64): boolean {
+    return this.disjointSets.has(x);
   }
 
   get(x: Uint64): Uint64 {
@@ -167,12 +172,12 @@ registerRPC(CLEAR_METHOD_ID, function(x) {
 function updateHighBitRepresentative(obj: SharedDisjointUint64Sets) {
   obj.rpc!.invoke(
       HIGH_BIT_REPRESENTATIVE_CHANGED_ID,
-      {'id': obj.rpcId, 'value': obj.disjointSets.highBitRepresentative.value});
+      {'id': obj.rpcId, 'value': obj.disjointSets.visibleSegmentEquivalencePolicy.value});
 }
 
 registerRPC(HIGH_BIT_REPRESENTATIVE_CHANGED_ID, function(x) {
   let obj = this.get(x['id']) as SharedDisjointUint64Sets;
-  obj.disjointSets.highBitRepresentative.value = x['value'];
+  obj.disjointSets.visibleSegmentEquivalencePolicy.value = x['value'];
 });
 
 registerRPC(DELETE_SET_METHOD_ID, function(x) {

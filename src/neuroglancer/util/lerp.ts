@@ -21,6 +21,8 @@ import {Uint64} from 'neuroglancer/util/uint64';
 
 export type DataTypeInterval = [number, number]|[Uint64, Uint64];
 
+export type UnknownDataTypeInterval = [number|Uint64, number|Uint64];
+
 export const defaultDataTypeRange: Record<DataType, DataTypeInterval> = {
   [DataType.UINT8]: [0, 0xff],
   [DataType.INT8]: [-0x80, 0x7f],
@@ -172,9 +174,33 @@ export function parseDataTypeValue(dataType: DataType, x: unknown): number|Uint6
   }
 }
 
+export function parseUnknownDataTypeValue(x: unknown): number|Uint64 {
+  if (typeof x === 'number') return x;
+  if (typeof x === 'string') {
+    let num64 = new Uint64();
+    let num = Number(x);
+    if (num64.tryParseString(x)) {
+      if (num.toString() === num64.toString()) {
+        return num;
+      }
+      return num64;
+    }
+    if (!Number.isFinite(num)) {
+      throw new Error(`Invalid value: ${JSON.stringify(x)}`);
+    }
+    return num;
+  }
+  throw new Error(`Invalid value: ${JSON.stringify(x)}`);
+}
+
 export function parseDataTypeInterval(obj: unknown, dataType: DataType): DataTypeInterval {
   return parseFixedLengthArray(new Array(2), obj, x => parseDataTypeValue(dataType, x)) as
       DataTypeInterval;
+}
+
+export function parseUnknownDataTypeInterval(obj: unknown): UnknownDataTypeInterval {
+  return parseFixedLengthArray(new Array(2), obj, x => parseUnknownDataTypeValue(x)) as
+      UnknownDataTypeInterval;
 }
 
 export function dataTypeIntervalEqual(
@@ -251,4 +277,44 @@ export function getIntervalBoundsEffectiveFraction(dataType: DataType, interval:
       return diff / (diff + 1);
     }
   }
+}
+
+export function convertDataTypeInterval(
+    interval: UnknownDataTypeInterval|undefined, dataType: DataType): DataTypeInterval {
+  if (interval === undefined) {
+    return defaultDataTypeRange[dataType];
+  }
+  let [lower, upper] = interval;
+  if (dataType === DataType.UINT64) {
+    if (typeof lower === 'number') {
+      lower = Uint64.fromNumber(lower);
+    }
+    if (typeof upper === 'number') {
+      upper = Uint64.fromNumber(upper);
+    }
+    return [lower, upper];
+  }
+  // Ensure that neither lower nor upper is a `Uint64`.
+  if (typeof lower !== 'number') {
+    lower = lower.toNumber();
+  }
+  if (typeof upper !== 'number') {
+    upper = upper.toNumber();
+  }
+  if (dataType !== DataType.FLOAT32) {
+    lower = Math.round(lower);
+    upper = Math.round(upper);
+    const range = defaultDataTypeRange[dataType] as [number, number];
+    if (!Number.isFinite(lower)) {
+      lower = range[0];
+    } else {
+      lower = Math.min(Math.max(range[0], lower), range[1]);
+    }
+    if (!Number.isFinite(upper)) {
+      upper = range[1];
+    } else {
+      upper = Math.min(Math.max(range[0], upper), range[1]);
+    }
+  }
+  return [lower, upper];
 }

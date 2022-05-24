@@ -18,13 +18,24 @@ import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {RenderLayer } from 'neuroglancer/renderlayer';
+import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
+import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
+import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
+
+export enum VisibleSegmentEquivalencePolicy {
+  MIN_REPRESENTATIVE = 0, // defafult, representative elmement is the minimum element in equivalence set
+  MAX_REPRESENTATIVE = 1, // representative elmement is the maximum element in equivalence set
+  REPRESENTATIVE_EXCLUDED = 1 << 1, // filter out the representative element when iterating over visible segments
+  NONREPRESENTATIVE_EXCLUDED = 1 << 2, // filter out non representative elements when iterating over visible segments
+}
 
 export abstract class SegmentationGraphSource {
-  abstract connect(segmentsState: VisibleSegmentsState): Owned<SegmentationGraphSourceConnection>;
+  abstract connect(segmentsState: VisibleSegmentsState, transform?: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection>;
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
-  abstract get highBitRepresentative(): boolean;
+  abstract get visibleSegmentEquivalencePolicy(): VisibleSegmentEquivalencePolicy;
 }
 
 export interface ComputedSplit {
@@ -40,10 +51,20 @@ export interface ComputedSplit {
 
 export abstract class SegmentationGraphSourceConnection<
     SourceType extends SegmentationGraphSource = SegmentationGraphSource> extends RefCounted {
-  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState) {
+  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState, public transform?: WatchableValueInterface<RenderLayerTransformOrError>) {
     super();
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;
+
+  createRenderLayers(
+      chunkManager: ChunkManager,
+      displayState: SegmentationDisplayState3D,
+      localPosition: WatchableValueInterface<Float32Array>): RenderLayer[] {
+    chunkManager;
+    displayState;
+    localPosition;
+    return [];
+  };
 }
 
 export function trackWatchableValueSegment(

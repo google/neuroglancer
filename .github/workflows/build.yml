@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         node-version:
-          - '15.x'
+          - '16.x'
         os:
           - 'ubuntu-latest'
           - 'windows-latest'
@@ -61,7 +61,7 @@ jobs:
           - '3.8'
           - '3.9'
         node-version:
-          - '15.x'
+          - '16.x'
         os:
           - 'ubuntu-latest'
           - 'windows-latest'
@@ -114,7 +114,7 @@ jobs:
     strategy:
       matrix:
         node-version:
-          - '15.x'
+          - '16.x'
         os:
           - 'ubuntu-latest'
           - 'windows-latest'
@@ -147,6 +147,8 @@ jobs:
         key: ${{ runner.os }}-buildwheel-${{ hashFiles('setup.py') }}
     - run: npm install
     - run: npm run build-python -- --no-typecheck
+    - name: Check for dirty working directory
+      run: git diff --exit-code
     - name: Build Python source distribution (sdist)
       run: python setup.py sdist --format gztar
       if: ${{ runner.os == 'Linux' }}

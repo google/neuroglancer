@@ -17,7 +17,7 @@
 import './segment_split_merge_tools.css';
 
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, registerCallbackWhenSegmentationDisplayStateChanged, resetTemporaryVisibleSegmentsState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
-import {isBaseSegmentId} from 'neuroglancer/segmentation_graph/source';
+import {isBaseSegmentId, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
@@ -57,7 +57,12 @@ export class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
       const mappedAnchorSegment = segmentEquivalences.get(anchorSegment);
       if (!Uint64.equal(segmentSelectionState.selectedSegment, mappedAnchorSegment)) return;
       const base = segmentSelectionState.baseSelectedSegment;
-      if (segmentEquivalences.disjointSets.highBitRepresentative.value && !isBaseSegmentId(base)) {
+      const isBase = isBaseSegmentId(base);
+      // TODO: This would ideally rely on a separate HIGH_BIT_REPRESENTATIVE flag,
+      // but it nonetheless still works correctly for nggraph and local equivalences.
+      const equivalencePolicy = segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy.value;
+      if ((equivalencePolicy & VisibleSegmentEquivalencePolicy.NONREPRESENTATIVE_EXCLUDED && isBase) ||
+          (equivalencePolicy & VisibleSegmentEquivalencePolicy.REPRESENTATIVE_EXCLUDED && !isBase)) {
         return;
       }
       this.lastAnchorBaseSegment.value = base.clone();

@@ -27,18 +27,28 @@ if __name__ == '__main__':
                         id='size',
                         type='float32',
                         default=10,
-                    )
+                    ),
+                    neuroglancer.AnnotationPropertySpec(
+                        id='p_int8',
+                        type='int8',
+                        default=10,
+                    ),
+                    neuroglancer.AnnotationPropertySpec(
+                        id='p_uint8',
+                        type='uint8',
+                        default=10,
+                    ),
                 ],
                 annotations=[
                     neuroglancer.PointAnnotation(
                         id='1',
                         point=[150, 150],
-                        props=['#0f0', 5],
+                        props=['#0f0', 5, 6, 7],
                     ),
                     neuroglancer.PointAnnotation(
                         id='2',
                         point=[250, 100],
-                        props=['#ff0', 30],
+                        props=['#ff0', 30, 7, 9],
                     ),
                 ],
                 shader='''

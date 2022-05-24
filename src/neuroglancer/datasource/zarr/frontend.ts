@@ -189,6 +189,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
                       url: this.url,
                       encoding: metadata.encoding,
                       separator: this.separator,
+                      order: metadata.order,
                     }
                   }),
                   chunkToMultiscaleTransform: transform,

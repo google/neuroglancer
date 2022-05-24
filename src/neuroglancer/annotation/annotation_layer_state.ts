@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {AnnotationSource} from 'neuroglancer/annotation';
+import {AnnotationPropertySpec, AnnotationSource, propertyTypeDataType} from 'neuroglancer/annotation';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {LayerDataSource} from 'neuroglancer/layer_data_source';
 import {ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
@@ -29,6 +29,7 @@ import {vec3} from 'neuroglancer/util/geom';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {makeTrackableFragmentMain, makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {getFallbackBuilderState, parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import { DataType } from '../util/data_type';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
@@ -87,8 +88,21 @@ void main() {
 `;
 
 export class AnnotationDisplayState extends RefCounted {
+  annotationProperties = new WatchableValue<AnnotationPropertySpec[]|undefined>(undefined);
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
-  shaderControls = new ShaderControlState(this.shader);
+  shaderControls = new ShaderControlState(
+      this.shader, makeCachedLazyDerivedWatchableValue(annotationProperties => {
+        const properties = new Map<string, DataType>();
+        if (annotationProperties === undefined) {
+          return null;
+        }
+        for (const property of annotationProperties) {
+          const dataType = propertyTypeDataType[property.type];
+          if (dataType === undefined) continue;
+          properties.set(property.identifier, dataType);
+        }
+        return {properties};
+      }, this.annotationProperties));
   fallbackShaderControls =
       new WatchableValue(getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)));
   shaderError = makeWatchableShaderError();
