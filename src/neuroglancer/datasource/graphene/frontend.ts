@@ -1160,12 +1160,18 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
     const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
     header.textContent = 'Multicut segments';
-    body.classList.add('neuroglancer-merge-segments-status');
+    body.classList.add('graphene-multicut-status');
     body.appendChild(makeIcon({
       text: 'Swap',
       title: 'Swap group',
       onClick: () => {
         multicutState.swapGroup();
+      }}));
+    body.appendChild(makeIcon({
+      text: 'Clear',
+      title: 'Clear multicut',
+      onClick: () => {
+        multicutState.reset();
       }}));
     body.appendChild(makeIcon({
       text: 'Submit',
@@ -1179,12 +1185,10 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
           }
         });
       }}));
-    body.appendChild(makeIcon({
-      text: 'Clear',
-      title: 'Clear multicut',
-      onClick: () => {
-        multicutState.reset();
-      }}));
+    const activeGroupIndicator = document.createElement('div');
+    activeGroupIndicator.className = 'activeGroupIndicator';
+    activeGroupIndicator.innerHTML = 'Active Group: ';
+    body.appendChild(activeGroupIndicator);
 
     const {displayState} = this.layer;
     // Ensure we use the same segmentationGroupState while activated.
@@ -1216,6 +1220,8 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
     const updateMulticutDisplay = () => {
       resetMulticutDisplay();
+      activeGroupIndicator.classList.toggle('blueGroup', multicutState.blueGroup.value);
+
       const focusSegment = multicutState.focusSegment.value;
       if (focusSegment === undefined) return;
 

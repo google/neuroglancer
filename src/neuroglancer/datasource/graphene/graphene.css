@@ -9,3 +9,28 @@
 .neuroglancer-graphene-tab div[data-color="#0000ff"] > .neuroglancer-annotation-position {
   color: #4444ff;
 }
+
+.graphene-multicut-status {
+  display: flex;
+  flex-direction: row;
+}
+
+.graphene-multicut-status > .activeGroupIndicator {
+  padding: 2px;
+  margin: auto 0;
+  background-color: red;
+  font: 12px sans-serif;
+  font-weight: 900;
+}
+
+.graphene-multicut-status > .activeGroupIndicator.blueGroup {
+  background-color: blue;
+}
+
+.graphene-multicut-status > .activeGroupIndicator::after {
+  content: "Red";
+}
+
+.graphene-multicut-status > .activeGroupIndicator.blueGroup::after {
+  content: "Blue";
+}
