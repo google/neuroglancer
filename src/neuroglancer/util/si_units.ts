@@ -23,35 +23,31 @@ export interface SiPrefix {
 }
 
 export const preferredSiPrefixes: readonly SiPrefix[] = [
-  {prefix: 'Y', exponent: 24, longPrefix: "yotta"},
-  {prefix: 'Z', exponent: 21, longPrefix: "zetta"},
-  {prefix: 'E', exponent: 18, longPrefix: "exa"},
-  {prefix: 'P', exponent: 15, longPrefix: "peta"},
-  {prefix: 'T', exponent: 12, longPrefix: "tera"},
-  {prefix: 'G', exponent: 9, longPrefix: "giga"},
-  {prefix: 'M', exponent: 6, longPrefix: "mega"},
-  {prefix: 'k', exponent: 3, longPrefix: "kilo"},
-  // {prefix: 'h', exponent: 2, longPrefix: "hecto"},
-  // {prefix: 'da', exponent: 1, longPrefix: "deca"},
-  {prefix: '', exponent: 0},
-  // {prefix: 'd', exponent: -1, longPrefix: "deci"},
-  // {prefix: 'c', exponent: -2, longPrefix: "centi"},
-  {prefix: 'm', exponent: -3, longPrefix: "milli"},
-  {prefix: 'µ', exponent: -6, longPrefix: "micro"},
-  {prefix: 'n', exponent: -9, longPrefix: "nano"},
-  {prefix: 'p', exponent: -12, longPrefix: "pico"},
-  {prefix: 'f', exponent: -15,longPrefix: "femto"},
-  {prefix: 'a', exponent: -18, longPrefix: "atto"},
-  {prefix: 'z', exponent: -21, longPrefix: "zepto"},
-  {prefix: 'y', exponent: -24, longPrefix: "yocto"},
+  {prefix: 'Y', exponent: 24, longPrefix: 'yotta'},
+  {prefix: 'Z', exponent: 21, longPrefix: 'zetta'},
+  {prefix: 'E', exponent: 18, longPrefix: 'exa'},
+  {prefix: 'P', exponent: 15, longPrefix: 'peta'},
+  {prefix: 'T', exponent: 12, longPrefix: 'tera'},
+  {prefix: 'G', exponent: 9, longPrefix: 'giga'},
+  {prefix: 'M', exponent: 6, longPrefix: 'mega'},
+  {prefix: 'k', exponent: 3, longPrefix: 'kilo'},
+  {prefix: '', exponent: 0, longPrefix: ''},
+  {prefix: 'm', exponent: -3, longPrefix: 'milli'},
+  {prefix: 'µ', exponent: -6, longPrefix: 'micro'},
+  {prefix: 'n', exponent: -9, longPrefix: 'nano'},
+  {prefix: 'p', exponent: -12, longPrefix: 'pico'},
+  {prefix: 'f', exponent: -15, longPrefix: 'femto'},
+  {prefix: 'a', exponent: -18, longPrefix: 'atto'},
+  {prefix: 'z', exponent: -21, longPrefix: 'zepto'},
+  {prefix: 'y', exponent: -24, longPrefix: 'yocto'},
 ];
 
 export const allSiPrefixes: readonly SiPrefix[] = [
   ...preferredSiPrefixes,
-  {prefix: 'h', exponent: 2, longPrefix: "hecto"},
-  {prefix: 'da', exponent: 1, longPrefix: "deca"},
-  {prefix: 'd', exponent: -1, longPrefix: "deci"},
-  {prefix: 'c', exponent: -2, longPrefix: "centi"},
+  {prefix: 'h', exponent: 2, longPrefix: 'hecto'},
+  {prefix: 'da', exponent: 1, longPrefix: 'deca'},
+  {prefix: 'd', exponent: -1, longPrefix: 'deci'},
+  {prefix: 'c', exponent: -2, longPrefix: 'centi'},
 ];
 
 const siPrefixesWithAlternatives: readonly SiPrefix[] = [
@@ -72,7 +68,8 @@ for (const {prefix, exponent} of siPrefixesWithAlternatives) {
 export function pickSiPrefix(x: number): SiPrefix {
   const exponent = Math.log10(x);
   const numPrefixes = preferredSiPrefixes.length;
-  const i = binarySearchLowerBound(0, numPrefixes, i => preferredSiPrefixes[i].exponent <= exponent);
+  const i =
+      binarySearchLowerBound(0, numPrefixes, i => preferredSiPrefixes[i].exponent <= exponent);
   return preferredSiPrefixes[Math.min(i, numPrefixes - 1)];
 }
 
@@ -83,7 +80,7 @@ interface FormatScaleWithUnitOptions {
 
 export function formatScaleWithUnit(
     scale: number, unit: string,
-  options: FormatScaleWithUnitOptions = {}): {scale: string, prefix: string, unit: string} {
+    options: FormatScaleWithUnitOptions = {}): {scale: string, prefix: string, unit: string} {
   const {precision = 6, elide1 = true} = options;
   let adjustedScale = scale;
   let prefix = '';
