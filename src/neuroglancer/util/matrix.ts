@@ -261,3 +261,29 @@ transformVector<Out extends TypedArray, Matrix extends TypedArray, Vector extend
   }
   return out;
 }
+
+export function permuteRows<Output extends TypedArray, Input extends TypedArray>(
+    output: Output, outputStride: number, input: Input, inputStride: number,
+    outputToInputRow: ReadonlyArray<number>, cols: number) {
+  const rows = outputToInputRow.length;
+  for (let outRow = 0; outRow < rows; ++outRow) {
+    const inRow = outputToInputRow[outRow];
+    for (let col = 0; col < cols; ++col) {
+      output[col * outputStride + outRow] = input[col * inputStride + inRow];
+    }
+  }
+  return output;
+}
+
+export function permuteCols<Output extends TypedArray, Input extends TypedArray>(
+    output: Output, outputStride: number, input: Input, inputStride: number,
+    outputToInputCol: ReadonlyArray<number>, rows: number) {
+  const cols = outputToInputCol.length;
+  for (let outCol = 0; outCol < cols; ++outCol) {
+    const inCol = outputToInputCol[outCol];
+    for (let row = 0; row < rows; ++row) {
+      output[outCol * outputStride + row] = input[inCol * inputStride + row];
+    }
+  }
+  return output;
+}

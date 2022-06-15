@@ -51,9 +51,17 @@ for (const unit of ['meter', 'second']) {
   }
 }
 
-function parseOmeAxis(axis: unknown): {name: string, unit: string, scale: number} {
+interface Axis {
+  name: string;
+  unit: string;
+  scale: number;
+  type: string|undefined;
+}
+
+function parseOmeAxis(axis: unknown): Axis {
   verifyObject(axis);
   const name = verifyObjectProperty(axis, 'name', verifyString);
+  const type = verifyOptionalObjectProperty(axis, 'type', verifyString);
   const parsedUnit = verifyOptionalObjectProperty(axis, 'unit', unit => {
     const x = OME_UNITS.get(unit);
     if (x === undefined) {
@@ -61,13 +69,20 @@ function parseOmeAxis(axis: unknown): {name: string, unit: string, scale: number
     }
     return x;
   }, {unit: '', scale: 1});
-  return {name, unit: parsedUnit.unit, scale: parsedUnit.scale};
+  return {name, unit: parsedUnit.unit, scale: parsedUnit.scale, type};
 }
 
 function parseOmeAxes(axes: unknown): CoordinateSpace {
   const parsedAxes = parseArray(axes, parseOmeAxis);
   return makeCoordinateSpace({
-    names: parsedAxes.map(axis => axis.name),
+    names: parsedAxes.map(axis => {
+      const {name, type} = axis;
+      if (type === 'channel') {
+        return `${name}'`;
+      } else {
+        return name;
+      }
+    }),
     scales: Float64Array.from(parsedAxes, axis => axis.scale),
     units: parsedAxes.map(axis => axis.unit),
   });
@@ -154,8 +169,6 @@ function parseOmeMultiscale(url: string, multiscale: unknown): OmeMultiscaleMeta
   const baseScales = new Float64Array(rank);
   for (let i = 0; i < rank; ++i) {
     const scale = baseScales[i] = baseTransform[i * (rank + 1) + i];
-    baseTransform[i * (rank + 1) + i] = 1;
-    baseTransform[rank * (rank + 1) + i] /= scale;
     coordinateSpace.scales[i] *= scale;
   }
   for (const scale of scales) {
