@@ -69,10 +69,7 @@ export function createHomogeneousTranslationMatrix<T extends TypedArray>(
     c: {new (length: number): T}, translation: ArrayLike<number>, square = true): T {
   const rank = translation.length;
   const stride = square ? rank + 1 : rank;
-  const m = new c(stride * (rank + 1));
-  if (square) {
-    m[m.length - 1] = 1;
-  }
+  const m = createIdentity(c, stride, rank + 1);
   for (let i = 0; i < rank; ++i) {
     m[stride * rank + i] = translation[i];
   }
