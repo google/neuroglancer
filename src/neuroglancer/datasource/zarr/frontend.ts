@@ -178,7 +178,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
       }
       const transform = new Float32Array((rank + 1) ** 2);
       matrix.multiply<Float32Array|Float64Array>(
-          transform, rank + 1, orderTransform, rank + 1, scale.transform, rank + 1, rank + 1,
+          transform, rank + 1, scale.transform, rank + 1, orderTransform, rank + 1, rank + 1,
           rank + 1, rank + 1);
       return makeDefaultVolumeChunkSpecifications({
                rank,
