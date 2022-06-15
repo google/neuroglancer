@@ -129,7 +129,7 @@ function parseOmeCoordinateTransforms(rank: number, transforms: unknown): Float6
   parseArray(transforms, transformJson => {
     const newTransform = parseOmeCoordinateTransform(rank, transformJson);
     transform = matrix.multiply(
-        new Float64Array(transform.length), rank + 1, transform, rank + 1, newTransform, rank + 1,
+        new Float64Array(transform.length), rank + 1, newTransform, rank + 1, transform, rank + 1,
         rank + 1, rank + 1, rank + 1);
   });
   return transform;
@@ -174,7 +174,7 @@ function parseOmeMultiscale(url: string, multiscale: unknown): OmeMultiscaleMeta
   for (const scale of scales) {
     const t = scale.transform;
     for (let i = 0; i < rank; ++i) {
-      for (let j = 0; j < rank + 1; ++j) {
+      for (let j = 0; j <= rank; ++j) {
         t[j * (rank + 1) + i] /= baseScales[i];
       }
     }
