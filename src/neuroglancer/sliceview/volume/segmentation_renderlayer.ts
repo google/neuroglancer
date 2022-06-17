@@ -26,7 +26,8 @@ import {RenderLayerBaseOptions, SliceViewVolumeRenderLayer} from 'neuroglancer/s
 import {AggregateWatchableValue, makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {Uint64Set} from 'neuroglancer/uint64_set';
+import {Uint64Map} from 'neuroglancer/uint64_map';
+import {vec4} from 'neuroglancer/util/geom';
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -62,7 +63,6 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
-  hasFocusSegments: boolean;
 }
 
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
@@ -72,9 +72,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       new SegmentStatedColorShaderManager('segmentStatedColor');
   private gpuSegmentStatedColorHashTable: GPUHashTable<HashMapUint64>|undefined;
   private hashTableManager = new HashSetShaderManager('visibleSegments');
-  private hashTableManagerFocusSegments = new HashSetShaderManager('focusSegments');
-  private gpuHashTableFocusSegments = this.registerDisposer(
-      GPUHashTable.get(this.gl, this.segmentationGroupState.focusSegments.hashTable));
   private gpuHashTable = this.registerDisposer(
       GPUHashTable.get(this.gl, this.segmentationGroupState.visibleSegments.hashTable));
   private gpuTemporaryHashTable =
@@ -99,18 +96,19 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
                 x => x.size !== 0,
                 [displayState.segmentationGroupState.value.segmentEquivalences])),
             hasSegmentStatedColors: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
-                x => x.size !== 0, [displayState.segmentStatedColors])),
+                (segmentStatedColors: Uint64Map, tempSegmentStatedColors2d: Uint64Map, useTempSegmentStatedColors2d: boolean) => {
+                  const releventMap = useTempSegmentStatedColors2d ? tempSegmentStatedColors2d : segmentStatedColors;
+                  return releventMap.size !== 0;
+                }, [displayState.segmentStatedColors, displayState.tempSegmentStatedColors2d, displayState.useTempSegmentStatedColors2d])),
             hasSegmentDefaultColor: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
-                x => x !== undefined, [displayState.segmentDefaultColor])),
+                (segmentDefaultColor, tempSegmentDefaultColor2d) => {
+                  return segmentDefaultColor !== undefined || tempSegmentDefaultColor2d !== undefined;
+                }, [displayState.segmentDefaultColor, displayState.tempSegmentDefaultColor2d])),
             hasHighlightColor: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
                 x => x !== undefined, [displayState.highlightColor])),
             hideSegmentZero: displayState.hideSegmentZero,
             baseSegmentColoring: displayState.baseSegmentColoring,
             baseSegmentHighlighting: displayState.baseSegmentHighlighting,
-            hasFocusSegments: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
-                (showFocusSegments: boolean, focusSegments: Uint64Set) => {
-                  return showFocusSegments && focusSegments.size !== 0;
-                }, [displayState.showFocusSegments, displayState.segmentationGroupState.value.focusSegments])),
           })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
@@ -123,8 +121,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(displayState.notSelectedAlpha.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
         displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch));
-    this.registerDisposer(this.segmentationGroupState.focusSegments.changed.add(this.redrawNeeded.dispatch));
-    this.registerDisposer(displayState.showFocusSegments.changed.add(this.redrawNeeded.dispatch));
   }
 
   disposed() {
@@ -138,7 +134,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
     this.hashTableManager.defineShader(builder);
-    this.hashTableManagerFocusSegments.defineShader(builder);
     let getUint64Code = `
 uint64_t getUint64DataValue() {
   uint64_t x = toUint64(getDataValue());
@@ -201,9 +196,9 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
 `;
     if (parameters.hasHighlightColor) {
-      builder.addUniform('highp vec3', 'uHighlightColor');
+      builder.addUniform('highp vec4', 'uHighlightColor');
       fragmentMain += `
-    emit(vec4(mix(vec3(1.0,1.0,1.0), uHighlightColor, 1.0), alpha));
+    emit(uHighlightColor);
     return;
 `;
     }
@@ -212,50 +207,25 @@ uint64_t getMappedObjectId(uint64_t value) {
     alpha = uNotSelectedAlpha;
   }
 `;
-
-    if (parameters.hasFocusSegments) {
-      if (parameters.hasSegmentStatedColors) {
-        fragmentMain += `
-  if (${this.hashTableManagerFocusSegments.hasFunctionName}(value)) {
-    vec3 rgb_unused;
-    if (!${this.segmentStatedColorShaderManager.getFunctionName}(value, rgb_unused)) {
-      alpha = 0.0;
-    }
-  }
-`;
-      } else {
-        fragmentMain += `
-  if (${this.hashTableManagerFocusSegments.hasFunctionName}(value)) {
-    alpha = 0.0;
-  }
-`;
-      }
-      fragmentMain += `
-  else {
-    emit(vec4(0.0, 0.0, 0.0, 0.5));
-    return;
-  }
-`;
-    }
-    let getMappedIdColor = `vec3 getMappedIdColor(uint64_t value) {
+    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value) {
 `;
     // If the value has a mapped color, use it; otherwise, compute the color.
     if (parameters.hasSegmentStatedColors) {
       this.segmentStatedColorShaderManager.defineShader(builder);
       getMappedIdColor += `
-  vec3 rgb;
-  if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgb)) {
-    return rgb;
+  vec4 rgba;
+  if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgba)) {
+    return rgba;
   }
 `;
     }
     if (parameters.hasSegmentDefaultColor) {
-      builder.addUniform('highp vec3', 'uSegmentDefaultColor');
+      builder.addUniform('highp vec4', 'uSegmentDefaultColor');
       getMappedIdColor += `  return uSegmentDefaultColor;
 `;
     } else {
       this.segmentColorShaderManager.defineShader(builder);
-      getMappedIdColor += `  return segmentColorHash(value);
+      getMappedIdColor += `  return vec4(segmentColorHash(value), 0.0);
 `;
     }
     getMappedIdColor += `
@@ -264,8 +234,11 @@ uint64_t getMappedObjectId(uint64_t value) {
     builder.addFragmentCode(getMappedIdColor);
 
     fragmentMain += `
-  vec3 rgb = getMappedIdColor(valueForColor);
-  emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
+  vec4 rgba = getMappedIdColor(valueForColor);
+  if (rgba.a > 0.0) {
+    alpha = rgba.a;
+  }
+  emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
   }
@@ -275,7 +248,8 @@ uint64_t getMappedObjectId(uint64_t value) {
     const {displayState, segmentationGroupState} = this;
     const {segmentSelectionState} = this.displayState;
     const {segmentDefaultColor: {value: segmentDefaultColor}, segmentColorHash: {value: segmentColorHash},
-      highlightColor: {value: highlightColor}} = this.displayState;
+      highlightColor: {value: highlightColor},
+      tempSegmentDefaultColor2d: {value: tempSegmentDefaultColor2d}} = this.displayState;
     const visibleSegments = getVisibleSegments(segmentationGroupState);
     const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
@@ -300,7 +274,6 @@ uint64_t getMappedObjectId(uint64_t value) {
         gl, shader,
         segmentationGroupState.useTemporaryVisibleSegments.value ? this.gpuTemporaryHashTable :
                                                                    this.gpuHashTable);
-    this.hashTableManagerFocusSegments.enable(gl, shader, this.gpuHashTableFocusSegments);
     if (parameters.hasEquivalences) {
       const useTemp = segmentationGroupState.useTemporarySegmentEquivalences.value;
       (useTemp ? this.temporaryEquivalencesHashMap : this.equivalencesHashMap).update();
@@ -308,13 +281,17 @@ uint64_t getMappedObjectId(uint64_t value) {
           gl, shader,
           useTemp ? this.gpuTemporaryEquivalencesHashTable : this.gpuEquivalencesHashTable);
     }
-    if (segmentDefaultColor === undefined) {
-      this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
+    let activeSegmentDefaultColor = tempSegmentDefaultColor2d || segmentDefaultColor;
+    if (activeSegmentDefaultColor) {
+      // convert to vec4, is there a better way?
+      activeSegmentDefaultColor = vec4.clone([...activeSegmentDefaultColor]);
+      gl.uniform4fv(shader.uniform('uSegmentDefaultColor'), activeSegmentDefaultColor);
     } else {
-      gl.uniform3fv(shader.uniform('uSegmentDefaultColor'), segmentDefaultColor);
+      this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
     }
     if (parameters.hasSegmentStatedColors) {
-      const segmentStatedColors = this.displayState.segmentStatedColors.value;
+      const segmentStatedColors = this.displayState.useTempSegmentStatedColors2d ? this.displayState.tempSegmentStatedColors2d.value :
+                                                                                   this.displayState.segmentStatedColors.value;
       let {gpuSegmentStatedColorHashTable} = this;
       if (gpuSegmentStatedColorHashTable === undefined ||
           gpuSegmentStatedColorHashTable.hashTable !== segmentStatedColors.hashTable) {
@@ -325,13 +302,12 @@ uint64_t getMappedObjectId(uint64_t value) {
       this.segmentStatedColorShaderManager.enable(gl, shader, gpuSegmentStatedColorHashTable);
     }
     if (highlightColor !== undefined) {
-      gl.uniform3fv(shader.uniform('uHighlightColor'), highlightColor);
+      gl.uniform4fv(shader.uniform('uHighlightColor'), highlightColor);
     }
   }
   endSlice(sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters) {
     const {gl} = this;
     this.hashTableManager.disable(gl, shader);
-    this.hashTableManagerFocusSegments.disable(gl, shader);
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.disable(gl, shader);
     }

@@ -23,7 +23,7 @@ import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_s
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
-import {mat4, vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyNonnegativeInt, verify3dVec} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -62,16 +62,27 @@ import { AnnotationDisplayState, AnnotationLayerState } from 'neuroglancer/annot
 import { LoadedDataSubsource } from 'neuroglancer/layer_data_source';
 import { NullarySignal } from 'neuroglancer/util/signal';
 import { Trackable } from 'neuroglancer/util/trackable';
-import { Uint64Map } from 'neuroglancer/uint64_map';
-import { Uint64Set } from 'neuroglancer/uint64_set';
 import { makeIcon } from 'neuroglancer/widget/icon';
 import { EventActionMap } from 'neuroglancer/util/event_action_map';
 import { packColor } from 'neuroglancer/util/color';
 
+function vec4FromVec3(vec: vec3, alpha = 0) {
+  const res = vec4.clone([...vec]);
+  res[3] = alpha;
+  return res;
+}
+
 const RED_COLOR = vec3.fromValues(1, 0, 0);
 const BLUE_COLOR = vec3.fromValues(0, 0, 1);
-const RED_COLOR_PACKED = new Uint64(packColor(RED_COLOR));
-const BLUE_COLOR_PACKED = new Uint64(packColor(BLUE_COLOR));
+const RED_COLOR_SEGMENT = vec4FromVec3(RED_COLOR, 0.5);
+const BLUE_COLOR_SEGMENT = vec4FromVec3(BLUE_COLOR, 0.5);
+const RED_COLOR_HIGHLIGHT = vec4FromVec3(RED_COLOR, 0.25);
+const BLUE_COLOR_HIGHTLIGHT = vec4FromVec3(BLUE_COLOR, 0.25);
+const TRANSPARENT_COLOR = vec4.fromValues(0, 0, 0, 0.01);
+const RED_COLOR_SEGMENT_PACKED = new Uint64(packColor(RED_COLOR_SEGMENT));
+const BLUE_COLOR_SEGMENT_PACKED = new Uint64(packColor(BLUE_COLOR_SEGMENT));
+const TRANSPARENT_COLOR_PACKED = new Uint64(packColor(TRANSPARENT_COLOR));
+const MULTICUT_OFF_COLOR = vec4.fromValues(0, 0, 0, 0.5);
 
 class GrapheneMeshSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {
@@ -677,17 +688,15 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       if (added) {
         if (isBaseSegment) {
           this.graph.getRoot(segmentConst).then(rootId => {
-            if (segmentConst === rootId) {
-              console.error('when does this happen?');
-            }
             segmentsState.visibleSegments.delete(segmentConst);
             segmentsState.visibleSegments.add(rootId);
           });
         }
       } else if (!isBaseSegment) {
-        // removed and not a base segment
-        if (segmentsState.focusSegments.has(segmentId)) {
+        const {focusSegment: {value: focusSegment}} = this.graph.state.multicutState;
+        if (focusSegment && Uint64.equal(segmentId, focusSegment)) {
           segmentsState.visibleSegments.add(segmentId);
+          StatusMessage.showTemporaryMessage(`Can't deselect active multicut segment.`, 3000);
           return;
         }
 
@@ -1194,10 +1203,6 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
     // Ensure we use the same segmentationGroupState while activated.
     const segmentationGroupState = displayState.segmentationGroupState.value;
     const priorBaseSegmentHighlighting = displayState.baseSegmentHighlighting.value;
-    const priorSegmentStatedColors = new Uint64Map();
-    priorSegmentStatedColors.assignFrom(displayState.segmentStatedColors.value);
-    const priorFocusSegments = new Uint64Set();
-    priorFocusSegments.assignFrom(segmentationGroupState.focusSegments);
     const priorHighlightColor = displayState.highlightColor.value;
 
 
@@ -1205,16 +1210,14 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
     activation.registerDisposer(() => {
       resetMulticutDisplay();
       displayState.baseSegmentHighlighting.value = priorBaseSegmentHighlighting;
-      displayState.segmentStatedColors.value.assignFrom(priorSegmentStatedColors);
-      segmentationGroupState.focusSegments.assignFrom(priorFocusSegments);
       displayState.highlightColor.value = priorHighlightColor;
     });
 
     const resetMulticutDisplay = () => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
-      displayState.showFocusSegments.value = false;
-      displayState.segmentStatedColors.value.clear(); // TODO, should only clear those that are in temp sets
-      segmentationGroupState.focusSegments.clear();
+      displayState.useTempSegmentStatedColors2d.value = false;
+      displayState.tempSegmentStatedColors2d.value.clear(); // TODO, should only clear those that are in temp sets
+      displayState.tempSegmentDefaultColor2d.value = undefined;
       displayState.highlightColor.value = undefined;
     };
 
@@ -1226,18 +1229,15 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       if (focusSegment === undefined) return;
 
       displayState.baseSegmentHighlighting.value = true;
-      displayState.highlightColor.value = multicutState.blueGroup.value ? BLUE_COLOR : RED_COLOR;
+      displayState.highlightColor.value = multicutState.blueGroup.value ? BLUE_COLOR_HIGHTLIGHT : RED_COLOR_HIGHLIGHT;
       segmentsState.useTemporaryVisibleSegments.value = true;
       segmentsState.useTemporarySegmentEquivalences.value = true;
-      displayState.showFocusSegments.value = true;
 
       // add to focus segments and temporary sets
-      segmentationGroupState.focusSegments.add(focusSegment);
       segmentsState.temporaryVisibleSegments.add(focusSegment);
 
       for (const segment of multicutState.segments) {
         segmentsState.temporaryVisibleSegments.add(segment);
-        segmentationGroupState.focusSegments.add(segment);
       }
 
       // all other segments are added to the focus segment equivalences
@@ -1248,12 +1248,17 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       }
 
       // set colors
+      displayState.tempSegmentDefaultColor2d.value = MULTICUT_OFF_COLOR;
+      displayState.tempSegmentStatedColors2d.value.set(focusSegment, TRANSPARENT_COLOR_PACKED);
+
       for (const segment of multicutState.redSegments) {
-        displayState.segmentStatedColors.value.set(segment, RED_COLOR_PACKED);
+        displayState.tempSegmentStatedColors2d.value.set(segment, RED_COLOR_SEGMENT_PACKED);
       }
       for (const segment of multicutState.blueSegments) {
-        displayState.segmentStatedColors.value.set(segment, BLUE_COLOR_PACKED);
+        displayState.tempSegmentStatedColors2d.value.set(segment, BLUE_COLOR_SEGMENT_PACKED);
       }
+
+      displayState.useTempSegmentStatedColors2d.value = true;
     };
 
     updateMulticutDisplay();
@@ -1269,7 +1274,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       event.stopPropagation();
       
       const {segmentSelectionState: {baseValue, value}} = this.layer.displayState;
-      if (!baseValue || !value) return; // could this happen or is this just for type checking
+      if (!baseValue || !value) return;
 
       if (!segmentationGroupState.visibleSegments.has(value)) {
         StatusMessage.showTemporaryMessage(

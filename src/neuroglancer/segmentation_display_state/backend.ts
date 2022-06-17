@@ -46,7 +46,6 @@ export const withSegmentationLayerBackendState =
   segmentEquivalences: SharedDisjointUint64Sets;
   temporaryVisibleSegments: Uint64Set;
   temporarySegmentEquivalences: SharedDisjointUint64Sets;
-  focusSegments: Uint64Set;
   useTemporaryVisibleSegments: SharedWatchableValue<boolean>;
   useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
   transform: SharedWatchableValue<RenderLayerTransformOrError>;

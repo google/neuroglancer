@@ -46,7 +46,7 @@ import {Uint64Map} from 'neuroglancer/uint64_map';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {packColor, parseRGBColorSpecification, serializeColor, TrackableOptionalRGB, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
+import {vec3, vec4} from 'neuroglancer/util/geom';
 import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -83,7 +83,6 @@ const MESH_SILHOUETTE_RENDERING_JSON_KEY = 'meshSilhouetteRendering';
 const LINKED_SEGMENTATION_GROUP_JSON_KEY = 'linkedSegmentationGroup';
 const LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY = 'linkedSegmentationColorGroup';
 const SEGMENT_DEFAULT_COLOR_JSON_KEY = 'segmentDefaultColor';
-// const HIGHLIGHT_COLOR_JSON_KEY = 'highlightColor';
 const ANCHOR_SEGMENT_JSON_KEY = 'anchorSegment';
 
 export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID = 'skeletonShaderControl';
@@ -161,8 +160,6 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
       this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
   useTemporarySegmentEquivalences =
       this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
-
-  focusSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
 }
 
 export class SegmentationUserLayerColorGroupState extends RefCounted implements
@@ -173,7 +170,9 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     const {specificationChanged} = this;
     this.segmentColorHash.changed.add(specificationChanged.dispatch);
     this.segmentStatedColors.changed.add(specificationChanged.dispatch);
+    this.tempSegmentStatedColors2d.changed.add(specificationChanged.dispatch);
     this.segmentDefaultColor.changed.add(specificationChanged.dispatch);
+    this.tempSegmentDefaultColor2d.changed.add(specificationChanged.dispatch);
     this.highlightColor.changed.add(specificationChanged.dispatch);
   }
 
@@ -183,9 +182,6 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     verifyOptionalObjectProperty(
         specification, SEGMENT_DEFAULT_COLOR_JSON_KEY,
         value => this.segmentDefaultColor.restoreState(value));
-    // verifyOptionalObjectProperty(
-    //     specification, HIGHLIGHT_COLOR_JSON_KEY,
-    //     value => this.highlightColor.restoreState(value));
     verifyOptionalObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
       let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
       for (let [idStr, colorVec] of result) {
@@ -200,11 +196,10 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     const x: any = {};
     x[COLOR_SEED_JSON_KEY] = this.segmentColorHash.toJSON();
     x[SEGMENT_DEFAULT_COLOR_JSON_KEY] = this.segmentDefaultColor.toJSON();
-    // x[HIGHLIGHT_COLOR_JSON_KEY] = this.highlightColor.toJSON();
-    const {segmentStatedColors} = this;
-    if (segmentStatedColors.size > 0) {
+    const {segmentStatedColors: segmentStatedColorsX} = this;
+    if (segmentStatedColorsX.size > 0) {
       const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
-      for (const [key, value] of segmentStatedColors.unsafeEntries()) {
+      for (const [key, value] of segmentStatedColorsX.unsafeEntries()) {
         j[key.toString()] = serializeColor(unpackRGB(value.low));
       }
     }
@@ -214,14 +209,17 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
   assignFrom(other: SegmentationUserLayerColorGroupState) {
     this.segmentColorHash.value = other.segmentColorHash.value;
     this.segmentStatedColors.assignFrom(other.segmentStatedColors);
+    this.tempSegmentStatedColors2d.assignFrom(other.tempSegmentStatedColors2d);
     this.segmentDefaultColor.value = other.segmentDefaultColor.value;
     this.highlightColor.value = other.highlightColor.value;
   }
 
   segmentColorHash = SegmentColorHash.getDefault();
   segmentStatedColors = this.registerDisposer(new Uint64Map());
+  tempSegmentStatedColors2d = this.registerDisposer(new Uint64Map());
   segmentDefaultColor = new TrackableOptionalRGB();
-  highlightColor = new TrackableOptionalRGB();
+  tempSegmentDefaultColor2d = new WatchableValue<vec3|vec4|undefined>(undefined);
+  highlightColor = new WatchableValue<vec4|undefined>(undefined);
 }
 
 class LinkedSegmentationGroupState<State extends SegmentationUserLayerGroupState|
@@ -277,8 +275,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         this.segmentationColorGroupState, group => group.segmentColorHash));
     this.segmentStatedColors = this.layer.registerDisposer(new IndirectTrackableValue(
         this.segmentationColorGroupState, group => group.segmentStatedColors));
+    this.tempSegmentStatedColors2d = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.tempSegmentStatedColors2d));
     this.segmentDefaultColor = this.layer.registerDisposer(new IndirectTrackableValue(
         this.segmentationColorGroupState, group => group.segmentDefaultColor));
+    this.tempSegmentDefaultColor2d = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.tempSegmentDefaultColor2d));
     this.highlightColor = this.layer.registerDisposer(new IndirectTrackableValue(
         this.segmentationColorGroupState, group => group.highlightColor));
     this.segmentQuery = this.layer.registerDisposer(
@@ -302,7 +304,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   transparentPickEnabled = this.layer.pick;
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
-  showFocusSegments = new TrackableBoolean(false, false);
+  useTempSegmentStatedColors2d =
+      this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false)); // where does this line belong? Also should it be in segmentationColorGroupState?
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 
@@ -333,8 +336,10 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: TrackableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  tempSegmentStatedColors2d: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
-  highlightColor: WatchableValueInterface<vec3|undefined>;
+  tempSegmentDefaultColor2d: WatchableValueInterface<vec3|vec4|undefined>;
+  highlightColor: WatchableValueInterface<vec4|undefined>;
   segmentQuery: WatchableValueInterface<string>;
   segmentPropertyMap: WatchableValueInterface<PreprocessedSegmentPropertyMap|undefined>;
 }

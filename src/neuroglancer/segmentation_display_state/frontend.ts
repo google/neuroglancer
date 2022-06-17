@@ -143,7 +143,9 @@ export interface SegmentationGroupState extends VisibleSegmentsState {
 export interface SegmentationColorGroupState {
   segmentColorHash: SegmentColorHash;
   segmentStatedColors: Uint64Map;
+  tempSegmentStatedColors2d: Uint64Map;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+  tempSegmentDefaultColor2d: WatchableValueInterface<vec3|vec4|undefined>;
 }
 
 export interface SegmentationDisplayState {
@@ -162,10 +164,11 @@ export interface SegmentationDisplayState {
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: WatchableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  tempSegmentStatedColors2d: WatchableValueInterface<Uint64Map>;
+  useTempSegmentStatedColors2d: WatchableValueInterface<boolean>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
-  highlightColor: WatchableValueInterface<vec3|undefined>;
-
-  showFocusSegments: WatchableValueInterface<boolean>;
+  tempSegmentDefaultColor2d: WatchableValueInterface<vec3|vec4|undefined>;
+  highlightColor: WatchableValueInterface<vec4|undefined>;
 }
 
 export function resetTemporaryVisibleSegmentsState(state: VisibleSegmentsState) {
