@@ -161,7 +161,6 @@ uint64_t getMappedObjectId(uint64_t value) {
 `);
     }
     builder.addUniform('highp uvec2', 'uSelectedSegment');
-    builder.addUniform('highp uvec2', 'uBaseSelectedSegment');
     builder.addUniform('highp uint', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
@@ -170,8 +169,6 @@ uint64_t getMappedObjectId(uint64_t value) {
   uint64_t baseValue = getUint64DataValue();
   uint64_t value = getMappedObjectId(baseValue);
   uint64_t valueForColor = ${parameters.baseSegmentColoring?'baseValue':'value'};
-
-  highp uvec2 segmentForHighlight = ${parameters.baseSegmentHighlighting?'uBaseSelectedSegment':'uSelectedSegment'};
   uint64_t valueForHighlight = ${parameters.baseSegmentHighlighting?'baseValue':'value'};
 
   float alpha = uSelectedAlpha;
@@ -187,7 +184,7 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     fragmentMain += `
   bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
-  if (segmentForHighlight == valueForHighlight.value) {
+  if (uSelectedSegment == valueForHighlight.value) {
     float adjustment = has ? 0.5 : 0.75;
     if (saturation > adjustment) {
       saturation -= adjustment;
@@ -253,20 +250,16 @@ uint64_t getMappedObjectId(uint64_t value) {
     const visibleSegments = getVisibleSegments(segmentationGroupState);
     const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
-    let baseSelectedSegmentLow = 0, baseSelectedSegmentHigh = 0;
     if (segmentSelectionState.hasSelectedSegment) {
-      let seg = segmentSelectionState.selectedSegment;
+      const seg = displayState.baseSegmentHighlighting.value ? segmentSelectionState.baseSelectedSegment :
+                                                               segmentSelectionState.selectedSegment;
       selectedSegmentLow = seg.low;
       selectedSegmentHigh = seg.high;
-      let baseSeg = segmentSelectionState.baseSelectedSegment;
-      baseSelectedSegmentLow = baseSeg.low;
-      baseSelectedSegmentHigh = baseSeg.high;
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), displayState.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uSaturation'), displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
-    gl.uniform2ui(shader.uniform('uBaseSelectedSegment'), baseSelectedSegmentLow, baseSelectedSegmentHigh);
     gl.uniform1ui(
         shader.uniform('uShowAllSegments'),
         visibleSegments.hashTable.size || !ignoreNullSegmentSet ? 0 : 1);
