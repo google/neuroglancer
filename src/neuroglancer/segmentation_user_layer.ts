@@ -196,10 +196,10 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     const x: any = {};
     x[COLOR_SEED_JSON_KEY] = this.segmentColorHash.toJSON();
     x[SEGMENT_DEFAULT_COLOR_JSON_KEY] = this.segmentDefaultColor.toJSON();
-    const {segmentStatedColors: segmentStatedColorsX} = this;
-    if (segmentStatedColorsX.size > 0) {
+    const {segmentStatedColors} = this;
+    if (segmentStatedColors.size > 0) {
       const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
-      for (const [key, value] of segmentStatedColorsX.unsafeEntries()) {
+      for (const [key, value] of segmentStatedColors.unsafeEntries()) {
         j[key.toString()] = serializeColor(unpackRGB(value.low));
       }
     }
