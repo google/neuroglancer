@@ -26,6 +26,7 @@ import {cancellableFetchOk, ResponseTransform} from 'neuroglancer/util/http_requ
 export interface OAuth2Credentials {
   tokenType: string;
   accessToken: string;
+  email?: string;
 }
 
 export function fetchWithOAuth2Credentials<T>(
@@ -55,6 +56,9 @@ export function fetchWithOAuth2Credentials<T>(
         } else if (status === 403 && !credentials.accessToken) {
           // Anonymous access denied.  Request credentials.
           return 'refresh';
+        }
+        if (error instanceof Error && credentials.email !== undefined) {
+          error.message += `  (Using credentials for ${JSON.stringify(credentials.email)})`;
         }
         throw error;
       },
