@@ -60,7 +60,6 @@ function extractEmailFromIdToken(idToken: string): string {
   try {
     if (idTokenParts.length !== 3) throw new Error(`Invalid JWT format`);
     const decoded = atob(idTokenParts[1]);
-    console.log(idTokenParts, decoded);
     const parsed = JSON.parse(decoded);
     verifyObject(parsed);
     return verifyObjectProperty(parsed, "email", verifyString);
@@ -133,7 +132,6 @@ class AuthHandler {
                   undefined, new Error(`Error obtaining Google OAuth2 token: ${fullMessage}`));
               return;
             }
-            console.log(params);
             let accessToken = params.get('access_token');
             let tokenType = params.get('token_type');
             let expiresIn = params.get('expires_in');
