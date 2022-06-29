@@ -501,7 +501,7 @@ export class SegmentationUserLayer extends Base {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
               this.graphConnection = refCounted.registerDisposer(
-                  segmentationGraph.connect(this.displayState.segmentationGroupState.value));
+                  segmentationGraph.connect(this));
               const displayState = {
                 ...this.displayState,
                 transform: loadedSubsource.getRenderLayerTransform(),
@@ -539,7 +539,7 @@ export class SegmentationUserLayer extends Base {
             updatedGraph = this.displayState.originalSegmentationGroupState.localGraph;
             loadedSubsource.activate(refCounted => {
               this.graphConnection = refCounted.registerDisposer(
-                  updatedGraph!.connect(this.displayState.segmentationGroupState.value));
+                  updatedGraph!.connect(this));
               refCounted.registerDisposer(() => {
                 this.graphConnection = undefined;
               });

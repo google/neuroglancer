@@ -19,7 +19,6 @@ import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RenderLayer } from 'neuroglancer/renderlayer';
-import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
 import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
 import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
@@ -33,7 +32,7 @@ export enum VisibleSegmentEquivalencePolicy {
 }
 
 export abstract class SegmentationGraphSource {
-  abstract connect(segmentsState: VisibleSegmentsState, transform?: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection>;
+  abstract connect(layer: SegmentationUserLayer): Owned<SegmentationGraphSourceConnection>;
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
@@ -55,7 +54,7 @@ export interface ComputedSplit {
 
 export abstract class SegmentationGraphSourceConnection<
     SourceType extends SegmentationGraphSource = SegmentationGraphSource> extends RefCounted {
-  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState, public transform?: WatchableValueInterface<RenderLayerTransformOrError>) {
+  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState) {
     super();
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;

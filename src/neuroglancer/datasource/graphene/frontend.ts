@@ -35,7 +35,6 @@ import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglanc
 import {StatusMessage} from 'neuroglancer/status';
 import { makeChunkedGraphChunkSpecification } from 'neuroglancer/datasource/graphene/base';
 import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy } from 'neuroglancer/segmentation_graph/source';
-import { VisibleSegmentsState } from 'neuroglancer/segmentation_display_state/base';
 import { TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { getChunkPositionFromCombinedGlobalLocalPositions, RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer, RenderLayerRole } from 'neuroglancer/renderlayer';
@@ -638,20 +637,29 @@ class MulticutState extends RefCounted implements Trackable {
 }
 
 class GraphConnection extends SegmentationGraphSourceConnection {
+  public annotationLayerStates: AnnotationLayerState[] = [];
+
   constructor(
       public graph: GrapheneGraphSource,
-      segmentsState: VisibleSegmentsState,
-      public transform: WatchableValueInterface<RenderLayerTransformOrError>,
+      layer: SegmentationUserLayer,
       private chunkSource: GrapheneMultiscaleVolumeChunkSource,
       public state: GrapheneState) {
-    super(graph, segmentsState);
-
+    super(graph, layer.displayState.segmentationGroupState.value);
+    const segmentsState = layer.displayState.segmentationGroupState.value;
     segmentsState.visibleSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
       if (segmentIds !== null) {
         segmentIds = Array<Uint64>().concat(segmentIds);
       }
       this.visibleSegmentsChanged(segmentIds, add);
     });
+
+    const {annotationLayerStates, state: {multicutState}} = this;
+    const loadedSubsource = getGraphLoadedSubsource(layer)!;
+    const redGroup = makeColoredAnnotationState(layer, loadedSubsource, 0, RED_COLOR);
+    const blueGroup = makeColoredAnnotationState(layer, loadedSubsource, 1, BLUE_COLOR);
+    synchronizeAnnotationSource(multicutState.sinks, redGroup);
+    synchronizeAnnotationSource(multicutState.sources, blueGroup)
+    annotationLayerStates.push(redGroup, blueGroup);
   }
 
   createRenderLayers(
@@ -727,22 +735,6 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
-  private annotationLayerStates: AnnotationLayerState[] = [];
-
-  initializeAnnotations(layer: SegmentationUserLayer) {
-    const {annotationLayerStates, state: {multicutState}} = this;
-    if (!annotationLayerStates.length) {
-      const loadedSubsource = getGraphLoadedSubsource(layer)!;
-      const redGroup = makeColoredAnnotationState(layer, loadedSubsource, 0, RED_COLOR);
-      const blueGroup = makeColoredAnnotationState(layer, loadedSubsource, 1, BLUE_COLOR);
-      synchronizeAnnotationSource(multicutState.sinks, redGroup);
-      synchronizeAnnotationSource(multicutState.sources, blueGroup)
-      annotationLayerStates.push(redGroup, blueGroup);
-    }
-
-    return annotationLayerStates;
-  }
-
   async submitMulticut(annotationToNanometers: Float64Array): Promise<boolean> {
     const {state: {multicutState}} = this;
     const {sinks, sources} = multicutState;
@@ -766,7 +758,6 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         return true;
       }
     }
-    return false;
   }
 }
 
@@ -862,8 +853,8 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     this.graphServer = new GrapheneGraphServerInterface(info.app!.segmentationUrl, credentialsProvider);
   }
 
-  connect(segmentsState: VisibleSegmentsState, transform: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection> {
-    const connection = new GraphConnection(this, segmentsState, transform, this.chunkSource, this.state);
+  connect(layer: SegmentationUserLayer): Owned<SegmentationGraphSourceConnection> {
+    const connection = new GraphConnection(this, layer, this.chunkSource, this.state);
   
     this.connections.add(connection);
     connection.registerDisposer(() => {
@@ -1082,8 +1073,7 @@ export class GrapheneTab extends Tab {
     super();
     const {graphConnection} = layer;
     if (graphConnection instanceof GraphConnection) {
-      const states = graphConnection.initializeAnnotations(this.layer);
-      for (const state of states) {
+      for (const state of graphConnection.annotationLayerStates) {
         this.annotationLayerView.annotationStates.add(state);
       }
     }
@@ -1139,32 +1129,14 @@ const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
 });
 
 class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
-  grapheneConnection?: GraphConnection;
-
-  constructor(public layer: SegmentationUserLayer, public toggle: boolean = false) {
-    super(layer, toggle);
-
-    const maybeInitializeAnnotations = () => {
-      if (this.grapheneConnection) return;
-      const {graphConnection} = this.layer;
-      if (graphConnection && graphConnection instanceof GraphConnection) {
-        this.grapheneConnection = graphConnection;
-        this.grapheneConnection.initializeAnnotations(layer);
-      }
-    };
-    this.layer.readyStateChanged.add(() => {
-      maybeInitializeAnnotations();
-    });
-    maybeInitializeAnnotations();
-  }
-
   toJSON() {
     return ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID;
   }
 
   activate(activation: ToolActivation<this>) {
-    if (!this.grapheneConnection) return;
-    const {state: {multicutState}, segmentsState} = this.grapheneConnection;
+    const {graphConnection} = this.layer;
+    if (!graphConnection || !(graphConnection instanceof GraphConnection)) return;
+    const {state: {multicutState}, segmentsState} = graphConnection;
     if (multicutState === undefined) return;
 
     const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
@@ -1188,7 +1160,7 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
       onClick: () => {
         const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
         const annotationToNanometers = loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
-        this.grapheneConnection?.submitMulticut(annotationToNanometers).then(success => {
+        graphConnection.submitMulticut(annotationToNanometers).then(success => {
           if (success) {
             activation.cancel();
           }
