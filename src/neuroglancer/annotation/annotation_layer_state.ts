@@ -121,6 +121,7 @@ export class AnnotationLayerState extends RefCounted {
   subsourceId: string;
   subsourceIndex: number;
   displayState: AnnotationDisplayState;
+  subsubsourceId?: string;
 
   readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
 
@@ -132,6 +133,7 @@ export class AnnotationLayerState extends RefCounted {
     dataSource: LayerDataSource,
     subsourceId: string,
     subsourceIndex: number,
+    subsubsourceId?: string,
     role?: RenderLayerRole,
   }) {
     super();
@@ -153,6 +155,7 @@ export class AnnotationLayerState extends RefCounted {
     this.dataSource = options.dataSource;
     this.subsourceId = options.subsourceId;
     this.subsourceIndex = options.subsourceIndex;
+    this.subsubsourceId = options.subsubsourceId;
   }
 
   get sourceIndex() {

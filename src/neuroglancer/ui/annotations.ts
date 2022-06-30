@@ -1334,7 +1334,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
         boolean {
       if (state.annotationId === undefined) return false;
       const annotationLayer = this.annotationStates.states.find(
-          x => x.subsourceIndex === state.annotationSubsourceIndex &&
+          x => x.sourceIndex === state.annotationSourceIndex &&
+               x.subsubsourceId === state.annotationSubsubsourceId &&
               (state.annotationSubsource === undefined ||
                x.subsourceId === state.annotationSubsource));
       if (annotationLayer === undefined) return false;
@@ -1646,8 +1647,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.manager.root.selectionState.captureSingleLayerState(this, state => {
         state.annotationId = id;
         state.annotationSourceIndex = annotationLayer.sourceIndex;
-        state.annotationSubsourceIndex = annotationLayer.subsourceIndex;
         state.annotationSubsource = annotationLayer.subsourceId;
+        state.annotationSubsubsourceId = annotationLayer.subsubsourceId;
         return true;
       }, pin);
     }

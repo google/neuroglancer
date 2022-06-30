@@ -458,7 +458,7 @@ function getGraphLoadedSubsource(layer: SegmentationUserLayer) {
 
 function makeColoredAnnotationState(
     layer: SegmentationUserLayer, loadedSubsource: LoadedDataSubsource,
-    subsourceIndex: number, color: vec3) {
+    subsubsourceId: string, color: vec3) {
   const {subsourceEntry} = loadedSubsource;
   const source = new LocalAnnotationSource(loadedSubsource.loadedDataSource.transform, [], []);
   
@@ -471,8 +471,9 @@ function makeColoredAnnotationState(
       source,
       displayState,
       dataSource: loadedSubsource.loadedDataSource.layerDataSource,
-      subsourceIndex: subsourceIndex,// loadedSubsource.subsourceIndex,
+      subsourceIndex: loadedSubsource.subsourceIndex,
       subsourceId: subsourceEntry.id,
+      subsubsourceId,
       role: RenderLayerRole.ANNOTATION,
     });
   layer.addAnnotationLayerState(state, loadedSubsource);
@@ -655,8 +656,8 @@ class GraphConnection extends SegmentationGraphSourceConnection {
 
     const {annotationLayerStates, state: {multicutState}} = this;
     const loadedSubsource = getGraphLoadedSubsource(layer)!;
-    const redGroup = makeColoredAnnotationState(layer, loadedSubsource, 0, RED_COLOR);
-    const blueGroup = makeColoredAnnotationState(layer, loadedSubsource, 1, BLUE_COLOR);
+    const redGroup = makeColoredAnnotationState(layer, loadedSubsource, "sinks", RED_COLOR);
+    const blueGroup = makeColoredAnnotationState(layer, loadedSubsource, "sources", BLUE_COLOR);
     synchronizeAnnotationSource(multicutState.sinks, redGroup);
     synchronizeAnnotationSource(multicutState.sources, blueGroup)
     annotationLayerStates.push(redGroup, blueGroup);
