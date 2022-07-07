@@ -27,7 +27,6 @@ import {AggregateWatchableValue, makeCachedDerivedWatchableValue, WatchableValue
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {Uint64Map} from 'neuroglancer/uint64_map';
-import {vec4} from 'neuroglancer/util/geom';
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -276,9 +275,8 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     let activeSegmentDefaultColor = tempSegmentDefaultColor2d || segmentDefaultColor;
     if (activeSegmentDefaultColor) {
-      // convert to vec4, is there a better way?
-      activeSegmentDefaultColor = vec4.clone([...activeSegmentDefaultColor]);
-      gl.uniform4fv(shader.uniform('uSegmentDefaultColor'), activeSegmentDefaultColor);
+      const [r, g, b, a] = activeSegmentDefaultColor;
+      gl.uniform4f(shader.uniform('uSegmentDefaultColor'), r, g, b, a === undefined ? 0 : a);
     } else {
       this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
     }
