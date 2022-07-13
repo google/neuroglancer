@@ -281,8 +281,8 @@ uint64_t getMappedObjectId(uint64_t value) {
       this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
     }
     if (parameters.hasSegmentStatedColors) {
-      const segmentStatedColors = this.displayState.useTempSegmentStatedColors2d ? this.displayState.tempSegmentStatedColors2d.value :
-                                                                                   this.displayState.segmentStatedColors.value;
+      const segmentStatedColors = displayState.useTempSegmentStatedColors2d.value ? displayState.tempSegmentStatedColors2d.value :
+                                                                                    displayState.segmentStatedColors.value;
       let {gpuSegmentStatedColorHashTable} = this;
       if (gpuSegmentStatedColorHashTable === undefined ||
           gpuSegmentStatedColorHashTable.hashTable !== segmentStatedColors.hashTable) {
