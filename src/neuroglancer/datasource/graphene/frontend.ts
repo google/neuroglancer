@@ -22,7 +22,7 @@ import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {Borrowed, Owned} from 'neuroglancer/util/disposable';
+import {Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {HttpError, isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyNonnegativeInt, verify3dVec} from 'neuroglancer/util/json';
@@ -55,8 +55,7 @@ import { CredentialsManager } from 'neuroglancer/credentials_provider';
 import { makeToolActivationStatusMessageWithHeader, makeToolButton, registerLayerTool, Tool, ToolActivation } from 'neuroglancer/ui/tool';
 import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
 import { DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
-import { Tab } from 'neuroglancer/widget/tab_view';
-import { AnnotationLayerView, MergedAnnotationStates, UserLayerWithAnnotations } from 'neuroglancer/ui/annotations';
+import { AnnotationLayerView, MergedAnnotationStates } from 'neuroglancer/ui/annotations';
 import { AnnotationDisplayState, AnnotationLayerState } from 'neuroglancer/annotation/annotation_layer_state';
 import { LoadedDataSubsource } from 'neuroglancer/layer_data_source';
 import { NullarySignal } from 'neuroglancer/util/signal';
@@ -874,9 +873,29 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     return this.graphServer.getRoot(segment);
   }
 
-  tab(layer: SegmentationUserLayer) {
-    return new GrapheneTab(layer);
+  tabContents(layer: SegmentationUserLayer) {
+    return new DependentViewWidget(
+                                layer.displayState.segmentationGroupState.value.graph,
+                                (graph, parent, context) => {
+                                  if (graph === undefined) return;
+                                  if (!(graph instanceof GrapheneGraphSource)) return;
+                                  const toolbox = document.createElement('div');
+                                  toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                  toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolJson: ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID,
+                                    label: 'Multicut',
+                                    title: 'Multicut segments'
+                                  }));
+                                  parent.appendChild(toolbox);
+                                  parent.appendChild(
+                                    context.registerDisposer(new MulticutAnnotationLayerView(layer, layer.annotationDisplayState))
+                                      .element
+                                  );
+                                  // parent.classList.add('neuroglancer-annotations-tab');
+                                  // parent.classList.add('neuroglancer-graphene-tab');
+                                });
   }
+
 
   // following not used
 
@@ -1010,9 +1029,16 @@ class MulticutAnnotationLayerView extends AnnotationLayerView {
   private _annotationStates: MergedAnnotationStates;
 
   constructor(
-      public layer: Borrowed<UserLayerWithAnnotations>,
+      public layer: SegmentationUserLayer,
       public displayState: AnnotationDisplayState) {
     super(layer, displayState);
+
+    const {graphConnection: {value: graphConnection}} = layer;
+    if (graphConnection instanceof GraphConnection) {
+      for (const state of graphConnection.annotationLayerStates) {
+        this.annotationStates.add(state);
+      }
+    }
   }
 
   get annotationStates() {
@@ -1066,41 +1092,6 @@ const synchronizeAnnotationSource = (source: WatchableSet<SegmentSelection>, sta
   }
 }
 
-export class GrapheneTab extends Tab {
-  private annotationLayerView =
-      this.registerDisposer(new MulticutAnnotationLayerView(this.layer, this.layer.annotationDisplayState));
-
-  constructor(public layer: SegmentationUserLayer) {
-    super();
-    const {graphConnection} = layer;
-    if (graphConnection instanceof GraphConnection) {
-      for (const state of graphConnection.annotationLayerStates) {
-        this.annotationLayerView.annotationStates.add(state);
-      }
-    }
-    const {element} = this;
-    element.classList.add('neuroglancer-annotations-tab');
-    element.classList.add('neuroglancer-graphene-tab');
-    element.appendChild(
-      this.registerDisposer(new DependentViewWidget(
-                                layer.displayState.segmentationGroupState.value.graph,
-                                (graph, parent, context) => {
-                                  if (graph === undefined) return;
-                                  if (!(graph instanceof GrapheneGraphSource)) return;
-                                  const toolbox = document.createElement('div');
-                                  toolbox.className = 'neuroglancer-segmentation-toolbox';
-                                  toolbox.appendChild(makeToolButton(context, layer, {
-                                    toolJson: ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID,
-                                    label: 'Multicut',
-                                    title: 'Multicut segments'
-                                  }));
-                                  parent.appendChild(toolbox);
-                                }))
-        .element);
-    element.appendChild(this.annotationLayerView.element);
-  }
-}
-
 function getMousePositionInLayerCoordinates(
     unsnappedPosition: Float32Array, layer: SegmentationUserLayer): Float32Array|
     undefined {
@@ -1135,7 +1126,8 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
   }
 
   activate(activation: ToolActivation<this>) {
-    const {graphConnection} = this.layer;
+    const {layer} = this;
+    const {graphConnection: {value: graphConnection}} = layer;
     if (!graphConnection || !(graphConnection instanceof GraphConnection)) return;
     const {state: {multicutState}, segmentsState} = graphConnection;
     if (multicutState === undefined) return;

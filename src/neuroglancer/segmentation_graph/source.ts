@@ -22,6 +22,7 @@ import {RenderLayer } from 'neuroglancer/renderlayer';
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
 import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
 import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
+import { DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
 import { Tab } from 'neuroglancer/widget/tab_view';
 
 export enum VisibleSegmentEquivalencePolicy {
@@ -31,14 +32,35 @@ export enum VisibleSegmentEquivalencePolicy {
   NONREPRESENTATIVE_EXCLUDED = 1 << 2, // filter out non representative elements when iterating over visible segments
 }
 
+export class SegmentationGraphSourceTab extends Tab {
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    const {element} = this;
+
+    element.classList.add('neuroglancer-annotations-tab');
+    element.classList.add('neuroglancer-graphene-tab');
+    element.appendChild(
+      this.registerDisposer(new DependentViewWidget(
+                                layer.displayState.segmentationGroupState.value.graph,
+                                (graph, parent, _context) => {
+                                  if (graph?.tabContents) {
+                                    parent.appendChild(
+                                      this.registerDisposer(graph.tabContents(layer))
+                                        .element);
+                                  }
+                                }))
+        .element);
+
+  }
+}
+
 export abstract class SegmentationGraphSource {
   abstract connect(layer: SegmentationUserLayer): Owned<SegmentationGraphSourceConnection>;
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
   abstract get visibleSegmentEquivalencePolicy(): VisibleSegmentEquivalencePolicy;
-
-  tab?(layer: SegmentationUserLayer): Tab;
+  tabContents?(layer: SegmentationUserLayer): DependentViewWidget<SegmentationGraphSource|undefined>;
 }
 
 export interface ComputedSplit {

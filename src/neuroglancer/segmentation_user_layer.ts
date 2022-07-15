@@ -27,7 +27,7 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationColorGroupState, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {getPreprocessedSegmentPropertyMap, PreprocessedSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {LocalSegmentationGraphSource} from 'neuroglancer/segmentation_graph/local';
-import {SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
@@ -355,7 +355,8 @@ export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
 
-  graphConnection: SegmentationGraphSourceConnection|undefined;
+  graphConnection = new WatchableValue<SegmentationGraphSourceConnection|undefined>(undefined);
+
 
   bindSegmentListWidth(element: HTMLElement) {
     return bindSegmentListWidth(this.displayState, element);
@@ -419,6 +420,11 @@ export class SegmentationUserLayer extends Base {
         'rendering', {label: 'Render', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.add(
         'segments', {label: 'Seg.', order: -50, getter: () => new SegmentDisplayTab(this)});
+    const hideGraphTab = this.registerDisposer(makeCachedDerivedWatchableValue(
+      x => x === undefined,
+      [this.displayState.segmentationGroupState.value.graph]));
+    this.tabs.add(
+        'graph', {label: 'Graph', order: -25, getter: () => new SegmentationGraphSourceTab(this), hidden: hideGraphTab});
     this.tabs.default = 'rendering';
   }
 
@@ -500,31 +506,19 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
-              this.graphConnection = refCounted.registerDisposer(
+              const graphConnection = refCounted.registerDisposer(
                   segmentationGraph.connect(this));
               const displayState = {
                 ...this.displayState,
                 transform: loadedSubsource.getRenderLayerTransform(),
               };
 
-              const graphRenderLayers = this.graphConnection.createRenderLayers(
+              const graphRenderLayers = graphConnection.createRenderLayers(
                 this.manager.chunkManager, displayState, this.localPosition
               );
+              this.graphConnection.value = graphConnection;
               for (const renderLayer of graphRenderLayers) {
                 loadedSubsource.addRenderLayer(renderLayer);
-              }
-              const graphTab = segmentationGraph.tab;
-              if (graphTab) {
-                const tabId = 'graph';
-                this.tabs.add(
-                  tabId, {label: 'Graph', order: -25, getter: () => {
-                    return graphTab(this);
-                  }});
-                this.panels.updateTabs();
-                refCounted.registerDisposer(() => {
-                  this.tabs.remove(tabId);
-                  this.panels.updateTabs();
-                });
               }
             });
           }
@@ -538,10 +532,10 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = this.displayState.originalSegmentationGroupState.localGraph;
             loadedSubsource.activate(refCounted => {
-              this.graphConnection = refCounted.registerDisposer(
+              this.graphConnection.value = refCounted.registerDisposer(
                   updatedGraph!.connect(this));
               refCounted.registerDisposer(() => {
-                this.graphConnection = undefined;
+                this.graphConnection.value = undefined;
               });
             });
           }

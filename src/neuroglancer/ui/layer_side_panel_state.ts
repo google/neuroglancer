@@ -64,6 +64,15 @@ export class UserLayerSidePanelState extends RefCounted {
       if (this === this.panels.panels[0]) return;
       this.panels.removePanel(this);
     });
+
+
+    // TODO, is it safe to put this here?
+    for (const id of this.tabs) {
+      const {hidden} = this.layer.tabs.options.get(id)!;
+      if (hidden) {
+        this.registerDisposer(hidden.changed.add(() => this.panels.updateTabs()));
+      }
+    }
   }
   tabsChanged = new Signal();
   selectedTab = new WatchableValue<string|undefined>(undefined);

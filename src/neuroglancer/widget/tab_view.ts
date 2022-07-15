@@ -259,7 +259,7 @@ export class StackView<TabId, TabType extends Tab = Tab> extends RefCounted {
 }
 
 export class TabSpecification extends
-    OptionSpecification<{label: string, order?: number, getter: () => Owned<Tab>}> {}
+    OptionSpecification<{label: string, order?: number, getter: () => Owned<Tab>, hidden?: WatchableValueInterface<boolean>}> {}
 
 function updateTabLabelVisibilityStyle(labelElement: HTMLElement, visible: boolean) {
   const className = 'neuroglancer-selected-tab-label';
