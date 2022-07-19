@@ -147,10 +147,11 @@ class Webdriver:
             pass
         profile = selenium.webdriver.FirefoxProfile()
         profile.set_preference('devtools.console.stdout.content', True)
-        binary = firefox_binary.FirefoxBinary(executable_path)
+        binary = selenium.webdriver.firefox.firefox_binary.FirefoxBinary()
         for arg in self.extra_command_line_args:
             binary.add_command_line_options(arg)
         self.driver = selenium.webdriver.Firefox(firefox_profile=profile,
+                                                 executable_path=executable_path,
                                                  firefox_binary=binary,
                                                  service_log_path=self._logfile.name)
 
