@@ -29,7 +29,7 @@ function getServerUrls() {
   if (match === null) {
     throw new Error('Failed to determine token from URL.');
   }
-  const prefix = `${window.location.origin}${match[1]}`;
+  const prefix = `${window.location.origin}${match[1]}`.replace(/\/+$/, '');
   const token = match[2];
   return {
     socket: `${prefix}/socket/${token}`,
