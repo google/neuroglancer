@@ -233,7 +233,7 @@ class Webdriver:
 
     @property
     def root_element(self):
-        return self.driver.find_element_by_xpath('//body')
+        return self.driver.find_element('xpath', '//body')
 
     def action_chain(self):
         import selenium.webdriver
