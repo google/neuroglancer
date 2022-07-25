@@ -34,7 +34,7 @@ import {ChunkedGraphSourceParameters, MeshSourceParameters, MultiscaleMeshMetada
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {StatusMessage} from 'neuroglancer/status';
 import { makeChunkedGraphChunkSpecification } from 'neuroglancer/datasource/graphene/base';
-import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy } from 'neuroglancer/segmentation_graph/source';
+import { ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab, VisibleSegmentEquivalencePolicy } from 'neuroglancer/segmentation_graph/source';
 import { TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface } from 'neuroglancer/trackable_value';
 import { getChunkPositionFromCombinedGlobalLocalPositions, RenderLayerTransformOrError } from 'neuroglancer/render_coordinate_transform';
 import { RenderLayer, RenderLayerRole } from 'neuroglancer/renderlayer';
@@ -54,7 +54,7 @@ import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
 import { CredentialsManager } from 'neuroglancer/credentials_provider';
 import { makeToolActivationStatusMessageWithHeader, makeToolButton, registerLayerTool, Tool, ToolActivation } from 'neuroglancer/ui/tool';
 import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
-import { DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
+import { DependentViewContext } from 'neuroglancer/widget/dependent_view_widget';
 import { AnnotationLayerView, MergedAnnotationStates } from 'neuroglancer/ui/annotations';
 import { AnnotationDisplayState, AnnotationLayerState } from 'neuroglancer/annotation/annotation_layer_state';
 import { LoadedDataSubsource } from 'neuroglancer/layer_data_source';
@@ -873,27 +873,25 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     return this.graphServer.getRoot(segment);
   }
 
-  tabContents(layer: SegmentationUserLayer) {
-    return new DependentViewWidget(
-                                layer.displayState.segmentationGroupState.value.graph,
-                                (graph, parent, context) => {
-                                  if (graph === undefined) return;
-                                  if (!(graph instanceof GrapheneGraphSource)) return;
-                                  const toolbox = document.createElement('div');
-                                  toolbox.className = 'neuroglancer-segmentation-toolbox';
-                                  toolbox.appendChild(makeToolButton(context, layer, {
-                                    toolJson: GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID,
-                                    label: 'Multicut',
-                                    title: 'Multicut segments'
-                                  }));
-                                  parent.appendChild(toolbox);
-                                  parent.appendChild(
-                                    context.registerDisposer(new MulticutAnnotationLayerView(layer, layer.annotationDisplayState))
-                                      .element
-                                  );
-                                  // parent.classList.add('neuroglancer-annotations-tab');
-                                  // parent.classList.add('neuroglancer-graphene-tab');
-                                });
+  tabContents(layer: SegmentationUserLayer, context: DependentViewContext, tab: SegmentationGraphSourceTab) {
+    const parent = document.createElement('div');
+    parent.style.display = 'contents';
+    const toolbox = document.createElement('div');
+    toolbox.className = 'neuroglancer-segmentation-toolbox';
+    toolbox.appendChild(makeToolButton(context, layer, {
+      toolJson: GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID,
+      label: 'Multicut',
+      title: 'Multicut segments'
+    }));
+    parent.appendChild(toolbox);
+    parent.appendChild(
+      context.registerDisposer(new MulticutAnnotationLayerView(layer, layer.annotationDisplayState))
+        .element
+    );
+    const tabElement = tab.element;
+    tabElement.classList.add('neuroglancer-annotations-tab');
+    tabElement.classList.add('neuroglancer-graphene-tab');
+    return parent;
   }
 
 

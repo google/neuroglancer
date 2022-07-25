@@ -22,7 +22,7 @@ import {RenderLayer } from 'neuroglancer/renderlayer';
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
 import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
 import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
-import { DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
+import { DependentViewContext, DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
 import { Tab } from 'neuroglancer/widget/tab_view';
 
 export enum VisibleSegmentEquivalencePolicy {
@@ -42,11 +42,9 @@ export class SegmentationGraphSourceTab extends Tab {
     element.appendChild(
       this.registerDisposer(new DependentViewWidget(
                                 layer.displayState.segmentationGroupState.value.graph,
-                                (graph, parent, _context) => {
+                                (graph, parent, context) => {
                                   if (graph?.tabContents) {
-                                    parent.appendChild(
-                                      this.registerDisposer(graph.tabContents(layer))
-                                        .element);
+                                    parent.appendChild(graph.tabContents(layer, context, this));
                                   }
                                 }))
         .element);
@@ -60,7 +58,7 @@ export abstract class SegmentationGraphSource {
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
   abstract get visibleSegmentEquivalencePolicy(): VisibleSegmentEquivalencePolicy;
-  tabContents?(layer: SegmentationUserLayer): DependentViewWidget<SegmentationGraphSource|undefined>;
+  tabContents?(layer: SegmentationUserLayer, context: DependentViewContext, tab: SegmentationGraphSourceTab): HTMLDivElement;
 }
 
 export interface ComputedSplit {
