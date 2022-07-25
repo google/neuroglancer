@@ -882,7 +882,7 @@ class GrapheneGraphSource extends SegmentationGraphSource {
                                   const toolbox = document.createElement('div');
                                   toolbox.className = 'neuroglancer-segmentation-toolbox';
                                   toolbox.appendChild(makeToolButton(context, layer, {
-                                    toolJson: ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID,
+                                    toolJson: GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID,
                                     label: 'Multicut',
                                     title: 'Multicut segments'
                                   }));
@@ -1023,7 +1023,7 @@ class SliceViewPanelChunkedGraphLayer extends SliceViewPanelRenderLayer {
   }
 }
 
-const ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID = 'multicutSegments';
+const GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID = 'grapheneMulticutSegments';
 
 class MulticutAnnotationLayerView extends AnnotationLayerView {
   private _annotationStates: MergedAnnotationStates;
@@ -1122,7 +1122,7 @@ const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
 
 class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
   toJSON() {
-    return ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID;
+    return GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID;
   }
 
   activate(activation: ToolActivation<this>) {
@@ -1283,6 +1283,6 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
   }
 }
 
-registerLayerTool(SegmentationUserLayer, ANNOTATE_MULTICUT_SEGMENTS_TOOL_ID, layer => {
+registerLayerTool(SegmentationUserLayer, GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID, layer => {
   return new MulticutSegmentsTool(layer, true);
 });
