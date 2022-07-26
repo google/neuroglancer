@@ -70,7 +70,10 @@ export class UserLayerSidePanelState extends RefCounted {
     for (const id of this.tabs) {
       const {hidden} = this.layer.tabs.options.get(id)!;
       if (hidden) {
-        this.registerDisposer(hidden.changed.add(() => this.panels.updateTabs()));
+        this.registerDisposer(hidden.changed.add(() => {
+          this.panels.updateTabs();
+          this.tabsChanged.dispatch();
+        }));
       }
     }
   }
