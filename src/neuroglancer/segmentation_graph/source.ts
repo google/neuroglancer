@@ -36,9 +36,6 @@ export class SegmentationGraphSourceTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {element} = this;
-
-    element.classList.add('neuroglancer-annotations-tab');
-    element.classList.add('neuroglancer-graphene-tab');
     element.appendChild(
       this.registerDisposer(new DependentViewWidget(
                                 layer.displayState.segmentationGroupState.value.graph,
