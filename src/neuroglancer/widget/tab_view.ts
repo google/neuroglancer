@@ -273,7 +273,7 @@ function updateTabLabelVisibilityStyle(labelElement: HTMLElement, visible: boole
 export interface TabViewOptions {
   makeTab: (id: string) => Tab;
   selectedTab: WatchableValueInterface<string|undefined>;
-  tabs: WatchableValueChangeInterface<{id: string, label: string}[]>;
+  tabs: WatchableValueChangeInterface<{id: string, label: string, hidden: boolean}[]>;
   handleTabElement?: (id: string, element: HTMLElement) => void;
 }
 
@@ -281,7 +281,7 @@ export class TabView extends RefCounted {
   element = document.createElement('div');
   tabBar = document.createElement('div');
 
-  tabs: WatchableValueChangeInterface<{id: string, label: string}[]>;
+  tabs: WatchableValueChangeInterface<{id: string, label: string, hidden: boolean}[]>;
   selectedTab: WatchableValueInterface<string|undefined>;
   private handleTabElement: ((id: string, element: HTMLElement) => void)|undefined;
 
@@ -312,7 +312,11 @@ export class TabView extends RefCounted {
         options.makeTab, options.selectedTab, this.visibility));
     element.appendChild(stack.element);
     this.registerDisposer(options.tabs.changed.add(this.debouncedUpdateView));
-    this.registerDisposer(options.selectedTab.changed.add(() => this.updateTabLabelStyles()));
+    this.registerDisposer(options.selectedTab.changed.add(() => {
+      // in case we are switching off a hidden tab. update tabs already calls updateTabLabelStyles
+      this.tabs.changed.count++;
+      this.debouncedUpdateView();
+    }));
     this.updateTabs();
   }
 
@@ -349,7 +353,8 @@ export class TabView extends RefCounted {
 
   private makeTabs() {
     const {tabBar, tabLabels, handleTabElement} = this;
-    for (const {id, label} of this.tabs.value) {
+    for (const {id, label, hidden} of this.tabs.value) {
+      if (hidden && id !== this.selectedTab.value) continue;
       const labelElement = document.createElement('div');
       labelElement.classList.add('neuroglancer-tab-label');
       labelElement.textContent = label;
