@@ -312,10 +312,18 @@ export class TabView extends RefCounted {
         options.makeTab, options.selectedTab, this.visibility));
     element.appendChild(stack.element);
     this.registerDisposer(options.tabs.changed.add(this.debouncedUpdateView));
+    let prevSelectedId = this.selectedTab.value;
     this.registerDisposer(options.selectedTab.changed.add(() => {
-      // in case we are switching off a hidden tab. update tabs already calls updateTabLabelStyles
-      this.tabs.changed.count++;
-      this.debouncedUpdateView();
+      const tabs = this.tabs.value;
+      const prevSelectedTab = tabs.find(({id}) => id === prevSelectedId);
+      if (prevSelectedTab?.hidden) {
+        // hide hidden tab label when it is deselected
+        this.tabs.changed.count++;
+        this.debouncedUpdateView();
+      } else {
+        this.updateTabLabelStyles();
+      }
+      prevSelectedId = this.selectedTab.value;
     }));
     this.updateTabs();
   }
