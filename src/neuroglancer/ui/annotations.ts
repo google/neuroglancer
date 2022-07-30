@@ -282,7 +282,7 @@ export class AnnotationLayerView extends Tab {
     this.element.classList.add('neuroglancer-annotation-layer-view');
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(
-        layer.annotationStates.changed.add(() => this.updateAttachedAnnotationLayerStates()));
+        this.annotationStates.changed.add(() => this.updateAttachedAnnotationLayerStates()));
     this.headerRow.classList.add('neuroglancer-annotation-list-header');
 
     const toolbox = document.createElement('div');
@@ -654,6 +654,7 @@ export class AnnotationLayerView extends Tab {
     const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
     const element = document.createElement('div');
     element.classList.add('neuroglancer-annotation-list-entry');
+    element.dataset.color = state.displayState.color.toString();
     element.style.gridTemplateColumns = this.gridTemplate;
     const icon = document.createElement('div');
     icon.className = 'neuroglancer-annotation-icon';
@@ -1334,6 +1335,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       if (state.annotationId === undefined) return false;
       const annotationLayer = this.annotationStates.states.find(
           x => x.sourceIndex === state.annotationSourceIndex &&
+               x.subsubsourceId === state.annotationSubsubsourceId &&
               (state.annotationSubsource === undefined ||
                x.subsourceId === state.annotationSubsource));
       if (annotationLayer === undefined) return false;
@@ -1646,6 +1648,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
         state.annotationId = id;
         state.annotationSourceIndex = annotationLayer.sourceIndex;
         state.annotationSubsource = annotationLayer.subsourceId;
+        state.annotationSubsubsourceId = annotationLayer.subsubsourceId;
         return true;
       }, pin);
     }

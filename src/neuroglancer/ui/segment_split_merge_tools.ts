@@ -277,7 +277,7 @@ export class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
       let otherSegmentAugmented: Uint64MapEntry|undefined;
       const updateTemporaryState = () => {
         const {segmentEquivalences} = segmentationGroupState;
-        const {graphConnection} = this.layer;
+        const {graphConnection: {value: graphConnection}} = this.layer;
         if (!anchorSegmentValid || graphConnection === undefined) {
           resetTemporaryVisibleSegmentsState(segmentationGroupState);
           return;

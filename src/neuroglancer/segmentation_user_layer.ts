@@ -27,7 +27,7 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationColorGroupState, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {getPreprocessedSegmentPropertyMap, PreprocessedSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {LocalSegmentationGraphSource} from 'neuroglancer/segmentation_graph/local';
-import {SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
@@ -46,7 +46,7 @@ import {Uint64Map} from 'neuroglancer/uint64_map';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {packColor, parseRGBColorSpecification, serializeColor, TrackableOptionalRGB, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
+import {vec3, vec4} from 'neuroglancer/util/geom';
 import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -170,7 +170,10 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
     const {specificationChanged} = this;
     this.segmentColorHash.changed.add(specificationChanged.dispatch);
     this.segmentStatedColors.changed.add(specificationChanged.dispatch);
+    this.tempSegmentStatedColors2d.changed.add(specificationChanged.dispatch);
     this.segmentDefaultColor.changed.add(specificationChanged.dispatch);
+    this.tempSegmentDefaultColor2d.changed.add(specificationChanged.dispatch);
+    this.highlightColor.changed.add(specificationChanged.dispatch);
   }
 
   restoreState(specification: unknown) {
@@ -206,12 +209,17 @@ export class SegmentationUserLayerColorGroupState extends RefCounted implements
   assignFrom(other: SegmentationUserLayerColorGroupState) {
     this.segmentColorHash.value = other.segmentColorHash.value;
     this.segmentStatedColors.assignFrom(other.segmentStatedColors);
+    this.tempSegmentStatedColors2d.assignFrom(other.tempSegmentStatedColors2d);
     this.segmentDefaultColor.value = other.segmentDefaultColor.value;
+    this.highlightColor.value = other.highlightColor.value;
   }
 
   segmentColorHash = SegmentColorHash.getDefault();
   segmentStatedColors = this.registerDisposer(new Uint64Map());
+  tempSegmentStatedColors2d = this.registerDisposer(new Uint64Map());
   segmentDefaultColor = new TrackableOptionalRGB();
+  tempSegmentDefaultColor2d = new WatchableValue<vec3|vec4|undefined>(undefined);
+  highlightColor = new WatchableValue<vec4|undefined>(undefined);
 }
 
 class LinkedSegmentationGroupState<State extends SegmentationUserLayerGroupState|
@@ -267,8 +275,14 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         this.segmentationColorGroupState, group => group.segmentColorHash));
     this.segmentStatedColors = this.layer.registerDisposer(new IndirectTrackableValue(
         this.segmentationColorGroupState, group => group.segmentStatedColors));
+    this.tempSegmentStatedColors2d = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.tempSegmentStatedColors2d));
     this.segmentDefaultColor = this.layer.registerDisposer(new IndirectTrackableValue(
         this.segmentationColorGroupState, group => group.segmentDefaultColor));
+    this.tempSegmentDefaultColor2d = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.tempSegmentDefaultColor2d));
+    this.highlightColor = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.highlightColor));
     this.segmentQuery = this.layer.registerDisposer(
         new IndirectWatchableValue(this.segmentationGroupState, group => group.segmentQuery));
     this.segmentPropertyMap = this.layer.registerDisposer(
@@ -289,6 +303,9 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   selectSegment = this.layer.selectSegment;
   transparentPickEnabled = this.layer.pick;
   baseSegmentColoring = new TrackableBoolean(false, false);
+  baseSegmentHighlighting = new TrackableBoolean(false, false);
+  useTempSegmentStatedColors2d =
+      this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false)); // where does this line belong? Also should it be in segmentationColorGroupState?
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 
@@ -319,7 +336,10 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: TrackableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  tempSegmentStatedColors2d: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+  tempSegmentDefaultColor2d: WatchableValueInterface<vec3|vec4|undefined>;
+  highlightColor: WatchableValueInterface<vec4|undefined>;
   segmentQuery: WatchableValueInterface<string>;
   segmentPropertyMap: WatchableValueInterface<PreprocessedSegmentPropertyMap|undefined>;
 }
@@ -335,7 +355,8 @@ export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
 
-  graphConnection: SegmentationGraphSourceConnection|undefined;
+  graphConnection = new WatchableValue<SegmentationGraphSourceConnection|undefined>(undefined);
+
 
   bindSegmentListWidth(element: HTMLElement) {
     return bindSegmentListWidth(this.displayState, element);
@@ -399,6 +420,11 @@ export class SegmentationUserLayer extends Base {
         'rendering', {label: 'Render', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.add(
         'segments', {label: 'Seg.', order: -50, getter: () => new SegmentDisplayTab(this)});
+    const hideGraphTab = this.registerDisposer(makeCachedDerivedWatchableValue(
+      x => x === undefined,
+      [this.displayState.segmentationGroupState.value.graph]));
+    this.tabs.add(
+        'graph', {label: 'Graph', order: -25, getter: () => new SegmentationGraphSourceTab(this), hidden: hideGraphTab});
     this.tabs.default = 'rendering';
   }
 
@@ -480,16 +506,17 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
-              this.graphConnection = refCounted.registerDisposer(
-                  segmentationGraph.connect(this.displayState.segmentationGroupState.value));
+              const graphConnection = refCounted.registerDisposer(
+                  segmentationGraph.connect(this));
               const displayState = {
                 ...this.displayState,
                 transform: loadedSubsource.getRenderLayerTransform(),
               };
 
-              const graphRenderLayers = this.graphConnection.createRenderLayers(
+              const graphRenderLayers = graphConnection.createRenderLayers(
                 this.manager.chunkManager, displayState, this.localPosition
               );
+              this.graphConnection.value = graphConnection;
               for (const renderLayer of graphRenderLayers) {
                 loadedSubsource.addRenderLayer(renderLayer);
               }
@@ -505,10 +532,10 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = this.displayState.originalSegmentationGroupState.localGraph;
             loadedSubsource.activate(refCounted => {
-              this.graphConnection = refCounted.registerDisposer(
-                  updatedGraph!.connect(this.displayState.segmentationGroupState.value));
+              this.graphConnection.value = refCounted.registerDisposer(
+                  updatedGraph!.connect(this));
               refCounted.registerDisposer(() => {
-                this.graphConnection = undefined;
+                this.graphConnection.value = undefined;
               });
             });
           }
