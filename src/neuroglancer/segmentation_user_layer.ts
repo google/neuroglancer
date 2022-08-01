@@ -506,8 +506,11 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
-              const graphConnection = refCounted.registerDisposer(
-                  segmentationGraph.connect(this));
+              const graphConnection = segmentationGraph.connect(this);
+              refCounted.registerDisposer(() => {
+                graphConnection.dispose();
+                this.graphConnection.value = undefined;
+              });
               const displayState = {
                 ...this.displayState,
                 transform: loadedSubsource.getRenderLayerTransform(),
