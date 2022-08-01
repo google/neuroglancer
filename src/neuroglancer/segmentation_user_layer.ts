@@ -305,7 +305,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
   useTempSegmentStatedColors2d =
-      this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false)); // where does this line belong? Also should it be in segmentationColorGroupState?
+      this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 
