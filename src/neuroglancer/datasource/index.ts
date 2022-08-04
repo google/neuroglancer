@@ -30,6 +30,7 @@ import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellati
 import {applyCompletionOffset, BasicCompletionResult, CompletionWithDescription, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {createIdentity} from 'neuroglancer/util/matrix';
+import {Trackable} from 'neuroglancer/util/trackable';
 
 export type CompletionResult = BasicCompletionResult<CompletionWithDescription>;
 
@@ -77,6 +78,7 @@ export interface GetDataSourceOptionsBase {
   url: string;
   transform: CoordinateTransformSpecification|undefined;
   globalCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
+  state?: any;
 }
 
 export interface GetDataSourceOptions extends GetDataSourceOptionsBase {
@@ -172,6 +174,7 @@ export interface DataSource {
   subsources: DataSubsourceEntry[];
   modelTransform: CoordinateSpaceTransform;
   canChangeModelSpaceRank?: boolean;
+  state?: Trackable;
 }
 
 export interface DataSourceProvider {
@@ -196,6 +199,7 @@ export interface DataSourceSpecification {
   transform: CoordinateTransformSpecification|undefined;
   enableDefaultSubsources: boolean;
   subsources: Map<string, DataSubsourceSpecification>;
+  state?: any;
 }
 
 export function makeEmptyDataSourceSpecification(): DataSourceSpecification {

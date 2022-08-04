@@ -256,7 +256,7 @@ export class TrackableRefCounted<T extends RefCounted> extends WatchableRefCount
 }
 
 export class WatchableSet<T> {
-  changed = new NullarySignal();
+  changed = new Signal<(x: T|null, add: boolean) => void>();
   values: Set<T>;
   constructor(values?: Iterable<T>) {
     if (values === undefined) {
@@ -269,14 +269,14 @@ export class WatchableSet<T> {
     const {values} = this;
     if (!values.has(x)) {
       values.add(x);
-      this.changed.dispatch();
+      this.changed.dispatch(x, true);
     }
     return this;
   }
   delete(x: T) {
     const {values} = this;
     if (values.delete(x)) {
-      this.changed.dispatch();
+      this.changed.dispatch(x, false);
       return true;
     }
     return false;
@@ -294,7 +294,7 @@ export class WatchableSet<T> {
     const {values} = this;
     if (values.size > 0) {
       values.clear();
-      this.changed.dispatch();
+      this.changed.dispatch(null, false);
     }
   }
 }

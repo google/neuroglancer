@@ -19,9 +19,11 @@ import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RenderLayer } from 'neuroglancer/renderlayer';
-import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
 import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
+import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
+import { DependentViewContext, DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
+import { Tab } from 'neuroglancer/widget/tab_view';
 
 export enum VisibleSegmentEquivalencePolicy {
   MIN_REPRESENTATIVE = 0, // defafult, representative elmement is the minimum element in equivalence set
@@ -30,12 +32,30 @@ export enum VisibleSegmentEquivalencePolicy {
   NONREPRESENTATIVE_EXCLUDED = 1 << 2, // filter out non representative elements when iterating over visible segments
 }
 
+export class SegmentationGraphSourceTab extends Tab {
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    const {element} = this;
+    element.appendChild(
+      this.registerDisposer(new DependentViewWidget(
+                                layer.displayState.segmentationGroupState.value.graph,
+                                (graph, parent, context) => {
+                                  if (graph?.tabContents) {
+                                    parent.appendChild(graph.tabContents(layer, context, this));
+                                  }
+                                }))
+        .element);
+
+  }
+}
+
 export abstract class SegmentationGraphSource {
-  abstract connect(segmentsState: VisibleSegmentsState, transform?: WatchableValueInterface<RenderLayerTransformOrError>): Owned<SegmentationGraphSourceConnection>;
+  abstract connect(layer: SegmentationUserLayer): Owned<SegmentationGraphSourceConnection>;
   abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
   abstract split(include: Uint64, exclude: Uint64): Promise<{include: Uint64, exclude: Uint64}>;
   abstract trackSegment(id: Uint64, callback: (id: Uint64|null) => void): () => void;
   abstract get visibleSegmentEquivalencePolicy(): VisibleSegmentEquivalencePolicy;
+  tabContents?(layer: SegmentationUserLayer, context: DependentViewContext, tab: SegmentationGraphSourceTab): HTMLDivElement;
 }
 
 export interface ComputedSplit {
@@ -51,7 +71,7 @@ export interface ComputedSplit {
 
 export abstract class SegmentationGraphSourceConnection<
     SourceType extends SegmentationGraphSource = SegmentationGraphSource> extends RefCounted {
-  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState, public transform?: WatchableValueInterface<RenderLayerTransformOrError>) {
+  constructor(public graph: SourceType, public segmentsState: VisibleSegmentsState) {
     super();
   }
   abstract computeSplit(include: Uint64, exclude: Uint64): ComputedSplit|undefined;

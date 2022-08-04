@@ -7,6 +7,10 @@ format arrays, using the following data source URL syntax:
 `zarr://FILE_URL`, where `FILE_URL` is a URL to the directory containing the `.zarray` metadata file
 using any [supported file protocol](../file_protocols.md).
 
+Alternatively, `FILE_URL` may be a URL to the directory containing the `.zattrs` metadata file that
+specifies an [OME-NGFF multiscale](https://ngff.openmicroscopy.org/0.4/#multiscale-md) dataset.
+Multiscale metadata versions `0.4`, `0.5-dev` and `0.5` are supported.
+
 If the zarr array uses `/` rather than the default of `.` as the dimension separator in chunk keys,
 you can either specify the separator as the `dimension_separator` member in the `.zarray` metadata
 file (preferred) or use a data source URL of `zarr://FILE_URL?dimension_separator=/`.

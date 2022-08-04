@@ -24,8 +24,8 @@ import weakref
 
 import numpy as np
 import tornado.httpserver
-import tornado.ioloop
 import tornado.netutil
+import tornado.platform.asyncio
 import tornado.web
 
 from . import local_volume, static
@@ -439,15 +439,15 @@ def start():
         # Workaround https://bugs.python.org/issue37373
         # https://www.tornadoweb.org/en/stable/index.html#installation
         if sys.platform == 'win32' and sys.version_info >= (3, 8):
-            import asyncio
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
         done = threading.Event()
 
         def start_server():
             global global_server
-            ioloop = tornado.ioloop.IOLoop()
+            ioloop = tornado.platform.asyncio.AsyncIOLoop()
             ioloop.make_current()
+            asyncio.set_event_loop(ioloop.asyncio_loop)
             global_server = Server(ioloop=ioloop, **global_server_args)
             done.set()
             ioloop.start()

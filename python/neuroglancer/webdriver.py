@@ -14,7 +14,7 @@
 # limitations under the License.
 """Interface for controlling a browser that runs Neuroglancer."""
 
-from __future__ import absolute_import
+from typing import Sequence, Optional
 
 import tempfile
 import time
@@ -29,7 +29,8 @@ class Webdriver:
                  window_size=(1920, 1080),
                  debug=False,
                  docker=False,
-                 print_logs=True):
+                 print_logs=True,
+                 extra_command_line_args: Optional[Sequence[str]] = None):
         if viewer is None:
             from .viewer import Viewer
             viewer = Viewer()
@@ -39,6 +40,7 @@ class Webdriver:
         self.window_size = window_size
         self.headless = headless
         self.docker = docker
+        self.extra_command_line_args = list(extra_command_line_args) if extra_command_line_args else []
         self.debug = debug
         self._logfile = None
         if browser == 'firefox':
@@ -108,6 +110,7 @@ class Webdriver:
         chrome_options = selenium.webdriver.chrome.options.Options()
         if self.headless:
             chrome_options.add_argument('--headless')
+        chrome_options.add_experimental_option("excludeSwitches", ['enable-automation'])
         if self.docker:
             # https://www.intricatecloud.io/2019/05/running-webdriverio-tests-using-headless-chrome-inside-a-container/
             chrome_options.add_argument('--no-sandbox')
@@ -116,6 +119,8 @@ class Webdriver:
             chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window_size=%dx%d' %
                                     (self.window_size[0], self.window_size[1]))
+        for arg in self.extra_command_line_args:
+            chrome_options.add_argument(arg)
         caps = selenium.webdriver.common.desired_capabilities.DesiredCapabilities.CHROME.copy()
         caps['goog:loggingPrefs'] = {'browser': 'ALL'}
         try:
@@ -131,6 +136,7 @@ class Webdriver:
 
     def _init_firefox(self):
         import selenium.webdriver
+        import selenium.webdriver.firefox.firefox_binary
         executable_path = 'geckodriver'
         try:
             # Use webdriver_manager package if available
@@ -141,8 +147,12 @@ class Webdriver:
             pass
         profile = selenium.webdriver.FirefoxProfile()
         profile.set_preference('devtools.console.stdout.content', True)
+        binary = selenium.webdriver.firefox.firefox_binary.FirefoxBinary()
+        for arg in self.extra_command_line_args:
+            binary.add_command_line_options(arg)
         self.driver = selenium.webdriver.Firefox(firefox_profile=profile,
                                                  executable_path=executable_path,
+                                                 firefox_binary=binary,
                                                  service_log_path=self._logfile.name)
 
     def _init_driver(self):
@@ -223,7 +233,7 @@ class Webdriver:
 
     @property
     def root_element(self):
-        return self.driver.find_element_by_xpath('//body')
+        return self.driver.find_element('xpath', '//body')
 
     def action_chain(self):
         import selenium.webdriver

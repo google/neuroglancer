@@ -73,6 +73,7 @@ export interface UserLayerSelectionState {
   annotationCount: number|undefined;
   annotationSourceIndex: number|undefined;
   annotationSubsource: string|undefined;
+  annotationSubsubsourceId: string|undefined;
   annotationPartIndex: number|undefined;
 
   value: any;

@@ -20,6 +20,7 @@ import {CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentit
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {VolumeChunkSourceParameters, ZarrCompressor, ZarrEncoding, ZarrSeparator} from 'neuroglancer/datasource/zarr/base';
+import {OmeMultiscaleMetadata, parseOmeMetadata} from 'neuroglancer/datasource/zarr/ome';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -29,6 +30,7 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import * as matrix from 'neuroglancer/util/matrix';
 import {createIdentity} from 'neuroglancer/util/matrix';
 import {parseNumpyDtype} from 'neuroglancer/util/numpy_dtype';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -118,82 +120,89 @@ function parseZarrMetadata(obj: unknown): ZarrMetadata {
   }
 }
 
+function parseArrayDimensionsAttr(rank: number, attrs: unknown): string[] {
+  let names = verifyOptionalObjectProperty(
+      attrs, '_ARRAY_DIMENSIONS',
+      names => parseFixedLengthArray(new Array<string>(rank), names, verifyString));
+  names = new Array(rank);
+  for (let i = 0; i < rank; ++i) {
+    names[i] = `d${i}`;
+  }
+  return names;
+}
+
 export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
-  dataType: DataType;
   volumeType: VolumeType;
-  modelSpace: CoordinateSpace;
+
+  get dataType() {
+    return this.multiscale.dataType;
+  }
+
+  get modelSpace() {
+    return this.multiscale.coordinateSpace;
+  }
 
   get rank() {
-    return this.metadata.rank;
+    return this.multiscale.coordinateSpace.rank;
   }
 
   constructor(
       chunkManager: Borrowed<ChunkManager>,
-      public credentialsProvider: SpecialProtocolCredentialsProvider, public url: string,
-      public separator: ZarrSeparator, public metadata: ZarrMetadata, public attrs: unknown) {
+      public credentialsProvider: SpecialProtocolCredentialsProvider,
+      public multiscale: ZarrMultiscaleInfo) {
     super(chunkManager);
-    this.dataType = metadata.dataType;
     this.volumeType = VolumeType.IMAGE;
-    let names = verifyOptionalObjectProperty(
-        attrs, '_ARRAY_DIMENSIONS',
-        names => parseFixedLengthArray(new Array<string>(metadata.rank), names, verifyString));
-    if (names === undefined) {
-      names = Array.from(metadata.shape, (_, i) => `d${i}`);
-    }
-    this.modelSpace = makeCoordinateSpace({
-      names,
-      scales: Float64Array.from(metadata.shape, () => 1),
-      units: Array.from(metadata.shape, () => ''),
-      boundingBoxes: [makeIdentityTransformedBoundingBox({
-        lowerBounds: new Float64Array(metadata.rank),
-        upperBounds: Float64Array.from(metadata.shape),
-      })],
-    });
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
-    const {metadata} = this;
-    const {rank, chunks, shape} = metadata;
-    let permutedChunkShape: Uint32Array;
-    let permutedDataShape: Float32Array;
-    let transform: Float32Array;
-    if (metadata.order === 'F') {
-      permutedChunkShape = Uint32Array.from(chunks);
-      permutedDataShape = Float32Array.from(shape);
-      transform = createIdentity(Float32Array, rank + 1);
-    } else {
-      permutedChunkShape = new Uint32Array(rank);
-      permutedDataShape = new Float32Array(rank);
-      transform = new Float32Array((rank + 1) ** 2);
-      transform[(rank + 1) ** 2 - 1] = 1;
-      for (let i = 0; i < rank; ++i) {
-        permutedChunkShape[i] = chunks[rank - 1 - i];
-        permutedDataShape[i] = shape[rank - 1 - i];
-        transform[i + (rank - 1 - i) * (rank + 1)] = 1;
+    return transposeNestedArrays(this.multiscale.scales.map(scale => {
+      const {metadata} = scale;
+      const {rank, chunks, shape} = metadata;
+      let permutedChunkShape: Uint32Array;
+      let permutedDataShape: Float32Array;
+      let orderTransform: Float32Array;
+      if (metadata.order === 'F') {
+        permutedChunkShape = Uint32Array.from(chunks);
+        permutedDataShape = Float32Array.from(shape);
+        orderTransform = createIdentity(Float32Array, rank + 1);
+      } else {
+        permutedChunkShape = new Uint32Array(rank);
+        permutedDataShape = new Float32Array(rank);
+        orderTransform = new Float32Array((rank + 1) ** 2);
+        orderTransform[(rank + 1) ** 2 - 1] = 1;
+        for (let i = 0; i < rank; ++i) {
+          permutedChunkShape[i] = chunks[rank - 1 - i];
+          permutedDataShape[i] = shape[rank - 1 - i];
+          orderTransform[i + (rank - 1 - i) * (rank + 1)] = 1;
+        }
       }
-    }
-    return transposeNestedArrays(
-        [makeDefaultVolumeChunkSpecifications({
-           rank,
-           chunkToMultiscaleTransform: transform,
-           dataType: metadata.dataType,
-           upperVoxelBound: permutedDataShape,
-           volumeType: this.volumeType,
-           chunkDataSizes: [permutedChunkShape],
-           volumeSourceOptions,
-         }).map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
-                  chunkSource: this.chunkManager.getChunkSource(ZarrVolumeChunkSource, {
-                    credentialsProvider: this.credentialsProvider,
-                    spec,
-                    parameters: {
-                      url: this.url,
-                      encoding: metadata.encoding,
-                      separator: this.separator,
-                      order: metadata.order,
-                    }
-                  }),
-                  chunkToMultiscaleTransform: transform,
-                }))]);
+      const transform = new Float32Array((rank + 1) ** 2);
+      matrix.multiply<Float32Array|Float64Array>(
+          transform, rank + 1, scale.transform, rank + 1, orderTransform, rank + 1, rank + 1,
+          rank + 1, rank + 1);
+      return makeDefaultVolumeChunkSpecifications({
+               rank,
+               chunkToMultiscaleTransform: transform,
+               dataType: metadata.dataType,
+               upperVoxelBound: permutedDataShape,
+               volumeType: this.volumeType,
+               chunkDataSizes: [permutedChunkShape],
+               volumeSourceOptions,
+             })
+          .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
+                 chunkSource: this.chunkManager.getChunkSource(ZarrVolumeChunkSource, {
+                   credentialsProvider: this.credentialsProvider,
+                   spec,
+                   parameters: {
+                     url: scale.url,
+                     encoding: metadata.encoding,
+                     separator: scale.dimensionSeparator,
+                     order: metadata.order,
+                   }
+                 }),
+                 chunkToMultiscaleTransform: transform,
+               }));
+    }));
   }
 }
 
@@ -218,15 +227,21 @@ function getAttributes(
 
 function getMetadata(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string): Promise<any> {
+    url: string, allowNotFound = true): Promise<ZarrMetadata|undefined> {
   return chunkManager.memoize.getUncounted(
       {type: 'zarr:.zarray json', url, credentialsProvider: getObjectId(credentialsProvider)},
       async () => {
-        const json = await cancellableFetchSpecialOk(
-            credentialsProvider, url + '/.zarray', {}, responseJson);
-        return parseZarrMetadata(json);
+        try {
+          const json = await cancellableFetchSpecialOk(
+              credentialsProvider, url + '/.zarray', {}, responseJson);
+          return parseZarrMetadata(json);
+        } catch (e) {
+          if (allowNotFound && isNotFoundError(e)) return undefined;
+          throw e;
+        }
       });
 }
+
 const supportedQueryParameters = [
   {
     key: {value: 'dimension_separator', description: 'Dimension separator in chunk keys'},
@@ -236,6 +251,122 @@ const supportedQueryParameters = [
     ]
   },
 ];
+
+interface ZarrScaleInfo {
+  url: string;
+  transform: Float64Array;
+  metadata: ZarrMetadata;
+  dimensionSeparator: ZarrSeparator;
+}
+
+interface ZarrMultiscaleInfo {
+  coordinateSpace: CoordinateSpace;
+  dataType: DataType;
+  scales: ZarrScaleInfo[];
+}
+
+function getMultiscaleInfoForSingleArray(
+    url: string, separator: ZarrSeparator|undefined, metadata: ZarrMetadata,
+    attrs: unknown): ZarrMultiscaleInfo {
+  const names = parseArrayDimensionsAttr(metadata.rank, attrs);
+  const modelSpace = makeCoordinateSpace({
+    names,
+    scales: Float64Array.from(metadata.shape, () => 1),
+    units: Array.from(metadata.shape, () => ''),
+    boundingBoxes: [makeIdentityTransformedBoundingBox({
+      lowerBounds: new Float64Array(metadata.rank),
+      upperBounds: Float64Array.from(metadata.shape),
+    })],
+  });
+  const transform = matrix.createIdentity(Float64Array, metadata.rank + 1);
+  return {
+    coordinateSpace: modelSpace,
+    dataType: metadata.dataType,
+    scales: [{
+      url,
+      transform,
+      metadata,
+      dimensionSeparator: validateSeparator(url, separator, metadata.dimensionSeparator)
+    }]
+  };
+}
+
+function validateSeparator(
+    url: string, expectedSeparator: ZarrSeparator|undefined,
+    actualSeparator: ZarrSeparator|undefined): ZarrSeparator {
+  if (actualSeparator !== undefined && expectedSeparator !== undefined &&
+      actualSeparator !== expectedSeparator) {
+    throw new Error(
+        `Explicitly specified dimension separator ` +
+        `${JSON.stringify(expectedSeparator)} does not match value ` +
+        `in ${url}/.zarray ${JSON.stringify(actualSeparator)}`);
+  }
+  return actualSeparator ?? expectedSeparator ?? '.';
+}
+
+async function resolveOmeMultiscale(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    separator: ZarrSeparator|undefined,
+    multiscale: OmeMultiscaleMetadata): Promise<ZarrMultiscaleInfo> {
+  const scaleZarrMetadata =
+      (await Promise.all(multiscale.scales.map(
+          scale => getMetadata(
+              chunkManager, credentialsProvider, scale.url, /*allowNotFound=*/ false)))) as
+      ZarrMetadata[];
+  const dataType = scaleZarrMetadata[0].dataType;
+  const numScales = scaleZarrMetadata.length;
+  const rank = multiscale.coordinateSpace.rank;
+  for (let i = 0; i < numScales; ++i) {
+    const scale = multiscale.scales[i];
+    const zarrMetadata = scaleZarrMetadata[i];
+    if (zarrMetadata.rank !== rank) {
+      throw new Error(
+          `Expected zarr array at ${JSON.stringify(scale.url)} to have rank ${rank}, ` +
+          `but received: ${zarrMetadata.rank}`);
+    }
+    if (zarrMetadata.dataType !== dataType) {
+      throw new Error(
+          `Expected zarr array at ${JSON.stringify(scale.url)} to have data type ` +
+          `${DataType[dataType]}, but received: ${DataType[zarrMetadata.dataType]}`);
+    }
+  }
+
+  const lowerBounds = new Float64Array(rank);
+  const upperBounds = new Float64Array(rank);
+  const baseScale = multiscale.scales[0];
+  const baseZarrMetadata = scaleZarrMetadata[0];
+  for (let i = 0; i < rank; ++i) {
+    const lower = lowerBounds[i] = baseScale.transform[(rank + 1) * rank + i];
+    upperBounds[i] = lower + baseZarrMetadata.shape[i];
+  }
+  const boundingBox = makeIdentityTransformedBoundingBox({
+    lowerBounds,
+    upperBounds,
+  });
+
+  const {coordinateSpace} = multiscale;
+  const resolvedCoordinateSpace = makeCoordinateSpace({
+    names: coordinateSpace.names,
+    units: coordinateSpace.units,
+    scales: coordinateSpace.scales,
+    boundingBoxes: [boundingBox]
+  });
+
+  return {
+    coordinateSpace: resolvedCoordinateSpace,
+    dataType,
+    scales: multiscale.scales.map((scale, i) => {
+      const zarrMetadata = scaleZarrMetadata[i];
+      return {
+        url: scale.url,
+        transform: scale.transform,
+        metadata: zarrMetadata,
+        dimensionSeparator:
+            validateSeparator(scale.url, separator, zarrMetadata.dimensionSeparator),
+      };
+    }),
+  };
+}
 
 export class ZarrDataSource extends DataSourceProvider {
   get description() {
@@ -258,16 +389,20 @@ export class ZarrDataSource extends DataSourceProvider {
             getMetadata(options.chunkManager, credentialsProvider, url),
             getAttributes(options.chunkManager, credentialsProvider, url)
           ]);
-          if (metadata.dimensionSeparator !== undefined && dimensionSeparator !== undefined &&
-              metadata.dimensionSeparator !== dimensionSeparator) {
-            throw new Error(
-                `Explicitly specified dimension separator ` +
-                `${JSON.stringify(dimensionSeparator)} does not match value ` +
-                `in .zarray ${JSON.stringify(metadata.dimensionSeparator)}`);
+          let multiscaleInfo: ZarrMultiscaleInfo;
+          if (metadata === undefined) {
+            // May be an OME-zarr multiscale dataset.
+            const multiscale = parseOmeMetadata(url, attrs);
+            if (multiscale === undefined) {
+              throw new Error(`Neither .zarray metadata nor OME multiscale metadata found`);
+            }
+            multiscaleInfo = await resolveOmeMultiscale(
+                options.chunkManager, credentialsProvider, dimensionSeparator, multiscale);
+          } else {
+            multiscaleInfo = getMultiscaleInfoForSingleArray(url, dimensionSeparator, metadata, attrs);
           }
           const volume = new MultiscaleVolumeChunkSource(
-              options.chunkManager, credentialsProvider, url,
-              dimensionSeparator || metadata.dimensionSeparator || '.', metadata, attrs);
+            options.chunkManager, credentialsProvider, multiscaleInfo);
           return {
             modelTransform: makeIdentityTransform(volume.modelSpace),
             subsources: [

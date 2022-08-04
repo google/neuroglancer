@@ -15,7 +15,6 @@
  */
 
 import debounce from 'lodash/debounce';
-import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
@@ -23,6 +22,7 @@ import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {parseArray} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 
 export class LocalSegmentationGraphSource extends SegmentationGraphSource {
   spanningTreeEdges = new Map<string, Set<string>>();
@@ -238,7 +238,8 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     };
   }
 
-  connect(segmentsState: VisibleSegmentsState): SegmentationGraphSourceConnection {
+  connect(layer: SegmentationUserLayer): SegmentationGraphSourceConnection {
+    const segmentsState = layer.displayState.segmentationGroupState.value;
     const connection = new LocalSegmentationGraphSourceConnection(this, segmentsState);
     segmentsState.segmentEquivalences.assignFrom(this.equivalences);
     normalizeSegmentSet(

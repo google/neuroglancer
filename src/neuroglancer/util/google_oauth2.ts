@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-import {CredentialsProvider, CredentialsWithGeneration, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {CredentialsProvider,  makeCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {StatusMessage} from 'neuroglancer/status';
 import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {Owned} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
-import {parseArray, verifyObject, verifyString} from 'neuroglancer/util/json';
+import {parseArray, verifyObject, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {Signal} from 'neuroglancer/util/signal';
+
+export const EMAIL_SCOPE = 'email';
+export const OPENID_SCOPE = 'openid';
 
 export const AUTH_SERVER = 'https://accounts.google.com/o/oauth2/auth';
 
@@ -46,10 +48,24 @@ export interface OAuth2Token {
   expiresIn: string;
   tokenType: string;
   scope: string;
+  email: string|undefined;
 }
 
 class PendingRequest {
   finished = new Signal<(token?: OAuth2Token, error?: any) => void>();
+}
+
+function extractEmailFromIdToken(idToken: string): string {
+  const idTokenParts = idToken.split(".");
+  try {
+    if (idTokenParts.length !== 3) throw new Error(`Invalid JWT format`);
+    const decoded = atob(idTokenParts[1]);
+    const parsed = JSON.parse(decoded);
+    verifyObject(parsed);
+    return verifyObjectProperty(parsed, "email", verifyString);
+  } catch (e) {
+    throw new Error(`Failed to decode id token: ${e.message}`);
+  }
 }
 
 class AuthHandler {
@@ -119,6 +135,8 @@ class AuthHandler {
             let accessToken = params.get('access_token');
             let tokenType = params.get('token_type');
             let expiresIn = params.get('expires_in');
+            let idToken = params.get('id_token');
+            let email = idToken === undefined ? undefined : extractEmailFromIdToken(idToken);
             let scope = params.get('scope');
             if (accessToken === undefined || tokenType === undefined || expiresIn === undefined ||
                 scope === undefined) {
@@ -128,7 +146,8 @@ class AuthHandler {
               accessToken: accessToken,
               tokenType: tokenType,
               expiresIn: expiresIn,
-              scope: scope
+              scope,
+              email,
             });
             return;
           }
@@ -162,12 +181,17 @@ class AuthHandler {
   }) {
     let url = `${AUTH_SERVER}?client_id=${encodeURIComponent(options.clientId)}`;
     url += `&redirect_uri=postmessage`;
-    url += `&response_type=token`;
+    let responseType = 'token';
+    const {scopes} = options;
+    if (scopes.includes("email") && scopes.includes("openid")) {
+      responseType = 'token%20id_token';
+    }
+    url += `&response_type=${responseType}`;
     let {origin = location.origin} = options;
     url += `&origin=${encodeURIComponent(origin)}`;
     url += `&proxy=${this.proxyName}`;
     url += `&include_granted_scopes=true`;
-    url += `&scope=${encodeURIComponent(options.scopes.join(' '))}`;
+    url += `&scope=${encodeURIComponent(scopes.join(' '))}`;
     if (options.state) {
       url += `&state=${options.state}`;
     }
@@ -333,27 +357,4 @@ export class GoogleOAuth2CredentialsProvider extends CredentialsProvider<OAuth2T
       login(/*immediate=*/ true);
     });
   });
-}
-
-export function fetchWithGoogleCredentials(
-    credentialsProvider: Owned<CredentialsProvider<OAuth2Token>>, input: string|Request,
-    init: RequestInit = {}): Promise<Response> {
-  function start(credentials: CredentialsWithGeneration<OAuth2Token>): Promise<Response> {
-    const token = credentials.credentials;
-    const headers = new Headers(init.headers);
-    headers.append('Authorization', `${token.tokenType} ${token.accessToken}`);
-    return fetch(input, {...init, mode: 'cors', headers}).then(response => {
-      if (response.status === 401) {
-        // 401: Authorization needed.  OAuth2 token may have expired.
-        return credentialsProvider.get(credentials).then(start);
-      }
-      return response;
-    });
-  }
-  const promise = credentialsProvider.get(/*invalidToken=*/ undefined).then(start);
-  const disposeRef = () => {
-    credentialsProvider.dispose();
-  };
-  promise.then(disposeRef, disposeRef);
-  return promise;
 }

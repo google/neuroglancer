@@ -30,6 +30,7 @@ import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectProperty, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 
 const urlPattern = '^(https?://[^/]+)/(.*)$';
 
@@ -385,7 +386,8 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
     })();
   }
 
-  connect(segmentsState: VisibleSegmentsState) {
+  connect(layer: SegmentationUserLayer) {
+    const segmentsState = layer.displayState.segmentationGroupState.value;
     return new GraphConnection(this, segmentsState);
   }
 

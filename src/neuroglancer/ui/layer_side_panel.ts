@@ -188,10 +188,13 @@ class LayerSidePanel extends SidePanel {
           selectedTab: panelState.selectedTab,
           tabs: this.registerDisposer(new CachedWatchableValue({
             get value() {
-              return panelState.tabs.map(id => ({
-                                           id,
-                                           label: layer.tabs.options.get(id)!.label,
-                                         }));
+              return panelState.tabs.map(id => {
+                const {label, hidden} = layer.tabs.options.get(id)!;
+                return {
+                  id,
+                  label,
+                  hidden: hidden?.value || false,
+                }});
             },
             changed: panelState.tabsChanged,
           })),
