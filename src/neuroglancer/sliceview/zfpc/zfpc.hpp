@@ -27,6 +27,7 @@ Date: July 2022
 #include <vector>
 
 #include "zfp.hpp"
+#include "zfp/bitstream.h"
 
 namespace zfpc {
 
@@ -64,10 +65,10 @@ inline uint64_t itoc(uint64_t x, std::vector<unsigned char> &buf, uint64_t idx) 
 }
 
 template <typename T>
-T ctoi(unsigned char* buf, uint64_t idx = 0);
+T ctoi(const unsigned char* buf, uint64_t idx = 0);
 
 template <>
-uint64_t ctoi(unsigned char* buf, uint64_t idx) {
+uint64_t ctoi(const unsigned char* buf, uint64_t idx) {
 	uint64_t x = 0;
 	x += static_cast<uint64_t>(buf[idx + 0]) << 0;
 	x += static_cast<uint64_t>(buf[idx + 1]) << 8;
@@ -81,7 +82,7 @@ uint64_t ctoi(unsigned char* buf, uint64_t idx) {
 }
 
 template <>
-uint32_t ctoi(unsigned char* buf, uint64_t idx) {
+uint32_t ctoi(const unsigned char* buf, uint64_t idx) {
 	uint32_t x = 0;
 	x += static_cast<uint32_t>(buf[idx + 0]) << 0;
 	x += static_cast<uint32_t>(buf[idx + 1]) << 8;
@@ -91,7 +92,7 @@ uint32_t ctoi(unsigned char* buf, uint64_t idx) {
 }
 
 template <>
-uint16_t ctoi(unsigned char* buf, uint64_t idx) {
+uint16_t ctoi(const unsigned char* buf, uint64_t idx) {
 	uint16_t x = 0;
 	x += static_cast<uint16_t>(buf[idx + 0]) << 0;
 	x += static_cast<uint16_t>(buf[idx + 1]) << 8;
@@ -99,7 +100,7 @@ uint16_t ctoi(unsigned char* buf, uint64_t idx) {
 }
 
 template <>
-uint8_t ctoi(unsigned char* buf, uint64_t idx) {
+uint8_t ctoi(const unsigned char* buf, uint64_t idx) {
 	return static_cast<uint8_t>(buf[idx]);
 }
 
@@ -148,17 +149,9 @@ public:
 		c_order(_c_order)
 	{}
 
-	ZfpcHeader(unsigned char* buf, const uint64_t buflen) {
-		if (buflen < header_size) {
-			throw std::runtime_error("zfpc: Data stream is not valid. Too short, unable to decompress.");
-		}
-
+	ZfpcHeader(const unsigned char* buf, const uint64_t buflen) {
 		bool valid_magic = (buf[0] == 'z' && buf[1] == 'f' && buf[2] == 'p' && buf[3] == 'c');
 		format_version = buf[4];
-
-		if (!valid_magic || format_version > 0) {
-			throw std::runtime_error("zfpc: Data stream is not valid. Unable to decompress.");
-		}
 
 		data_type = ctoi<uint8_t>(buf, 5);
 		nx = ctoi<uint32_t>(buf, 6); 
@@ -170,24 +163,39 @@ public:
 		c_order = (data_type >> 7);
 		mode = (data_type >> 3) & 0b111;
 		data_type = data_type & 0b111;
-		
-		if (data_type > 4) {
-			std::string err = "zfpc: Invalid data type in stream. Unable to decompress. Got: ";
-			err += std::to_string(data_width);
-			throw std::runtime_error(err);
-		}
 	}
 
-	uint64_t voxels() {
+	uint64_t voxels() const {
 		return static_cast<uint64_t>(nx) 
 			* static_cast<uint64_t>(ny) 
 			* static_cast<uint64_t>(nz) 
 			* static_cast<uint64_t>(nw);
 	}
 
-	uint64_t tochars(std::vector<unsigned char> &buf, uint64_t idx = 0) const {
-		if ((idx + CompressoHeader::header_size) > buf.size()) {
-			throw std::runtime_error("zfpc: Unable to write past end of buffer.");
+	uint64_t nbytes() const {
+		uint64_t data_width = 1;
+		if (data_type == 0) {
+			data_width = 0;
+		}
+		else if (data_type == 1) {
+			data_width = sizeof(int32_t);
+		}
+		else if (data_type == 2) {
+			data_width = sizeof(int64_t);
+		}
+		else if (data_type == 3) {
+			data_width = sizeof(float);
+		}
+		else if (data_type == 4) {
+			data_width = sizeof(double);
+		}
+
+		return voxels() * data_width;
+	}
+
+	int64_t tochars(std::vector<unsigned char> &buf, uint64_t idx = 0) const {
+		if ((idx + ZfpcHeader::header_size) > buf.size()) {
+			return -1;
 		}
 
 		uint64_t i = idx;
@@ -196,7 +204,10 @@ public:
 		}
 
 		i += itoc(format_version, buf, i);
-		i += itoc(data_type | ((mode << 3) & 0b111) | (c_order << 7), buf, i);
+		i += itoc(
+			static_cast<uint8_t>(data_type | ((mode << 3) & 0b111) | (c_order << 7)), 
+			buf, i
+		);
 		i += itoc(nx, buf, i);
 		i += itoc(ny, buf, i);
 		i += itoc(nz, buf, i);
@@ -206,20 +217,20 @@ public:
 		return i - idx;
 	}
 
-	uint64_t get_num_streams() {
+	uint64_t num_streams() const {
 		uint64_t shape[4] = { nx, ny, nz, nw };
-		uint64_t num_streams = 1;
+		uint64_t nstreams = 1;
 		// size 0 is treated as the dimension does not exist. Zeros should
 		// only occur on the rhs.
 		for (int i = 0; i < 4; i++) {
 			if (shape[i] > 1 && ((correlated_dims >> i) & 0b1) == 0) {
-				num_streams *= shape[i];
+				nstreams *= shape[i];
 			}
 		}
-		return num_streams;
+		return nstreams;
 	}
 
-	static bool valid_header(unsigned char* buf, const uint64_t buflen) {
+	static bool valid(const unsigned char* buf, const uint64_t buflen) {
 		if (buflen < header_size) {
 			return false;
 		}
@@ -240,21 +251,26 @@ public:
 	}
 };
 
-std::vector<uint64_t> get_stream_offsets(const unsigned char* buf, const uint64_t buflen) const {
-	ZfpcHeader header(buf, buflen);
-	
+std::tuple<std::vector<uint64_t>, int> get_stream_offsets(
+	const ZfpcHeader &header, 
+	const unsigned char* buf, const uint64_t buflen
+) {	
 	uint64_t nstreams = header.num_streams();
 	uint64_t index_offset = ZfpcHeader::header_size;
 
+	int error = 0;
+
+	// Buffer length too short for stream index
 	if (buflen < index_offset + (1 + nstreams) * sizeof(uint64_t)) {
-		throw std::runtime_error("zfpc: Buffer length too short for stream index.");
+		error = 101;
 	}
 
 	uint64_t stream_offset = ctoi<uint64_t>(buf, index_offset);
 	index_offset += sizeof(uint64_t);
 
+	// invalid index
 	if (buflen < stream_offset) {
-		throw std::runtime_error("zfpc: Index invalid.");
+		error = 102;
 	}
 
 	std::vector<uint64_t> stream_sizes(nstreams);
@@ -264,28 +280,39 @@ std::vector<uint64_t> get_stream_offsets(const unsigned char* buf, const uint64_
 
 	std::vector<uint64_t> stream_offsets(nstreams + 1);
 	stream_offsets[0] = stream_offset;
+	// Invalid stream index. Stream location outside of buffer
 	if (stream_offsets[0] >= buflen) {
-		throw std::runtime_error("zfpc: Invalid stream index. Stream location outside of buffer.");
+		error = 103;
 	}
 
 	for (uint64_t i = 1; i < nstreams + 1; i++) {
 		stream_offsets[i] = stream_offsets[i-1] + stream_sizes[i-1];
+		// Invalid stream index. Stream location outside of buffer
 		if (stream_offsets[i] >= buflen) {
-			throw std::runtime_error("zfpc: Invalid stream index. Stream location outside of buffer.");
+			error = 104;
+			break;
 		}
 	}
 
-	return stream_offsets;
+	return std::make_tuple(stream_offsets, error);
 }
 
-std::vector<std::vector<unsigned char>> disassemble_container(
+std::vector<std::vector<unsigned char>>
+disassemble_container(
 	const ZfpcHeader &header, 
-	const unsigned char* buf, const uint64_t buflen
+	const unsigned char* buf, const uint64_t buflen,
+	int &error
 ) {
-	std::vector<uint64_t> stream_offsets = get_stream_offsets(buf, buflen);
+	std::vector<uint64_t> stream_offsets;
+
+	std::tie(stream_offsets, error) = get_stream_offsets(header, buf, buflen);
 	
 	const uint64_t nstreams = header.num_streams();
 	std::vector<std::vector<unsigned char>> streams(nstreams);
+
+	if (error > 0) {
+		return streams;
+	}
 
 	for (uint64_t i = 0; i < nstreams; i++) {
 		const uint64_t stream_nbytes = stream_offsets[i+1] - stream_offsets[i];
@@ -299,12 +326,15 @@ std::vector<std::vector<unsigned char>> disassemble_container(
 }
 
 template <typename T>
-std::vector<T> decompress_zfp_stream(const std::vector<unsigned char> &stream) {
+std::vector<T> decompress_zfp_stream(
+	std::vector<unsigned char> &stream,
+	int &error
+) {
 	zfp_field* field = zfp_field_alloc();
-	bitstream* bstream = stream_open(stream.data(), stream.size());
-	zfp_stream* stream = zfp_stream_open(bstream);
-	zfp_read_header(stream, field, ZFP_HEADER_FULL);
-	zfp_stream_rewind(stream);
+	bitstream* bstream = stream_open(static_cast<void*>(stream.data()), stream.size());
+	zfp_stream* zstream = zfp_stream_open(bstream);
+	zfp_read_header(zstream, field, ZFP_HEADER_FULL);
+	zfp_stream_rewind(zstream);
 
 	size_t voxels = 
 		  static_cast<uint64_t>(field->nx) 
@@ -315,40 +345,98 @@ std::vector<T> decompress_zfp_stream(const std::vector<unsigned char> &stream) {
 	std::vector<T> decompressed(voxels);
 
 	zfp_field_set_pointer(field, decompressed.data());
-	auto bytes_consumed = zfp_decompress(stream, field);
+	auto bytes_consumed = zfp_decompress(zstream, field);
+	// unable to decompress stream
 	if (bytes_consumed == 0) {
-		throw new std::runtime_error("zfpc: unable to decompress stream.");
+		error = 1;
 	}
 
 	zfp_field_free(field);
-	zfp_stream_close(stream);
+	zfp_stream_close(zstream);
 	stream_close(bstream);
 
 	return decompressed;
 }
 
 template <typename T>
-std::vector<T> decompress(const unsigned char* buf, const uint64_t buflen) {
-	ZfpcHeader header(buf, buflen);
-	std::vector<std::vector<unsigned char>> streams = std::move(
-		disassemble_container(header, buf, buflen)
-	);
-
-	std::vector<T> recovered(header.voxels());
-
-	if (header.c_order) {
-		throw new std::runtime_error("c order decompression not yet supported.");
+int decompress_helper(
+	const ZfpcHeader &header,
+	const unsigned char* inbuf, const uint64_t in_num_bytes,
+	T* outbuf, const unsigned int out_num_bytes
+) {
+	if (header.nbytes() != out_num_bytes) {
+		return 201;
 	}
+
+	int error = 0;
+	std::vector<std::vector<unsigned char>> streams = std::move(
+		disassemble_container(header, inbuf, in_num_bytes, error)
+	);
 
 	uint64_t out_i = 0;
 	for (auto stream : streams) {
-		std::vector<T> hyperplane = std::move(decompress_zfp_stream(stream));
-		for (uint64_t i = 0; i < voxels; i++, out_i++) {
-			recovered[out_i] = hyperplane[i];
+		std::vector<T> hyperplane = std::move(
+			decompress_zfp_stream<T>(stream, error)
+		);
+		if (error) {
+			return 202;
+		}
+
+		for (uint64_t i = 0; i < hyperplane.size(); i++, out_i++) {
+			outbuf[out_i] = hyperplane[i];
 		}
 	}
 
-	return recovered;
+	return 0;
+}
+
+int decompress(
+	const unsigned char* inbuf, const uint64_t in_num_bytes,
+	void* outbuf, const unsigned int out_num_bytes
+) {
+	if (!ZfpcHeader::valid(inbuf, in_num_bytes)) {
+		return 1;
+	}
+	else if (out_num_bytes < 1) {
+		return 2;
+	}
+
+	ZfpcHeader header(inbuf, in_num_bytes);
+
+	// we don't yet support c order
+	if (header.c_order) {
+		return 3;
+	}
+
+	if (header.data_type == 0) {
+		return 4; // data type none
+	}
+	else if (header.data_type == 1) {
+		return decompress_helper<int32_t>(
+			header, inbuf, in_num_bytes, 
+			static_cast<int32_t*>(outbuf), out_num_bytes
+		);
+	}
+	else if (header.data_type == 2) {
+		return decompress_helper<int64_t>(
+			header, inbuf, in_num_bytes, 
+			static_cast<int64_t*>(outbuf), out_num_bytes
+		);
+	}
+	else if (header.data_type == 3) {
+		return decompress_helper<float>(
+			header, inbuf, in_num_bytes, 
+			static_cast<float*>(outbuf), out_num_bytes
+		);
+	}
+	else if (header.data_type == 4) {
+		return decompress_helper<double>(
+			header, inbuf, in_num_bytes, 
+			static_cast<double*>(outbuf), out_num_bytes
+		);
+	}
+
+	return 5;
 }
 
 };
