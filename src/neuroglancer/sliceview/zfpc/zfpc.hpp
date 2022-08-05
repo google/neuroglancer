@@ -155,10 +155,10 @@ public:
 
 		data_type = ctoi<uint8_t>(buf, 5);
 		nx = ctoi<uint32_t>(buf, 6); 
-		ny = ctoi<uint32_t>(buf, 8); 
-		nz = ctoi<uint32_t>(buf, 10);
-		nw = ctoi<uint32_t>(buf, 12);
-		correlated_dims = ctoi<uint8_t>(buf, 14);
+		ny = ctoi<uint32_t>(buf, 10); 
+		nz = ctoi<uint32_t>(buf, 14);
+		nw = ctoi<uint32_t>(buf, 18);
+		correlated_dims = ctoi<uint8_t>(buf, 22);
 
 		c_order = (data_type >> 7);
 		mode = (data_type >> 3) & 0b111;
