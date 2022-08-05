@@ -34,6 +34,45 @@ const zfpcModulePromise = (async () => {
   return m;
 })();
 
+// not a full implementation of read header, just the parts we need
+function readHeader(buffer: Uint8Array) 
+  : {sx:number,sy:number,sz:number,sw:number,dataWidth:number} 
+{
+  // check for header "zfpc"
+  const magic = (
+       buffer[0] === 'z'.charCodeAt(0) && buffer[1] === 'f'.charCodeAt(0)
+    && buffer[2] === 'p'.charCodeAt(0) && buffer[3] === 'c'.charCodeAt(0)
+  );
+  if (!magic) {
+    throw new Error("zfpc: didn't match magic numbers");
+  }
+  const format = buffer[4];
+  if (format > 0) {
+    throw new Error("zfpc: didn't match format version");
+  }
+
+  const bufview = new DataView(buffer.buffer, 0);
+
+  const dataWidth = buffer[5] & 0b111;
+  const sx = bufview.getUint32(6, /*littleEndian=*/true);
+  const sy = bufview.getUint32(10, /*littleEndian=*/true);
+  const sz = bufview.getUint32(14, /*littleEndian=*/true);
+  const sw = bufview.getUint32(18, /*littleEndian=*/true);
+
+
+  if (dataWidth === 2 || dataWidth === 4) {
+    dataWidth = 8; // uint64 or float64
+  }
+  else if (dataWidth === 1 || dataWidth === 3) {
+    dataWidth = 4; // uint32 or float32
+  }
+  else {
+    throw new Error("zfpc: unsupported data width.");
+  }
+
+  return {sx,sy,sz,sw,dataWidth};
+}
+
 export async function decompressZfpc(
   buffer: Uint8Array, 
   width: number, height: number, 
@@ -42,26 +81,12 @@ export async function decompressZfpc(
 ) : Promise<Uint8Array> {
   
   const m = await zfpcModulePromise;
-  let {sx,sy,dataWidth,numChannels} = readHeader(buffer);
+  let {sx,sy,sz,sw,dataWidth} = readHeader(buffer);
 
-  if (
-    sx !== width 
-    || sy !== height 
-    || numComponents !== numChannels
-    || bytesPerPixel !== dataWidth
-  ) {
-    throw new Error(
-      `png: Image decode parameters did not match expected chunk parameters.
-         Expected: width: ${width} height: ${height} channels: ${numComponents} bytes per pixel: ${bytesPerPixel} 
-         Decoded:  width: ${sx} height: ${sy} channels: ${numChannels} bytes per pixel: ${dataWidth}
-         Convert to Grayscale? ${convertToGrayscale}
-        `
-    );
-  }
-
-  const nbytes = sx * sy * dataWidth * numChannels;
+  const voxels = sx * sy * sz * sw;
+  const nbytes = voxels * dataWidth;
   if (nbytes < 0) {
-    throw new Error(`png: Failed to decode png image size. image size: ${nbytes}`);
+    throw new Error(`zfpc: Failed to decode png image size. image size: ${nbytes}`);
   }
 
   // heap must be referenced after creating bufPtr and imagePtr because
@@ -71,13 +96,13 @@ export async function decompressZfpc(
   let heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, bufPtr);
 
-  const code = (m.instance.exports.png_decompress as Function)(
-    bufPtr, buffer.byteLength, imagePtr, nbytes, convertToGrayscale
+  const code = (m.instance.exports.zfpc_decompress as Function)(
+    bufPtr, buffer.byteLength, imagePtr, nbytes
   );
 
   try {
     if (code !== 0) {
-      throw new Error(`png: Failed to decode png image. decoder code: ${code}`);
+      throw new Error(`zfpc: Failed to decode image. decoder code: ${code}`);
     }
 
     // Likewise, we reference memory.buffer instead of heap.buffer
