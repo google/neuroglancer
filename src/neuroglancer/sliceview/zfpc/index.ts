@@ -53,7 +53,7 @@ function readHeader(buffer: Uint8Array)
 
   const bufview = new DataView(buffer.buffer, 0);
 
-  const dataWidth = buffer[5] & 0b111;
+  let dataWidth = buffer[5] & 0b111;
   const sx = bufview.getUint32(6, /*littleEndian=*/true);
   const sy = bufview.getUint32(10, /*littleEndian=*/true);
   const sz = bufview.getUint32(14, /*littleEndian=*/true);
@@ -74,10 +74,7 @@ function readHeader(buffer: Uint8Array)
 }
 
 export async function decompressZfpc(
-  buffer: Uint8Array, 
-  width: number, height: number, 
-  numComponents: number, 
-  bytesPerPixel:number, 
+  buffer: Uint8Array
 ) : Promise<Uint8Array> {
   
   const m = await zfpcModulePromise;

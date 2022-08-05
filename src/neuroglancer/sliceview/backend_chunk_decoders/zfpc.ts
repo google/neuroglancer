@@ -18,7 +18,7 @@ import {TypedArray} from 'neuroglancer/util/array';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {decodeZfpc} from 'neuroglancer/async_computation/decode_compresso_request';
+import {decodeZfpc} from 'neuroglancer/async_computation/decode_zfpc_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 
 export async function decodeZfpcChunk(
