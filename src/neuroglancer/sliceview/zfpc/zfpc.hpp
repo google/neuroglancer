@@ -288,7 +288,7 @@ std::tuple<std::vector<uint64_t>, int> get_stream_offsets(
 	for (uint64_t i = 1; i < nstreams + 1; i++) {
 		stream_offsets[i] = stream_offsets[i-1] + stream_sizes[i-1];
 		// Invalid stream index. Stream location outside of buffer
-		if (stream_offsets[i] >= buflen) {
+		if (stream_offsets[i] > buflen) {
 			error = 104;
 			break;
 		}
@@ -348,7 +348,7 @@ std::vector<T> decompress_zfp_stream(
 	auto bytes_consumed = zfp_decompress(zstream, field);
 	// unable to decompress stream
 	if (bytes_consumed == 0) {
-		error = 1;
+		error = 301;
 	}
 
 	zfp_field_free(field);
@@ -372,6 +372,10 @@ int decompress_helper(
 	std::vector<std::vector<unsigned char>> streams = std::move(
 		disassemble_container(header, inbuf, in_num_bytes, error)
 	);
+
+	if (error) {
+		return error;
+	}
 
 	uint64_t out_i = 0;
 	for (auto stream : streams) {
