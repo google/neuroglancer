@@ -333,22 +333,26 @@ std::vector<T> decompress_zfp_stream(
 	zfp_field* field = zfp_field_alloc();
 	bitstream* bstream = stream_open(static_cast<void*>(stream.data()), stream.size());
 	zfp_stream* zstream = zfp_stream_open(bstream);
-	zfp_read_header(zstream, field, ZFP_HEADER_FULL);
 	zfp_stream_rewind(zstream);
+	zfp_read_header(zstream, field, ZFP_HEADER_FULL);
 
-	size_t voxels = 
+	uint64_t voxels = 
 		  static_cast<uint64_t>(field->nx) 
 		* static_cast<uint64_t>(field->ny) 
 		* static_cast<uint64_t>(field->nz) 
 		* static_cast<uint64_t>(field->nw);
-
+	
 	std::vector<T> decompressed(voxels);
 
 	zfp_field_set_pointer(field, decompressed.data());
-	auto bytes_consumed = zfp_decompress(zstream, field);
+	size_t bytes_consumed = zfp_decompress(zstream, field);
+
 	// unable to decompress stream
 	if (bytes_consumed == 0) {
 		error = 301;
+	}
+	else if (bytes_consumed != stream.size()) {
+		error = 302;
 	}
 
 	zfp_field_free(field);
