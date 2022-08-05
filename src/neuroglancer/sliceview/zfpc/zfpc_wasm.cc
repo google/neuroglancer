@@ -16,6 +16,7 @@
 
 
 #include <stdbool.h>
+#include "zfpc.hpp"
 
 extern "C" {
 
@@ -23,10 +24,7 @@ int zfpc_decompress(
 	unsigned char* inbuf, unsigned int in_num_bytes, 
     void* outbuf, unsigned int out_num_bytes
 ) {
-
-
-
-    return 0;
+    return zfpc::decompress(inbuf, in_num_bytes, outbuf, out_num_bytes);
 }
 
 
