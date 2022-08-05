@@ -241,7 +241,7 @@ public:
 		uint8_t corr = ctoi<uint8_t>(buf, 22);
 
 		// checks only unused bit and invalid data type value
-		bool valid_dtype = (dtype & 0b00000010) == 0 && (dtype & 0b111) < 5;
+		bool valid_dtype = (dtype & 0b01000000) == 0 && (dtype & 0b111) < 5;
 
 		return valid_magic && (format_version == 0) && valid_dtype && (corr <= 0b1111);
 	}
