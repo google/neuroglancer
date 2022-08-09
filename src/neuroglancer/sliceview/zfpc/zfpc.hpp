@@ -397,7 +397,9 @@ int decompress_helper(
 		return error;
 	}
 
-	uint64_t out_i = 0;
+	uint64_t offset = 0;
+	const uint64_t nstreams = streams.size();
+
 	for (auto stream : streams) {
 		std::vector<T> hyperplane = std::move(
 			decompress_zfp_stream<T>(stream, error)
@@ -406,9 +408,10 @@ int decompress_helper(
 			return 202;
 		}
 
-		for (uint64_t i = 0; i < hyperplane.size(); i++, out_i++) {
-			outbuf[out_i] = hyperplane[i];
+		for (uint64_t i = 0; i < hyperplane.size(); i++) {
+			outbuf[nstreams * i + offset] = hyperplane[i];
 		}
+		offset++;
 	}
 
 	ipt::ipt<T>(outbuf, header.nw, header.nz, header.ny, header.nx);
