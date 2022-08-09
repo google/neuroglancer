@@ -342,6 +342,12 @@ std::vector<T> decompress_zfp_stream(
 	uint64_t nz = static_cast<uint64_t>(field->nz);
 	uint64_t nw = static_cast<uint64_t>(field->nw);
 
+	// invalid stream
+	if (nx == 0 && ny == 0 && nz == 0 && nw == 0) {
+		error = 301;
+		return std::vector<T>(0);
+	}
+
 	// 0 is a special value that means the
 	// dimension is not used, not that there
 	// are no voxels.
@@ -359,10 +365,10 @@ std::vector<T> decompress_zfp_stream(
 
 	// unable to decompress stream
 	if (bytes_consumed == 0) {
-		error = 301;
+		error = 302;
 	}
 	else if (bytes_consumed != stream.size()) {
-		error = 302;
+		error = 303;
 	}
 
 	zfp_field_free(field);
