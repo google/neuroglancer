@@ -331,11 +331,19 @@ std::vector<T> decompress_zfp_stream(
 	std::vector<unsigned char> &stream,
 	int &error
 ) {
-	zfp_field* field = zfp_field_alloc();
-	bitstream* bstream = stream_open(static_cast<void*>(stream.data()), stream.size());
-	zfp_stream* zstream = zfp_stream_open(bstream);
-	zfp_stream_rewind(zstream);
-	zfp_read_header(zstream, field, ZFP_HEADER_FULL);
+	std::unique_ptr<zfp_field, void(*)(zfp_field*)> field(
+		zfp_field_alloc(), zfp_field_free
+	);
+	std::unique_ptr<bitstream, void(*)(bitstream*)> bstream(
+		stream_open(static_cast<void*>(stream.data()), stream.size()),
+		stream_close
+	);
+	std::unique_ptr<zfp_stream, void(*)(zfp_stream*)> zstream(
+		zfp_stream_open(bstream.get()),
+		zfp_stream_close
+	);
+	zfp_stream_rewind(zstream.get());
+	zfp_read_header(zstream.get(), field.get(), ZFP_HEADER_FULL);
 
 	uint64_t nx = static_cast<uint64_t>(field->nx);
 	uint64_t ny = static_cast<uint64_t>(field->ny);
@@ -360,8 +368,8 @@ std::vector<T> decompress_zfp_stream(
 	
 	std::vector<T> decompressed(voxels);
 
-	zfp_field_set_pointer(field, decompressed.data());
-	size_t bytes_consumed = zfp_decompress(zstream, field);
+	zfp_field_set_pointer(field.get(), decompressed.data());
+	size_t bytes_consumed = zfp_decompress(zstream.get(), field.get());
 
 	// unable to decompress stream
 	if (bytes_consumed == 0) {
@@ -370,10 +378,6 @@ std::vector<T> decompress_zfp_stream(
 	else if (bytes_consumed != stream.size()) {
 		error = 303;
 	}
-
-	zfp_field_free(field);
-	zfp_stream_close(zstream);
-	stream_close(bstream);
 
 	return decompressed;
 }
