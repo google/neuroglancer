@@ -337,11 +337,20 @@ std::vector<T> decompress_zfp_stream(
 	zfp_stream_rewind(zstream);
 	zfp_read_header(zstream, field, ZFP_HEADER_FULL);
 
-	uint64_t voxels = 
-		  static_cast<uint64_t>(field->nx) 
-		* static_cast<uint64_t>(field->ny) 
-		* static_cast<uint64_t>(field->nz) 
-		* static_cast<uint64_t>(field->nw);
+	uint64_t nx = static_cast<uint64_t>(field->nx);
+	uint64_t ny = static_cast<uint64_t>(field->ny);
+	uint64_t nz = static_cast<uint64_t>(field->nz);
+	uint64_t nw = static_cast<uint64_t>(field->nw);
+
+	// 0 is a special value that means the
+	// dimension is not used, not that there
+	// are no voxels.
+	nx = nx ? nx : 1;
+	ny = ny ? ny : 1;
+	nz = nz ? nz : 1;
+	nw = nw ? nw : 1;
+
+	uint64_t voxels = nx * ny * nz * nw;
 	
 	std::vector<T> decompressed(voxels);
 
