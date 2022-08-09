@@ -28,6 +28,7 @@ Date: July 2022
 
 #include "zfp.hpp"
 #include "zfp/bitstream.h"
+#include "ipt.hpp"
 
 namespace zfpc {
 
@@ -394,6 +395,8 @@ int decompress_helper(
 			outbuf[out_i] = hyperplane[i];
 		}
 	}
+
+	ipt::ipt<T>(outbuf, header.nw, header.nz, header.ny, header.nx);
 
 	return 0;
 }
