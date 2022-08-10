@@ -15,6 +15,7 @@
  */
 
 import pngWasmDataUrl from './libpng.wasm';
+import { wasmModuleInstance } from 'neuroglancer/sliceview/base';
 
 const libraryEnv = {
   emscripten_notify_memory_growth: function () {},
@@ -23,10 +24,6 @@ const libraryEnv = {
   },
 };
 
-interface wasmModuleInstance {
-    module: WebAssembly.Module;
-    instance: WebAssembly.Instance;
-}
 let wasmModule:wasmModuleInstance|null = null;
 
 async function loadPngModule () {
