@@ -23,20 +23,25 @@ const libraryEnv = {
   },
 };
 
-let wasmCode:ArrayBuffer|null = null;
+interface wasmModuleInstance {
+    module: WebAssembly.Module;
+    instance: WebAssembly.Instance;
+}
+let wasmModule:wasmModuleInstance|null = null;
 
 async function loadPngModule () {
-  if (wasmCode === null) {
-    const response = await fetch(pngWasmDataUrl);
-    wasmCode = await response.arrayBuffer();
+  if (wasmModule !== null) {
+    return wasmModule;
   }
 
+  const response = await fetch(pngWasmDataUrl);
+  const wasmCode = await response.arrayBuffer();
   const m = await WebAssembly.instantiate(wasmCode, {
     env: libraryEnv,
     wasi_snapshot_preview1: libraryEnv,
   });
-  console.log(m);
   (m.instance.exports._initialize as Function)();
+  wasmModule = m;
   return m;
 }
 

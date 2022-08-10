@@ -23,18 +23,25 @@ const libraryEnv = {
   },
 };
 
-let wasmCode:ArrayBuffer|null = null;
+interface wasmModuleInstance {
+    module: WebAssembly.Module;
+    instance: WebAssembly.Instance;
+}
+let wasmModule:wasmModuleInstance|null = null;
 
 async function loadCompressoModule () {
-  if (wasmCode === null) {
-    const response = await fetch(compressoWasmDataUrl);
-    wasmCode = await response.arrayBuffer();
+  if (wasmModule !== null) {
+    return wasmModule;
   }
+
+  const response = await fetch(compressoWasmDataUrl);
+  const wasmCode = await response.arrayBuffer();
   const m = await WebAssembly.instantiate(wasmCode, {
     env: libraryEnv,
     wasi_snapshot_preview1: libraryEnv,
   });
   (m.instance.exports._initialize as Function)();
+  wasmModule = m;
   return m;
 }
 
@@ -69,7 +76,6 @@ export async function decompressCompresso(buffer: Uint8Array)
   : Promise<Uint8Array> {
   
   const m = await loadCompressoModule();
-
   const {sx, sy, sz, dataWidth} = readHeader(buffer);
   const voxels = sx * sy * sz;
   const nbytes = voxels * dataWidth;

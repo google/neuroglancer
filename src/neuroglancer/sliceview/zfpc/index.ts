@@ -23,19 +23,26 @@ const libraryEnv = {
   },
 };
 
-let wasmCode:ArrayBuffer|null = null;
+interface wasmModuleInstance {
+    module: WebAssembly.Module;
+    instance: WebAssembly.Instance;
+}
+
+let wasmModule:wasmModuleInstance|null = null;
 
 async function loadZfpcModule () {
-  if (wasmCode === null) {
-    const response = await fetch(zfpcWasmDataUrl);
-    wasmCode = await response.arrayBuffer();
+  if (wasmModule !== null) {
+    return wasmModule;
   }
 
+  const response = await fetch(zfpcWasmDataUrl);
+  const wasmCode = await response.arrayBuffer();
   const m = await WebAssembly.instantiate(wasmCode, {
     env: libraryEnv,
     wasi_snapshot_preview1: libraryEnv,
   });
   (m.instance.exports._initialize as Function)();
+  wasmModule = m;
   return m;
 }
 
