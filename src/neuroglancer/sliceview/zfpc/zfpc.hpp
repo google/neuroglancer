@@ -166,10 +166,14 @@ public:
 	}
 
 	uint64_t voxels() const {
-		return static_cast<uint64_t>(nx) 
-			* static_cast<uint64_t>(ny) 
-			* static_cast<uint64_t>(nz) 
-			* static_cast<uint64_t>(nw);
+		if (nx == 0 && ny == 0 && nz == 0 && nw == 0) {
+			return 0;
+		}
+
+		return static_cast<uint64_t>(nx ? nx : 1) 
+			* static_cast<uint64_t>(ny ? ny : 1) 
+			* static_cast<uint64_t>(nz ? nz : 1) 
+			* static_cast<uint64_t>(nw ? nw : 1);
 	}
 
 	uint64_t nbytes() const {
