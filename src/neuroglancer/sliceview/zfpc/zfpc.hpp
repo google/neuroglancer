@@ -28,7 +28,6 @@ Date: July 2022
 
 #include "zfp.hpp"
 #include "zfp/bitstream.h"
-#include "ipt.hpp"
 
 namespace zfpc {
 
@@ -419,10 +418,17 @@ int decompress_helper(
 			return 202;
 		}
 
-		ipt::ipt<T>(hyperplane.data(), nx, ny, nz, nw);
-
-		for (uint64_t i = 0; i < hyperplane.size(); i++, o_i++) {
-			outbuf[o_i] = hyperplane[i];
+		// read out while performing transposition from C to F order
+		for (uint64_t x = 0; x < nx; x++) {
+			for (uint64_t y = 0; y < ny; y++) {
+				for (uint64_t z = 0; z < nz; z++) {
+					for (uint64_t w = 0; w < nw; w++, o_i++) {
+						outbuf[o_i] = hyperplane[
+							x + nx * (y + ny * (z + nz * w))
+						];
+					}
+				}
+			}
 		}
 	}
 
