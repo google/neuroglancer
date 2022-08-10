@@ -329,6 +329,7 @@ disassemble_container(
 template <typename T>
 std::vector<T> decompress_zfp_stream(
 	std::vector<unsigned char> &stream,
+	uint64_t &nx, uint64_t &ny, uint64_t &nz, uint64_t &nw, 
 	int &error
 ) {
 	std::unique_ptr<zfp_field, void(*)(zfp_field*)> field(
@@ -345,10 +346,10 @@ std::vector<T> decompress_zfp_stream(
 	zfp_stream_rewind(zstream.get());
 	zfp_read_header(zstream.get(), field.get(), ZFP_HEADER_FULL);
 
-	uint64_t nx = static_cast<uint64_t>(field->nx);
-	uint64_t ny = static_cast<uint64_t>(field->ny);
-	uint64_t nz = static_cast<uint64_t>(field->nz);
-	uint64_t nw = static_cast<uint64_t>(field->nw);
+	nx = static_cast<uint64_t>(field->nx);
+	ny = static_cast<uint64_t>(field->ny);
+	nz = static_cast<uint64_t>(field->nz);
+	nw = static_cast<uint64_t>(field->nw);
 
 	// invalid stream
 	if (nx == 0 && ny == 0 && nz == 0 && nw == 0) {
@@ -404,21 +405,26 @@ int decompress_helper(
 	uint64_t offset = 0;
 	const uint64_t nstreams = streams.size();
 
+	uint64_t nx = 1;
+	uint64_t ny = 1;
+	uint64_t nz = 1;
+	uint64_t nw = 1;
+
+	uint64_t o_i = 0;
 	for (auto stream : streams) {
 		std::vector<T> hyperplane = std::move(
-			decompress_zfp_stream<T>(stream, error)
+			decompress_zfp_stream<T>(stream, nx, ny, nz, nw, error)
 		);
 		if (error) {
 			return 202;
 		}
+		
+		ipt::ipt<T>(hyperplane.data(), nw, nz, ny, nx);
 
-		for (uint64_t i = 0; i < hyperplane.size(); i++) {
-			outbuf[nstreams * i + offset] = hyperplane[i];
+		for (uint64_t i = 0; i < hyperplane.size(); i++, o_i++) {
+			outbuf[o_i] = hyperplane[i];
 		}
-		offset++;
 	}
-
-	ipt::ipt<T>(outbuf, header.nw, header.nz, header.ny, header.nx);
 
 	return 0;
 }
