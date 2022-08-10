@@ -418,8 +418,8 @@ int decompress_helper(
 		if (error) {
 			return 202;
 		}
-		
-		ipt::ipt<T>(hyperplane.data(), nw, nz, ny, nx);
+
+		ipt::ipt<T>(hyperplane.data(), nx, ny, nz, nw);
 
 		for (uint64_t i = 0; i < hyperplane.size(); i++, o_i++) {
 			outbuf[o_i] = hyperplane[i];
