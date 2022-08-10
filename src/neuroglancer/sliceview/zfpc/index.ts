@@ -23,16 +23,21 @@ const libraryEnv = {
   },
 };
 
-const zfpcModulePromise = (async () => {
-  const response = await fetch(zfpcWasmDataUrl);
-  const wasmCode = await response.arrayBuffer();
+let wasmCode:ArrayBuffer|null = null;
+
+async function loadZfpcModule () {
+  if (wasmCode === null) {
+    const response = await fetch(zfpcWasmDataUrl);
+    wasmCode = await response.arrayBuffer();
+  }
+
   const m = await WebAssembly.instantiate(wasmCode, {
     env: libraryEnv,
     wasi_snapshot_preview1: libraryEnv,
   });
   (m.instance.exports._initialize as Function)();
   return m;
-})();
+}
 
 // not a full implementation of read header, just the parts we need
 function readHeader(buffer: Uint8Array) 
@@ -77,7 +82,7 @@ export async function decompressZfpc(
   buffer: Uint8Array
 ) : Promise<Uint8Array> {
   
-  const m = await zfpcModulePromise;
+  const m = await loadZfpcModule();
   let {sx,sy,sz,sw,dataWidth} = readHeader(buffer);
 
   const voxels = sx * sy * sz * sw;

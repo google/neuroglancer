@@ -149,7 +149,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       minify: this.minify,
       target: 'es2019',
       plugins: this.plugins,
-      loader: {'.wasm': 'dataurl'},
+      loader: {'.wasm': 'file'},
       // TODO(jbms): Remove this workaround once evanw/esbuild#1202 is fixed.
       banner: {
         js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
