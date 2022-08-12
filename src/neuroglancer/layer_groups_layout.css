@@ -28,12 +28,14 @@
   padding-left: 4px;
   padding-right: 4px;
   width: 1px;
+  cursor: col-resize;
 }
 
 .neuroglancer-stack-layout-column > .neuroglancer-stack-layout-drop-placeholder {
   padding-top: 4px;
   padding-bottom: 4px;
   height: 1px;
+  cursor: row-resize;
 }
 
 .neuroglancer-stack-layout-drop-placeholder {

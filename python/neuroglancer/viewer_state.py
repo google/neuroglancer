@@ -1093,6 +1093,7 @@ layout_specification.supports_readonly = True
 class StackLayout(JsonObjectWrapper):
     __slots__ = ()
     type = wrapped_property('type', text_type)
+    flex = wrapped_property('flex', optional(float, 1))
     children = wrapped_property('children', typed_list(layout_specification))
 
     def __getitem__(self, key):
@@ -1142,6 +1143,7 @@ def interpolate_layout(a, b, t):
 class LayerGroupViewer(JsonObjectWrapper):
     __slots__ = ()
     type = wrapped_property('type', text_type)
+    flex = wrapped_property('flex', optional(float, 1))
     layers = wrapped_property('layers', typed_list(text_type))
     layout = wrapped_property('layout', data_panel_layout_wrapper('xy'))
     position = wrapped_property('position', LinkedPosition)
