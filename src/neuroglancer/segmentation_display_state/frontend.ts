@@ -396,14 +396,17 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
   };
 
   const onMousedown = (event: MouseEvent) => {
-    if (event.button !== 2 || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
-      return;
-    }
     const entryElement = event.currentTarget as HTMLElement;
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor
     id.tryParseString(idString);
-    displayState.moveToSegment(id);
+
+    if (event.button === 0 && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      const {selectedSegments} = displayState.segmentationGroupState.value;
+      selectedSegments.delete(id);
+    } else if (event.button === 2 && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      displayState.moveToSegment(id);
+    }
   };
 
   return (element: HTMLElement, template: SegmentWidgetTemplate) => {

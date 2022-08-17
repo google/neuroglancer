@@ -217,9 +217,9 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       this.segmentQueries.delete(segmentIdString);
       try {
         this.ignoreVisibleSegmentsChanged = true;
-        if (this.segmentsState.visibleSegments.has(oldId)) {
-          this.segmentsState.visibleSegments.delete(oldId);
-          this.segmentsState.visibleSegments.add(newId);
+        if (this.segmentsState.selectedSegments.has(oldId)) {
+          this.segmentsState.selectedSegments.delete(oldId);
+          this.segmentsState.selectedSegments.add(newId);
         }
         if (this.segmentsState.temporaryVisibleSegments.has(oldId)) {
           this.segmentsState.temporaryVisibleSegments.delete(oldId);

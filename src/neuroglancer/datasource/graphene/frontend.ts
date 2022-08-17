@@ -646,11 +646,11 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       public state: GrapheneState) {
     super(graph, layer.displayState.segmentationGroupState.value);
     const segmentsState = layer.displayState.segmentationGroupState.value;
-    segmentsState.visibleSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
+    segmentsState.selectedSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
       if (segmentIds !== null) {
         segmentIds = Array<Uint64>().concat(segmentIds);
       }
-      this.visibleSegmentsChanged(segmentIds, add);
+      this.selectedSegmentsChanged(segmentIds, add);
     });
 
     const {annotationLayerStates, state: {multicutState}} = this;
@@ -678,11 +678,11 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   private lastDeselectionMessage: StatusMessage|undefined;
   private lastDeselectionMessageExists = false;
 
-  private visibleSegmentsChanged(segments: Uint64[]|null, added: boolean) {
+  private selectedSegmentsChanged(segments: Uint64[]|null, added: boolean) {
     const {segmentsState} = this;
 
     if (segments === null) {
-      const leafSegmentCount = this.segmentsState.visibleSegments.size;
+      const leafSegmentCount = this.segmentsState.selectedSegments.size;
       this.segmentsState.segmentEquivalences.clear();
       StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
       return;
@@ -696,14 +696,14 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       if (added) {
         if (isBaseSegment) {
           this.graph.getRoot(segmentConst).then(rootId => {
-            segmentsState.visibleSegments.delete(segmentConst);
-            segmentsState.visibleSegments.add(rootId);
+            segmentsState.selectedSegments.delete(segmentConst);
+            segmentsState.selectedSegments.add(rootId);
           });
         }
       } else if (!isBaseSegment) {
         const {focusSegment: {value: focusSegment}} = this.graph.state.multicutState;
         if (focusSegment && Uint64.equal(segmentId, focusSegment)) {
-          segmentsState.visibleSegments.add(segmentId);
+          segmentsState.selectedSegments.add(segmentId);
           StatusMessage.showTemporaryMessage(`Can't deselect active multicut segment.`, 3000);
           return;
         }
@@ -748,12 +748,10 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         return false;
       } else {
         const {segmentsState} = this;
-
         for (const segment of [...sinks, ...sources]) {
-          segmentsState.visibleSegments.delete(segment.rootId);
+          segmentsState.selectedSegments.delete(segment.rootId);
         }
-
-        segmentsState.visibleSegments.add(splitRoots);
+        segmentsState.selectedSegments.add(splitRoots);
         multicutState.reset();
         return true;
       }
@@ -1235,11 +1233,10 @@ class MulticutSegmentsTool extends Tool<SegmentationUserLayer> {
 
     activation.bindAction('set-anchor', event => {
       event.stopPropagation();
-      
       const {segmentSelectionState: {baseValue, value}} = this.layer.displayState;
       if (!baseValue || !value) return;
 
-      if (!segmentationGroupState.visibleSegments.has(value)) {
+      if (!segmentationGroupState.selectedSegments.has(value)) {
         StatusMessage.showTemporaryMessage(
             'The selected supervoxel is of an unselected segment', 7000);
         return;

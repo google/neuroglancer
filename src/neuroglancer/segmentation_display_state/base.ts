@@ -23,6 +23,7 @@ import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/s
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  selectedSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 
   // Specifies a temporary/alternative set of segments/equivalences to use for display purposes,

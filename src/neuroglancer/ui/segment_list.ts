@@ -82,8 +82,8 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     const splices: ArraySpliceOp[] = [];
     let changed = false;
     let matchStatusTextPrefix = '';
-    const {visibleSegments} = this.segmentationDisplayState.segmentationGroupState.value;
-    const visibleSegmentsGeneration = visibleSegments.changed.count;
+    const {selectedSegments} = this.segmentationDisplayState.segmentationGroupState.value;
+    const visibleSegmentsGeneration = selectedSegments.changed.count;
     const prevVisibleSegmentsGeneration = this.visibleSegmentsGeneration;
     const unconstrained = isQueryUnconstrained(queryResult.query);
     if (unconstrained) {
@@ -91,7 +91,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       if (prevVisibleSegmentsGeneration !== visibleSegmentsGeneration ||
           this.explicitSegments === undefined || !this.explicitSegmentsVisible) {
         this.visibleSegmentsGeneration = visibleSegmentsGeneration;
-        const newSortedVisibleSegments = Array.from(visibleSegments, x => x.clone());
+        const newSortedVisibleSegments = Array.from(selectedSegments, x => x.clone());
         newSortedVisibleSegments.sort(Uint64.compare);
         const {explicitSegments} = this;
         if (explicitSegments === undefined) {
@@ -150,7 +150,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       if (segmentPropertyMap !== undefined && queryResult.count > 0) {
         // Recompute selectedMatches.
         selectedMatches =
-            findQueryResultIntersectionSize(segmentPropertyMap, queryResult, visibleSegments);
+            findQueryResultIntersectionSize(segmentPropertyMap, queryResult, selectedSegments);
         statusText += ` (${selectedMatches} visible)`;
       }
       this.selectedMatches = selectedMatches;
@@ -175,8 +175,11 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     this.update();
 
     this.registerDisposer(
-        segmentationDisplayState.segmentationGroupState.value.visibleSegments.changed.add(
+        segmentationDisplayState.segmentationGroupState.value.selectedSegments.changed.add(
             this.debouncedUpdate));
+    this.registerDisposer(
+        segmentationDisplayState.segmentationGroupState.value.selectedSegments.changed.add(
+            () => { console.log('selectedSegments.changed');}));
     this.registerDisposer(query.changed.add(this.debouncedUpdate));
   }
 
@@ -872,9 +875,9 @@ export class SegmentDisplayTab extends Tab {
                   const selectionCopyButton = makeCopyButton({
                     title: 'Copy visible segment IDs',
                     onClick: () => {
-                      const visibleSegments = Array.from(group.visibleSegments, x => x.clone());
-                      visibleSegments.sort(Uint64.compare);
-                      setClipboard(visibleSegments.join(', '));
+                      const selectedSegments = Array.from(group.selectedSegments, x => x.clone());
+                      selectedSegments.sort(Uint64.compare);
+                      setClipboard(selectedSegments.join(', '));
                     },
                   });
                   const selectionStatusMessage = document.createElement('span');

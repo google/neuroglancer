@@ -70,7 +70,8 @@ const BASE_SEGMENT_COLORING_JSON_KEY = 'baseSegmentColoring';
 const IGNORE_NULL_VISIBLE_SET_JSON_KEY = 'ignoreNullVisibleSet';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
-const SEGMENTS_JSON_KEY = 'segments';
+const SELECTED_SEGMENTS_JSON_KEY = 'segments';
+// const VISIBLE_SEGMENTS_JSON_KEY = 'visibleSegments';
 const EQUIVALENCES_JSON_KEY = 'equivalences';
 const COLOR_SEED_JSON_KEY = 'colorSeed';
 const SEGMENT_STATED_COLORS_JSON_KEY = 'segmentColors';
@@ -92,9 +93,26 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {specificationChanged} = this;
-    this.visibleSegments.changed.add(specificationChanged.dispatch);
     this.hideSegmentZero.changed.add(specificationChanged.dispatch);
     this.segmentQuery.changed.add(specificationChanged.dispatch);
+
+    const {visibleSegments, selectedSegments} = this;
+    visibleSegments.changed.add(specificationChanged.dispatch);
+    selectedSegments.changed.add(specificationChanged.dispatch);
+    selectedSegments.changed.add((x, add) => {
+      if (x === null && !add) {
+        visibleSegments.clear();
+      } else if (x) {
+        if (add) {
+          visibleSegments.add(x);
+        } else {
+          visibleSegments.delete(x);
+        }
+      }
+    });
+
+    visibleSegments.changed.add(() => { console.log('visibleSegments', visibleSegments.toJSON())});
+    selectedSegments.changed.add(() => { console.log('selectedSegments', selectedSegments.toJSON())});
   }
 
   restoreState(specification: unknown) {
@@ -105,11 +123,11 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
       this.localGraph.restoreState(value);
     });
 
-    verifyOptionalObjectProperty(specification, SEGMENTS_JSON_KEY, segmentsValue => {
-      const {segmentEquivalences, visibleSegments} = this;
+    verifyOptionalObjectProperty(specification, SELECTED_SEGMENTS_JSON_KEY, segmentsValue => {
+      const {segmentEquivalences, selectedSegments} = this;
       parseArray(segmentsValue, value => {
         let id = Uint64.parseString(String(value), 10);
-        visibleSegments.add(segmentEquivalences.get(id));
+        selectedSegments.add(segmentEquivalences.get(id));
       });
     });
     verifyOptionalObjectProperty(
@@ -119,9 +137,9 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   toJSON() {
     const x: any = {};
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.hideSegmentZero.toJSON();
-    let {visibleSegments} = this;
-    if (visibleSegments.size > 0) {
-      x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
+    let {selectedSegments} = this;
+    if (selectedSegments.size > 0) {
+      x[SELECTED_SEGMENTS_JSON_KEY] = this.selectedSegments.toJSON();
     }
     let {segmentEquivalences} = this;
     if (this.localSegmentEquivalences && segmentEquivalences.size > 0) {
@@ -134,12 +152,14 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   assignFrom(other: SegmentationUserLayerGroupState) {
     this.maxIdLength.value = other.maxIdLength.value;
     this.hideSegmentZero.value = other.hideSegmentZero.value;
+    this.selectedSegments.assignFrom(other.selectedSegments);
     this.visibleSegments.assignFrom(other.visibleSegments);
     this.segmentEquivalences.assignFrom(other.segmentEquivalences);
   }
 
   localGraph = new LocalSegmentationGraphSource();
   visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
+  selectedSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   segmentPropertyMap = new WatchableValue<PreprocessedSegmentPropertyMap|undefined>(undefined);
   graph = new WatchableValue<SegmentationGraphSource|undefined>(undefined);
   segmentEquivalences = this.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(
@@ -684,14 +704,14 @@ export class SegmentationUserLayer extends Base {
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
-          const {visibleSegments} = this.displayState.segmentationGroupState.value;
-          const newVisible = !visibleSegments.has(segment);
+          const {selectedSegments} = this.displayState.segmentationGroupState.value;
+          const newVisible = !selectedSegments.has(segment);
           if (newVisible || context.segmentationToggleSegmentState === undefined) {
             context.segmentationToggleSegmentState = newVisible;
           }
           context.defer(() => {
             if (context.segmentationToggleSegmentState === newVisible) {
-              visibleSegments.set(segment, newVisible);
+              selectedSegments.set(segment, newVisible);
             }
           });
         }
