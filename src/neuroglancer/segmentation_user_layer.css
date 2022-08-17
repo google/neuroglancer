@@ -35,6 +35,10 @@
   height: 80vh;
 }
 
+.neuroglancer-segment-list[data-count="0"] {
+  display: none;
+}
+
 .neuroglancer-segment-list-entry {
   display: flex;
   flex-direction: row;
@@ -53,6 +57,34 @@
 .neuroglancer-segment-list-entry[data-selected="true"],
 .neuroglancer-selection-details-segment[data-selected="true"] {
   background-color: #222;
+}
+
+.neuroglancer-segment-list-entry:not([data-selected-segment="true"]) .neuroglancer-icon-hover:hover svg:first-child {
+  display: inherit;
+}
+
+.neuroglancer-segment-list-entry:not([data-selected-segment="true"]) .neuroglancer-icon-hover:hover svg:last-child {
+  display: none;
+}
+
+.neuroglancer-segment-list-entry[data-selected-segment="true"] .neuroglancer-segment-list-entry-star:not(:hover) svg {
+  fill: white;
+}
+
+.neuroglancer-segment-list-status-star:not(:hover).unstar svg {
+  fill: white;
+}
+
+.neuroglancer-segment-list-status-star:not(.unstar) svg:first-child {
+  display: inherit;
+}
+
+.neuroglancer-segment-list-status-star:not(.unstar) svg:last-child {
+  display: none;
+}
+
+.neuroglancer-segment-list-entry[data-selected-segment="true"] .neuroglancer-segment-list-entry-star:hover svg {
+  fill: inherit;
 }
 
 .neuroglancer-segment-list-entry-copy-container {
@@ -90,6 +122,11 @@
   align-items: start;
   background-color: inherit;
   display: flex;
+}
+
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-header .neuroglancer-segment-list-entry-star,
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-header:hover .neuroglancer-segment-list-entry-copy {
+  visibility: hidden;
 }
 
 .neuroglancer-segment-list-entry-extra-property {

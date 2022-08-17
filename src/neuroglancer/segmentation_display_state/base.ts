@@ -20,9 +20,11 @@ import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  selectedSegments: Uint64OrderedSet;
   segmentEquivalences: SharedDisjointUint64Sets;
 
   // Specifies a temporary/alternative set of segments/equivalences to use for display purposes,
@@ -35,6 +37,7 @@ export interface VisibleSegmentsState {
 
 export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
   'visibleSegments',
+  'selectedSegments',
   'segmentEquivalences',
   'temporaryVisibleSegments',
   'temporarySegmentEquivalences',

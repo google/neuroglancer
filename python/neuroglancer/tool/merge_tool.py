@@ -352,7 +352,7 @@ class Annotator(object):
     def get_existing_segment_ids(self):
         ids = set()
         for state in self.states:
-            ids.update(self.get_state_segment_ids(state))
+            ids.update(self.get_state_segment_ids(state).keys())
         return ids
 
     def add_segments_from_state(self, base_state):
@@ -379,7 +379,7 @@ class Annotator(object):
 
         segments = self.get_state_segment_ids(state)
         segments.clear()
-        segments.add(segment_id)
+        segments[segment_id] = True
         state.layers[self.annotation_layer_name] = neuroglancer.AnnotationLayer()
 
         return state
@@ -411,7 +411,7 @@ class Annotator(object):
             # print('%d: %r' % (i, other_segments))
             if other_segments:
                 u_result = layer.equivalences.union(*other_segments)
-                layer.segments.add(u_result)
+                layer.segments[u_result] = True
             points.extend(other_state.layers[self.annotation_layer_name].annotations)
         return state
 

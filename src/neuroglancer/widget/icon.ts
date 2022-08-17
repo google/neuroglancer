@@ -24,6 +24,19 @@ export interface MakeIconOptions {
   href?: string;
 }
 
+export interface MakeHoverIconOptions extends MakeIconOptions {
+  svgHover?: string
+}
+
+export function makeHoverIcon(options: MakeHoverIconOptions): HTMLElement {
+  const element = makeIcon(options);
+  if (options.svgHover) {
+    element.classList.add('neuroglancer-icon-hover');
+    element.innerHTML += options.svgHover;
+  }
+  return element;
+}
+
 export function makeIcon(options: MakeIconOptions): HTMLElement {
   const {title, onClick, href} = options;
   let element: HTMLDivElement|HTMLAnchorElement;

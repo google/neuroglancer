@@ -311,10 +311,6 @@ export class VirtualList extends RefCounted {
 
   private updateView() {
     const {element} = this;
-    if (element.offsetHeight === 0) {
-      // Element not visible
-      return;
-    }
     const viewportHeight = element.clientHeight - this.header.offsetHeight;
 
     const {source, state, sizes} = this;
@@ -387,11 +383,12 @@ export class VirtualList extends RefCounted {
     state.anchorIndex = renderParams.anchorIndex;
     state.anchorClientOffset = renderParams.anchorOffset - renderParams.scrollOffset;
     const topSize = sizes.getRangeSize(renderParams.startIndex, renderParams.anchorIndex);
-    const totalHeight = sizes.getEstimatedTotalSize();
+    const totalHeight = sizes.getEstimatedTotalSize() || 0;
     body.style.height = `${totalHeight}px`;
     topItems.style.top = `${renderParams.anchorOffset - topSize}px`;
     bottomItems.style.top = `${renderParams.anchorOffset}px`;
     element.scrollTop = renderParams.scrollOffset;
+    element.dataset.count = source.length.toString();
   }
 
   getItemElement(index: number): HTMLElement|undefined {

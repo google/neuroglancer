@@ -21,7 +21,7 @@
 .neuroglancer-segment-list {
   position: relative;
   overflow-y: auto;
-  overflow-x: scroll;
+  overflow-x: auto;
   flex: 1;
 }
 
@@ -95,20 +95,7 @@
 }
 
 .neuroglancer-segment-list-entry-visible-checkbox {
-  order: -1;
-}
-
-.neuroglancer-segment-list-entry[data-visible-list] .neuroglancer-segment-list-entry-sticky::before {
-  order: -1000;
-  content: " ";
-  display: inline-block;
-  width: 2px;
-  /* prevent collapsing if name is too long */
-  flex-shrink: 0;
-  margin-right: -2px;
-  align-self: stretch;
-  margin-bottom: 2px;
-  background-color: #999;
+  order: 1;
 }
 
 .neuroglancer-segment-list-entry-filter {

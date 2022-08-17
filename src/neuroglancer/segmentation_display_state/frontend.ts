@@ -40,6 +40,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {makeFilterButton} from 'neuroglancer/widget/filter_button';
+import {makeStarButton} from 'neuroglancer/widget/star_button';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
@@ -271,6 +272,13 @@ const segmentWidgetTemplate = (() => {
   idElement.classList.add('neuroglancer-segment-list-entry-id');
   const idIndex = idContainer.childElementCount;
   idContainer.appendChild(idElement);
+  const starButton = makeStarButton({
+    title: `Star segment`,
+  });
+  starButton.classList.add('neuroglancer-segment-list-entry-star');
+  const starIndex = stickyContainer.childElementCount;
+  stickyContainer.appendChild(starButton);
+
   const nameElement = document.createElement('span');
   nameElement.classList.add('neuroglancer-segment-list-entry-name');
   const labelIndex = template.childElementCount;
@@ -290,6 +298,7 @@ const segmentWidgetTemplate = (() => {
     idIndex,
     labelIndex,
     filterIndex,
+    starIndex,
     unmappedIdIndex: -1,
     unmappedCopyIndex: -1
   };
@@ -382,8 +391,12 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
-    const {visibleSegments} = displayState.segmentationGroupState.value;
-    visibleSegments.set(id, !visibleSegments.has(id));
+    const {selectedSegments, visibleSegments} = displayState.segmentationGroupState.value;
+    const shouldBeVisible = !visibleSegments.has(id);
+    if (shouldBeVisible) {
+      selectedSegments.add(id);
+    }
+    visibleSegments.set(id, shouldBeVisible);
     event.stopPropagation();
   };
 
@@ -422,6 +435,16 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     stickyChildren[template.visibleIndex].addEventListener('click', visibleCheckboxHandler);
     children[template.filterIndex].addEventListener('click', filterHandler);
     element.addEventListener('action:select-position', selectHandler);
+
+    const starButton = stickyChildren[template.starIndex] as HTMLElement;
+    starButton.addEventListener('click', (event: MouseEvent) => {
+      const entryElement = getEntryElement(event);
+      const idString = entryElement.dataset.id!;
+      const id = tempStatedColor
+      id.tryParseString(idString);
+      const {selectedSegments} = displayState.segmentationGroupState.value;
+      selectedSegments.set(id, !selectedSegments.has(id));
+    });
   };
 }
 
@@ -512,6 +535,8 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     container.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
                                   Uint64.equal(segmentSelectionState.selectedSegment, mapped))
                                      .toString();
+    const {selectedSegments} = displayState!.segmentationGroupState.value;
+    container.dataset.selectedSegment = selectedSegments.has(mapped) ? 'true' : 'false';
     const idContainer = stickyChildren[template.idContainerIndex] as HTMLElement;
     setSegmentIdElementStyle(
         (idContainer.children[template.idIndex] as HTMLElement),
