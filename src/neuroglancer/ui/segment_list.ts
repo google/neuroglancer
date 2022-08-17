@@ -907,7 +907,7 @@ export class SegmentDisplayTab extends Tab {
                     listSource.debouncedUpdate.flush();
                     const queryResult = listSource.queryResult.value;
                     if (queryResult === undefined) return;
-                    const {visibleSegments} = group;
+                    const {selectedSegments} = group;
                     const {selectedMatches} = listSource;
                     const shouldSelect = (selectedMatches !== queryResult.count);
                     if (shouldSelect &&
@@ -922,7 +922,7 @@ export class SegmentDisplayTab extends Tab {
                       updateStatus();
                     }
                     forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
-                      visibleSegments.set(id, shouldSelect);
+                      selectedSegments.set(id, shouldSelect);
                     });
                     return true;
                   };
