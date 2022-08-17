@@ -34,3 +34,14 @@
 .graphene-multicut-status > .activeGroupIndicator.blueGroup::after {
   content: "Blue";
 }
+
+.graphene-merge-segments-status {
+  display: flex;
+  gap: 10px;
+}
+
+.graphene-merge-segments-point {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
