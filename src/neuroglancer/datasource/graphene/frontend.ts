@@ -754,6 +754,13 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       private chunkSource: GrapheneMultiscaleVolumeChunkSource, public state: GrapheneState) {
     super(graph, layer.displayState.segmentationGroupState.value);
     const segmentsState = layer.displayState.segmentationGroupState.value;
+    segmentsState.selectedSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
+      if (segmentIds !== null) {
+        segmentIds = Array<Uint64>().concat(segmentIds);
+      }
+      this.selectedSegmentsChanged(segmentIds, add);
+    });
+
     segmentsState.visibleSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
       if (segmentIds !== null) {
         segmentIds = Array<Uint64>().concat(segmentIds);
@@ -874,45 +881,35 @@ class GraphConnection extends SegmentationGraphSourceConnection {
 
   private visibleSegmentsChanged(segments: Uint64[]|null, added: boolean) {
     const {segmentsState} = this;
-
+    const {focusSegment: {value: focusSegment}} = this.graph.state.multicutState;
+    if (focusSegment && !segmentsState.visibleSegments.has(focusSegment)) {
+      if (segmentsState.selectedSegments.has(focusSegment)) {
+        StatusMessage.showTemporaryMessage(`Can't hide active multicut segment.`, 3000);
+      } else {
+        StatusMessage.showTemporaryMessage(`Can't deselect active multicut segment.`, 3000);
+      }
+      segmentsState.selectedSegments.add(focusSegment);
+      segmentsState.visibleSegments.add(focusSegment);
+      if (segments) {
+        segments = segments.filter(segment => !Uint64.equal(segment, focusSegment));
+      }
+    }
     if (segments === null) {
-      const leafSegmentCount = this.segmentsState.visibleSegments.size;
+      const leafSegmentCount = this.segmentsState.selectedSegments.size;
       this.segmentsState.segmentEquivalences.clear();
-      StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+      StatusMessage.showTemporaryMessage(`Hid all ${leafSegmentCount} segments.`, 3000);
       return;
     }
-
     for (const segmentId of segments) {
-      const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph.nBitsForLayerId);
-
-      const segmentConst = segmentId.clone();
-
-      if (added) {
-        if (isBaseSegment) {
-          this.graph.getRoot(segmentConst).then(rootId => {
-            segmentsState.visibleSegments.delete(segmentConst);
-            segmentsState.visibleSegments.add(rootId);
-          });
-        }
-      } else if (!isBaseSegment) {
-        const {focusSegment: {value: focusSegment}} = this.graph.state.multicutState;
-        if (focusSegment && Uint64.equal(segmentId, focusSegment)) {
-          segmentsState.visibleSegments.add(segmentId);
-          StatusMessage.showTemporaryMessage(`Can't deselect active multicut segment.`, 3000);
-          return;
-        }
-
-        const segmentCount =
-            [...segmentsState.segmentEquivalences.setElements(segmentId)].length;  // Approximation
-
+      if (!added) {
+        const segmentCount = [...segmentsState.segmentEquivalences.setElements(segmentId)].length; // Approximation
         segmentsState.segmentEquivalences.deleteSet(segmentId);
-
         if (this.lastDeselectionMessage && this.lastDeselectionMessageExists) {
           this.lastDeselectionMessage.dispose();
           this.lastDeselectionMessageExists = false;
         }
         this.lastDeselectionMessage =
-            StatusMessage.showMessage(`Deselected ${segmentCount} segments.`);
+            StatusMessage.showMessage(`Hid ${segmentCount} segments.`);
         this.lastDeselectionMessageExists = true;
         setTimeout(() => {
           if (this.lastDeselectionMessageExists) {
@@ -920,6 +917,30 @@ class GraphConnection extends SegmentationGraphSourceConnection {
             this.lastDeselectionMessageExists = false;
           }
         }, 2000);
+      }
+    }
+  }
+
+  private selectedSegmentsChanged(segments: Uint64[]|null, added: boolean) {
+    const {segmentsState} = this;
+    if (segments === null) {
+      const leafSegmentCount = this.segmentsState.selectedSegments.size;
+      StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+      return;
+    }
+    for (const segmentId of segments) {
+      const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph.nBitsForLayerId);
+      const segmentConst = segmentId.clone();
+      if (added) {
+        if (isBaseSegment) {
+          this.graph.getRoot(segmentConst).then(rootId => {
+            if (segmentsState.visibleSegments.has(segmentConst)) {
+              segmentsState.visibleSegments.add(rootId);
+            }
+            segmentsState.selectedSegments.delete(segmentConst);
+            segmentsState.selectedSegments.add(rootId);
+          });
+        }
       }
     }
   }
@@ -948,7 +969,11 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         multicutState
             .reset();  // need to clear the focus segment before deleting the multicut segment
         const {segmentsState} = this;
-        segmentsState.visibleSegments.delete(focusSegment);
+        segmentsState.selectedSegments.delete(focusSegment);
+        for (const segment of [...sinks, ...sources]) {
+          segmentsState.selectedSegments.delete(segment.rootId);
+        }
+        segmentsState.selectedSegments.add(splitRoots);
         segmentsState.visibleSegments.add(splitRoots);
         return true;
       }
@@ -980,7 +1005,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return Uint64.ZERO; // appease typescript
   }
 
-    async bulkMerge(submissions: MergeSubmission[]) {
+  async bulkMerge(submissions: MergeSubmission[]) {
       const {merges} = this.state.mergeState;
       const bulkMergeHelper = (submissions: MergeSubmission[]): Promise<Uint64[]> => {
         return new Promise(f => {
@@ -1047,7 +1072,6 @@ class GraphConnection extends SegmentationGraphSourceConnection {
           loop(completed, submissions);
         });
       };
-
 
       submissions = submissions.filter(x => !x.locked && x.source);
       const segmentsToRemove = await bulkMergeHelper(submissions);
@@ -1630,8 +1654,7 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
 
     activation.bindAction('set-anchor', event => {
       event.stopPropagation();
-      const currentSegmentSelection =
-          maybeGetSelection(this, segmentationGroupState.visibleSegments);
+      const currentSegmentSelection = maybeGetSelection(this, segmentationGroupState.visibleSegments); // or visible segments?
       if (!currentSegmentSelection) return;
       const {rootId, segmentId} = currentSegmentSelection;
       const {focusSegment, segments} = multicutState;

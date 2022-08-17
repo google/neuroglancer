@@ -43,6 +43,7 @@ export const withSegmentationLayerBackendState =
     <TBase extends AnyConstructor<ChunkRequester>>(Base: TBase) =>
         class SegmentationLayerState extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  selectedSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   temporaryVisibleSegments: Uint64Set;
   temporarySegmentEquivalences: SharedDisjointUint64Sets;

@@ -179,9 +179,10 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     removeSplitEdges(includeBaseSegments, includeRoot);
     removeSplitEdges(excludeBaseSegments, excludeRoot);
     for (const connection of this.connections) {
-      const {visibleSegments} = connection.segmentsState;
-      if (visibleSegments.has(excludeRepresentative)) {
-        visibleSegments.delete(excludeRepresentative);
+      const {selectedSegments, visibleSegments} = connection.segmentsState;
+      if (selectedSegments.has(excludeRepresentative)) {
+        selectedSegments.delete(excludeRepresentative);
+        selectedSegments.add(includeRepresentative);
         visibleSegments.add(includeRepresentative);
       }
     }

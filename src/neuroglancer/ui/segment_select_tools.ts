@@ -90,13 +90,14 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const {segmentSelectionState} = layer.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
         const segment = segmentSelectionState.selectedSegment;
-        const {visibleSegments} = layer.displayState.segmentationGroupState.value;
+        const {selectedSegments, visibleSegments} = layer.displayState.segmentationGroupState.value;
         switch (currentState) {
           case ToolState.SELECT:
+            selectedSegments.add(segment);
             visibleSegments.add(segment);
             break;
           case ToolState.DESELECT:
-            visibleSegments.delete(segment);
+            selectedSegments.delete(segment);
             break;
         }
       }

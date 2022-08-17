@@ -47,3 +47,11 @@
 .neuroglancer-icon:hover {
   background-color: #db4437;
 }
+
+.neuroglancer-icon-hover:not(:hover) svg:last-child {
+  display: none;
+}
+
+.neuroglancer-icon-hover:hover svg:first-child {
+  display: none;
+}
