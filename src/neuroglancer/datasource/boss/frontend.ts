@@ -300,7 +300,8 @@ export class BossMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
 
     let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
-      encoding = this.volumeType === VolumeType.IMAGE ? 'jpeg' : 'npz';
+      // 8-bit image encoded in JPEG filmstrips. 
+      encoding = this.dataType === DataType.UINT8 ? 'jpeg' : 'npz';
     } else {
       if (!VALID_ENCODINGS.has(encoding)) {
         throw new Error(`Invalid encoding: ${JSON.stringify(encoding)}.`);
