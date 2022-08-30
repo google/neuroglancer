@@ -20,6 +20,10 @@ import threading
 
 import numpy as np
 import six
+try:
+    import tensorstore as ts
+except ImportError:
+    ts = None
 
 from . import downsample, downsample_scales
 from .chunks import encode_jpeg, encode_npz, encode_raw
@@ -83,27 +87,30 @@ class LocalVolume(trackable_state.ChangeNotifier):
         """
         super(LocalVolume, self).__init__()
         self.token = make_random_token()
-        self.data = data
-        self.shape = data.shape
+        if ts is not None and isinstance(data, ts.TensorStore):
+            self.data = TensorStoreDataWrapper(data)
+        else:
+            self.data = DataWrapper(data)
+        self.shape = self.data.shape
         rank = self.rank = len(self.shape)
         if dimensions is None:
             dimensions = CoordinateSpace(
-                names=['d%d' % d for d in range(rank)],
-                units=[''] * rank,
-                scales=[1] * rank,
+                names=self.data.labels,
+                units=self.data.units,
+                scales=self.data.scales,
             )
         if rank != dimensions.rank:
             raise ValueError('rank of data (%d) must match rank of coordinate space (%d)' %
                              (rank, dimensions.rank))
         if voxel_offset is None:
-            voxel_offset = np.zeros(rank, dtype=np.int64)
+            voxel_offset = np.array(self.data.origin, dtype=np.int64)
         else:
             voxel_offset = np.array(voxel_offset, dtype=np.int64)
         if voxel_offset.shape != (rank,):
             raise ValueError('voxel_offset must have shape of (%d,)' % (rank,))
         self.voxel_offset = voxel_offset
         self.dimensions = dimensions
-        self.data_type = np.dtype(data.dtype).name
+        self.data_type = np.dtype(self.data.dtype).name
         if self.data_type == 'float64':
             self.data_type = 'float32'
         self.encoding = encoding
@@ -244,3 +251,84 @@ class LocalVolume(trackable_state.ChangeNotifier):
             self._mesh_generator_pending = None
             self._mesh_generator = None
         self._dispatch_changed_callbacks()
+
+class DataWrapper:
+    """Wraps data for LocalVolume."""
+
+    def __init__(self, data):
+        self._data = data
+        self._default_labels = ['d%d' % d for d in range(self.rank)]
+        self._default_origin = [0] * self.rank
+        self._default_scales = [1] * self.rank
+        self._default_units = [''] * self.rank
+
+    def __getitem__(self, item):
+        return self._data.__getitem__(item)
+
+    def __getattr__(self, attr):
+        if attr in self.__dict__:
+            return getattr(self, attr)
+        return getattr(self._data, attr)
+
+    @property
+    def labels(self):
+        return self._default_labels
+
+    @property
+    def origin(self):
+        return self._default_origin
+
+    @property
+    def rank(self):
+        return len(self._data.shape)
+
+    @property
+    def scales(self):
+        return self._default_scales
+
+    @property
+    def units(self):
+        return self._default_units
+
+
+class TensorStoreDataWrapper(DataWrapper):
+    """Wraps TensorStore data for LocalVolume."""
+
+    def __init__(self, data):
+        super().__init__(data=data[ts.d[:].translate_to[0]])
+        self.dtype = self._data.dtype.numpy_dtype
+        self._origin_before_translation = data.origin
+
+    def __getitem__(self, item):
+        return self._data.__getitem__(item).read().result()
+
+    @property
+    def labels(self):
+        labels = self._default_labels
+        for i, label in enumerate(self._data.domain.labels):
+            if any(label):
+                labels[i] = label
+        return labels
+
+    @property
+    def origin(self):
+        return self._origin_before_translation
+
+    @property
+    def scales(self):
+        scales = self._default_scales
+        for i, dimension_units in enumerate(self._data.dimension_units):
+            if dimension_units is not None and dimension_units.multiplier is not None:
+                scales[i] = dimension_units.multiplier
+        return scales
+
+    @property
+    def units(self):
+        units = self._default_units
+        for i, dimension_units in enumerate(self._data.dimension_units):
+            if dimension_units is not None and dimension_units.base_unit is not None:
+                units[i] = dimension_units.base_unit
+        return units
+
+    def transpose(self):
+        return TensorStoreDataWrapper(self._data.T)

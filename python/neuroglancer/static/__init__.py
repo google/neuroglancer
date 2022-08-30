@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.resources
 import os
 import posixpath
 import re
-
 
 mime_type_map = {
     '.css': 'text/css',
@@ -30,6 +30,7 @@ def guess_mime_type_from_path(path):
 
 
 class StaticContentSource(object):
+
     def get(self, name):
         if name == '':
             name = 'index.html'
@@ -39,19 +40,23 @@ class StaticContentSource(object):
         raise NotImplementedError
 
 
-class PkgResourcesContentSource(StaticContentSource):
+class ImportlibResourcesContentSource(StaticContentSource):
+
     def get_content(self, name):
-        import pkg_resources
         if not re.match(r'^[a-z][a-z_\-\.]*\.(?:js|js\.map|css|html)$', name):
             raise ValueError('Invalid static resource name: %r' % name)
-        if pkg_resources.resource_exists(__name__, name):
-            return pkg_resources.resource_string(__name__, name)
+        if importlib.resources.is_resource(__name__, name):
+            return importlib.resources.read_binary(__name__, name)
         raise ValueError(
             'Static resources not built.  Run: "npm run build-python" or use an alternative static content source.'
         )
 
 
+PkgResourcesContentSource = ImportlibResourcesContentSource
+
+
 class HttpSource(StaticContentSource):
+
     def __init__(self, url):
         self.url = url
 
@@ -65,6 +70,7 @@ class HttpSource(StaticContentSource):
 
 
 class FileSource(StaticContentSource):
+
     def __init__(self, path, file_open=None):
         self.file_path = path
         self.file_open = file_open or open
@@ -79,7 +85,7 @@ class FileSource(StaticContentSource):
 
 
 def get_default_static_content_source():
-    return PkgResourcesContentSource()
+    return ImportlibResourcesContentSource()
 
 
 def get_static_content_source(source=None, url=None, path=None, file_open=None):

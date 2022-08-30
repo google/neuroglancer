@@ -18,6 +18,7 @@ import {CredentialsManager, MaybeOptionalCredentialsProvider} from 'neuroglancer
 import {fetchWithOAuth2Credentials} from 'neuroglancer/credentials_provider/oauth2';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {parseUrl, ResponseTransform} from 'neuroglancer/util/http_request';
+import {getRandomHexString} from 'neuroglancer/util/random';
 import {cancellableFetchS3Ok, getS3RegionCredentials} from 'neuroglancer/util/s3';
 
 export type SpecialProtocolCredentials = any;
@@ -103,28 +104,36 @@ export async function cancellableFetchSpecialOk<T>(
   const u = parseUrl(url);
   switch (u.protocol) {
     case 'gs':
-      // Include origin as `neuroglancerOrigin` query string parameter.
+      // Include random query string parameter (ignored by GCS) to bypass GCS cache and ensure a
+      // cached response is never used.
       //
-      // GCS fails to send an updated `Access-Control-Allow-Origin` header in 304 responses to cache
-      // revalidation requests.
+      // This addresses two issues related to GCS:
       //
-      // https://bugs.chromium.org/p/chromium/issues/detail?id=1214563#c2
+      // 1. GCS fails to send an updated `Access-Control-Allow-Origin` header in 304 responses to
+      //    cache revalidation requests.
       //
-      // Consequently, we include this extra query string parameter that is ignored by GCS but
-      // ensures the cache is not shared.
+      //    https://bugs.chromium.org/p/chromium/issues/detail?id=1214563#c2
       //
-      // Note: This workaround is not needed for gs+xml because with the XML API, the
-      // Access-Control-Allow-Origin response header does not vary with the Origin.
+      //    The random query string parameter ensures cached responses are never used.
+      //
+      //    Note: This issue does not apply to gs+xml because with the XML API, the
+      //    Access-Control-Allow-Origin response header does not vary with the Origin.
+      //
+      // 2. If the object does not prohibit caching (e.g. public bucket and default `cache-control`
+      //    metadata value), GCS may return stale responses.
+      //
       return fetchWithOAuth2Credentials(
           credentialsProvider,
           `https://www.googleapis.com/storage/v1/b/${u.host}/o/` +
-              `${encodeURIComponent(u.path.substring(1))}?alt=media&` +
-              `neuroglancerOrigin=${encodeURIComponent(location.origin)}`,
+              `${encodeURIComponent(u.path.substring(1))}?alt=media` +
+          `&neuroglancer=${getRandomHexString()}`,
           init, transformResponse, cancellationToken);
     case 'gs+xml':
       return fetchWithOAuth2Credentials(
-          credentialsProvider, `https://storage.googleapis.com/${u.host}${u.path}`, init,
-          transformResponse, cancellationToken);
+          credentialsProvider,
+          `https://storage.googleapis.com/${u.host}${u.path}` +
+              `?neuroglancer=${getRandomHexString()}`,
+          init, transformResponse, cancellationToken);
     case 's3':
       return cancellableFetchS3Ok(
           credentialsProvider!, u.host, u.path, init, transformResponse, cancellationToken);

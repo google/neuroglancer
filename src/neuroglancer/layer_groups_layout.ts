@@ -23,12 +23,15 @@ import './layer_groups_layout.css';
 import debounce from 'lodash/debounce';
 import {LayerListSpecification, LayerSubsetSpecification} from 'neuroglancer/layer';
 import {getViewerDropEffect, hasViewerDrag, LayerGroupViewer, viewerDragType} from 'neuroglancer/layer_group_viewer';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {popDragStatus, pushDragStatus} from 'neuroglancer/ui/drag_and_drop';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDragInfo, updateLayerDropEffect} from 'neuroglancer/ui/layer_drag_and_drop';
+import {SIZE_FOR_DIRECTION} from 'neuroglancer/ui/side_panel';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, setDropEffect} from 'neuroglancer/util/drag_and_drop';
-import {parseArray, verifyObject, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {parseArray, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
@@ -60,6 +63,9 @@ export class LayoutComponentContainer extends RefCounted {
   get component() {
     return this.componentValue;
   }
+
+  // flexGrow value when this is contained in a StackLayoutComponent
+  flex = new TrackableValue<number>(1, verifyFinitePositiveFloat);
 
   private setComponent(component: LayoutComponent) {
     this.unsetComponent();
@@ -134,7 +140,10 @@ export class LayoutComponentContainer extends RefCounted {
     element.style.position = 'relative';
     element.style.alignItems = 'stretch';
     (<any>element)[layoutComponentContainerSymbol] = this;
-
+    this.flex.changed.add(() => {
+      element.style.flexGrow = '' + this.flex.value;
+      this.changed.dispatch();
+    });
     this.setSpecification(spec);
 
     interface DropZone {
@@ -226,11 +235,16 @@ export class LayoutComponentContainer extends RefCounted {
   }
 
   toJSON() {
-    return this.component.toJSON();
+    const j = this.component.toJSON();
+    if (this.parent instanceof StackLayoutComponent) {
+      j.flex = this.flex.toJSON();
+    }
+    return j;
   }
 
   setSpecification(spec: any) {
     this.setComponent(makeComponent(this, spec));
+    this.flex.value = verifyOptionalObjectProperty(spec, 'flex', verifyFinitePositiveFloat, 1);
   }
 
   static getFromElement(element: Element): LayoutComponentContainer {
@@ -440,6 +454,46 @@ export class StackLayoutComponent extends RefCounted implements LayoutComponent 
     }, this.direction === 'row' ? 'column' : 'row');
     refCounted.registerDisposer(() => {
       removeFromParent(dropZone);
+    });
+    dropZone.addEventListener('pointerdown', event => {
+      if ('button' in event && event.button !== 0) {
+        return;
+      }
+      const nextElement = dropZone.nextElementSibling;
+      if (nextElement === null) return;
+      const nextChild = LayoutComponentContainer.getFromElement(nextElement);
+      const prevElement = dropZone.previousElementSibling;
+      if (prevElement === null) return;
+      const prevChild = LayoutComponentContainer.getFromElement(prevElement);
+      event.preventDefault();
+      const updateMessage = () => {
+        pushDragStatus(
+            dropZone, 'drag',
+            `Drag to resize, current ${SIZE_FOR_DIRECTION[this.direction]} ratio is ` +
+                `${prevChild.flex.value} : ` +
+                `${nextChild.flex.value}`);
+      };
+      updateMessage();
+      startRelativeMouseDrag(
+          event,
+          newEvent => {
+            const firstRect = prevChild.element.getBoundingClientRect();
+            const secondRect = nextChild.element.getBoundingClientRect();
+            const firstFraction = Math.max(
+                0.1,
+                Math.min(
+                    0.9,
+                  this.direction === 'column' ?
+                        (newEvent.clientY - firstRect.top) / (secondRect.bottom - firstRect.top) :
+                    (newEvent.clientX - firstRect.left) / (secondRect.right - firstRect.left)));
+            const existingFlexSum = Number(prevChild.flex.value) + Number(nextChild.flex.value);
+            prevChild.flex.value = Math.round(firstFraction * existingFlexSum * 100) / 100;
+            nextChild.flex.value = Math.round((1 - firstFraction) * existingFlexSum * 100) / 100;
+            updateMessage();
+          },
+          () => {
+            popDragStatus(dropZone, 'drag');
+          });
     });
     return dropZone;
   }

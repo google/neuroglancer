@@ -89,16 +89,16 @@ class Webdriver:
         try:
             # Use webdriver_manager package if available
             import webdriver_manager.chrome
-            import webdriver_manager.utils
+            import webdriver_manager.core.utils
             chrome_version = None
-            chrome_types = (webdriver_manager.utils.ChromeType.GOOGLE,
-                            webdriver_manager.utils.ChromeType.CHROMIUM)
+            chrome_types = (webdriver_manager.core.utils.ChromeType.GOOGLE,
+                            webdriver_manager.core.utils.ChromeType.CHROMIUM)
             for chrome_type in chrome_types:
                 try:
-                    chrome_version = webdriver_manager.utils.chrome_version()
-                    break
-                except ValueError:
-                    # Not found
+                    chrome_version = webdriver_manager.core.utils.get_browser_version_from_os(chrome_type)
+                    if chrome_version is not None:
+                        break
+                except:
                     if chrome_type == chrome_types[-1]:
                         raise
 
