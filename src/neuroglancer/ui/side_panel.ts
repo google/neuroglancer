@@ -53,7 +53,7 @@ const CROSS_DIRECTION_FOR_SIDE: Record<Side, FlexDirection> = {
   'top': 'column',
   'bottom': 'column',
 };
-const SIZE_FOR_DIRECTION: Record<FlexDirection, 'width'|'height'> = {
+export const SIZE_FOR_DIRECTION: Record<FlexDirection, 'width'|'height'> = {
   'row': 'width',
   'column': 'height'
 };

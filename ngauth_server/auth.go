@@ -282,7 +282,9 @@ func (auth *Authenticator) checkStoragePermission(userId string, bucket string) 
 		return
 	}
 	var policyResponse policytroubleshooterpb.TroubleshootIamPolicyResponse
-	err = protojson.Unmarshal(body, &policyResponse)
+	err = protojson.UnmarshalOptions{
+		DiscardUnknown: true,
+	}.Unmarshal(body, &policyResponse)
 	if err != nil {
 		err = fmt.Errorf("Error unmarshaling body: %s %w", string(body), err)
 		return

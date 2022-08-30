@@ -305,7 +305,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
   useTempSegmentStatedColors2d =
-      this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false)); // where does this line belong? Also should it be in segmentationColorGroupState?
+      this.layer.registerDisposer(SharedWatchableValue.make(this.layer.manager.rpc, false));
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 
@@ -506,8 +506,11 @@ export class SegmentationUserLayer extends Base {
           } else {
             updatedGraph = segmentationGraph;
             loadedSubsource.activate(refCounted => {
-              const graphConnection = refCounted.registerDisposer(
-                  segmentationGraph.connect(this));
+              const graphConnection = segmentationGraph.connect(this);
+              refCounted.registerDisposer(() => {
+                graphConnection.dispose();
+                this.graphConnection.value = undefined;
+              });
               const displayState = {
                 ...this.displayState,
                 transform: loadedSubsource.getRenderLayerTransform(),
