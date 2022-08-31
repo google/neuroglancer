@@ -116,28 +116,30 @@ jobs:
   python-build-package:
     strategy:
       matrix:
-        node-version:
-          - '16.x'
         include:
         - os: 'ubuntu-latest'
           cibw_build: '*'
-          wheel_identifier: linux
+          wheel_identifier: 'linux'
+          node-version: '16.x'
         - os: 'windows-latest'
           cibw_build: '*'
-          wheel_identifier: windows
+          wheel_identifier: 'windows'
+          node-version: '16.x'
         - os: 'macos-latest'
           cibw_build: '*_x86_64'
-          wheel_identifier: macos_x86_64
+          wheel_identifier: 'macos_x86_64'
+          node-version: '16.x'
         - os: 'macos-latest'
           cibw_build: '*_arm64'
-          wheel_identifier: macos_arm64
+          wheel_identifier: 'macos_arm64'
+          node-version: '16.x'
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
       with:
         # Need full history to determine version number.
         fetch-depth: 0
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
