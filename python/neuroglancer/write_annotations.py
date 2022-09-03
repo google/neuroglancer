@@ -15,7 +15,7 @@ amount of annotation data:
 """
 
 from . import coordinate_space
-from typing import List, Sequence, NamedTuple, Literal, Optional
+from typing import List, Sequence, NamedTuple, Optional
 from . import viewer_state
 import numbers
 import io
@@ -24,6 +24,10 @@ import os
 import numpy as np
 import struct
 
+try:
+    from typing import Literal
+except:
+    from typing_excpetions import Literal
 
 class Annotation(NamedTuple):
     id: int
