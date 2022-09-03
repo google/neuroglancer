@@ -105,7 +105,15 @@ class AnnotationWriter:
 
         self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
+        self._add_obj(point, id, kwargs)
 
+    def add_box(self, coords: Sequence[int], id: Optional[int] = None, **kwargs):
+        num_coords = len(coords)
+        self.lower_bound = np.minimum(self.lower_bound, coords[:num_coords//2])
+        self.upper_bound = np.maximum(self.upper_bound, coords[num_coords//2:])
+        self._add_obj(coords, id, kwargs)
+
+    def _add_obj(self, coords: Sequence[int], id: Optional[int], kwargs):
         encoded = np.zeros(shape=(), dtype=self.dtype)
         encoded[()]['geometry'] = point
 
