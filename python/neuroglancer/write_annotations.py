@@ -95,10 +95,11 @@ class AnnotationWriter:
         self.upper_bound = np.full(shape=(self.rank, ), fill_value=float('-inf'), dtype=np.float32)
         self.related_annotations = [{} for _ in self.relationships]
 
-    def add_annotation(self, annotation: Annotation):
-        self.annotations.append(annotation)
-
     def add_point(self, point: Sequence[int], id: Optional[int] = None, **kwargs):
+        if self.annotation_type != 'point':
+            raise ValueError(
+                f'Expected annotation type point, but received: {self.annotation_type}'
+            )
         if len(point) != self.coordinate_space.rank:
             raise ValueError(
                 f'Expected point to have length {self.coordinate_space.rank}, but received: {len(point)}'
@@ -106,7 +107,39 @@ class AnnotationWriter:
 
         self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
+        self._add_obj(point, id, kwargs)
+        
+    def add_axis_aligned_bounding_box(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, **kwargs):
+        if self.annotation_type != 'axis_aligned_bounding_box':
+            raise ValueError(
+                f'Expected annotation type axis_aligned_bounding_box, but received: {self.annotation_type}'
+            )
+        self._add_two_point_obj(point_a, point_b, id, kwargs)
+    
+    def add_line(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, **kwargs):
+        if self.annotation_type != 'line':
+            raise ValueError(
+                f'Expected annotation type line, but received: {self.annotation_type}'
+            )
+        self._add_two_point_obj(point_a, point_b, id, kwargs)
 
+    def _add_two_point_obj(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, kwargs):
+        if len(point_a) != self.coordinate_space.rank:
+            raise ValueError(
+                f'Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_a)}'
+            )
+            
+        if len(point_b) != self.coordinate_space.rank:
+            raise ValueError(
+                f'Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_b)}'
+            )
+            
+        self.lower_bound = np.minimum(self.lower_bound, point_a)
+        self.upper_bound = np.maximum(self.upper_bound, point_b)
+        coords = np.concatenate((point_a, point_b))
+        self._add_obj(coords, id, kwargs)
+
+    def _add_obj(self, coords: Sequence[int], id: Optional[int], kwargs):
         encoded = np.zeros(shape=(), dtype=self.dtype)
         encoded[()]['geometry'] = point
 
