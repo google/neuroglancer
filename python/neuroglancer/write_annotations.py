@@ -15,7 +15,8 @@ amount of annotation data:
 """
 
 from . import coordinate_space
-from typing import List, Sequence, NamedTuple, Literal, Optional
+from typing import List, Sequence, NamedTuple, Optional
+from typing_exceptions import Literal
 from . import viewer_state
 import numbers
 import io
