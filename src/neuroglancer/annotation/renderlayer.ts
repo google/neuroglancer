@@ -169,7 +169,7 @@ export class AnnotationLayer extends RefCounted {
   }
 
   segmentationStates = this.registerDisposer(makeCachedDerivedWatchableValue(
-      (_) => {
+      (_relationshipStates, _ignoreNullSegmentFilter) => {
         const {displayState, source} = this.state;
         const {relationshipStates} = displayState;
         return displayState.displayUnfiltered.value ?
@@ -179,7 +179,7 @@ export class AnnotationLayer extends RefCounted {
               return state.showMatches.value ? state.segmentationState.value : undefined;
             });
       },
-      [this.state.displayState.relationshipStates],
+      [this.state.displayState.relationshipStates, this.state.displayState.ignoreNullSegmentFilter],
       (a, b) => {
         if (a === undefined || b === undefined) {
           return a === b;
