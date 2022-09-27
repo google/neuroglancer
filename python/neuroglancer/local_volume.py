@@ -174,7 +174,8 @@ class LocalVolume(trackable_state.ChangeNotifier):
         if np.any(end < start) or np.any(start < 0) or np.any(end > downsampled_shape):
             raise ValueError('Out of bounds data request.')
 
-        indexing_expr = tuple(np.s_[start[i] * downsample_factor[i]:end[i] * downsample_factor[i]]
+        orig_data_shape = self.data.shape
+        indexing_expr = tuple(np.s_[start[i] * downsample_factor[i]:min(orig_data_shape[i], end[i] * downsample_factor[i])]
                               for i in range(rank))
         subvol = np.array(self.data[indexing_expr], copy=False)
         if subvol.dtype == 'float64':
