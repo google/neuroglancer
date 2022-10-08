@@ -19,7 +19,7 @@ import {fetchWithOAuth2Credentials} from 'neuroglancer/credentials_provider/oaut
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {parseUrl, ResponseTransform} from 'neuroglancer/util/http_request';
 import {getRandomHexString} from 'neuroglancer/util/random';
-import {cancellableFetchS3Ok, getS3RegionCredentials} from 'neuroglancer/util/s3';
+import {cancellableFetchS3Ok} from 'neuroglancer/util/s3';
 
 export type SpecialProtocolCredentials = any;
 export type SpecialProtocolCredentialsProvider =
@@ -86,7 +86,7 @@ export function parseSpecialUrl(url: string, credentialsManager: CredentialsMana
       };
     case 's3':
       return {
-        credentialsProvider: getS3RegionCredentials(u.host),
+        credentialsProvider: undefined,
         url,
       };
     default:
@@ -126,7 +126,7 @@ export async function cancellableFetchSpecialOk<T>(
           credentialsProvider,
           `https://www.googleapis.com/storage/v1/b/${u.host}/o/` +
               `${encodeURIComponent(u.path.substring(1))}?alt=media` +
-          `&neuroglancer=${getRandomHexString()}`,
+              `&neuroglancer=${getRandomHexString()}`,
           init, transformResponse, cancellationToken);
     case 'gs+xml':
       return fetchWithOAuth2Credentials(
@@ -135,8 +135,7 @@ export async function cancellableFetchSpecialOk<T>(
               `?neuroglancer=${getRandomHexString()}`,
           init, transformResponse, cancellationToken);
     case 's3':
-      return cancellableFetchS3Ok(
-          credentialsProvider!, u.host, u.path, init, transformResponse, cancellationToken);
+      return cancellableFetchS3Ok(u.host, u.path, init, transformResponse, cancellationToken);
     default:
       return fetchWithOAuth2Credentials(
           credentialsProvider, url, init, transformResponse, cancellationToken);
