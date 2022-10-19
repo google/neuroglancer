@@ -1149,7 +1149,7 @@ class LayerGroupViewer(JsonObjectWrapper):
     position = wrapped_property('position', LinkedPosition)
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', LinkedOrientationState)
-    cross_section_scale = crossSectionScale = wrapped_property('crossSectionZoom', LinkedZoomFactor)
+    cross_section_scale = crossSectionScale = wrapped_property('crossSectionScale', LinkedZoomFactor)
     cross_section_depth = crossSectionDepth = wrapped_property('crossSectionDepth',
                                                                LinkedDepthRange)
     projection_orientation = projectionOrientation = wrapped_property('projectionOrientation',
