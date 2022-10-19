@@ -151,6 +151,7 @@ export interface SegmentationColorGroupState {
 export interface SegmentationDisplayState {
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
+  hoverHighlight: WatchableValueInterface<boolean>;
   baseSegmentColoring: WatchableValueInterface<boolean>;
   baseSegmentHighlighting: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
@@ -671,6 +672,7 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
   context.registerDisposer(displayState.saturation.changed.add(callback));
   context.registerDisposer(displayState.segmentSelectionState.changed.add(callback));
   context.registerDisposer(displayState.baseSegmentColoring.changed.add(callback));
+  context.registerDisposer(displayState.hoverHighlight.changed.add(callback));
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -745,7 +747,8 @@ export function getObjectColor(
   color[3] = alpha;
   getBaseObjectColor(displayState, objectId, color);
   let saturation = displayState.saturation.value;
-  if (displayState.segmentSelectionState.isSelected(objectId)) {
+  if (displayState.hoverHighlight.value &&
+      displayState.segmentSelectionState.isSelected(objectId)) {
     if (saturation > 0.5) {
       saturation = saturation -= 0.5;
     } else {
