@@ -16,8 +16,9 @@
 
 import {ChunkLayoutOptions, getChunkDataSizes, getNearIsotropicBlockSize, makeSliceViewChunkSpecification, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import { vec3, getDependentTransformInputDimensions} from 'neuroglancer/util/geom';
+import {getDependentTransformInputDimensions, vec3} from 'neuroglancer/util/geom';
 import * as matrix from 'neuroglancer/util/matrix';
+import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
 
 export {DATA_TYPE_BYTES, DataType};
@@ -62,6 +63,7 @@ export interface VolumeChunkSpecificationBaseOptions extends
    */
   baseVoxelOffset?: Float32Array;
   dataType: DataType;
+  fillValue?: number|Uint64;
 
   /**
    * If set, indicates that the chunk is in compressed segmentation format with the specified block
@@ -114,17 +116,24 @@ export interface VolumeChunkSpecification extends SliceViewChunkSpecification<Ui
   baseVoxelOffset: Float32Array;
   dataType: DataType;
   compressedSegmentationBlockSize: vec3|undefined;
+  fillValue: number|Uint64;
 }
 
 export function makeVolumeChunkSpecification(options: VolumeChunkSpecificationOptions):
     VolumeChunkSpecification {
-  const {rank, dataType, compressedSegmentationBlockSize} = options;
+  const {
+    rank,
+    dataType,
+    fillValue = (dataType === DataType.UINT64 ? Uint64.ZERO : 0),
+    compressedSegmentationBlockSize
+  } = options;
   const {baseVoxelOffset = new Float32Array(rank)} = options;
   return {
     ...makeSliceViewChunkSpecification(options),
     compressedSegmentationBlockSize,
     baseVoxelOffset,
     dataType,
+    fillValue,
   };
 }
 

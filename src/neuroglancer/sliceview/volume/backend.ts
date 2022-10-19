@@ -42,13 +42,15 @@ export class VolumeChunk extends SliceViewChunk {
     if (chunkDataSize !== this.source!.spec.chunkDataSize) {
       msg['chunkDataSize'] = chunkDataSize;
     }
-    let data = msg['data'] = this.data!;
-    transfers.push(data.buffer);
+    let data = msg['data'] = this.data;
+    if (data !== null) {
+      transfers.push(data!.buffer);
+    }
     this.data = null;
   }
 
   downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.byteLength;
+    this.systemMemoryBytes = this.gpuMemoryBytes = this.data?.byteLength ?? 0;
     super.downloadSucceeded();
   }
 

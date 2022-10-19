@@ -12,8 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import atexit
-import pytest
+import asyncio
+import concurrent.futures
+import pathlib
+import threading
+
 import neuroglancer.webdriver
+import pytest
+import tornado.httpserver
+import tornado.netutil
+import tornado.platform
+import tornado.web
 
 
 def pytest_addoption(parser):
@@ -64,3 +73,67 @@ def webdriver(_webdriver_internal):
     viewer.actions.clear()
     viewer.config_state.set_state({})
     return _webdriver_internal
+
+
+class CorsStaticFileHandler(tornado.web.StaticFileHandler):
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Headers", "x-requested-with")
+        self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+
+    def options(self, *args):
+        self.set_status(204)
+        self.finish()
+
+
+def _start_server(bind_address: str, output_dir: str) -> int:
+
+    token = neuroglancer.random_token.make_random_token()
+    handlers = [
+        (fr'/{token}/(.*)', CorsStaticFileHandler, {
+            'path': output_dir
+        }),
+    ]
+    settings = {}
+    app = tornado.web.Application(handlers, settings=settings)
+
+    http_server = tornado.httpserver.HTTPServer(app)
+    sockets = tornado.netutil.bind_sockets(port=0, address=bind_address)
+    http_server.add_sockets(sockets)
+    actual_port = sockets[0].getsockname()[1]
+    url = neuroglancer.server._get_server_url(bind_address, actual_port)
+    return f'{url}/{token}'
+
+
+@pytest.fixture
+def tempdir_server(tmp_path: pathlib.Path) -> int:
+
+    bind_address = "localhost"
+
+    server_url_future = concurrent.futures.Future()
+
+    ioloop = None
+
+    def run_server():
+        nonlocal ioloop
+        try:
+            ioloop = tornado.platform.asyncio.AsyncIOLoop()
+            ioloop.make_current()
+            asyncio.set_event_loop(ioloop.asyncio_loop)
+            server_url_future.set_result(_start_server(bind_address, str(tmp_path)))
+        except Exception as e:
+            server_url_future.set_exception(e)
+            return
+        ioloop.start()
+        ioloop.close()
+
+    thread = threading.Thread(target=run_server)
+    try:
+        thread.start()
+        server_url = server_url_future.result()
+        yield (tmp_path, server_url)
+    finally:
+        if ioloop is not None:
+            ioloop.add_callback(ioloop.stop)
+        thread.join()
