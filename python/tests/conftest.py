@@ -130,7 +130,7 @@ def _start_server(bind_address: str, output_dir: str) -> int:
 
 
 @pytest.fixture
-def tempdir_server(tmp_path: pathlib.Path) -> int:
+def tempdir_server(tmp_path: pathlib.Path):
 
     bind_address = "localhost"
 
