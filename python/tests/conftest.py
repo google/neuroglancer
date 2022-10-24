@@ -14,6 +14,7 @@
 import atexit
 import asyncio
 import concurrent.futures
+import os
 import pathlib
 import threading
 
@@ -47,6 +48,8 @@ def pytest_addoption(parser):
                      action='store_true',
                      default=False,
                      help='Skip tests that rely on a web browser.')
+    parser.addoption('--failure-screenshot-dir',
+                     help="Save screenshots to specified directory in case of test failures.")
 
 
 @pytest.fixture(scope='session')
@@ -66,13 +69,33 @@ def _webdriver_internal(request):
     return webdriver
 
 
+# https://docs.pytest.org/en/latest/example/simple.html#making-test-result-information-available-in-fixtures
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # execute all other hooks to obtain the report object
+    outcome = yield
+    rep = outcome.get_result()
+
+    # set a report attribute for each phase of a call, which can
+    # be "setup", "call", "teardown"
+
+    setattr(item, "rep_" + rep.when, rep)
+
+
 @pytest.fixture
-def webdriver(_webdriver_internal):
+def webdriver(_webdriver_internal, request):
     viewer = _webdriver_internal.viewer
     viewer.set_state({})
     viewer.actions.clear()
     viewer.config_state.set_state({})
-    return _webdriver_internal
+    yield _webdriver_internal
+    if request.node.rep_setup.passed and request.node.rep_call.failed:
+        screenshot_dir = request.config.getoption('--failure-screenshot-dir')
+        if screenshot_dir:
+            # Collect screenshot
+            os.makedirs(screenshot_dir, exist_ok=True)
+            _webdriver_internal.driver.save_screenshot(
+                os.path.join(screenshot_dir, request.node.nodeid + ".png"))
 
 
 class CorsStaticFileHandler(tornado.web.StaticFileHandler):
