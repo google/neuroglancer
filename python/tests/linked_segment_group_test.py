@@ -45,6 +45,8 @@ def test_linked_segmentation_group(webdriver):
         s.layout = 'xy'
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
+        s.position = [0.5, 0.5, 0.5]
+    webdriver.sync()
     screenshot_response = webdriver.viewer.screenshot(size=[10, 10])
     assert screenshot_response.viewer_state.layers[0].segment_default_color == '#ff0000'
     screenshot = screenshot_response.screenshot
@@ -53,6 +55,7 @@ def test_linked_segmentation_group(webdriver):
     with webdriver.viewer.txn() as s:
         s.layers[1].linked_segmentation_color_group = False
         s.layers[1].segment_default_color = '#0f0'
+    webdriver.sync()
     screenshot_response = webdriver.viewer.screenshot(size=[10, 10])
     screenshot = screenshot_response.screenshot
     np.testing.assert_array_equal(screenshot.image_pixels,

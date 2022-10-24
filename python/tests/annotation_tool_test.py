@@ -55,8 +55,8 @@ def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
     webdriver.sync()
     chain = webdriver.action_chain().key_down(Keys.CONTROL)
     for i in range(num_clicks):
-        chain = chain.move_to_element_with_offset(webdriver.root_element, 300 + 50 * i,
-                                                  300 + 50 * i).click()
+        chain = chain.move_to_element_with_offset(webdriver.root_element, 100 + 50 * i,
+                                                  100 + 50 * i).click()
     chain.key_up(Keys.CONTROL)
     chain.perform()
     webdriver.sync()
