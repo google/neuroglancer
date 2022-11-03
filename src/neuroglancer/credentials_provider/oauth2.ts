@@ -49,10 +49,6 @@ export function fetchWithOAuth2Credentials<T>(
         if (status === 401) {
           // 401: Authorization needed.  OAuth2 token may have expired.
           return 'refresh';
-        } else if (status === 504 || status === 503) {
-          // 503: Service unavailable.  Retry.
-          // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
-          return 'retry';
         } else if (status === 403 && !credentials.accessToken) {
           // Anonymous access denied.  Request credentials.
           return 'refresh';
