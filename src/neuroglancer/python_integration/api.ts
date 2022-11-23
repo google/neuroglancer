@@ -85,6 +85,7 @@ export class ClientStateSynchronizer extends RefCounted {
         });
       }
       try {
+        this.updateInProgress = true;
         const response = await fetch(this.client.urls.state, {
           method: 'POST',
           body: JSON.stringify({
@@ -94,6 +95,7 @@ export class ClientStateSynchronizer extends RefCounted {
             c: this.client.clientId
           })
         });
+        this.updateInProgress = false;
         if (response.status === 200) {
           const responseJson = await response.json();
           this.lastServerState = newStateEncoded;
@@ -108,6 +110,7 @@ export class ClientStateSynchronizer extends RefCounted {
           throw HttpError.fromResponse(response);
         }
       } catch (e) {
+        this.updateInProgress = false;
         console.log('Failed to send state update', e);
         return;
       }
