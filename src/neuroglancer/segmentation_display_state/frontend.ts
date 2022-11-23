@@ -778,6 +778,11 @@ export class SegmentationLayerSharedObject extends Base {
       public chunkManager: ChunkManager, public displayState: SegmentationDisplayState3D,
       chunkRenderLayer: LayerChunkProgressInfo) {
     super(chunkRenderLayer);
+    const segmentationGroupState = displayState.segmentationGroupState.value;
+    // Ensure that these properties remain valid as long as the layer does.
+    for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
+      this.registerDisposer(segmentationGroupState[property].addRef());
+    }
   }
 
   initializeCounterpartWithChunkManager(options: any) {
