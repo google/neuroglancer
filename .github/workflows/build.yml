@@ -32,7 +32,7 @@ jobs:
       run: npm run build-module --no-typecheck
     - name: Build Python client bundles
       run: npm run build-python --no-typecheck
-    - run: sudo apt-get install xvfb
+    - run: sudo apt-get install firefox xvfb
       if: startsWith(runner.os, 'Linux')
     - name: Run JavaScript tests (including WebGL)
       # Swiftshader, used by Chrome headless, crashes when running Neuroglancer
