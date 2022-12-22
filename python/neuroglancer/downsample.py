@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import division
-
 import math
 
 import numpy as np
@@ -27,7 +25,7 @@ def downsample_with_averaging(array, factor):
     factor = tuple(factor)
     output_shape = tuple(int(math.ceil(s / f)) for s, f in zip(array.shape, factor))
     temp = np.zeros(output_shape, dtype=np.float32)
-    counts = np.zeros(output_shape, np.int)
+    counts = np.zeros(output_shape, int)
     for offset in np.ndindex(factor):
         part = array[tuple(np.s_[o::f] for o, f in zip(offset, factor))]
         indexing_expr = tuple(np.s_[:s] for s in part.shape)
