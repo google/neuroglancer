@@ -123,7 +123,7 @@ class AnnotationWriter:
             )
         self._add_two_point_obj(point_a, point_b, id, kwargs)
 
-    def _add_two_point_obj(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, kwargs):
+    def _add_two_point_obj(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, **kwargs):
         if len(point_a) != self.coordinate_space.rank:
             raise ValueError(
                 f'Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_a)}'
@@ -139,7 +139,7 @@ class AnnotationWriter:
         coords = np.concatenate((point_a, point_b))
         self._add_obj(coords, id, kwargs)
 
-    def _add_obj(self, coords: Sequence[int], id: Optional[int], kwargs):
+    def _add_obj(self, coords: Sequence[int], id: Optional[int], **kwargs):
         encoded = np.zeros(shape=(), dtype=self.dtype)
         encoded[()]['geometry'] = point
 
