@@ -16,7 +16,11 @@ on:
         default: false
 
 jobs:
-  client:
+  build-and-deploy:
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+      deployments: 'write'
     strategy:
       matrix:
         os:
