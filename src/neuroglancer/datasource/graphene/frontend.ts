@@ -748,14 +748,11 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         StatusMessage.showTemporaryMessage(`No split found.`, 3000);
         return false;
       } else {
+        const focusSegment = multicutState.focusSegment.value!;
+        multicutState.reset(); // need to clear the focus segment before deleting the multicut segment
         const {segmentsState} = this;
-
-        for (const segment of [...sinks, ...sources]) {
-          segmentsState.visibleSegments.delete(segment.rootId);
-        }
-
+        segmentsState.visibleSegments.delete(focusSegment);
         segmentsState.visibleSegments.add(splitRoots);
-        multicutState.reset();
         return true;
       }
     }

@@ -65,6 +65,7 @@ const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
+const HOVER_HIGHLIGHT_JSON_KEY = 'hoverHighlight';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
 const BASE_SEGMENT_COLORING_JSON_KEY = 'baseSegmentColoring';
 const IGNORE_NULL_VISIBLE_SET_JSON_KEY = 'ignoreNullVisibleSet';
@@ -293,6 +294,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   selectedAlpha = trackableAlphaValue(0.5);
   saturation = trackableAlphaValue(1.0);
   notSelectedAlpha = trackableAlphaValue(0);
+  hoverHighlight = new TrackableBoolean(true, true);
   silhouetteRendering = new TrackableValue<number>(0, verifyFiniteNonNegativeFloat, 0);
   objectAlpha = trackableAlphaValue(1.0);
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
@@ -405,6 +407,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.saturation.changed.add(this.specificationChanged.dispatch);
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
+    this.displayState.hoverHighlight.changed.add(this.specificationChanged.dispatch);
     this.displayState.baseSegmentColoring.changed.add(this.specificationChanged.dispatch);
     this.displayState.ignoreNullVisibleSet.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
@@ -601,6 +604,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.selectedAlpha.restoreState(specification[SELECTED_ALPHA_JSON_KEY]);
     this.displayState.saturation.restoreState(specification[SATURATION_JSON_KEY]);
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
+    this.displayState.hoverHighlight.restoreState(specification[HOVER_HIGHLIGHT_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.baseSegmentColoring.restoreState(
         specification[BASE_SEGMENT_COLORING_JSON_KEY]);
@@ -640,6 +644,7 @@ export class SegmentationUserLayer extends Base {
     x[NOT_SELECTED_ALPHA_JSON_KEY] = this.displayState.notSelectedAlpha.toJSON();
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
+    x[HOVER_HIGHLIGHT_JSON_KEY] = this.displayState.hoverHighlight.toJSON();
     x[BASE_SEGMENT_COLORING_JSON_KEY] = this.displayState.baseSegmentColoring.toJSON();
     x[IGNORE_NULL_VISIBLE_SET_JSON_KEY] = this.displayState.ignoreNullVisibleSet.toJSON();
     x[MESH_SILHOUETTE_RENDERING_JSON_KEY] = this.displayState.silhouetteRendering.toJSON();
@@ -940,6 +945,12 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     title: 'Show all segments if none are selected',
     toolJson: IGNORE_NULL_VISIBLE_SET_JSON_KEY,
     ...checkboxLayerControl(layer => layer.displayState.ignoreNullVisibleSet),
+  },
+  {
+    label: 'Highlight on hover',
+    toolJson: HOVER_HIGHLIGHT_JSON_KEY,
+    title: 'Highlight the segment under the mouse pointer',
+    ...checkboxLayerControl(layer => layer.displayState.hoverHighlight),
   },
   ...getViewSpecificSkeletonRenderingControl('2d'),
   ...getViewSpecificSkeletonRenderingControl('3d'),

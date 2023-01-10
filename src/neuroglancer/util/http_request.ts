@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {CANCELED, CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export class HttpError extends Error {
@@ -58,21 +58,53 @@ export class HttpError extends Error {
   }
 }
 
+const maxAttempts = 32;
+const minDelayMilliseconds = 500;
+const maxDelayMilliseconds = 10000;
+
+export function pickDelay(attemptNumber: number): number {
+  // If `attemptNumber == 0`, delay is a random number of milliseconds between
+  // `[minDelayMilliseconds, minDelayMilliseconds*2]`.  The lower and upper bounds of the interval
+  // double with each successive attempt, up to the limit of
+  // `[maxDelayMilliseconds/2,maxDelayMilliseconds]`.
+  return Math.min(2 ** attemptNumber * minDelayMilliseconds, maxDelayMilliseconds / 2) *
+      (1 + Math.random());
+}
+
 /**
  * Issues a `fetch` request.
  *
  * If the request fails due to an HTTP status outside `[200, 300)`, throws an `HttpError`.  If the
  * request fails due to a network or CORS restriction, throws an `HttpError` with a `status` of `0`.
+ *
+ * If the request fails due to a transient error (429, 503, 504), retry.
  */
 export async function fetchOk(input: RequestInfo, init?: RequestInit): Promise<Response> {
-  let response: Response;
-  try {
-    response = await fetch(input, init);
-  } catch (error) {
-    throw HttpError.fromRequestError(input, error);
+  for (let requestAttempt = 0;;) {
+    if (init?.signal?.aborted) {
+      throw CANCELED;
+    }
+    let response: Response;
+    try {
+      response = await fetch(input, init);
+    } catch (error) {
+      throw HttpError.fromRequestError(input, error);
+    }
+    if (!response.ok) {
+      const {status} = response;
+      if (status === 429 || status === 503 || status === 504) {
+        // 429: Too Many Requests.  Retry.
+        // 503: Service unavailable.  Retry.
+        // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
+        if (++requestAttempt !== maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, pickDelay(requestAttempt - 1)));
+          continue;
+        }
+      }
+      throw HttpError.fromResponse(response);
+    }
+    return response;
   }
-  if (!response.ok) throw HttpError.fromResponse(response);
-  return response;
 }
 
 export function responseArrayBuffer(response: Response): Promise<ArrayBuffer> {

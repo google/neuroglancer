@@ -1,9 +1,6 @@
 import neuroglancer
 import numpy as np
-try:
-    import tensorstore as ts
-except ImportError:
-    ts = None
+import pytest
 
 
 def test_numpy_data():
@@ -20,8 +17,7 @@ def test_numpy_data():
 
 
 def test_tensorstore_defaults():
-    if ts is None:
-        return
+    ts = pytest.importorskip("tensorstore")
     shape = (8, 16, 32)
     data = ts.open({
         'driver': 'n5',
@@ -46,8 +42,7 @@ def test_tensorstore_defaults():
 
 
 def test_tensorstore_features():
-    if ts is None:
-        return
+    ts = pytest.importorskip("tensorstore")
     shape = (8, 16, 32)
     offset = (2, 4, 8)
     labels = ['x', 'y', '']

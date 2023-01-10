@@ -279,7 +279,7 @@ chunkDecoders.set(VolumeChunkEncoding.ZFPC, decodeZfpcChunk);
     const {parameters} = this;
 
     const {minishardIndexSource} = this;
-    let response: ArrayBuffer;
+    let response: ArrayBuffer|undefined;
     if (minishardIndexSource === undefined) {
       let url: string;
       {
@@ -291,8 +291,16 @@ chunkDecoders.set(VolumeChunkEncoding.ZFPC, decodeZfpcChunk);
             `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
             `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
       }
-      response = await cancellableFetchSpecialOk(
-          this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
+      try {
+        response = await cancellableFetchSpecialOk(
+            this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
+      } catch (e) {
+        if (isNotFoundError(e)) {
+          response = undefined;
+        } else {
+          throw e;
+        }
+      }
     } else {
       this.computeChunkBounds(chunk);
       const {gridShape} = this;
@@ -302,11 +310,12 @@ chunkDecoders.set(VolumeChunkEncoding.ZFPC, decodeZfpcChunk);
       const chunkIndex = encodeZIndexCompressed3d(
           new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
           chunkGridPosition[2]);
-      response = (getOrNotFoundError(await getShardedData(
-                      minishardIndexSource, chunk, chunkIndex, cancellationToken)))
-                     .data;
+      response =
+          (await getShardedData(minishardIndexSource, chunk, chunkIndex, cancellationToken)) ?.data;
     }
-    await this.chunkDecoder(chunk, cancellationToken, response);
+    if (response !== undefined) {
+      await this.chunkDecoder(chunk, cancellationToken, response);
+    }
   }
 }
 

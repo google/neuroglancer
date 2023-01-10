@@ -16,28 +16,16 @@
 
 import {CredentialsProvider, CredentialsWithGeneration} from 'neuroglancer/credentials_provider';
 import {CancellationToken, throwIfCanceled, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {cancellableFetchOk, HttpError, ResponseTransform} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, HttpError, pickDelay, ResponseTransform} from 'neuroglancer/util/http_request';
 
-const maxAttempts = 32;
 const maxCredentialsAttempts = 3;
-const minDelayMilliseconds = 500;
-const maxDelayMilliseconds = 10000;
-
-function pickDelay(attemptNumber: number): number {
-  // If `attemptNumber == 0`, delay is a random number of milliseconds between
-  // `[minDelayMilliseconds, minDelayMilliseconds*2]`.  The lower and upper bounds of the interval
-  // double with each successive attempt, up to the limit of
-  // `[maxDelayMilliseconds/2,maxDelayMilliseconds]`.
-  return Math.min(2 ** attemptNumber * minDelayMilliseconds, maxDelayMilliseconds / 2) *
-      (1 + Math.random());
-}
 
 export async function fetchWithCredentials<Credentials, T>(
     credentialsProvider: CredentialsProvider<Credentials>,
     input: RequestInfo|((credentials: Credentials) => RequestInfo), init: RequestInit,
     transformResponse: ResponseTransform<T>,
     applyCredentials: (credentials: Credentials, requestInit: RequestInit) => RequestInit,
-    errorHandler: (httpError: HttpError, credentials: Credentials) => 'refresh' | 'retry',
+    errorHandler: (httpError: HttpError, credentials: Credentials) => 'refresh',
     cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
   let credentials: CredentialsWithGeneration<Credentials>|undefined;
   credentialsLoop: for (let credentialsAttempt = 0;;) {
@@ -49,23 +37,18 @@ export async function fetchWithCredentials<Credentials, T>(
       await new Promise(resolve => setTimeout(resolve, pickDelay(credentialsAttempt - 2)));
     }
     credentials = await credentialsProvider.get(credentials, cancellationToken);
-    requestLoop: for (let requestAttempt = 0;;) {
-      try {
-        return await cancellableFetchOk(
-            typeof input === 'function' ? input(credentials.credentials) : input,
-            applyCredentials(credentials.credentials, init), transformResponse, cancellationToken);
-      } catch (error) {
-        if (error instanceof HttpError) {
-          if (errorHandler(error, credentials.credentials) === 'refresh') {
-            if (++credentialsAttempt === maxCredentialsAttempts) throw error;
-            continue credentialsLoop;
-          }
-          if (++requestAttempt === maxAttempts) throw error;
-          await new Promise(resolve => setTimeout(resolve, pickDelay(requestAttempt - 1)));
-          continue requestLoop;
+    try {
+      return await cancellableFetchOk(
+          typeof input === 'function' ? input(credentials.credentials) : input,
+          applyCredentials(credentials.credentials, init), transformResponse, cancellationToken);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        if (errorHandler(error, credentials.credentials) === 'refresh') {
+          if (++credentialsAttempt === maxCredentialsAttempts) throw error;
+          continue credentialsLoop;
         }
-        throw error;
       }
+      throw error;
     }
   }
 }

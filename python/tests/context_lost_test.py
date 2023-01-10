@@ -32,6 +32,7 @@ def test_context_lost(webdriver):
         )
         s.layout = 'xy'
         s.cross_section_scale = 1e-6
+        s.position = [0.5, 0.5, 0.5]
         s.show_axis_lines = False
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
     np.testing.assert_array_equal(screenshot.image_pixels,

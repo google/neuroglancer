@@ -32,6 +32,7 @@ def test_screenshot_basic(webdriver):
         s.layout = 'xy'
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
+        s.position = [0.5, 0.5, 0.5]
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
     np.testing.assert_array_equal(screenshot.image_pixels,
                                   np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))

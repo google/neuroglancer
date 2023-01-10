@@ -12,8 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import atexit
-import pytest
+import asyncio
+import concurrent.futures
+import os
+import pathlib
+import threading
+
 import neuroglancer.webdriver
+import pytest
+import tornado.httpserver
+import tornado.netutil
+import tornado.platform
+import tornado.web
 
 
 def pytest_addoption(parser):
@@ -38,6 +48,8 @@ def pytest_addoption(parser):
                      action='store_true',
                      default=False,
                      help='Skip tests that rely on a web browser.')
+    parser.addoption('--failure-screenshot-dir',
+                     help="Save screenshots to specified directory in case of test failures.")
 
 
 @pytest.fixture(scope='session')
@@ -57,10 +69,94 @@ def _webdriver_internal(request):
     return webdriver
 
 
+# https://docs.pytest.org/en/latest/example/simple.html#making-test-result-information-available-in-fixtures
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # execute all other hooks to obtain the report object
+    outcome = yield
+    rep = outcome.get_result()
+
+    # set a report attribute for each phase of a call, which can
+    # be "setup", "call", "teardown"
+
+    setattr(item, "rep_" + rep.when, rep)
+
+
 @pytest.fixture
-def webdriver(_webdriver_internal):
+def webdriver(_webdriver_internal, request):
     viewer = _webdriver_internal.viewer
     viewer.set_state({})
     viewer.actions.clear()
     viewer.config_state.set_state({})
-    return _webdriver_internal
+    yield _webdriver_internal
+    if request.node.rep_setup.passed and request.node.rep_call.failed:
+        screenshot_dir = request.config.getoption('--failure-screenshot-dir')
+        if screenshot_dir:
+            # Collect screenshot
+            os.makedirs(screenshot_dir, exist_ok=True)
+            _webdriver_internal.driver.save_screenshot(
+                os.path.join(screenshot_dir, request.node.nodeid + ".png"))
+
+
+class CorsStaticFileHandler(tornado.web.StaticFileHandler):
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Headers", "x-requested-with")
+        self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+
+    def options(self, *args):
+        self.set_status(204)
+        self.finish()
+
+
+def _start_server(bind_address: str, output_dir: str) -> int:
+
+    token = neuroglancer.random_token.make_random_token()
+    handlers = [
+        (fr'/{token}/(.*)', CorsStaticFileHandler, {
+            'path': output_dir
+        }),
+    ]
+    settings = {}
+    app = tornado.web.Application(handlers, settings=settings)
+
+    http_server = tornado.httpserver.HTTPServer(app)
+    sockets = tornado.netutil.bind_sockets(port=0, address=bind_address)
+    http_server.add_sockets(sockets)
+    actual_port = sockets[0].getsockname()[1]
+    url = neuroglancer.server._get_server_url(bind_address, actual_port)
+    return f'{url}/{token}'
+
+
+@pytest.fixture
+def tempdir_server(tmp_path: pathlib.Path):
+
+    bind_address = "localhost"
+
+    server_url_future = concurrent.futures.Future()
+
+    ioloop = None
+
+    def run_server():
+        nonlocal ioloop
+        try:
+            ioloop = tornado.platform.asyncio.AsyncIOLoop()
+            ioloop.make_current()
+            asyncio.set_event_loop(ioloop.asyncio_loop)
+            server_url_future.set_result(_start_server(bind_address, str(tmp_path)))
+        except Exception as e:
+            server_url_future.set_exception(e)
+            return
+        ioloop.start()
+        ioloop.close()
+
+    thread = threading.Thread(target=run_server)
+    try:
+        thread.start()
+        server_url = server_url_future.result()
+        yield (tmp_path, server_url)
+    finally:
+        if ioloop is not None:
+            ioloop.add_callback(ioloop.stop)
+        thread.join()

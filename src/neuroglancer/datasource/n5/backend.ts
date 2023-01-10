@@ -24,7 +24,7 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {isNotFoundError, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
@@ -74,8 +74,12 @@ async function decodeChunk(
     for (let i = 0; i < rank; ++i) {
       url += `/${chunkGridPosition[i]}`;
     }
-    const response = await cancellableFetchSpecialOk(
-        this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
-    await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
+    try {
+      const response = await cancellableFetchSpecialOk(
+          this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
+      await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
+    } catch (e) {
+      if (!isNotFoundError(e)) throw e;
+    }
   }
 }
