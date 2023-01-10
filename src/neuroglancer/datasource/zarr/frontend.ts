@@ -29,12 +29,13 @@ import {applyCompletionOffset, completeQueryStringParametersFromTable} from 'neu
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 import {createIdentity} from 'neuroglancer/util/matrix';
 import {parseNumpyDtype} from 'neuroglancer/util/numpy_dtype';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 class ZarrVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -47,6 +48,7 @@ interface ZarrMetadata {
   shape: number[];
   chunks: number[];
   dimensionSeparator: ZarrSeparator|undefined;
+  fillValue: number|Uint64|undefined;
 }
 
 function parseDimensionSeparator(obj: unknown): ZarrSeparator|undefined {
@@ -106,13 +108,33 @@ function parseZarrMetadata(obj: unknown): ZarrMetadata {
           throw new Error(`Unsupported compressor: ${JSON.stringify(id)}`);
       }
     });
+    const dataType = numpyDtype.dataType;
+    const fillValue = verifyObjectProperty(obj, 'fill_value', fillValue => {
+      if (fillValue === null) return undefined;
+      switch (dataType) {
+        case DataType.FLOAT32:
+          if (fillValue === 'NaN') {
+            return Number.NaN;
+          }
+          if (fillValue === 'Infinity') {
+            return Number.POSITIVE_INFINITY;
+          }
+          if (fillValue === '-Infinity') {
+            return Number.NEGATIVE_INFINITY;
+          }
+          return verifyFloat(fillValue);
+        default:
+          return verifyInt(fillValue);
+      }
+    });
     return {
       rank: shape.length,
       shape,
       chunks,
       order,
-      dataType: numpyDtype.dataType,
+      dataType,
       encoding: {compressor, endianness: numpyDtype.endianness},
+      fillValue,
       dimensionSeparator,
     };
   } catch (e) {
@@ -188,6 +210,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
                volumeType: this.volumeType,
                chunkDataSizes: [permutedChunkShape],
                volumeSourceOptions,
+               fillValue: metadata.fillValue,
              })
           .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
                  chunkSource: this.chunkManager.getChunkSource(ZarrVolumeChunkSource, {

@@ -14,6 +14,7 @@
 """Tests that annotation properties and relationships can be specified from Python."""
 
 import neuroglancer
+import neuroglancer.test_utils
 import numpy as np
 
 
@@ -97,10 +98,14 @@ void main() {
         with webdriver.viewer.txn() as s:
             s.layers['seg1'].segments = seg1
             s.layers['seg2'].segments = seg2
-        webdriver.sync()
-        screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-        np.testing.assert_array_equal(screenshot.image_pixels,
-                                      np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)))
+
+        def check_color():
+            webdriver.sync()
+            screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+            np.testing.assert_array_equal(screenshot.image_pixels,
+                                          np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)))
+
+        neuroglancer.test_utils.retry(check_color, max_attempts=5, exceptions=(AssertionError, ))
 
     expect_color(seg1=[42], seg2=[], color=[0, 255, 0, 255])
     expect_color(seg1=[], seg2=[43], color=[0, 0, 255, 255])

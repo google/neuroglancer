@@ -49,10 +49,6 @@ export function fetchWithBossCredentials<T>(
           // Authorization needed.  Retry with refreshed token.
           return 'refresh';
         }
-        if (status === 504) {
-          // Gateway timeout can occur if the server takes too long to reply.  Retry.
-          return 'retry';
-        }
         throw error;
       },
       cancellationToken);

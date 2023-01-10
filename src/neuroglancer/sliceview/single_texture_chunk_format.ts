@@ -83,7 +83,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends
     VolumeChunk {
   texture: WebGLTexture|null = null;
-  data: Data;
+  data: Data|null;
   textureLayout: TextureLayout|null;
   CHUNK_FORMAT_TYPE: SingleTextureChunkFormat<TextureLayout>;
 
@@ -96,6 +96,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
+    if (this.data === null) return;
     let texture = this.texture = gl.createTexture();
     const textureTarget = textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
     gl.bindTexture(textureTarget, texture);
@@ -105,6 +106,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
+    if (this.data === null) return;
     gl.deleteTexture(this.texture);
     this.texture = null;
     this.textureLayout!.dispose();

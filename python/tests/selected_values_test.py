@@ -34,6 +34,7 @@ def setup_viewer(viewer, dtype, value, layer_type):
         s.layout = 'xy'
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
+        s.position = [0.5, 0.5, 0.5]
 
 def get_selected_value(webdriver):
     event = threading.Event()

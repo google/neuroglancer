@@ -32,6 +32,7 @@ from . import local_volume, static
 from . import skeleton
 from .json_utils import json_encoder_default, encode_json
 from .random_token import make_random_token
+from .trackable_state import ConcurrentModificationError
 
 INFO_PATH_REGEX = r'^/neuroglancer/info/(?P<token>[^/]+)$'
 SKELETON_INFO_PATH_REGEX = r'^/neuroglancer/skeletoninfo/(?P<token>[^/]+)$'
@@ -260,10 +261,19 @@ class SetStateHandler(BaseRequestHandler):
             self.send_error(404)
             return
         msg = json.loads(self.request.body)
+        prev_generation = msg['pg']
         generation = msg['g']
         state = msg['s']
         client_id = msg['c']
-        viewer.set_state(state, f'{client_id}/{generation}')
+        try:
+            new_generation = viewer.set_state(state, f'{client_id}/{generation}', existing_generation=prev_generation)
+            self.set_header('Content-type', 'application/json')
+            self.finish(json.dumps({"g": new_generation}))
+        except ConcurrentModificationError:
+            self.set_status(412)
+            self.set_header('Content-type', 'application/json')
+            raw_state, generation = viewer.shared_state.raw_state_and_generation
+            self.finish(json.dumps({"s": raw_state, "g": generation}))
 
 
 class CredentialsHandler(BaseRequestHandler):

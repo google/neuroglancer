@@ -18,25 +18,28 @@ import {readSingleChannelValue as readSingleChannelValueUint32} from 'neuroglanc
 import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
-import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
-import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderProgram, ShaderSamplerType, textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_getFortranOrderIndex, glsl_uint32, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
 import {computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 class TextureLayout extends RefCounted {
   subchunkGridSize: vec3;
 
-  constructor(public chunkDataSize: Uint32Array, public subchunkSize: vec3) {
+  // This texture layout represents a special fill value chunk with just a single element.
+  singleton: boolean;
+
+  constructor(chunkDataSize: Uint32Array, subchunkSize: vec3) {
     super();
     const subchunkGridSize = this.subchunkGridSize = vec3.create();
     for (let i = 0; i < 3; ++i) {
       subchunkGridSize[i] = Math.ceil(chunkDataSize[i] / subchunkSize[i]);
     }
+    this.singleton = false;
   }
 
   static get(gl: GL, chunkDataSize: Uint32Array, subchunkSize: vec3) {
@@ -118,7 +121,7 @@ ${glslType} getDataValueAt(highp ivec3 p`;
 `;
     }
 
-      fragmentCode += `
+    fragmentCode += `
   highp ivec3 chunkPosition = chunkPositionFull.xyz;
 
   // TODO: maybe premultiply this and store as uniform.
@@ -180,16 +183,18 @@ ${glslType} getDataValueAt(highp ivec3 p`;
     const stridesUniform = tempStridesUniform;
     const numChannelDimensions = channelDimensions.length;
     stridesUniform.fill(0);
-    for (let i = 0; i < 3; ++i) {
-      stridesUniform[i] = fixedChunkPosition[i];
-      const chunkDim = chunkDisplaySubspaceDimensions[i];
-      if (chunkDim === -1) continue;
-      stridesUniform[4 * (i + 1) + chunkDim] = 1;
-    }
-    for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      const chunkDim = channelDimensions[channelDim];
-      if (chunkDim === -1) continue;
-      stridesUniform[4 * (4 + channelDim) + chunkDim] = 1;
+    if (!textureLayout.singleton) {
+      for (let i = 0; i < 3; ++i) {
+        stridesUniform[i] = fixedChunkPosition[i];
+        const chunkDim = chunkDisplaySubspaceDimensions[i];
+        if (chunkDim === -1) continue;
+        stridesUniform[4 * (i + 1) + chunkDim] = 1;
+      }
+      for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
+        const chunkDim = channelDimensions[channelDim];
+        if (chunkDim === -1) continue;
+        stridesUniform[4 * (4 + channelDim) + chunkDim] = 1;
+      }
     }
     gl.uniform4iv(
         shader.uniform('uVolumeChunkStrides'), stridesUniform, 0, (numChannelDimensions + 4) * 4);
@@ -220,12 +225,15 @@ export class CompressedSegmentationVolumeChunk extends
     let {data} = this;
     let {chunkFormat} = this;
     let textureLayout = this.textureLayout = chunkFormat.getTextureLayout(gl, this.chunkDataSize);
-    chunkFormat.setTextureData(gl, textureLayout, data);
+    chunkFormat.setTextureData(gl, textureLayout, data!);
   }
 
   getValueAt(dataPosition: Uint32Array): Uint64|number {
     let {chunkDataSize, chunkFormat} = this;
-    let {data} = this;
+    const {data} = this;
+    if (data === null) {
+      return this.source.spec.fillValue;
+    }
     let offset = data[dataPosition[3] || 0];
     if (chunkFormat.dataType === DataType.UINT64) {
       let result = new Uint64();
@@ -240,9 +248,40 @@ export class CompressedSegmentationVolumeChunk extends
   }
 }
 
+class FillValueChunk extends RefCounted {
+  textureLayout: TextureLayout;
+  texture: WebGLTexture|null;
+}
+
+function getFillValueChunk(
+    gl: GL, chunkFormat: ChunkFormat, fillValue: number|Uint64): FillValueChunk {
+  const {dataType, numChannels} = chunkFormat;
+  const array = new Uint32Array(numChannels + 2 + (dataType === DataType.UINT64 ? 2 : 1));
+  array[0] = numChannels;
+  array[numChannels] = 2;
+  if (dataType === DataType.UINT64) {
+    array[numChannels + 2] = (fillValue as Uint64).low;
+    array[numChannels + 3] = (fillValue as Uint64).high;
+  } else {
+    array[numChannels + 2] = fillValue as number;
+  }
+  const textureLayout = new TextureLayout(Uint32Array.of(1, 1, 1), vec3.fromValues(1, 1, 1));
+  textureLayout.singleton = true;
+  const texture = gl.createTexture();
+  const textureTarget = textureTargetForSamplerType[chunkFormat.shaderSamplerType];
+  gl.bindTexture(textureTarget, texture);
+  chunkFormat.setTextureData(gl, textureLayout, array);
+  gl.bindTexture(textureTarget, null);
+  const chunk = new FillValueChunk();
+  chunk.textureLayout = textureLayout;
+  chunk.texture = texture;
+  return chunk;
+}
+
 export class CompressedSegmentationChunkFormatHandler extends RefCounted implements
     ChunkFormatHandler {
   chunkFormat: ChunkFormat;
+  fillValueChunk: FillValueChunk;
 
   constructor(gl: GL, spec: VolumeChunkSpecification) {
     super();
@@ -252,10 +291,19 @@ export class CompressedSegmentationChunkFormatHandler extends RefCounted impleme
     }
     this.chunkFormat = this.registerDisposer(ChunkFormat.get(
         gl, spec.dataType, spec.compressedSegmentationBlockSize!, spec.chunkDataSize[3] || 1));
+    this.fillValueChunk = this.registerDisposer(gl.memoize.get(
+        `sliceview.CompressedSegmentationChunkFormat.fillValue:` +
+            `${spec.dataType}:${spec.fillValue}:${this.chunkFormat.numChannels}`,
+        () => getFillValueChunk(gl, this.chunkFormat, spec.fillValue)));
   }
 
   getChunk(source: VolumeChunkSource, x: any) {
-    return new CompressedSegmentationVolumeChunk(source, x);
+    const chunk = new CompressedSegmentationVolumeChunk(source, x);
+    if (chunk.data === null) {
+      chunk.texture = this.fillValueChunk.texture;
+      chunk.textureLayout = this.fillValueChunk.textureLayout;
+    }
+    return chunk;
   }
 }
 

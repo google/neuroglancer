@@ -29,16 +29,16 @@ import {ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager
 import {LayerView, MouseSelectionState, PickState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDisplayTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getLayerDisplayDimensionMapping, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
-import {ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
+import {ThreeDimensionalReadyRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {sendVisibleSegmentsState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {SliceViewProjectionParameters} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
-import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {SliceViewPanelReadyRenderContext, SliceViewPanelRenderContext, SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {crossSectionBoxWireFrameShader, projectionViewBoxWireFrameShader} from 'neuroglancer/sliceview/wire_frame';
 import {constantWatchableValue, makeCachedDerivedWatchableValue, NestedStateManager, registerNested, registerNestedSync, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual} from 'neuroglancer/util/array';
@@ -169,7 +169,7 @@ export class AnnotationLayer extends RefCounted {
   }
 
   segmentationStates = this.registerDisposer(makeCachedDerivedWatchableValue(
-      (_) => {
+      (_relationshipStates, _ignoreNullSegmentFilter) => {
         const {displayState, source} = this.state;
         const {relationshipStates} = displayState;
         return displayState.displayUnfiltered.value ?
@@ -179,7 +179,7 @@ export class AnnotationLayer extends RefCounted {
               return state.showMatches.value ? state.segmentationState.value : undefined;
             });
       },
-      [this.state.displayState.relationshipStates],
+      [this.state.displayState.relationshipStates, this.state.displayState.ignoreNullSegmentFilter],
       (a, b) => {
         if (a === undefined || b === undefined) {
           return a === b;
@@ -392,7 +392,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
     }
 
     updateModelClipBounds(
-        renderContext: ThreeDimensionalRenderContext, state: AnnotationChunkRenderParameters) {
+        renderContext: ThreeDimensionalReadyRenderContext, state: AnnotationChunkRenderParameters) {
       const {modelClipBounds} = state;
       const rank = this.curRank;
       const {chunkTransform} = state;
@@ -567,32 +567,6 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
           /*isLittleEndian=*/ Endianness.LITTLE === ENDIANNESS, propertyValues);
       return formatAnnotationPropertyValue(properties[0], propertyValues[0]);
     }
-
-    isReady() {
-      const {base} = this;
-      const {source} = base;
-      if (!(source instanceof MultiscaleAnnotationSource)) {
-        return true;
-      }
-      const {value: segmentationStates} = this.base.segmentationStates;
-      if (segmentationStates === undefined) return true;
-      for (let i = 0, count = segmentationStates.length; i < count; ++i) {
-        const segmentationState = segmentationStates[i];
-        if (segmentationState === null) return false;
-        if (segmentationState === undefined) continue;
-        const chunks = source.segmentFilteredSources[i].chunks;
-        let missing = false;
-        forEachVisibleSegment(segmentationState.segmentationGroupState.value, objectId => {
-          const key = getObjectKey(objectId);
-          if (!chunks.has(key)) {
-            missing = true;
-          }
-        });
-        if (missing) return false;
-      }
-      return true;
-    }
-
     isAnnotation = true;
   };
   return C as MixinConstructor<typeof C, TBase>;
@@ -646,6 +620,31 @@ const NonSpatiallyIndexedAnnotationRenderLayer =
       renderScaleHistogram.add(
           Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, presentChunks, notPresentChunks);
     }
+  }
+
+  isReady() {
+    const {base} = this;
+    const {source} = base;
+    if (!(source instanceof MultiscaleAnnotationSource)) {
+      return true;
+    }
+    const {value: segmentationStates} = this.base.segmentationStates;
+    if (segmentationStates === undefined) return true;
+    for (let i = 0, count = segmentationStates.length; i < count; ++i) {
+      const segmentationState = segmentationStates[i];
+      if (segmentationState === null) return false;
+      if (segmentationState === undefined) continue;
+      const chunks = source.segmentFilteredSources[i].chunks;
+      let missing = false;
+      forEachVisibleSegment(segmentationState.segmentationGroupState.value, objectId => {
+        const key = getObjectKey(objectId);
+        if (!chunks.has(key)) {
+          missing = true;
+        }
+      });
+      if (missing) return false;
+    }
+    return true;
   }
 };
 
@@ -778,6 +777,33 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
             }
             renderScaleHistogram.add(physicalSpacing, pixelSpacing, present, 1 - present);
           });
+    }
+
+    isReady(
+        renderContext: PerspectiveViewReadyRenderContext|SliceViewPanelReadyRenderContext,
+        attachment: VisibleLayerInfo<PerspectivePanel, SpatiallyIndexedValidAttachmentState>) {
+      const chunkRenderParameters = this.updateAttachmentState(attachment);
+      if (this.curRank === 0 || chunkRenderParameters === undefined) return;
+      const transformedSources = attachment.state!.sources!.value;
+      if (transformedSources.length === 0) return;
+      this.updateModelClipBounds(renderContext, chunkRenderParameters);
+      const {projectionParameters} = renderContext;
+      let present = true;
+      forEachVisibleAnnotationChunk(
+          projectionParameters, this.base.state.localPosition.value, this.renderScaleTarget.value,
+          transformedSources[0], () => {},
+          (tsource, index, drawFraction, physicalSpacing, pixelSpacing) => {
+            index;
+            drawFraction;
+            physicalSpacing;
+            pixelSpacing;
+            const chunk = tsource.source.chunks.get(tsource.curPositionInChunks.join());
+            if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
+              present = false;
+              return;
+            }
+          });
+      return present;
     }
   };
   return SpatiallyIndexedAnnotationLayer as

@@ -49,6 +49,7 @@ def test_display_dimensions(webdriver, display_dimensions, layout, key, expected
         )
         s.display_dimensions = display_dimensions
         s.layout = layout
+        s.position = [5.5, 5.5, 5.5]
     webdriver.sync()
     webdriver.action_chain().move_to_element_with_offset(webdriver.root_element, 100, 100).click().send_keys(key).perform()
     webdriver.sync()

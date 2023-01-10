@@ -245,7 +245,8 @@ setuptools.setup(
         'six',
         'google-apitools',
         'google-auth',
-        'atomicwrites'
+        'atomicwrites',
+        'typing_extensions',
     ],
     extras_require={
         'test': [

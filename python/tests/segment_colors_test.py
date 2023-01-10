@@ -88,6 +88,7 @@ def test_segment_colors(webdriver):
         s.layout = 'xy'
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
+        s.position = [0.5, 0.5, 0.5]
         assert list(s.layers[0].segment_colors.keys()) == [42]
         assert s.layers[0].segment_colors[42] == '#f00'
     webdriver.sync()

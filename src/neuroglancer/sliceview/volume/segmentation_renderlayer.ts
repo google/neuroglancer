@@ -64,6 +64,9 @@ interface ShaderParameters {
   hasHighlightColor: boolean;
 }
 
+const HAS_SELECTED_SEGMENT_FLAG = 1;
+const SHOW_ALL_SEGMENTS_FLAG = 2;
+
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   public readonly segmentationGroupState = this.displayState.segmentationGroupState.value;
   protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
@@ -160,7 +163,7 @@ uint64_t getMappedObjectId(uint64_t value) {
 `);
     }
     builder.addUniform('highp uvec2', 'uSelectedSegment');
-    builder.addUniform('highp uint', 'uShowAllSegments');
+    builder.addUniform('highp uint', 'uFlags');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addUniform('highp float', 'uSaturation');
@@ -182,8 +185,8 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     }
     fragmentMain += `
-  bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
-  if (uSelectedSegment == valueForHighlight.value) {
+  bool has = (uFlags & ${SHOW_ALL_SEGMENTS_FLAG}u) != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
+  if ((uFlags & ${HAS_SELECTED_SEGMENT_FLAG}u) != 0u && uSelectedSegment == valueForHighlight.value) {
     float adjustment = has ? 0.5 : 0.75;
     if (saturation > adjustment) {
       saturation -= adjustment;
@@ -249,19 +252,22 @@ uint64_t getMappedObjectId(uint64_t value) {
     const visibleSegments = getVisibleSegments(segmentationGroupState);
     const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
-    if (segmentSelectionState.hasSelectedSegment) {
+    let flags = 0;
+    if (segmentSelectionState.hasSelectedSegment && displayState.hoverHighlight.value) {
       const seg = displayState.baseSegmentHighlighting.value ? segmentSelectionState.baseSelectedSegment :
                                                                segmentSelectionState.selectedSegment;
       selectedSegmentLow = seg.low;
       selectedSegmentHigh = seg.high;
+      flags |= HAS_SELECTED_SEGMENT_FLAG;
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), displayState.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uSaturation'), displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
-    gl.uniform1ui(
-        shader.uniform('uShowAllSegments'),
-        visibleSegments.hashTable.size || !ignoreNullSegmentSet ? 0 : 1);
+    if (visibleSegments.hashTable.size === 0 && ignoreNullSegmentSet) {
+      flags |= SHOW_ALL_SEGMENTS_FLAG;
+    }
+    gl.uniform1ui(shader.uniform('uFlags'), flags);
     this.hashTableManager.enable(
         gl, shader,
         segmentationGroupState.useTemporaryVisibleSegments.value ? this.gpuTemporaryHashTable :

@@ -32,7 +32,18 @@ jobs:
       run: npm run build-module --no-typecheck
     - name: Build Python client bundles
       run: npm run build-python --no-typecheck
-    - run: sudo apt-get install xvfb
+    - run: |
+        sudo add-apt-repository ppa:mozillateam/ppa
+        echo '
+        Package: *
+        Pin: release o=LP-PPA-mozillateam
+        Pin-Priority: 1001
+
+        Package: firefox
+        Pin: version 1:1snap1-0ubuntu2
+        Pin-Priority: -1
+        ' | sudo tee /etc/apt/preferences.d/mozilla-firefox
+        sudo apt-get install firefox xvfb
       if: startsWith(runner.os, 'Linux')
     - name: Run JavaScript tests (including WebGL)
       # Swiftshader, used by Chrome headless, crashes when running Neuroglancer
@@ -99,8 +110,19 @@ jobs:
     - run: npm run build-python -- --no-typecheck
     - name: Install Python packaging/test tools
       run: python -m pip install --upgrade pip tox wheel numpy pytest
-    - run: sudo apt-get install xvfb
-      if: ${{ startsWith(runner.os, 'Linux') }}
+    - run: |
+        sudo add-apt-repository ppa:mozillateam/ppa
+        echo '
+        Package: *
+        Pin: release o=LP-PPA-mozillateam
+        Pin-Priority: 1001
+
+        Package: firefox
+        Pin: version 1:1snap1-0ubuntu2
+        Pin-Priority: -1
+        ' | sudo tee /etc/apt/preferences.d/mozilla-firefox
+        sudo apt-get install firefox xvfb
+      if: startsWith(runner.os, 'Linux')
     - name: Test with tox
       run: tox -e ${{ fromJSON('["skip-browser-tests","firefox-xvfb"]')[runner.os == 'Linux'] }}
       env:
@@ -116,23 +138,34 @@ jobs:
   python-build-package:
     strategy:
       matrix:
-        node-version:
-          - '16.x'
-        os:
-          - 'ubuntu-latest'
-          - 'windows-latest'
-          - 'macos-latest'
+        include:
+        - os: 'ubuntu-latest'
+          cibw_build: '*'
+          wheel_identifier: 'linux'
+          node-version: '16.x'
+        - os: 'windows-latest'
+          cibw_build: '*'
+          wheel_identifier: 'windows'
+          node-version: '16.x'
+        - os: 'macos-latest'
+          cibw_build: '*_x86_64'
+          wheel_identifier: 'macos_x86_64'
+          node-version: '16.x'
+        - os: 'macos-latest'
+          cibw_build: '*_arm64'
+          wheel_identifier: 'macos_arm64'
+          node-version: '16.x'
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
       with:
         # Need full history to determine version number.
         fetch-depth: 0
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python
       uses: actions/setup-python@v2
       with:
         python-version: 3.x
@@ -163,10 +196,11 @@ jobs:
         # On Linux, share pip cache with manylinux docker containers
         CIBW_ENVIRONMENT_LINUX: PIP_CACHE_DIR=/host${{ steps.pip-cache.outputs.dir }}
         CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.pip-cache.outputs.dir }}
+        CIBW_BUILD: ${{ matrix.cibw_build }}
     - name: Upload wheels as artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: python-wheels-${{ matrix.os }}
+        name: python-wheels-${{ matrix.wheel_identifier }}
         path: |
           dist/*.whl
           dist/*.tar.gz
@@ -180,15 +214,19 @@ jobs:
     steps:
     - uses: actions/download-artifact@v2
       with:
-        name: python-wheels-ubuntu-latest
+        name: python-wheels-linux
         path: dist
     - uses: actions/download-artifact@v2
       with:
-        name: python-wheels-macos-latest
+        name: python-wheels-macos_x86_64
         path: dist
     - uses: actions/download-artifact@v2
       with:
-        name: python-wheels-windows-latest
+        name: python-wheels-macos_arm64
+        path: dist
+    - uses: actions/download-artifact@v2
+      with:
+        name: python-wheels-windows
         path: dist
     # - name: Publish to PyPI (test server)
     #   uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
