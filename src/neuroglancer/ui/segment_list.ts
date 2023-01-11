@@ -98,18 +98,17 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       if (segmentsChanged ||
           this.explicitSegments === undefined || !this.explicitSegmentsVisible) {
         this.visibleSegmentsGeneration = visibleSegmentsGeneration;
-        const newSortedVisibleSegments = Array.from(selectedSegments, x => x.clone());
-        newSortedVisibleSegments.sort(Uint64.compare);
+        const newSelectedSegments = [...selectedSegments];
         const {explicitSegments} = this;
         if (explicitSegments === undefined) {
-          this.explicitSegments = newSortedVisibleSegments;
+          this.explicitSegments = newSelectedSegments;
           splices.push(
-              {retainCount: 0, insertCount: newSortedVisibleSegments.length, deleteCount: 0});
+              {retainCount: 0, insertCount: newSelectedSegments.length, deleteCount: 0});
         } else {
           splices.push(
-              ...getMergeSplices(explicitSegments, newSortedVisibleSegments, Uint64.compare));
+              ...getMergeSplices(explicitSegments, newSelectedSegments, Uint64.compare));
         }
-        this.explicitSegments = newSortedVisibleSegments;
+        this.explicitSegments = newSelectedSegments;
         changed = true;
       } else {
         console.log('not a new generation', prevVisibleSegmentsGeneration === visibleSegmentsGeneration);

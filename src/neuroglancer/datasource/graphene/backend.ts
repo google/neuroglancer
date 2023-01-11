@@ -45,6 +45,9 @@ import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
 import { forEachVisibleSegment } from 'neuroglancer/segmentation_display_state/base';
 import { computeChunkBounds } from 'neuroglancer/sliceview/volume/backend';
 
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
+console.log('test - this is needed becuase Uint64OrderedSet is not usecd by any backend threads', Uint64OrderedSet);
+
 function getVerifiedFragmentPromise(
     credentialsProvider: SpecialProtocolCredentialsProvider,
     chunk: FragmentChunk,

@@ -60,6 +60,7 @@ import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
 import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
 import {registerSegmentSelectTools} from 'neuroglancer/ui/segment_select_tools';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -146,6 +147,8 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
     let {selectedSegments} = this;
     if (selectedSegments.size > 0) {
       x[SELECTED_SEGMENTS_JSON_KEY] = this.selectedSegments.toJSON();
+    } else {
+      x[SELECTED_SEGMENTS_JSON_KEY] = [];
     }
     let {visibleSegments} = this;
     if (visibleSegments.size > 0) {
@@ -171,7 +174,8 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
 
   localGraph = new LocalSegmentationGraphSource();
   visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
-  selectedSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
+  selectedSegments = this.registerDisposer(Uint64OrderedSet.makeWithCounterpart(this.layer.manager.rpc));
+
   segmentPropertyMap = new WatchableValue<PreprocessedSegmentPropertyMap|undefined>(undefined);
   graph = new WatchableValue<SegmentationGraphSource|undefined>(undefined);
   segmentEquivalences = this.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(
