@@ -138,7 +138,7 @@ export abstract class HashTableBase {
    *
    * Creates a new Uint64 object at every iteration (otherwise spread and Array.from() fail)
    */
-  * keys() {
+  * keys(): IterableIterator<Uint64> {
     let {emptyLow, emptyHigh, entryStride} = this;
     let {table} = this;
     for (let i = 0, length = table.length; i < length; i += entryStride) {
@@ -154,7 +154,7 @@ export abstract class HashTableBase {
    *
    * The same temp value will be modified and yielded at every iteration.
    */
-  * unsafeKeys(temp = new Uint64()) {
+  * unsafeKeys(temp = new Uint64()): IterableIterator<Uint64> {
     let {emptyLow, emptyHigh, entryStride} = this;
     let {table} = this;
     for (let i = 0, length = table.length; i < length; i += entryStride) {

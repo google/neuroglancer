@@ -15,15 +15,14 @@
  */
 
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {registerRPC, registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 
 @registerSharedObject('Uint64OrderedSet')
-export class Uint64OrderedSet extends SharedObjectCounterpart implements
+export class Uint64OrderedSet extends Uint64Set implements
     WatchableValueInterface<Uint64OrderedSet> {
   _array: Uint64[] = [];
-  changed = new Signal<(x: Uint64|Uint64[]|null, add: boolean) => void>();
 
   get value() {
     return this;
@@ -35,20 +34,12 @@ export class Uint64OrderedSet extends SharedObjectCounterpart implements
     return obj;
   }
 
-  set(x: Uint64|Uint64[], value: boolean) {
-    if (!value) {
-      this.delete(x);
-    } else {
-      this.add(x);
-    }
-  }
-
   add_(x: Uint64[]) {
     let changed = false;
     for (const v of x) {
-      if (!this.has(v)) {
+      if (this.hashTable.add(v)) {
+        this._array.push(v.clone());
         changed = true;
-        this._array = [...this._array, v.clone()];
       }
     }
     return changed;
@@ -65,15 +56,6 @@ export class Uint64OrderedSet extends SharedObjectCounterpart implements
     }
   }
 
-  has(x: Uint64) {
-    for (const v of this) {
-      if (Uint64.equal(v, x)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   [Symbol.iterator]() {
     return this._array.values();
   }
@@ -81,9 +63,9 @@ export class Uint64OrderedSet extends SharedObjectCounterpart implements
   delete_(x: Uint64[]) {
     let changed = false;
     for (const v of x) {
-      if (this.has(v)) {
-        changed = true;
+      if (this.hashTable.delete(v)) {
         this._array = this._array.filter(y =>!Uint64.equal(y, v));
+        changed = true;
       }
     }
     return changed;
@@ -100,21 +82,15 @@ export class Uint64OrderedSet extends SharedObjectCounterpart implements
     }
   }
 
-  get size() {
-    return this._array.length;
-  }
-
   clear(sendRPC = true) {
-    if (this.size === 0) {
-      return false;
+    if (this.hashTable.clear()) {
+      this._array = [];
+      let {rpc} = this;
+      if (rpc && sendRPC) {
+        rpc.invoke('Uint64OrderedSet.clear', {'id': this.rpcId});
+      }
+      this.changed.dispatch(null, false);
     }
-    let {rpc} = this;
-    if (rpc && sendRPC) {
-      rpc.invoke('Uint64OrderedSet.clear', {'id': this.rpcId});
-    }
-    this._array = [];
-    this.changed.dispatch(null, false);
-    return true;
   }
 
   toJSON() {
