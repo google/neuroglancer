@@ -107,21 +107,21 @@ class AnnotationWriter:
 
         self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
-        self._add_obj(point, id, kwargs)
+        self._add_obj(point, id, **kwargs)
         
     def add_axis_aligned_bounding_box(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, **kwargs):
         if self.annotation_type != 'axis_aligned_bounding_box':
             raise ValueError(
                 f'Expected annotation type axis_aligned_bounding_box, but received: {self.annotation_type}'
             )
-        self._add_two_point_obj(point_a, point_b, id, kwargs)
+        self._add_two_point_obj(point_a, point_b, id, **kwargs)
     
     def add_line(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, **kwargs):
         if self.annotation_type != 'line':
             raise ValueError(
                 f'Expected annotation type line, but received: {self.annotation_type}'
             )
-        self._add_two_point_obj(point_a, point_b, id, kwargs)
+        self._add_two_point_obj(point_a, point_b, id, **kwargs)
 
     def _add_two_point_obj(self, point_a: Sequence[int], point_b: Sequence[int], id: Optional[int] = None, **kwargs):
         if len(point_a) != self.coordinate_space.rank:
@@ -137,11 +137,11 @@ class AnnotationWriter:
         self.lower_bound = np.minimum(self.lower_bound, point_a)
         self.upper_bound = np.maximum(self.upper_bound, point_b)
         coords = np.concatenate((point_a, point_b))
-        self._add_obj(coords, id, kwargs)
+        self._add_obj(coords, id, **kwargs)
 
     def _add_obj(self, coords: Sequence[int], id: Optional[int], **kwargs):
         encoded = np.zeros(shape=(), dtype=self.dtype)
-        encoded[()]['geometry'] = point
+        encoded[()]['geometry'] = coords
 
         for i, p in enumerate(self.properties):
             if p.id in kwargs:
