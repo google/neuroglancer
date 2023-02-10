@@ -143,14 +143,17 @@ export class ChunkQueueManager extends SharedObject {
       }
       let update = this.pendingChunkUpdates;
       if (update == null) break;
-      if (this.applyChunkUpdate(update)) {
-        visibleChunksChanged = true;
-      }
-      ++numUpdates;
-      let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
-      if (nextUpdate == null) {
-        this.pendingChunkUpdatesTail = null;
-        break;
+      try {
+        if (this.applyChunkUpdate(update)) {
+          visibleChunksChanged = true;
+        }
+      } finally {
+        ++numUpdates;
+        let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
+        if (nextUpdate == null) {
+          this.pendingChunkUpdatesTail = null;
+          break;
+        }
       }
     }
     if (visibleChunksChanged) {
@@ -186,6 +189,10 @@ export class ChunkQueueManager extends SharedObject {
     let visibleChunksChanged = false;
     let {rpc} = this;
     const source = <ChunkSource>rpc!.get(update['source']);
+    if (source === undefined) {
+      // Source was removed while chunk update was enqueued.
+      return;
+    }
     if (DEBUG_CHUNK_UPDATES) {
       console.log(
           `${Date.now()} Chunk.update processed: ${source.rpcId} ` +
