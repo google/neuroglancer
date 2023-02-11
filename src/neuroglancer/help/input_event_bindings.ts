@@ -110,7 +110,10 @@ export class InputEventBindingHelpDialog extends SidePanel {
       if (timestamp !== undefined) {
         const timestampElement = document.createElement('div');
         timestampElement.classList.add('neuroglancer-build-timestamp');
-        timestampElement.textContent = `Built at ${timestamp}`;
+        const timestampString =
+            Intl.DateTimeFormat('en', {hour12: false, dateStyle: 'medium', timeStyle: 'long'})
+                .format(new Date(timestamp));
+        timestampElement.textContent = `Built at ${timestampString}`;
         buildInfoElement.append(timestampElement);
       }
       scroll.appendChild(buildInfoElement);
