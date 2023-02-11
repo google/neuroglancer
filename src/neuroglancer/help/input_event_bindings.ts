@@ -25,6 +25,8 @@ import {removeChildren} from 'neuroglancer/util/dom';
 import {EventActionMap} from 'neuroglancer/util/event_action_map';
 import {emptyToUndefined} from 'neuroglancer/util/json';
 
+declare var NEUROGLANCER_BUILD_INFO: {tag: string, url?: string, timestamp?: string}|undefined;
+
 export function formatKeyName(name: string) {
   if (name.startsWith('key')) {
     return name.substring(3);
@@ -91,6 +93,29 @@ export class InputEventBindingHelpDialog extends SidePanel {
   private updateView() {
     const {scroll, bindings, toolBinder} = this;
     removeChildren(scroll);
+
+    if (typeof NEUROGLANCER_BUILD_INFO !== 'undefined') {
+      const header = document.createElement('h2');
+      header.textContent = 'Build info';
+      const buildInfoElement = document.createElement('div');
+      buildInfoElement.classList.add('neuroglancer-build-info');
+      const tagElement = document.createElement('a');
+      const {tag, url, timestamp} = NEUROGLANCER_BUILD_INFO;
+      tagElement.textContent = tag;
+      if (url !== undefined) {
+        tagElement.href = url;
+      }
+      scroll.appendChild(header);
+      buildInfoElement.appendChild(tagElement);
+      if (timestamp !== undefined) {
+        const timestampElement = document.createElement('div');
+        timestampElement.classList.add('neuroglancer-build-timestamp');
+        timestampElement.textContent = `Built at ${timestamp}`;
+        buildInfoElement.append(timestampElement);
+      }
+      scroll.appendChild(buildInfoElement);
+    }
+
     interface BindingList {
       label: string;
       entries: Map<string, string>;
