@@ -57,4 +57,15 @@
 
 .neuroglancer-build-info {
   font-size: 10pt;
+  user-select: text;
+}
+
+.neuroglancer-build-info a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.neuroglancer-build-info a:hover {
+  background-color: #db4437;
 }

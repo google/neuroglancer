@@ -102,6 +102,7 @@ export class InputEventBindingHelpDialog extends SidePanel {
       const tagElement = document.createElement('a');
       const {tag, url, timestamp} = NEUROGLANCER_BUILD_INFO;
       tagElement.textContent = tag;
+      tagElement.target = '_blank';
       if (url !== undefined) {
         tagElement.href = url;
       }
