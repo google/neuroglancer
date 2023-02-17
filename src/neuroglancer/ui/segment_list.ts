@@ -20,7 +20,7 @@ import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import {SegmentationDisplayState, SegmentWidgetWithExtraColumnsFactory} from 'neuroglancer/segmentation_display_state/frontend';
 import {changeTagConstraintInSegmentQuery, executeSegmentQuery, ExplicitIdQuery, FilterQuery, findQueryResultIntersectionSize, forEachQueryResultSegmentId, InlineSegmentNumericalProperty, isQueryUnconstrained, NumericalPropertyConstraint, parseSegmentQuery, PreprocessedSegmentPropertyMap, PropertyHistogram, queryIncludesColumn, QueryResult, unparseSegmentQuery, updatePropertyHistograms} from 'neuroglancer/segmentation_display_state/property_map';
-import type {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
+import type {SegmentationUserLayer, SegmentationUserLayerGroupState} from 'neuroglancer/segmentation_user_layer';
 import {observeWatchable, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
@@ -43,6 +43,7 @@ import {makeToolButton} from 'neuroglancer/ui/tool';
 import {ANNOTATE_MERGE_SEGMENTS_TOOL_ID, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID} from 'neuroglancer/ui/segment_split_merge_tools';
 import {SELECT_SEGMENTS_TOOLS_ID} from 'neuroglancer/ui/segment_select_tools';
 import {makeStarButton} from 'neuroglancer/widget/star_button';
+import { DebouncedFunc } from 'lodash';
 
 const tempUint64 = new Uint64();
 
@@ -60,6 +61,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
   selectedSegmentsGeneration = -1;
   prevQuery: string|undefined;
   queryResult = new WatchableValue<QueryResult|undefined>(undefined);
+  prevQueryResult = new WatchableValue<QueryResult|undefined>(undefined);
   statusText = new WatchableValue<string>('');
   selectedMatches: number = 0;
   matchStatusTextPrefix: string = '';
@@ -69,11 +71,11 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
   }
 
   private update() {
-    console.log('listsource update');
     const query = this.query.value;
 
     const {segmentPropertyMap} = this;
-    const prevQueryResult = this.queryResult.value;
+    this.prevQueryResult.value = this.queryResult.value;
+    const prevQueryResult = this.prevQueryResult.value;
     let queryResult: QueryResult;
     if (this.prevQuery === query) {
       queryResult = prevQueryResult!;
@@ -93,7 +95,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     const segmentsChanged = prevVisibleSegmentsGeneration !== visibleSegmentsGeneration ||
       prevSelectedSegmentsGeneration !== selectedSegmentsGeneration
     const unconstrained = isQueryUnconstrained(queryResult.query);
-    if (unconstrained) {
+    if (unconstrained && this.showExplicit) {
       // Full list of visible segments is shown only if no query is specified.
       if (segmentsChanged ||
           this.explicitSegments === undefined || !this.explicitSegmentsVisible) {
@@ -111,7 +113,6 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
         this.explicitSegments = newSelectedSegments;
         changed = true;
       } else {
-        console.log('not a new generation', prevVisibleSegmentsGeneration === visibleSegmentsGeneration);
         splices.push({retainCount: this.explicitSegments.length, deleteCount: 0, insertCount: 0});
       }
       this.explicitSegmentsVisible = true;
@@ -155,12 +156,12 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
         segmentsChanged) {
       let statusText = matchStatusTextPrefix;
       let selectedMatches = 0;
-      // if (segmentPropertyMap !== undefined && queryResult.count > 0) { // TODO: this code seems useful without a segmentPropertyMap
+      if (segmentPropertyMap !== undefined && queryResult.count > 0) {
         // Recompute selectedMatches.
         selectedMatches =
-            findQueryResultIntersectionSize(segmentPropertyMap, queryResult, visibleSegments);
+            findQueryResultIntersectionSize(segmentPropertyMap, queryResult, selectedSegments);
         statusText += ` (${selectedMatches} visible)`;
-      // }
+      }
       this.selectedMatches = selectedMatches;
       this.statusText.value = statusText;
     }
@@ -178,7 +179,8 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       public query: WatchableValueInterface<string>,
       public segmentPropertyMap: PreprocessedSegmentPropertyMap|undefined,
       public segmentationDisplayState: SegmentationDisplayState,
-      public parentElement: HTMLElement) {
+      public parentElement: HTMLElement,
+      public showExplicit = true) {
     super();
     this.update();
 
@@ -235,7 +237,8 @@ const keyMap = EventActionMap.fromObject({
   'escape': {action: 'cancel'},
 });
 
-const selectSegmentConfirmationThreshold = 200;
+const selectSegmentConfirmationThreshold = 5;
+console.log('selectSegmentConfirmationThreshold', selectSegmentConfirmationThreshold);
 
 interface NumericalBoundElements {
   container: HTMLElement;
@@ -785,6 +788,384 @@ function renderTagSummary(
   return tagList;
 }
 
+class SegmentListGroupBase extends RefCounted {
+  confirmationContainer = document.createElement('span');
+  confirmationCheckbox = document.createElement('input');
+  confirmationMessage = document.createElement('span');
+
+  elements: HTMLElement[] = [];
+  prevNumDisplayed = -1;
+
+  selectionStatusContainer = document.createElement('span');
+  starAllButton: HTMLElement;
+  selectionStatusMessage = document.createElement('span');
+  selectionCopyButton: HTMLElement;
+  visibilityToggleAllButton = document.createElement('input');
+
+  private currentConfirmCallback: WatchableValueInterface<(() => void)|undefined> = new WatchableValue(undefined);
+
+  selectSegments(select: boolean, changeVisibility=false) {
+    const {selectedSegments, visibleSegments} = this.group;
+    for (const id of this.listSegments()) {
+      if (select || !changeVisibility) {
+        selectedSegments.set(id, select);
+      }
+      if (changeVisibility) {
+        visibleSegments.set(id, select);
+      }
+    }
+  }
+
+  copySegments(onlyVisible=false) {
+    let ids = [...this.listSegments()]
+    if (onlyVisible) {
+      ids = ids.filter(segment => this.group.visibleSegments.has(segment));
+    }
+    ids.sort(Uint64.compare);
+    setClipboard(ids.join(', '));
+  }
+
+  clearConfirm() {
+    this.currentConfirmCallback.value = undefined;
+  }
+
+  confirm(message: string, callback: () => void) {
+    this.confirmationMessage.textContent = message;
+    this.currentConfirmCallback.value = callback;
+  }
+
+  constructor(
+      protected listSource: SegmentListSource,
+      protected group: SegmentationUserLayerGroupState) {
+    super();
+    const {visibilityToggleAllButton} = this;
+
+    const {confirmationContainer, confirmationCheckbox, confirmationMessage, currentConfirmCallback} = this;
+    confirmationContainer.classList.add('neuroglancer-segment-list-status')
+    confirmationCheckbox.type = 'checkbox';
+    confirmationCheckbox.title = "Confirm"
+    confirmationCheckbox.addEventListener('click', event => {
+      event.preventDefault();
+      const callbackValue = currentConfirmCallback.value;
+      if (callbackValue) {
+        this.clearConfirm();
+        callbackValue();
+      }
+    });
+    this.confirmationContainer.style.display = 'none';
+    currentConfirmCallback.changed.add(() => {
+      if (currentConfirmCallback.value) {
+        this.confirmationContainer.style.display = '';
+      } else {
+        this.confirmationContainer.style.display = 'none';
+      }
+    });
+    confirmationContainer.appendChild(confirmationCheckbox);
+    confirmationContainer.appendChild(confirmationMessage);
+    this.elements.push(confirmationContainer);
+    this.starAllButton = makeStarButton({
+      title: 'Toggle star status',
+      onClick: () => {
+        const unstar = this.starAllButton.classList.contains('unstar');
+        this.selectSegments(!unstar, false);
+      }
+    });
+    this.starAllButton.classList.add('neuroglancer-segment-list-status-star');
+    this.selectionCopyButton = makeCopyButton({
+      title: 'Copy visible segment IDs',
+      onClick: () => {
+        this.copySegments(true);
+      },
+    });
+    visibilityToggleAllButton.type = 'checkbox';
+    visibilityToggleAllButton.checked = true;
+    visibilityToggleAllButton.title = 'Deselect all segment IDs';
+    visibilityToggleAllButton.addEventListener('change', () => {
+      const adding = visibilityToggleAllButton.checked;
+      const {visibleSegments} = group;
+      if (adding) {
+        const newSegments = [...this.listSegments()];
+        const existingVisible = newSegments.filter(segment => visibleSegments.has(segment));
+        const newVisibleCount = newSegments.length - existingVisible.length;
+        if (newVisibleCount > selectSegmentConfirmationThreshold) {
+          this.confirm(`Confirm: show ${newVisibleCount} segments?`, () => {
+            this.selectSegments(adding, true);
+          });
+          return;
+        }
+      }
+      this.selectSegments(adding, true);
+    });
+    const {selectionStatusContainer} = this;
+    selectionStatusContainer.classList.add('neuroglancer-segment-list-status');
+    selectionStatusContainer.appendChild(this.selectionCopyButton);
+    selectionStatusContainer.appendChild(this.starAllButton);
+    selectionStatusContainer.appendChild(this.visibilityToggleAllButton);
+    selectionStatusContainer.appendChild(this.selectionStatusMessage);
+    this.elements.push(selectionStatusContainer);
+    listSource.statusText.changed.add(() => this.updateStatus());
+    this.registerDisposer(group.visibleSegments.changed.add(() => this.updateStatus()));
+    this.registerDisposer(group.selectedSegments.changed.add(() => this.updateStatus()));
+  }
+
+  listSegments(): IterableIterator<Uint64> {
+    return [].values();
+  }
+
+  updateStatus() {
+    const {listSource, group,
+      starAllButton, selectionStatusMessage, selectionCopyButton, visibilityToggleAllButton} = this;
+    const {visibleSegments, selectedSegments} = group;
+    let queryVisibleCount = 0;
+    let querySelectedCount = 0;
+    if (listSource.numMatches) {
+      for (const id of this.listSegments()) {
+        if (selectedSegments.has(id)) {
+          querySelectedCount++;
+        }
+        if (visibleSegments.has(id)) {
+          queryVisibleCount++;
+        }
+      }
+    }
+    const selectedCount = selectedSegments.size;
+    const visibleCount = visibleSegments.size;
+    const visibleDisplayedCount = listSource.numMatches ? queryVisibleCount : visibleCount;
+    const visibleSelectedCount = listSource.numMatches ? querySelectedCount : selectedCount;
+    const totalDisplayed = listSource.numMatches || selectedCount;
+    starAllButton.classList.toggle('unstar', visibleSelectedCount > 0);
+    selectionStatusMessage.textContent = `${visibleDisplayedCount}/${totalDisplayed} visible`;
+    if (this.prevNumDisplayed !== totalDisplayed) {
+      this.prevNumDisplayed = totalDisplayed;
+      selectionCopyButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
+      starAllButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
+      visibilityToggleAllButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
+    }
+    visibilityToggleAllButton.checked = visibleDisplayedCount > 0;
+  };
+}
+
+class SegmentListGroupSelected extends SegmentListGroupBase {
+  copySelectedMessage = document.createElement('span');
+  copySelectedButton: HTMLElement;
+
+  constructor(
+      protected listSource: SegmentListSource,
+      protected group: SegmentationUserLayerGroupState) {
+    super(listSource, group);
+    this.copySelectedButton = makeCopyButton({
+      title: 'Copy selected segment IDs',
+      onClick: () => {
+        this.copySegments(true);
+      }
+    });
+    const matchStatusContainer = document.createElement('span');
+    matchStatusContainer.classList.add('neuroglancer-segment-list-status')
+    matchStatusContainer.appendChild(this.copySelectedButton);
+    matchStatusContainer.appendChild(this.copySelectedMessage);
+    this.elements.unshift(matchStatusContainer);
+  }
+
+  listSegments() {
+      return this.group.selectedSegments[Symbol.iterator](); // TODO, better way to call the iterator?
+  }
+  
+  updateStatus() {
+    super.updateStatus();
+    const {selectedSegments} = this.group;
+    this.copySelectedMessage.textContent = `Copy ${selectedSegments.size} selected segment IDs`
+  }
+}
+
+class SegmentListGroupQuery extends SegmentListGroupBase {
+  hasConfirmed = false;
+  matchStatusContainer = document.createElement('span');
+  matchStatusMessage = document.createElement('span');
+  matchCopyButton: HTMLElement;
+
+  updateQuery() {
+    const {listSource, debouncedUpdateQueryModel} = this;
+    debouncedUpdateQueryModel();
+    debouncedUpdateQueryModel.flush();
+    listSource.debouncedUpdate.flush();
+  }
+
+  listSegments(): IterableIterator<Uint64> {
+    const {listSource, segmentPropertyMap} = this;
+    this.updateQuery();
+    const queryResult = listSource.queryResult.value;
+    const segments: Uint64[] = [];
+    forEachQueryResultSegmentId(segmentPropertyMap, queryResult, (id) => {
+      segments.push(id);
+    });
+    return segments.values();
+  }
+
+  constructor(
+      list: VirtualList,
+      listSource: SegmentListSource,
+      group: SegmentationUserLayerGroupState,
+      private segmentPropertyMap: PreprocessedSegmentPropertyMap | undefined,
+      segmentQuery: WatchableValueInterface<string>,
+      queryElement: HTMLInputElement,
+      private debouncedUpdateQueryModel: DebouncedFunc<() => void>) {
+    super(listSource, group);
+    const setQuery = (newQuery: ExplicitIdQuery|FilterQuery) => {
+      queryElement.focus();
+      queryElement.select();
+      const value = unparseSegmentQuery(segmentPropertyMap, newQuery);
+      document.execCommand('insertText', false, value);
+      segmentQuery.value = value;
+      queryElement.select();
+    };
+    const queryStatisticsContainer = document.createElement('div');
+      queryStatisticsContainer.classList.add(
+          'neuroglancer-segment-query-result-statistics');
+    const queryStatisticsSeparator = document.createElement('div');
+      queryStatisticsSeparator.classList.add(
+          'neuroglancer-segment-query-result-statistics-separator');
+    const queryErrors = document.createElement('ul');
+      queryErrors.classList.add('neuroglancer-segment-query-errors');
+    this.matchCopyButton = makeCopyButton({
+      onClick: () => {
+        this.copySegments(false);
+      }
+    });
+    const {matchStatusContainer, matchCopyButton, matchStatusMessage} = this;
+    matchStatusContainer.classList.add('neuroglancer-segment-list-status')
+    matchStatusContainer.appendChild(matchCopyButton);
+    matchStatusContainer.appendChild(matchStatusMessage);
+    // push them in front of the base list elements
+    this.elements.unshift(queryErrors, queryStatisticsContainer, queryStatisticsSeparator, matchStatusContainer);
+    this.registerEventListener(queryElement, 'input', () => {
+      debouncedUpdateQueryModel();
+      this.clearConfirm();
+      this.updateStatus();
+    });
+    this.registerDisposer(registerActionListener(queryElement, 'cancel', () => {
+      queryElement.focus();
+      queryElement.select();
+      document.execCommand('delete');
+      queryElement.blur();
+      queryElement.value = '';
+      segmentQuery.value = '';
+      this.hasConfirmed = false;
+      this.updateStatus();
+    }));
+    this.registerDisposer(
+      registerActionListener(queryElement, 'toggle-listed', this.toggleMatches));
+    this.registerDisposer(registerActionListener(queryElement, 'hide-all', () => {
+      for (const id of this.listSegments()) {
+        group.visibleSegments.delete(id);
+      }
+    }));
+    this.registerDisposer(
+      registerActionListener(queryElement, 'hide-listed', () => {
+        debouncedUpdateQueryModel();
+        debouncedUpdateQueryModel.flush();
+        listSource.debouncedUpdate.flush();
+        const {visibleSegments} = group;
+        if (segmentQuery.value === '') {
+          visibleSegments.clear();
+        } else {
+          for (const id of this.listSegments()) {
+            visibleSegments.delete(id);
+          }
+        }
+      }));
+    const numericalPropertySummaries =
+                      this.registerDisposer(new NumericalPropertiesSummary(
+                          segmentPropertyMap, listSource.queryResult, setQuery));
+    {
+      const {listElement} = numericalPropertySummaries;
+      if (listElement !== undefined) {
+        queryStatisticsContainer.appendChild(listElement);
+      }
+    }
+    const updateQueryErrors = (queryResult: QueryResult|undefined) => {
+      const errors = queryResult?.errors;
+      removeChildren(queryErrors);
+      if (errors === undefined) return;
+      for (const error of errors) {
+        const errorElement = document.createElement('li');
+        errorElement.textContent = error.message;
+        queryErrors.appendChild(errorElement);
+      }
+    };
+
+    let tagSummary: HTMLElement|undefined = undefined;
+    observeWatchable((queryResult: QueryResult|undefined) => {
+      listSource.segmentWidgetFactory = new SegmentWidgetWithExtraColumnsFactory(
+          listSource.segmentationDisplayState, listSource.parentElement,
+          property => queryIncludesColumn(queryResult?.query, property.id));
+      list.scrollToTop();
+      removeChildren(list.header);
+      if (segmentPropertyMap !== undefined) {
+        const header = listSource.segmentWidgetFactory.getHeader();
+        header.container.classList.add('neuroglancer-segment-list-header');
+        for (const headerLabel of header.propertyLabels) {
+          const {label, sortIcon, id} = headerLabel;
+          label.addEventListener('click', () => {
+            toggleSortOrder(listSource.queryResult.value, setQuery, id);
+          });
+          updateColumnSortIcon(queryResult, sortIcon, id);
+        }
+        list.header.appendChild(header.container);
+      }
+      updateQueryErrors(queryResult);
+      queryStatisticsSeparator.style.display = 'none';
+      tagSummary?.remove();
+      if (queryResult === undefined) return;
+      let {query} = queryResult;
+      if (query.errors !== undefined || query.ids !== undefined) return;
+      tagSummary = renderTagSummary(queryResult, setQuery);
+      if (tagSummary !== undefined) {
+        queryStatisticsContainer.appendChild(tagSummary);
+      }
+      if (numericalPropertySummaries.properties.length > 0 ||
+          tagSummary !== undefined) {
+        queryStatisticsSeparator.style.display = '';
+      }
+    }, listSource.queryResult);
+  }
+
+  updateStatus(): void {
+    super.updateStatus();
+    const {listSource, visibilityToggleAllButton, matchStatusMessage, matchCopyButton, matchStatusContainer, selectionStatusContainer} = this;
+    matchStatusMessage.textContent = listSource.statusText.value;
+    const {numMatches, selectedMatches} = listSource;
+    matchCopyButton.style.visibility = numMatches ? 'visible' : 'hidden';
+    matchCopyButton.title = `Copy ${numMatches} segment ID(s)`;
+    if (selectedMatches === 0) {
+      visibilityToggleAllButton.title = `Show ${numMatches} segment ID(s)`;
+    } else if (selectedMatches === numMatches) {
+      visibilityToggleAllButton.title = `Hide ${selectedMatches} segment ID(s)`;
+    } else {
+      visibilityToggleAllButton.title = `Hide ${selectedMatches} segment ID(s)`;
+    }
+    matchStatusContainer.style.display = numMatches ? '' : 'none';
+    selectionStatusContainer.style.display = numMatches ? '' : 'none';
+  }
+
+  toggleMatches() {
+    const {listSource} = this;
+    this.updateQuery();
+    const queryResult = listSource.queryResult.value;
+    if (queryResult === undefined) return;
+    const {selectedMatches} = listSource;
+    const shouldSelect = (selectedMatches !== queryResult.count);
+    if (shouldSelect &&
+        queryResult.count - selectedMatches > selectSegmentConfirmationThreshold) {
+      this.confirm(`Confirm: show ${queryResult.count - selectedMatches} segments?`, () => {
+        this.selectSegments(shouldSelect, true);
+      });
+      return false;
+    }
+    this.selectSegments(shouldSelect, true);
+    return true;
+  };
+}
+
 export class SegmentDisplayTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {
     super();
@@ -856,231 +1237,36 @@ export class SegmentDisplayTab extends Tab {
                 // segmentLabelMap is guaranteed to change if segmentationGroupState changes.
                 layer.displayState.segmentPropertyMap,
                 (segmentPropertyMap, parent, context) => {
-                  const setQuery = (newQuery: ExplicitIdQuery|FilterQuery) => {
-                    queryElement.focus();
-                    queryElement.select();
-                    const value = unparseSegmentQuery(segmentPropertyMap, newQuery);
-                    document.execCommand('insertText', false, value);
-                    segmentQuery.value = value;
-                    queryElement.select();
-                  };
+
+
+
                   const listSource = context.registerDisposer(new SegmentListSource(
-                      segmentQuery, segmentPropertyMap, layer.displayState, parent));
-                  const group = layer.displayState.segmentationGroupState.value;
-                  const queryErrors = document.createElement('ul');
-                  queryErrors.classList.add('neuroglancer-segment-query-errors');
-                  parent.appendChild(queryErrors);
-                  const queryStatisticsContainer = document.createElement('div');
-                  queryStatisticsContainer.classList.add(
-                      'neuroglancer-segment-query-result-statistics');
-                  const selectionStatusContainer = document.createElement('span');
-                  const visibilityToggleAllButton = document.createElement('input');
-                  visibilityToggleAllButton.type = 'checkbox';
-                  visibilityToggleAllButton.checked = true;
-                  visibilityToggleAllButton.title = 'Deselect all segment IDs';
-                  visibilityToggleAllButton.addEventListener('change', () => {
-                    const adding = visibilityToggleAllButton.checked;
-                    debouncedUpdateQueryModel();
-                    debouncedUpdateQueryModel.flush();
-                    listSource.debouncedUpdate.flush();
-                    const queryResult = listSource.queryResult.value;
-                    const {selectedSegments, visibleSegments} = group;
-                    if (listSource.numMatches === 0) { // TODO, how should I check for this?
-                      for (const segment of selectedSegments) {
-                        visibleSegments.set(segment, adding);
-                      }
-                    } else {
-                      forEachQueryResultSegmentId(segmentPropertyMap, queryResult, (id) => {
-                        if (adding) {
-                          group.selectedSegments.add(id);
-                          group.visibleSegments.add(id);
-                        } else {
-                          group.visibleSegments.delete(id);
-                        }
-                      });
-                    }
-                  });
-                  const selectionCopyButton = makeCopyButton({
-                    title: 'Copy segment IDs',
-                    onClick: () => {
-                      const ids: Uint64[] = [];
-                      const queryResult = listSource.queryResult.value;
-                      if (queryResult === undefined) return;
-                      forEachQueryResultSegmentId(segmentPropertyMap, queryResult, (id) => {
-                        ids.push(id);
-                      });
-                      ids.sort(Uint64.compare);
-                      setClipboard(ids.join(', '));
-                    },
-                  });
-                  const starAllButton = makeStarButton({
-                    title: 'Toggle star status',
-                    onClick: () => {
-                      const unstar = starAllButton.classList.contains('unstar');
-                      const queryResult = listSource.queryResult.value;
-                      if (listSource.numMatches === 0) {
-                        const {selectedSegments} = group;
-                        selectedSegments.clear();
-                      } else {
-                        console.log('unstar', unstar);
-                        const {selectedSegments} = group;
-                        forEachQueryResultSegmentId(segmentPropertyMap, queryResult, (id) => {
-                          selectedSegments.set(id, !unstar);
-                        });
-                      }
-                    },
-                  });
-                  starAllButton.classList.add('neuroglancer-segment-list-status-star');
-                  const selectionStatusMessage = document.createElement('span');
-                  selectionStatusContainer.appendChild(selectionCopyButton);
-                  selectionStatusContainer.appendChild(starAllButton);
-                  selectionStatusContainer.appendChild(visibilityToggleAllButton);
-                  selectionStatusContainer.appendChild(selectionStatusMessage);
-                  const matchStatusContainer = document.createElement('span');
-                  const matchCopyButton = makeCopyButton({
-                    onClick: () => {
-                      debouncedUpdateQueryModel();
-                      debouncedUpdateQueryModel.flush();
-                      listSource.debouncedUpdate.flush();
-                      const queryResult = listSource.queryResult.value;
-                      if (queryResult === undefined) return;
-                      const segmentStrings = new Array<string>(queryResult.count);
-                      forEachQueryResultSegmentId(segmentPropertyMap, queryResult, (id, i) => {
-                        segmentStrings[i] = id.toString();
-                      });
-                      setClipboard(segmentStrings.join(', '));
-                    },
-                  });
-                  const toggleMatches = () => {
-                    debouncedUpdateQueryModel();
-                    debouncedUpdateQueryModel.flush();
-                    listSource.debouncedUpdate.flush();
-                    const queryResult = listSource.queryResult.value;
-                    if (queryResult === undefined) return;
-                    const {selectedSegments, visibleSegments} = group;
-                    const {selectedMatches} = listSource;
-                    const shouldSelect = (selectedMatches !== queryResult.count);
-                    if (shouldSelect &&
-                        queryResult.count - selectedMatches > selectSegmentConfirmationThreshold) {
-                      if (!hasConfirmed) {
-                        hasConfirmed = true;
-                        matchStatusMessage.textContent =
-                            `Confirm: show ${queryResult.count - selectedMatches} segments?`;
-                        return false;
-                      }
-                      hasConfirmed = false;
-                      updateStatus();
-                    }
-
-                    forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
-                      selectedSegments.set(id, shouldSelect);
-                      visibleSegments.set(id, shouldSelect);
-                    });
-                    return true;
-                  };
-                  const matchStatusMessage = document.createElement('span');
-                  matchStatusContainer.appendChild(matchCopyButton);
-                  matchStatusContainer.appendChild(matchStatusMessage);
-                  selectionStatusContainer.classList.add('neuroglancer-segment-list-status');
-                  matchStatusContainer.classList.add('neuroglancer-segment-list-status');
-                  parent.appendChild(queryStatisticsContainer);
-                  const queryStatisticsSeparator = document.createElement('div');
-                  queryStatisticsSeparator.classList.add(
-                      'neuroglancer-segment-query-result-statistics-separator');
-                  parent.appendChild(queryStatisticsSeparator);
-                  parent.appendChild(matchStatusContainer);
-                  parent.appendChild(selectionStatusContainer);
-                  let prevNumDisplayed = -1;
-                  const updateStatus = () => {
-                    const {visibleSegments, selectedSegments} = group;
-                    let queryVisibleCount = 0;
-                    let querySelectedCount = 0;
-                    if (listSource.numMatches) {
-                      forEachQueryResultSegmentId(segmentPropertyMap, listSource.queryResult.value, id => {
-                        if (selectedSegments.has(id)) {
-                          querySelectedCount++;
-                        }
-                        if (visibleSegments.has(id)) {
-                          queryVisibleCount++;
-                        }
-                      });
-                    }
-                    const nonSelectedQueryCount = listSource.numMatches - querySelectedCount;
-                    const selectedCount = selectedSegments.size;
-                    const visibleCount = visibleSegments.size;
-                    const totalCount = nonSelectedQueryCount + selectedCount;
-                    const visibleDisplayedCount = listSource.numMatches ? queryVisibleCount : visibleCount;
-                    const visibleSelectedCount = listSource.numMatches ? querySelectedCount : selectedCount;
-                    const totalDisplayed = listSource.numMatches || selectedCount;
-                    starAllButton.classList.toggle('unstar', visibleSelectedCount > 0);
-                    selectionStatusMessage.textContent = `${visibleCount}/${totalCount} visible`;
-                    if (prevNumDisplayed !== totalDisplayed) {
-                      prevNumDisplayed = totalDisplayed;
-                      selectionCopyButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
-                      starAllButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
-                      visibilityToggleAllButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
-                    }
-                    matchStatusMessage.textContent = listSource.statusText.value;
-                    const {numMatches, selectedMatches} = listSource;
-                    matchCopyButton.style.visibility = numMatches ? 'visible' : 'hidden';
-                    matchCopyButton.title = `Copy ${numMatches} segment ID(s)`;
-                    if (selectedMatches === 0) {
-                      visibilityToggleAllButton.title = `Show ${numMatches} segment ID(s)`;
-                    } else if (selectedMatches === numMatches) {
-                      visibilityToggleAllButton.title = `Hide ${selectedMatches} segment ID(s)`;
-                    } else {
-                      visibilityToggleAllButton.title = `Hide ${selectedMatches} segment ID(s)`;
-                    }
-                    visibilityToggleAllButton.checked = visibleDisplayedCount > 0;
-                  };
-                  updateStatus();
-                  listSource.statusText.changed.add(updateStatus);
-                  context.registerDisposer(group.visibleSegments.changed.add(updateStatus));
-                  context.registerDisposer(group.selectedSegments.changed.add(updateStatus));
-
-                  let hasConfirmed = false;
-                  context.registerEventListener(queryElement, 'input', () => {
-                    debouncedUpdateQueryModel();
-                    if (hasConfirmed) {
-                      hasConfirmed = false;
-                      updateStatus();
-                    }
-                  });
-                  context.registerDisposer(registerActionListener(queryElement, 'cancel', () => {
-                    queryElement.focus();
-                    queryElement.select();
-                    document.execCommand('delete');
-                    queryElement.blur();
-                    queryElement.value = '';
-                    segmentQuery.value = '';
-                    hasConfirmed = false;
-                    updateStatus();
-                  }));
-                  context.registerDisposer(
-                      registerActionListener(queryElement, 'toggle-listed', toggleMatches));
-                  context.registerDisposer(registerActionListener(queryElement, 'hide-all', () => {
-                    group.visibleSegments.clear();
-                  }));
-                  context.registerDisposer(
-                      registerActionListener(queryElement, 'hide-listed', () => {
-                        debouncedUpdateQueryModel();
-                        debouncedUpdateQueryModel.flush();
-                        listSource.debouncedUpdate.flush();
-                        const {visibleSegments} = group;
-                        if (segmentQuery.value === '') {
-                          visibleSegments.clear();
-                        } else {
-                          const queryResult = listSource.queryResult.value;
-                          if (queryResult === undefined) return;
-                          forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
-                            visibleSegments.delete(id);
-                          });
-                        }
-                      }));
+                      segmentQuery, segmentPropertyMap, layer.displayState, parent, false));
+                  const dummyString = new WatchableValue<string>("");
+                  const selectedSegmentsListSource = context.registerDisposer(new SegmentListSource(
+                      dummyString, undefined, layer.displayState, parent));
                   const list = context.registerDisposer(
                       new VirtualList({source: listSource, horizontalScroll: true}));
+                  const selectedSegmentsList = context.registerDisposer(
+                      new VirtualList({source: selectedSegmentsListSource, horizontalScroll: true}));
+
+                  const group = layer.displayState.segmentationGroupState.value;
+
+                  const segList = context.registerDisposer(new SegmentListGroupQuery(list, listSource, group, segmentPropertyMap, segmentQuery, queryElement, debouncedUpdateQueryModel));
+                  segList.updateStatus();
+                  for (let element of segList.elements) {
+                    parent.appendChild(element);
+                  }
+                  parent.appendChild(list.element);
+                  const segList2 = context.registerDisposer(new SegmentListGroupSelected(selectedSegmentsListSource, group));
+                  segList2.updateStatus();
+                  for (let element of segList2.elements) {
+                    parent.appendChild(element);
+                  }
+                  parent.appendChild(selectedSegmentsList.element);
                   const updateListItems = context.registerCancellable(animationFrameDebounce(() => {
                     listSource.updateRenderedItems(list);
+                    selectedSegmentsListSource.updateRenderedItems(selectedSegmentsList);
                   }));
                   const {displayState} = this.layer;
                   context.registerDisposer(
@@ -1094,65 +1280,22 @@ export class SegmentDisplayTab extends Tab {
                   context.registerDisposer(
                       displayState.segmentDefaultColor.changed.add(updateListItems));
                   list.element.classList.add('neuroglancer-segment-list');
+                  list.element.classList.add('neuroglancer-preview-list');
+                  selectedSegmentsList.element.classList.add('neuroglancer-segment-list');
+
                   context.registerDisposer(layer.bindSegmentListWidth(list.element));
+                  context.registerDisposer(layer.bindSegmentListWidth(selectedSegmentsList.element));
                   context.registerDisposer(
                       new MouseEventBinder(list.element, getDefaultSelectBindings()));
-                  const numericalPropertySummaries =
-                      context.registerDisposer(new NumericalPropertiesSummary(
-                          segmentPropertyMap, listSource.queryResult, setQuery));
-                  {
-                    const {listElement} = numericalPropertySummaries;
-                    if (listElement !== undefined) {
-                      queryStatisticsContainer.appendChild(listElement);
-                    }
-                  }
-                  let tagSummary: HTMLElement|undefined = undefined;
-                  const updateQueryErrors = (queryResult: QueryResult|undefined) => {
-                    const errors = queryResult?.errors;
-                    removeChildren(queryErrors);
-                    if (errors === undefined) return;
-                    for (const error of errors) {
-                      const errorElement = document.createElement('li');
-                      errorElement.textContent = error.message;
-                      queryErrors.appendChild(errorElement);
-                    }
-                  };
-                  observeWatchable((queryResult: QueryResult|undefined) => {
-                    console.log('observeWatchable');
-                    listSource.segmentWidgetFactory = new SegmentWidgetWithExtraColumnsFactory(
-                        listSource.segmentationDisplayState, listSource.parentElement,
-                        property => queryIncludesColumn(queryResult?.query, property.id));
-                    list.scrollToTop();
-                    console.log('scrolling to top!');
-                    removeChildren(list.header);
-                    if (segmentPropertyMap !== undefined) {
-                      const header = listSource.segmentWidgetFactory.getHeader();
-                      header.container.classList.add('neuroglancer-segment-list-header');
-                      for (const headerLabel of header.propertyLabels) {
-                        const {label, sortIcon, id} = headerLabel;
-                        label.addEventListener('click', () => {
-                          toggleSortOrder(listSource.queryResult.value, setQuery, id);
-                        });
-                        updateColumnSortIcon(queryResult, sortIcon, id);
-                      }
-                      list.header.appendChild(header.container);
-                    }
-                    updateQueryErrors(queryResult);
-                    queryStatisticsSeparator.style.display = 'none';
-                    tagSummary?.remove();
-                    if (queryResult === undefined) return;
-                    let {query} = queryResult;
-                    if (query.errors !== undefined || query.ids !== undefined) return;
-                    tagSummary = renderTagSummary(queryResult, setQuery);
-                    if (tagSummary !== undefined) {
-                      queryStatisticsContainer.appendChild(tagSummary);
-                    }
-                    if (numericalPropertySummaries.properties.length > 0 ||
-                        tagSummary !== undefined) {
-                      queryStatisticsSeparator.style.display = '';
-                    }
-                  }, listSource.queryResult);
-                  parent.appendChild(list.element);
+                  context.registerDisposer(
+                      new MouseEventBinder(selectedSegmentsList.element, getDefaultSelectBindings()));
+
+                  // list2 doesn't depend on queryResult, maybe move this into class
+                  selectedSegmentsListSource.segmentWidgetFactory = new SegmentWidgetWithExtraColumnsFactory(
+                    selectedSegmentsListSource.segmentationDisplayState, selectedSegmentsListSource.parentElement,
+                    property => queryIncludesColumn(undefined, property.id));
+                  selectedSegmentsList.scrollToTop();
+                  removeChildren(selectedSegmentsList.header);
                 }))
             .element);
   }

@@ -313,7 +313,7 @@ export class VirtualList extends RefCounted {
     const {element} = this;
     if (element.offsetHeight === 0) {
       // Element not visible
-      return;
+      // return;
     }
     const viewportHeight = element.clientHeight - this.header.offsetHeight;
 

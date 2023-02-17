@@ -21,7 +21,7 @@
 .neuroglancer-segment-list {
   position: relative;
   overflow-y: auto;
-  overflow-x: scroll;
+  overflow-x: auto;
   flex: 1;
 }
 
