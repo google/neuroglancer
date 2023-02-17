@@ -108,14 +108,14 @@ function parseTranslationTransform(rank: number, obj: unknown) {
 }
 
 const coordinateTransformParsers = new Map([
-  ["scale", parseScaleTransform],
-  ["identity", parseIdentityTransform],
-  ["translation", parseTranslationTransform],
+  ['scale', parseScaleTransform],
+  ['identity', parseIdentityTransform],
+  ['translation', parseTranslationTransform],
 ]);
 
 function parseOmeCoordinateTransform(rank: number, transformJson: unknown): Float64Array {
   verifyObject(transformJson);
-  const transformType = verifyObjectProperty(transformJson, "type", verifyString);
+  const transformType = verifyObjectProperty(transformJson, 'type', verifyString);
   const parser = coordinateTransformParsers.get(transformType);
   if (parser === undefined) {
     throw new Error(`Unsupported coordinate transform type: ${JSON.stringify(transformType)}`);
@@ -138,7 +138,7 @@ function parseOmeCoordinateTransforms(rank: number, transforms: unknown): Float6
 function parseMultiscaleScale(rank: number, url: string, obj: unknown): OmeMultiscaleScale {
   const path = verifyObjectProperty(obj, 'path', verifyString);
   const transform = verifyObjectProperty(
-    obj, 'coordinateTransformations', x => parseOmeCoordinateTransforms(rank, x));
+      obj, 'coordinateTransformations', x => parseOmeCoordinateTransforms(rank, x));
   const scaleUrl = `${url}/${path}`;
   return {url: scaleUrl, transform};
 }
@@ -171,8 +171,22 @@ function parseOmeMultiscale(url: string, multiscale: unknown): OmeMultiscaleMeta
     const scale = baseScales[i] = baseTransform[i * (rank + 1) + i];
     coordinateSpace.scales[i] *= scale;
   }
+
   for (const scale of scales) {
     const t = scale.transform;
+    // In OME's coordinate space, the origin of a voxel is its center, while in Neuroglancer it is
+    // the "lower" (in coordinates) corner.  Translate by the physical size of half a voxel in the
+    // current scale, and then translate by the physical size of half a voxel in the base scale, to
+    // convert from OME coordinate space to Neuroglancer coordinate space.
+    for (let i = 0; i < rank; ++i) {
+      let offset = -baseScales[i] / 2;
+      for (let j = 0; j < rank; ++j) {
+        offset += t[j * (rank + 1) + i] * 0.5;
+      }
+      t[rank * (rank + 1) + i] -= offset;
+    }
+
+    // Make the scale relative to the base scale.
     for (let i = 0; i < rank; ++i) {
       for (let j = 0; j <= rank; ++j) {
         t[j * (rank + 1) + i] /= baseScales[i];
