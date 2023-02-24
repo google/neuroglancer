@@ -39,6 +39,7 @@ export class KeyboardEventBinder<EventMap extends EventActionMapInterface> exten
   modifierShortcutsAreGlobal = true;
   allShortcutsAreGlobal = false;
   allowSpaceKeyOnButtons = false;
+  shouldIgnore: ((event: KeyboardEvent) => boolean)|undefined = undefined;
   constructor(public target: EventTarget, public eventMap: EventMap) {
     super();
     this.registerEventListener(
@@ -46,6 +47,7 @@ export class KeyboardEventBinder<EventMap extends EventActionMapInterface> exten
   }
 
   private shouldIgnoreEvent(key: string, event: KeyboardEvent) {
+    if (this.shouldIgnore?.(event)) return true;
     var el = <HTMLElement>event.target;
     let {tagName} = el;
     if (el === this.target) {

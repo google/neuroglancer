@@ -33,7 +33,7 @@ import {DisplayContext, TrackableWindowedViewport} from 'neuroglancer/display_co
 import {HelpPanelState, InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
-import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {CoordinateSpacePlaybackVelocity, DisplayPose, NavigationState, OrientationState, PlaybackManager, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -68,7 +68,7 @@ import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
 
-declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
+declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any;
 
 interface CreditLink {
   url: string;
@@ -180,6 +180,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('relativeDisplayScales', viewer.relativeDisplayScales);
     this.add('displayDimensions', viewer.displayDimensions);
     this.add('position', viewer.position);
+    this.add('velocity', viewer.velocity);
     this.add('crossSectionOrientation', viewer.crossSectionOrientation);
     this.add('crossSectionScale', viewer.crossSectionScale);
     this.add('crossSectionDepth', viewer.crossSectionDepthRange);
@@ -256,6 +257,7 @@ export class Viewer extends RefCounted implements ViewerState {
   title = new TrackableValue<string|undefined>(undefined, verifyString);
   coordinateSpace = new TrackableCoordinateSpace();
   position = this.registerDisposer(new Position(this.coordinateSpace));
+  velocity = this.registerDisposer(new CoordinateSpacePlaybackVelocity(this.coordinateSpace));
   relativeDisplayScales =
       this.registerDisposer(new TrackableRelativeDisplayScales(this.coordinateSpace));
   displayDimensions = this.registerDisposer(new TrackableDisplayDimensions(this.coordinateSpace));
@@ -457,6 +459,8 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
 
     this.state = new TrackableViewerState(this);
+
+    this.registerDisposer(new PlaybackManager(this.display, this.position, this.velocity));
   }
 
   private updateShowBorders() {
@@ -483,7 +487,10 @@ export class Viewer extends RefCounted implements ViewerState {
     topRow.style.alignItems = 'stretch';
 
     const positionWidget = this.registerDisposer(new PositionWidget(
-        this.navigationState.position, this.layerSpecification.coordinateSpaceCombiner));
+        this.navigationState.position, this.layerSpecification.coordinateSpaceCombiner, {
+          velocity: this.velocity,
+          getToolBinder: () => this.toolBinder,
+        }));
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showLocation, positionWidget.element));
     topRow.appendChild(positionWidget.element);
@@ -629,8 +636,8 @@ export class Viewer extends RefCounted implements ViewerState {
         new SidePanelManager(this.display, this.layout.element, this.visibility));
     this.registerDisposer(this.sidePanelManager.registerPanel({
       location: this.layerListPanelState.location,
-      makePanel: () =>
-          new LayerListPanel(this.sidePanelManager, this.layerSpecification, this.layerListPanelState),
+      makePanel: () => new LayerListPanel(
+          this.sidePanelManager, this.layerSpecification, this.layerListPanelState),
     }));
     this.registerDisposer(
         new LayerSidePanelManager(this.sidePanelManager, this.selectedLayer.addRef()));

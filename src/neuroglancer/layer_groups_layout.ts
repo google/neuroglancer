@@ -320,6 +320,7 @@ function getCommonViewerState(viewer: Viewer) {
     visibleLayerRoles: viewer.visibleLayerRoles,
     navigationState: viewer.navigationState.addRef(),
     perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
+    velocity: viewer.velocity.addRef(),
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
   };

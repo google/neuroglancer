@@ -31,6 +31,7 @@
   font-weight: 900;
   margin-left: 1px;
   margin-right: 1px;
+  user-select: none;
 }
 
 .neuroglancer-icon svg {

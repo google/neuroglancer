@@ -60,6 +60,7 @@ export class DependentViewWidget<T> extends RefCounted {
     const currentViewDisposer = this.currentViewDisposer =
         new DependentViewContext(this.debouncedUpdateView);
     this.render(model.value, this.element, currentViewDisposer);
+    this.generation = generation;
   }
 
   private disposeCurrentView() {

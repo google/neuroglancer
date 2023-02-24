@@ -51,6 +51,7 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
 
 .neuroglancer-position-dimension-coordinate {
   color: white;
+  text-align: right;
 }
 
 .neuroglancer-position-widget input:invalid, .neuroglancer-position-widget input::placeholder, .neuroglancer-position-widget input[data-is-valid="false"] {
@@ -59,6 +60,10 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
 
 .neuroglancer-position-widget *:focus {
   outline: 0px;
+}
+
+.neuroglancer-position-dimension + .neuroglancer-position-dimension {
+  margin-left: 1ch;
 }
 
 .neuroglancer-position-dimension[data-dropdown-visible="true"]::after {
@@ -82,14 +87,6 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   left: -1px;
   z-index: 100;
   background-color: black;
-}
-
-.neuroglancer-position-dimension-dropdown {
-  display: grid;
-  grid-template-areas:
-    "labels . graph";
-  grid-template-rows: 1fr;
-  grid-template-columns: 0fr 3px 0fr;
 }
 
 .neuroglancer-position-dimension-coordinate-dropdown {
@@ -117,19 +114,6 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   outline: 0px;
 }
 
-.neuroglancer-position-dimension-dropdown-lowerbound,
-.neuroglancer-position-dimension-dropdown-upperbound,
-.neuroglancer-position-dimension-dropdown-hoverposition {
-  grid-area: labels;
-  text-align: right;
-}
-
-.neuroglancer-position-dimension-dropdown canvas {
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
-  grid-area: graph;
-}
-
 .neuroglancer-position-dimension:focus-within,
 .neuroglancer-position-dimension[data-dropdown-visible="true"] {
   border: 1px solid #aaa;
@@ -140,8 +124,6 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   border: 1px solid transparent;
   position: relative;
   display: inline-block;
-  font-family: monospace;
-  font-size: medium;
   white-space: nowrap;
 }
 
@@ -195,4 +177,54 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
 .neuroglancer-position-dimension-coordinate-label:not(:empty)::after {
   content: "]";
   color: #aaa;
+}
+
+.neuroglancer-position-dimension-playback {
+  font-family: sans-serif;
+  font-size: 10pt;
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-position-dimension-playback .neuroglancer-number-input {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.neuroglancer-position-dimension-playback input[type="text"] {
+  background-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  border: 0px;
+  font-family: monospace;
+  width: 8ch;
+  text-align: right;
+}
+
+.neuroglancer-position-dimension-playback select {
+  align-self: center;
+}
+
+
+.neuroglancer-position-dimension > .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+  position: relative;
+  top: 1px;
+}
+
+.neuroglancer-position-dimension > .neuroglancer-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.neuroglancer-position-tool {
+  background-color: #474747;
+}
+
+.neuroglancer-position-dimension-playback-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
 }

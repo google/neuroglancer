@@ -24,15 +24,16 @@ import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {LayerListSpecification, LayerSubsetSpecification, MouseSelectionState, SelectedLayerState} from 'neuroglancer/layer';
-import {DisplayPose, LinkedDepthRange, LinkedDisplayDimensions, LinkedOrientationState, LinkedPosition, LinkedRelativeDisplayScales, linkedStateLegacyJsonView, LinkedZoomState, NavigationState, TrackableCrossSectionZoom, TrackableNavigationLink, TrackableProjectionZoom, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {CoordinateSpacePlaybackVelocity, DisplayPose, LinkedCoordinateSpacePlaybackVelocity, LinkedDepthRange, LinkedDisplayDimensions, LinkedOrientationState, LinkedPosition, LinkedRelativeDisplayScales, linkedStateLegacyJsonView, LinkedZoomState, NavigationLinkType, NavigationState, PlaybackManager, TrackableCrossSectionZoom, TrackableNavigationLink, TrackableProjectionZoom, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {registerNested, WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {popDragStatus, pushDragStatus} from 'neuroglancer/ui/drag_and_drop';
 import {LayerBar} from 'neuroglancer/ui/layer_bar';
 import {endLayerDrag, getDropEffectFromModifiers, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
+import {LocalToolBinder} from 'neuroglancer/ui/tool';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -49,6 +50,7 @@ export interface LayerGroupViewerState {
   display: Borrowed<DisplayContext>;
   navigationState: Owned<NavigationState>;
   perspectiveNavigationState: Owned<NavigationState>;
+  velocity: Owned<CoordinateSpacePlaybackVelocity>;
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
@@ -107,6 +109,7 @@ export function getViewerDropEffect(event: DragEvent, manager: Borrowed<LayerLis
 
 export class LinkedViewerNavigationState extends RefCounted {
   position: LinkedPosition;
+  velocity: LinkedCoordinateSpacePlaybackVelocity;
   relativeDisplayScales: LinkedRelativeDisplayScales;
   displayDimensions: LinkedDisplayDimensions;
   displayDimensionRenderInfo: WatchableDisplayDimensionRenderInfo;
@@ -122,6 +125,7 @@ export class LinkedViewerNavigationState extends RefCounted {
 
   constructor(parent: {
     navigationState: Borrowed<NavigationState>,
+    velocity: Borrowed<CoordinateSpacePlaybackVelocity>,
     perspectiveNavigationState: Borrowed<NavigationState>
   }) {
     super();
@@ -130,6 +134,8 @@ export class LinkedViewerNavigationState extends RefCounted {
     this.displayDimensions =
         new LinkedDisplayDimensions(parent.navigationState.pose.displayDimensions.addRef());
     this.position = new LinkedPosition(parent.navigationState.position.addRef());
+    this.velocity = this.registerDisposer(
+        new LinkedCoordinateSpacePlaybackVelocity(parent.velocity, this.position.link));
     this.crossSectionOrientation =
         new LinkedOrientationState(parent.navigationState.pose.orientation.addRef());
     this.displayDimensionRenderInfo = this.registerDisposer(new WatchableDisplayDimensionRenderInfo(
@@ -155,7 +161,7 @@ export class LinkedViewerNavigationState extends RefCounted {
         new DisplayPose(
             this.position.value.addRef(), this.displayDimensionRenderInfo.addRef(),
             this.projectionOrientation.value),
-        this.projectionScale.value, this.projectionDepthRange.value));
+      this.projectionScale.value, this.projectionDepthRange.value));
   }
 
   copyToParent() {
@@ -163,6 +169,7 @@ export class LinkedViewerNavigationState extends RefCounted {
              of [this.relativeDisplayScales,
                  this.displayDimensions,
                  this.position,
+                 this.velocity,
                  this.crossSectionOrientation,
                  this.crossSectionScale,
                  this.projectionOrientation,
@@ -176,6 +183,7 @@ export class LinkedViewerNavigationState extends RefCounted {
     state.add('dimensionRenderScales', this.relativeDisplayScales);
     state.add('displayDimensions', this.displayDimensions);
     state.add('position', linkedStateLegacyJsonView(this.position));
+    state.add('velocity', this.velocity);
     state.add('crossSectionOrientation', this.crossSectionOrientation);
     state.add('crossSectionScale', this.crossSectionScale);
     state.add('crossSectionDepth', this.crossSectionDepthRange);
@@ -283,6 +291,7 @@ export class LayerGroupViewer extends RefCounted {
   }
   layerPanel: LayerBar|undefined;
   layout: DataPanelLayoutContainer;
+  toolBinder: LocalToolBinder<this>;
 
   options: LayerGroupViewerOptions;
 
@@ -303,9 +312,17 @@ export class LayerGroupViewer extends RefCounted {
       ...options
     };
     this.layerSpecification = this.registerDisposer(viewerState.layerSpecification);
+    this.toolBinder =
+        this.registerDisposer(new LocalToolBinder(this, this.layerSpecification.root.toolBinder));
     this.viewerNavigationState =
         this.registerDisposer(new LinkedViewerNavigationState(viewerState));
     this.viewerNavigationState.register(this.state);
+    this.registerDisposer(registerNested((context, linkValue) => {
+      if (linkValue !== NavigationLinkType.UNLINKED) return;
+      context.registerDisposer(new PlaybackManager(
+          this.layerSpecification.root.display, this.viewerNavigationState.position.value,
+          this.viewerNavigationState.velocity.velocity));
+    }, this.viewerNavigationState.position.link));
     if (!(this.layerSpecification instanceof LayerSubsetSpecification)) {
       this.state.add('layers', {
         changed: this.layerSpecification.changed,
@@ -325,6 +342,7 @@ export class LayerGroupViewer extends RefCounted {
 
     this.layout = this.registerDisposer(new DataPanelLayoutContainer(this, 'xy'));
     this.state.add('layout', this.layout);
+    this.state.add('toolBindings', this.toolBinder);
     this.registerActionBindings();
     this.registerDisposer(this.layerManager.useDirectly());
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
@@ -389,10 +407,8 @@ export class LayerGroupViewer extends RefCounted {
       return;
     }
     if (showLayerPanel && this.layerPanel === undefined) {
-      const layerPanel = this.layerPanel = new LayerBar(
-          this.display, this.layerSpecification, this.viewerNavigationState,
-          this.viewerState.selectedLayer.addRef(), () => this.layout.toJSON(),
-          this.options.showLayerHoverValues);
+      const layerPanel = this.layerPanel =
+          new LayerBar(this, () => this.layout.toJSON(), this.options.showLayerHoverValues);
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';

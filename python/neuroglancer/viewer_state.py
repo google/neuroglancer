@@ -288,6 +288,13 @@ class SelectSegmentsTool(Tool):
     TOOL_TYPE = 'selectSegments'
 
 
+@export_tool
+class DimensionTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'dimension'
+    dimension = wrapped_property('dimension', text_type)
+
+
 @export
 def tool(json_data, _readonly=False):
     if isinstance(json_data, Tool):
@@ -343,12 +350,25 @@ class HelpPanelState(SidePanelLocation):
 
 
 @export
+class DimensionPlaybackVelocity(JsonObjectWrapper):
+    __slot__ = ()
+    supports_validation = True
+
+    velocity = wrapped_property('velocity', optional(float, 10))
+    at_boundary = atBoundary = wrapped_property('atBoundary', optional(str, 'reverse'))
+    paused = wrapped_property('paused', optional(bool, True))
+
+
+@export
 class Layer(JsonObjectWrapper):
     __slots__ = ()
     type = wrapped_property('type', optional(text_type))
     layer_dimensions = layerDimensions = wrapped_property('localDimensions', CoordinateSpace)
-    layer_position = layerPosition = wrapped_property('localPosition',
-                                                      optional(array_wrapper(np.float32)))
+    layer_position = layerPosition = local_position = localPosition = wrapped_property(
+        'localPosition', optional(array_wrapper(np.float32)))
+    localVelocity = local_velocity = wrapped_property(
+        'localVelocity', typed_map(key_type=text_type, value_type=DimensionPlaybackVelocity))
+
     tab = wrapped_property('tab', optional(str))
     panels = wrapped_property('panels', typed_list(LayerSidePanelState))
     pick = wrapped_property('pick', optional(bool))
@@ -532,7 +552,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     equivalences = wrapped_property('equivalences', uint64_equivalence_map)
     hide_segment_zero = hideSegmentZero = wrapped_property('hideSegmentZero', optional(bool, True))
     hover_highlight = hoverHighlight = wrapped_property('hoverHighlight', optional(bool, True))
-    base_segment_coloring = baseSegmentColoring = wrapped_property('baseSegmentColoring', optional(bool, False))
+    base_segment_coloring = baseSegmentColoring = wrapped_property('baseSegmentColoring',
+                                                                   optional(bool, False))
     selected_alpha = selectedAlpha = wrapped_property('selectedAlpha', optional(float, 0.5))
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
@@ -1028,6 +1049,7 @@ class CrossSection(JsonObjectWrapper):
 
 @export
 class CrossSectionMap(typed_string_map(CrossSection)):
+
     @staticmethod
     def interpolate(a, b, t):
         c = copy.deepcopy(a)
@@ -1065,6 +1087,7 @@ class DataPanelLayout(JsonObjectWrapper):
 
 
 def data_panel_layout_wrapper(default_value='xy'):
+
     def wrapper(x, _readonly=False):
         if x is None:
             x = default_value
@@ -1155,16 +1178,20 @@ class LayerGroupViewer(JsonObjectWrapper):
     layers = wrapped_property('layers', typed_list(text_type))
     layout = wrapped_property('layout', data_panel_layout_wrapper('xy'))
     position = wrapped_property('position', LinkedPosition)
+    velocity = wrapped_property('velocity',
+                                typed_map(key_type=text_type, value_type=DimensionPlaybackVelocity))
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', LinkedOrientationState)
-    cross_section_scale = crossSectionScale = wrapped_property('crossSectionScale', LinkedZoomFactor)
+    cross_section_scale = crossSectionScale = wrapped_property('crossSectionScale',
+                                                               LinkedZoomFactor)
     cross_section_depth = crossSectionDepth = wrapped_property('crossSectionDepth',
                                                                LinkedDepthRange)
     projection_orientation = projectionOrientation = wrapped_property('projectionOrientation',
                                                                       LinkedOrientationState)
     projection_scale = projectionScale = wrapped_property('projectionScale', LinkedZoomFactor)
     projection_depth = projectionDepth = wrapped_property('projectionDepth', LinkedDepthRange)
-    tool_bindings = wrapped_property('toolBindings', typed_map(key_type=text_type, value_type=tool))
+    tool_bindings = toolBindings = wrapped_property('toolBindings',
+                                                    typed_map(key_type=text_type, value_type=tool))
 
     def __init__(self, *args, **kwargs):
         super(LayerGroupViewer, self).__init__(*args, **kwargs)
@@ -1211,6 +1238,8 @@ class ViewerState(JsonObjectWrapper):
     display_dimensions = displayDimensions = wrapped_property('displayDimensions',
                                                               optional(typed_list(text_type)))
     position = voxel_coordinates = wrapped_property('position', optional(array_wrapper(np.float32)))
+    velocity = wrapped_property('velocity',
+                                typed_map(key_type=text_type, value_type=DimensionPlaybackVelocity))
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', optional(array_wrapper(np.float32, 4)))
     cross_section_scale = crossSectionScale = wrapped_property('crossSectionScale', optional(float))
@@ -1242,7 +1271,8 @@ class ViewerState(JsonObjectWrapper):
     partial_viewport = partialViewport = wrapped_property(
         'partialViewport',
         optional(array_wrapper(np.float64, 4), np.array([0, 0, 1, 1], dtype=np.float64)))
-    tool_bindings = wrapped_property('toolBindings', typed_map(key_type=text_type, value_type=tool))
+    tool_bindings = toolBindings = wrapped_property('toolBindings',
+                                                    typed_map(key_type=text_type, value_type=tool))
 
     @staticmethod
     def interpolate(a, b, t):

@@ -52,7 +52,7 @@ export class NumberInputWidget extends RefCounted {
     this.inputElement.value = '' + this.model.value;
   }
 
-  private updateModel() {
+  updateModel() {
     let value = parseFloat(this.inputElement.value.trim());
     if (Number.isNaN(value)) {
       this.updateView();

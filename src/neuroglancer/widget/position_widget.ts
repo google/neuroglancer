@@ -16,22 +16,36 @@
 
 import './position_widget.css';
 
-import {computeCombinedLowerUpperBound, CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
-import {MouseSelectionState} from 'neuroglancer/layer';
-import {Position} from 'neuroglancer/navigation_state';
+import svg_pause from 'ikonate/icons/pause.svg';
+import svg_play from 'ikonate/icons/play.svg';
+import svg_video from 'ikonate/icons/video.svg';
+import {CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
+import {LayerGroupViewer} from 'neuroglancer/layer_group_viewer';
+import {CoordinateSpacePlaybackVelocity, Position, VelocityBoundaryBehavior} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedDerivedWatchableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {LocalToolBinder, makeToolActivationStatusMessage, makeToolButton, registerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {arraysEqual, binarySearch, filterArrayInplace} from 'neuroglancer/util/array';
+import {arraysEqual, binarySearch} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent, updateChildren, updateInputFieldWidth} from 'neuroglancer/util/dom';
 import {vec3} from 'neuroglancer/util/geom';
+import {verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {ActionEvent, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {EventActionMap, MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
-import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {formatScaleWithUnit, parseScale} from 'neuroglancer/util/si_units';
+import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
+import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
+import {Viewer} from 'neuroglancer/viewer';
+import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
+import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
+import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
+import {makeIcon} from 'neuroglancer/widget/icon';
+import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
+import {PositionPlot} from 'neuroglancer/widget/position_plot';
 
 export const positionDragType = 'neuroglancer-position';
 
@@ -43,6 +57,7 @@ const inputEventMap = EventActionMap.fromObject({
   'tab': {action: 'tab-forward'},
   'shift+tab': {action: 'tab-backward'},
   'wheel': {action: 'adjust-via-wheel'},
+  'alt+wheel': {action: 'adjust-velocity-via-wheel'},
   'backspace': {action: 'delete-backward', preventDefault: false},
   'enter': {action: 'commit'},
   'escape': {action: 'cancel'},
@@ -79,13 +94,27 @@ class DimensionWidget {
   scaleElement = document.createElement('input');
   coordinate = document.createElement('input');
   coordinateLabel = document.createElement('span')
+  playButton = document.createElement('div');
+  pauseButton = document.createElement('div');
   coordinateLabelWidth = 0;
+
+  // Maximum possible position width given the current coordinate space.
+  maxPositionWidth: number = 0;
+
+  // Maximum position width seen so far.
+  //
+  // If the bounds are known when this DimensionWidget is first created, this is initialized to
+  // `maxPositionWidth`.  Otherwise it is initialized to `0`.
+  maxPositionWidthSeen: number = 0;
+
   dropdownOwner: RefCounted|undefined = undefined;
   modified = false;
   draggingPosition = false;
   hasFocus = false;
 
-  constructor(public coordinateSpace: CoordinateSpace, initialDimensionIndex: number) {
+  constructor(
+      public coordinateSpace: CoordinateSpace, public id: DimensionId,
+      initialDimensionIndex: number, options: {allowFocus: boolean, showPlayback: boolean}) {
     const {
       container,
       scaleElement,
@@ -93,16 +122,22 @@ class DimensionWidget {
       coordinate,
       nameElement,
       nameContainer,
-      coordinateLabel
+      coordinateLabel,
+      playButton,
+      pauseButton,
     } = this;
     container.title = '';
     container.classList.add('neuroglancer-position-dimension');
-    container.draggable = true;
-    container.tabIndex = -1;
+    const {allowFocus, showPlayback} = options;
+    if (allowFocus) {
+      container.draggable = true;
+      container.tabIndex = -1;
+    }
     container.appendChild(nameContainer);
     container.appendChild(scaleElement);
     nameContainer.appendChild(nameElement);
-    nameContainer.title = `Drag to reorder, double click to rename.  Names ending in ' or ^ indicate dimensions local to the layer; names ending in ^ indicate channel dimensions (image layers only).`;
+    nameContainer.title =
+        `Drag to reorder, double click to rename.  Names ending in ' or ^ indicate dimensions local to the layer; names ending in ^ indicate channel dimensions (image layers only).`;
     scaleContainer.appendChild(scaleElement);
     nameElement.classList.add('neuroglancer-position-dimension-name');
     nameElement.disabled = true;
@@ -116,6 +151,16 @@ class DimensionWidget {
     scaleElement.spellcheck = false;
     scaleElement.autocomplete = 'off';
     container.appendChild(scaleContainer);
+
+    if (showPlayback) {
+      playButton.classList.add('neuroglancer-icon');
+      pauseButton.classList.add('neuroglancer-icon');
+      playButton.innerHTML = svg_play;
+      pauseButton.innerHTML = svg_pause;
+      container.appendChild(playButton);
+      container.appendChild(pauseButton);
+    }
+
     container.appendChild(coordinate);
     coordinate.type = 'text';
     coordinate.classList.add('neuroglancer-position-dimension-coordinate');
@@ -135,84 +180,47 @@ class DimensionWidget {
     coordinate.required = true;
     coordinate.placeholder = ' ';
     coordinateLabel.classList.add('neuroglancer-position-dimension-coordinate-label');
+
+    if (allowFocus) {
+      nameContainer.addEventListener('dblclick', () => {
+        nameElement.disabled = false;
+        nameElement.focus();
+        nameElement.select();
+      });
+      scaleContainer.addEventListener('dblclick', () => {
+        scaleElement.disabled = false;
+        scaleElement.focus();
+        scaleElement.select();
+      });
+      coordinate.addEventListener('focus', () => {
+        coordinate.select();
+      });
+      container.addEventListener('click', (event: PointerEvent) => {
+        if (!(event.target instanceof HTMLInputElement) || event.target.disabled) {
+          coordinate.focus();
+        }
+      });
+    }
   }
 }
 
-interface NormalizedDimensionBounds {
-  lowerBound: number;
-  upperBound: number;
-  normalizedBounds: readonly{lower: number, upper: number}[];
-}
-
-
-function getCanvasYFromCoordinate(
-    coordinate: number, lowerBound: number, upperBound: number, canvasHeight: number) {
-  return Math.floor((coordinate - lowerBound) * (canvasHeight - 1) / (upperBound - lowerBound));
-}
-
-function getNormalizedDimensionBounds(
-    coordinateSpace: CoordinateSpace, dimensionIndex: number,
-    height: number): NormalizedDimensionBounds|undefined {
-  const {boundingBoxes, bounds} = coordinateSpace;
-  const lowerBound = Math.floor(bounds.lowerBounds[dimensionIndex]);
-  const upperBound = Math.ceil(bounds.upperBounds[dimensionIndex] - 1);
-  if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound)) {
-    return undefined;
+// Updates the width of the coordinate field to the max of:
+//
+// - The current size.
+//
+// - Maximum size seen so far, bounded by maximum width for the current lower/upper
+//   bounds.
+//
+// The purpose of this is to avoid repeatedly changing the layout when using velocity, and also
+// changing the layout as Neuroglancer first loads and the bounds are not yet known.
+function updateCoordinateFieldWidth(widget: DimensionWidget, value: string) {
+  const curLength = value.length;
+  if (curLength > widget.maxPositionWidthSeen) {
+    widget.maxPositionWidthSeen = curLength;
   }
-  const normalizedBounds: {lower: number, upper: number}[] = [];
-  const normalize = (x: number) => {
-    return getCanvasYFromCoordinate(x, lowerBound, upperBound, height);
-  };
-  const {rank} = coordinateSpace;
-  for (const boundingBox of boundingBoxes) {
-    const result = computeCombinedLowerUpperBound(boundingBox, dimensionIndex, rank);
-    if (result === undefined) continue;
-    result.lower = normalize(result.lower);
-    result.upper = normalize(Math.ceil(result.upper - 1));
-    normalizedBounds.push(result);
-  }
-  normalizedBounds.sort((a, b) => {
-    const lowerDiff = a.lower - b.lower;
-    if (lowerDiff !== 0) return lowerDiff;
-    return b.upper - b.upper;
-  });
-  filterArrayInplace(normalizedBounds, (x, i) => {
-    if (i === 0) return true;
-    const prev = normalizedBounds[i - 1];
-    return (prev.lower !== x.lower || prev.upper !== x.upper);
-  });
-  return {lowerBound, upperBound, normalizedBounds};
-}
-
-const tickWidth = 10;
-const barWidth = 15;
-const barRightMargin = 10;
-const canvasWidth = tickWidth + barWidth + barRightMargin;
-
-function drawDimensionBounds(
-    canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, bounds: NormalizedDimensionBounds) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const {normalizedBounds} = bounds;
-  function drawTick(x: number) {
-    ctx.fillRect(0, x, tickWidth, 1);
-  }
-  ctx.fillStyle = '#fff';
-  for (const {lower, upper} of normalizedBounds) {
-    drawTick(lower);
-    drawTick(upper);
-  }
-  const length = normalizedBounds.length;
-  ctx.fillStyle = '#ccc';
-  for (let i = 0; i < length; ++i) {
-    const {lower, upper} = normalizedBounds[i];
-    const startX = Math.floor(i * barWidth / length);
-    const width = Math.max(1, barWidth / length);
-    ctx.fillRect(startX + tickWidth, lower, width, upper + 1 - lower);
-  }
-}
-
-function updateCoordinateFieldWidth(element: HTMLInputElement, value: string) {
-  updateInputFieldWidth(element, value.length + 1);
+  updateInputFieldWidth(
+      widget.coordinate,
+      Math.max(Math.min(widget.maxPositionWidth, widget.maxPositionWidthSeen), curLength));
 }
 
 function updateScaleElementStyle(scaleElement: HTMLInputElement) {
@@ -225,149 +233,127 @@ export class PositionWidget extends RefCounted {
   element = document.createElement('div');
   private dimensionContainer = document.createElement('div');
   private coordinateSpace: CoordinateSpace|undefined = undefined;
+  private velocity: CoordinateSpacePlaybackVelocity|undefined;
+  private singleDimensionId: DimensionId|undefined;
+  private getToolBinder: (() => (LocalToolBinder | undefined))|undefined;
+  private allowFocus: boolean;
+  private showPlayback: boolean;
 
   private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
   private dimensionWidgetList: DimensionWidget[] = [];
 
-  private openRegularDropdown(widget: DimensionWidget, dropdown: HTMLDivElement) {
-    dropdown.classList.add('neuroglancer-position-dimension-dropdown');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-
-    const lowerBoundElement = document.createElement('div');
-    const lowerBoundContainer = document.createElement('div');
-    lowerBoundContainer.appendChild(lowerBoundElement);
-    const lowerBoundText = document.createTextNode('');
-    lowerBoundElement.appendChild(lowerBoundText);
-    const upperBoundElement = document.createElement('div');
-    const hoverElement = document.createElement('div');
-    lowerBoundContainer.classList.add('neuroglancer-position-dimension-dropdown-lowerbound');
-    upperBoundElement.classList.add('neuroglancer-position-dimension-dropdown-upperbound');
-    hoverElement.classList.add('neuroglancer-position-dimension-dropdown-hoverposition');
-    dropdown.appendChild(lowerBoundContainer);
-    dropdown.appendChild(upperBoundElement);
-    dropdown.appendChild(hoverElement);
-    dropdown.appendChild(canvas);
-
-    const canvasHeight = 100;
-
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    upperBoundElement.style.marginTop = `${canvasHeight-1}px`;
-
-    let prevLowerBound: number|undefined, prevUpperBound: number|undefined;
-
-    let hoverPosition: number|undefined = undefined;
-    const updateView = () => {
-      const dimensionIndex = this.dimensionWidgetList.indexOf(widget);
-      if (dimensionIndex === -1) return;
-      const {coordinateSpace} = widget;
-      const normalizedDimensionBounds =
-          getNormalizedDimensionBounds(coordinateSpace, dimensionIndex, canvasHeight);
-      if (normalizedDimensionBounds === undefined ||
-          coordinateSpace.bounds.lowerBounds[dimensionIndex] + 1 ===
-              coordinateSpace.bounds.upperBounds[dimensionIndex]) {
-        dropdown.style.display = 'none';
-        widget.container.dataset.dropdownVisible = undefined;
-        return;
-      }
-      widget.container.dataset.dropdownVisible = 'true';
-      dropdown.style.display = '';
-      const {lowerBound, upperBound} = normalizedDimensionBounds;
-      prevLowerBound = lowerBound;
-      prevUpperBound = upperBound;
-      lowerBoundText.textContent = lowerBound.toString();
-      upperBoundElement.textContent = upperBound.toString();
-      drawDimensionBounds(canvas, ctx, normalizedDimensionBounds);
-      const curPosition = this.position.value[dimensionIndex];
-      if (curPosition >= lowerBound && curPosition <= upperBound) {
-        ctx.fillStyle = '#f66';
-        ctx.fillRect(
-            0, getCanvasYFromCoordinate(curPosition, lowerBound, upperBound, canvasHeight),
-            canvasWidth, 1);
-      }
-      if (hoverPosition !== undefined && hoverPosition >= lowerBound &&
-          hoverPosition <= upperBound) {
-        ctx.fillStyle = '#66f';
-        const hoverOffset =
-            getCanvasYFromCoordinate(hoverPosition, lowerBound, upperBound, canvasHeight);
-        ctx.fillRect(0, hoverOffset, canvasWidth, 1);
-        hoverElement.textContent = hoverPosition.toString();
-        const labelHeight = lowerBoundElement.clientHeight;
-        lowerBoundElement.style.visibility = (hoverOffset > labelHeight) ? '' : 'hidden';
-        upperBoundElement.style.visibility =
-            (hoverOffset < canvasHeight - labelHeight) ? '' : 'hidden';
-        hoverElement.style.display = '';
-        hoverElement.style.visibility = 'visible';
-        hoverElement.style.marginTop = `${hoverOffset}px`;
-      } else {
-        lowerBoundElement.style.visibility = '';
-        hoverElement.style.display = 'none';
-        upperBoundElement.style.visibility = '';
-      }
-    };
-    const dropdownOwner = widget.dropdownOwner!;
-    const scheduleUpdateView =
-        dropdownOwner.registerCancellable(animationFrameDebounce(updateView));
-    dropdownOwner.registerDisposer(this.position.changed.add(scheduleUpdateView));
-    const getPositionFromMouseEvent = (event: MouseEvent): number|undefined => {
-      if (prevLowerBound === undefined || prevUpperBound === undefined) return undefined;
-      const canvasBounds = canvas.getBoundingClientRect();
-      let relativeY = (event.clientY - canvasBounds.top) / canvasBounds.height;
-      relativeY = Math.max(0, relativeY);
-      relativeY = Math.min(1, relativeY);
-      return Math.round(relativeY * (prevUpperBound - prevLowerBound)) + prevLowerBound;
-    };
-    const setPositionFromMouse = (event: MouseEvent) => {
-      const dimensionIndex = this.dimensionWidgetList.indexOf(widget);
-      if (dimensionIndex === -1) return;
-      const x = getPositionFromMouseEvent(event);
-      if (x === undefined) return;
-      const {position} = this;
-      const voxelCoordinates = position.value;
-      voxelCoordinates[dimensionIndex] = x + 0.5;
-      widget.modified = false;
-      position.value = voxelCoordinates;
-    };
-
-    canvas.addEventListener('pointermove', (event: MouseEvent) => {
-      const x = getPositionFromMouseEvent(event);
-      hoverPosition = x;
-      scheduleUpdateView();
-    });
-    canvas.addEventListener('pointerleave', () => {
-      hoverPosition = undefined;
-      scheduleUpdateView();
-    });
-
-    canvas.addEventListener('pointerdown', (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
-        return;
-      }
-      startRelativeMouseDrag(
-          event,
-          (newEvent: MouseEvent) => {
-            if (widget.dropdownOwner === undefined) return;
-            hoverPosition = undefined;
-            setPositionFromMouse(newEvent);
-            scheduleUpdateView();
-            widget.draggingPosition = true;
-          },
-          () => {
-            widget.draggingPosition = false;
-            this.updateDropdownVisibility(widget);
-          });
-      setPositionFromMouse(event);
-    });
-    updateView();
+  getDimensionIndex(id: DimensionId): number {
+    const coordinateSpace = this.position.coordinateSpace.value;
+    return coordinateSpace.ids.indexOf(id);
   }
 
-  private openCoordinateArrayDropdown(widget: DimensionWidget, dropdown: HTMLDivElement, coordinateArray: CoordinateArray) {
+  private openRegularDropdown(widget: DimensionWidget, dropdown: HTMLDivElement) {
+    dropdown.classList.add('neuroglancer-position-dimension-dropdown');
+
+    const dropdownOwner = widget.dropdownOwner!;
+    const toolBinder = this.getToolBinder?.();
+    if (toolBinder !== undefined) {
+      const dimensionIndex = this.getDimensionIndex(widget.id);
+      const toolButton = makeToolButton(dropdownOwner, toolBinder, {
+        toolJson:
+            {type: DIMENSION_TOOL_ID, dimension: widget.coordinateSpace.names[dimensionIndex]},
+      });
+      dropdown.appendChild(toolButton);
+    }
+
+    const plot = dropdownOwner.registerDisposer(new PositionPlot(this.position, widget.id));
+    dropdown.appendChild(plot.element);
+
+    const watchableVelocity = this.velocity?.dimensionVelocity(dropdownOwner, widget.id);
+    if (watchableVelocity !== undefined) {
+      const playbackElement = document.createElement('div');
+      playbackElement.classList.add('neuroglancer-position-dimension-playback');
+      const header = document.createElement('div');
+      header.classList.add('neuroglancer-position-dimension-playback-header');
+      playbackElement.appendChild(header);
+      header.appendChild(
+          dropdownOwner
+              .registerDisposer(new CheckboxIcon(this.velocity!.playbackEnabled(widget.id), {
+                svg: svg_video,
+                enableTitle: 'Enable playback/velocity',
+                disableTitle: 'Disable playback/velocity',
+                backgroundScheme: 'dark',
+              }))
+              .element);
+      header.appendChild(document.createTextNode('Playback'));
+      dropdown.appendChild(playbackElement);
+      const enabled = dropdownOwner.registerDisposer(
+          makeCachedDerivedWatchableValue(value => value !== undefined, [watchableVelocity]));
+      playbackElement.appendChild(
+          dropdownOwner
+              .registerDisposer(new DependentViewWidget(
+                  enabled,
+                  (enabledValue, parent, context) => {
+                    if (!enabledValue) return;
+                    const velocityModel = new WatchableValue<number>(0);
+                    velocityModel.changed.add(() => {
+                      const newValue = velocityModel.value;
+                      const velocity = watchableVelocity.value;
+                      if (velocity === undefined) return;
+                      if (velocity.velocity === newValue) return;
+                      watchableVelocity.value = {...velocity, velocity: newValue};
+                    });
+                    const negateButton = makeIcon({
+                      text: '±',
+                      title: 'Negate velocity',
+                      onClick: () => {
+                        velocityModel.value = -velocityModel.value;
+                      },
+                    });
+                    const velocityInputWidget =
+                        context.registerDisposer(new NumberInputWidget(velocityModel));
+                    velocityInputWidget.element.insertBefore(
+                        negateButton, velocityInputWidget.element.firstChild);
+                    velocityInputWidget.element.title = 'Velocity in coordinates per second';
+                    const rateSpan = document.createElement('span');
+                    rateSpan.textContent = '/s';
+                    velocityInputWidget.element.appendChild(rateSpan);
+                    parent.appendChild(velocityInputWidget.element);
+                    const trackableEnum = new TrackableEnum<VelocityBoundaryBehavior>(
+                        VelocityBoundaryBehavior, VelocityBoundaryBehavior.STOP);
+                    const watchableVelocityChanged = () => {
+                      trackableEnum.value =
+                          watchableVelocity.value?.atBoundary ?? VelocityBoundaryBehavior.STOP;
+                      velocityModel.value = watchableVelocity.value?.velocity ?? 0;
+                    };
+                    watchableVelocityChanged();
+                    context.registerDisposer(
+                        watchableVelocity.changed.add(watchableVelocityChanged));
+                    trackableEnum.changed.add(() => {
+                      const atBoundary = trackableEnum.value;
+                      const velocity = watchableVelocity.value;
+                      if (velocity === undefined) return;
+                      if (velocity.atBoundary === atBoundary) return;
+                      watchableVelocity.value = {...velocity, atBoundary};
+                    });
+                    const selectWidget = new EnumSelectWidget(trackableEnum).element;
+                    parent.appendChild(selectWidget);
+                    selectWidget.title = 'Behavior when lower/upper bound is reached';
+                  }))
+              .element);
+    }
+    plot.dragging.changed.add(() => {
+      const newValue = widget.draggingPosition = plot.dragging.value;
+      if (newValue === false) {
+        this.updateDropdownVisibility(widget);
+      }
+    });
+  }
+
+  private openCoordinateArrayDropdown(
+      widget: DimensionWidget, dropdown: HTMLDivElement, coordinateArray: CoordinateArray) {
     dropdown.classList.add('neuroglancer-position-dimension-coordinate-dropdown');
     const {coordinates, labels} = coordinateArray;
-    const entries: {entryElement: HTMLDivElement, coordinateElement: HTMLDivElement, labelElement: HTMLDivElement}[] = [];
+    const entries: {
+      entryElement: HTMLDivElement,
+      coordinateElement: HTMLDivElement,
+      labelElement: HTMLDivElement
+    }[] = [];
     const length = coordinates.length;
     dropdown.style.setProperty(
         '--neuroglancer-coordinate-label-width', `${widget.coordinateLabelWidth}ch`);
@@ -383,7 +369,7 @@ export class PositionWidget extends RefCounted {
       entryElement.appendChild(coordinateElement);
       entryElement.appendChild(labelElement);
       entryElement.addEventListener('click', () => {
-        const dimensionIndex = this.dimensionWidgetList.indexOf(widget);
+        const dimensionIndex = this.getDimensionIndex(widget.id);
         if (dimensionIndex === -1) return;
         const {position} = this;
         const voxelCoordinates = position.value;
@@ -394,13 +380,13 @@ export class PositionWidget extends RefCounted {
       dropdown.appendChild(entryElement);
       entries.push({entryElement, coordinateElement, labelElement});
     }
-    //const dropdownOwner = widget.dropdownOwner!;
+    // const dropdownOwner = widget.dropdownOwner!;
   }
 
   private openDropdown(widget: DimensionWidget) {
     if (widget.dropdownOwner !== undefined) return;
-    const initialDimensionIndex = this.dimensionWidgetList.indexOf(widget);
-    if (initialDimensionIndex === -1) return;
+    const dimensionIndex = this.getDimensionIndex(widget.id);
+    if (dimensionIndex === -1) return;
     this.closeDropdown();
     const dropdownOwner = widget.dropdownOwner = new RefCounted();
     const dropdown = document.createElement('div');
@@ -415,7 +401,7 @@ export class PositionWidget extends RefCounted {
     dropdown.tabIndex = -1;
     widget.container.appendChild(dropdown);
 
-    const coordinateArray = getCoordinateArray(widget.coordinateSpace, initialDimensionIndex);
+    const coordinateArray = getCoordinateArray(widget.coordinateSpace, dimensionIndex);
     if (coordinateArray == null) {
       this.openRegularDropdown(widget, dropdown);
     } else {
@@ -489,150 +475,141 @@ export class PositionWidget extends RefCounted {
     }
   }
 
-  private newDimension(coordinateSpace: CoordinateSpace, initialDimensionIndex: number) {
-    const widget = new DimensionWidget(coordinateSpace, initialDimensionIndex);
-    widget.container.addEventListener('dragstart', (event: DragEvent) => {
-      this.dragSource = widget;
-      event.stopPropagation();
-      event.dataTransfer!.setData('neuroglancer-dimension', '');
-    });
-    widget.container.addEventListener('dragenter', (event: DragEvent) => {
-      const {dragSource} = this;
-      if (dragSource === undefined || dragSource === widget) return;
-      const {dimensionWidgetList} = this;
-      const sourceIndex = dimensionWidgetList.indexOf(dragSource);
-      const targetIndex = dimensionWidgetList.indexOf(widget);
-      if (sourceIndex === -1 || targetIndex === -1) return;
-      event.preventDefault();
-      this.reorderDimensionTo(targetIndex, sourceIndex);
-    });
-    widget.container.addEventListener('dragend', (event: DragEvent) => {
-      event;
-      if (this.dragSource === widget) {
-        this.dragSource = undefined;
-      }
-    });
-    widget.nameContainer.addEventListener('dblclick', () => {
-      widget.nameElement.disabled = false;
-      widget.nameElement.focus();
-      widget.nameElement.select();
-    });
-    widget.scaleContainer.addEventListener('dblclick', () => {
-      widget.scaleElement.disabled = false;
-      widget.scaleElement.focus();
-      widget.scaleElement.select();
-    });
-    widget.coordinate.addEventListener('focus', () => {
-      widget.coordinate.select();
-    });
-    widget.container.addEventListener('focusin', () => {
-      widget.hasFocus = true;
-      this.updateDropdownVisibility(widget);
-    });
-    widget.container.addEventListener('focusout', (event: FocusEvent) => {
-      const {relatedTarget} = event;
-      if (relatedTarget instanceof Node && widget.container.contains(relatedTarget)) {
-        return;
-      }
-      widget.hasFocus = false;
-      this.updateDropdownVisibility(widget);
-    });
-    widget.container.addEventListener('click', (event: PointerEvent) => {
-      if (!(event.target instanceof HTMLInputElement) || event.target.disabled) {
-        widget.coordinate.focus();
-      }
-    });
-    widget.coordinate.addEventListener('paste', (event: ClipboardEvent) => {
-      const input = widget.coordinate;
-      const value = input.value;
-      const {clipboardData} = event;
-      if (clipboardData === null) return;
-      let text = clipboardData.getData('text');
-      let {selectionEnd, selectionStart} = input;
-      if (selectionStart !== 0 || selectionEnd !== value.length) {
-        if (selectionStart == null) selectionStart = 0;
-        if (selectionEnd == null) selectionEnd = 0;
-        const invalidMatch = text.match(/[^\-0-9\.]/);
-        if (invalidMatch !== null) {
-          text = text.substring(0, invalidMatch.index);
+  private newDimension(
+      coordinateSpace: CoordinateSpace, id: DimensionId, initialDimensionIndex: number) {
+    const widget = new DimensionWidget(
+        coordinateSpace, id, initialDimensionIndex,
+        {allowFocus: this.allowFocus, showPlayback: this.showPlayback});
+    if (this.singleDimensionId === undefined) {
+      widget.container.addEventListener('dragstart', (event: DragEvent) => {
+        this.dragSource = widget;
+        event.stopPropagation();
+        event.dataTransfer!.setData('neuroglancer-dimension', '');
+      });
+      widget.container.addEventListener('dragenter', (event: DragEvent) => {
+        const {dragSource} = this;
+        if (dragSource === undefined || dragSource === widget) return;
+        const {dimensionWidgetList} = this;
+        const sourceIndex = dimensionWidgetList.indexOf(dragSource);
+        const targetIndex = dimensionWidgetList.indexOf(widget);
+        if (sourceIndex === -1 || targetIndex === -1) return;
+        event.preventDefault();
+        this.reorderDimensionTo(targetIndex, sourceIndex);
+      });
+      widget.container.addEventListener('dragend', (event: DragEvent) => {
+        event;
+        if (this.dragSource === widget) {
+          this.dragSource = undefined;
         }
-        if (text.length > 0) {
-          document.execCommand('insertText', undefined, text);
+      });
+    }
+    if (this.allowFocus) {
+      widget.container.addEventListener('focusin', () => {
+        widget.hasFocus = true;
+        this.updateDropdownVisibility(widget);
+      });
+      widget.container.addEventListener('focusout', (event: FocusEvent) => {
+        const {relatedTarget} = event;
+        if (relatedTarget instanceof Node && widget.container.contains(relatedTarget)) {
+          return;
         }
-      } else {
-        this.pasteString(widget, text);
-      }
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    widget.coordinate.addEventListener('input', () => {
-      widget.modified = true;
-      const input = widget.coordinate;
-      const value = input.value;
-      let {selectionDirection, selectionEnd, selectionStart} = input;
-      if (selectionStart === null) selectionStart = 0;
-      if (selectionEnd === null) selectionEnd = selectionStart;
-      let newValue = '';
-      const invalidPattern = /[^\-0-9\.]/g;
-      newValue += value.substring(0, selectionStart).replace(invalidPattern, '');
-      const newSelectionStart = newValue.length;
-      newValue += value.substring(selectionStart, selectionEnd).replace(invalidPattern, '');
-      const newSelectionEnd = newValue.length;
-      newValue += value.substring(selectionEnd).replace(invalidPattern, '');
-      input.value = newValue;
-      input.selectionStart = newSelectionStart;
-      input.selectionEnd = newSelectionEnd;
-      input.selectionDirection = selectionDirection;
-      updateCoordinateFieldWidth(input, newValue);
-      if (selectionEnd === selectionStart && selectionEnd === value.length &&
-          value.match(/^(-?\d+(?:\.(?:\d+)?)?)((?:\s+(?![\s,]))|(?:\s*,\s*))$/)) {
-        this.selectAdjacentCoordinate(widget, 1);
-      }
-    });
+        widget.hasFocus = false;
+        this.updateDropdownVisibility(widget);
+      });
+      widget.coordinate.addEventListener('paste', (event: ClipboardEvent) => {
+        const input = widget.coordinate;
+        const value = input.value;
+        const {clipboardData} = event;
+        if (clipboardData === null) return;
+        let text = clipboardData.getData('text');
+        let {selectionEnd, selectionStart} = input;
+        if (selectionStart !== 0 || selectionEnd !== value.length) {
+          if (selectionStart == null) selectionStart = 0;
+          if (selectionEnd == null) selectionEnd = 0;
+          const invalidMatch = text.match(/[^\-0-9\.]/);
+          if (invalidMatch !== null) {
+            text = text.substring(0, invalidMatch.index);
+          }
+          if (text.length > 0) {
+            document.execCommand('insertText', undefined, text);
+          }
+        } else {
+          this.pasteString(widget, text);
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      widget.coordinate.addEventListener('input', () => {
+        widget.modified = true;
+        const input = widget.coordinate;
+        const value = input.value;
+        let {selectionDirection, selectionEnd, selectionStart} = input;
+        if (selectionStart === null) selectionStart = 0;
+        if (selectionEnd === null) selectionEnd = selectionStart;
+        let newValue = '';
+        const invalidPattern = /[^\-0-9\.]/g;
+        newValue += value.substring(0, selectionStart).replace(invalidPattern, '');
+        const newSelectionStart = newValue.length;
+        newValue += value.substring(selectionStart, selectionEnd).replace(invalidPattern, '');
+        const newSelectionEnd = newValue.length;
+        newValue += value.substring(selectionEnd).replace(invalidPattern, '');
+        input.value = newValue;
+        input.selectionStart = newSelectionStart;
+        input.selectionEnd = newSelectionEnd;
+        input.selectionDirection = selectionDirection;
+        updateCoordinateFieldWidth(widget, newValue);
+        if (selectionEnd === selectionStart && selectionEnd === value.length &&
+            value.match(/^(-?\d+(?:\.(?:\d+)?)?)((?:\s+(?![\s,]))|(?:\s*,\s*))$/)) {
+          this.selectAdjacentCoordinate(widget, 1);
+        }
+      });
 
-    widget.nameElement.addEventListener('input', () => {
-      const {nameElement} = widget;
-      updateInputFieldWidth(nameElement);
-      this.updateNameValidity();
-    });
+      widget.nameElement.addEventListener('input', () => {
+        const {nameElement} = widget;
+        updateInputFieldWidth(nameElement);
+        this.updateNameValidity();
+      });
 
-    widget.scaleElement.addEventListener('input', () => {
-      const {scaleElement} = widget;
-      updateScaleElementStyle(scaleElement);
-      this.updateScaleValidity(widget);
-    });
+      widget.scaleElement.addEventListener('input', () => {
+        const {scaleElement} = widget;
+        updateScaleElementStyle(scaleElement);
+        this.updateScaleValidity(widget);
+      });
 
-    widget.coordinate.addEventListener('blur', event => {
-      const {relatedTarget} = event;
-      if (this.dimensionWidgetList.some(widget => widget.coordinate === relatedTarget)) {
-        return;
-      }
-      if (widget.modified) {
-        this.updatePosition();
-      }
-    });
+      widget.coordinate.addEventListener('blur', event => {
+        const {relatedTarget} = event;
+        if (this.dimensionWidgetList.some(widget => widget.coordinate === relatedTarget)) {
+          return;
+        }
+        if (widget.modified) {
+          this.updatePosition();
+        }
+      });
 
-    widget.nameElement.addEventListener('blur', event => {
-      widget.nameElement.disabled = true;
-      const {relatedTarget} = event;
-      if (this.dimensionWidgetList.some(widget => widget.nameElement === relatedTarget)) {
-        return;
-      }
-      if (!this.updateNames()) {
-        this.forceUpdateDimensions();
-      }
-    });
+      widget.nameElement.addEventListener('blur', event => {
+        widget.nameElement.disabled = true;
+        const {relatedTarget} = event;
+        if (this.dimensionWidgetList.some(widget => widget.nameElement === relatedTarget)) {
+          return;
+        }
+        if (!this.updateNames()) {
+          this.forceUpdateDimensions();
+        }
+      });
 
-    widget.scaleElement.addEventListener('blur', event => {
-      widget.scaleElement.disabled = true;
-      const {relatedTarget} = event;
-      if (this.dimensionWidgetList.some(widget => widget.scaleElement === relatedTarget)) {
-        return;
-      }
-      if (!this.updateScales()) {
-        this.forceUpdateDimensions();
-      }
-    });
+      widget.scaleElement.addEventListener('blur', event => {
+        widget.scaleElement.disabled = true;
+        const {relatedTarget} = event;
+        if (this.dimensionWidgetList.some(widget => widget.scaleElement === relatedTarget)) {
+          return;
+        }
+        if (!this.updateScales()) {
+          this.forceUpdateDimensions();
+        }
+      });
+    } else {
+      widget.coordinate.disabled = true;
+    }
 
     registerActionListener<WheelEvent>(widget.container, 'adjust-via-wheel', actionEvent => {
       const event = actionEvent.detail;
@@ -640,14 +617,20 @@ export class PositionWidget extends RefCounted {
       if (deltaY === 0) {
         return;
       }
-      this.adjustDimension(widget, Math.sign(deltaY));
+      this.adjustDimensionPosition(widget.id, Math.sign(deltaY));
     });
 
+    registerActionListener<WheelEvent>(
+        widget.container, 'adjust-velocity-via-wheel', actionEvent => {
+          const event = actionEvent.detail;
+          this.adjustDimensionVelocity(widget, getWheelZoomAmount(event));
+        });
+
     registerActionListener(widget.container, 'adjust-up', () => {
-      this.adjustDimension(widget, -1);
+      this.adjustDimensionPosition(widget.id, -1);
     });
     registerActionListener(widget.container, 'adjust-down', () => {
-      this.adjustDimension(widget, 1);
+      this.adjustDimensionPosition(widget.id, 1);
     });
 
     for (const getter of widgetFieldGetters) {
@@ -688,6 +671,13 @@ export class PositionWidget extends RefCounted {
       }
     });
 
+    if (this.showPlayback) {
+      const setPaused = (paused: boolean) => {
+        this.velocity?.togglePlayback(widget.id, paused);
+      };
+      widget.playButton.addEventListener('click', () => setPaused(false));
+      widget.pauseButton.addEventListener('click', () => setPaused(true));
+    }
 
     return widget;
   }
@@ -705,15 +695,24 @@ export class PositionWidget extends RefCounted {
       ids,
       scales,
       units,
+      bounds: {lowerBounds, upperBounds},
     } = coordinateSpace;
-    updateChildren(this.dimensionContainer, ids.map((id, i) => {
+    const getDimensionWidget = (id: DimensionId, i: number) => {
+      // Calculate max position width.
+      const lower = lowerBounds[i];
+      const upper = upperBounds[i];
+      const maxPositionWidth = Math.max(
+          Number.isFinite(lower) ? Math.floor(lower).toString().length : 0,
+          Number.isFinite(upper) ? Math.ceil(upper).toString().length : 0);
       let widget = dimensionWidgets.get(id);
       if (widget === undefined) {
-        widget = this.newDimension(coordinateSpace, i);
+        widget = this.newDimension(coordinateSpace, id, i);
         dimensionWidgets.set(id, widget);
+        widget.maxPositionWidthSeen = maxPositionWidth;
       } else {
         widget.coordinateSpace = coordinateSpace;
       }
+      widget.maxPositionWidth = maxPositionWidth;
       const name = names[i]
       widget.nameElement.value = name;
       delete widget.nameElement.dataset.isValid;
@@ -738,7 +737,19 @@ export class PositionWidget extends RefCounted {
       updateScaleElementStyle(widget.scaleElement);
       dimensionWidgetList.push(widget);
       return widget.container;
-    }));
+    };
+    const {singleDimensionId} = this;
+    if (singleDimensionId !== undefined) {
+      const dimensionIndex = this.getDimensionIndex(singleDimensionId);
+      if (dimensionIndex === -1) {
+        updateChildren(this.dimensionContainer, []);
+      } else {
+        updateChildren(
+            this.dimensionContainer, [getDimensionWidget(singleDimensionId, dimensionIndex)]);
+      }
+    } else {
+      updateChildren(this.dimensionContainer, ids.map(getDimensionWidget));
+    }
     for (const [id, widget] of dimensionWidgets) {
       if (widget.coordinateSpace !== coordinateSpace) {
         this.closeDropdown(widget);
@@ -810,11 +821,28 @@ export class PositionWidget extends RefCounted {
     widget.scaleElement.dataset.isValid = isValid.toString();
   }
 
-  constructor(
-      public position: Borrowed<Position>, public combiner: CoordinateSpaceCombiner,
-      {copyButton = true} = {}) {
+  constructor(public position: Borrowed<Position>, public combiner: CoordinateSpaceCombiner, {
+    copyButton = true,
+    velocity = undefined,
+    singleDimensionId = undefined,
+    getToolBinder = undefined,
+    allowFocus = true,
+    showPlayback = true,
+  }: {
+    copyButton?: boolean,
+    velocity?: CoordinateSpacePlaybackVelocity,
+    singleDimensionId?: DimensionId,
+    getToolBinder?: (() => (LocalToolBinder | undefined))|undefined,
+    allowFocus?: boolean,
+    showPlayback?: boolean,
+  } = {}) {
     super();
     const {element, dimensionContainer} = this;
+    this.velocity = velocity;
+    this.singleDimensionId = singleDimensionId;
+    this.getToolBinder = getToolBinder;
+    this.allowFocus = allowFocus;
+    this.showPlayback = showPlayback;
     this.registerDisposer(position.coordinateSpace.changed.add(
         this.registerCancellable(animationFrameDebounce(() => this.updateDimensions()))));
     element.className = 'neuroglancer-position-widget';
@@ -840,12 +868,30 @@ export class PositionWidget extends RefCounted {
       copyButton.draggable = true;
       element.appendChild(copyButton);
     }
-    this.registerDisposer(position.changed.add(
-        this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
 
-    const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(element, inputEventMap));
-    keyboardHandler.allShortcutsAreGlobal = true;
-    this.registerDisposer(new MouseEventBinder(element, inputEventMap));
+    const debouncedUpdateView =
+        this.registerCancellable(animationFrameDebounce(() => this.updateView()));
+    this.registerDisposer(position.changed.add(debouncedUpdateView));
+    if (velocity !== undefined) {
+      this.registerDisposer(velocity.changed.add(debouncedUpdateView));
+    }
+
+    const shouldIgnoreEvent = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element &&
+          target.matches('.neuroglancer-position-dimension-playback *')) {
+        return true;
+      }
+      return false;
+    };
+    if (allowFocus) {
+      const keyboardHandler =
+          this.registerDisposer(new KeyboardEventBinder(element, inputEventMap));
+      keyboardHandler.allShortcutsAreGlobal = true;
+      keyboardHandler.shouldIgnore = shouldIgnoreEvent;
+    }
+    const mouseHandler = this.registerDisposer(new MouseEventBinder(element, inputEventMap));
+    mouseHandler.shouldIgnore = shouldIgnoreEvent;
     this.registerDisposer(registerActionListener(element, 'cancel', event => {
       this.coordinateSpace = undefined;
       this.updateView();
@@ -859,8 +905,8 @@ export class PositionWidget extends RefCounted {
   }
 
 
-  private adjustDimension(widget: DimensionWidget, adjustment: number) {
-    const axisIndex = this.dimensionWidgetList.indexOf(widget);
+  adjustDimensionPosition(id: DimensionId, adjustment: number) {
+    const axisIndex = this.getDimensionIndex(id);
     if (axisIndex === -1) return;
     this.updatePosition();
     const {position} = this;
@@ -887,7 +933,14 @@ export class PositionWidget extends RefCounted {
     this.updateView();
   }
 
+  adjustDimensionVelocity(widget: DimensionWidget, factor: number) {
+    const {velocity} = this;
+    if (velocity === undefined) return;
+    velocity.multiplyVelocity(widget.id, factor);
+  }
+
   private updatePosition() {
+    if (!this.allowFocus) return;
     const {dimensionWidgetList} = this;
     const {position} = this;
     const {value: voxelCoordinates} = position;
@@ -905,6 +958,7 @@ export class PositionWidget extends RefCounted {
   }
 
   private updateNames() {
+    if (!this.allowFocus) return;
     const {dimensionWidgetList} = this;
     const {position: {coordinateSpace}} = this;
     const existing = coordinateSpace.value;
@@ -912,14 +966,15 @@ export class PositionWidget extends RefCounted {
     if (this.combiner.getRenameValidity(names).includes(false)) return false;
     const existingNames = existing.names;
     if (arraysEqual(existingNames, names)) return false;
-    const timestamps = existing.timestamps.map(
-        (t, i) => (existingNames[i] === names[i]) ? t : Date.now());
+    const timestamps =
+        existing.timestamps.map((t, i) => (existingNames[i] === names[i]) ? t : Date.now());
     const newSpace = {...existing, names, timestamps};
     coordinateSpace.value = newSpace;
     return true;
   }
 
   private updateScales() {
+    if (!this.allowFocus) return;
     const {dimensionWidgetList} = this;
     const {position: {coordinateSpace}} = this;
     const existing = coordinateSpace.value;
@@ -965,12 +1020,13 @@ export class PositionWidget extends RefCounted {
       return;
     }
     const coordinateSpace = this.coordinateSpace!;
+    const {velocity} = this;
     for (let i = 0; i < rank; ++i) {
       const widget = dimensionWidgetList[i];
       const inputElement = widget.coordinate;
       const newCoord = Math.floor(voxelCoordinates[i]);
       const newValue = newCoord.toString();
-      updateCoordinateFieldWidth(inputElement, newValue);
+      updateCoordinateFieldWidth(widget, newValue);
       inputElement.value = newValue;
       const coordinateArray = getCoordinateArray(coordinateSpace, i);
       let label = '';
@@ -983,6 +1039,17 @@ export class PositionWidget extends RefCounted {
       }
       const labelElement = widget.coordinateLabel;
       labelElement.textContent = label;
+      if (this.showPlayback) {
+        const velocityInfo = velocity?.value?.[i];
+        if (velocityInfo !== undefined) {
+          const paused = velocityInfo.paused;
+          widget.playButton.style.display = paused ? '' : 'none';
+          widget.pauseButton.style.display = (!paused) ? '' : 'none';
+        } else {
+          widget.playButton.style.display = 'none';
+          widget.pauseButton.style.display = 'none';
+        }
+      }
     }
   }
 
@@ -1023,3 +1090,232 @@ export class MousePositionWidget extends RefCounted {
     super.disposed();
   }
 }
+
+const DIMENSION_TOOL_ID = 'dimension';
+
+interface SupportsDimensionTool<ToolContext extends Object = Object> {
+  position: Position;
+  velocity: CoordinateSpacePlaybackVelocity;
+  coordinateSpaceCombiner: CoordinateSpaceCombiner;
+  toolBinder: LocalToolBinder<ToolContext>;
+}
+
+const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  'at:shift?+wheel': {action: 'adjust-position-via-wheel'},
+  'at:shift?+alt+wheel': {action: 'adjust-velocity-via-wheel'},
+  'shift?+alt?+space': {action: 'toggle-playback'},
+  'at:shift?+alt?+mousedown0': {action: 'toggle-playback'},
+
+});
+
+class DimensionTool<Viewer extends Object> extends Tool<Viewer> {
+  get position() {
+    return this.viewer.position;
+  }
+  get velocity() {
+    return this.viewer.velocity;
+  }
+  get coordinateSpace() {
+    return this.viewer.coordinateSpaceCombiner.combined;
+  }
+
+  activate(activation: ToolActivation<this>) {
+    const {viewer} = this;
+    const {content} = makeToolActivationStatusMessage(activation);
+    content.classList.add('neuroglancer-position-tool');
+    activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
+    const positionWidget = new PositionWidget(viewer.position, viewer.coordinateSpaceCombiner, {
+      velocity: viewer.velocity,
+      singleDimensionId: this.dimensionId,
+      copyButton: false,
+      allowFocus: false,
+      showPlayback: false,
+    });
+    positionWidget.element.style.userSelect = 'none';
+    content.appendChild(activation.registerDisposer(positionWidget).element);
+    const plot =
+        activation.registerDisposer(new PositionPlot(viewer.position, this.dimensionId, 'row'));
+    plot.element.style.flex = '1';
+    content.appendChild(plot.element);
+    activation.bindAction<WheelEvent>('adjust-position-via-wheel', actionEvent => {
+      actionEvent.stopPropagation();
+      const event = actionEvent.detail;
+      const {deltaY} = event;
+      if (deltaY === 0) {
+        return;
+      }
+      positionWidget.adjustDimensionPosition(this.dimensionId, Math.sign(deltaY));
+    });
+
+    const watchableVelocity = this.velocity.dimensionVelocity(activation, this.dimensionId);
+    const enabled = activation.registerDisposer(
+        makeCachedDerivedWatchableValue(value => value !== undefined, [watchableVelocity]));
+    content.appendChild(
+        activation
+            .registerDisposer(new DependentViewWidget(
+                enabled,
+                (enabledValue, parent, context) => {
+                  if (!enabledValue) return;
+                  parent.classList.add('neuroglancer-position-dimension-playback');
+                  const playButton = document.createElement('div');
+                  const pauseButton = document.createElement('div');
+                  playButton.classList.add('neuroglancer-icon');
+                  pauseButton.classList.add('neuroglancer-icon');
+                  playButton.innerHTML = svg_play;
+                  pauseButton.innerHTML = svg_pause;
+                  parent.appendChild(playButton);
+                  parent.appendChild(pauseButton);
+                  const togglePlayback = () => viewer.velocity.togglePlayback(this.dimensionId);
+                  playButton.addEventListener('click', togglePlayback);
+                  pauseButton.addEventListener('click', togglePlayback);
+                  const updatePlayPause = () => {
+                    const paused = watchableVelocity.value?.paused;
+                    playButton.style.display = paused ? '' : 'none';
+                    pauseButton.style.display = (!paused) ? '' : 'none';
+                  };
+                  context.registerDisposer(watchableVelocity.changed.add(updatePlayPause));
+                  updatePlayPause();
+                  const velocityModel = new WatchableValue<number>(0);
+                  velocityModel.changed.add(() => {
+                    const newValue = velocityModel.value;
+                    const velocity = watchableVelocity.value;
+                    if (velocity === undefined) return;
+                    if (velocity.velocity === newValue) return;
+                    watchableVelocity.value = {...velocity, velocity: newValue};
+                  });
+                  const negateButton = makeIcon({
+                    text: '±',
+                    title: 'Negate velocity',
+                    onClick: () => {
+                      velocityModel.value = -velocityModel.value;
+                    },
+                  });
+                  const velocityInputWidget =
+                      context.registerDisposer(new NumberInputWidget(velocityModel));
+                  velocityInputWidget.inputElement.disabled = true;
+                  velocityInputWidget.element.insertBefore(
+                      negateButton, velocityInputWidget.element.firstChild);
+                  velocityInputWidget.element.title = 'Velocity in coordinates per second';
+                  const rateSpan = document.createElement('span');
+                  rateSpan.textContent = '/s';
+                  velocityInputWidget.element.appendChild(rateSpan);
+                  parent.appendChild(velocityInputWidget.element);
+                  const trackableEnum = new TrackableEnum<VelocityBoundaryBehavior>(
+                      VelocityBoundaryBehavior, VelocityBoundaryBehavior.STOP);
+                  const watchableVelocityChanged = () => {
+                    trackableEnum.value =
+                        watchableVelocity.value?.atBoundary ?? VelocityBoundaryBehavior.STOP;
+                    velocityModel.value = watchableVelocity.value?.velocity ?? 0;
+                  };
+                  watchableVelocityChanged();
+                  context.registerDisposer(watchableVelocity.changed.add(watchableVelocityChanged));
+                  trackableEnum.changed.add(() => {
+                    const atBoundary = trackableEnum.value;
+                    const velocity = watchableVelocity.value;
+                    if (velocity === undefined) return;
+                    if (velocity.atBoundary === atBoundary) return;
+                    watchableVelocity.value = {...velocity, atBoundary};
+                  });
+                  const selectWidget = new EnumSelectWidget(trackableEnum).element;
+                  parent.appendChild(selectWidget);
+                  selectWidget.title = 'Behavior when lower/upper bound is reached';
+                }))
+            .element);
+    content.appendChild(
+        activation
+            .registerDisposer(new CheckboxIcon(viewer.velocity.playbackEnabled(this.dimensionId), {
+              svg: svg_video,
+              enableTitle: 'Enable playback/velocity',
+              disableTitle: 'Disable playback/velocity',
+              backgroundScheme: 'dark',
+            }))
+            .element);
+
+    activation.bindAction<WheelEvent>('adjust-velocity-via-wheel', actionEvent => {
+      actionEvent.stopPropagation();
+      const factor = getWheelZoomAmount(actionEvent.detail);
+      viewer.velocity.multiplyVelocity(this.dimensionId, factor);
+    });
+    activation.bindAction<WheelEvent>('toggle-playback', event => {
+      event.stopPropagation();
+      viewer.velocity.togglePlayback(this.dimensionId);
+    });
+  }
+
+  get description() {
+    return `dim ${this.dimensionName}`;
+  }
+
+  dimensionIndex: number;
+  dimensionName: string;
+
+  constructor(public viewer: SupportsDimensionTool<Viewer>, public dimensionId: DimensionId) {
+    super(viewer.toolBinder);
+    const coordinateSpace = this.coordinateSpace.value;
+    const i = this.dimensionIndex = coordinateSpace.ids.indexOf(dimensionId);
+    this.dimensionName = coordinateSpace.names[i];
+    this.registerDisposer(this.coordinateSpace.changed.add(() => {
+      const coordinateSpace = this.coordinateSpace.value;
+      const i = this.dimensionIndex = this.coordinateSpace.value.ids.indexOf(dimensionId);
+      if (i === -1) {
+        this.unbind();
+        return;
+      }
+      const newName = coordinateSpace.names[i];
+      if (this.dimensionName !== newName) {
+        this.dimensionName = newName;
+        this.changed.dispatch();
+      }
+    }));
+  }
+
+  toJSON() {
+    return {
+      'type': DIMENSION_TOOL_ID,
+      'dimension': this.dimensionName,
+    };
+  }
+}
+
+function makeDimensionTool(viewer: SupportsDimensionTool, obj: unknown) {
+  const dimension = verifyObjectProperty(obj, 'dimension', verifyString);
+  const coordinateSpace = viewer.coordinateSpaceCombiner.combined.value;
+  const dimensionIndex = coordinateSpace.names.indexOf(dimension);
+  if (dimensionIndex === -1) {
+    throw new Error(`Invalid dimension name: ${JSON.stringify(dimension)}`);
+  }
+  return new DimensionTool(viewer, coordinateSpace.ids[dimensionIndex]);
+}
+
+registerTool(
+    Viewer, DIMENSION_TOOL_ID,
+    (viewer, obj) => makeDimensionTool(
+        {
+          position: viewer.position,
+          velocity: viewer.velocity,
+          coordinateSpaceCombiner: viewer.layerSpecification.coordinateSpaceCombiner,
+          toolBinder: viewer.toolBinder,
+        },
+        obj));
+
+registerTool(
+    UserLayer, DIMENSION_TOOL_ID,
+    (layer, obj) => makeDimensionTool(
+        {
+          position: layer.localPosition,
+          velocity: layer.localVelocity,
+          coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
+          toolBinder: layer.toolBinder,
+        },
+        obj));
+
+registerTool(
+    LayerGroupViewer, DIMENSION_TOOL_ID,
+    (layerGroupViewer, obj) => makeDimensionTool(
+        {
+          position: layerGroupViewer.viewerNavigationState.position.value,
+          velocity: layerGroupViewer.viewerNavigationState.velocity.velocity,
+          coordinateSpaceCombiner: layerGroupViewer.layerSpecification.root.coordinateSpaceCombiner,
+          toolBinder: layerGroupViewer.toolBinder,
+        },
+        obj));

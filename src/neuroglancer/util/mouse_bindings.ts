@@ -23,8 +23,10 @@ import {ActionEvent, dispatchEventWithModifiers, EventActionMap, EventActionMapI
 
 export class MouseEventBinder<EventMap extends EventActionMapInterface> extends RefCounted {
   private dispatch(baseIdentifier: string, event: MouseEvent) {
+    if (this.shouldIgnore?.(event)) return;
     dispatchEventWithModifiers(baseIdentifier, event, event, this.eventMap);
   }
+  shouldIgnore: ((event: MouseEvent) => boolean)|undefined = undefined;
   constructor(
       public target: EventTarget, public eventMap: EventMap,
       commonHandler?: (event: MouseEvent) => void) {
