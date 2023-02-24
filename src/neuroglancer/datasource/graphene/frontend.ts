@@ -1396,13 +1396,13 @@ class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
             setSource(selection.rootId);
             const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
             const annotationToNanometers = loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
+            activation.cancel();
             const mergedRoot = await graph.graphServer.mergeSegments(lastSegmentSelection, selection, annotationToNanometers);
             const {visibleSegments} = segmentationGroupState;
             visibleSegments.delete(lastSegmentSelection.rootId);
             visibleSegments.delete(selection.rootId);
             visibleSegments.add(mergedRoot);
             this.lastAnchorSelection.value = undefined;
-            activation.cancel();
           }
         }
       })()
