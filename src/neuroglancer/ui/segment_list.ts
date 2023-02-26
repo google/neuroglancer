@@ -19,7 +19,7 @@ import './segment_list.css';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import {SegmentationDisplayState, SegmentWidgetWithExtraColumnsFactory} from 'neuroglancer/segmentation_display_state/frontend';
-import {changeTagConstraintInSegmentQuery, executeSegmentQuery, ExplicitIdQuery, FilterQuery, findQueryResultIntersectionSize, forEachQueryResultSegmentId, InlineSegmentNumericalProperty, isQueryUnconstrained, NumericalPropertyConstraint, parseSegmentQuery, PreprocessedSegmentPropertyMap, PropertyHistogram, queryIncludesColumn, QueryResult, unparseSegmentQuery, updatePropertyHistograms} from 'neuroglancer/segmentation_display_state/property_map';
+import {changeTagConstraintInSegmentQuery, executeSegmentQuery, ExplicitIdQuery, FilterQuery, findQueryResultIntersectionSize, forEachQueryResultSegmentIdGenerator, InlineSegmentNumericalProperty, isQueryUnconstrained, NumericalPropertyConstraint, parseSegmentQuery, PreprocessedSegmentPropertyMap, PropertyHistogram, queryIncludesColumn, QueryResult, unparseSegmentQuery, updatePropertyHistograms} from 'neuroglancer/segmentation_display_state/property_map';
 import type {SegmentationUserLayer, SegmentationUserLayerGroupState} from 'neuroglancer/segmentation_user_layer';
 import {observeWatchable, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
@@ -804,20 +804,28 @@ class SegmentListGroupBase extends RefCounted {
 
   private currentConfirmCallback: WatchableValueInterface<(() => void)|undefined> = new WatchableValue(undefined);
 
+  makeSegmentsVisible(visible: boolean) {
+    const {visibleSegments, selectedSegments} = this.group;
+    const segments = [...this.listSegments(true)];
+    if (visible) {
+      selectedSegments.set(segments, visible);
+    }
+    visibleSegments.set(segments, visible);
+  }
+
   selectSegments(select: boolean, changeVisibility=false) {
     const {selectedSegments, visibleSegments} = this.group;
-    for (const id of this.listSegments()) {
-      if (select || !changeVisibility) {
-        selectedSegments.set(id, select);
-      }
-      if (changeVisibility) {
-        visibleSegments.set(id, select);
-      }
+    const segments = [...this.listSegments(true)];
+    if (select || !changeVisibility) {
+      selectedSegments.set(segments, select);
+    }
+    if (changeVisibility) {
+      visibleSegments.set(segments, select);
     }
   }
 
   copySegments(onlyVisible=false) {
-    let ids = [...this.listSegments()]
+    let ids = [...this.listSegments(true)]
     if (onlyVisible) {
       ids = ids.filter(segment => this.group.visibleSegments.has(segment));
     }
@@ -881,20 +889,21 @@ class SegmentListGroupBase extends RefCounted {
     visibilityToggleAllButton.checked = true;
     visibilityToggleAllButton.title = 'Deselect all segment IDs';
     visibilityToggleAllButton.addEventListener('change', () => {
+      this.clearConfirm();
       const adding = visibilityToggleAllButton.checked;
       const {visibleSegments} = group;
       if (adding) {
-        const newSegments = [...this.listSegments()];
+        const newSegments = [...this.listSegments(true)];
         const existingVisible = newSegments.filter(segment => visibleSegments.has(segment));
         const newVisibleCount = newSegments.length - existingVisible.length;
         if (newVisibleCount > selectSegmentConfirmationThreshold) {
           this.confirm(`Confirm: show ${newVisibleCount} segments?`, () => {
-            this.selectSegments(adding, true);
+            this.makeSegmentsVisible(adding);
           });
           return;
         }
       }
-      this.selectSegments(adding, true);
+      this.makeSegmentsVisible(adding);
     });
     const {selectionStatusContainer} = this;
     selectionStatusContainer.classList.add('neuroglancer-segment-list-status');
@@ -908,11 +917,13 @@ class SegmentListGroupBase extends RefCounted {
     this.registerDisposer(group.selectedSegments.changed.add(() => this.updateStatus()));
   }
 
-  listSegments(): IterableIterator<Uint64> {
+  listSegments(safe = false): IterableIterator<Uint64> {
+    safe;
     return [].values();
   }
 
   updateStatus() {
+    this.clearConfirm();
     const {listSource, group,
       starAllButton, selectionStatusMessage, selectionCopyButton, visibilityToggleAllButton} = this;
     const {visibleSegments, selectedSegments} = group;
@@ -966,8 +977,9 @@ class SegmentListGroupSelected extends SegmentListGroupBase {
     this.elements.unshift(matchStatusContainer);
   }
 
-  listSegments() {
-      return this.group.selectedSegments[Symbol.iterator](); // TODO, better way to call the iterator?
+  listSegments(safe = false) {
+    safe;
+    return this.group.selectedSegments[Symbol.iterator](); // TODO, better way to call the iterator?
   }
   
   updateStatus() {
@@ -990,15 +1002,11 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
     listSource.debouncedUpdate.flush();
   }
 
-  listSegments(): IterableIterator<Uint64> {
+  listSegments(safe = false): IterableIterator<Uint64> {
     const {listSource, segmentPropertyMap} = this;
     this.updateQuery();
     const queryResult = listSource.queryResult.value;
-    const segments: Uint64[] = [];
-    forEachQueryResultSegmentId(segmentPropertyMap, queryResult, (id) => {
-      segments.push(id);
-    });
-    return segments.values();
+    return forEachQueryResultSegmentIdGenerator(segmentPropertyMap, queryResult, safe);
   }
 
   constructor(

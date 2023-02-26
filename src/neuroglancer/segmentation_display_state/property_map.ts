@@ -1063,6 +1063,31 @@ export function forEachQueryResultSegmentId(
   }
 }
 
+export function* forEachQueryResultSegmentIdGenerator(
+    db: PreprocessedSegmentPropertyMap|undefined, queryResult: QueryResult|undefined, safe = false): IterableIterator<Uint64> {
+  if (queryResult === undefined) return;
+  const {explicitIds} = queryResult;
+  if (explicitIds !== undefined) {
+    for (let id of explicitIds) {
+      yield id;
+    }
+  }
+  const {indices} = queryResult;
+  if (indices !== undefined) {
+    const {ids} = db?.segmentPropertyMap.inlineProperties!;
+    for (let i = 0, count = indices.length; i < count; ++i) {
+      const propIndex = indices[i];
+      if (safe) {
+        yield new Uint64(ids[propIndex * 2], ids[propIndex * 2 + 1]);
+      } else {
+        tempUint64.low = ids[propIndex * 2];
+        tempUint64.high = ids[propIndex * 2 + 1];
+        yield tempUint64;
+      }
+    }
+  }
+}
+
 export function findQueryResultIntersectionSize(
     db: PreprocessedSegmentPropertyMap|undefined, queryResult: QueryResult|undefined,
     segmentSet: Uint64Set): number {
