@@ -282,6 +282,12 @@ export function normalizeEventAction(
   return {...action, originalEventIdentifier: identifier};
 }
 
+// Strips the phase and optional modifiers.
+function friendlyEventIdentifier(identifier: string): string {
+  identifier = identifier.replace(/^(?:at|bubble|capture)|(?:(?:shift|control|alt|meta)\?\+)/g, "");
+  return identifier;
+}
+
 /**
  * Hierarchical map of `EventIdentifier` specifications to `EventAction` specifications.  These maps
  * are used by KeyboardEventBinder and MouseEventBinder to dispatch an ActionEvent in response to an
@@ -354,8 +360,18 @@ export class EventActionMap extends
     for (const [, value] of this.entries()) {
       uniqueBindings.set(value.originalEventIdentifier!, value.action);
     }
-    for (const [key, value] of uniqueBindings) {
-      bindings.push(`${key}→${value}`);
+    const actionBindings = new Map<string, string[]>();
+    for (const [eventIdentifier, action] of uniqueBindings) {
+      let events = actionBindings.get(action);
+      if (events === undefined) {
+        events = [];
+        actionBindings.set(action, events);
+      }
+      events.push(friendlyEventIdentifier(eventIdentifier));
+    }
+    for (const [action, events] of actionBindings) {
+      const eventStr = events.length === 1 ? events[0] : `{${events.join(',')}}`;
+      bindings.push(`${eventStr}→${action}`);
     }
     return bindings.join(', ');
   }
