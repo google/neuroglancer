@@ -29,7 +29,7 @@ import {EventActionMap, MouseEventBinder} from 'neuroglancer/util/mouse_bindings
 import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {formatScaleWithUnitAsString, parseScale} from 'neuroglancer/util/si_units';
 
-const dimensionColors = ['#f00', '#0f0', '#00f'];
+const dimensionColors = ['#f00', '#0f0', '#99f'];
 
 interface DimensionWidget {
   container: HTMLDivElement;
