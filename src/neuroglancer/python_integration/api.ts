@@ -62,58 +62,60 @@ export class ClientStateSynchronizer extends RefCounted {
     if (this.updateInProgress) {
       return;
     }
-    while (this.needUpdate) {
-      this.needUpdate = false;
-      const clientGeneration = this.state.changed.count;
-      if (clientGeneration == this.clientGeneration) {
-        return;
-      }
-      const newStateJson = getCachedJson(this.state).value;
-      const newStateEncoded = JSON.stringify(newStateJson);
-      if (newStateEncoded === this.lastServerState) {
-        // Avoid sending back the exact same state just received from or sent to the server.  This
-        // is also important for making things work in the presence of multiple simultaneous
-        // clients.
-        this.clientGeneration = clientGeneration;
-        return;
-      }
-      if (DEBUG) {
-        console.log('Sending update due to mismatch: ', {
-          newStateEncoded,
-          lastServerState: this.lastServerState,
-          lastServerGeneration: this.lastServerGeneration
-        });
-      }
-      try {
-        this.updateInProgress = true;
-        const response = await fetch(this.client.urls.state, {
-          method: 'POST',
-          body: JSON.stringify({
-            s: newStateJson,
-            g: clientGeneration,
-            pg: this.lastServerGeneration,
-            c: this.client.clientId
-          })
-        });
-        this.updateInProgress = false;
-        if (response.status === 200) {
-          const responseJson = await response.json();
-          this.lastServerState = newStateEncoded;
-          this.lastServerGeneration = responseJson['g'];
-          this.clientGeneration = clientGeneration;
-        } else if (response.status === 412) {
-          const responseJson = await response.json();
-          const newState = responseJson['s'];
-          const newGeneration = responseJson['g'];
-          this.setServerState(newState, newGeneration);
-        } else {
-          throw HttpError.fromResponse(response);
+    try {
+      this.updateInProgress = true;
+      while (this.needUpdate) {
+        this.needUpdate = false;
+        const clientGeneration = this.state.changed.count;
+        if (clientGeneration == this.clientGeneration) {
+          return;
         }
-      } catch (e) {
-        this.updateInProgress = false;
-        console.log('Failed to send state update', e);
-        return;
+        const newStateJson = getCachedJson(this.state).value;
+        const newStateEncoded = JSON.stringify(newStateJson);
+        if (newStateEncoded === this.lastServerState) {
+          // Avoid sending back the exact same state just received from or sent to the server.  This
+          // is also important for making things work in the presence of multiple simultaneous
+          // clients.
+          this.clientGeneration = clientGeneration;
+          return;
+        }
+        if (DEBUG) {
+          console.log('Sending update due to mismatch: ', {
+            newStateEncoded,
+            lastServerState: this.lastServerState,
+            lastServerGeneration: this.lastServerGeneration
+          });
+        }
+        try {
+          const response = await fetch(this.client.urls.state, {
+            method: 'POST',
+            body: JSON.stringify({
+              s: newStateJson,
+              g: clientGeneration,
+              pg: this.lastServerGeneration,
+              c: this.client.clientId
+            })
+          });
+          if (response.status === 200) {
+            const responseJson = await response.json();
+            this.lastServerState = newStateEncoded;
+            this.lastServerGeneration = responseJson['g'];
+            this.clientGeneration = clientGeneration;
+          } else if (response.status === 412) {
+            const responseJson = await response.json();
+            const newState = responseJson['s'];
+            const newGeneration = responseJson['g'];
+            this.setServerState(newState, newGeneration);
+          } else {
+            throw HttpError.fromResponse(response);
+          }
+        } catch (e) {
+          console.log('Failed to send state update', e);
+          return;
+        }
       }
+    } finally {
+      this.updateInProgress = false;
     }
   }
 
