@@ -786,12 +786,12 @@ export class SegmentDisplayTab extends Tab {
                                     if (graph === undefined) return;
                                     const toolbox = document.createElement('div');
                                     toolbox.className = 'neuroglancer-segmentation-toolbox';
-                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolbox.appendChild(makeToolButton(context, layer.toolBinder, {
                                       toolJson: ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
                                       label: 'Merge',
                                       title: 'Merge segments'
                                     }));
-                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                    toolbox.appendChild(makeToolButton(context, layer.toolBinder, {
                                       toolJson: ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
                                       label: 'Split',
                                       title: 'Split segments'
@@ -803,7 +803,7 @@ export class SegmentDisplayTab extends Tab {
 
     const toolbox = document.createElement('div');
     toolbox.className ='neuroglancer-segmentation-toolbox';
-    toolbox.appendChild(makeToolButton(this, layer, {
+    toolbox.appendChild(makeToolButton(this, layer.toolBinder, {
       toolJson: SELECT_SEGMENTS_TOOLS_ID,
       label: 'Select',
       title: 'Select/Deselect segments'

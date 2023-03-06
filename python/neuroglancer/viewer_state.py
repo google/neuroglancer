@@ -1164,6 +1164,7 @@ class LayerGroupViewer(JsonObjectWrapper):
                                                                       LinkedOrientationState)
     projection_scale = projectionScale = wrapped_property('projectionScale', LinkedZoomFactor)
     projection_depth = projectionDepth = wrapped_property('projectionDepth', LinkedDepthRange)
+    tool_bindings = wrapped_property('toolBindings', typed_map(key_type=text_type, value_type=tool))
 
     def __init__(self, *args, **kwargs):
         super(LayerGroupViewer, self).__init__(*args, **kwargs)
@@ -1241,6 +1242,7 @@ class ViewerState(JsonObjectWrapper):
     partial_viewport = partialViewport = wrapped_property(
         'partialViewport',
         optional(array_wrapper(np.float64, 4), np.array([0, 0, 1, 1], dtype=np.float64)))
+    tool_bindings = wrapped_property('toolBindings', typed_map(key_type=text_type, value_type=tool))
 
     @staticmethod
     def interpolate(a, b, t):

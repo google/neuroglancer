@@ -21,7 +21,7 @@
 import './tool.css';
 
 import debounce from 'lodash/debounce';
-import {MouseSelectionState, UserLayer, UserLayerConstructor} from 'neuroglancer/layer';
+import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
 import {StatusMessage} from 'neuroglancer/status';
 import {TrackableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
@@ -46,30 +46,47 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
     this.inputEventMapBinder(inputEventMap, this);
   }
   cancel() {
-    if (this == this.tool.layer.manager.root.toolBinder.activeTool_) {
-      this.tool.layer.manager.root.toolBinder.deactivate_();
+    const {globalBinder} = this.tool;
+    if (this == globalBinder.activeTool_) {
+      globalBinder.deactivate_();
     }
   }
 }
 
-export abstract class Tool<LayerType extends UserLayer = UserLayer> extends RefCounted {
+export abstract class Tool<Context extends Object = Object> extends RefCounted {
   changed = new Signal();
   keyBinding: string|undefined = undefined;
-  constructor(public layer: LayerType, public toggle: boolean = false) {
-    super();
+
+  get context () {
+    return this.localBinder.context;
   }
-  get mouseState() {
-    return this.layer.manager.root.layerSelectedValues.mouseState;
+
+  get globalBinder() {
+    return this.localBinder.globalBinder;
+  }
+
+  constructor(
+      public readonly localBinder: LocalToolBinder<Context>, public toggle: boolean = false) {
+    super();
   }
   abstract activate(activation: ToolActivation<this>): void;
   abstract toJSON(): any;
   abstract description: string;
   unbind() {
-    const {layer} = this;
     const {keyBinding} = this;
     if (keyBinding !== undefined) {
-      layer.toolBinder.set(keyBinding, undefined);
+      this.localBinder.set(keyBinding, undefined);
     }
+  }
+}
+
+export abstract class LayerTool<LayerType extends UserLayer = UserLayer> extends
+    Tool<LayerType> {
+  constructor(public layer: LayerType, toggle: boolean = false) {
+    super(layer.toolBinder, toggle);
+  }
+  get mouseState() {
+    return this.layer.manager.root.layerSelectedValues.mouseState;
   }
 }
 
@@ -77,6 +94,9 @@ export abstract class LegacyTool<LayerType extends UserLayer = UserLayer> extend
   changed = new Signal();
   constructor(public layer: LayerType) {
     super();
+  }
+  get context() {
+    return this.layer;
   }
   get mouseState() {
     return this.layer.manager.root.layerSelectedValues.mouseState;
@@ -93,7 +113,7 @@ export abstract class LegacyTool<LayerType extends UserLayer = UserLayer> extend
   }
 }
 
-export function restoreTool(layer: UserLayer, obj: any) {
+export function restoreTool<Context extends Object>(context: Context, obj: unknown) {
   if (obj === undefined) {
     return undefined;
   }
@@ -102,17 +122,18 @@ export function restoreTool(layer: UserLayer, obj: any) {
   }
   verifyObject(obj);
   const type = verifyObjectProperty(obj, 'type', verifyString);
-  // First look for layer-specific tool.
-  let getter: ToolGetter|undefined =
-      layerTools.get(layer.constructor as UserLayerConstructor)?.get(type);
-  if (getter === undefined) {
-    // Look for layer-independent tool.
-    getter = tools.get(type);
+
+  let prototype = context;
+  let getter:ToolGetter|undefined;
+  while (true) {
+    prototype = Object.getPrototypeOf(prototype);
+    if (prototype === null) {
+      throw new Error(`Invalid tool type: ${JSON.stringify(obj)}.`);
+    }
+    getter = toolsForPrototype.get(prototype)?.get(type);
+    if (getter !== undefined) break;
   }
-  if (getter === undefined) {
-    throw new Error(`Invalid tool type: ${JSON.stringify(obj)}.`);
-  }
-  return getter(layer, obj);
+  return getter(context, obj);
 }
 
 export function restoreLegacyTool(layer: UserLayer, obj: any) {
@@ -131,31 +152,26 @@ export function restoreLegacyTool(layer: UserLayer, obj: any) {
   return getter(layer, obj);
 }
 
-export type ToolGetter<LayerType extends UserLayer = UserLayer> =
-    (layer: LayerType, options: any) => Owned<Tool>|undefined;
+export type ToolGetter<Context extends Object = Object> =
+    (context: Context, options: any) => Owned<Tool>|undefined;
 
 export type LegacyToolGetter<LayerType extends UserLayer = UserLayer> =
     (layer: LayerType, options: any) => Owned<LegacyTool>|undefined;
 
 const legacyTools = new Map<string, LegacyToolGetter>();
-const tools = new Map<string, ToolGetter>();
-const layerTools = new Map<UserLayerConstructor, Map<string, ToolGetter>>();
+const toolsForPrototype = new Map<Object, Map<string, ToolGetter>>();
 
 export function registerLegacyTool(type: string, getter: LegacyToolGetter) {
   legacyTools.set(type, getter);
 }
 
-export function registerTool(type: string, getter: ToolGetter) {
-  tools.set(type, getter);
-}
-
-export function registerLayerTool<LayerType extends UserLayer>(
-    layerType: UserLayerConstructor&AnyConstructor<LayerType>, type: string,
-    getter: ToolGetter<LayerType>) {
-  let tools = layerTools.get(layerType);
+export function registerTool<Context extends Object>(
+  contextType: AnyConstructor<Context>, type: string, getter: ToolGetter<Context>) {
+  const {prototype} = contextType;
+  let tools = toolsForPrototype.get(prototype);
   if (tools === undefined) {
     tools = new Map();
-    layerTools.set(layerType, tools);
+    toolsForPrototype.set(prototype, tools);
   }
   tools.set(type, getter);
 }
@@ -211,7 +227,7 @@ export class SelectedLegacyTool extends RefCounted implements
   }
 }
 
-export class ToolBinder extends RefCounted {
+export class GlobalToolBinder extends RefCounted {
   bindings = new Map<string, Borrowed<Tool>>();
   changed = new Signal();
   activeTool_: Owned<ToolActivation>|undefined; // For internal use only- should only be called by ToolBinder and ToolActivation.cancel()
@@ -233,29 +249,29 @@ export class ToolBinder extends RefCounted {
     if (existingTool !== undefined) {
       existingTool.keyBinding = undefined;
       bindings.delete(key);
-      const layerToolBinder = existingTool.layer.toolBinder;
-      layerToolBinder.bindings.delete(key);
-      layerToolBinder.jsonToKey.delete(JSON.stringify(existingTool.toJSON()));
+      const localToolBinder = existingTool.localBinder;
+      localToolBinder.bindings.delete(key);
+      localToolBinder.jsonToKey.delete(JSON.stringify(existingTool.toJSON()));
       this.destroyTool(existingTool);
-      layerToolBinder.changed.dispatch();
+      localToolBinder.changed.dispatch();
     }
     if (tool !== undefined) {
-      const layerToolBinder = tool.layer.toolBinder;
+      const localToolBinder = tool.localBinder;
       const json = JSON.stringify(tool.toJSON());
-      const existingKey = layerToolBinder.jsonToKey.get(json);
+      const existingKey = localToolBinder.jsonToKey.get(json);
       if (existingKey !== undefined) {
-        const existingTool = layerToolBinder.bindings.get(existingKey)!;
+        const existingTool = localToolBinder.bindings.get(existingKey)!;
         existingTool.keyBinding = undefined;
         bindings.delete(existingKey);
-        layerToolBinder.bindings.delete(existingKey);
-        layerToolBinder.jsonToKey.delete(json);
+        localToolBinder.bindings.delete(existingKey);
+        localToolBinder.jsonToKey.delete(json);
         this.destroyTool(existingTool);
       }
-      layerToolBinder.bindings.set(key, tool);
+      localToolBinder.bindings.set(key, tool);
       tool.keyBinding = key;
-      layerToolBinder.jsonToKey.set(json, key);
+      localToolBinder.jsonToKey.set(json, key);
       bindings.set(key, tool);
-      layerToolBinder.changed.dispatch();
+      localToolBinder.changed.dispatch();
     }
     this.changed.dispatch();
   }
@@ -334,18 +350,20 @@ export class ToolBinder extends RefCounted {
   }
 }
 
-export class LayerToolBinder {
+export class LocalToolBinder<Context extends Object = Object> extends RefCounted {
   // Maps the the tool key (i.e. "A", "B", ...) to the bound tool.
   bindings = new Map<string, Owned<Tool>>();
   // Maps the serialized json representation of the tool to the tool key.
   jsonToKey = new Map<string, string>();
   changed = new Signal();
 
-  private get globalBinder() {
-    return this.layer.manager.root.toolBinder;
+  constructor(public context: Context, public globalBinder: GlobalToolBinder) {
+    super();
   }
-  constructor(public layer: UserLayer) {
-    layer.registerDisposer(() => this.clear());
+
+  disposed() {
+    this.clear();
+    super.disposed();
   }
 
   get(key: string): Borrowed<Tool>|undefined {
@@ -357,7 +375,7 @@ export class LayerToolBinder {
   }
 
   setJson(key: string, toolJson: any) {
-    const tool = restoreTool(this.layer, toolJson);
+    const tool = restoreTool(this.context, toolJson);
     if (tool === undefined) return;
     this.set(key, tool);
   }
@@ -404,33 +422,33 @@ export class LayerToolBinder {
       if (!key.match(TOOL_KEY_PATTERN)) {
         throw new Error(`Invalid tool key: ${JSON.stringify(key)}`);
       }
-      const tool = restoreTool(this.layer, value);
+      const tool = restoreTool(this.context, value);
       if (tool === undefined) return;
       this.set(key, tool);
     }
   }
 }
 
-export class ToolBindingWidget<LayerType extends UserLayer> extends RefCounted {
+export class ToolBindingWidget<Context extends Object> extends RefCounted {
   element = document.createElement('div');
   private toolJsonString = JSON.stringify(this.toolJson);
-  constructor(public layer: LayerType, public toolJson: any) {
+  constructor(public localBinder: LocalToolBinder<Context>, public toolJson: any) {
     super();
     const {element} = this;
     element.classList.add('neuroglancer-tool-key-binding');
-    this.registerDisposer(layer.toolBinder.changed.add(
+    this.registerDisposer(localBinder.changed.add(
         this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
     this.updateView();
     element.title = 'click → bind key, dbclick → unbind';
     element.addEventListener('dblclick', () => {
-      this.layer.toolBinder.removeJsonString(this.toolJsonString);
+      this.localBinder.removeJsonString(this.toolJsonString);
     });
-    addToolKeyBindHandlers(this, element, key => this.layer.toolBinder.setJson(key, this.toolJson));
+    addToolKeyBindHandlers(this, element, key => this.localBinder.setJson(key, this.toolJson));
   }
 
   private updateView() {
-    const {toolBinder} = this.layer;
-    const key = toolBinder.jsonToKey.get(this.toolJsonString);
+    const {localBinder} = this;
+    const key = localBinder.jsonToKey.get(this.toolJsonString);
     this.element.textContent = key ?? ' ';
   }
 }
@@ -471,15 +489,18 @@ export function addToolKeyBindHandlers(
 }
 
 export function makeToolButton(
-    context: RefCounted, layer: UserLayer,
-    options: {toolJson: any, label: string, title?: string}) {
+    context: RefCounted, localBinder: LocalToolBinder,
+    options: {toolJson: any, label?: string, title?: string}) {
   const element = document.createElement('div');
   element.classList.add('neuroglancer-tool-button');
   element.appendChild(
-      context.registerDisposer(new ToolBindingWidget(layer, options.toolJson)).element);
+      context.registerDisposer(new ToolBindingWidget(localBinder, options.toolJson)).element);
   const labelElement = document.createElement('div');
   labelElement.classList.add('neuroglancer-tool-button-label');
-  labelElement.textContent = options.label;
+  const labelText = options.label
+  if (labelText !== undefined) {
+    labelElement.textContent = labelText;
+  }
   if (options.title) {
     labelElement.title = options.title;
   }

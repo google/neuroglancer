@@ -16,8 +16,8 @@
 
 import './annotation_tool_status.css';
 
-import {SelectedLayerState} from 'neuroglancer/layer';
-import {addToolKeyBindHandlers, LegacyTool, Tool, ToolBinder} from 'neuroglancer/ui/tool';
+import {SelectedLayerState, UserLayer} from 'neuroglancer/layer';
+import {addToolKeyBindHandlers, Tool, GlobalToolBinder, LegacyTool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
@@ -39,7 +39,7 @@ export class AnnotationToolStatusWidget extends RefCounted {
     return userLayer.tool.value;
   }
 
-  constructor(public selectedLayer: SelectedLayerState, public toolBinder: ToolBinder) {
+  constructor(public selectedLayer: SelectedLayerState, public toolBinder: GlobalToolBinder) {
     super();
     const {element} = this;
     element.className = 'neuroglancer-annotation-tool-status';
@@ -80,10 +80,6 @@ export class AnnotationToolStatusWidget extends RefCounted {
     element.className = 'neuroglancer-annotation-tool-status-widget';
     const layerNumberElement = document.createElement('div');
     layerNumberElement.className = 'neuroglancer-annotation-tool-status-widget-layer-number';
-    const {managedLayer} = tool.layer;
-    managedLayer.manager.rootLayers.updateNonArchivedLayerIndices();
-    const index = managedLayer.nonArchivedLayerIndex;
-    layerNumberElement.textContent = (index + 1).toString();
     const descriptionElement = document.createElement('div');
     descriptionElement.className = 'neuroglancer-annotation-tool-status-widget-description';
     descriptionElement.textContent = tool.description;
@@ -99,10 +95,16 @@ export class AnnotationToolStatusWidget extends RefCounted {
       keyElement.className = 'neuroglancer-annotation-tool-status-widget-key';
       keyElement.textContent = tool.keyBinding!;
       element.appendChild(keyElement);
-      addToolKeyBindHandlers(
-          context, element, key => tool.layer.toolBinder.set(key, tool.addRef()));
+      addToolKeyBindHandlers(context, element, key => tool.localBinder.set(key, tool.addRef()));
     }
-    element.appendChild(layerNumberElement);
+    const toolContext = tool.context;
+    if (toolContext instanceof UserLayer) {
+      const {managedLayer} = toolContext;
+      managedLayer.manager.rootLayers.updateNonArchivedLayerIndices();
+      const index = managedLayer.nonArchivedLayerIndex;
+      layerNumberElement.textContent = (index + 1).toString();
+      element.appendChild(layerNumberElement);
+    }
     element.appendChild(descriptionElement);
     return element;
   }

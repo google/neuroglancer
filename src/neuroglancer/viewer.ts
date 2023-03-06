@@ -46,7 +46,7 @@ import {SelectionDetailsPanel} from 'neuroglancer/ui/selection_details';
 import {SidePanelManager} from 'neuroglancer/ui/side_panel';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
-import {ToolBinder} from 'neuroglancer/ui/tool';
+import {GlobalToolBinder, LocalToolBinder} from 'neuroglancer/ui/tool';
 import {ViewerSettingsPanel, ViewerSettingsPanelState} from 'neuroglancer/ui/viewer_settings';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -211,6 +211,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('layerListPanel', viewer.layerListPanelState);
     this.add('partialViewport', viewer.partialViewport);
     this.add('selectedStateServer', viewer.selectedStateServer);
+    this.add('toolBindings', viewer.toolBinder);
   }
 
   restoreState(obj: any) {
@@ -400,7 +401,7 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layerSpecification = new TopLevelLayerListSpecification(
         this.display, this.dataSourceProvider, this.layerManager, this.chunkManager,
         this.selectionDetailsState, this.selectedLayer, this.navigationState.coordinateSpace,
-        this.navigationState.pose.position, this.toolBinder);
+        this.navigationState.pose.position, this.globalToolBinder);
 
     this.registerDisposer(display.updateStarted.add(() => {
       this.onUpdateDisplay();
@@ -512,8 +513,8 @@ export class Viewer extends RefCounted implements ViewerState {
       }
     }
 
-    const annotationToolStatus =
-        this.registerDisposer(new AnnotationToolStatusWidget(this.selectedLayer, this.toolBinder));
+    const annotationToolStatus = this.registerDisposer(
+        new AnnotationToolStatusWidget(this.selectedLayer, this.globalToolBinder));
     topRow.appendChild(annotationToolStatus.element);
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
@@ -660,7 +661,7 @@ export class Viewer extends RefCounted implements ViewerState {
               ['3-D projection view', inputEventBindings.perspectiveView]
             ],
             this.layerManager,
-            this.toolBinder,
+            this.globalToolBinder,
         );
       },
     }));
@@ -771,15 +772,18 @@ export class Viewer extends RefCounted implements ViewerState {
 
   private toolInputEventMapBinder = (inputEventMap: EventActionMap, context: RefCounted) => {
     context.registerDisposer(
-          this.inputEventBindings.sliceView.addParent(inputEventMap, Number.POSITIVE_INFINITY));
-    context.registerDisposer(this.inputEventBindings.perspectiveView.addParent(
-          inputEventMap, Number.POSITIVE_INFINITY));
+        this.inputEventBindings.sliceView.addParent(inputEventMap, Number.POSITIVE_INFINITY));
+    context.registerDisposer(
+        this.inputEventBindings.perspectiveView.addParent(inputEventMap, Number.POSITIVE_INFINITY));
   };
-  
-  private toolBinder = this.registerDisposer(new ToolBinder(this.toolInputEventMapBinder));
+
+  private globalToolBinder =
+      this.registerDisposer(new GlobalToolBinder(this.toolInputEventMapBinder));
+
+  public toolBinder = this.registerDisposer(new LocalToolBinder(this, this.globalToolBinder));
 
   activateTool(uppercase: string) {
-    this.toolBinder.activate(uppercase);
+    this.globalToolBinder.activate(uppercase);
   }
 
   editJsonState() {

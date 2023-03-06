@@ -49,6 +49,7 @@
 
 .neuroglancer-tool-status-bindings {
   background-color: #333;
+  user-select: none;
 }
 
 .neuroglancer-tool-status-content {

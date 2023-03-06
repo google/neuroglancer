@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {UserLayer, UserLayerConstructor} from 'neuroglancer/layer';
-import {registerLayerTool, ToolActivation} from 'neuroglancer/ui/tool';
+import {registerTool, ToolActivation} from 'neuroglancer/ui/tool';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -190,7 +190,7 @@ class ShaderControlTool extends LayerControlTool {
 export function registerLayerShaderControlsTool<LayerType extends UserLayer>(
     layerType: UserLayerConstructor&AnyConstructor<LayerType>,
     getter: (layer: LayerType) => LayerShaderControls, toolId: string = SHADER_CONTROL_TOOL_ID) {
-  registerLayerTool(layerType, toolId, (layer, options) => {
+  registerTool(layerType, toolId, (layer, options) => {
     const control = verifyObjectProperty(options, CONTROL_JSON_KEY, verifyString);
     return new ShaderControlTool(layer, getter(layer), toolId, control);
   });

@@ -19,7 +19,7 @@ import './input_event_bindings.css';
 import {LayerManager, UserLayer} from 'neuroglancer/layer';
 import {SidePanel, SidePanelManager} from 'neuroglancer/ui/side_panel';
 import {DEFAULT_SIDE_PANEL_LOCATION, SidePanelLocation, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
-import {ToolBinder} from 'neuroglancer/ui/tool';
+import {GlobalToolBinder} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {EventActionMap} from 'neuroglancer/util/event_action_map';
@@ -73,7 +73,7 @@ export class InputEventBindingHelpDialog extends SidePanel {
   constructor(
       sidePanelManager: SidePanelManager, state: HelpPanelState,
       private bindings: Iterable<[string, EventActionMap]>, layerManager: LayerManager,
-      private toolBinder: ToolBinder) {
+      private toolBinder: GlobalToolBinder) {
     super(sidePanelManager, state.location);
 
     this.addTitleBar({title: 'Help'});
@@ -175,12 +175,14 @@ export class InputEventBindingHelpDialog extends SidePanel {
 
     const layerToolBindingsMap = new Map<UserLayer, [string, string][]>();
     for (const [key, tool] of toolBinder.bindings) {
-      let layerBindings = layerToolBindingsMap.get(tool.layer);
-      if (layerBindings === undefined) {
-        layerBindings = [];
-        layerToolBindingsMap.set(tool.layer, layerBindings);
+      if (tool.context instanceof UserLayer) {
+        let layerBindings = layerToolBindingsMap.get(tool.context);
+        if (layerBindings === undefined) {
+          layerBindings = [];
+          layerToolBindingsMap.set(tool.context, layerBindings);
+        }
+        layerBindings.push([`shift+key${key.toLowerCase()}`, tool.description]);
       }
-      layerBindings.push([`shift+key${key.toLowerCase()}`, tool.description]);
     }
     const layerToolBindings = Array.from(layerToolBindingsMap.entries());
     if (layerToolBindings.length > 0) {

@@ -34,7 +34,7 @@ import {registerNested, TrackableValueInterface, WatchableSet, WatchableValue, W
 import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
 import {SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION, UserLayerSidePanelsState} from 'neuroglancer/ui/layer_side_panel_state';
 import {DEFAULT_SIDE_PANEL_LOCATION, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
-import {LayerToolBinder, SelectedLegacyTool, ToolBinder} from 'neuroglancer/ui/tool';
+import {GlobalToolBinder, LocalToolBinder, SelectedLegacyTool} from 'neuroglancer/ui/tool';
 import {gatherUpdate} from 'neuroglancer/util/array';
 import {Borrowed, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {emptyToUndefined, parseArray, parseFixedLengthArray, verifyBoolean, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
@@ -239,7 +239,7 @@ export class UserLayer extends RefCounted {
   tabs = this.registerDisposer(new TabSpecification());
   panels = new UserLayerSidePanelsState(this);
   tool = this.registerDisposer(new SelectedLegacyTool(this));
-  toolBinder = new LayerToolBinder(this);
+  toolBinder = this.registerDisposer(new LocalToolBinder(this, this.manager.root.toolBinder));
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
@@ -376,10 +376,10 @@ export class UserLayer extends RefCounted {
 
   restoreState(specification: any) {
     this.tool.restoreState(specification[TOOL_JSON_KEY]);
-    this.toolBinder.restoreState(specification[TOOL_BINDINGS_JSON_KEY]);
     this.panels.restoreState(specification);
     this.localCoordinateSpace.restoreState(specification[LOCAL_COORDINATE_SPACE_JSON_KEY]);
     this.localPosition.restoreState(specification[LOCAL_POSITION_JSON_KEY]);
+    this.toolBinder.restoreState(specification[TOOL_BINDINGS_JSON_KEY]);
     if ((this.constructor as typeof UserLayer).supportsPickOption) {
       this.pick.restoreState(specification[PICK_JSON_KEY]);
     }
@@ -1795,7 +1795,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
       public selectionState: Borrowed<TrackableDataSelectionState>,
       public selectedLayer: Borrowed<SelectedLayerState>,
       public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
-      public globalPosition: Borrowed<Position>, public toolBinder: Borrowed<ToolBinder>) {
+      public globalPosition: Borrowed<Position>, public toolBinder: Borrowed<GlobalToolBinder>) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
     this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));

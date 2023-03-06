@@ -21,7 +21,7 @@ import {isBaseSegmentId, VisibleSegmentEquivalencePolicy} from 'neuroglancer/seg
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
-import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
+import {makeToolActivationStatusMessageWithHeader, registerTool, LayerTool, ToolActivation} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {EventActionMap} from 'neuroglancer/util/keyboard_bindings';
@@ -41,7 +41,7 @@ const SPLIT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown2': {action: 'set-anchor'},
 });
 
-export class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
+export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
   lastAnchorBaseSegment = new WatchableValue<Uint64|undefined>(undefined);
 
   constructor(layer: SegmentationUserLayer) {
@@ -215,7 +215,7 @@ export class MergeSegmentsTool extends Tool<SegmentationUserLayer> {
   }
 }
 
-export class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
+export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
   toJSON() {
     return ANNOTATE_SPLIT_SEGMENTS_TOOL_ID;
   }
@@ -391,11 +391,11 @@ export class SplitSegmentsTool extends Tool<SegmentationUserLayer> {
 }
 
 export function registerSegmentSplitMergeTools() {
-  registerLayerTool(SegmentationUserLayer, ANNOTATE_MERGE_SEGMENTS_TOOL_ID, layer => {
+  registerTool(SegmentationUserLayer, ANNOTATE_MERGE_SEGMENTS_TOOL_ID, layer => {
     return new MergeSegmentsTool(layer);
   });
 
-  registerLayerTool(SegmentationUserLayer, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID, layer => {
+  registerTool(SegmentationUserLayer, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID, layer => {
     return new SplitSegmentsTool(layer);
   });
 }

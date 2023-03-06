@@ -19,7 +19,7 @@ import './layer_control.css';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {UserLayer, UserLayerConstructor} from 'neuroglancer/layer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation, ToolBindingWidget} from 'neuroglancer/ui/tool';
+import {LayerTool, makeToolActivationStatusMessageWithHeader, registerTool, ToolActivation, ToolBindingWidget} from 'neuroglancer/ui/tool';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
@@ -75,7 +75,8 @@ function makeControl<LayerType extends UserLayer>(
   return {controlContainer, label, labelContainer, labelTextContainer, control};
 }
 
-export class LayerControlTool<LayerType extends UserLayer = UserLayer> extends Tool<LayerType> {
+export class LayerControlTool<LayerType extends UserLayer = UserLayer> extends
+    LayerTool<LayerType> {
   constructor(layer: LayerType, public options: LayerControlDefinition<LayerType>) {
     super(layer);
   }
@@ -106,7 +107,8 @@ function makeLayerControlToOptionsTab<LayerType extends UserLayer>(
     visibility: WatchableVisibilityPriority): HTMLElement {
   const {controlContainer, label} = makeControl(context, layer, options, visibility);
   controlContainer.classList.add('neuroglancer-layer-options-control-container');
-  label.prepend(context.registerDisposer(new ToolBindingWidget(layer, options.toolJson)).element);
+  label.prepend(
+      context.registerDisposer(new ToolBindingWidget(layer.toolBinder, options.toolJson)).element);
   return controlContainer;
 }
 
@@ -132,5 +134,5 @@ export function registerLayerControl<LayerType extends UserLayer>(
     layerType: UserLayerConstructor<LayerType>, options: LayerControlDefinition<LayerType>) {
   const {toolJson} = options;
   const toolId = (typeof toolJson === 'string') ? toolJson : toolJson.type;
-  registerLayerTool(layerType, toolId, layer => new LayerControlTool<LayerType>(layer, options));
+  registerTool(layerType, toolId, layer => new LayerControlTool<LayerType>(layer, options));
 }
