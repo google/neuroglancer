@@ -188,8 +188,13 @@ export class Position extends RefCounted {
       } else {
         coordinates_ = this.coordinates_ = new Float32Array(rank);
         getBoundingBoxCenter(coordinates_, coordinateSpace.bounds);
+        const {voxelCenterAtIntegerCoordinates} = coordinateSpace.bounds;
         for (let i = 0; i < rank; ++i) {
-          coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
+          if (voxelCenterAtIntegerCoordinates[i]) {
+            coordinates_[i] = Math.round(coordinates_[i]);
+          } else {
+            coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
+          }
         }
       }
       this.changed.dispatch();
@@ -235,10 +240,15 @@ export class Position extends RefCounted {
 
   snapToVoxel() {
     this.handleCoordinateSpaceChanged();
+    const {bounds: {voxelCenterAtIntegerCoordinates}} = this.coordinateSpace.value;
     const {coordinates_} = this;
     const rank = coordinates_.length;
     for (let i = 0; i < rank; ++i) {
-      coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
+      if (voxelCenterAtIntegerCoordinates[i]) {
+        coordinates_[i] = Math.round(coordinates_[i]);
+      } else {
+        coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
+      }
     }
     this.changed.dispatch();
   }
@@ -422,7 +432,10 @@ export class CoordinateSpacePlaybackVelocity extends RefCounted {
     };
   }
 
-  modifyDimension(id: DimensionId, callback: (oldInfo: DimensionPlaybackVelocity|undefined) => DimensionPlaybackVelocity|undefined) {
+  modifyDimension(
+      id: DimensionId,
+      callback: (oldInfo: DimensionPlaybackVelocity|undefined) => DimensionPlaybackVelocity |
+          undefined) {
     const ids = this.coordinateSpace.value?.ids;
     if (ids === undefined) return;
     const index = ids.indexOf(id);
@@ -625,7 +638,7 @@ interface DimensionPlaybackState {
 export class PlaybackManager extends RefCounted {
   private dimensionStates = new Map<DimensionId, DimensionPlaybackState>();
   private lastUpdateGeneration = 0;
-  private unregisterUpdateStartedCallback: (() => void) | undefined;
+  private unregisterUpdateStartedCallback: (() => void)|undefined;
 
   constructor(
       public display: {updateStarted: NullarySignal, scheduleRedraw(): void},
@@ -676,7 +689,8 @@ export class PlaybackManager extends RefCounted {
       }
     } else {
       if (this.unregisterUpdateStartedCallback === undefined) {
-        this.unregisterUpdateStartedCallback = this.display.updateStarted.add(() => this.updateStarted());
+        this.unregisterUpdateStartedCallback =
+            this.display.updateStarted.add(() => this.updateStarted());
         this.display.scheduleRedraw();
       }
     }
@@ -1525,12 +1539,12 @@ export class DisplayPose extends RefCounted {
     if (adjustment > 0) {
       const bound = upperBounds[dimensionIndex];
       if (Number.isFinite(bound)) {
-        newValue = Math.min(newValue, Math.ceil(bound - 1));
+        newValue = Math.min(newValue, bound - 1);
       }
     } else {
       const bound = lowerBounds[dimensionIndex];
       if (Number.isFinite(bound)) {
-        newValue = Math.max(newValue, Math.floor(bound));
+        newValue = Math.max(newValue, bound);
       }
     }
     voxelCoordinates[dimensionIndex] = newValue;
@@ -1545,7 +1559,8 @@ export class DisplayPose extends RefCounted {
     const {position} = this;
     const {value: voxelCoordinates} = position;
     const {displayDimensionIndices, displayRank} = this.displayDimensions.value;
-    const {bounds: {lowerBounds, upperBounds}} = position.coordinateSpace.value;
+    const {bounds: {lowerBounds, upperBounds, voxelCenterAtIntegerCoordinates}} =
+        position.coordinateSpace.value;
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
       const adjustment = temp[i];
@@ -1554,15 +1569,21 @@ export class DisplayPose extends RefCounted {
       if (adjustment > 0) {
         const bound = upperBounds[dim];
         if (Number.isFinite(bound)) {
-          newValue = Math.min(newValue, Math.ceil(bound - 1));
+          newValue = Math.min(newValue, bound - 1);
         }
       } else {
         const bound = lowerBounds[dim];
         if (Number.isFinite(bound)) {
-          newValue = Math.max(newValue, Math.floor(bound));
+          newValue = Math.max(newValue, bound);
         }
       }
-      if (round) newValue = Math.floor(newValue) + 0.5;
+      if (round) {
+        if (voxelCenterAtIntegerCoordinates[dim]) {
+          newValue = Math.round(newValue);
+        } else {
+          newValue = Math.floor(newValue) + 0.5;
+        }
+      }
       voxelCoordinates[dim] = newValue;
     }
     this.position.changed.dispatch();

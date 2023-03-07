@@ -71,8 +71,11 @@ describe('emptyCoordinateSpace', () => {
     expect(emptyInvalidCoordinateSpace.names).toEqual([]);
     expect(emptyInvalidCoordinateSpace.timestamps).toEqual([]);
     expect(emptyInvalidCoordinateSpace.boundingBoxes).toEqual([]);
-    expect(emptyInvalidCoordinateSpace.bounds)
-        .toEqual({lowerBounds: new Float64Array(0), upperBounds: new Float64Array(0)});
+    expect(emptyInvalidCoordinateSpace.bounds).toEqual({
+      lowerBounds: new Float64Array(0),
+      upperBounds: new Float64Array(0),
+      voxelCenterAtIntegerCoordinates: new Array(0)
+    });
   });
 });
 

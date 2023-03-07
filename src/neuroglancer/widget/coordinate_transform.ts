@@ -40,8 +40,12 @@ function updateInputFieldWidth(element: HTMLInputElement, value: string = elemen
 
 const singletonClassName = 'neuroglancer-coordinate-space-transform-singleton';
 
-function formatBounds(lower: number, upper: number) {
+function formatBounds(lower: number, upper: number, voxelCenterAtIntegerCoordinates: boolean) {
   let lowerString: string;
+  if (voxelCenterAtIntegerCoordinates) {
+    lower += 0.5;
+    upper += 0.5;
+  }
   if (lower === Number.NEGATIVE_INFINITY) {
     lowerString = '(-∞,';
   } else {
@@ -905,7 +909,11 @@ export class CoordinateSpaceTransformWidget extends RefCounted {
       names: inputNames,
       scales: inputScales,
       units: inputUnits,
-      bounds: {lowerBounds: inputLowerBounds, upperBounds: inputUpperBounds}
+      bounds: {
+        lowerBounds: inputLowerBounds,
+        upperBounds: inputUpperBounds,
+        voxelCenterAtIntegerCoordinates: inputVoxelCenterAtIntegerCoordinates,
+      }
     } = inputSpace;
     for (let inputDim = 0; inputDim < rank; ++inputDim) {
       const inputScaleElement = inputScaleElements[inputDim];
@@ -925,7 +933,9 @@ export class CoordinateSpaceTransformWidget extends RefCounted {
         dimensionNameString = `singleton dimension`;
         inputScaleElement.title = `Set extent of ${dimensionNameString}`;
       }
-      const {lower, upper} = formatBounds(inputLowerBounds[inputDim], inputUpperBounds[inputDim]);
+      const {lower, upper} = formatBounds(
+          inputLowerBounds[inputDim], inputUpperBounds[inputDim],
+          inputVoxelCenterAtIntegerCoordinates[inputDim]);
       const elements = inputBoundsElements[inputDim];
       elements.lower.textContent = lower;
       elements.lower.title = `Lower bound of ${dimensionNameString}`;
@@ -944,7 +954,11 @@ export class CoordinateSpaceTransformWidget extends RefCounted {
       names,
       units: outputUnits,
       scales: outputScales,
-      bounds: {lowerBounds: outputLowerBounds, upperBounds: outputUpperBounds}
+      bounds: {
+        lowerBounds: outputLowerBounds,
+        upperBounds: outputUpperBounds,
+        voxelCenterAtIntegerCoordinates: outputVoxelCenterAtIntegerCoordinates
+      }
     } = transform.outputSpace;
     const {outputScaleElements, outputBoundsElements, outputScaleSuggestionElements} = this;
     for (let outputDim = 0; outputDim < rank; ++outputDim) {
@@ -958,8 +972,9 @@ export class CoordinateSpaceTransformWidget extends RefCounted {
       const titlePrefix =
           `Change coordinates of ${isLocalDimension(name) ? 'local' : 'global'} dimension ${name}`;
       scaleElement.title = `${titlePrefix} (does not rescale the source)`;
-      const {lower, upper} =
-          formatBounds(outputLowerBounds[outputDim], outputUpperBounds[outputDim]);
+      const {lower, upper} = formatBounds(
+          outputLowerBounds[outputDim], outputUpperBounds[outputDim],
+          outputVoxelCenterAtIntegerCoordinates[outputDim]);
       const elements = outputBoundsElements[outputDim];
       elements.lower.textContent = lower;
       elements.upper.textContent = upper;
