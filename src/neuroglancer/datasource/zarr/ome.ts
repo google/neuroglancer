@@ -176,10 +176,9 @@ function parseOmeMultiscale(url: string, multiscale: unknown): OmeMultiscaleMeta
     const t = scale.transform;
     // In OME's coordinate space, the origin of a voxel is its center, while in Neuroglancer it is
     // the "lower" (in coordinates) corner.  Translate by the physical size of half a voxel in the
-    // current scale, and then translate by the physical size of half a voxel in the base scale, to
-    // convert from OME coordinate space to Neuroglancer coordinate space.
+    // current scale.
     for (let i = 0; i < rank; ++i) {
-      let offset = -baseScales[i] / 2;
+      let offset = 0;
       for (let j = 0; j < rank; ++j) {
         offset += t[j * (rank + 1) + i] * 0.5;
       }
