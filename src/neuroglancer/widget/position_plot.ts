@@ -61,7 +61,7 @@ function getNormalizedDimensionBounds(
     const result = computeCombinedLowerUpperBound(boundingBox, dimensionIndex, rank);
     if (result === undefined) continue;
     result.lower = Math.max(0, normalize(result.lower));
-    result.upper = normalize(Math.min(1, Math.ceil(result.upper - 1)));
+    result.upper = Math.min(height - 1, normalize(Math.ceil(result.upper - 1)));
     normalizedBounds.push(result);
   }
   normalizedBounds.sort((a, b) => {
