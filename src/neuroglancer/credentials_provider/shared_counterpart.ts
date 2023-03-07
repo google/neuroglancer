@@ -30,7 +30,7 @@ export class SharedCredentialsProviderCounterpart<Credentials> extends SharedObj
     implements CredentialsProvider<Credentials> {
   get = makeCachedCredentialsGetter(
       (invalidCredentials?: CredentialsWithGeneration<Credentials>,
-       cancellationToken?: CancellationToken) =>
+       cancellationToken?: CancellationToken): Promise<CredentialsWithGeneration<Credentials>> =>
           this.rpc!.promiseInvoke(
               CREDENTIALS_PROVIDER_GET_RPC_ID,
               {providerId: this.rpcId, invalidCredentials: invalidCredentials}, cancellationToken));

@@ -18,7 +18,7 @@ export type ValueOrError<T> = (T&{error?: undefined})|{error: string};
 
 export function makeValueOrError<T>(f: () => T): ValueOrError<T> {
   try {
-    return f();
+    return f() as ValueOrError<T>;
   } catch (e) {
     return {error: (e as Error).message};
   }
