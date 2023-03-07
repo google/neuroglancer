@@ -178,10 +178,6 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
 
 Want to contribute?  Great!  First, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
-# Acknowledgements
-[<img src="https://neuroglancer-public-data.storage.googleapis.com/website/powered-by-sauce-labs-gray.svg" alt="Powered by Sauce Labs" width=300 align="center">](https://saucelabs.com)
-Cross-browser Testing Platform and Open Source <3 Provided by [Sauce Labs](https://saucelabs.com)
-
 # License
 
 Copyright 2016 Google Inc.
