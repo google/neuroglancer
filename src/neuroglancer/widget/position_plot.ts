@@ -41,8 +41,14 @@ function getNormalizedDimensionBounds(
     coordinateSpace: CoordinateSpace, dimensionIndex: number,
     height: number): NormalizedDimensionBounds|undefined {
   const {boundingBoxes, bounds} = coordinateSpace;
-  const lowerBound = Math.floor(bounds.lowerBounds[dimensionIndex]);
-  const upperBound = Math.ceil(bounds.upperBounds[dimensionIndex] - 1);
+  let lowerBound = bounds.lowerBounds[dimensionIndex];
+  let upperBound = bounds.upperBounds[dimensionIndex];
+  if (bounds.voxelCenterAtIntegerCoordinates[dimensionIndex]) {
+    lowerBound += 0.5;
+    upperBound += 0.5;
+  }
+  lowerBound = Math.floor(lowerBound);
+  upperBound = Math.floor(upperBound - 1);
   if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound)) {
     return undefined;
   }
@@ -54,8 +60,8 @@ function getNormalizedDimensionBounds(
   for (const boundingBox of boundingBoxes) {
     const result = computeCombinedLowerUpperBound(boundingBox, dimensionIndex, rank);
     if (result === undefined) continue;
-    result.lower = normalize(result.lower);
-    result.upper = normalize(Math.ceil(result.upper - 1));
+    result.lower = Math.max(0, normalize(result.lower));
+    result.upper = normalize(Math.min(1, Math.ceil(result.upper - 1)));
     normalizedBounds.push(result);
   }
   normalizedBounds.sort((a, b) => {
@@ -231,11 +237,14 @@ export class PositionPlot extends RefCounted {
       const coordinateSpace = this.position.coordinateSpace.value;
       const dimensionIndex = coordinateSpace.ids.indexOf(this.dimensionId);
       if (dimensionIndex === -1) return;
-      const x = getPositionFromMouseEvent(event);
+      let x = getPositionFromMouseEvent(event);
       if (x === undefined) return;
       const {position} = this;
       const voxelCoordinates = position.value;
-      voxelCoordinates[dimensionIndex] = x + 0.5;
+      if (!coordinateSpace.bounds.voxelCenterAtIntegerCoordinates[dimensionIndex]) {
+        x += 0.5;
+      }
+      voxelCoordinates[dimensionIndex] = x;
       position.value = voxelCoordinates;
     };
 
