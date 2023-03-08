@@ -47,9 +47,8 @@ import { DebouncedFunc } from 'lodash';
 
 const tempUint64 = new Uint64();
 
-class SegmentListSource extends RefCounted implements VirtualListSource {
+abstract class SegmentListSource extends RefCounted implements VirtualListSource {
   length: number;
-
   changed = new Signal<(splices: readonly Readonly<ArraySpliceOp>[]) => void>();
 
   // The segment list is the concatenation of two lists: the `explicitSegments` list, specified as
@@ -57,20 +56,90 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
   // `segmentPropertyMap` of the matching segments.
   explicitSegments: Uint64[]|undefined;
   explicitSegmentsVisible: boolean = false;
-  visibleSegmentsGeneration = -1;
-  selectedSegmentsGeneration = -1;
+
+  debouncedUpdate = debounce(() => this.update(), 0);
+
+  constructor(
+      public segmentationDisplayState: SegmentationDisplayState,
+      public parentElement: HTMLElement) {
+    super();
+  }
+
+  abstract update(): void
+
+  private updateRendering(element: HTMLElement) {
+    this.segmentWidgetFactory.update(element);
+  }
+
+  segmentWidgetFactory: SegmentWidgetWithExtraColumnsFactory;
+
+  abstract render(index: number): HTMLDivElement;
+
+  updateRenderedItems(list: VirtualList) {
+    list.forEachRenderedItem(element => {
+      this.updateRendering(element);
+    });
+  }
+}
+
+class StarredSegmentsListSource extends SegmentListSource {
+  explicitSegmentsVisible: true;
+
+  constructor(
+      public segmentationDisplayState: SegmentationDisplayState,
+      public parentElement: HTMLElement) {
+    super(segmentationDisplayState, parentElement);
+    this.update();
+    this.registerDisposer(
+        segmentationDisplayState.segmentationGroupState.value.selectedSegments.changed.add(
+            this.debouncedUpdate));
+  }
+
+  update() {
+    const splices: ArraySpliceOp[] = [];
+    const {selectedSegments} = this.segmentationDisplayState.segmentationGroupState.value;
+    const newSelectedSegments = [...selectedSegments];
+    const {explicitSegments} = this;
+    if (explicitSegments === undefined) {
+      splices.push(
+          {retainCount: 0, insertCount: newSelectedSegments.length, deleteCount: 0});
+    } else {
+      splices.push(
+          ...getMergeSplices(explicitSegments, newSelectedSegments, Uint64.compare));
+    }
+    this.explicitSegments = newSelectedSegments;
+    this.length = selectedSegments.size;
+    this.changed.dispatch(splices);
+  }
+
+  render = (index: number) => {
+    const {explicitSegments} = this;
+    let id: Uint64;
+    let visibleList = false;
+    id = explicitSegments![index];
+    visibleList = this.explicitSegmentsVisible;
+    const container = this.segmentWidgetFactory.get(id);
+    if (visibleList) {
+      container.dataset.visibleList = 'true';
+    }
+    return container;
+  };
+}
+
+class SegmentQueryListSource extends SegmentListSource {
   prevQuery: string|undefined;
   queryResult = new WatchableValue<QueryResult|undefined>(undefined);
   prevQueryResult = new WatchableValue<QueryResult|undefined>(undefined);
   statusText = new WatchableValue<string>('');
   selectedMatches: number = 0;
   matchStatusTextPrefix: string = '';
+  selectedSegmentsGeneration = -1;
 
   get numMatches() {
     return this.queryResult.value?.count ?? 0;
   }
 
-  private update() {
+  update() {
     const query = this.query.value;
 
     const {segmentPropertyMap} = this;
@@ -87,38 +156,8 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     const splices: ArraySpliceOp[] = [];
     let changed = false;
     let matchStatusTextPrefix = '';
-    const {selectedSegments, visibleSegments} = this.segmentationDisplayState.segmentationGroupState.value;
-    const visibleSegmentsGeneration = visibleSegments.changed.count;
-    const selectedSegmentsGeneration = selectedSegments.changed.count;
-    const prevVisibleSegmentsGeneration = this.visibleSegmentsGeneration;
-    const prevSelectedSegmentsGeneration = this.selectedSegmentsGeneration;
-    const segmentsChanged = prevVisibleSegmentsGeneration !== visibleSegmentsGeneration ||
-      prevSelectedSegmentsGeneration !== selectedSegmentsGeneration
-    const unconstrained = isQueryUnconstrained(queryResult.query);
-    if (unconstrained && this.showExplicit) {
-      // Full list of visible segments is shown only if no query is specified.
-      if (segmentsChanged ||
-          this.explicitSegments === undefined || !this.explicitSegmentsVisible) {
-        this.visibleSegmentsGeneration = visibleSegmentsGeneration;
-        const newSelectedSegments = [...selectedSegments];
-        const {explicitSegments} = this;
-        if (explicitSegments === undefined) {
-          this.explicitSegments = newSelectedSegments;
-          splices.push(
-              {retainCount: 0, insertCount: newSelectedSegments.length, deleteCount: 0});
-        } else {
-          splices.push(
-              ...getMergeSplices(explicitSegments, newSelectedSegments, Uint64.compare));
-        }
-        this.explicitSegments = newSelectedSegments;
-        changed = true;
-      } else {
-        splices.push({retainCount: this.explicitSegments.length, deleteCount: 0, insertCount: 0});
-      }
-      this.explicitSegmentsVisible = true;
-    } else {
-      this.visibleSegmentsGeneration = visibleSegmentsGeneration;
-      this.selectedSegmentsGeneration = selectedSegmentsGeneration;
+    const unconstrained = isQueryUnconstrained(queryResult.query);      
+    if (!unconstrained) {
       if (this.explicitSegments !== undefined && this.explicitSegmentsVisible) {
         splices.push({deleteCount: this.explicitSegments.length, retainCount: 0, insertCount: 0});
         this.explicitSegments = undefined;
@@ -152,15 +191,22 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       matchStatusTextPrefix = `${queryResult.count}/${queryResult.total} matches`;
     }
 
-    if (prevQueryResult !== queryResult ||
-        segmentsChanged) {
+    const {selectedSegments} = this.segmentationDisplayState.segmentationGroupState.value;
+    const selectedSegmentsGeneration = selectedSegments.changed.count;
+    const prevSelectedSegmentsGeneration = this.selectedSegmentsGeneration;
+    const selectedChanged = prevSelectedSegmentsGeneration !== selectedSegmentsGeneration;
+    this.selectedSegmentsGeneration = selectedSegmentsGeneration;
+
+
+    if (prevQueryResult !== queryResult || selectedChanged) {
       let statusText = matchStatusTextPrefix;
       let selectedMatches = 0;
       if (segmentPropertyMap !== undefined && queryResult.count > 0) {
         // Recompute selectedMatches.
+        const {selectedSegments} = this.segmentationDisplayState.segmentationGroupState.value;
         selectedMatches =
             findQueryResultIntersectionSize(segmentPropertyMap, queryResult, selectedSegments);
-        statusText += ` (${selectedMatches} visible)`;
+        statusText += ` (${selectedMatches} selected)`;
       }
       this.selectedMatches = selectedMatches;
       this.statusText.value = statusText;
@@ -173,31 +219,21 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       this.changed.dispatch(splices);
     }
   }
-  debouncedUpdate = debounce(() => this.update(), 0);
 
   constructor(
       public query: WatchableValueInterface<string>,
       public segmentPropertyMap: PreprocessedSegmentPropertyMap|undefined,
       public segmentationDisplayState: SegmentationDisplayState,
-      public parentElement: HTMLElement,
-      public showExplicit = true) {
-    super();
+      public parentElement: HTMLElement) {
+    super(segmentationDisplayState, parentElement);
     this.update();
-
     this.registerDisposer(
         segmentationDisplayState.segmentationGroupState.value.selectedSegments.changed.add(
             this.debouncedUpdate));
-    this.registerDisposer(
-        segmentationDisplayState.segmentationGroupState.value.visibleSegments.changed.add(
-            this.debouncedUpdate));
-    this.registerDisposer(query.changed.add(this.debouncedUpdate));
+    if (query) {
+      this.registerDisposer(query.changed.add(this.debouncedUpdate));
+    }
   }
-
-  private updateRendering(element: HTMLElement) {
-    this.segmentWidgetFactory.update(element);
-  }
-
-  segmentWidgetFactory: SegmentWidgetWithExtraColumnsFactory;
 
   render = (index: number) => {
     const {explicitSegments} = this;
@@ -222,12 +258,6 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     }
     return container;
   };
-
-  updateRenderedItems(list: VirtualList) {
-    list.forEachRenderedItem(element => {
-      this.updateRendering(element);
-    });
-  }
 }
 
 const keyMap = EventActionMap.fromObject({
@@ -912,7 +942,6 @@ class SegmentListGroupBase extends RefCounted {
     selectionStatusContainer.appendChild(this.visibilityToggleAllButton);
     selectionStatusContainer.appendChild(this.selectionStatusMessage);
     this.elements.push(selectionStatusContainer);
-    listSource.statusText.changed.add(() => this.updateStatus());
     this.registerDisposer(group.visibleSegments.changed.add(() => this.updateStatus()));
     this.registerDisposer(group.selectedSegments.changed.add(() => this.updateStatus()));
   }
@@ -929,7 +958,8 @@ class SegmentListGroupBase extends RefCounted {
     const {visibleSegments, selectedSegments} = group;
     let queryVisibleCount = 0;
     let querySelectedCount = 0;
-    if (listSource.numMatches) {
+    const numMatches = listSource instanceof SegmentQueryListSource ? listSource.numMatches : 0;
+    if (numMatches) {
       for (const id of this.listSegments()) {
         if (selectedSegments.has(id)) {
           querySelectedCount++;
@@ -941,9 +971,9 @@ class SegmentListGroupBase extends RefCounted {
     }
     const selectedCount = selectedSegments.size;
     const visibleCount = visibleSegments.size;
-    const visibleDisplayedCount = listSource.numMatches ? queryVisibleCount : visibleCount;
-    const visibleSelectedCount = listSource.numMatches ? querySelectedCount : selectedCount;
-    const totalDisplayed = listSource.numMatches || selectedCount;
+    const visibleDisplayedCount = numMatches ? queryVisibleCount : visibleCount;
+    const visibleSelectedCount = numMatches ? querySelectedCount : selectedCount;
+    const totalDisplayed = numMatches || selectedCount;
     starAllButton.classList.toggle('unstar', visibleSelectedCount > 0);
     selectionStatusMessage.textContent = `${visibleDisplayedCount}/${totalDisplayed} visible`;
     if (this.prevNumDisplayed !== totalDisplayed) {
@@ -967,7 +997,7 @@ class SegmentListGroupSelected extends SegmentListGroupBase {
     this.copySelectedButton = makeCopyButton({
       title: 'Copy selected segment IDs',
       onClick: () => {
-        this.copySegments(true);
+        this.copySegments(false);
       }
     });
     const matchStatusContainer = document.createElement('span');
@@ -1011,13 +1041,14 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
 
   constructor(
       list: VirtualList,
-      listSource: SegmentListSource,
+      protected listSource: SegmentQueryListSource,
       group: SegmentationUserLayerGroupState,
       private segmentPropertyMap: PreprocessedSegmentPropertyMap | undefined,
       segmentQuery: WatchableValueInterface<string>,
       queryElement: HTMLInputElement,
       private debouncedUpdateQueryModel: DebouncedFunc<() => void>) {
     super(listSource, group);
+    listSource.statusText.changed.add(() => this.updateStatus());
     const setQuery = (newQuery: ExplicitIdQuery|FilterQuery) => {
       queryElement.focus();
       queryElement.select();
@@ -1248,11 +1279,10 @@ export class SegmentDisplayTab extends Tab {
 
 
 
-                  const listSource = context.registerDisposer(new SegmentListSource(
-                      segmentQuery, segmentPropertyMap, layer.displayState, parent, false));
-                  const dummyString = new WatchableValue<string>("");
-                  const selectedSegmentsListSource = context.registerDisposer(new SegmentListSource(
-                      dummyString, undefined, layer.displayState, parent));
+                  const listSource = context.registerDisposer(new SegmentQueryListSource(
+                      segmentQuery, segmentPropertyMap, layer.displayState, parent));
+                  const selectedSegmentsListSource = context.registerDisposer(
+                      new StarredSegmentsListSource(layer.displayState, parent));
                   const list = context.registerDisposer(
                       new VirtualList({source: listSource, horizontalScroll: true}));
                   const selectedSegmentsList = context.registerDisposer(
