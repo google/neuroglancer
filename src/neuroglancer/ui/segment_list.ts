@@ -134,6 +134,7 @@ class SegmentQueryListSource extends SegmentListSource {
   selectedMatches: number = 0;
   matchStatusTextPrefix: string = '';
   selectedSegmentsGeneration = -1;
+  explicitSegmentsVisible = false;
 
   get numMatches() {
     return this.queryResult.value?.count ?? 0;
@@ -141,7 +142,6 @@ class SegmentQueryListSource extends SegmentListSource {
 
   update() {
     const query = this.query.value;
-
     const {segmentPropertyMap} = this;
     this.prevQueryResult.value = this.queryResult.value;
     const prevQueryResult = this.prevQueryResult.value;
@@ -163,7 +163,6 @@ class SegmentQueryListSource extends SegmentListSource {
         this.explicitSegments = undefined;
         changed = true;
       }
-      this.explicitSegmentsVisible = false;
     }
 
     const {explicitIds} = queryResult;
@@ -213,8 +212,7 @@ class SegmentQueryListSource extends SegmentListSource {
     }
     this.prevQuery = query;
     this.matchStatusTextPrefix = matchStatusTextPrefix;
-    const {explicitSegments} = this;
-    this.length = (this.explicitSegmentsVisible ? explicitSegments!.length : 0) + queryResult.count;
+    this.length = queryResult.count;
     if (changed) {
       this.changed.dispatch(splices);
     }
@@ -229,7 +227,7 @@ class SegmentQueryListSource extends SegmentListSource {
     this.update();
     this.registerDisposer(
         segmentationDisplayState.segmentationGroupState.value.selectedSegments.changed.add(
-            this.debouncedUpdate));
+            this.debouncedUpdate)); // to update statusText
     if (query) {
       this.registerDisposer(query.changed.add(this.debouncedUpdate));
     }
@@ -238,25 +236,16 @@ class SegmentQueryListSource extends SegmentListSource {
   render = (index: number) => {
     const {explicitSegments} = this;
     let id: Uint64;
-    let visibleList = false;
-    if (explicitSegments !== undefined && index < explicitSegments.length) {
+    if (explicitSegments !== undefined) {
       id = explicitSegments[index];
-      visibleList = this.explicitSegmentsVisible;
     } else {
-      if (explicitSegments !== undefined) {
-        index -= explicitSegments.length;
-      }
       id = tempUint64;
       const propIndex = this.queryResult.value!.indices![index];
       const {ids} = this.segmentPropertyMap!.segmentPropertyMap.inlineProperties!;
       id.low = ids[propIndex * 2];
       id.high = ids[propIndex * 2 + 1];
     }
-    const container = this.segmentWidgetFactory.get(id);
-    if (visibleList) {
-      container.dataset.visibleList = 'true';
-    }
-    return container;
+    return this.segmentWidgetFactory.get(id);
   };
 }
 
@@ -267,8 +256,7 @@ const keyMap = EventActionMap.fromObject({
   'escape': {action: 'cancel'},
 });
 
-const selectSegmentConfirmationThreshold = 5;
-console.log('selectSegmentConfirmationThreshold', selectSegmentConfirmationThreshold);
+const selectSegmentConfirmationThreshold = 100;
 
 interface NumericalBoundElements {
   container: HTMLElement;
@@ -944,6 +932,7 @@ class SegmentListGroupBase extends RefCounted {
     this.elements.push(selectionStatusContainer);
     this.registerDisposer(group.visibleSegments.changed.add(() => this.updateStatus()));
     this.registerDisposer(group.selectedSegments.changed.add(() => this.updateStatus()));
+    this.registerDisposer(listSource.changed.add(() => this.updateStatus()));
   }
 
   listSegments(safe = false): IterableIterator<Uint64> {
@@ -1048,7 +1037,6 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
       queryElement: HTMLInputElement,
       private debouncedUpdateQueryModel: DebouncedFunc<() => void>) {
     super(listSource, group);
-    listSource.statusText.changed.add(() => this.updateStatus());
     const setQuery = (newQuery: ExplicitIdQuery|FilterQuery) => {
       queryElement.focus();
       queryElement.select();
@@ -1079,7 +1067,6 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
     this.registerEventListener(queryElement, 'input', () => {
       debouncedUpdateQueryModel();
       this.clearConfirm();
-      this.updateStatus();
     });
     this.registerDisposer(registerActionListener(queryElement, 'cancel', () => {
       queryElement.focus();
@@ -1089,7 +1076,6 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
       queryElement.value = '';
       segmentQuery.value = '';
       this.hasConfirmed = false;
-      this.updateStatus();
     }));
     this.registerDisposer(
       registerActionListener(queryElement, 'toggle-listed', this.toggleMatches));
