@@ -114,15 +114,8 @@ class StarredSegmentsListSource extends SegmentListSource {
 
   render = (index: number) => {
     const {explicitSegments} = this;
-    let id: Uint64;
-    let visibleList = false;
-    id = explicitSegments![index];
-    visibleList = this.explicitSegmentsVisible;
-    const container = this.segmentWidgetFactory.get(id);
-    if (visibleList) {
-      container.dataset.visibleList = 'true';
-    }
-    return container;
+    const id = explicitSegments![index];
+    return this.segmentWidgetFactory.get(id);
   };
 }
 
