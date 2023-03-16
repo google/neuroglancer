@@ -24,12 +24,12 @@ import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, ChunkedGraphSourceParameters, getGrapheneFragmentKey, isBaseSegmentId, makeChunkedGraphChunkSpecification, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, ChunkedGraphSourceParameters, getGrapheneFragmentKey, isBaseSegmentId, makeChunkedGraphChunkSpecification, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, responseIdentity, GRAPHENE_REFRESH_MESH_RPC_ID} from 'neuroglancer/datasource/graphene/base';
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource, resolvePath} from 'neuroglancer/datasource/precomputed/frontend';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshLayer, MeshSource, MultiscaleMeshLayer} from 'neuroglancer/mesh/frontend';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayer, RenderLayerRole} from 'neuroglancer/renderlayer';
@@ -924,6 +924,9 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     toolbox.appendChild(makeToolButton(
         context, layer.toolBinder,
         {toolJson: GRAPHENE_MERGE_SEGMENTS_TOOL_ID, label: 'Merge', title: 'Merge segments'}));
+    toolbox.appendChild(makeToolButton(
+        context, layer.toolBinder,
+        {toolJson: GRAPHENE_REFRESH_MESHES_TOOL_ID, label: 'Refresh Meshes', title: 'Refresh Meshes'}));
     parent.appendChild(toolbox);
     parent.appendChild(
         context
@@ -1067,6 +1070,7 @@ class SliceViewPanelChunkedGraphLayer extends SliceViewPanelRenderLayer {
 
 const GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID = 'grapheneMulticutSegments';
 const GRAPHENE_MERGE_SEGMENTS_TOOL_ID = 'grapheneMergeSegments';
+const GRAPHENE_REFRESH_MESHES_TOOL_ID = 'grapheneRefreshMesh';
 
 class MulticutAnnotationLayerView extends AnnotationLayerView {
   private _annotationStates: MergedAnnotationStates;
@@ -1456,10 +1460,48 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
   }
 }
 
+class RefreshMeshesTool extends LayerTool<SegmentationUserLayer> {
+  activate(activation: ToolActivation<this>) {
+    const {body, header} = makeToolActivationStatusMessageWithHeader(activation);
+    header.textContent = 'Refresh meshes';
+    body.classList.add('neuroglancer-merge-segments-status');
+
+    const someMeshLayer = (layer: SegmentationUserLayer) => {
+      for (let x of layer.renderLayers) {
+        if (x instanceof MeshLayer || x instanceof MultiscaleMeshLayer) {
+          return x;
+        }
+      }
+      return undefined;
+    };
+
+    const {segmentationGroupState} = this.layer.displayState;
+    const {visibleSegments} = segmentationGroupState.value;
+    const meshLayer = someMeshLayer(this.layer);
+    if (!meshLayer) return;
+    const meshSource = meshLayer.source;
+    for (const segment of visibleSegments) {
+      meshSource.rpc!.invoke(GRAPHENE_REFRESH_MESH_RPC_ID, {'rpcId': meshSource.rpcId!, 'segment': segment.toString()});
+    }
+  }
+
+  toJSON() {
+    return GRAPHENE_REFRESH_MESHES_TOOL_ID;
+  }
+
+  get description() {
+    return `refresh meshes`;
+  }
+}
+
 registerTool(SegmentationUserLayer, GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID, layer => {
   return new MulticutSegmentsTool(layer, true);
 });
 
 registerTool(SegmentationUserLayer, GRAPHENE_MERGE_SEGMENTS_TOOL_ID, layer => {
   return new MergeSegmentsTool(layer, true);
+});
+
+registerTool(SegmentationUserLayer, GRAPHENE_REFRESH_MESHES_TOOL_ID, layer => {
+  return new RefreshMeshesTool(layer);
 });
