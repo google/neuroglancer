@@ -799,12 +799,12 @@ function renderTagSummary(
   return tagList;
 }
 
-class SegmentListGroupBase extends RefCounted {
+abstract class SegmentListGroupBase extends RefCounted {
   confirmationContainer = document.createElement('span');
   confirmationCheckbox = document.createElement('input');
   confirmationMessage = document.createElement('span');
 
-  elements: HTMLElement[] = [];
+  element = document.createElement('div');
   prevNumDisplayed = -1;
 
   selectionStatusContainer = document.createElement('span');
@@ -859,7 +859,8 @@ class SegmentListGroupBase extends RefCounted {
     super();
     const {visibilityToggleAllButton} = this;
 
-    const {confirmationContainer, confirmationCheckbox, confirmationMessage, currentConfirmCallback} = this;
+    const {element, confirmationContainer, confirmationCheckbox, confirmationMessage, currentConfirmCallback} = this;
+    element.style.display = 'contents';
     confirmationContainer.classList.add('neuroglancer-segment-list-status')
     confirmationCheckbox.type = 'checkbox';
     confirmationCheckbox.title = "Confirm"
@@ -881,7 +882,7 @@ class SegmentListGroupBase extends RefCounted {
     });
     confirmationContainer.appendChild(confirmationCheckbox);
     confirmationContainer.appendChild(confirmationMessage);
-    this.elements.push(confirmationContainer);
+    this.element.appendChild(confirmationContainer);
     this.starAllButton = makeStarButton({
       title: 'Toggle star status',
       onClick: () => {
@@ -922,7 +923,7 @@ class SegmentListGroupBase extends RefCounted {
     selectionStatusContainer.appendChild(this.starAllButton);
     selectionStatusContainer.appendChild(this.visibilityToggleAllButton);
     selectionStatusContainer.appendChild(this.selectionStatusMessage);
-    this.elements.push(selectionStatusContainer);
+    this.element.appendChild(selectionStatusContainer);
     this.registerDisposer(group.visibleSegments.changed.add(() => this.updateStatus()));
     this.registerDisposer(group.selectedSegments.changed.add(() => this.updateStatus()));
     this.registerDisposer(listSource.changed.add(() => this.updateStatus()));
@@ -986,7 +987,7 @@ class SegmentListGroupSelected extends SegmentListGroupBase {
     matchStatusContainer.classList.add('neuroglancer-segment-list-status')
     matchStatusContainer.appendChild(this.copySelectedButton);
     matchStatusContainer.appendChild(this.copySelectedMessage);
-    this.elements.unshift(matchStatusContainer);
+    this.element.prepend(matchStatusContainer);
   }
 
   listSegments(safe = false) {
@@ -1056,7 +1057,7 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
     matchStatusContainer.appendChild(matchCopyButton);
     matchStatusContainer.appendChild(matchStatusMessage);
     // push them in front of the base list elements
-    this.elements.unshift(queryErrors, queryStatisticsContainer, queryStatisticsSeparator, matchStatusContainer);
+    this.element.prepend(queryErrors, queryStatisticsContainer, queryStatisticsSeparator, matchStatusContainer);
     this.registerEventListener(queryElement, 'input', () => {
       debouncedUpdateQueryModel();
       this.clearConfirm();
@@ -1271,16 +1272,12 @@ export class SegmentDisplayTab extends Tab {
 
                   const segList = context.registerDisposer(new SegmentListGroupQuery(list, listSource, group, segmentPropertyMap, segmentQuery, queryElement, debouncedUpdateQueryModel));
                   segList.updateStatus();
-                  for (let element of segList.elements) {
-                    parent.appendChild(element);
-                  }
-                  parent.appendChild(list.element);
+                  segList.element.appendChild(list.element);
+                  parent.appendChild(segList.element);
                   const segList2 = context.registerDisposer(new SegmentListGroupSelected(selectedSegmentsListSource, group));
                   segList2.updateStatus();
-                  for (let element of segList2.elements) {
-                    parent.appendChild(element);
-                  }
-                  parent.appendChild(selectedSegmentsList.element);
+                  segList2.element.appendChild(selectedSegmentsList.element);
+                  parent.appendChild(segList2.element);
                   const updateListItems = context.registerCancellable(animationFrameDebounce(() => {
                     listSource.updateRenderedItems(list);
                     selectedSegmentsListSource.updateRenderedItems(selectedSegmentsList);
