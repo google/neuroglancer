@@ -85,7 +85,7 @@ class ScaleInfo {
   chunkSizes: Uint32Array[];
   compressedSegmentationBlockSize: vec3|undefined;
   sharding: ShardingParameters|undefined;
-  hidden: boolean|undefined;
+  hidden: boolean;
   constructor(obj: any, numChannels: number) {
     verifyObject(obj);
     const rank = (numChannels === 1) ? 3 : 4;
@@ -125,7 +125,7 @@ class ScaleInfo {
           x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
     }
     this.key = verifyObjectProperty(obj, 'key', verifyString);
-    this.hidden =  verifyObjectProperty(obj, 'hidden', verifyOptionalBoolean);
+    this.hidden =  verifyObjectProperty(obj, 'hidden', verifyOptionalBoolean) ?? false;
   }
 }
 

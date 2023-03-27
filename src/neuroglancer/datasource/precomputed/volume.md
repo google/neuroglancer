@@ -56,6 +56,7 @@ The root value must be a JSON object with the following members:
     format](#sharded-chunk-storage).  Must be a [sharding specification](./sharded.md#sharding-specification).
     If the sharded format is used, the `"chunk_sizes"` member must specify only a single chunk size.
     If unspecified, the [unsharded format](#unsharded-chunk-storage) is used.
+  - `"hidden"`: Optional. If specified, must be a boolean value that indicates if the scale should be not rendered in the viewer. Defaults to `False`. 
 - `"mesh"`: May be optionally specified if `"volume_type"` is `"segmentation"`.  If specified, it
   must be a string value specifying the name of the subdirectory containing the [mesh
   data](./meshes.md).
