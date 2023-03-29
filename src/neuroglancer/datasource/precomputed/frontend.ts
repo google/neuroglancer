@@ -37,7 +37,7 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray, verifyOptionalBoolean} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
@@ -85,6 +85,7 @@ class ScaleInfo {
   chunkSizes: Uint32Array[];
   compressedSegmentationBlockSize: vec3|undefined;
   sharding: ShardingParameters|undefined;
+  hidden: boolean;
   constructor(obj: any, numChannels: number) {
     verifyObject(obj);
     const rank = (numChannels === 1) ? 3 : 4;
@@ -124,6 +125,7 @@ class ScaleInfo {
           x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
     }
     this.key = verifyObjectProperty(obj, 'key', verifyString);
+    this.hidden =  verifyObjectProperty(obj, 'hidden', verifyOptionalBoolean) ?? false;
   }
 }
 
@@ -208,7 +210,7 @@ export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChun
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     const modelResolution = this.info.scales[0].resolution;
     const {rank} = this;
-    return transposeNestedArrays(this.info.scales.map(scaleInfo => {
+    return transposeNestedArrays(this.info.scales.filter(x => !x.hidden).map(scaleInfo => {
       const {resolution} = scaleInfo;
       const stride = rank + 1;
       const chunkToMultiscaleTransform = new Float32Array(stride * stride);
