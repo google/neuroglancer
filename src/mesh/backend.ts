@@ -812,10 +812,8 @@ function convertMeshData(
 }
 
 export function assignMeshFragmentData(
-  chunk: FragmentChunk,
-  data: RawMeshData,
-  vertexPositionFormat: VertexPositionFormat = VertexPositionFormat.float32,
-) {
+    chunk: FragmentChunk|MultiscaleFragmentChunk, data: RawMeshData,
+    vertexPositionFormat: VertexPositionFormat = VertexPositionFormat.float32) {
   chunk.meshData = convertMeshData(data, vertexPositionFormat);
 }
 
