@@ -18,3 +18,7 @@ For this step `bundle-config.js` was modified to contain `deepzoom` datasource o
 
 Trivial step, making the code build again.
 
+2. 2. Removals
+
+Unwanted features, like annotation, mesh, segmentation, sharding, and skeleton support.  
+There were some commented code blocks (coming from the original repo), those are removed too.
