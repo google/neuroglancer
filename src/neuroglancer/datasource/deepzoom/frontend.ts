@@ -25,17 +25,16 @@ import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} f
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
-import {vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
-export class PrecomputedVolumeChunkSource extends
+/*export*/ class DeepzoomVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
-export function resolvePath(a: string, b: string) {
+/*export*/ function resolvePath(a: string, b: string) {
   const outputParts = a.split('/');
   for (const part of b.split('/')) {
     if (part === '..') {
@@ -56,7 +55,6 @@ class ScaleInfo {
   voxelOffset: Float32Array;
   size: Float32Array;
   chunkSizes: Uint32Array[];
-  compressedSegmentationBlockSize: vec3|undefined;
   constructor(obj: any, numChannels: number) {
     verifyObject(obj);
     const rank = (numChannels === 1) ? 3 : 4;
@@ -84,35 +82,24 @@ class ScaleInfo {
     if (this.chunkSizes.length === 0) {
       throw new Error('No chunk sizes specified.');
     }
-    let encoding = this.encoding =
+    this.encoding =
         verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
-    if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION) {
-      this.compressedSegmentationBlockSize = verifyObjectProperty(
-          obj, 'compressed_segmentation_block_size',
-          x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
-    }
     this.key = verifyObjectProperty(obj, 'key', verifyString);
   }
 }
 
-export interface MultiscaleVolumeInfo {
+/*export*/ interface MultiscaleVolumeInfo {
   dataType: DataType;
   volumeType: VolumeType;
-  mesh: string|undefined;
-  skeletons: string|undefined;
-  segmentPropertyMap: string|undefined;
   scales: ScaleInfo[];
   modelSpace: CoordinateSpace;
 }
 
-export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
+/*export*/ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
   const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
-  const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
-  const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
-  const segmentPropertyMap = verifyObjectProperty(obj, 'segment_properties', verifyOptionalString);
   const scaleInfos =
       verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
   if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
@@ -146,15 +133,12 @@ export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   return {
     dataType,
     volumeType,
-    mesh,
-    skeletons,
-    segmentPropertyMap,
     scales: scaleInfos,
     modelSpace
   };
 }
 
-export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+/*export*/ class DeepzoomMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
   }
@@ -206,11 +190,10 @@ export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChun
                volumeType: this.volumeType,
                chunkDataSizes: scaleInfo.chunkSizes,
                baseVoxelOffset: scaleInfo.voxelOffset,
-               compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
                volumeSourceOptions,
              })
           .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
-                 chunkSource: this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
+                 chunkSource: this.chunkManager.getChunkSource(DeepzoomVolumeChunkSource, {
                    credentialsProvider: this.credentialsProvider,
                    spec,
                    parameters: {
@@ -230,7 +213,7 @@ function getJsonMetadata(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string): Promise<any> {
   return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
+      {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
       async () => {
         return await cancellableFetchSpecialOk(
             credentialsProvider, `${url}/info`, {}, responseJson);
@@ -241,7 +224,7 @@ async function getVolumeDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, metadata: any): Promise<DataSource> {
   const info = parseMultiscaleVolumeInfo(metadata);
-  const volume = new PrecomputedMultiscaleVolumeChunkSource(
+  const volume = new DeepzoomMultiscaleVolumeChunkSource(
       options.chunkManager, credentialsProvider, url, info);
   const {modelSpace} = info;
   const subsources: DataSubsourceEntry[] = [
@@ -263,7 +246,7 @@ async function getVolumeDataSource(
 
 const urlPattern = /^([^#]*)(?:#(.*))?$/;
 
-export function parseProviderUrl(providerUrl: string) {
+/*export*/ function parseProviderUrl(providerUrl: string) {
   let [, url, fragment] = providerUrl.match(urlPattern)!;
   if (url.endsWith('/')) {
     url = url.substring(0, url.length - 1);
@@ -280,9 +263,9 @@ function unparseProviderUrl(url: string, parameters: any) {
   return url;
 }
 
-export class PrecomputedDataSource extends DataSourceProvider {
+export class DeepzoomDataSource extends DataSourceProvider {
   get description() {
-    return 'Precomputed file-backed data source';
+    return 'Deep Zoom file-backed data source';
   }
 
   normalizeUrl(options: NormalizeUrlOptions): string {
@@ -292,16 +275,13 @@ export class PrecomputedDataSource extends DataSourceProvider {
 
   convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
     const {url, parameters} = parseProviderUrl(options.providerUrl);
-    if (options.type === 'mesh') {
-      parameters['type'] = 'mesh';
-    }
     return options.providerProtocol + '://' + unparseProviderUrl(url, parameters);
   }
 
   get(options: GetDataSourceOptions): Promise<DataSource> {
     const {url: providerUrl, parameters} = parseProviderUrl(options.providerUrl);
     return options.chunkManager.memoize.getUncounted(
-        {'type': 'precomputed:get', providerUrl, parameters}, async(): Promise<DataSource> => {
+        {'type': 'deepzoom:get', providerUrl, parameters}, async(): Promise<DataSource> => {
           const {url, credentialsProvider} =
               parseSpecialUrl(providerUrl, options.credentialsManager);
           let metadata: any;

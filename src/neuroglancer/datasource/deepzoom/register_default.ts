@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {PrecomputedDataSource} from 'neuroglancer/datasource/deepzoom/frontend';
+import {DeepzoomDataSource} from 'neuroglancer/datasource/deepzoom/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
-registerProvider('deepzoom', () => new PrecomputedDataSource());
+registerProvider('deepzoom', () => new DeepzoomDataSource());

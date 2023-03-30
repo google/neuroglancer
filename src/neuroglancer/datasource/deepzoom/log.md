@@ -22,3 +22,10 @@ Trivial step, making the code build again.
 
 Unwanted features, like annotation, mesh, segmentation, sharding, and skeleton support.  
 There were some commented code blocks (coming from the original repo), those are removed too.
+
+2. 3. Further removals
+
+Unwanted encoding schemes (raw kept for testing, jpg and png for planned future use).  
+`export`s keep all dead code alive, commented the fake ones.  
+Further feature removal with text search (traces of "mesh", "skeleton", and "segment").  
+`precomputed` renamed to `deepzoom`, also inside strings (related to RPC and memoizing features).

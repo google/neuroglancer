@@ -17,8 +17,6 @@
 export enum VolumeChunkEncoding {
   RAW,
   JPEG,
-  COMPRESSED_SEGMENTATION,
-  COMPRESSO,
   PNG
 }
 
@@ -26,5 +24,5 @@ export class VolumeChunkSourceParameters {
   url: string;
   encoding: VolumeChunkEncoding;
 
-  static RPC_ID = 'precomputed/VolumeChunkSource';
+  static RPC_ID = 'deepzoom/VolumeChunkSource';
 }

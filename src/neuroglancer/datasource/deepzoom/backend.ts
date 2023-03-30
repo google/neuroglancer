@@ -17,16 +17,12 @@
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
-import {assignMeshFragmentData, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
-import {decodeCompressoChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compresso';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodePngChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/png';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Endianness} from 'neuroglancer/util/endian';
 import {isNotFoundError, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
@@ -34,11 +30,9 @@ import {registerSharedObject} from 'neuroglancer/worker_rpc';
 const chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
 chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
-chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedSegmentationChunk);
-chunkDecoders.set(VolumeChunkEncoding.COMPRESSO, decodeCompressoChunk);
 chunkDecoders.set(VolumeChunkEncoding.PNG, decodePngChunk);
 
-@registerSharedObject() export class PrecomputedVolumeChunkSource extends
+@registerSharedObject() export class DeepzoomVolumeChunkSource extends
 (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
   gridShape = (() => {
@@ -78,17 +72,4 @@ chunkDecoders.set(VolumeChunkEncoding.PNG, decodePngChunk);
       await this.chunkDecoder(chunk, cancellationToken, response);
     }
   }
-}
-
-export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
-  return decodeJsonManifestChunk(chunk, response, 'fragments');
-}
-
-export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
-  let dv = new DataView(response);
-  let numVertices = dv.getUint32(0, true);
-  assignMeshFragmentData(
-      chunk,
-      decodeTriangleVertexPositionsAndIndices(
-          response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
