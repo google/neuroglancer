@@ -10,3 +10,11 @@ It's a tiled pyramidal image representation where pyramid levels always halve th
 
 This last step needs restarting the `dev-server`. Of course the resulting `deepzoom://` still opens `precomputed` sets, which is a good thing, allows keeping open some dataset while cleaning up the unwanted features.
 
+2. Big cleanup
+
+For this step `bundle-config.js` was modified to contain `deepzoom` datasource only, and `precomputed` was physically moved away (also `graphene`, because of its imports). Feature removal steps can be conveniently started in `base.ts`, then the error messages can be followed about missing things, and unused imports.
+
+2. 1. Fix `import`s
+
+Trivial step, making the code build again.
+
