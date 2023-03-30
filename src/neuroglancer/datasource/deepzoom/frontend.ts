@@ -19,7 +19,7 @@ import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend'
 import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
-import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
+import {ImageTileEncoding, ImageTileSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -31,8 +31,8 @@ import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQu
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
-/*export*/ class DeepzoomVolumeChunkSource extends
-(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
+/*export*/ class DeepzoomImageTileSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), ImageTileSourceParameters)) {}
 
 /*export*/ function resolvePath(a: string, b: string) {
   const outputParts = a.split('/');
@@ -50,7 +50,7 @@ import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, 
 
 class ScaleInfo {
   key: string;
-  encoding: VolumeChunkEncoding;
+  encoding: ImageTileEncoding;
   resolution: Float64Array;
   voxelOffset: Float32Array;
   size: Float32Array;
@@ -83,19 +83,19 @@ class ScaleInfo {
       throw new Error('No chunk sizes specified.');
     }
     this.encoding =
-        verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
+        verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, ImageTileEncoding));
     this.key = verifyObjectProperty(obj, 'key', verifyString);
   }
 }
 
-/*export*/ interface MultiscaleVolumeInfo {
+/*export*/ interface PyramidalImageInfo {
   dataType: DataType;
   volumeType: VolumeType;
   scales: ScaleInfo[];
   modelSpace: CoordinateSpace;
 }
 
-/*export*/ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
+/*export*/ function parsePyramidalImageInfo(obj: unknown): PyramidalImageInfo {
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
@@ -138,7 +138,7 @@ class ScaleInfo {
   };
 }
 
-/*export*/ class DeepzoomMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+/*export*/ class DeepzoomPyramidalImageTileSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
   }
@@ -153,7 +153,7 @@ class ScaleInfo {
 
   constructor(
       chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
-      public url: string, public info: MultiscaleVolumeInfo) {
+      public url: string, public info: PyramidalImageInfo) {
     super(chunkManager);
   }
 
@@ -193,7 +193,7 @@ class ScaleInfo {
                volumeSourceOptions,
              })
           .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
-                 chunkSource: this.chunkManager.getChunkSource(DeepzoomVolumeChunkSource, {
+                 chunkSource: this.chunkManager.getChunkSource(DeepzoomImageTileSource, {
                    credentialsProvider: this.credentialsProvider,
                    spec,
                    parameters: {
@@ -220,11 +220,11 @@ function getJsonMetadata(
       });
 }
 
-async function getVolumeDataSource(
+async function getImageDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, metadata: any): Promise<DataSource> {
-  const info = parseMultiscaleVolumeInfo(metadata);
-  const volume = new DeepzoomMultiscaleVolumeChunkSource(
+  const info = parsePyramidalImageInfo(metadata);
+  const volume = new DeepzoomPyramidalImageTileSource(
       options.chunkManager, credentialsProvider, url, info);
   const {modelSpace} = info;
   const subsources: DataSubsourceEntry[] = [
@@ -295,7 +295,7 @@ export class DeepzoomDataSource extends DataSourceProvider {
           switch (t) {
             case 'neuroglancer_multiscale_volume':
             case undefined:
-              return await getVolumeDataSource(options, credentialsProvider, url, metadata);
+              return await getImageDataSource(options, credentialsProvider, url, metadata);
             default:
               throw new Error(`Invalid type: ${JSON.stringify(t)}`);
           }

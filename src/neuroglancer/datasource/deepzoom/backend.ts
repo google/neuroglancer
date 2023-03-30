@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
+import {ImageTileEncoding, ImageTileSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodePngChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/png';
@@ -27,13 +27,13 @@ import {isNotFoundError, responseArrayBuffer} from 'neuroglancer/util/http_reque
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
-const chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
-chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
-chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
-chunkDecoders.set(VolumeChunkEncoding.PNG, decodePngChunk);
+const chunkDecoders = new Map<ImageTileEncoding, ChunkDecoder>();
+chunkDecoders.set(ImageTileEncoding.RAW, decodeRawChunk);
+chunkDecoders.set(ImageTileEncoding.JPEG, decodeJpegChunk);
+chunkDecoders.set(ImageTileEncoding.PNG, decodePngChunk);
 
-@registerSharedObject() export class DeepzoomVolumeChunkSource extends
-(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {
+@registerSharedObject() export class DeepzoomImageTileSource extends
+(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), ImageTileSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
   gridShape = (() => {
     const gridShape = new Uint32Array(3);

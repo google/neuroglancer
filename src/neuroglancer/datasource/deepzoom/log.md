@@ -29,3 +29,9 @@ Unwanted encoding schemes (raw kept for testing, jpg and png for planned future 
 `export`s keep all dead code alive, commented the fake ones.  
 Further feature removal with text search (traces of "mesh", "skeleton", and "segment").  
 `precomputed` renamed to `deepzoom`, also inside strings (related to RPC and memoizing features).
+
+2. 4. Further renamings
+
+In local identifiers: `volume` to `image`, `chunk` to `tile`, `multiscale` to `pyramidal`. Now it's easier to track what is owned versus what is imported. Also, identifiers are distinct enough that they're unlikely clash with anything else, so other data sources have been restored at this point (not seen in the commit, as removal was done locally too).
+
+Supposedly this is the last point where `deepzoom` data source still opens `precomputed`, but only "classic" raster data, and only with `raw`, `jpeg`, or `png` encodings.

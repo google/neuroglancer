@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-export enum VolumeChunkEncoding {
+export enum ImageTileEncoding {
   RAW,
   JPEG,
   PNG
 }
 
-export class VolumeChunkSourceParameters {
+export class ImageTileSourceParameters {
   url: string;
-  encoding: VolumeChunkEncoding;
+  encoding: ImageTileEncoding;
 
-  static RPC_ID = 'deepzoom/VolumeChunkSource';
+  static RPC_ID = 'deepzoom/ImageTileSource';
 }
