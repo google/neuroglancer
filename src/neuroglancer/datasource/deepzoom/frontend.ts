@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2016 Google Inc., 2023 Gergely Csucs
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -18,7 +18,7 @@ import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
-import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
+import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions} from 'neuroglancer/datasource';
 import {ImageTileEncoding, ImageTileSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -26,10 +26,11 @@ import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/slice
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {responseJson} from 'neuroglancer/util/http_request';
+// import {responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import { responseText } from '../dvid/api';
 
 /*export*/ class DeepzoomImageTileSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), ImageTileSourceParameters)) {}
@@ -93,18 +94,41 @@ class ScaleInfo {
   volumeType: VolumeType;
   scales: ScaleInfo[];
   modelSpace: CoordinateSpace;
+  overlap: number;
+  tilesize: number;
 }
 
-/*export*/ function parsePyramidalImageInfo(obj: unknown): PyramidalImageInfo {
-  verifyObject(obj);
-  const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
-  const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
-  const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
-  const scaleInfos =
-      verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
+/*export*/ function buildPyramidalImageInfo(metadata: DZIMetaData): PyramidalImageInfo {
+  // verifyObject(obj);
+  const {width, height, tilesize, overlap, format} = metadata;
+  // const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
+  const dataType = DataType.UINT8;
+  // const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
+  const numChannels = 3;
+  // const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
+  const volumeType = VolumeType.IMAGE;
+  // const scaleInfos =
+  //     verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
+  const scaleInfos = new Array<ScaleInfo>();
+  let w = width, h = height;
+  let maxlevel = Math.ceil(Math.log2(Math.max(w,h)));
+  do {
+    const lvl = scaleInfos.length;
+    const res = 1 << lvl;
+    scaleInfos.push(new ScaleInfo({
+      key: (maxlevel - lvl).toString(),
+      size: [w,h,1],
+      resolution: [res,res,res],
+      chunk_sizes: [[tilesize,tilesize,1]],
+      encoding: format
+    },numChannels));
+    w = Math.ceil(w / 2);
+    h = Math.ceil(h / 2);
+  } while(w > 1 || h > 1);
+
   if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
   const baseScale = scaleInfos[0];
-  const rank = (numChannels === 1) ? 3 : 4;
+  const rank = 4; // (numChannels === 1) ? 3 : 4;
   const scales = new Float64Array(rank);
   const lowerBounds = new Float64Array(rank);
   const upperBounds = new Float64Array(rank);
@@ -134,7 +158,9 @@ class ScaleInfo {
     dataType,
     volumeType,
     scales: scaleInfos,
-    modelSpace
+    modelSpace,
+    overlap,
+    tilesize
   };
 }
 
@@ -151,10 +177,13 @@ class ScaleInfo {
     return this.info.modelSpace.rank;
   }
 
+  url: string;
+
   constructor(
       chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
-      public url: string, public info: PyramidalImageInfo) {
+      /*public*/ url: string, public info: PyramidalImageInfo) {
     super(chunkManager);
+    this.url = url.substring(0, url.lastIndexOf(".")) + "_files";
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -199,6 +228,8 @@ class ScaleInfo {
                    parameters: {
                      url: resolvePath(this.url, scaleInfo.key),
                      encoding: scaleInfo.encoding,
+                     overlap: this.info.overlap,
+                     tilesize: this.info.tilesize
                    }
                  }),
                  chunkToMultiscaleTransform,
@@ -209,21 +240,43 @@ class ScaleInfo {
   }
 }
 
-function getJsonMetadata(
-    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string): Promise<any> {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
-      async () => {
-        return await cancellableFetchSpecialOk(
-            credentialsProvider, `${url}/info`, {}, responseJson);
-      });
+interface DZIMetaData {
+  width: number;
+  height: number;
+  tilesize: number;
+  overlap: number;
+  format: string; // ImageTileEncoding;
 }
+
+function getDZIMetadata(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string): Promise<DZIMetaData> {
+    if (url.endsWith(".json") || url.includes(".json?"))
+      throw new Error("DZI-JSON: OpenSeadragon hack not supported yet.");
+      return chunkManager.memoize.getUncounted(
+        {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
+        async () => {
+          return await cancellableFetchSpecialOk(
+              credentialsProvider, url, {}, responseText)
+              .then(text => {
+                const xml = new DOMParser().parseFromString(text, "text/xml");
+                const image = xml.documentElement;
+                const size = verifyObject(image.getElementsByTagName("Size").item(0));
+                return {
+                  width: verifyPositiveInt(size.getAttribute("Width")),
+                  height: verifyPositiveInt(size.getAttribute("Height")),
+                  tilesize: verifyPositiveInt(verifyString(image.getAttribute("TileSize"))),
+                  overlap: verifyInt(verifyString(image.getAttribute("Overlap"))),
+                  format: verifyString(image.getAttribute("Format")) // verifyEnumString(image.getAttribute("Format"), ImageTileEncoding)
+                };
+              });
+        });
+  }
 
 async function getImageDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, metadata: any): Promise<DataSource> {
-  const info = parsePyramidalImageInfo(metadata);
+    url: string, metadata: DZIMetaData): Promise<DataSource> {
+  const info = buildPyramidalImageInfo(metadata);
   const volume = new DeepzoomPyramidalImageTileSource(
       options.chunkManager, credentialsProvider, url, info);
   const {modelSpace} = info;
@@ -284,21 +337,8 @@ export class DeepzoomDataSource extends DataSourceProvider {
         {'type': 'deepzoom:get', providerUrl, parameters}, async(): Promise<DataSource> => {
           const {url, credentialsProvider} =
               parseSpecialUrl(providerUrl, options.credentialsManager);
-          let metadata: any;
-            metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, url);
-          verifyObject(metadata);
-          const redirect = verifyOptionalObjectProperty(metadata, 'redirect', verifyString);
-          if (redirect !== undefined) {
-            throw new RedirectError(redirect);
-          }
-          const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
-          switch (t) {
-            case 'neuroglancer_multiscale_volume':
-            case undefined:
-              return await getImageDataSource(options, credentialsProvider, url, metadata);
-            default:
-              throw new Error(`Invalid type: ${JSON.stringify(t)}`);
-          }
+          const metadata = await getDZIMetadata(options.chunkManager, credentialsProvider, url);
+          return await getImageDataSource(options, credentialsProvider, url, metadata);
         });
   }
   completeUrl(options: CompleteUrlOptions) {

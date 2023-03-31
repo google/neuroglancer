@@ -35,3 +35,9 @@ Further feature removal with text search (traces of "mesh", "skeleton", and "seg
 In local identifiers: `volume` to `image`, `chunk` to `tile`, `multiscale` to `pyramidal`. Now it's easier to track what is owned versus what is imported. Also, identifiers are distinct enough that they're unlikely clash with anything else, so other data sources have been restored at this point (not seen in the commit, as removal was done locally too).
 
 Supposedly this is the last point where `deepzoom` data source still opens `precomputed`, but only "classic" raster data, and only with `raw`, `jpeg`, or `png` encodings.
+
+3. First working version
+
+DZI descriptor is parsed, and used to fake the array of `ScaleInfo` structure. A simple backend hack is employed, skipping all the magic with partial chunks, but using [`createImageBitmap()`](https://developer.mozilla.org/en-US/docs/Web/API/createImageBitmap) (with a `Blob` in particular) for decoding the tile and [`OffscreenCanvas`](https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas) for making it fixed size and also trimming the overlay (Deep Zoom tiles are allowed to have overlay with their neighbors for dubious reasons).  
+`OffscreenCanvas` needs relatively recent Firefox (105, 2022-09-20), and brand new Safari (16.4, 2023-03-27 - which was 4 days ago at the time of writing).  
+`raw` encoding is removed now. While `createImageBitmap()` could handle whatever image format the browser supports, the filtering is kept in place and `png`, `jpeg`, and `jpg` formats are accepted only.
