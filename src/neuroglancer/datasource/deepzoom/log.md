@@ -48,3 +48,26 @@ This one works on older Firefox and Safari versions.
 
 The built-in `png` and `jpeg` decoders are brought into action. As there are known Deep Zoom tile generators putting an extra `overlay` pixel row on right/bottom edge tiles, the specify-image-dimensions-beforehand requirement is solved with actually reading into the files (`PNG` has its dimensions at fixed positions, and in case of `JPEG` the first occurrence of a `SIFn` chunk is assumed to tell the full dimensions).  
 Extra quirk is that the `JPEG` decoder produces planar image (there is an explicit `transposeArray2d()` call for that in `decode_jpeg.ts`), while `PNG` returns packed (like `getImageData()` in the previous variant).
+
+5. Formatting, and an `export`
+
+Gulp is somewhat happy now.  
+Side note: it reformatted 178 files, 2 of them being mine (`base.ts` and `register_defaults.ts` were untouched).  
+
+`backend.ts`:
+
+* it wanted to add an extra empty line after `import`s, I'm not sure about that
+* it wanted to reformat the simple/future tile loader (`OffscreenCanvas` and co.) in the comment, that doesn't make sense
+* I personally prefer keeping `requestAsyncComputation()` parameters in their current form: the first line is for the RPC call (function, token, transferrables), and the second line is for the actual call parameters.
+
+`frontend.ts`:
+
+* I think it's fully gulp-accepted now (moved a single comment around after the change)
+* 3 utility functions are removed and `imported` from `precomupted` instead. One of them was not `export`ed, now it is. These may be good candidates to be collected at some completely different location anyway, with other utility functions.
+
+Random things:
+
+* Noticed the latest feature addition, the "hidden placeholder resolution" thing. It's not in use by this datasource yet, but definitely something to look into
+* While I needed the name distinctions to have a better track of what's local and what's imported, on a longer run it may be possible the inherit from `precomputed` (instead of what's happened here, so making a copy of it)
+* Configured fragment with PNG tiles, hosted on cscs.ch: `#!%7B"dimensions":%7B"x":%5B1e-9%2C"m"%5D%2C"y":%5B1e-9%2C"m"%5D%2C"z":%5B1e-9%2C"m"%5D%7D%2C"position":%5B11285.9521484375%2C8724.158203125%2C0.5%5D%2C"crossSectionScale":22.759895093526723%2C"projectionScale":32768%2C"layers":%5B%7B"type":"image"%2C"source":"deepzoom://https://object.cscs.ch/v1/AUTH_08c08f9f119744cbbf77e216988da3eb/imgsvc-c304a135-4558-4765-bd52-35452db90dce/hbp-00169_482_R602_1961__BDA_s160.tif/hbp-00169_482_R602_1961__BDA_s160.dzi"%2C"tab":"rendering"%2C"shader":"#uicontrol%20invlerp%20normalized%5Cnvoid%20main%20%28%29%20%7B%5Cn%20%20emitRGB%28vec3%28toNormalized%28getDataValue%280%29%29%2C%5Cn%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20toNormalized%28getDataValue%281%29%29%2C%5Cn%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20toNormalized%28getDataValue%282%29%29%29%29%3B%5Cn%7D"%2C"channelDimensions":%7B"c%5E":%5B1%2C""%5D%7D%2C"name":"hbp-00169_482_R602_1961__BDA_s160.dzi"%7D%5D%2C"selectedLayer":%7B"visible":true%2C"layer":"hbp-00169_482_R602_1961__BDA_s160.dzi"%7D%2C"layout":"xy"%7D`
+* Configured fragment with JPG tiles, hosted on cscs.ch again, but accessed via data-proxy.ebrains.eu: `#!%7B"dimensions":%7B"x":%5B1e-9%2C"m"%5D%2C"y":%5B1e-9%2C"m"%5D%2C"z":%5B1e-9%2C"m"%5D%7D%2C"position":%5B24468.66796875%2C17203.955078125%2C0.5%5D%2C"crossSectionScale":42.52108200006277%2C"projectionScale":8192%2C"layers":%5B%7B"type":"image"%2C"source":"deepzoom://https://data-proxy.ebrains.eu/api/v1/buckets/localizoom/14122_mPPC_BDA_s186.tif/14122_mPPC_BDA_s186.dzi"%2C"tab":"rendering"%2C"shader":"#uicontrol%20invlerp%20normalized%5Cnvoid%20main%20%28%29%20%7B%5Cn%20%20emitRGB%28vec3%28toNormalized%28getDataValue%280%29%29%2C%5Cn%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20toNormalized%28getDataValue%281%29%29%2C%5Cn%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20toNormalized%28getDataValue%282%29%29%29%29%3B%5Cn%7D%5Cn"%2C"channelDimensions":%7B"c%5E":%5B1%2C""%5D%7D%2C"name":"class_0"%7D%5D%2C"selectedLayer":%7B"visible":true%2C"layer":"class_0"%7D%2C"layout":"xy"%7D`

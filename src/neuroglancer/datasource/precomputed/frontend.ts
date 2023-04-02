@@ -910,7 +910,7 @@ export function parseProviderUrl(providerUrl: string) {
   return {url, parameters};
 }
 
-function unparseProviderUrl(url: string, parameters: any) {
+export function unparseProviderUrl(url: string, parameters: any) {
   const fragment = unparseQueryStringParameters(parameters);
   if (fragment) {
     url += `#${fragment}`;

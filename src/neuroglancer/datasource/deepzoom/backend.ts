@@ -22,10 +22,10 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {isNotFoundError, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
-import { decodeJpeg } from 'src/neuroglancer/async_computation/decode_jpeg_request';
-import { decodePng } from 'src/neuroglancer/async_computation/decode_png_request';
-import { requestAsyncComputation } from 'src/neuroglancer/async_computation/request';
-import { transposeArray2d } from 'src/neuroglancer/util/array';
+import {decodeJpeg} from 'src/neuroglancer/async_computation/decode_jpeg_request';
+import {decodePng} from 'src/neuroglancer/async_computation/decode_png_request';
+import {requestAsyncComputation} from 'src/neuroglancer/async_computation/request';
+import {transposeArray2d} from 'src/neuroglancer/util/array';
 
 /* This is enough if support for these aren't needed:
  * - Firefox before 105 (OffscreenCanvas, 2022-09-20)
@@ -69,62 +69,64 @@ import { transposeArray2d } from 'src/neuroglancer/util/array';
     // }
     // Todo: ^ "transposeArray2d" likely does the same
 
-    const {tilesize, overlap, encoding}=parameters;
+    const {tilesize, overlap, encoding} = parameters;
     const [x, y] = chunk.chunkGridPosition;
     const ox = x === 0 ? 0 : overlap;
     const oy = y === 0 ? 0 : overlap;
     const url = `${parameters.url}/${x}_${y}.${ImageTileEncoding[encoding].toLowerCase()}`;
     try{
-      const responseBuffer = await cancellableFetchSpecialOk(this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
+      const responseBuffer = await cancellableFetchSpecialOk(
+          this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
 
       const responseDataView = new DataView(responseBuffer);
-      let tilewidth=0,tileheight=0;
+      let tilewidth = 0, tileheight = 0;
       let tiledata: Uint8Array|undefined;
       switch(encoding){
         case ImageTileEncoding.PNG:
           /* Somewhat straightforward, width and height are at fixed position
            * no validation attempt, decoding throws on mismatch/garbage anyway
            */
-          tilewidth = responseDataView.getInt32(16,false);
-          tileheight = responseDataView.getInt32(20,false);
+          tilewidth = responseDataView.getInt32(16, false);
+          tileheight = responseDataView.getInt32(20, false);
           tiledata = await requestAsyncComputation(
-            decodePng, cancellationToken, [responseBuffer],
-            new Uint8Array(responseBuffer),tilewidth,tileheight,3,1,false
+              decodePng, cancellationToken, [responseBuffer],
+              new Uint8Array(responseBuffer), tilewidth, tileheight, 3, 1, false
           );
-          tiledata=transposeArray2d(tiledata,tilewidth*tileheight,3);
+          tiledata = transposeArray2d(tiledata, tilewidth*tileheight, 3);
           break;
 
         case ImageTileEncoding.JPG:
         case ImageTileEncoding.JPEG:
-          /* Fragile heuristic with 10-minute read into the standard, deliberately ignoring some details */
+          /* Fragile heuristic with 10-minute read into the standard */
           let pos = 2; // skip SOI, it has irregular format anyway
           while(pos < responseDataView.byteLength) {
-            if(responseDataView.getUint8(pos)!==0xFF)
-              throw new Error("The JPEG thing has broketh.");
-            const code = responseDataView.getUint8(pos+1);
-            if(code<0xC0 || code>0xCF)
-              pos+=responseDataView.getUint16(pos+2,false)+2;
+            if(responseDataView.getUint8(pos) !== 0xFF)
+              throw new Error('The JPEG thing has broketh.');
+            const code = responseDataView.getUint8(pos + 1);
+            if(code < 0xC0 || code > 0xCF)
+              pos += responseDataView.getUint16(pos + 2, false) + 2;
             else {
-              tileheight=responseDataView.getUint16(pos+5);
-              tilewidth=responseDataView.getUint16(pos+7);
-              tiledata=await requestAsyncComputation(
-                decodeJpeg, cancellationToken, [responseBuffer],
-                new Uint8Array(responseBuffer), tilewidth, tileheight, 3, false);
+              tileheight = responseDataView.getUint16(pos + 5);
+              tilewidth = responseDataView.getUint16(pos + 7);
+              tiledata = await requestAsyncComputation(
+                  decodeJpeg, cancellationToken, [responseBuffer],
+                  new Uint8Array(responseBuffer), tilewidth, tileheight, 3, false);
               break;
             }
           }
           break;
       }
-      if(tiledata!==undefined){
-        const d = chunk.data = new Uint8Array(tilesize*tilesize*3);
-        for(let k=0;k<3;k++)
-          for(let j=0;j<tileheight;j++)
-            for(let i=0;i<tilewidth;i++)
-              d[i+j*tilesize+k*tilesize*tilesize]=tiledata[i+ox+(j+oy)*tilewidth+k*tilewidth*tileheight];
+      if(tiledata !== undefined){
+        const t2 = tilesize * tilesize;
+        const twh = tilewidth * tileheight;
+        const d = chunk.data = new Uint8Array(t2 * 3);
+        for(let k = 0; k < 3; k++)
+          for(let j = 0; j < tileheight; j++)
+            for(let i = 0; i < tilewidth; i++)
+              d[i + j * tilesize + k * t2] = tiledata[i + ox + (j + oy) * tilewidth + k * twh];
       }
     } catch (e) {
-      if (!isNotFoundError(e)) 
-        throw e;
+      if (!isNotFoundError(e)) throw e;
     }
   }
 }

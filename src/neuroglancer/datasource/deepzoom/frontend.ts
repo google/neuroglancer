@@ -20,34 +20,20 @@ import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions} from 'neuroglancer/datasource';
 import {ImageTileEncoding, ImageTileSourceParameters} from 'neuroglancer/datasource/deepzoom/base';
+import {responseText} from 'neuroglancer/datasource/dvid/api';
+import {parseProviderUrl, resolvePath, unparseProviderUrl} from 'neuroglancer/datasource/precomputed/frontend';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-// import {responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
-import { responseText } from '../dvid/api';
 
 /*export*/ class DeepzoomImageTileSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), ImageTileSourceParameters)) {}
-
-/*export*/ function resolvePath(a: string, b: string) {
-  const outputParts = a.split('/');
-  for (const part of b.split('/')) {
-    if (part === '..') {
-      if (outputParts.length !== 0) {
-        outputParts.length = outputParts.length - 1;
-        continue;
-      }
-    }
-    outputParts.push(part);
-  }
-  return outputParts.join('/');
-}
 
 class ScaleInfo {
   key: string;
@@ -99,36 +85,32 @@ class ScaleInfo {
 }
 
 /*export*/ function buildPyramidalImageInfo(metadata: DZIMetaData): PyramidalImageInfo {
-  // verifyObject(obj);
   const {width, height, tilesize, overlap, format} = metadata;
-  // const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const dataType = DataType.UINT8;
-  // const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
   const numChannels = 3;
-  // const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
   const volumeType = VolumeType.IMAGE;
-  // const scaleInfos =
-  //     verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
   const scaleInfos = new Array<ScaleInfo>();
   let w = width, h = height;
-  let maxlevel = Math.ceil(Math.log2(Math.max(w,h)));
+  let maxlevel = Math.ceil(Math.log2(Math.max(w, h)));
   do {
     const lvl = scaleInfos.length;
     const res = 1 << lvl;
-    scaleInfos.push(new ScaleInfo({
-      key: (maxlevel - lvl).toString(),
-      size: [w,h,1],
-      resolution: [res,res,res],
-      chunk_sizes: [[tilesize,tilesize,1]],
-      encoding: format
-    },numChannels));
+    scaleInfos.push(new ScaleInfo(
+        {
+          key: (maxlevel - lvl).toString(),
+          size: [w, h, 1],
+          resolution: [res, res, res],
+          chunk_sizes: [[tilesize, tilesize, 1]],
+          encoding: format
+        },
+        numChannels));
     w = Math.ceil(w / 2);
     h = Math.ceil(h / 2);
-  } while(w > 1 || h > 1);
+  } while (w > 1 || h > 1);
 
   if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
   const baseScale = scaleInfos[0];
-  const rank = 4; // (numChannels === 1) ? 3 : 4;
+  const rank = 4;
   const scales = new Float64Array(rank);
   const lowerBounds = new Float64Array(rank);
   const upperBounds = new Float64Array(rank);
@@ -154,14 +136,7 @@ class ScaleInfo {
     scales,
     boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
   });
-  return {
-    dataType,
-    volumeType,
-    scales: scaleInfos,
-    modelSpace,
-    overlap,
-    tilesize
-  };
+  return {dataType, volumeType, scales: scaleInfos, modelSpace, overlap, tilesize};
 }
 
 /*export*/ class DeepzoomPyramidalImageTileSource extends MultiscaleVolumeChunkSource {
@@ -183,7 +158,7 @@ class ScaleInfo {
       chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
       /*public*/ url: string, public info: PyramidalImageInfo) {
     super(chunkManager);
-    this.url = url.substring(0, url.lastIndexOf(".")) + "_files";
+    this.url = url.substring(0, url.lastIndexOf('.')) + '_files';
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -245,40 +220,40 @@ interface DZIMetaData {
   height: number;
   tilesize: number;
   overlap: number;
-  format: string; // ImageTileEncoding;
+  format: string;
 }
 
 function getDZIMetadata(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string): Promise<DZIMetaData> {
-    if (url.endsWith(".json") || url.includes(".json?"))
-      throw new Error("DZI-JSON: OpenSeadragon hack not supported yet.");
-      return chunkManager.memoize.getUncounted(
-        {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
-        async () => {
-          return await cancellableFetchSpecialOk(
-              credentialsProvider, url, {}, responseText)
-              .then(text => {
-                const xml = new DOMParser().parseFromString(text, "text/xml");
-                const image = xml.documentElement;
-                const size = verifyObject(image.getElementsByTagName("Size").item(0));
-                return {
-                  width: verifyPositiveInt(size.getAttribute("Width")),
-                  height: verifyPositiveInt(size.getAttribute("Height")),
-                  tilesize: verifyPositiveInt(verifyString(image.getAttribute("TileSize"))),
-                  overlap: verifyInt(verifyString(image.getAttribute("Overlap"))),
-                  format: verifyString(image.getAttribute("Format")) // verifyEnumString(image.getAttribute("Format"), ImageTileEncoding)
-                };
-              });
-        });
-  }
+  if (url.endsWith('.json') || url.includes('.json?'))
+    throw new Error('DZI-JSON: OpenSeadragon hack not supported yet.');
+  return chunkManager.memoize.getUncounted(
+      {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
+      async () => {
+        return await cancellableFetchSpecialOk(credentialsProvider, url, {}, responseText)
+            .then(text => {
+              const xml = new DOMParser().parseFromString(text, 'text/xml');
+              const image = xml.documentElement;
+              const size = verifyObject(image.getElementsByTagName('Size').item(0));
+              return {
+                width: verifyPositiveInt(size.getAttribute('Width')),
+                height: verifyPositiveInt(size.getAttribute('Height')),
+                tilesize: verifyPositiveInt(verifyString(image.getAttribute('TileSize'))),
+                overlap: verifyInt(verifyString(image.getAttribute('Overlap'))),
+                // verifyEnumString(image.getAttribute("Format"), ImageTileEncoding)
+                format: verifyString(image.getAttribute('Format'))  
+              };
+            });
+      });
+}
 
 async function getImageDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, metadata: DZIMetaData): Promise<DataSource> {
   const info = buildPyramidalImageInfo(metadata);
-  const volume = new DeepzoomPyramidalImageTileSource(
-      options.chunkManager, credentialsProvider, url, info);
+  const volume =
+      new DeepzoomPyramidalImageTileSource(options.chunkManager, credentialsProvider, url, info);
   const {modelSpace} = info;
   const subsources: DataSubsourceEntry[] = [
     {
@@ -295,25 +270,6 @@ async function getImageDataSource(
     },
   ];
   return {modelTransform: makeIdentityTransform(modelSpace), subsources};
-}
-
-const urlPattern = /^([^#]*)(?:#(.*))?$/;
-
-/*export*/ function parseProviderUrl(providerUrl: string) {
-  let [, url, fragment] = providerUrl.match(urlPattern)!;
-  if (url.endsWith('/')) {
-    url = url.substring(0, url.length - 1);
-  }
-  const parameters = parseQueryStringParameters(fragment || '');
-  return {url, parameters};
-}
-
-function unparseProviderUrl(url: string, parameters: any) {
-  const fragment = unparseQueryStringParameters(parameters);
-  if (fragment) {
-    url += `#${fragment}`;
-  }
-  return url;
 }
 
 export class DeepzoomDataSource extends DataSourceProvider {
