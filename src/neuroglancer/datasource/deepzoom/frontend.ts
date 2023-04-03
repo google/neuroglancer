@@ -226,8 +226,14 @@ interface DZIMetaData {
 function getDZIMetadata(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string): Promise<DZIMetaData> {
-  if (url.endsWith('.json') || url.includes('.json?'))
+  if (url.endsWith('.json') || url.includes('.json?')) {
+    /* http://openseadragon.github.io/examples/tilesource-dzi/
+     * JSON variant is a bit of a hack, it's not known how much it is in use for real.
+     * The actual reason for not implementing it right now is the lack of CORS-enabled
+     * test data.
+     */
     throw new Error('DZI-JSON: OpenSeadragon hack not supported yet.');
+  }
   return chunkManager.memoize.getUncounted(
       {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
       async () => {
