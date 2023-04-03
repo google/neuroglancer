@@ -18,7 +18,7 @@
  * @file Tabbed view widget.
  */
 
-import 'neuroglancer/widget/tab_view.css';
+import './tab_view.css';
 
 import {WatchableValueChangeInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/widget/render_scale_widget.css';
+import './render_scale_widget.css';
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';

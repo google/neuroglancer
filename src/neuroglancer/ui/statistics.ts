@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/ui/statistics.css';
+import './statistics.css';
 
 import debounce from 'lodash/debounce';
 import {ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStates} from 'neuroglancer/chunk_manager/base';

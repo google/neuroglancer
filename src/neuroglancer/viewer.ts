@@ -15,7 +15,7 @@
  */
 
 import './viewer.css';
-import 'neuroglancer/noselect.css';
+import './noselect.css';
 
 import svg_controls_alt from 'ikonate/icons/controls-alt.svg';
 import svg_layers from 'ikonate/icons/layers.svg';

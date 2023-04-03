@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/noselect.css';
+import '../noselect.css';
 import './panel.css';
 
 import {AxesLineHelper, computeAxisLineMatrix} from 'neuroglancer/axes_lines';

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/segmentation_user_layer.css';
+import './segmentation_user_layer.css';
 
 import {CoordinateTransformSpecification, emptyValidCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, LocalDataSource, localEquivalencesUrl} from 'neuroglancer/datasource';

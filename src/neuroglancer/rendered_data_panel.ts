@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/rendered_data_panel.css';
-import 'neuroglancer/noselect.css';
+import './rendered_data_panel.css';
+import './noselect.css';
 
 import {Annotation} from 'neuroglancer/annotation';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';

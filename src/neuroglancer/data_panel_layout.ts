@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/data_panel_layout.css';
+import './data_panel_layout.css';
 
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
