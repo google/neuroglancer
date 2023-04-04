@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 import {asyncComputation} from 'neuroglancer/async_computation';
+import {DecodedImage} from './decode_png_request';
 
 export const decodeJpeg = asyncComputation<
-    (data: Uint8Array, width: number, height: number, numComponents: number,
-     convertToGrayscale: boolean) => Uint8Array>('decodeJpeg');
+    (data: Uint8Array, width: number|undefined, height: number|undefined, numComponents: number|undefined,
+     convertToGrayscale: boolean) => DecodedImage>('decodeJpeg');

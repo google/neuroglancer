@@ -75,3 +75,7 @@ Random things:
 6. Trivial housekeeping
 
 Unused decoders are removed from `bundle-config.js`, formatting a single code block, providing links to documentation and software.
+
+7. Image parsing hacks removed
+
+PNG/JPEG decoders can still verify expected dimensions, but they also accept `undefined` now. Returned `Uint8Array` is replaced with `DecodedImage` now, containing the array, width, height, and the number of components/channels.

@@ -74,49 +74,31 @@ import {transposeArray2d} from 'src/neuroglancer/util/array';
     const ox = x === 0 ? 0 : overlap;
     const oy = y === 0 ? 0 : overlap;
     const url = `${parameters.url}/${x}_${y}.${ImageTileEncoding[encoding].toLowerCase()}`;
-    try{
+    try {
       const responseBuffer = await cancellableFetchSpecialOk(
           this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
 
-      const responseDataView = new DataView(responseBuffer);
       let tilewidth = 0, tileheight = 0;
       let tiledata: Uint8Array|undefined;
       switch(encoding){
         case ImageTileEncoding.PNG:
-          /* Somewhat straightforward, width and height are at fixed position
-           * no validation attempt, decoding throws on mismatch/garbage anyway
-           */
-          tilewidth = responseDataView.getInt32(16, false);
-          tileheight = responseDataView.getInt32(20, false);
-          tiledata = await requestAsyncComputation(
+          const pngbitmap = await requestAsyncComputation(
               decodePng, cancellationToken, [responseBuffer],
-              new Uint8Array(responseBuffer), tilewidth, tileheight, 3, 1, false
+              new Uint8Array(responseBuffer), undefined, undefined, 3, 1, false
           );
-          tiledata = transposeArray2d(tiledata, tilewidth*tileheight, 3);
+          ({width: tilewidth, height: tileheight} = pngbitmap);
+          tiledata = transposeArray2d(pngbitmap.uint8Array, tilewidth * tileheight, 3);
           break;
 
         case ImageTileEncoding.JPG:
         case ImageTileEncoding.JPEG:
-          /* Fragile heuristic with 10-minute read into the standard */
-          let pos = 2; // skip SOI, it has irregular format anyway
-          while(pos < responseDataView.byteLength) {
-            if(responseDataView.getUint8(pos) !== 0xFF)
-              throw new Error('The JPEG thing has broketh.');
-            const code = responseDataView.getUint8(pos + 1);
-            if(code < 0xC0 || code > 0xCF)
-              pos += responseDataView.getUint16(pos + 2, false) + 2;
-            else {
-              tileheight = responseDataView.getUint16(pos + 5);
-              tilewidth = responseDataView.getUint16(pos + 7);
-              tiledata = await requestAsyncComputation(
-                  decodeJpeg, cancellationToken, [responseBuffer],
-                  new Uint8Array(responseBuffer), tilewidth, tileheight, 3, false);
-              break;
-            }
-          }
+            const jpegbitmap = await requestAsyncComputation(
+                decodeJpeg, cancellationToken, [responseBuffer],
+                new Uint8Array(responseBuffer), undefined, undefined, 3, false);
+            ({uint8Array: tiledata, width: tilewidth, height: tileheight} = jpegbitmap);
           break;
       }
-      if(tiledata !== undefined){
+      if(tiledata !== undefined) {
         const t2 = tilesize * tilesize;
         const twh = tilewidth * tileheight;
         const d = chunk.data = new Uint8Array(t2 * 3);
