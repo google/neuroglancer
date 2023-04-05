@@ -28,106 +28,46 @@ import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/slice
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {verifyEnumString, verifyInt, verifyObject, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 /*export*/ class DeepzoomImageTileSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), ImageTileSourceParameters)) {}
 
-class ScaleInfo {
-  key: string;
-  encoding: ImageTileEncoding;
-  resolution: Float64Array;
-  voxelOffset: Float32Array;
-  size: Float32Array;
-  chunkSizes: Uint32Array[];
-  constructor(obj: any, numChannels: number) {
-    verifyObject(obj);
-    const rank = (numChannels === 1) ? 3 : 4;
-    const resolution = this.resolution = new Float64Array(rank);
-    const voxelOffset = this.voxelOffset = new Float32Array(rank);
-    const size = this.size = new Float32Array(rank);
-    if (rank === 4) {
-      resolution[3] = 1;
-      size[3] = numChannels;
-    }
-    verifyObjectProperty(
-        obj, 'resolution',
-        x => parseFixedLengthArray(resolution.subarray(0, 3), x, verifyFinitePositiveFloat));
-    verifyOptionalObjectProperty(
-        obj, 'voxel_offset', x => parseFixedLengthArray(voxelOffset.subarray(0, 3), x, verifyInt));
-    verifyObjectProperty(
-        obj, 'size', x => parseFixedLengthArray(size.subarray(0, 3), x, verifyPositiveInt));
-    this.chunkSizes = verifyObjectProperty(
-        obj, 'chunk_sizes', x => parseArray(x, y => {
-                              const chunkSize = new Uint32Array(rank);
-                              if (rank === 4) chunkSize[3] = numChannels;
-                              parseFixedLengthArray(chunkSize.subarray(0, 3), y, verifyPositiveInt);
-                              return chunkSize;
-                            }));
-    if (this.chunkSizes.length === 0) {
-      throw new Error('No chunk sizes specified.');
-    }
-    this.encoding =
-        verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, ImageTileEncoding));
-    this.key = verifyObjectProperty(obj, 'key', verifyString);
-  }
+interface LevelInfo {
+  width: number;
+  height: number;
 }
 
 /*export*/ interface PyramidalImageInfo {
-  dataType: DataType;
-  volumeType: VolumeType;
-  scales: ScaleInfo[];
+  levels: LevelInfo[];
   modelSpace: CoordinateSpace;
   overlap: number;
   tilesize: number;
+  format: string;
+  encoding: ImageTileEncoding;
 }
 
 /*export*/ function buildPyramidalImageInfo(metadata: DZIMetaData): PyramidalImageInfo {
   const {width, height, tilesize, overlap, format} = metadata;
-  const dataType = DataType.UINT8;
-  const numChannels = 3;
-  const volumeType = VolumeType.IMAGE;
-  const scaleInfos = new Array<ScaleInfo>();
+  const encoding = verifyEnumString(format, ImageTileEncoding);
+  const levelInfos = new Array<LevelInfo>();
   let w = width, h = height;
-  let maxlevel = Math.ceil(Math.log2(Math.max(w, h)));
-  do {
-    const lvl = scaleInfos.length;
-    const res = 1 << lvl;
-    scaleInfos.push(new ScaleInfo(
-        {
-          key: (maxlevel - lvl).toString(),
-          size: [w, h, 1],
-          resolution: [res, res, res],
-          chunk_sizes: [[tilesize, tilesize, 1]],
-          encoding: format
-        },
-        numChannels));
+  while (w > 1 || h > 1) {
+    levelInfos.push({width: w, height: h});
     w = Math.ceil(w / 2);
     h = Math.ceil(h / 2);
-  } while (w > 1 || h > 1);
+  }
+  levelInfos.push({width: w, height: h});
 
-  if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
-  const baseScale = scaleInfos[0];
   const rank = 4;
-  const scales = new Float64Array(rank);
+  const scales = Float64Array.of(1 / 1e9, 1 / 1e9, 1 / 1e9, 1);
   const lowerBounds = new Float64Array(rank);
-  const upperBounds = new Float64Array(rank);
-  const names = ['x', 'y', 'z'];
-  const units = ['m', 'm', 'm'];
+  const upperBounds = Float64Array.of(width, height, 1, 3);
+  const names = ['x', 'y', 'z', 'c^'];
+  const units = ['m', 'm', 'm', ''];
 
-  for (let i = 0; i < 3; ++i) {
-    scales[i] = baseScale.resolution[i] / 1e9;
-    lowerBounds[i] = baseScale.voxelOffset[i];
-    upperBounds[i] = lowerBounds[i] + baseScale.size[i];
-  }
-  if (rank === 4) {
-    scales[3] = 1;
-    upperBounds[3] = numChannels;
-    names[3] = 'c^';
-    units[3] = '';
-  }
   const box: BoundingBox = {lowerBounds, upperBounds};
   const modelSpace = makeCoordinateSpace({
     rank,
@@ -136,16 +76,16 @@ class ScaleInfo {
     scales,
     boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
   });
-  return {dataType, volumeType, scales: scaleInfos, modelSpace, overlap, tilesize};
+  return {levels: levelInfos, modelSpace, overlap, tilesize, format, encoding};
 }
 
 /*export*/ class DeepzoomPyramidalImageTileSource extends MultiscaleVolumeChunkSource {
   get dataType() {
-    return this.info.dataType;
+    return DataType.UINT8;
   }
 
   get volumeType() {
-    return this.info.volumeType;
+    return VolumeType.IMAGE;
   }
 
   get rank() {
@@ -162,10 +102,10 @@ class ScaleInfo {
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
-    const modelResolution = this.info.scales[0].resolution;
     const {rank} = this;
-    return transposeNestedArrays(this.info.scales.map(scaleInfo => {
-      const {resolution} = scaleInfo;
+    const chunkDataSizes = [Uint32Array.of(this.info.tilesize, this.info.tilesize, 1, 3)];
+    return transposeNestedArrays(this.info.levels.map((levelInfo, index, array) => {
+      const relativeScale = 1 << index;
       const stride = rank + 1;
       const chunkToMultiscaleTransform = new Float32Array(stride * stride);
       chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
@@ -174,12 +114,9 @@ class ScaleInfo {
       const lowerClipBound = new Float32Array(rank);
       const upperClipBound = new Float32Array(rank);
       for (let i = 0; i < 3; ++i) {
-        const relativeScale = resolution[i] / modelResolution[i];
         chunkToMultiscaleTransform[stride * i + i] = relativeScale;
-        const voxelOffsetValue = scaleInfo.voxelOffset[i];
-        chunkToMultiscaleTransform[stride * rank + i] = voxelOffsetValue * relativeScale;
-        lowerClipBound[i] = baseLowerBound[i] / relativeScale - voxelOffsetValue;
-        upperClipBound[i] = baseUpperBound[i] / relativeScale - voxelOffsetValue;
+        lowerClipBound[i] = baseLowerBound[i] / relativeScale;
+        upperClipBound[i] = baseUpperBound[i] / relativeScale;
       }
       if (rank === 4) {
         chunkToMultiscaleTransform[stride * 3 + 3] = 1;
@@ -190,10 +127,9 @@ class ScaleInfo {
                rank,
                dataType: this.dataType,
                chunkToMultiscaleTransform,
-               upperVoxelBound: scaleInfo.size,
+               upperVoxelBound: Float32Array.of(levelInfo.width, levelInfo.height, 1, 3),
                volumeType: this.volumeType,
-               chunkDataSizes: scaleInfo.chunkSizes,
-               baseVoxelOffset: scaleInfo.voxelOffset,
+               chunkDataSizes,
                volumeSourceOptions,
              })
           .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
@@ -201,8 +137,9 @@ class ScaleInfo {
                    credentialsProvider: this.credentialsProvider,
                    spec,
                    parameters: {
-                     url: resolvePath(this.url, scaleInfo.key),
-                     encoding: scaleInfo.encoding,
+                     url: resolvePath(this.url, (array.length - 1 - index).toString()),
+                     encoding: this.info.encoding,
+                     format: this.info.format,
                      overlap: this.info.overlap,
                      tilesize: this.info.tilesize
                    }
@@ -247,8 +184,7 @@ function getDZIMetadata(
                 height: verifyPositiveInt(size.getAttribute('Height')),
                 tilesize: verifyPositiveInt(verifyString(image.getAttribute('TileSize'))),
                 overlap: verifyInt(verifyString(image.getAttribute('Overlap'))),
-                // verifyEnumString(image.getAttribute("Format"), ImageTileEncoding)
-                format: verifyString(image.getAttribute('Format'))  
+                format: verifyString(image.getAttribute('Format'))
               };
             });
       });

@@ -73,7 +73,7 @@ import {transposeArray2d} from 'src/neuroglancer/util/array';
     const [x, y] = chunk.chunkGridPosition;
     const ox = x === 0 ? 0 : overlap;
     const oy = y === 0 ? 0 : overlap;
-    const url = `${parameters.url}/${x}_${y}.${ImageTileEncoding[encoding].toLowerCase()}`;
+    const url = `${parameters.url}/${x}_${y}.${parameters.format}`;
     try {
       const responseBuffer = await cancellableFetchSpecialOk(
           this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);

@@ -79,3 +79,8 @@ Unused decoders are removed from `bundle-config.js`, formatting a single code bl
 7. Image parsing hacks removed
 
 PNG/JPEG decoders can still verify expected dimensions, but they also accept `undefined` now. Returned `Uint8Array` is replaced with `DecodedImage` now, containing the array, width, height, and the number of components/channels.
+
+8. `LevelInfo`, `encoding`, `format`
+
+`ScaleInfo` emulation is scattered, a `LevelInfo` remains with `width` and `height` only, everything else is constant for all levels and provided directly at their site of usage.  
+Besides `encoding` being a single dataset-level property now, `format` is preserved separately, so file extension of tiles keeps its case in case-sensitive environments.

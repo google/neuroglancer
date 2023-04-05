@@ -23,6 +23,7 @@ export enum ImageTileEncoding {
 export class ImageTileSourceParameters {
   url: string;
   encoding: ImageTileEncoding;
+  format: string;
   tilesize: number;
   overlap: number;
 
