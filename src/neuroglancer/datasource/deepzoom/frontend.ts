@@ -65,8 +65,8 @@ interface LevelInfo {
   const scales = Float64Array.of(1 / 1e9, 1 / 1e9, 1 / 1e9, 1);
   const lowerBounds = new Float64Array(rank);
   const upperBounds = Float64Array.of(width, height, 1, 3);
-  const names = ['x', 'y', 'z', 'c^'];
-  const units = ['m', 'm', 'm', ''];
+  const names = ['x', 'y', ' ', 'c^'];
+  const units = ['m', 'm', '', ''];
 
   const box: BoundingBox = {lowerBounds, upperBounds};
   const modelSpace = makeCoordinateSpace({
@@ -109,20 +109,15 @@ interface LevelInfo {
       const stride = rank + 1;
       const chunkToMultiscaleTransform = new Float32Array(stride * stride);
       chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
-      const {lowerBounds: baseLowerBound, upperBounds: baseUpperBound} =
+      const {upperBounds: baseUpperBound} =
           this.info.modelSpace.boundingBoxes[0].box;
-      const lowerClipBound = new Float32Array(rank);
       const upperClipBound = new Float32Array(rank);
       for (let i = 0; i < 3; ++i) {
         chunkToMultiscaleTransform[stride * i + i] = relativeScale;
-        lowerClipBound[i] = baseLowerBound[i] / relativeScale;
         upperClipBound[i] = baseUpperBound[i] / relativeScale;
       }
-      if (rank === 4) {
-        chunkToMultiscaleTransform[stride * 3 + 3] = 1;
-        lowerClipBound[3] = baseLowerBound[3];
-        upperClipBound[3] = baseUpperBound[3];
-      }
+      chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+      upperClipBound[3] = baseUpperBound[3];
       return makeDefaultVolumeChunkSpecifications({
                rank,
                dataType: this.dataType,
@@ -145,7 +140,6 @@ interface LevelInfo {
                    }
                  }),
                  chunkToMultiscaleTransform,
-                 lowerClipBound,
                  upperClipBound,
                }));
     }));

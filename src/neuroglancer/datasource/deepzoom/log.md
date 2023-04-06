@@ -84,3 +84,10 @@ PNG/JPEG decoders can still verify expected dimensions, but they also accept `un
 
 `ScaleInfo` emulation is scattered, a `LevelInfo` remains with `width` and `height` only, everything else is constant for all levels and provided directly at their site of usage.  
 Besides `encoding` being a single dataset-level property now, `format` is preserved separately, so file extension of tiles keeps its case in case-sensitive environments.
+
+9. Minor pre-breakage step
+
+`LowerBound` things removed, they default to 0.  
+`'z'` is a space now (index -2- appears for empty string), and unitless. `1e-9` scale kept, no "infinity" stretch occurs yet.  
+An `if (rank === 4)` check removed, `rank` is hardcoded 4 at this step.  
+So image is still 3D, with a thickness of a single voxel.
