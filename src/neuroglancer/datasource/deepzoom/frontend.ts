@@ -61,12 +61,12 @@ interface LevelInfo {
   }
   levelInfos.push({width: w, height: h});
 
-  const rank = 4;
-  const scales = Float64Array.of(1 / 1e9, 1 / 1e9, 1 / 1e9, 1);
+  const rank = 3;
+  const scales = Float64Array.of(1 / 1e9, 1 / 1e9, 1);
   const lowerBounds = new Float64Array(rank);
-  const upperBounds = Float64Array.of(width, height, 1, 3);
-  const names = ['x', 'y', ' ', 'c^'];
-  const units = ['m', 'm', '', ''];
+  const upperBounds = Float64Array.of(width, height, 3);
+  const names = ['x', 'y', 'c^'];
+  const units = ['m', 'm', ''];
 
   const box: BoundingBox = {lowerBounds, upperBounds};
   const modelSpace = makeCoordinateSpace({
@@ -103,7 +103,7 @@ interface LevelInfo {
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     const {rank} = this;
-    const chunkDataSizes = [Uint32Array.of(this.info.tilesize, this.info.tilesize, 1, 3)];
+    const chunkDataSizes = [Uint32Array.of(this.info.tilesize, this.info.tilesize, 3)];
     return transposeNestedArrays(this.info.levels.map((levelInfo, index, array) => {
       const relativeScale = 1 << index;
       const stride = rank + 1;
@@ -112,17 +112,17 @@ interface LevelInfo {
       const {upperBounds: baseUpperBound} =
           this.info.modelSpace.boundingBoxes[0].box;
       const upperClipBound = new Float32Array(rank);
-      for (let i = 0; i < 3; ++i) {
+      for (let i = 0; i < 2; ++i) {
         chunkToMultiscaleTransform[stride * i + i] = relativeScale;
         upperClipBound[i] = baseUpperBound[i] / relativeScale;
       }
-      chunkToMultiscaleTransform[stride * 3 + 3] = 1;
-      upperClipBound[3] = baseUpperBound[3];
+      chunkToMultiscaleTransform[stride * 2 + 2] = 1;
+      upperClipBound[2] = baseUpperBound[2];
       return makeDefaultVolumeChunkSpecifications({
                rank,
                dataType: this.dataType,
                chunkToMultiscaleTransform,
-               upperVoxelBound: Float32Array.of(levelInfo.width, levelInfo.height, 1, 3),
+               upperVoxelBound: Float32Array.of(levelInfo.width, levelInfo.height, 3),
                volumeType: this.volumeType,
                chunkDataSizes,
                volumeSourceOptions,

@@ -91,3 +91,8 @@ Besides `encoding` being a single dataset-level property now, `format` is preser
 `'z'` is a space now (index -2- appears for empty string), and unitless. `1e-9` scale kept, no "infinity" stretch occurs yet.  
 An `if (rank === 4)` check removed, `rank` is hardcoded 4 at this step.  
 So image is still 3D, with a thickness of a single voxel.
+
+10. Dropping `z`
+
+Data source is 2D now (+colors). `xy` view functions, `xz` view shows infinite stretch along the `z` axis, `yz` view is broken completely (but comes alive when adding a fake dimension with the "+v" button).  
+
