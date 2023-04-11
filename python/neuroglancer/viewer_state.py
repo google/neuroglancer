@@ -37,7 +37,7 @@ from .coordinate_space import DimensionScale, CoordinateSpace, CoordinateArray
 from .equivalence_map import EquivalenceMap
 from .json_utils import encode_json_for_repr
 from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
-                            typed_map, typed_set, typed_string_map, wrapped_property,
+                            typed_map, typed_set, segments, typed_string_map, wrapped_property,
                             number_or_string)
 
 __all__ = ['CoordinateSpace', 'DimensionScale', 'CoordinateArray']
@@ -548,7 +548,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         super(SegmentationLayer, self).__init__(*args, type='segmentation', **kwargs)
 
     source = wrapped_property('source', LayerDataSources)
-    segments = wrapped_property('segments', typed_set(np.uint64))
+    segments = wrapped_property('segments', segments())
     equivalences = wrapped_property('equivalences', uint64_equivalence_map)
     hide_segment_zero = hideSegmentZero = wrapped_property('hideSegmentZero', optional(bool, True))
     hover_highlight = hoverHighlight = wrapped_property('hoverHighlight', optional(bool, True))
