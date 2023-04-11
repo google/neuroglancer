@@ -170,7 +170,7 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
 
   localGraph = new LocalSegmentationGraphSource();
   visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
-  selectedSegments = this.registerDisposer(Uint64OrderedSet.makeWithCounterpart(this.layer.manager.rpc));
+  selectedSegments = this.registerDisposer(new Uint64OrderedSet());
 
   segmentPropertyMap = new WatchableValue<PreprocessedSegmentPropertyMap|undefined>(undefined);
   graph = new WatchableValue<SegmentationGraphSource|undefined>(undefined);
