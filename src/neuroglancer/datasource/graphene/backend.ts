@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {assignMeshFragmentData, FragmentChunk, FragmentId, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
+import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, FragmentChunk, FragmentId, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
 import {getGrapheneFragmentKey, MultiscaleMeshSourceParameters, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
@@ -87,7 +87,7 @@ function getFragmentDownloadPromise(
 }
 
 async function decodeDracoFragmentChunk(
-    chunk: FragmentChunk|MultiscaleFragmentChunk, response: ArrayBuffer) {
+    chunk: FragmentChunk, response: ArrayBuffer) {
   const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
   const rawMesh = await m.decodeDraco(new Uint8Array(response));
   assignMeshFragmentData(chunk, rawMesh);
@@ -152,15 +152,13 @@ function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, r
   chunk.fragmentIds = response.fragments;
 }
 
-// async function decodeMultiscaleFragmentChunk(
-//     chunk: MultiscaleFragmentChunk, response: ArrayBuffer) {
-//   const {lod} = chunk;
-//   const source = chunk.manifestChunk!.source! as GrapheneMultiscaleMeshSource;
-//   const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
-//   const rawMesh = await m.decodeDracoPartitioned(
-//       new Uint8Array(response), source.parameters.metadata.vertexQuantizationBits, lod !== 0);
-//   assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
-// }
+async function decodeMultiscaleFragmentChunk(
+    chunk: MultiscaleFragmentChunk, response: ArrayBuffer) {
+  const source = chunk.manifestChunk!.source! as GrapheneMultiscaleMeshSource;
+  const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
+  const rawMesh = await m.decodeDracoPartitioned(new Uint8Array(response), 0, false);
+  assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
+}
 
 
 @registerSharedObject()
@@ -190,8 +188,7 @@ export class GrapheneMultiscaleMeshSource extends
       }
       const response = await getFragmentDownloadPromise(
         undefined, fragmentId, parameters, cancellationToken);
-      await decodeDracoFragmentChunk(chunk, response);
-      chunk.subChunkOffsets = new Uint32Array();
+      await decodeMultiscaleFragmentChunk(chunk, response);
     } catch (e) {
       if (isNotFoundError(e)) {
         chunk.source!.removeChunk(chunk);

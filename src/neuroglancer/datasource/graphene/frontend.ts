@@ -321,8 +321,6 @@ async function getMeshSource(
     throw new Error('Mesh metadata is missing');
   }
 
-  console.log(metadata);
-
   if (metadata.lodScaleMultiplier === 0) {
     const parameters: MeshSourceParameters = {
       manifestUrl: url,
@@ -339,15 +337,6 @@ async function getMeshSource(
     };
   }
 
-  let vertexPositionFormat: VertexPositionFormat;
-  const {vertexQuantizationBits} = metadata;
-  if (vertexQuantizationBits === 10) {
-    vertexPositionFormat = VertexPositionFormat.uint10;
-  } else if (vertexQuantizationBits === 16) {
-    vertexPositionFormat = VertexPositionFormat.uint16;
-  } else {
-    throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
-  }
   const parameters: MultiscaleMeshSourceParameters = {
     manifestUrl: url,
     fragmentUrl: fragmentUrl,
@@ -360,8 +349,8 @@ async function getMeshSource(
       credentialsProvider,
       parameters: parameters,
       format: {
-        fragmentRelativeVertices: true,
-        vertexPositionFormat,
+        fragmentRelativeVertices: false,
+        vertexPositionFormat: VertexPositionFormat.float32,
       }
     }),
     transform: metadata.transform,
