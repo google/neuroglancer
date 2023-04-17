@@ -161,9 +161,9 @@ export async function decompressPng(
   }
 
   if (
-    width && sx !== width 
-    || height && sy !== height 
-    || numComponents && numComponents !== numChannels
+    width !== undefined && sx !== width 
+    || height !== undefined && sy !== height 
+    || numComponents !== undefined && numComponents !== numChannels
     || bytesPerPixel !== dataWidth
   ) {
     throw new Error(

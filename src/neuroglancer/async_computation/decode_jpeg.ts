@@ -27,7 +27,7 @@ registerAsyncComputation(
       let parser = new JpegDecoder();
       parser.parse(data);
       // Just check that the total number pixels matches the expected value.
-      if (width && height && parser.width * parser.height !== width * height) {
+      if (width !== undefined && height !== undefined && parser.width * parser.height !== width * height) {
         throw new Error(
             `JPEG data does not have the expected dimensions: ` +
             `width=${parser.width}, height=${parser.height}, ` +
@@ -36,7 +36,7 @@ registerAsyncComputation(
         width = parser.width;
         height = parser.height;
       }
-      if (numComponents && parser.numComponents !== numComponents) {
+      if (numComponents !== undefined && parser.numComponents !== numComponents) {
         throw new Error(
             `JPEG data does not have the expected number of components: ` +
             `components=${parser.numComponents}, expected=${numComponents}`);

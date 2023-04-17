@@ -168,19 +168,17 @@ function getDZIMetadata(
   return chunkManager.memoize.getUncounted(
       {'type': 'deepzoom:metadata', url, credentialsProvider: getObjectId(credentialsProvider)},
       async () => {
-        return await cancellableFetchSpecialOk(credentialsProvider, url, {}, responseText)
-            .then(text => {
-              const xml = new DOMParser().parseFromString(text, 'text/xml');
-              const image = xml.documentElement;
-              const size = verifyObject(image.getElementsByTagName('Size').item(0));
-              return {
-                width: verifyPositiveInt(size.getAttribute('Width')),
-                height: verifyPositiveInt(size.getAttribute('Height')),
-                tilesize: verifyPositiveInt(verifyString(image.getAttribute('TileSize'))),
-                overlap: verifyInt(verifyString(image.getAttribute('Overlap'))),
-                format: verifyString(image.getAttribute('Format'))
-              };
-            });
+        const text = await cancellableFetchSpecialOk(credentialsProvider, url, {}, responseText);
+        const xml = new DOMParser().parseFromString(text, 'text/xml');
+        const image = xml.documentElement;
+        const size = verifyObject(image.getElementsByTagName('Size').item(0));
+        return {
+          width: verifyPositiveInt(size.getAttribute('Width')),
+          height: verifyPositiveInt(size.getAttribute('Height')),
+          tilesize: verifyPositiveInt(verifyString(image.getAttribute('TileSize'))),
+          overlap: verifyInt(verifyString(image.getAttribute('Overlap'))),
+          format: verifyString(image.getAttribute('Format'))
+        };
       });
 }
 
@@ -230,7 +228,7 @@ export class DeepzoomDataSource extends DataSourceProvider {
           const {url, credentialsProvider} =
               parseSpecialUrl(providerUrl, options.credentialsManager);
           const metadata = await getDZIMetadata(options.chunkManager, credentialsProvider, url);
-          return await getImageDataSource(options, credentialsProvider, url, metadata);
+          return getImageDataSource(options, credentialsProvider, url, metadata);
         });
   }
   completeUrl(options: CompleteUrlOptions) {

@@ -36,9 +36,9 @@ import {transposeArray2d} from 'src/neuroglancer/util/array';
 @registerSharedObject() export class DeepzoomImageTileSource extends
 (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), ImageTileSourceParameters)) {
   gridShape = (() => {
-    const gridShape = new Uint32Array(3);
+    const gridShape = new Uint32Array(2);
     const {upperVoxelBound, chunkDataSize} = this.spec;
-    for (let i = 0; i < 3; ++i) {
+    for (let i = 0; i < 2; ++i) {
       gridShape[i] = Math.ceil(upperVoxelBound[i] / chunkDataSize[i]);
     }
     return gridShape;
