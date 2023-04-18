@@ -154,9 +154,10 @@ function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, r
 
 async function decodeMultiscaleFragmentChunk(
     chunk: MultiscaleFragmentChunk, response: ArrayBuffer) {
+  const {lod} = chunk;
   const source = chunk.manifestChunk!.source! as GrapheneMultiscaleMeshSource;
   const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
-  const rawMesh = await m.decodeDracoPartitioned(new Uint8Array(response), 0, false);
+  const rawMesh = await m.decodeDracoPartitioned(new Uint8Array(response), 0, lod !== 0);
   assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
 }
 
