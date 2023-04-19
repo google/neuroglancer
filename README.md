@@ -28,6 +28,13 @@ The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3
 
   This dataset was copied from <https://www.janelia.org/project-team/flyem/data-and-software-release>, and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/).  Paper: <a href="http://dx.doi.org/10.1073/pnas.1509820112" target="_blank">Takemura, Shin-ya et al. "Synaptic Circuits and Their Variations within Different Columns in the Visual System of Drosophila."  Proceedings of the National Academy of Sciences of the United States of America 112.44 (2015): 13711-13716.</a>
 
+- Example of viewing 2D microscopy (coronal section of rat brain at 325 nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%7D%2C%22position%22:%5B10387071%2C5347131%5D%2C%22crossSectionScale%22:263.74955563693914%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%7B%22url%22:%22deepzoom://https://data-proxy.ebrains.eu/api/v1/buckets/localizoom/14122_mPPC_BDA_s186.tif/14122_mPPC_BDA_s186.dzi%22%2C%22transform%22:%7B%22outputDimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22inputDimensions%22:%7B%22x%22:%5B3.25e-7%2C%22m%22%5D%2C%22y%22:%5B3.25e-7%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%7D%7D%2C%22tab%22:%22rendering%22%2C%22shader%22:%22void%20main%28%29%7BemitRGB%28vec3%28toNormalized%28getDataValue%280%29%29%2CtoNormalized%28getDataValue%281%29%29%2CtoNormalized%28getDataValue%282%29%29%29%29%3B%7D%22%2C%22channelDimensions%22:%7B%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22name%22:%2214122_mPPC_BDA_s186.dzi%22%7D%5D%2C%22selectedLayer%22:%7B%22layer%22:%2214122_mPPC_BDA_s186.dzi%22%7D%2C%22layout%22:%22xy%22%7D"
+  target="_blank">Open viewer.</a> (Use <kbd>Ctrl</kbd>+<kbd>MouseWheel</kbd> to zoom out)
+
+  This image is part of:  
+  Olsen et al., 2020. Anterogradely labeled axonal projections from the posterior parietal cortex in rat [Data set]. EBRAINS.  
+  <https://doi.org/10.25493/FKM4-ZCC>
+
 # Supported data sources
 
 Neuroglancer itself is purely a client-side program, but it depends on data being accessible via HTTP in a suitable format.  It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
@@ -40,6 +47,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
+- [Deep Zoom images](src/neuroglancer/datasource/deepzoom)
 
 # Supported browsers
 
