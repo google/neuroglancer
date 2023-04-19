@@ -145,7 +145,7 @@ function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, r
     chunkGridSpatialOrigin: response.chunkGridSpatialOrigin,
     lodScales: response.lodScales,
     octree: response.octree,
-    vertexOffsets: response.vertexOffsets,
+    vertexOffsets: new Float32Array(response.lodScales.length * 3),
     clipLowerBound: vec3.create(),
     clipUpperBound: vec3.create(),
   }
