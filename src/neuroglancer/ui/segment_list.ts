@@ -784,6 +784,7 @@ export class SegmentDisplayTab extends Tab {
                                   layer.displayState.segmentationGroupState.value.graph,
                                   (graph, parent, context) => {
                                     if (graph === undefined) return;
+                                    if (graph.tabContents) return
                                     const toolbox = document.createElement('div');
                                     toolbox.className = 'neuroglancer-segmentation-toolbox';
                                     toolbox.appendChild(makeToolButton(context, layer.toolBinder, {
