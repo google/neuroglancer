@@ -1705,6 +1705,14 @@ export class MergeSegmentsPlaceLineTool extends PlaceLineTool {
   getBaseSegment = true;
   constructor(layer: SegmentationUserLayer, private annotationState: AnnotationLayerState) {
     super(layer, {});
+    const {inProgressAnnotation} = this;
+    const {displayState} = annotationState;
+    if (!displayState) return; // TODO, this happens when reloading the page when a toggle tool is up
+    const {disablePicking} = displayState;
+    this.registerDisposer(inProgressAnnotation.changed.add(() => {
+      disablePicking.value = inProgressAnnotation.value !== undefined;
+      console.log("set disablePicking", disablePicking.value)
+    }));
   }
   get annotationLayer() {
     return this.annotationState;

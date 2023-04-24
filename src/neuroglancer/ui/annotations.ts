@@ -32,7 +32,7 @@ import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/ren
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentWidgetFactory} from 'neuroglancer/segmentation_display_state/frontend';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultAnnotationListBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {LegacyTool, registerLegacyTool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
@@ -864,9 +864,9 @@ function getMousePositionInAnnotationCoordinates(
 }
 
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
-  inProgressAnnotation:
+  inProgressAnnotation: WatchableValue<
       {annotationLayer: AnnotationLayerState, reference: AnnotationReference, disposer: () => void}|
-      undefined;
+      undefined> = new WatchableValue(undefined);
 
   abstract getInitialAnnotation(
       mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation;
@@ -875,14 +875,14 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
       annotationLayer: AnnotationLayerState): Annotation;
 
   trigger(mouseState: MouseSelectionState) {
-    const {annotationLayer} = this;
+    const {annotationLayer, inProgressAnnotation} = this;
     if (annotationLayer === undefined) {
       // Not yet ready.
       return;
     }
     if (mouseState.updateUnconditionally()) {
       const updatePointB = () => {
-        const state = this.inProgressAnnotation!;
+        const state = inProgressAnnotation.value!;
         const reference = state.reference;
         const newAnnotation =
             this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
@@ -894,7 +894,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
         this.layer.selectAnnotation(annotationLayer, reference.id, true);
       };
 
-      if (this.inProgressAnnotation === undefined) {
+      if (inProgressAnnotation.value === undefined) {
         const reference = annotationLayer.source.add(
             this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/false);
         this.layer.selectAnnotation(annotationLayer, reference.id, true);
@@ -903,17 +903,17 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
           mouseDisposer();
           reference.dispose();
         };
-        this.inProgressAnnotation = {
+        inProgressAnnotation.value = {
           annotationLayer,
           reference,
           disposer,
         };
       } else {
         updatePointB();
-        this.inProgressAnnotation.annotationLayer.source.commit(
-            this.inProgressAnnotation.reference);
-        this.inProgressAnnotation.disposer();
-        this.inProgressAnnotation = undefined;
+        const state = inProgressAnnotation.value;
+        state.annotationLayer.source.commit(state.reference);
+        state.disposer();
+        inProgressAnnotation.value = undefined;
       }
     }
   }
@@ -924,10 +924,11 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
   }
 
   deactivate() {
-    if (this.inProgressAnnotation !== undefined) {
-      this.inProgressAnnotation.annotationLayer.source.delete(this.inProgressAnnotation.reference);
-      this.inProgressAnnotation.disposer();
-      this.inProgressAnnotation = undefined;
+    const state = this.inProgressAnnotation.value;
+    if (state !== undefined) {
+      state.annotationLayer.source.delete(state.reference);
+      state.disposer();
+      this.inProgressAnnotation.value = undefined;
     }
   }
 }
