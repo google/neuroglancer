@@ -776,7 +776,7 @@ export class AnnotationTab extends Tab {
   }
 }
 
-function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState) {
+function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState, getBase = false) {
   let segments: Uint64[][] = [];
   const {relationships} = annotationLayer.source;
   const {relationshipStates} = annotationLayer.displayState;
@@ -785,6 +785,9 @@ function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState) {
     if (segmentationState != null) {
       if (segmentationState.segmentSelectionState.hasSelectedSegment) {
         segments[i] = [segmentationState.segmentSelectionState.selectedSegment.clone()];
+        if (getBase) {
+          segments[i] = [...segments[i], segmentationState.segmentSelectionState.baseSelectedSegment.clone()];
+        }
         continue;
       }
     }
@@ -982,6 +985,8 @@ export class PlaceBoundingBoxTool extends PlaceTwoCornerAnnotationTool {
 PlaceBoundingBoxTool.prototype.annotationType = AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
 
 export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
+  getBaseSegment = false;
+
   get description() {
     return `annotate line`;
   }
@@ -992,7 +997,7 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
       Annotation {
     const result = super.getInitialAnnotation(mouseState, annotationLayer);
     this.initialRelationships = result.relatedSegments =
-        getSelectedAssociatedSegments(annotationLayer);
+        getSelectedAssociatedSegments(annotationLayer, this.getBaseSegment);
     return result;
   }
 
@@ -1001,7 +1006,7 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
       annotationLayer: AnnotationLayerState) {
     const result = super.getUpdatedAnnotation(oldAnnotation, mouseState, annotationLayer);
     const initialRelationships = this.initialRelationships;
-    const newRelationships = getSelectedAssociatedSegments(annotationLayer);
+    const newRelationships = getSelectedAssociatedSegments(annotationLayer, this.getBaseSegment);
     if (initialRelationships === undefined) {
       result.relatedSegments = newRelationships;
     } else {

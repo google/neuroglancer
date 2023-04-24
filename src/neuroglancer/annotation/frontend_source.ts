@@ -755,6 +755,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   readonly = false;
   childAdded: Signal<(annotation: Annotation) => void>;
   childUpdated: Signal<(annotation: Annotation) => void>;
+  childCommitted: Signal<(annotationId: string) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
 }
 
