@@ -141,10 +141,10 @@ interface GrapheneMultiscaleManifestChunk extends MultiscaleManifestChunk {
 function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, response: any) {
   verifyObject(response);
   chunk.manifest = {
-    chunkShape: response.chunkShape,
-    chunkGridSpatialOrigin: response.chunkGridSpatialOrigin,
-    lodScales: response.lodScales,
-    octree: response.octree,
+    chunkShape: vec3.clone(response.chunkShape),
+    chunkGridSpatialOrigin: vec3.create(),
+    lodScales: new Float32Array(response.lodScales),
+    octree: new Uint32Array(response.octree),
     vertexOffsets: new Float32Array(response.lodScales.length * 3),
     clipLowerBound: vec3.create(),
     clipUpperBound: vec3.create(),
