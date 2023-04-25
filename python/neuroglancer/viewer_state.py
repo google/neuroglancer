@@ -996,7 +996,7 @@ def make_linked_navigation_type(value_type, interpolate_function=None):
             c = copy.deepcopy(a)
             c.link = a.link
             if a.link == b.link and a.link != 'linked':
-                c.value = interpolate_function(a, b, t)
+                c.value = interpolate_function(a.value, b.value, t)
                 return c
             return c
 
