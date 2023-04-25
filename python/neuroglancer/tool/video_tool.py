@@ -62,6 +62,7 @@ from __future__ import print_function, division
 
 import argparse
 import bisect
+import copy
 import math
 import os
 import threading
@@ -76,6 +77,7 @@ import neuroglancer.tool.screenshot
 
 
 class PlaybackManager(object):
+
     def __init__(self, keypoints, frames_per_second):
         self.keypoints = keypoints
         self.frames_per_second = frames_per_second
@@ -134,6 +136,7 @@ class PlaybackManager(object):
 
 
 class EditorPlaybackManager(object):
+
     def __init__(self, script_editor, playing=True, frames_per_second=5):
         self.script_editor = script_editor
         self.frames_per_second = frames_per_second
@@ -251,6 +254,7 @@ def save_script(script_path, keypoints):
 
 
 class ScriptEditor(object):
+
     def __init__(self, script_path, transition_duration, fullscreen_width, fullscreen_height,
                  fullscreen_scale_bar_scale, frames_per_second):
         self.script_path = script_path
@@ -468,6 +472,7 @@ def run_edit(args):
 
 
 def _get_states_to_capture(keypoints, fps, resume, output_directory):
+
     def get_output_path(frame_number: int) -> str:
         return os.path.join(args.output_directory, '%07d.png' % frame_number)
 
@@ -509,6 +514,7 @@ def run_render(args):
         state_to_capture: Tuple[int, int, neuroglancer.ViewerState]
     ) -> neuroglancer.tool.screenshot.CaptureScreenshotRequest:
         frame_number, t, state, path = state_to_capture
+
         def config_callback(s):
             s.viewer_size = (args.width, args.height)
             s.scale_bar_options.scale_factor = args.scale_bar_scale
@@ -540,6 +546,25 @@ def run_render(args):
             total_requests=len(states_to_capture))
 
 
+def run_pan(args):
+    from scipy.spatial.transform import Rotation
+    state = args.state
+
+    duration = args.duration
+
+    keypoints = []
+
+    orig_orientation = state.projection_orientation
+    for i in range(5):
+        rotation = Rotation.from_rotvec([0, math.pi / 2 * i, 0])
+        new_orientation = Rotation.from_quat(orig_orientation) * rotation
+        new_state = copy.deepcopy(state)
+        new_state.projection_orientation = new_orientation.as_quat()
+        keypoints.append({"state": new_state, "transition_duration": duration / 4})
+
+    save_script(args.script, keypoints)
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_server_arguments(ap)
@@ -548,7 +573,12 @@ if __name__ == '__main__':
     ap_edit.set_defaults(func=run_edit)
     ap_render = sub_aps.add_parser('render', help='Render a script.')
     ap_render.set_defaults(func=run_render)
-    for ap_sub in [ap_edit, ap_render]:
+    ap_pan = sub_aps.add_parser('pan', help='Create 360 degree pan script.')
+    ap_pan.set_defaults(func=run_pan)
+    neuroglancer.cli.add_state_arguments(ap_pan, required=True)
+    ap_pan.add_argument('-d', '--duration', type=float, help="Pan duration in seconds.", default=4)
+
+    for ap_sub in [ap_edit, ap_render, ap_pan]:
         ap_sub.add_argument('script', help='Path to script file to read and write.')
 
     ap_edit.add_argument('-d',
