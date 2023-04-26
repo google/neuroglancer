@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {TypedArray} from 'neuroglancer/util/array';
 import {DATA_TYPE_BYTES} from 'neuroglancer/util/data_type';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
@@ -27,7 +26,7 @@ export async function decodePngChunk(
   
   const chunkDataSize = chunk.chunkDataSize!;
   const dataType = chunk.source!.spec.dataType;
-  let image : TypedArray = await requestAsyncComputation(
+  let {uint8Array: image} = await requestAsyncComputation(
     decodePng, cancellationToken, [response],
     /*buffer=*/(new Uint8Array(response)),
     /*width=*/chunkDataSize[0],

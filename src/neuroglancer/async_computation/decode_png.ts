@@ -21,13 +21,13 @@ import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
 registerAsyncComputation(
     decodePng,
     async function(
-      data: Uint8Array, width: number, height: number, 
-      numComponents: number, bytesPerPixel:number, 
+      data: Uint8Array, width: number|undefined, height: number|undefined, 
+      numComponents: number|undefined, bytesPerPixel:number, 
       convertToGrayscale: boolean
     ) {
       const result = await decompressPng(
         data, width, height, numComponents, 
         bytesPerPixel, convertToGrayscale
       );
-      return { value: result, transfer: [result.buffer] };
+      return { value: result, transfer: [result.uint8Array.buffer] };
     });
