@@ -87,10 +87,9 @@ export class DataManagementContext extends RefCounted {
   }
 
   constructor(
-      public gl: GL, public frameNumberCounter: FrameNumberCounter, bundleRoot: string = '') {
+      public gl: GL, public frameNumberCounter: FrameNumberCounter, chunkWorkerFileName: string = '') {
     super();
-    const chunk_worker_url = bundleRoot + 'chunk_worker.bundle.js';
-    this.worker = new Worker(chunk_worker_url);
+    this.worker = new Worker(chunkWorkerFileName);
     this.chunkQueueManager = this.registerDisposer(
         new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
           gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
@@ -162,7 +161,7 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
-  bundleRoot: string;
+  chunkWorkerFileName: string;
 }
 
 const defaultViewerOptions = 'undefined' !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
@@ -356,7 +355,7 @@ export class Viewer extends RefCounted implements ViewerState {
     super();
 
     const {
-      dataContext = new DataManagementContext(display.gl, display, options.bundleRoot),
+      dataContext = new DataManagementContext(display.gl, display, options.chunkWorkerFileName),
       visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
       inputEventBindings = {
         global: new EventActionMap(),
