@@ -20,12 +20,11 @@ import svg_pause from 'ikonate/icons/pause.svg';
 import svg_play from 'ikonate/icons/play.svg';
 import svg_video from 'ikonate/icons/video.svg';
 import {CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
-import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
-import {LayerGroupViewer} from 'neuroglancer/layer_group_viewer';
+import {MouseSelectionState, } from 'neuroglancer/layer';
 import {CoordinateSpacePlaybackVelocity, Position, VelocityBoundaryBehavior} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
 import {makeCachedDerivedWatchableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {LocalToolBinder, makeToolActivationStatusMessage, makeToolButton, registerTool, Tool, ToolActivation} from 'neuroglancer/ui/tool';
+import {LocalToolBinder, makeToolActivationStatusMessage, makeToolButton, Tool, ToolActivation} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, binarySearch} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
@@ -38,7 +37,6 @@ import {EventActionMap, MouseEventBinder} from 'neuroglancer/util/mouse_bindings
 import {formatScaleWithUnit, parseScale} from 'neuroglancer/util/si_units';
 import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
-import {Viewer} from 'neuroglancer/viewer';
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
@@ -1091,7 +1089,7 @@ export class MousePositionWidget extends RefCounted {
   }
 }
 
-const DIMENSION_TOOL_ID = 'dimension';
+export const DIMENSION_TOOL_ID = 'dimension';
 
 interface SupportsDimensionTool<ToolContext extends Object = Object> {
   position: Position;
@@ -1277,7 +1275,7 @@ class DimensionTool<Viewer extends Object> extends Tool<Viewer> {
   }
 }
 
-function makeDimensionTool(viewer: SupportsDimensionTool, obj: unknown) {
+export function makeDimensionTool(viewer: SupportsDimensionTool, obj: unknown) {
   const dimension = verifyObjectProperty(obj, 'dimension', verifyString);
   const coordinateSpace = viewer.coordinateSpaceCombiner.combined.value;
   const dimensionIndex = coordinateSpace.names.indexOf(dimension);
@@ -1286,36 +1284,3 @@ function makeDimensionTool(viewer: SupportsDimensionTool, obj: unknown) {
   }
   return new DimensionTool(viewer, coordinateSpace.ids[dimensionIndex]);
 }
-
-registerTool(
-    Viewer, DIMENSION_TOOL_ID,
-    (viewer, obj) => makeDimensionTool(
-        {
-          position: viewer.position,
-          velocity: viewer.velocity,
-          coordinateSpaceCombiner: viewer.layerSpecification.coordinateSpaceCombiner,
-          toolBinder: viewer.toolBinder,
-        },
-        obj));
-
-registerTool(
-    UserLayer, DIMENSION_TOOL_ID,
-    (layer, obj) => makeDimensionTool(
-        {
-          position: layer.localPosition,
-          velocity: layer.localVelocity,
-          coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
-          toolBinder: layer.toolBinder,
-        },
-        obj));
-
-registerTool(
-    LayerGroupViewer, DIMENSION_TOOL_ID,
-    (layerGroupViewer, obj) => makeDimensionTool(
-        {
-          position: layerGroupViewer.viewerNavigationState.position.value,
-          velocity: layerGroupViewer.viewerNavigationState.velocity.velocity,
-          coordinateSpaceCombiner: layerGroupViewer.layerSpecification.root.coordinateSpaceCombiner,
-          toolBinder: layerGroupViewer.toolBinder,
-        },
-        obj));

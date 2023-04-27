@@ -2,6 +2,7 @@ import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/d
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
+import { registerPositionWidgetTool } from './neuroglancer/widget/registerPositionWidgetTools';
 
 import 'neuroglancer/datasource/dvid/register_credentials_provider';
 import 'neuroglancer/datasource/dvid/register_default';
@@ -53,6 +54,7 @@ export function setupDefaultViewer(options: {
     hashBinding.parseError;
   }));
   hashBinding.updateFromUrlHash(); */
+  registerPositionWidgetTool()
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
