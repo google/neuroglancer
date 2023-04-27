@@ -19,7 +19,7 @@ import './position_widget.css';
 import svg_pause from 'ikonate/icons/pause.svg';
 import svg_play from 'ikonate/icons/play.svg';
 import svg_video from 'ikonate/icons/video.svg';
-import {CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {clampAndRoundCoordinateToVoxelCenter, CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
 import {LayerGroupViewer} from 'neuroglancer/layer_group_viewer';
 import {CoordinateSpacePlaybackVelocity, Position, VelocityBoundaryBehavior} from 'neuroglancer/navigation_state';
@@ -916,19 +916,8 @@ export class PositionWidget extends RefCounted {
     const coordinateSpace = position.coordinateSpace.value;
     const {bounds} = coordinateSpace;
     const voxelCoordinates = Float32Array.from(position.value);
-    let newValue = Math.floor(voxelCoordinates[axisIndex] + adjustment);
-    if (adjustment > 0) {
-      const bound = bounds.upperBounds[axisIndex];
-      if (Number.isFinite(bound)) {
-        newValue = Math.min(newValue, Math.ceil(bound - 1));
-      }
-    } else {
-      const bound = bounds.lowerBounds[axisIndex];
-      if (Number.isFinite(bound)) {
-        newValue = Math.max(newValue, Math.floor(bound));
-      }
-    }
-    voxelCoordinates[axisIndex] = newValue + 0.5;
+    voxelCoordinates[axisIndex] = clampAndRoundCoordinateToVoxelCenter(
+        bounds, axisIndex, voxelCoordinates[axisIndex] + adjustment);
     this.position.value = voxelCoordinates;
     this.updateView();
   }
@@ -944,17 +933,28 @@ export class PositionWidget extends RefCounted {
     const {dimensionWidgetList} = this;
     const {position} = this;
     const {value: voxelCoordinates} = position;
+    const coordinateSpace = position.coordinateSpace.value;
     if (voxelCoordinates === undefined) return;
     const rank = dimensionWidgetList.length;
+    let modified = false;
     for (let i = 0; i < rank; ++i) {
       const widget = dimensionWidgetList[i];
+      if (!widget.modified) continue;
       widget.modified = false;
-      const value = Number(widget.coordinate.value);
-      if (Number.isFinite(value)) {
-        voxelCoordinates[i] = value + (Number.isInteger(value) ? 0.5 : 0);
+      modified = true;
+      const valueString = widget.coordinate.value;
+      let value = Number(valueString);
+      if (!Number.isFinite(value)) continue;
+      // If `valueString` contains a decimal point, don't adjust to voxel center.
+      if (Number.isInteger(value) && !valueString.includes('.') && coordinateSpace !== undefined &&
+          !coordinateSpace.bounds.voxelCenterAtIntegerCoordinates[i]) {
+        value += 0.5;
       }
+      voxelCoordinates[i] = value;
     }
-    position.value = voxelCoordinates;
+    if (modified) {
+      position.value = voxelCoordinates;
+    }
   }
 
   private updateNames() {
