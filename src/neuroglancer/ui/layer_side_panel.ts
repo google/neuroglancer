@@ -18,7 +18,7 @@
  * @file Side panel for displaying/editing layer details.
  */
 
-import 'neuroglancer/ui/layer_side_panel.css';
+import './layer_side_panel.css';
 
 import svg_cursor from 'ikonate/icons/cursor.svg';
 import {changeLayerName, changeLayerType, deleteLayer, layerTypes, ManagedUserLayer, SelectedLayerState, UserLayer} from 'neuroglancer/layer';

@@ -1,12 +1,12 @@
 {
-  "name": "neuroglancer",
+  "name": "@niaid/neuroglancer",
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
-  "version": "0.0.0-beta.0",
+  "version": "2.20.0",
   "main": "dist/module/main_module.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/google/neuroglancer.git"
+    "url": "git+https://github.com/niad/neuroglancer.git"
   },
   "engines": {
     "node": ">=12"
@@ -18,7 +18,10 @@
     "build:watch": "node ./config/esbuild-cli.js --config=dev --serve --watch",
     "dev-server": "node ./config/esbuild-cli.js --config=dev --serve --watch",
     "dev-server-python": "node ./config/esbuild-cli.js --config=python-dev --serve --watch",
-    "build-module": "node ./config/esbuild-cli.js --config=module",
+    "build-module": "npm run typecheck && npm run clean && node ./config/esbuild-cli.js --config=module && npm run tsc-alias && npm run copy-css-files",
+    "clean": "rimraf ./dist",
+    "copy-css-files": "cd src && find . -name '*.css' | cpio -pdm ../dist/module",
+    "tsc-alias": "tsc-alias -p tsconfig.json --outDir ./dist/module --verbose",
     "build-python": "node ./config/esbuild-cli.js --config=python-min",
     "build-python-min": "node ./config/esbuild-cli.js --config=python-min",
     "build-python-dev": "node ./config/esbuild-cli.js --config=python-dev",
@@ -57,6 +60,7 @@
     "morgan": "^1.10.0",
     "nunjucks": "^3.2.3",
     "send": "^0.18.0",
+    "tsc-alias": "^1.8.5",
     "yargs": "^17.0.1"
   },
   "dependencies": {

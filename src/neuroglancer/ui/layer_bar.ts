@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/noselect.css';
+import '../noselect.css';
 import './layer_bar.css';
 
 import svg_plus from 'ikonate/icons/plus.svg';

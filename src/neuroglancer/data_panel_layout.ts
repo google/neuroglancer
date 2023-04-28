@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/data_panel_layout.css';
+import './data_panel_layout.css';
 
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
@@ -89,6 +89,7 @@ const oneSquareSymbol = '◻';
 const LAYOUT_SYMBOLS = new Map<string, string>([
   ['4panel', '◱'],
   ['3d', oneSquareSymbol],
+  ['2d', '2D'],
 ]);
 
 export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: quat) {
@@ -433,6 +434,12 @@ export const LAYOUTS = new Map<string, {
         '3d', {
           factory: (container, element, viewer, crossSections) =>
               new SinglePerspectiveLayout(container, element, viewer, crossSections)
+        }
+      ],
+      [
+        '2d', {
+          factory: (container, element, viewer) =>
+            new SinglePanelLayout(container, element, viewer, "xy")
         }
       ],
     ],

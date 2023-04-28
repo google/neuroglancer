@@ -18,6 +18,7 @@ import {AsyncComputationSpec} from 'neuroglancer/async_computation';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {WORKER_RPC_ID} from 'neuroglancer/worker_rpc';
 import {rpc} from 'neuroglancer/worker_rpc_context';
+import {asyncComputationWorkerFileName} from "../../asyncComputationWorkerFileName"
 
 const freeWorkers: (Worker|MessagePort)[] = [];
 const pendingTasks = new Map<number, {msg: any, transfer: Transferable[] | undefined}>();
@@ -46,9 +47,9 @@ function getNewWorker(): Worker|MessagePort {
     const channel = new MessageChannel();
     port = channel.port2;
     rpc.invoke(
-        WORKER_RPC_ID, {port: channel.port1, path: 'async_computation.bundle.js'}, [channel.port1]);
+        WORKER_RPC_ID, {port: channel.port1, path: asyncComputationWorkerFileName}, [channel.port1]);
   } else {
-    port = new Worker('async_computation.bundle.js');
+    port = new Worker(asyncComputationWorkerFileName);
   }
   port.onmessage = msg => {
     const {id, value, error} = msg.data as {id: number, value?: any, error?: string};
