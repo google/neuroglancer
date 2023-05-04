@@ -17,15 +17,12 @@
 from __future__ import absolute_import
 
 import collections
+import collections.abc
 import copy
 import math
 import numbers
 import re
-
-try:
-    import collections.abc as collections_abc
-except ImportError:
-    import collections as collections_abc
+import typing
 
 import numpy as np
 import six
@@ -37,7 +34,7 @@ from .coordinate_space import DimensionScale, CoordinateSpace, CoordinateArray
 from .equivalence_map import EquivalenceMap
 from .json_utils import encode_json_for_repr
 from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
-                            typed_map, typed_set, segments, typed_string_map, wrapped_property,
+                            typed_map, typed_set, typed_string_map, wrapped_property,
                             number_or_string)
 
 __all__ = ['CoordinateSpace', 'DimensionScale', 'CoordinateArray']
@@ -541,6 +538,198 @@ class SkeletonRenderingOptions(JsonObjectWrapper):
 
 
 @export
+class StarredSegments(collections.abc.MutableMapping):
+    supports_readonly = True
+    supports_validation = True
+    __slots__ = ('_readonly', '_data', '_visible')
+
+    _readonly: bool
+    _data: typing.Dict[np.uint64, bool]
+    _visible: typing.Dict[np.uint64, None]
+
+    def __init__(self, json_data=None, _readonly=False):
+        self._readonly = _readonly
+        if json_data is None:
+            return
+        self._data = {}
+        self._visible = {}
+        self._update(json_data)
+
+    def _update(self, other):
+        if isinstance(other, StarredSegments):
+            self._data.update(other._data)
+            visible = self._visible
+            for k, v in other._data:
+                if not v:
+                    visible.pop(k, None)
+            visible.update(other._visible)
+            return
+
+        if isinstance(other, collections.abc.Mapping):
+            items = other.items()
+        else:
+            items = other
+        data = self._data
+        visible = self._visible
+        for item in items:
+            if isinstance(item, numbers.Integral):
+                k = np.uint64(item)
+                if k != item:
+                    raise ValueError(f'Invalid uint64: {item!r}')
+                v = True
+            elif isinstance(item, str):
+                v = True
+                if item.startswith('!'):
+                    v = False
+                    item = item[1:]
+                k = np.uint64(item)
+            elif isinstance(item, tuple):
+                k, v = item
+                if (not isinstance(k, numbers.Integral) or np.uint64(k) != k or not isinstance(v, bool)):
+                    raise TypeError(f'Invalid (uint64, bool) pair: {(k, v)!r}')
+                k = np.uint64(k)
+            else:
+                raise TypeError(f'Expected int | str | Tuple[uint64, bool] but received: {item!r}')
+
+            data[k] = v
+            if v:
+                visible[k] = True
+            else:
+                visible.pop(k, None)
+
+    def copy(self):
+        return StarredSegments(self)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __contains__(self, segment_id: numbers.Integral) -> bool:
+        return segment_id in self._data
+
+    def keys(self):
+        return self._data.keys()
+
+    def values(self):
+        return self._data.values()
+
+    def items(self):
+        return self._data.items()
+
+    def __eq__(self, other):
+        if isinstance(other, StarredSegments):
+            return self._data == other._data
+        return self._data == other
+
+    def add(self, segment_id: numbers.Integral) -> None:
+        if self._readonly:
+            raise AttributeError
+        self.setdefault(segment_id, True)
+
+    def get(self, segment_id: numbers.Integral, default_value=None) -> bool:
+        return self._data.get(segment_id, default_value)
+
+    def __getitem__(self, segment_id: numbers.Integral) -> bool:
+        return self._data[segment_id]
+
+    def remove(self, segment_id: numbers.Integral) -> None:
+        if self._readonly:
+            raise AttributeError
+        del self._data[segment_id]
+        self._visible.pop(segment_id)
+
+    def discard(self, segment_id: numbers.Integral) -> None:
+        self._data.pop(segment_id, None)
+        self._visible.pop(segment_id, None)
+
+    def __setitem__(self, segment_id: numbers.Integral, visible: bool) -> None:
+        if self._readonly:
+            raise AttributeError
+        self._data[segment_id] = visible
+        if visible:
+            self._visible[segment_id] = True
+        else:
+            self._visible.pop(segment_id, None)
+
+    def __delitem__(self, segment_id: numbers.Integral) -> None:
+        if self._readonly:
+            raise AttributeError
+        del self._data[segment_id]
+        self._visible.pop(segment_id, None)
+
+    def clear(self):
+        if self._readonly:
+            raise AttributeError
+        self._data.clear()
+        self._visible.clear()
+
+    def __repr__(self):
+        return f'StarredSegments({self._data}!r)'
+
+    def update(self, other):
+        if self._readonly:
+            raise AttributeError
+        self._update(other)
+
+    def to_json(self):
+        return [f"{segment}" if visible else f"!{segment}"
+                for segment, visible in self.items()]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    @property
+    def visible(self):
+        return VisibleSegments(self)
+
+    @visible.setter
+    def visible(self, segments: typing.Iterable[numbers.Integral]):
+        new_dict = {}
+        for k in segments:
+            num_k = np.uint64(k)
+            if num_k != k:
+                raise ValueError(f'Invalid uint64 value: {k}')
+            new_dict[num_k] = True
+        self._data = new_dict
+        self._visible = new_dict.copy()
+
+
+@export
+class VisibleSegments(collections.abc.MutableSet):
+
+    def __init__(self, starred_segments: StarredSegments):
+        self._starred_segments = starred_segments
+        self._visible = self._starred_segments._visible
+
+    def __len__(self):
+        return len(self._visible)
+
+    def clear(self):
+        self._starred_segments.clear()
+
+    def __contains__(self, segment_id: numbers.Integral):
+        return segment_id in self._visible
+
+    def add(self, segment_id: numbers.Integral) -> None:
+        self._starred_segments[segment_id] = True
+
+    def discard(self, segment_id: numbers.Integral) -> None:
+        self._starred_segments.discard(segment_id)
+
+    def __iter__(self):
+        return iter(self._visible)
+
+    def copy(self):
+        new_starred_segments = StarredSegments()
+        new_visible = self._visible.copy()
+        new_starred_segments._data = new_visible
+        new_starred_segments._visible = new_visible.copy()
+        return VisibleSegments(new_starred_segments)
+
+    def __repr__(self):
+        return f'VisibleSegments({list(self)!r})'
+
+
+@export
 class SegmentationLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
 
@@ -548,7 +737,18 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         super(SegmentationLayer, self).__init__(*args, type='segmentation', **kwargs)
 
     source = wrapped_property('source', LayerDataSources)
-    segments = wrapped_property('segments', segments())
+    starred_segments = wrapped_property('segments', StarredSegments)
+
+    @property
+    def visible_segments(self):
+        return VisibleSegments(self.starred_segments)
+
+    @visible_segments.setter
+    def visible_segments(self, segments):
+        self.starred_segments.visible = segments
+
+    segments = visible_segments
+
     equivalences = wrapped_property('equivalences', uint64_equivalence_map)
     hide_segment_zero = hideSegmentZero = wrapped_property('hideSegmentZero', optional(bool, True))
     hover_highlight = hoverHighlight = wrapped_property('hoverHighlight', optional(bool, True))
@@ -863,7 +1063,7 @@ class Layers(object):
             json_data = collections.OrderedDict()
         self._layers = []
         self._readonly = _readonly
-        if isinstance(json_data, collections_abc.Mapping):
+        if isinstance(json_data, collections.abc.Mapping):
             for k, v in six.iteritems(json_data):
                 self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
         else:
