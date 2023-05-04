@@ -994,7 +994,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         return await this.graph.graphServer.mergeSegments(submission.sink, submission.source!, annotationToNanometers);
       } catch (err) {
         if (i === attempts) {
-          submission.error = err;
+          submission.error = err.message || "unknown";
           throw err;
         }
       }
@@ -1092,14 +1092,26 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     }
 }
 
+async function parseGrapheneError(e: HttpError) {
+  if (e.response) {
+    let msg: string;
+    if (e.response.headers.get('content-type') === 'application/json') {
+      msg = (await e.response.json())['message'];
+    } else {
+      msg = await e.response.text();
+    }
+    return msg;
+  }
+  return undefined;
+}
+
 async function withErrorMessageHTTP(promise: Promise<Response>, options: {
-    initialMessage: string,
+    initialMessage?: string,
     errorPrefix: string,
-    noStatus?: boolean,
   }): Promise<Response> {
     let status: StatusMessage|undefined = undefined;
     let dispose = () => {};
-    if (!options.noStatus) {
+    if (options.initialMessage) {
       status = new StatusMessage(true);
       status.setText(options.initialMessage);
       dispose = status.dispose.bind(status);
@@ -1110,19 +1122,16 @@ async function withErrorMessageHTTP(promise: Promise<Response>, options: {
       return response;
     } catch (e) {
       if (e instanceof HttpError && e.response) {
-        let msg: string;
-        if (e.response.headers.get('content-type') === 'application/json') {
-          msg = (await e.response.json())['message'];
-        } else {
-          msg = await e.response.text();
-        }
-
         const {errorPrefix = ''} = options;
-        if (!options.noStatus) {
-          status!.setErrorMessage(errorPrefix + msg);
-          status!.setVisible(true);
+        const msg = await parseGrapheneError(e);
+        if (msg) {
+          if (!status) {
+            status = new StatusMessage(true);
+          }
+          status.setErrorMessage(errorPrefix + msg);
+          status.setVisible(true);
+          throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
         }
-        throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
       }
       throw e;
     }
@@ -1174,12 +1183,17 @@ class GrapheneGraphServerInterface {
         },
         responseIdentity);
 
-    const response = await withErrorMessageHTTP(promise, {
-      initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
-      errorPrefix: 'Merge failed: '
-    });
-    const jsonResp = await response.json();
-    return Uint64.parseString(jsonResp['new_root_ids'][0]);
+    try {
+      const response = await promise;
+      const jsonResp = await response.json();
+      return Uint64.parseString(jsonResp['new_root_ids'][0]);
+    } catch (e) {
+      if (e instanceof HttpError) {
+        const msg = await parseGrapheneError(e);
+        throw new Error(msg);
+      }
+      throw e;
+    }
   }
 
   async splitSegments(
@@ -1230,7 +1244,6 @@ class GrapheneGraphServerInterface {
     }, responseIdentity);
 
     const response = await withErrorMessageHTTP(promise, {
-      initialMessage: `Checking is latest for segments ${segments.map(x => x.toJSON()).join(', ')}`,
       errorPrefix: `Could not check latest: `
     });
     const jsonResp = await response.json();
