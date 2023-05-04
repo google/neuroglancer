@@ -61,14 +61,14 @@ const dracoModulePromise = (async () => {
 
 export async function decodeDracoPartitioned(
     buffer: Uint8Array, vertexQuantizationBits: number,
-    partition: boolean): Promise<RawPartitionedMeshData> {
+    partition: boolean, skipDequantization: boolean): Promise<RawPartitionedMeshData> {
   const m = await dracoModulePromise;
   const offset = (m.instance.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, offset);
   numPartitions = partition ? 8 : 1;
   const code = (m.instance.exports.neuroglancer_draco_decode as Function)(
-      offset, buffer.byteLength, partition, vertexQuantizationBits, false);
+      offset, buffer.byteLength, partition, vertexQuantizationBits, skipDequantization);
   if (code === 0) {
     const r = decodeResult;
     decodeResult = undefined;

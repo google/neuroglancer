@@ -44,7 +44,7 @@ import { SharedWatchableValue } from 'neuroglancer/shared_watchable_value';
 import { DisplayDimensionRenderInfo } from 'neuroglancer/navigation_state';
 import { forEachVisibleSegment } from 'neuroglancer/segmentation_display_state/base';
 import { computeChunkBounds } from 'neuroglancer/sliceview/volume/backend';
-import { verifyObject } from 'src/neuroglancer/util/json';
+import { verifyObject } from 'neuroglancer/util/json';
 
 function getVerifiedFragmentPromise(
     credentialsProvider: SpecialProtocolCredentialsProvider,
@@ -142,12 +142,12 @@ function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, r
   verifyObject(response);
   chunk.manifest = {
     chunkShape: vec3.clone(response.chunkShape),
-    chunkGridSpatialOrigin: vec3.create(),
+    chunkGridSpatialOrigin: vec3.clone(response.chunkGridSpatialOrigin),
     lodScales: new Float32Array(response.lodScales),
     octree: new Uint32Array(response.octree),
     vertexOffsets: new Float32Array(response.lodScales.length * 3),
-    clipLowerBound: vec3.create(),
-    clipUpperBound: vec3.create(),
+    clipLowerBound: vec3.clone(response.clipLowerBound),
+    clipUpperBound: vec3.clone(response.clipUpperBound),
   }
   chunk.fragmentIds = response.fragments;
 }
@@ -157,7 +157,7 @@ async function decodeMultiscaleFragmentChunk(
   const {lod} = chunk;
   const source = chunk.manifestChunk!.source! as GrapheneMultiscaleMeshSource;
   const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
-  const rawMesh = await m.decodeDracoPartitioned(new Uint8Array(response), 0, lod !== 0);
+  const rawMesh = await m.decodeDracoPartitioned(new Uint8Array(response), 0, lod !== 0, false);
   assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
 }
 
