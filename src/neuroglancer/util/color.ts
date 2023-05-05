@@ -93,8 +93,8 @@ export function unpackRGBA(value: number) {
       ((value >>> 24) & 0xff) / 255);
 }
 
-export function serializeColor(x: vec3|vec4) {
-  if (x[3] === undefined || x[3] === 1) {
+export function serializeColor(x: vec3|vec4, ignoreAlpha=false) {
+  if (x[3] === undefined || x[3] === 1 || ignoreAlpha) {
     let result = '#';
     for (let i = 0; i < 3; ++i) {
       result += hexEncodeByte(Math.min(255, Math.max(0, Math.round(x[i] * 255))));

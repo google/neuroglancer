@@ -21,15 +21,18 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 
 export class ColorWidget<Color extends vec3|undefined = vec3> extends RefCounted {
-  element = document.createElement('input');
+  static template() {
+    const element = document.createElement('input');
+    element.classList.add('neuroglancer-color-widget');
+    element.type = 'color';
+    return element;
+  }
 
   constructor(
       public model: WatchableValueInterface<Color>,
-      public getDefaultColor: (() => vec3) = () => vec3.fromValues(1, 0, 0)) {
+      public getDefaultColor: (() => vec3) = () => vec3.fromValues(1, 0, 0),
+      public element = ColorWidget.template()) {
     super();
-    const {element} = this;
-    element.classList.add('neuroglancer-color-widget');
-    element.type = 'color';
     element.addEventListener('change', () => this.updateModel());
     element.addEventListener('input', () => this.updateModel());
     element.addEventListener('wheel', event => {
