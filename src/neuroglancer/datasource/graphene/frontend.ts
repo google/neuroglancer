@@ -931,16 +931,14 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     for (const segmentId of segments) {
       const isBaseSegment = isBaseSegmentId(segmentId, this.graph.info.graph.nBitsForLayerId);
       const segmentConst = segmentId.clone();
-      if (added) {
-        if (isBaseSegment) {
-          this.graph.getRoot(segmentConst).then(rootId => {
-            if (segmentsState.visibleSegments.has(segmentConst)) {
-              segmentsState.visibleSegments.add(rootId);
-            }
-            segmentsState.selectedSegments.delete(segmentConst);
-            segmentsState.selectedSegments.add(rootId);
-          });
-        }
+      if (added && isBaseSegment) {
+        this.graph.getRoot(segmentConst).then(rootId => {
+          if (segmentsState.visibleSegments.has(segmentConst)) {
+            segmentsState.visibleSegments.add(rootId);
+          }
+          segmentsState.selectedSegments.delete(segmentConst);
+          segmentsState.selectedSegments.add(rootId);
+        });
       }
     }
   }
@@ -1085,9 +1083,10 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         }
       }
       const segmentsState = this.layer.displayState.segmentationGroupState.value;
-      const {visibleSegments} = segmentsState;
-      visibleSegments.delete(segmentsToRemove);
+      const {visibleSegments, selectedSegments} = segmentsState;
+      selectedSegments.delete(segmentsToRemove);
       const latestRoots = await this.graph.graphServer.filterLatestRoots(segmentsToAdd);
+      selectedSegments.add(latestRoots);
       visibleSegments.add(latestRoots);
       merges.changed.dispatch();
     }
@@ -1654,7 +1653,8 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
 
     activation.bindAction('set-anchor', event => {
       event.stopPropagation();
-      const currentSegmentSelection = maybeGetSelection(this, segmentationGroupState.visibleSegments); // or visible segments?
+      const currentSegmentSelection =
+          maybeGetSelection(this, segmentationGroupState.visibleSegments);
       if (!currentSegmentSelection) return;
       const {rootId, segmentId} = currentSegmentSelection;
       const {focusSegment, segments} = multicutState;
