@@ -149,7 +149,7 @@ class SegmentQueryListSource extends SegmentListSource {
     const splices: ArraySpliceOp[] = [];
     let changed = false;
     let matchStatusTextPrefix = '';
-    const unconstrained = isQueryUnconstrained(queryResult.query);      
+    const unconstrained = isQueryUnconstrained(queryResult.query);
     if (!unconstrained) {
       if (this.explicitSegments !== undefined && this.explicitSegmentsVisible) {
         splices.push({deleteCount: this.explicitSegments.length, retainCount: 0, insertCount: 0});
@@ -991,7 +991,7 @@ class SegmentListGroupSelected extends SegmentListGroupBase {
     safe;
     return this.group.selectedSegments[Symbol.iterator](); // TODO, better way to call the iterator?
   }
-  
+
   updateStatus() {
     super.updateStatus();
     const {selectedSegments} = this.group;
@@ -1068,8 +1068,9 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
       segmentQuery.value = '';
       this.hasConfirmed = false;
     }));
-    this.registerDisposer(
-      registerActionListener(queryElement, 'toggle-listed', this.toggleMatches));
+    this.registerDisposer(registerActionListener(queryElement, 'toggle-listed', () => {
+      this.toggleMatches();
+    }));
     this.registerDisposer(registerActionListener(queryElement, 'hide-all', () => {
       for (const id of this.listSegments()) {
         group.visibleSegments.delete(id);
