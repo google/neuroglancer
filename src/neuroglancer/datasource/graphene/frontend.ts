@@ -1848,8 +1848,13 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       event.stopPropagation();
       submitAction();
     });
-
-
+    body.appendChild(makeIcon({
+      text: 'Clear',
+      title: 'Clear pending merges',
+      onClick: () => {
+        merges.value = [];
+      }
+    }));
     const checkbox = activation.registerDisposer(new TrackableBooleanCheckbox(autoSubmit));
     const label = document.createElement('label');
     label.appendChild(document.createTextNode('auto-submit'));
