@@ -1541,6 +1541,7 @@ const getPoint = (layer: SegmentationUserLayer, mouseState: MouseSelectionState)
 const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+control+mousedown0': {action: 'set-anchor'},
   'at:shift?+keyg': {action: 'swap-group'},
+  'at:shift?+enter': {action: 'submit'},
 });
 
 class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
@@ -1572,20 +1573,26 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
         multicutState.reset();
       }
     }));
-    body.appendChild(makeIcon({
+    const submitAction = async () => {
+      submitIcon.classList.toggle('disabled', true);
+      const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
+      const annotationToNanometers =
+          loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
+      graphConnection.submitMulticut(annotationToNanometers).then(success => {
+        submitIcon.classList.toggle('disabled', false);
+        if (success) {
+          activation.cancel();
+        }
+      });
+    }
+    const submitIcon = makeIcon({
       text: 'Submit',
       title: 'Submit multicut',
       onClick: () => {
-        const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
-        const annotationToNanometers =
-            loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
-        graphConnection.submitMulticut(annotationToNanometers).then(success => {
-          if (success) {
-            activation.cancel();
-          }
-        });
+        submitAction();
       }
-    }));
+    });
+    body.appendChild(submitIcon);
     const activeGroupIndicator = document.createElement('div');
     activeGroupIndicator.className = 'activeGroupIndicator';
     activeGroupIndicator.innerHTML = 'Active Group: ';
@@ -1693,6 +1700,11 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
         }
       }
       multicutState.activeGroup.add(currentSegmentSelection);
+    });
+
+    activation.bindAction('submit', event => {
+      event.stopPropagation();
+      submitAction();
     });
   }
 

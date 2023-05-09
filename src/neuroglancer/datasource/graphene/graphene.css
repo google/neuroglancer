@@ -50,7 +50,7 @@
   gap: 10px;
 }
 
-.graphene-merge-segments-status .neuroglancer-icon {
+.graphene-merge-segments-status .neuroglancer-icon, .graphene-multicut-status .neuroglancer-icon {
   height: 100%;
 }
 
