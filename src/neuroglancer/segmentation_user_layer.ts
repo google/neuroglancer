@@ -142,6 +142,8 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
         }
       });
     });
+    verifyOptionalObjectProperty(
+        specification, SEGMENT_QUERY_JSON_KEY, value => this.segmentQuery.restoreState(value));
   }
 
   toJSON() {
