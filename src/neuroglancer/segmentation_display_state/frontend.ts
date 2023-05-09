@@ -398,6 +398,7 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     }
     visibleSegments.set(id, shouldBeVisible);
     event.stopPropagation();
+    event.preventDefault();
   };
 
   const filterHandler = (event: Event) => {
