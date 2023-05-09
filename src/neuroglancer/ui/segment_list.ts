@@ -816,11 +816,8 @@ abstract class SegmentListGroupBase extends RefCounted {
   private currentConfirmCallback: WatchableValueInterface<(() => void)|undefined> = new WatchableValue(undefined);
 
   makeSegmentsVisible(visible: boolean) {
-    const {visibleSegments, selectedSegments} = this.group;
+    const {visibleSegments} = this.group;
     const segments = [...this.listSegments(true)];
-    if (visible) {
-      selectedSegments.set(segments, visible);
-    }
     visibleSegments.set(segments, visible);
   }
 

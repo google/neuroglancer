@@ -109,6 +109,13 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
         }
       }
     });
+    visibleSegments.changed.add((x, add) => {
+      if (add) {
+        if (x) {
+          selectedSegments.add(x);
+        }
+      }
+    });
   }
 
   restoreState(specification: unknown) {
@@ -723,17 +730,14 @@ export class SegmentationUserLayer extends Base {
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
-          const {selectedSegments, visibleSegments} = this.displayState.segmentationGroupState.value;
-          const newVisible = !selectedSegments.has(segment);
+          const {visibleSegments} = this.displayState.segmentationGroupState.value;
+          const newVisible = !visibleSegments.has(segment);
           if (newVisible || context.segmentationToggleSegmentState === undefined) {
             context.segmentationToggleSegmentState = newVisible;
           }
           context.defer(() => {
             if (context.segmentationToggleSegmentState === newVisible) {
-              selectedSegments.set(segment, newVisible);
-              if (newVisible) { // because selectedSegments already handles visible deletion
-                visibleSegments.set(segment, newVisible);
-              }
+              visibleSegments.set(segment, newVisible);
             }
           });
         }
