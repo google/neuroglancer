@@ -1747,7 +1747,6 @@ export class MergeSegmentsPlaceLineTool extends PlaceLineTool {
     const {disablePicking} = displayState;
     this.registerDisposer(inProgressAnnotation.changed.add(() => {
       disablePicking.value = inProgressAnnotation.value !== undefined;
-      console.log("set disablePicking", disablePicking.value)
     }));
   }
   get annotationLayer() {
@@ -1842,13 +1841,12 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
     const checkbox = activation.registerDisposer(new TrackableBooleanCheckbox(autoSubmit));
     const label = document.createElement('label');
     label.appendChild(document.createTextNode('auto-submit'));
-    label.title =
-        'auto-submit merges';
+    label.title = 'auto-submit merges';
     label.appendChild(checkbox.element);
     body.appendChild(label);
     const points = document.createElement('div');
     points.classList.add('graphene-merge-segments-merges');
-    body.appendChild(points)
+    body.appendChild(points);
 
     const segmentWidgetFactory = SegmentWidgetFactory.make(this.layer.displayState, /*includeUnmapped=*/ true);
     const makeWidget = (id: Uint64MapEntry) => {
