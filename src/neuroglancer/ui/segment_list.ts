@@ -24,7 +24,7 @@ import type {SegmentationUserLayer, SegmentationUserLayerGroupState} from 'neuro
 import {observeWatchable, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {ArraySpliceOp, getMergeSplices} from 'neuroglancer/util/array';
+import {ArraySpliceOp, getFixedOrderMergeSplices} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, updateInputFieldWidth} from 'neuroglancer/util/dom';
@@ -105,10 +105,10 @@ class StarredSegmentsListSource extends SegmentListSource {
           {retainCount: 0, insertCount: newSelectedSegments.length, deleteCount: 0});
     } else {
       splices.push(
-          ...getMergeSplices(explicitSegments, newSelectedSegments, Uint64.compare));
+          ...getFixedOrderMergeSplices(explicitSegments, newSelectedSegments, Uint64.equal));
     }
     this.explicitSegments = newSelectedSegments;
-    this.length = selectedSegments.size;
+    this.length = newSelectedSegments.length;
     this.changed.dispatch(splices);
   }
 
