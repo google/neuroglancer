@@ -94,6 +94,14 @@
   visibility: visible;
 }
 
+.neuroglancer-segment-list .neuroglancer-segment-list-entry:not(:hover) .neuroglancer-star-icon:not(.neuroglancer-starred) {
+  visibility: hidden;
+}
+
+.neuroglancer-segment-list .neuroglancer-segment-list-entry:not(:hover) .neuroglancer-eye-icon:not(.neuroglancer-visible) {
+  visibility: hidden;
+}
+
 .neuroglancer-segment-list-entry-visible-checkbox {
   order: 1;
 }
@@ -283,4 +291,9 @@
 
 .neuroglancer-segment-list-header .neuroglancer-segment-list-entry-extra-property {
   text-align: center;
+}
+
+.neuroglancer-segment-list-status-message {
+  overflow: hidden;
+  white-space: nowrap;
 }

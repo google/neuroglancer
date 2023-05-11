@@ -16,6 +16,7 @@
 
 import './segment_list.css';
 
+import type {DebouncedFunc} from 'lodash';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import {registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentWidgetWithExtraColumnsFactory} from 'neuroglancer/segmentation_display_state/frontend';
@@ -42,8 +43,8 @@ import {CdfController, getUpdatedRangeAndWindowParameters, RangeAndWindowInterva
 import {makeToolButton} from 'neuroglancer/ui/tool';
 import {ANNOTATE_MERGE_SEGMENTS_TOOL_ID, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID} from 'neuroglancer/ui/segment_split_merge_tools';
 import {SELECT_SEGMENTS_TOOLS_ID} from 'neuroglancer/ui/segment_select_tools';
+import {makeEyeButton} from 'neuroglancer/widget/eye_button';
 import {makeStarButton} from 'neuroglancer/widget/star_button';
-import {DebouncedFunc} from 'lodash';
 
 const tempUint64 = new Uint64();
 
@@ -181,7 +182,7 @@ class SegmentQueryListSource extends SegmentListSource {
     } else if (unconstrained) {
       matchStatusTextPrefix = `${queryResult.count} total ids`;
     } else if (queryResult.total > 0) {
-      matchStatusTextPrefix = `${queryResult.count} matches/${queryResult.total} total ids`;
+      matchStatusTextPrefix = `${queryResult.count} match /${queryResult.total} total ids`;
     }
 
     const {selectedSegments, visibleSegments} =
@@ -213,11 +214,12 @@ class SegmentQueryListSource extends SegmentListSource {
     let fullStatusText = matchStatusTextPrefix;
     if (this.selectedMatches > 0) {
       if (this.selectedMatches === this.visibleMatches) {
-        fullStatusText = `${this.selectedMatches} visible/${fullStatusText}`;
+        fullStatusText = `${this.selectedMatches} vis/${fullStatusText}`;
       } else if (this.visibleMatches > 0) {
-        fullStatusText = `${this.visibleMatches} visible/${this.selectedMatches} starred/${fullStatusText}`;
+        fullStatusText =
+            `${this.visibleMatches} vis/${this.selectedMatches} star/${fullStatusText}`;
       } else {
-        fullStatusText = `${this.selectedMatches} starred/${fullStatusText}`;
+        fullStatusText = `${this.selectedMatches} star/${fullStatusText}`;
       }
     }
 
@@ -829,7 +831,7 @@ abstract class SegmentListGroupBase extends RefCounted {
   selectionStatusMessage = document.createElement('span');
   copyAllSegmentsButton: HTMLElement;
   copyVisibleSegmentsButton: HTMLElement;
-  visibilityToggleAllButton = document.createElement('input');
+  visibilityToggleAllButton: HTMLElement;
 
   statusChanged = new NullarySignal();
 
@@ -838,8 +840,22 @@ abstract class SegmentListGroupBase extends RefCounted {
   makeSegmentsVisible(visible: boolean) {
     const {visibleSegments} = this.group;
     const segments = Array.from(this.listSegments(true));
-    console.log('make segments visible: ', visible, segments.map(x => x.toString()));
     visibleSegments.set(segments, visible);
+  }
+
+  invertVisibility() {
+    const markVisible: Uint64[] = [];
+    const markNonVisible: Uint64[] = [];
+    const {visibleSegments} = this.group;
+    for (const segment of this.listSegments(true)) {
+      if (visibleSegments.has(segment)) {
+        markNonVisible.push(segment);
+      } else {
+        markVisible.push(segment);
+      }
+    }
+    visibleSegments.set(markVisible, true);
+    visibleSegments.set(markNonVisible, false);
   }
 
   selectSegments(select: boolean, changeVisibility = false) {
@@ -865,20 +881,28 @@ abstract class SegmentListGroupBase extends RefCounted {
   constructor(
       protected listSource: SegmentListSource, protected group: SegmentationUserLayerGroupState) {
     super();
-    const {visibilityToggleAllButton} = this;
 
     const {
       element,
     } = this;
     element.style.display = 'contents';
     this.starAllButton = makeStarButton({
-      title: 'Toggle star status',
-      onClick: () => {
-        const unstar = this.starAllButton.classList.contains('unstar');
-        this.selectSegments(!unstar, false);
+      title: 'Click to toggle star status, shift+click to unstar non-visible segments.',
+      onClick: (event) => {
+        const starred = this.starAllButton.classList.contains('neuroglancer-starred');
+        if (event.shiftKey) {
+          const nonVisibleSegments: Uint64[] = [];
+          for (const segment of this.group.selectedSegments) {
+            if (!this.group.visibleSegments.has(segment)) {
+              nonVisibleSegments.push(segment);
+            }
+          }
+          this.group.selectedSegments.delete(nonVisibleSegments);
+          return;
+        }
+        this.selectSegments(!starred, false);
       }
     });
-    this.starAllButton.classList.add('neuroglancer-segment-list-status-star');
     this.copyAllSegmentsButton = makeCopyButton({
       title: 'Copy all segment IDs',
       onClick: () => {
@@ -891,13 +915,18 @@ abstract class SegmentListGroupBase extends RefCounted {
         this.copySegments(true);
       },
     });
-    visibilityToggleAllButton.type = 'checkbox';
-    visibilityToggleAllButton.addEventListener('click', event => {
-      this.makeSegmentsVisible(visibilityToggleAllButton.checked);
-      event.stopPropagation();
-      event.preventDefault();
+    this.visibilityToggleAllButton = makeEyeButton({
+      onClick: event => {
+        if (event.shiftKey) {
+          this.invertVisibility();
+          return;
+        }
+        this.makeSegmentsVisible(
+            !this.visibilityToggleAllButton.classList.contains('neuroglancer-visible'));
+      }
     });
     const {selectionStatusContainer} = this;
+    this.selectionStatusMessage.classList.add('neuroglancer-segment-list-status-message');
     selectionStatusContainer.classList.add('neuroglancer-segment-list-status');
     selectionStatusContainer.appendChild(this.copyAllSegmentsButton);
     selectionStatusContainer.appendChild(this.starAllButton);
@@ -943,22 +972,34 @@ abstract class SegmentListGroupBase extends RefCounted {
     const visibleDisplayedCount = numMatches ? queryVisibleCount : visibleCount;
     const visibleSelectedCount = numMatches ? querySelectedCount : selectedCount;
     const totalDisplayed = numMatches || selectedCount;
-    starAllButton.classList.toggle('unstar', visibleSelectedCount === totalDisplayed);
+    starAllButton.classList.toggle('neuroglancer-starred', visibleSelectedCount === totalDisplayed);
+    starAllButton.classList.toggle(
+        'neuroglancer-indeterminate',
+        visibleSelectedCount > 0 && visibleSelectedCount !== totalDisplayed);
     selectionStatusMessage.textContent = statusMessage;
-    copyAllSegmentsButton.title = `Copy all ${totalDisplayed} ${numMatches ? 'matching' : 'starred'} segment(s)`;
-    copyVisibleSegmentsButton.title = `Copy ${visibleDisplayedCount} ${numMatches ? 'visible matching' : 'visible'} segment(s)`;
+    copyAllSegmentsButton.title =
+        `Copy all ${totalDisplayed} ${numMatches ? 'matching' : 'starred'} segment(s)`;
+    copyVisibleSegmentsButton.title =
+        `Copy ${visibleDisplayedCount} ${numMatches ? 'visible matching' : 'visible'} segment(s)`;
     copyAllSegmentsButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
     copyVisibleSegmentsButton.style.visibility = visibleDisplayedCount ? 'visible' : 'hidden';
     starAllButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
     visibilityToggleAllButton.style.visibility = totalDisplayed ? 'visible' : 'hidden';
-    visibilityToggleAllButton.checked = visibleDisplayedCount === totalDisplayed;
-    visibilityToggleAllButton.indeterminate =
-      visibleDisplayedCount > 0 && visibleDisplayedCount !== totalDisplayed;
-    if (visibleDisplayedCount !== totalDisplayed) {
-      visibilityToggleAllButton.title = `Show ${totalDisplayed - visibleDisplayedCount} segment ID(s)`;
+    const allVisible = visibleDisplayedCount === totalDisplayed;
+    visibilityToggleAllButton.classList.toggle('neuroglancer-visible', allVisible);
+    const visibleIndeterminate =
+        visibleDisplayedCount > 0 && visibleDisplayedCount !== totalDisplayed;
+    visibilityToggleAllButton.classList.toggle('neuroglancer-indeterminate', visibleIndeterminate);
+    let visibleToggleTitle: string;
+    if (!allVisible) {
+      visibleToggleTitle = `Click to show ${totalDisplayed - visibleDisplayedCount} segment ID(s).`;
     } else {
-      visibilityToggleAllButton.title = `Hide ${totalDisplayed} segment ID(s)`;
+      visibleToggleTitle = `Click to hide ${totalDisplayed} segment ID(s).`;
     }
+    if (visibleIndeterminate) {
+      visibleToggleTitle += `  Shift+click to invert visibility.`;
+    }
+    visibilityToggleAllButton.title = visibleToggleTitle;
     this.statusChanged.dispatch();
   }
 }
@@ -1014,8 +1055,7 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
     const queryErrors = document.createElement('ul');
     queryErrors.classList.add('neuroglancer-segment-query-errors');
     // push them in front of the base list elements
-    this.element.prepend(
-        queryErrors, queryStatisticsContainer, queryStatisticsSeparator);
+    this.element.prepend(queryErrors, queryStatisticsContainer, queryStatisticsSeparator);
     this.registerEventListener(queryElement, 'input', () => {
       debouncedUpdateQueryModel();
     });
@@ -1222,7 +1262,7 @@ export class SegmentDisplayTab extends Tab {
                   }));
                   const {displayState} = this.layer;
                   registerCallbackWhenSegmentationDisplayStateChanged(
-                    displayState, context, updateListItems);
+                      displayState, context, updateListItems);
                   context.registerDisposer(
                       displayState.segmentationGroupState.value.selectedSegments.changed.add(
                           updateListItems));

@@ -39,6 +39,7 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
+import {makeEyeButton} from 'neuroglancer/widget/eye_button';
 import {makeFilterButton} from 'neuroglancer/widget/filter_button';
 import {makeStarButton} from 'neuroglancer/widget/star_button';
 
@@ -259,11 +260,11 @@ const segmentWidgetTemplate = (() => {
   const copyContainerIndex = stickyContainer.childElementCount;
   stickyContainer.appendChild(copyContainer);
   const visibleIndex = stickyContainer.childElementCount;
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.title = 'Toggle segment visibility';
-  checkbox.classList.add('neuroglancer-segment-list-entry-visible-checkbox');
-  stickyContainer.appendChild(checkbox);
+  const visibleIcon = makeEyeButton({
+    title: 'Toggle segment visibility',
+  });
+  visibleIcon.classList.add('neuroglancer-segment-list-entry-visible-checkbox');
+  stickyContainer.appendChild(visibleIcon);
   const idContainer = document.createElement('div');
   idContainer.classList.add('neuroglancer-segment-list-entry-id-container');
   const idContainerIndex = stickyContainer.childElementCount;
@@ -531,13 +532,14 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     const {displayState} = this;
     const {segmentSelectionState} = displayState!;
     const {visibleSegments} = displayState!.segmentationGroupState.value;
-    (stickyChildren[template.visibleIndex] as HTMLInputElement).checked =
-        visibleSegments.has(mapped);
+    (stickyChildren[template.visibleIndex] as HTMLInputElement)
+        .classList.toggle('neuroglancer-visible', visibleSegments.has(mapped));
     container.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
                                   Uint64.equal(segmentSelectionState.selectedSegment, mapped))
                                      .toString();
     const {selectedSegments} = displayState!.segmentationGroupState.value;
-    container.dataset.selectedSegment = selectedSegments.has(mapped) ? 'true' : 'false';
+    (stickyChildren[template.starIndex] as HTMLInputElement)
+        .classList.toggle('neuroglancer-starred', selectedSegments.has(mapped));
     const idContainer = stickyChildren[template.idContainerIndex] as HTMLElement;
     setSegmentIdElementStyle(
         (idContainer.children[template.idIndex] as HTMLElement),

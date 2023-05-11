@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2019 Google Inc.
+ * Copyright 2023 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import './star_button.css';
+.neuroglancer-star-icon > svg {
+  stroke: white;
+}
 
-import svg_star from 'ikonate/icons/star.svg';
-import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
+.neuroglancer-star-icon.neuroglancer-starred > svg {
+  fill: white;
+}
 
-export function makeStarButton(options: MakeIconOptions = {}) {
-  const icon = makeIcon({svg: svg_star, ...options});
-  icon.classList.add('neuroglancer-star-icon');
-  return icon;
+.neuroglancer-star-icon.neuroglancer-indeterminate > svg {
+  fill: rgba(255, 255, 255, 0.4);
 }
