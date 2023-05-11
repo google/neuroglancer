@@ -727,19 +727,21 @@ export class SegmentationUserLayer extends Base {
         this.displayState.segmentationGroupState.value.visibleSegments.clear();
         break;
       }
-      case 'select': {
+      case 'select':
+      case 'star': {
         if (!this.pick.value) break;
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
-          const {visibleSegments} = this.displayState.segmentationGroupState.value;
-          const newVisible = !visibleSegments.has(segment);
-          if (newVisible || context.segmentationToggleSegmentState === undefined) {
-            context.segmentationToggleSegmentState = newVisible;
+          const group = this.displayState.segmentationGroupState.value;
+          const segmentSet = action === 'select' ? group.visibleSegments : group.selectedSegments;
+          const newValue = !segmentSet.has(segment);
+          if (newValue || context.segmentationToggleSegmentState === undefined) {
+            context.segmentationToggleSegmentState = newValue;
           }
           context.defer(() => {
-            if (context.segmentationToggleSegmentState === newVisible) {
-              visibleSegments.set(segment, newVisible);
+            if (context.segmentationToggleSegmentState === newValue) {
+              segmentSet.set(segment, newValue);
             }
           });
         }

@@ -713,7 +713,7 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (const action of ['select']) {
+    for (const action of ['select', 'star']) {
       this.bindAction(action, () => {
         this.mouseState.updateUnconditionally();
         this.layerManager.invokeAction(action);
