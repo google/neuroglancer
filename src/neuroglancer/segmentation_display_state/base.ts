@@ -35,15 +35,14 @@ export interface VisibleSegmentsState {
   useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
 }
 
-export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
+export const VISIBLE_SEGMENTS_STATE_PROPERTIES = [
   'visibleSegments',
-  'selectedSegments',
   'segmentEquivalences',
   'temporaryVisibleSegments',
   'temporarySegmentEquivalences',
   'useTemporaryVisibleSegments',
   'useTemporarySegmentEquivalences',
-];
+] as const;
 
 export function onVisibleSegmentsStateChanged(
     context: RefCounted, state: VisibleSegmentsState, callback: () => void) {

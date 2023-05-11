@@ -16,6 +16,7 @@
 
 import {ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {IndexedSegmentProperty} from 'neuroglancer/segmentation_display_state/base';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mergeSequences, TypedArray, TypedArrayConstructor, WritableArrayLike} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -1090,7 +1091,7 @@ export function* forEachQueryResultSegmentIdGenerator(
 
 export function findQueryResultIntersectionSize(
     db: PreprocessedSegmentPropertyMap|undefined, queryResult: QueryResult|undefined,
-    segmentSet: Uint64Set): number {
+    segmentSet: Uint64Set|Uint64OrderedSet): number {
   if (segmentSet.size === 0) return 0;
   let count = 0;
   forEachQueryResultSegmentId(db, queryResult, id => {

@@ -15,113 +15,107 @@
  */
 
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {registerRPC, registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
-import {Uint64Set} from 'neuroglancer/uint64_set';
 
-@registerSharedObject('Uint64OrderedSet')
-export class Uint64OrderedSet extends Uint64Set implements
-    WatchableValueInterface<Uint64OrderedSet> {
-  _array: Uint64[] = [];
+export class Uint64OrderedSet implements WatchableValueInterface<Uint64OrderedSet> {
+  changed = new Signal<(x: Uint64|Uint64[]|null, add: boolean) => void>();
+  private data = new Map<BigInt, Uint64>();
+
+  dispose() {
+    this.data.clear();
+  }
+
+  get size() {
+    return this.data.size;
+  }
 
   get value() {
     return this;
   }
 
-  static makeWithCounterpart(rpc: RPC) {
-    let obj = new Uint64OrderedSet();
-    obj.initializeCounterpart(rpc);
-    return obj;
+  has(x: Uint64) {
+    return this.data.has(BigInt(x.toString()));
   }
 
-  add_(x: Uint64[]) {
-    let changed = false;
-    for (const v of x) {
-      if (this.hashTable.add(v)) {
-        this._array.push(v.clone());
-        changed = true;
+  add(x: Uint64|Uint64[]) {
+    const {data} = this;
+    if (Array.isArray(x)) {
+      let added: Uint64[] = [];
+      for (let num of x) {
+        const bignum = BigInt(num.toString());
+        if (data.has(bignum)) continue;
+        num = num.clone();
+        added.push(num);
+        data.set(bignum, num);
       }
-    }
-    return changed;
-  }
-
-  add(x: Uint64|Uint64[], sendRPC = true) {
-    const tmp = Array<Uint64>().concat(x);
-    if (this.add_(tmp)) {
-      let {rpc} = this;
-      if (rpc && sendRPC) {
-        rpc.invoke('Uint64OrderedSet.add', {'id': this.rpcId, 'value': tmp});
+      if (added.length !== 0) {
+        this.changed.dispatch(added, true);
       }
+    } else {
+      const bignum = BigInt(x.toString());
+      if (data.has(bignum)) {
+        return;
+      }
+      data.set(bignum, x.clone());
       this.changed.dispatch(x, true);
     }
   }
 
   [Symbol.iterator]() {
-    return this._array.values();
+    return this.data.values();
   }
 
-  delete_(x: Uint64[]) {
-    let changed = false;
-    for (const v of x) {
-      if (this.hashTable.delete(v)) {
-        this._array = this._array.filter(y =>!Uint64.equal(y, v));
-        changed = true;
+  delete(x: Uint64|Uint64[]) {
+    const {data} = this;
+    if (Array.isArray(x)) {
+      let removed: Uint64[] = [];
+      for (let num of x) {
+        const bignum = BigInt(num.toString());
+        if (!data.has(bignum)) continue;
+        data.delete(bignum);
+        removed.push(num);
       }
-    }
-    return changed;
-  }
-
-  delete(x: Uint64|Uint64[], sendRPC = true) {
-    const tmp = Array<Uint64>().concat(x);
-    if (this.delete_(Array<Uint64>().concat(x))) {
-      let {rpc} = this;
-      if (rpc && sendRPC) {
-        rpc.invoke('Uint64OrderedSet.delete', {'id': this.rpcId, 'value': tmp});
+      if (removed.length !== 0) {
+        this.changed.dispatch(removed, false);
       }
+    } else {
+      const bignum = BigInt(x.toString());
+      if (!data.has(bignum)) {
+        return;
+      }
+      data.delete(bignum);
       this.changed.dispatch(x, false);
     }
   }
 
-  clear(sendRPC = true) {
-    if (this.hashTable.clear()) {
-      this._array = [];
-      let {rpc} = this;
-      if (rpc && sendRPC) {
-        rpc.invoke('Uint64OrderedSet.clear', {'id': this.rpcId});
-      }
+  set(x: Uint64|Uint64[], value: boolean) {
+    if (!value) {
+      this.delete(x);
+    } else {
+      this.add(x);
+    }
+  }
+
+  clear() {
+    if (this.data.size > 0) {
+      this.data.clear();
       this.changed.dispatch(null, false);
     }
   }
 
   toJSON() {
-    let result = new Array<string>();
-    for (let id of this) {
-      result.push(id.toString());
-    }
-    return result;
+    return Array.from(this.data.keys(), x => x.toString());
   }
 
   assignFrom(other: Uint64OrderedSet) {
     this.clear();
-    for (const key of other) {
-      this.add(key);
+    const otherData = other.data;
+    const {data} = this;
+    const added = Array.from(otherData.values());
+    for (const [key, value] of otherData) {
+      data.set(key, value);
     }
+    this.changed.dispatch(added, true);
   }
 }
-
-registerRPC('Uint64OrderedSet.add', function(x) {
-  let obj = this.get(x['id']);
-  let values = x['value'].map((el: any) => new Uint64(el.low, el.high));
-  obj.add(values, false);
-});
-
-registerRPC('Uint64OrderedSet.delete', function(x) {
-  let obj = this.get(x['id']);
-  let values = x['value'].map((el: any) => new Uint64(el.low, el.high));
-  obj.delete(values, false);
-});
-
-registerRPC('Uint64OrderedSet.clear', function(x) {
-  let obj = this.get(x['id']);
-  obj.clear(false);
-});
