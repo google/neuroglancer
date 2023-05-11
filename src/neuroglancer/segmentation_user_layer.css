@@ -35,10 +35,6 @@
   height: 80vh;
 }
 
-.neuroglancer-segment-list[data-count="0"] {
-  display: none;
-}
-
 .neuroglancer-segment-list-entry {
   display: flex;
   flex-direction: row;

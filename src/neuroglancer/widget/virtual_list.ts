@@ -399,7 +399,6 @@ export class VirtualList extends RefCounted {
     topItems.style.top = `${renderParams.anchorOffset - topSize}px`;
     bottomItems.style.top = `${renderParams.anchorOffset}px`;
     element.scrollTop = renderParams.scrollOffset;
-    element.dataset.count = source.length.toString();
   }
 
   getItemElement(index: number): HTMLElement|undefined {
