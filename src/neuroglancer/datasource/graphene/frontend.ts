@@ -994,7 +994,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         return await this.graph.graphServer.mergeSegments(submission.sink, submission.source!, annotationToNanometers);
       } catch (err) {
         if (i === attempts) {
-          submission.error = err;
+          submission.error = err.message || "unknown";
           throw err;
         }
       }
@@ -1092,14 +1092,26 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     }
 }
 
+async function parseGrapheneError(e: HttpError) {
+  if (e.response) {
+    let msg: string;
+    if (e.response.headers.get('content-type') === 'application/json') {
+      msg = (await e.response.json())['message'];
+    } else {
+      msg = await e.response.text();
+    }
+    return msg;
+  }
+  return undefined;
+}
+
 async function withErrorMessageHTTP(promise: Promise<Response>, options: {
-    initialMessage: string,
+    initialMessage?: string,
     errorPrefix: string,
-    noStatus?: boolean,
   }): Promise<Response> {
     let status: StatusMessage|undefined = undefined;
     let dispose = () => {};
-    if (!options.noStatus) {
+    if (options.initialMessage) {
       status = new StatusMessage(true);
       status.setText(options.initialMessage);
       dispose = status.dispose.bind(status);
@@ -1110,19 +1122,16 @@ async function withErrorMessageHTTP(promise: Promise<Response>, options: {
       return response;
     } catch (e) {
       if (e instanceof HttpError && e.response) {
-        let msg: string;
-        if (e.response.headers.get('content-type') === 'application/json') {
-          msg = (await e.response.json())['message'];
-        } else {
-          msg = await e.response.text();
-        }
-
         const {errorPrefix = ''} = options;
-        if (!options.noStatus) {
-          status!.setErrorMessage(errorPrefix + msg);
-          status!.setVisible(true);
+        const msg = await parseGrapheneError(e);
+        if (msg) {
+          if (!status) {
+            status = new StatusMessage(true);
+          }
+          status.setErrorMessage(errorPrefix + msg);
+          status.setVisible(true);
+          throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
         }
-        throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
       }
       throw e;
     }
@@ -1174,12 +1183,17 @@ class GrapheneGraphServerInterface {
         },
         responseIdentity);
 
-    const response = await withErrorMessageHTTP(promise, {
-      initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
-      errorPrefix: 'Merge failed: '
-    });
-    const jsonResp = await response.json();
-    return Uint64.parseString(jsonResp['new_root_ids'][0]);
+    try {
+      const response = await promise;
+      const jsonResp = await response.json();
+      return Uint64.parseString(jsonResp['new_root_ids'][0]);
+    } catch (e) {
+      if (e instanceof HttpError) {
+        const msg = await parseGrapheneError(e);
+        throw new Error(msg);
+      }
+      throw e;
+    }
   }
 
   async splitSegments(
@@ -1230,7 +1244,6 @@ class GrapheneGraphServerInterface {
     }, responseIdentity);
 
     const response = await withErrorMessageHTTP(promise, {
-      initialMessage: `Checking is latest for segments ${segments.map(x => x.toJSON()).join(', ')}`,
       errorPrefix: `Could not check latest: `
     });
     const jsonResp = await response.json();
@@ -1528,6 +1541,7 @@ const getPoint = (layer: SegmentationUserLayer, mouseState: MouseSelectionState)
 const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+control+mousedown0': {action: 'set-anchor'},
   'at:shift?+keyg': {action: 'swap-group'},
+  'at:shift?+enter': {action: 'submit'},
 });
 
 class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
@@ -1559,20 +1573,26 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
         multicutState.reset();
       }
     }));
-    body.appendChild(makeIcon({
+    const submitAction = async () => {
+      submitIcon.classList.toggle('disabled', true);
+      const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
+      const annotationToNanometers =
+          loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
+      graphConnection.submitMulticut(annotationToNanometers).then(success => {
+        submitIcon.classList.toggle('disabled', false);
+        if (success) {
+          activation.cancel();
+        }
+      });
+    }
+    const submitIcon = makeIcon({
       text: 'Submit',
       title: 'Submit multicut',
       onClick: () => {
-        const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
-        const annotationToNanometers =
-            loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(x => x / 1e-9);
-        graphConnection.submitMulticut(annotationToNanometers).then(success => {
-          if (success) {
-            activation.cancel();
-          }
-        });
+        submitAction();
       }
-    }));
+    });
+    body.appendChild(submitIcon);
     const activeGroupIndicator = document.createElement('div');
     activeGroupIndicator.className = 'activeGroupIndicator';
     activeGroupIndicator.innerHTML = 'Active Group: ';
@@ -1681,6 +1701,11 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       }
       multicutState.activeGroup.add(currentSegmentSelection);
     });
+
+    activation.bindAction('submit', event => {
+      event.stopPropagation();
+      submitAction();
+    });
   }
 
   get description() {
@@ -1734,7 +1759,6 @@ export class MergeSegmentsPlaceLineTool extends PlaceLineTool {
     const {disablePicking} = displayState;
     this.registerDisposer(inProgressAnnotation.changed.add(() => {
       disablePicking.value = inProgressAnnotation.value !== undefined;
-      console.log("set disablePicking", disablePicking.value)
     }));
   }
   get annotationLayer() {
@@ -1824,18 +1848,22 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       event.stopPropagation();
       submitAction();
     });
-
-
+    body.appendChild(makeIcon({
+      text: 'Clear',
+      title: 'Clear pending merges',
+      onClick: () => {
+        merges.value = [];
+      }
+    }));
     const checkbox = activation.registerDisposer(new TrackableBooleanCheckbox(autoSubmit));
     const label = document.createElement('label');
     label.appendChild(document.createTextNode('auto-submit'));
-    label.title =
-        'auto-submit merges';
+    label.title = 'auto-submit merges';
     label.appendChild(checkbox.element);
     body.appendChild(label);
     const points = document.createElement('div');
     points.classList.add('graphene-merge-segments-merges');
-    body.appendChild(points)
+    body.appendChild(points);
 
     const segmentWidgetFactory = SegmentWidgetFactory.make(this.layer.displayState, /*includeUnmapped=*/ true);
     const makeWidget = (id: Uint64MapEntry) => {
