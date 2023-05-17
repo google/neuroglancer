@@ -4,6 +4,7 @@ import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
 import { registerPositionWidgetTool } from './neuroglancer/widget/registerPositionWidgetTools';
 export {makeLayer} from "neuroglancer/layer"
 import {disableContextMenu, disableWheel} from 'neuroglancer/ui/disable_default_actions';
+export {insertDimensionAt} from "neuroglancer/coordinate_transform"
 export {DEFAULT_FRAGMENT_MAIN} from "neuroglancer/sliceview/volume/image_renderlayer"
 
 import "neuroglancer/datasource/precomputed/register_default"
