@@ -2,7 +2,7 @@
   "name": "@niaid/neuroglancer",
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
-  "version": "2.20.0",
+  "version": "2.21.0",
   "main": "dist/module/main_module.js",
   "repository": {
     "type": "git",
