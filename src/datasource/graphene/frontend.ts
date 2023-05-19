@@ -2488,7 +2488,11 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
         text: "Clear",
         title: "Clear pending merges",
         onClick: () => {
-          merges.value = [];
+          for (const merge of merges.value) {
+            if (!merge.locked) {
+              graphConnection.deleteMergeSubmission(merge);
+            }
+          }
         },
       }),
     );
