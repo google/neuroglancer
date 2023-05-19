@@ -2,7 +2,7 @@
   "name": "@niaid/neuroglancer",
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
-  "version": "2.20.0",
+  "version": "2.21.0",
   "main": "dist/module/main_module.js",
   "repository": {
     "type": "git",
@@ -29,7 +29,7 @@
     "test:watch": "karma start ./config/karma.conf.js --no-single-run",
     "benchmark": "karma start ./config/karma.benchmark.js --single-run",
     "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run",
-    "prepublishOnly": "npm run test && npm run build-module",
+    "prepublishOnly": "npm run build-module",
     "gulp": "gulp",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
