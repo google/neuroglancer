@@ -117,6 +117,7 @@ async function main(argv) {
     define: argv.define,
     inject: argv.inject,
     googleTagManager: argv.googleTagManager,
+    analyze: argv.analyze,
   });
   if (moduleBuild) {
     try {
@@ -150,6 +151,11 @@ if (require.main === module) {
               nargs: 1,
               choices: ['min', 'dev', 'python-min', 'python-dev', 'module'],
               default: 'min',
+            },
+            analyze: {
+              type: 'boolean',
+              default: false,
+              description: 'Print bundle analysis.',
             },
             typecheck: {
               type: 'boolean',
