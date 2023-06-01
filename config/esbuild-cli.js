@@ -81,9 +81,11 @@ async function main(argv) {
   let minify = true;
   let python = false;
   let moduleBuild = false;
-  let outDir = undefined;
+  let outDir = argv.output;
   let id = argv.config;
-  const pythonOutDir = path.resolve(__dirname, '..', 'python', 'neuroglancer', 'static');
+  const pythonOutDir = argv.output !== undefined ?
+      argv.output :
+      path.resolve(__dirname, '..', 'python', 'neuroglancer', 'static');
 
   switch (id) {
     case 'min':
@@ -119,7 +121,7 @@ async function main(argv) {
     googleTagManager: argv.googleTagManager,
     analyze: argv.analyze,
   });
-  if (moduleBuild) {
+  if (moduleBuild && argv.output === undefined) {
     try {
       if ((await fs.promises.lstat(builder.outDir)).isDirectory()) {
         await fs.promises.rmdir(builder.outDir, {recursive: true});
@@ -204,6 +206,11 @@ if (require.main === module) {
               config: true,
               description: 'Additional JSON/JavaScript config file to load.',
               configParser: x => mungeConfig(require(x)),
+            },
+            output: {
+              type: 'string',
+              nargs: 1,
+              description: 'Output directory.',
             },
             ['google-tag-manager']: {
               group: 'Customization',
