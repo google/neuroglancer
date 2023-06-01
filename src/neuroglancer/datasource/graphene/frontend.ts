@@ -34,12 +34,14 @@ import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayer, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {augmentSegmentId, resetTemporaryVisibleSegmentsState, SegmentationDisplayState3D, SegmentationLayerSharedObject, SegmentWidgetFactory, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
-import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
+import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab} from 'neuroglancer/segmentation_graph/source';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
+import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeCachedLazyDerivedWatchableValue, NestedStateManager, registerNested, TrackableValue, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {AnnotationLayerView, MergedAnnotationStates, PlaceLineTool} from 'neuroglancer/ui/annotations';
 import {LayerTool, makeToolActivationStatusMessageWithHeader, makeToolButton, registerLegacyTool, registerTool, ToolActivation} from 'neuroglancer/ui/tool';
@@ -56,10 +58,9 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
 import {makeIcon} from 'neuroglancer/widget/icon';
-import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 
 function vec4FromVec3(vec: vec3, alpha = 0) {
   const res = vec4.clone([...vec]);

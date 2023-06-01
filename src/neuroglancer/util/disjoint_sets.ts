@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
 import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 
 const rankSymbol = Symbol('disjoint_sets:rank');
 const parentSymbol = Symbol('disjoint_sets:parent');

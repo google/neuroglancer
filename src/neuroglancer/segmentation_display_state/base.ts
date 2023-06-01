@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
-import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;

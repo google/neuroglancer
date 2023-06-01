@@ -17,11 +17,11 @@
 import './segment_split_merge_tools.css';
 
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, registerCallbackWhenSegmentationDisplayStateChanged, resetTemporaryVisibleSegmentsState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
-import {isBaseSegmentId, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {isBaseSegmentId, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
-import {makeToolActivationStatusMessageWithHeader, registerTool, LayerTool, ToolActivation} from 'neuroglancer/ui/tool';
+import {LayerTool, makeToolActivationStatusMessageWithHeader, registerTool, ToolActivation} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {EventActionMap} from 'neuroglancer/util/keyboard_bindings';
