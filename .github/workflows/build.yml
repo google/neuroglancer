@@ -27,11 +27,11 @@ jobs:
     - name: Typecheck with TypeScript
       run: npm run typecheck
     - name: Build client bundles
-      run: npm run build --no-typecheck
+      run: npm run build -- --no-typecheck
     - name: Build JavaScript module
-      run: npm run build-module --no-typecheck
+      run: npm run build-module -- --no-typecheck
     - name: Build Python client bundles
-      run: npm run build-python --no-typecheck
+      run: npm run build-python -- --no-typecheck
     - uses: ./.github/actions/setup-firefox
     - name: Run JavaScript tests (including WebGL)
       # Swiftshader, used by Chrome headless, crashes when running Neuroglancer
@@ -157,7 +157,10 @@ jobs:
         path: ${{ steps.pip-cache.outputs.dir }}
         key: ${{ runner.os }}-buildwheel-${{ hashFiles('setup.py') }}
     - run: npm install
-    - run: npm run build-python -- --no-typecheck
+    - run: |
+        build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
+        npm run build-python -- --no-typecheck --define NEUROGLANCER_BUILD_INFO="${build_info}"
+      shell: bash
     - name: Check for dirty working directory
       run: git diff --exit-code
     - name: Build Python source distribution (sdist)
