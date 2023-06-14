@@ -1531,11 +1531,11 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         segmentsToAdd.push(submission.mergedRoot);
       }
     }
+    const latestRoots =
+      await this.graph.graphServer.filterLatestRoots(segmentsToAdd);
     const segmentsState = this.layer.displayState.segmentationGroupState.value;
     const { visibleSegments, selectedSegments } = segmentsState;
     selectedSegments.delete(segmentsToRemove);
-    const latestRoots =
-      await this.graph.graphServer.filterLatestRoots(segmentsToAdd);
     this.meshAddNewSegments(latestRoots);
     selectedSegments.add(latestRoots);
     visibleSegments.add(latestRoots);
