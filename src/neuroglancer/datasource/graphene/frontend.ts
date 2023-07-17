@@ -61,8 +61,6 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
 import {makeIcon} from 'neuroglancer/widget/icon';
-import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 
 function vec4FromVec3(vec: vec3, alpha = 0) {
