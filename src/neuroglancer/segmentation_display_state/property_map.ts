@@ -16,6 +16,7 @@
 
 import {ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {IndexedSegmentProperty} from 'neuroglancer/segmentation_display_state/base';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mergeSequences, TypedArray, TypedArrayConstructor, WritableArrayLike} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -1063,9 +1064,34 @@ export function forEachQueryResultSegmentId(
   }
 }
 
+export function* forEachQueryResultSegmentIdGenerator(
+    db: PreprocessedSegmentPropertyMap|undefined, queryResult: QueryResult|undefined, safe = false): IterableIterator<Uint64> {
+  if (queryResult === undefined) return;
+  const {explicitIds} = queryResult;
+  if (explicitIds !== undefined) {
+    for (let id of explicitIds) {
+      yield id;
+    }
+  }
+  const {indices} = queryResult;
+  if (indices !== undefined) {
+    const {ids} = db?.segmentPropertyMap.inlineProperties!;
+    for (let i = 0, count = indices.length; i < count; ++i) {
+      const propIndex = indices[i];
+      if (safe) {
+        yield new Uint64(ids[propIndex * 2], ids[propIndex * 2 + 1]);
+      } else {
+        tempUint64.low = ids[propIndex * 2];
+        tempUint64.high = ids[propIndex * 2 + 1];
+        yield tempUint64;
+      }
+    }
+  }
+}
+
 export function findQueryResultIntersectionSize(
     db: PreprocessedSegmentPropertyMap|undefined, queryResult: QueryResult|undefined,
-    segmentSet: Uint64Set): number {
+    segmentSet: Uint64Set|Uint64OrderedSet): number {
   if (segmentSet.size === 0) return 0;
   let count = 0;
   forEachQueryResultSegmentId(db, queryResult, id => {

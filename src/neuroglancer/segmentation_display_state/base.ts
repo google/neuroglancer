@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  selectedSegments: Uint64OrderedSet;
   segmentEquivalences: SharedDisjointUint64Sets;
 
   // Specifies a temporary/alternative set of segments/equivalences to use for display purposes,
@@ -33,14 +35,14 @@ export interface VisibleSegmentsState {
   useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
 }
 
-export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
+export const VISIBLE_SEGMENTS_STATE_PROPERTIES = [
   'visibleSegments',
   'segmentEquivalences',
   'temporaryVisibleSegments',
   'temporarySegmentEquivalences',
   'useTemporaryVisibleSegments',
   'useTemporarySegmentEquivalences',
-];
+] as const;
 
 export function onVisibleSegmentsStateChanged(
     context: RefCounted, state: VisibleSegmentsState, callback: () => void) {

@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {parseArray} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
-import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
 
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';

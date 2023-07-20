@@ -21,7 +21,7 @@
 .neuroglancer-segment-list {
   position: relative;
   overflow-y: auto;
-  overflow-x: scroll;
+  overflow-x: auto;
   flex: 1;
 }
 
@@ -94,21 +94,16 @@
   visibility: visible;
 }
 
-.neuroglancer-segment-list-entry-visible-checkbox {
-  order: -1;
+.neuroglancer-segment-list .neuroglancer-segment-list-entry:not(:hover) .neuroglancer-star-icon:not(.neuroglancer-starred) {
+  visibility: hidden;
 }
 
-.neuroglancer-segment-list-entry[data-visible-list] .neuroglancer-segment-list-entry-sticky::before {
-  order: -1000;
-  content: " ";
-  display: inline-block;
-  width: 2px;
-  /* prevent collapsing if name is too long */
-  flex-shrink: 0;
-  margin-right: -2px;
-  align-self: stretch;
-  margin-bottom: 2px;
-  background-color: #999;
+.neuroglancer-segment-list .neuroglancer-segment-list-entry:not(:hover) .neuroglancer-eye-icon:not(.neuroglancer-visible) {
+  visibility: hidden;
+}
+
+.neuroglancer-segment-list-entry-visible-checkbox {
+  order: 1;
 }
 
 .neuroglancer-segment-list-entry-filter {
@@ -163,7 +158,7 @@
 
 .neuroglancer-segment-query-result-statistics {
   background-color: #333;
-  max-height: 40%;
+  max-height: 30%;
   flex-shrink: 0;
   overflow: auto;
 }
@@ -296,4 +291,9 @@
 
 .neuroglancer-segment-list-header .neuroglancer-segment-list-entry-extra-property {
   text-align: center;
+}
+
+.neuroglancer-segment-list-status-message {
+  overflow: hidden;
+  white-space: nowrap;
 }

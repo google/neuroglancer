@@ -16,7 +16,7 @@
 
 import './channel_dimensions_widget.css';
 
-import {CoordinateSpace, CoordinateSpaceCombiner, DimensionId, insertDimensionAt} from 'neuroglancer/coordinate_transform';
+import {CoordinateSpace, CoordinateSpaceCombiner, DimensionId, getDisplayLowerUpperBounds, insertDimensionAt} from 'neuroglancer/coordinate_transform';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -199,14 +199,15 @@ export class ChannelDimensionsWidget extends RefCounted {
     const dimensionWidgets = this.dimensionWidgets = coordinateSpace.ids.map(
         id => oldDimensionWidgets.find(x => x.id === id) || this.makeNewDimensionWidget(id));
     function* getChildren(this: ChannelDimensionsWidget) {
-      const {names, rank, bounds: {lowerBounds, upperBounds}} = coordinateSpace;
+      const {names, rank, bounds} = coordinateSpace;
       for (let i = 0; i < rank; ++i) {
         const widget = dimensionWidgets[i];
         widget.nameElement.value = names[i];
         delete widget.nameElement.dataset.isValid;
         updateInputFieldWidth(widget.nameElement);
-        widget.lowerElement.textContent = lowerBounds[i].toString();
-        widget.upperElement.textContent = upperBounds[i].toString();
+        const [lower, upper] = getDisplayLowerUpperBounds(bounds, i);
+        widget.lowerElement.textContent = lower.toString();
+        widget.upperElement.textContent = upper.toString();
         yield widget.element;
       }
     }

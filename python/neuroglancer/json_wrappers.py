@@ -322,6 +322,32 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
     return Map
 
 
+def segments():
+    key_type = np.uint64
+    value_type = bool
+    value_validator = _normalize_validator(value_type, None)
+
+    class Map(typed_map(key_type, value_type)):
+        def to_json(self):
+            return [segment if visible else "!" + segment for segment, visible in self._json_data.items()]
+
+        def __init__(self, json_data=None, _readonly=False):
+            if json_data is None:
+                json_data = dict()
+            else:
+                json_data = dict(
+                    (key_type(v[1:]), False) if str(v).startswith('!') else (key_type(v), True)
+                    for v in json_data)
+            super(Map, self).__init__(json_data, _readonly=_readonly)
+
+        def __setitem__(self, key, value):
+            key = str(key)
+            with self._lock:
+                self._set_wrapped(key, value, value_validator)
+                self._json_data[key] = value # using the value
+
+    return Map
+
 def typed_set(wrapped_type):
     def wrapper(x, _readonly=False):
         set_type = frozenset if _readonly else set

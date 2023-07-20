@@ -15,14 +15,15 @@
  */
 
 import debounce from 'lodash/debounce';
-import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
+import {ComputedSplit, SegmentationGraphSource, SegmentationGraphSourceConnection} from 'neuroglancer/segmentation_graph/source';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {parseArray} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 
 export class LocalSegmentationGraphSource extends SegmentationGraphSource {
   spanningTreeEdges = new Map<string, Set<string>>();
@@ -179,9 +180,10 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     removeSplitEdges(includeBaseSegments, includeRoot);
     removeSplitEdges(excludeBaseSegments, excludeRoot);
     for (const connection of this.connections) {
-      const {visibleSegments} = connection.segmentsState;
-      if (visibleSegments.has(excludeRepresentative)) {
-        visibleSegments.delete(excludeRepresentative);
+      const {selectedSegments, visibleSegments} = connection.segmentsState;
+      if (selectedSegments.has(excludeRepresentative)) {
+        selectedSegments.delete(excludeRepresentative);
+        selectedSegments.add(includeRepresentative);
         visibleSegments.add(includeRepresentative);
       }
     }

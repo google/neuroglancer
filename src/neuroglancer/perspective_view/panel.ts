@@ -40,6 +40,7 @@ import {DepthStencilRenderbuffer, FramebufferConfiguration, makeTextureBuffers, 
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {MultipleScaleBarTextures, ScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {PerspectiveViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -458,6 +459,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
 
     let gl = this.gl;
+    const disablePicking = () => {
+      gl.drawBuffers(this.offscreenFramebuffer.singleAttachmentList);
+    };
     const bindFramebuffer = () => {
       this.offscreenFramebuffer.bind(width, height);
     };
@@ -570,7 +574,14 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isAnnotation) {
-          renderLayer.draw(renderContext, attachment);
+          const annotationRenderLayer = renderLayer as PerspectiveViewAnnotationLayer;
+          if (annotationRenderLayer.base.state.displayState.disablePicking.value) {
+            disablePicking();
+            annotationRenderLayer.draw(renderContext, attachment);
+            renderContext.bindFramebuffer();
+          } else {
+            annotationRenderLayer.draw(renderContext, attachment);
+          }
         }
       }
       gl.depthFunc(WebGL2RenderingContext.LESS);

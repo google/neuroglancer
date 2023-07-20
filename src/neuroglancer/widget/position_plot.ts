@@ -16,7 +16,7 @@
 
 import './position_plot.css';
 
-import {computeCombinedLowerUpperBound, CoordinateSpace, DimensionId} from 'neuroglancer/coordinate_transform';
+import {computeCombinedLowerUpperBound, CoordinateSpace, DimensionId, getDisplayLowerUpperBounds} from 'neuroglancer/coordinate_transform';
 import {Position} from 'neuroglancer/navigation_state';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
@@ -41,12 +41,7 @@ function getNormalizedDimensionBounds(
     coordinateSpace: CoordinateSpace, dimensionIndex: number,
     height: number): NormalizedDimensionBounds|undefined {
   const {boundingBoxes, bounds} = coordinateSpace;
-  let lowerBound = bounds.lowerBounds[dimensionIndex];
-  let upperBound = bounds.upperBounds[dimensionIndex];
-  if (bounds.voxelCenterAtIntegerCoordinates[dimensionIndex]) {
-    lowerBound += 0.5;
-    upperBound += 0.5;
-  }
+  let [lowerBound, upperBound] = getDisplayLowerUpperBounds(bounds, dimensionIndex);
   lowerBound = Math.floor(lowerBound);
   upperBound = Math.floor(upperBound - 1);
   if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound)) {

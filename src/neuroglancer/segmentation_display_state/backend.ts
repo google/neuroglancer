@@ -27,6 +27,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {AnyConstructor} from 'neuroglancer/util/mixin';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 
 export function receiveVisibleSegmentsState(
     rpc: RPC, options: any,
@@ -43,6 +44,7 @@ export const withSegmentationLayerBackendState =
     <TBase extends AnyConstructor<ChunkRequester>>(Base: TBase) =>
         class SegmentationLayerState extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  selectedSegments: Uint64OrderedSet;
   segmentEquivalences: SharedDisjointUint64Sets;
   temporaryVisibleSegments: Uint64Set;
   temporarySegmentEquivalences: SharedDisjointUint64Sets;

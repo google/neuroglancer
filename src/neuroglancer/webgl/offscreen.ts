@@ -165,9 +165,9 @@ export class FramebufferConfiguration<
   colorBuffers: ColorBuffer[];
   framebuffer: Framebuffer;
   depthBuffer: DepthBuffer|undefined;
-  private fullAttachmentList = new Array<number>();
+  fullAttachmentList = new Array<number>();
   private attachmentVerified = false;
-  private singleAttachmentList = [this.gl.COLOR_ATTACHMENT0];
+  singleAttachmentList = [this.gl.COLOR_ATTACHMENT0];
 
   constructor(public gl: GL, configuration: {
     framebuffer?: Framebuffer, colorBuffers: ColorBuffer[],

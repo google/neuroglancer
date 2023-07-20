@@ -64,11 +64,19 @@ export interface VirtualListSource {
 }
 
 class RenderParameters {
+  // Index of first item to render.
   startIndex: number = 0;
+  // Index one past the last item to render.
   endIndex: number = 0;
+  // Index of anchor element.
   anchorIndex: number = 0;
+  // Offset in pixels from the start of the scrollable content area to the start of the anchor item.
   anchorOffset: number = 0;
+  // Offset in pixels from the start of the scrollable content area to the start of the scroll
+  // viewport.
   scrollOffset: number = 0;
+  // Width of viewport in pixels.
+  viewportWidth: number = 0;
 }
 
 class SizeEstimates {
@@ -93,7 +101,7 @@ class SizeEstimates {
   }
 
   getEstimatedSize(index: number) {
-    return this.itemSize[index] ??this.averageSize;
+    return this.itemSize[index] ?? this.averageSize;
   }
 
   getEstimatedTotalSize() {
@@ -193,7 +201,7 @@ function updateRenderParameters(
       }
     }
 
-    // Update renderAnchorIndex and renderAnchorPixel
+    // Update renderAnchorIndex and renderAnchorOffset
     renderAnchorIndex = anchorIndex;
     renderAnchorOffset = anchorOffset;
     for (; renderAnchorIndex < renderStartIndex; ++renderAnchorIndex) {
@@ -220,7 +228,8 @@ function normalizeRenderParams(p: RenderParameters, sizes: SizeEstimates) {
 }
 
 function rerenderNeeded(newParams: RenderParameters, prevParams: RenderParameters) {
-  return newParams.startIndex < prevParams.startIndex || newParams.endIndex > prevParams.endIndex;
+  return newParams.startIndex < prevParams.startIndex || newParams.endIndex > prevParams.endIndex ||
+      (newParams.viewportWidth !== 0) && (prevParams.viewportWidth === 0);
 }
 
 export class VirtualList extends RefCounted {
@@ -311,11 +320,8 @@ export class VirtualList extends RefCounted {
 
   private updateView() {
     const {element} = this;
-    if (element.offsetHeight === 0) {
-      // Element not visible
-      return;
-    }
     const viewportHeight = element.clientHeight - this.header.offsetHeight;
+    const viewportWidth = element.clientWidth;
 
     const {source, state, sizes} = this;
     const numItems = source.length;
@@ -328,6 +334,7 @@ export class VirtualList extends RefCounted {
       const prevRenderParams = this.renderParams;
       updateRenderParameters(
           renderParams, prevRenderParams, numItems, viewportHeight, sizes, state);
+      renderParams.viewportWidth = viewportWidth;
       let forceRender: boolean;
       if ((renderChanged !== undefined && renderChanged.count !== this.renderGeneration) ||
           (changed !== undefined && changed.count !== this.listGeneration)) {
@@ -387,7 +394,7 @@ export class VirtualList extends RefCounted {
     state.anchorIndex = renderParams.anchorIndex;
     state.anchorClientOffset = renderParams.anchorOffset - renderParams.scrollOffset;
     const topSize = sizes.getRangeSize(renderParams.startIndex, renderParams.anchorIndex);
-    const totalHeight = sizes.getEstimatedTotalSize();
+    const totalHeight = sizes.getEstimatedTotalSize() || 0;
     body.style.height = `${totalHeight}px`;
     topItems.style.top = `${renderParams.anchorOffset - topSize}px`;
     bottomItems.style.top = `${renderParams.anchorOffset}px`;

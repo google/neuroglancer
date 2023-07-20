@@ -109,6 +109,7 @@ export class AnnotationDisplayState extends RefCounted {
   color = new TrackableRGB(vec3.fromValues(1, 1, 0));
   relationshipStates = this.registerDisposer(new WatchableAnnotationRelationshipStates());
   ignoreNullSegmentFilter = new TrackableBoolean(true);
+  disablePicking = new WatchableValue(false);
   displayUnfiltered = makeCachedLazyDerivedWatchableValue((map, ignoreNullSegmentFilter) => {
     for (const state of map.values()) {
       if (state.showMatches.value) {

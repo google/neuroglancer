@@ -32,7 +32,11 @@ export class DependentViewWidget<T> extends RefCounted {
   private generation = -1;
   private currentViewDisposer: RefCounted|undefined = undefined;
   private debouncedUpdateView =
-      this.registerCancellable(animationFrameDebounce(() => this.updateView()));
+    this.registerCancellable(animationFrameDebounce(() => this.updateView()));
+  private debouncedForceUpdateView = () => {
+    this.generation = -1;
+    this.debouncedUpdateView();
+  };
 
   constructor(
       public model: WatchableValueInterface<T>,
@@ -58,7 +62,7 @@ export class DependentViewWidget<T> extends RefCounted {
     if (generation === this.generation) return;
     this.disposeCurrentView();
     const currentViewDisposer = this.currentViewDisposer =
-        new DependentViewContext(this.debouncedUpdateView);
+        new DependentViewContext(this.debouncedForceUpdateView);
     this.render(model.value, this.element, currentViewDisposer);
     this.generation = generation;
   }
