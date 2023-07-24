@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2019 Google Inc.
+ * Copyright 2023 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,9 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {asyncComputation} from 'neuroglancer/async_computation';
-import {DecodedImage} from './decode_png_request';
 
-export const decodeJpeg = asyncComputation<
-    (data: Uint8Array, width: number|undefined, height: number|undefined, numComponents: number|undefined,
-     convertToGrayscale: boolean) => DecodedImage>('decodeJpeg');
+import './eye_button.css';
+
+import svg_eye_crossed from 'ikonate/icons/eye-crossed.svg';
+import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
+
+export function makeEyeButton(options: MakeIconOptions = {}) {
+  const icon = makeIcon({svg: svg_eye_crossed, ...options});
+  icon.classList.add('neuroglancer-eye-icon');
+  return icon;
+}

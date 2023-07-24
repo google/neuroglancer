@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2019 Google Inc.
+ * Copyright 2016 Google Inc., 2023 Gergely Csucs
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,9 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {asyncComputation} from 'neuroglancer/async_computation';
-import {DecodedImage} from './decode_png_request';
 
-export const decodeJpeg = asyncComputation<
-    (data: Uint8Array, width: number|undefined, height: number|undefined, numComponents: number|undefined,
-     convertToGrayscale: boolean) => DecodedImage>('decodeJpeg');
+export enum ImageTileEncoding {
+  JPG,
+  JPEG,
+  PNG
+}
+
+export class ImageTileSourceParameters {
+  url: string;
+  encoding: ImageTileEncoding;
+  format: string;
+  tilesize: number;
+  overlap: number;
+
+  static RPC_ID = 'deepzoom/ImageTileSource';
+}

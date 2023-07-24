@@ -92,6 +92,11 @@
   display: flex;
 }
 
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-header .neuroglancer-segment-list-entry-star,
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-header:hover .neuroglancer-segment-list-entry-copy {
+  visibility: hidden;
+}
+
 .neuroglancer-segment-list-entry-extra-property {
   padding-left: 8px;
   flex-shrink: 0;

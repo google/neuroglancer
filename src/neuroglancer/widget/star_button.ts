@@ -13,9 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {asyncComputation} from 'neuroglancer/async_computation';
-import {DecodedImage} from './decode_png_request';
 
-export const decodeJpeg = asyncComputation<
-    (data: Uint8Array, width: number|undefined, height: number|undefined, numComponents: number|undefined,
-     convertToGrayscale: boolean) => DecodedImage>('decodeJpeg');
+import './star_button.css';
+
+import svg_star from 'ikonate/icons/star.svg';
+import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
+
+export function makeStarButton(options: MakeIconOptions = {}) {
+  const icon = makeIcon({svg: svg_star, ...options});
+  icon.classList.add('neuroglancer-star-icon');
+  return icon;
+}

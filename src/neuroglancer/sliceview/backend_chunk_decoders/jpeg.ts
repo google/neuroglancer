@@ -23,7 +23,7 @@ import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 export async function decodeJpegChunk(
     chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
   const chunkDataSize = chunk.chunkDataSize!;
-  const decoded = await requestAsyncComputation(
+  const {uint8Array: decoded} = await requestAsyncComputation(
       decodeJpeg, cancellationToken, [response], new Uint8Array(response), chunkDataSize[0],
       chunkDataSize[1] * chunkDataSize[2], chunkDataSize[3] || 1, false);
   await postProcessRawData(chunk, cancellationToken, decoded);

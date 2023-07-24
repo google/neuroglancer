@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CoordinateSpace, DimensionId, dimensionNamesFromJson, emptyInvalidCoordinateSpace, getBoundingBoxCenter, getCenterBound} from 'neuroglancer/coordinate_transform';
+import {clampAndRoundCoordinateToVoxelCenter, CoordinateSpace, DimensionId, dimensionNamesFromJson, emptyInvalidCoordinateSpace, getBoundingBoxCenter, getCenterBound} from 'neuroglancer/coordinate_transform';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -1534,24 +1534,13 @@ export class DisplayPose extends RefCounted {
     }
     const {position} = this;
     const {value: voxelCoordinates} = position;
-    const {bounds: {lowerBounds, upperBounds}} = position.coordinateSpace.value;
-    let newValue = voxelCoordinates[dimensionIndex] + adjustment;
-    if (adjustment > 0) {
-      const bound = upperBounds[dimensionIndex];
-      if (Number.isFinite(bound)) {
-        newValue = Math.min(newValue, bound - 1);
-      }
-    } else {
-      const bound = lowerBounds[dimensionIndex];
-      if (Number.isFinite(bound)) {
-        newValue = Math.max(newValue, bound);
-      }
-    }
-    voxelCoordinates[dimensionIndex] = newValue;
+    const {bounds} = position.coordinateSpace.value;
+    voxelCoordinates[dimensionIndex] = clampAndRoundCoordinateToVoxelCenter(
+        bounds, dimensionIndex, voxelCoordinates[dimensionIndex] + adjustment);
     position.changed.dispatch();
   }
 
-  translateVoxelsRelative(translation: vec3, round: boolean = false) {
+  translateVoxelsRelative(translation: vec3) {
     if (!this.valid) {
       return;
     }
@@ -1559,32 +1548,13 @@ export class DisplayPose extends RefCounted {
     const {position} = this;
     const {value: voxelCoordinates} = position;
     const {displayDimensionIndices, displayRank} = this.displayDimensions.value;
-    const {bounds: {lowerBounds, upperBounds, voxelCenterAtIntegerCoordinates}} =
-        position.coordinateSpace.value;
+    const {bounds} = position.coordinateSpace.value;
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
       const adjustment = temp[i];
       if (adjustment === 0) continue;
-      let newValue = voxelCoordinates[dim] + adjustment;
-      if (adjustment > 0) {
-        const bound = upperBounds[dim];
-        if (Number.isFinite(bound)) {
-          newValue = Math.min(newValue, bound - 1);
-        }
-      } else {
-        const bound = lowerBounds[dim];
-        if (Number.isFinite(bound)) {
-          newValue = Math.max(newValue, bound);
-        }
-      }
-      if (round) {
-        if (voxelCenterAtIntegerCoordinates[dim]) {
-          newValue = Math.round(newValue);
-        } else {
-          newValue = Math.floor(newValue) + 0.5;
-        }
-      }
-      voxelCoordinates[dim] = newValue;
+      voxelCoordinates[dim] =
+          clampAndRoundCoordinateToVoxelCenter(bounds, dim, voxelCoordinates[dim] + adjustment);
     }
     this.position.changed.dispatch();
   }

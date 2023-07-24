@@ -344,6 +344,38 @@ export function getMergeSplices<T>(
   return splices;
 }
 
+export function getFixedOrderMergeSplices<T>(
+    oldArray: readonly T[], newArray: readonly T[],
+    equal: (a: T, b: T) => boolean): ArraySpliceOp[] {
+  const splices: ArraySpliceOp[] = [];
+  let oldIndex = 0, newIndex = 0, oldCount = oldArray.length, newCount = newArray.length;
+  while (oldIndex < oldCount) {
+    let retainCount = 0;
+    while (oldIndex < oldCount && newIndex < newCount &&
+           equal(oldArray[oldIndex], newArray[newIndex])) {
+      ++retainCount;
+      ++oldIndex;
+      ++newIndex;
+    }
+    if (retainCount !== 0) {
+      splices.push({retainCount, deleteCount: 0, insertCount: 0});
+    }
+    let deleteCount = 0;
+    while (oldIndex < oldCount &&
+           (newIndex == newCount || !equal(oldArray[oldIndex], newArray[newIndex]))) {
+      ++deleteCount;
+      ++oldIndex;
+    }
+    if (deleteCount !== 0) {
+      splices.push({retainCount: 0, deleteCount, insertCount: 0});
+    }
+  }
+  if (newIndex !== newCount) {
+    splices.push({retainCount: 0, deleteCount: 0, insertCount: newCount - newIndex});
+  }
+  return splices;
+}
+
 export function mergeSequences(
     aCount: number, bCount: number, compare: (a: number, b: number) => number,
     aCallback: (a: number) => void, bCallback: (b: number) => void,

@@ -15,8 +15,15 @@
  */
 import {asyncComputation} from 'neuroglancer/async_computation';
 
+export interface DecodedImage {
+    width: number;
+    height: number;
+    numComponents: number;
+    uint8Array: Uint8Array;
+}
+
 export const decodePng = asyncComputation<( 
-    data: Uint8Array, width: number, height: number, 
-    numComponents: number, bytesPerPixel:number, 
+    data: Uint8Array, width: number|undefined, height: number|undefined, 
+    numComponents: number|undefined, bytesPerPixel:number, 
     convertToGrayscale: boolean
-) => Uint8Array>('decodePng');
+) => DecodedImage>('decodePng');

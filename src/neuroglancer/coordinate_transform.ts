@@ -292,6 +292,49 @@ export interface CoordinateSpaceBounds extends BoundingBox {
   voxelCenterAtIntegerCoordinates: boolean[];
 }
 
+export function roundCoordinateToVoxelCenter(
+    bounds: CoordinateSpaceBounds, dimIndex: number, coordinate: number) {
+  if (bounds.voxelCenterAtIntegerCoordinates[dimIndex]) {
+    coordinate = Math.round(coordinate);
+  } else {
+    coordinate = Math.floor(coordinate) + 0.5;
+  }
+  return coordinate;
+}
+
+export function getDisplayLowerUpperBounds(bounds: CoordinateSpaceBounds, dimIndex: number) {
+  let lower = bounds.lowerBounds[dimIndex];
+  let upper = bounds.upperBounds[dimIndex];
+  if (bounds.voxelCenterAtIntegerCoordinates[dimIndex]) {
+    lower += 0.5;
+    upper += 0.5;
+  }
+  return [lower, upper];
+}
+
+// Clamps `coordinate` to `[lower, upper - 1]`.  This is intended to be used with
+// `roundCoordinateToVoxelCenter`.  If not rounding, it may be desirable to instead
+// clamp to `[lower upper]`.
+export function clampCoordinateToBounds(
+    bounds: CoordinateSpaceBounds, dimIndex: number, coordinate: number) {
+  const upperBound = bounds.upperBounds[dimIndex];
+  if (Number.isFinite(upperBound)) {
+    coordinate = Math.min(coordinate, upperBound-1);
+  }
+
+  const lowerBound = bounds.lowerBounds[dimIndex];
+  if (Number.isFinite(lowerBound)) {
+    coordinate = Math.max(coordinate, lowerBound);
+  }
+  return coordinate;
+}
+
+export function clampAndRoundCoordinateToVoxelCenter(
+    bounds: CoordinateSpaceBounds, dimIndex: number, coordinate: number): number {
+  coordinate = clampCoordinateToBounds(bounds, dimIndex, coordinate);
+  return roundCoordinateToVoxelCenter(bounds, dimIndex, coordinate);
+}
+
 export function getCenterBound(lower: number, upper: number) {
   let x = (lower + upper) / 2;
   if (!Number.isFinite(x)) x = Math.min(Math.max(0, lower), upper);

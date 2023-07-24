@@ -27,7 +27,8 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationColorGroupState, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {getPreprocessedSegmentPropertyMap, PreprocessedSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {LocalSegmentationGraphSource} from 'neuroglancer/segmentation_graph/local';
-import {SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab, VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/source';
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
+import {SegmentationGraphSource, SegmentationGraphSourceConnection, SegmentationGraphSourceTab} from 'neuroglancer/segmentation_graph/source';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
@@ -40,9 +41,11 @@ import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {IndirectTrackableValue, IndirectWatchableValue, makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNestedSync, TrackableValue, TrackableValueInterface, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {SegmentDisplayTab} from 'neuroglancer/ui/segment_list';
+import {registerSegmentSelectTools} from 'neuroglancer/ui/segment_select_tools';
 import {registerSegmentSplitMergeTools} from 'neuroglancer/ui/segment_split_merge_tools';
 import {DisplayOptionsTab} from 'neuroglancer/ui/segmentation_display_options_tab';
 import {Uint64Map} from 'neuroglancer/uint64_map';
+import {Uint64OrderedSet} from 'neuroglancer/uint64_ordered_set';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {packColor, parseRGBColorSpecification, serializeColor, TrackableOptionalRGB, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -59,7 +62,6 @@ import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
 import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
-import {registerSegmentSelectTools} from 'neuroglancer/ui/segment_select_tools';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -93,9 +95,28 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {specificationChanged} = this;
-    this.visibleSegments.changed.add(specificationChanged.dispatch);
     this.hideSegmentZero.changed.add(specificationChanged.dispatch);
     this.segmentQuery.changed.add(specificationChanged.dispatch);
+
+    const {visibleSegments, selectedSegments} = this;
+    visibleSegments.changed.add(specificationChanged.dispatch);
+    selectedSegments.changed.add(specificationChanged.dispatch);
+    selectedSegments.changed.add((x, add) => {
+      if (!add) {
+        if (x) {
+          visibleSegments.delete(x);
+        } else {
+          visibleSegments.clear();
+        }
+      }
+    });
+    visibleSegments.changed.add((x, add) => {
+      if (add) {
+        if (x) {
+          selectedSegments.add(x);
+        }
+      }
+    });
   }
 
   restoreState(specification: unknown) {
@@ -107,10 +128,19 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
     });
 
     verifyOptionalObjectProperty(specification, SEGMENTS_JSON_KEY, segmentsValue => {
-      const {segmentEquivalences, visibleSegments} = this;
+      const {segmentEquivalences, selectedSegments, visibleSegments} = this;
       parseArray(segmentsValue, value => {
-        let id = Uint64.parseString(String(value), 10);
-        visibleSegments.add(segmentEquivalences.get(id));
+        let stringValue = String(value);
+        const hidden = stringValue.startsWith('!');
+        if (hidden) {
+          stringValue = stringValue.substring(1);
+        }
+        const id = Uint64.parseString(stringValue, 10);
+        const segmentId = segmentEquivalences.get(id);
+        selectedSegments.add(segmentId);
+        if (!hidden) {
+          visibleSegments.add(segmentId);
+        }
       });
     });
     verifyOptionalObjectProperty(
@@ -120,9 +150,17 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   toJSON() {
     const x: any = {};
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.hideSegmentZero.toJSON();
-    let {visibleSegments} = this;
-    if (visibleSegments.size > 0) {
-      x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
+    let {selectedSegments, visibleSegments} = this;
+    if (selectedSegments.size > 0) {
+      x[SEGMENTS_JSON_KEY] = [...selectedSegments].map(segment => {
+        if (visibleSegments.has(segment)) {
+          return segment.toString();
+        } else {
+          return '!' + segment.toString();
+        }
+      });
+    } else {
+      x[SEGMENTS_JSON_KEY] = [];
     }
     let {segmentEquivalences} = this;
     if (this.localSegmentEquivalences && segmentEquivalences.size > 0) {
@@ -135,12 +173,15 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   assignFrom(other: SegmentationUserLayerGroupState) {
     this.maxIdLength.value = other.maxIdLength.value;
     this.hideSegmentZero.value = other.hideSegmentZero.value;
+    this.selectedSegments.assignFrom(other.selectedSegments);
     this.visibleSegments.assignFrom(other.visibleSegments);
     this.segmentEquivalences.assignFrom(other.segmentEquivalences);
   }
 
   localGraph = new LocalSegmentationGraphSource();
   visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
+  selectedSegments = this.registerDisposer(new Uint64OrderedSet());
+
   segmentPropertyMap = new WatchableValue<PreprocessedSegmentPropertyMap|undefined>(undefined);
   graph = new WatchableValue<SegmentationGraphSource|undefined>(undefined);
   segmentEquivalences = this.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(
@@ -687,19 +728,21 @@ export class SegmentationUserLayer extends Base {
         this.displayState.segmentationGroupState.value.visibleSegments.clear();
         break;
       }
-      case 'select': {
+      case 'select':
+      case 'star': {
         if (!this.pick.value) break;
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
-          const {visibleSegments} = this.displayState.segmentationGroupState.value;
-          const newVisible = !visibleSegments.has(segment);
-          if (newVisible || context.segmentationToggleSegmentState === undefined) {
-            context.segmentationToggleSegmentState = newVisible;
+          const group = this.displayState.segmentationGroupState.value;
+          const segmentSet = action === 'select' ? group.visibleSegments : group.selectedSegments;
+          const newValue = !segmentSet.has(segment);
+          if (newValue || context.segmentationToggleSegmentState === undefined) {
+            context.segmentationToggleSegmentState = newValue;
           }
           context.defer(() => {
-            if (context.segmentationToggleSegmentState === newVisible) {
-              visibleSegments.set(segment, newVisible);
+            if (context.segmentationToggleSegmentState === newValue) {
+              segmentSet.set(segment, newValue);
             }
           });
         }

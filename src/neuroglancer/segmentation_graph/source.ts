@@ -14,23 +14,17 @@
  * limitations under the License.
  */
 
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {RenderLayer} from 'neuroglancer/renderlayer';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {SegmentationDisplayState3D} from 'neuroglancer/segmentation_display_state/frontend';
+import {VisibleSegmentEquivalencePolicy} from 'neuroglancer/segmentation_graph/segment_id';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RenderLayer } from 'neuroglancer/renderlayer';
-import { ChunkManager } from 'neuroglancer/chunk_manager/frontend';
-import { SegmentationDisplayState3D } from 'neuroglancer/segmentation_display_state/frontend';
-import { SegmentationUserLayer } from 'neuroglancer/segmentation_user_layer';
-import { DependentViewContext, DependentViewWidget } from 'neuroglancer/widget/dependent_view_widget';
-import { Tab } from 'neuroglancer/widget/tab_view';
-
-export enum VisibleSegmentEquivalencePolicy {
-  MIN_REPRESENTATIVE = 0, // defafult, representative elmement is the minimum element in equivalence set
-  MAX_REPRESENTATIVE = 1, // representative elmement is the maximum element in equivalence set
-  REPRESENTATIVE_EXCLUDED = 1 << 1, // filter out the representative element when iterating over visible segments
-  NONREPRESENTATIVE_EXCLUDED = 1 << 2, // filter out non representative elements when iterating over visible segments
-}
+import {DependentViewContext, DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
+import {Tab} from 'neuroglancer/widget/tab_view';
 
 export class SegmentationGraphSourceTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {
@@ -126,10 +120,3 @@ export function trackWatchableValueSegment(
   };
   return disposer;
 }
-
-// Returns `true` if `segmentId` is a base segment id, rather than a segment id added to the graph.
-export function isBaseSegmentId(segmentId: Uint64) {
-  return (segmentId.high >>> 31) ? false : true;
-}
-
-export const UNKNOWN_NEW_SEGMENT_ID = new Uint64(0xffffffff, 0xffffffff);

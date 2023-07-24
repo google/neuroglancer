@@ -71,6 +71,7 @@ class Builder {
       inject = [],
       minify = true,
       googleTagManager = undefined,
+      analyze = false,
     } = options;
     this.outDir = outDir;
     this.cacheId = id;
@@ -87,6 +88,7 @@ class Builder {
     this.define = define;
     this.inject = inject;
     this.googleTagManager = googleTagManager;
+    this.analyze = analyze;
   }
 
   // Deletes .js/.css/.html files from `this.outDir`.  Can safely be used on
@@ -190,12 +192,16 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           path.resolve(this.srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
           path.resolve(this.outDir, 'bossauth.html'));
     }
-    await esbuild.build({
+    const result = await esbuild.build({
       ...this.getBaseEsbuildConfig(),
       entryPoints: [this.getMainEntrypoint(), ...this.getWorkerEntrypoints()],
       bundle: true,
       sourcemap: true,
+      metafile: true,
     });
+    if (this.analyze) {
+      console.log(await esbuild.analyzeMetafile(result.metafile));
+    }
   }
 
   async buildModule() {

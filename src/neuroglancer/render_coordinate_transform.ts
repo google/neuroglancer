@@ -212,13 +212,23 @@ export function getRenderLayerTransform(
         subspaceRank + 1);
   }
   const channelSpaceShape = new Uint32Array(channelRank);
+  const {
+    lowerBounds: channelLowerBounds,
+    upperBounds: channelUpperBounds,
+    voxelCenterAtIntegerCoordinates: channelVoxelCenterAtIntegerCoordinates
+  } = channelCoordinateSpace.bounds;
   for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
-    const lower = channelCoordinateSpace.bounds.lowerBounds[channelDim];
-    const upper = channelCoordinateSpace.bounds.upperBounds[channelDim];
+    let lower = channelLowerBounds[channelDim];
+    let upper = channelUpperBounds[channelDim];
+    if (channelVoxelCenterAtIntegerCoordinates[channelDim]) {
+      lower += 0.5;
+      upper += 0.5;
+    }
     if (lower !== 0 || !Number.isInteger(upper) || upper <= 0 || upper >= 2 ** 32) {
       return {
         error: `Channel dimension ${channelCoordinateSpace.names[channelDim]} must have ` +
-            `lower bound of 0 and positive integer upper bound`,
+            `lower bound of 0 and positive integer upper bound; current bounds are [${lower}, ${
+                   upper}]`,
       };
     }
     channelSpaceShape[channelDim] = upper;
@@ -476,10 +486,11 @@ export function getChunkTransformParameters(
         correspondingChunkDim = chunkDim;
       }
       if (correspondingChunkDim !== -1) {
-        if (chunkToLayerTransform[layerDim + layerRank * (layerRank + 1)] !== 0) {
+        const offset = chunkToLayerTransform[layerDim + layerRank * (layerRank + 1)];
+        if (offset !== 0 && offset !== -0.5) {
           throw new Error(
               `Channel dimension ${modelTransform.layerDimensionNames[layerDim]} ` +
-              `must have an offset of 0 in the chunk coordinate space`);
+              `must have an offset of 0 in the chunk coordinate space; current offset is ${offset}`);
         }
         chunkChannelDimensionIndices.push(correspondingChunkDim);
       }

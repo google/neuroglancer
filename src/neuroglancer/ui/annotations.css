@@ -277,10 +277,6 @@ input.neuroglancer-segment-list-entry-id {
   visibility: hidden;
 }
 
-.neuroglancer-segment-list-entry-delete {
-  order: 0;
-}
-
 .neuroglancer-selection-annotation-status {
   font-family: sans-serif;
   font-size: small;
