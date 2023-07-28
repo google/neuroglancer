@@ -326,6 +326,7 @@ void setEndpointMarkerSize(float startSize, float endSize);
 void setEndpointMarkerBorderWidth(float startSize, float endSize);
 
 void setPointMarkerColor(vec4 color);
+void setPointMarkerColor(vec3 color) { setPointMarkerColor(vec4(color, 1.0)); }
 void setPointMarkerBorderColor(vec4 color);
 void setPointMarkerSize(float size);
 void setPointMarkerBorderWidth(float size);
