@@ -26,7 +26,7 @@ specifying the coordinate labels starting at 0.  For example:
   "compression": {"type": "raw"},
   "axes": ["x", "y", "c"],
   "coordinateArrays": {
-    "c": ["A", "B', "C', "D', "E"]
+    "c": ["A", "B", "C", "D", "E"]
   }
 }
 ```
