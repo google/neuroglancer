@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Google oauth redirect</title>
+        <script>
+          const data = Object.fromEntries(new URLSearchParams(location.hash.substring(1)).entries());
+          const target = window.opener || window.parent;
+          if (target === window) {
+            console.error('No opener/parent to receive successful oauth2 response');
+          } else {
+            target.postMessage(data, window.location.origin);
+          }
+        </script>
+    </head>
+    <body>
+        <p>Google authentication successful.</p>
+        <p><button onclick="window.close()">Close</button></p>
+    </body>
+</html>
