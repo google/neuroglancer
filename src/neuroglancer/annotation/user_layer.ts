@@ -135,9 +135,11 @@ class LinkedSegmentationLayers extends RefCounted {
       state.seenGeneration = generation;
     }
     if (!isLoading) {
+      const {relationshipStates} = this.annotationDisplayState;
       for (const [relationship, state] of map) {
         if (state.seenGeneration !== generation) {
           map.delete(relationship);
+          relationshipStates.delete(relationship);
           changed = true;
         }
       }
