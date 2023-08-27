@@ -18,7 +18,7 @@
  * @file Defines facilities for GPU computation of empirical cumulative distribution functions.
  *
  * This is based on the technique described in
- * https://developer.amd.com/wordpress/media/2012/10/GPUHistogramGeneration_preprint.pdf
+ * http://shaderwrangler.com/publications/histogram/
  *
  * In particular, the "scatter" operation required to compute a histogram is performed by
  * rendering point primitives.
@@ -90,7 +90,9 @@ const histogramSamplesPerInstance = 4096;
 // of the histogram but also slows down rendering.
 const histogramSamples = 2 ** 14;
 
-// Generates a histogram from a single-channel uint8 texture.
+/**
+ * Generates a histogram from a single-channel uint8 texture.
+ */
 export class TextureHistogramGenerator extends RefCounted {
   private shader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
