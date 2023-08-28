@@ -66,10 +66,10 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
       const value = this.getTargetValue(mouseEvent);
       if (value === undefined) return;
       const clampedRange = getClampedInterval(bounds.window, bounds.range);
-      const endpoint = getClosestEndpoint(clampedRange, value);
+      const endpointIndex = getClosestEndpoint(clampedRange, value);
       const setEndpoint = (value: number|Uint64) => {
         const bounds = this.getModel();
-        this.setModel(getUpdatedRangeAndWindowParameters(bounds, 'range', endpoint, value));
+        this.setModel(getUpdatedRangeAndWindowParameters(bounds, 'range', endpointIndex, value));
       };
       setEndpoint(value);
       startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
@@ -86,6 +86,7 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
       const mouseEvent = actionEvent.detail;
       const initialRelativeX = this.getTargetFraction(mouseEvent);
       const initialValue = this.getWindowLerp(initialRelativeX);
+      // Index for bound being adjusted
       const endpointIndex = (initialRelativeX < 0.5) ? 0 : 1;
       const setEndpoint = (value: number|Uint64) => {
         const bounds = this.getModel();
@@ -126,11 +127,19 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
     });
   }
 
+  /**
+   * Get fraction of distance in x along bounding rect for a MouseEvent.
+   */
   getTargetFraction(event: MouseEvent) {
     const clientRect = this.element.getBoundingClientRect();
     return (event.clientX - clientRect.left) / clientRect.width;
   }
 
+  /**
+   * Interpolate a value along the model interval.
+   * @param relativeX Relative x coordinate within the interval.
+   * @returns Interpolated value.
+   */
   getWindowLerp(relativeX: number) {
     return computeLerp(this.getModel().window, this.dataType, relativeX);
   }
@@ -144,21 +153,36 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
 
 const histogramSamplerTextureUnit = Symbol('histogramSamplerTexture');
 
+/**
+ * An interval with coordinates `range` and endpoint values `window`.
+ * Can be thought of representing associated intervals in x (range) and y (window).
+ */
 export interface RangeAndWindowIntervals {
   range: DataTypeInterval;
   window: DataTypeInterval;
 }
 
+/**
+ * Update the value of one endpoint, and return new interval.
+ * @param existingBounds Initial bounds.
+ * @param boundType 'range' to update endpoint coordinates, 'window' to update endpoint values.
+ * @param endpointIndex Index of bound to update.
+ * @param newEndpoint New value of bound being updated.
+ * @param fitRangeInWindow
+ * @returns New bounds.
+ */
 export function getUpdatedRangeAndWindowParameters<T extends RangeAndWindowIntervals>(
     existingBounds: T, boundType: 'range'|'window', endpointIndex: number,
     newEndpoint: number|Uint64, fitRangeInWindow = false): T {
   const newBounds = {...existingBounds};
   const existingInterval = existingBounds[boundType];
   newBounds[boundType] = [existingInterval[0], existingInterval[1]] as DataTypeInterval;
+  // Update bound
   newBounds[boundType][endpointIndex] = newEndpoint;
   if (boundType === 'window' &&
       dataTypeCompare(newEndpoint, existingInterval[1 - endpointIndex]) * (2 * endpointIndex - 1) <
           0) {
+    // If new endpoint has gone past other bound, adjust other bound to match
     newBounds[boundType][1 - endpointIndex] = newEndpoint;
   }
   if (boundType === 'range' && fitRangeInWindow) {
@@ -180,6 +204,9 @@ export function getUpdatedRangeAndWindowParameters<T extends RangeAndWindowInter
 const NUM_HISTOGRAM_BINS_IN_RANGE = 254;
 const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
 
+/**
+   * Panel that shows Cumulative Distribution Function (CDF) of visible data.
+   */
 class CdfPanel extends IndirectRenderedPanel {
   get drawOrder() {
     return 100;

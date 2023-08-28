@@ -34,6 +34,12 @@ export const defaultDataTypeRange: Record<DataType, DataTypeInterval> = {
   [DataType.FLOAT32]: [0, 1],
 };
 
+/**
+ * Compute inverse linear interpolation on the interval [0, 1].
+ * @param range Values at start and end of interval.
+ * @param value Value to interpolate at.
+ * @returns Coordinate of interpolated point.
+ */
 export function computeInvlerp(range: DataTypeInterval, value: number|Uint64): number {
   if (typeof value === 'number') {
     const minValue = range[0] as number;
@@ -54,6 +60,13 @@ export function computeInvlerp(range: DataTypeInterval, value: number|Uint64): n
   }
 }
 
+/**
+ * Compute linear interpolation on the interval [0, 1].
+ * @param range Values at start and end of interval.
+ * @param dataType
+ * @param value Coordinate to interpolate at.
+ * @returns Interpolated value.
+ */
 export function computeLerp(range: DataTypeInterval, dataType: DataType, value: number): number|
     Uint64 {
   if (typeof range[0] === 'number') {
