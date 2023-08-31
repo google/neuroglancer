@@ -25,6 +25,7 @@ SETTINGS = {
     'ALLOW_MEMORY_GROWTH': '1',
     'TOTAL_STACK': '32768',
     'TOTAL_MEMORY': '65536',
+    'MAXIMUM_MEMORY': '4GB',
     'EXPORTED_FUNCTIONS': '["_neuroglancer_draco_decode","_malloc"]',
     'MALLOC': 'emmalloc',
     'ENVIRONMENT': 'worker',
