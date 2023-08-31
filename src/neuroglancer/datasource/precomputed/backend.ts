@@ -538,7 +538,7 @@ async function decodeMultiscaleFragmentChunk(
   const source = chunk.manifestChunk!.source! as PrecomputedMultiscaleMeshSource;
   const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
   const rawMesh = await m.decodeDracoPartitioned(
-      new Uint8Array(response), source.parameters.metadata.vertexQuantizationBits, lod !== 0);
+      new Uint8Array(response), source.parameters.metadata.vertexQuantizationBits, lod !== 0, true);
   assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
 }
 

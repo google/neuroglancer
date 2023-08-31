@@ -134,7 +134,7 @@ export function getDesiredMultiscaleMeshChunks(
     const size = 1 << lod;
     const rowOffset = row * 5;
     const gridX = octree[rowOffset], gridY = octree[rowOffset + 1], gridZ = octree[rowOffset + 2],
-          childBegin = octree[rowOffset + 3], childEndAndEmpty = octree[rowOffset + 4];
+          childBeginAndVirtual = octree[rowOffset + 3], childEndAndEmpty = octree[rowOffset + 4];
     let xLower = gridX * size * chunkShape[0] + chunkGridSpatialOrigin[0],
         yLower = gridY * size * chunkShape[1] + chunkGridSpatialOrigin[1],
         zLower = gridZ * size * chunkShape[2] + chunkGridSpatialOrigin[2];
@@ -152,13 +152,18 @@ export function getDesiredMultiscaleMeshChunks(
       const pixelSize = minW / scaleFactor;
 
       if (priorLodScale === 0 || pixelSize * detailCutoff < priorLodScale) {
-        const lodScale = lodScales[lod];
+        let lodScale = lodScales[lod];
+        if ((childBeginAndVirtual & (1 << 31)) !== 0) {
+          lodScale = 0;
+        }
+
         if (lodScale !== 0) {
           callback(lod, row, lodScale / pixelSize, (childEndAndEmpty >>> 31));
         }
 
         if (lod > 0 && (lodScale === 0 || pixelSize * detailCutoff < lodScale)) {
           const nextPriorLodScale = lodScale === 0 ? priorLodScale : lodScale;
+          const childBegin = (childBeginAndVirtual & 0x7FFFFFFF) >>> 0;
           const childEnd = (childEndAndEmpty & 0x7FFFFFFF) >>> 0;
           for (let childRow = childBegin; childRow < childEnd; ++childRow) {
             handleChunk(lod - 1, childRow, nextPriorLodScale);

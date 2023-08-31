@@ -24,12 +24,12 @@ import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, ChunkedGraphSourceParameters, getGrapheneFragmentKey, isBaseSegmentId, makeChunkedGraphChunkSpecification, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, ChunkedGraphSourceParameters, getGrapheneFragmentKey, isBaseSegmentId, makeChunkedGraphChunkSpecification, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, responseIdentity, MultiscaleMeshSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource, resolvePath} from 'neuroglancer/datasource/precomputed/frontend';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayer, RenderLayerRole} from 'neuroglancer/renderlayer';
@@ -61,6 +61,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
 import {makeIcon} from 'neuroglancer/widget/icon';
+import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 
 function vec4FromVec3(vec: vec3, alpha = 0) {
   const res = vec4.clone([...vec]);
@@ -87,6 +88,9 @@ class GrapheneMeshSource extends
     return getGrapheneFragmentKey(fragmentId);
   }
 }
+
+class GrapheneMultiscaleMeshSource extends
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MultiscaleMeshSource), MultiscaleMeshSourceParameters)) {}
 
 class AppInfo {
   segmentationUrl: string;
@@ -311,17 +315,43 @@ async function getMeshSource(
     url: string, fragmentUrl: string, nBitsForLayerId: number) {
   const {metadata, segmentPropertyMap} =
       await getMeshMetadata(chunkManager, undefined, fragmentUrl);
-  const parameters: MeshSourceParameters = {
+  if (metadata === undefined) {
+    throw new Error('Mesh metadata is missing');
+  }
+
+  if (metadata.lodScaleMultiplier === 0) {
+    const parameters: MeshSourceParameters = {
+      manifestUrl: url,
+      fragmentUrl: fragmentUrl,
+      lod: 0,
+      sharding: metadata.sharding,
+      nBitsForLayerId,
+    };
+    const transform = metadata?.transform || mat4.create();
+    return {
+      source: getShardedMeshSource(chunkManager, parameters, credentialsProvider),
+      transform,
+      segmentPropertyMap,
+    };
+  }
+
+  const parameters: MultiscaleMeshSourceParameters = {
     manifestUrl: url,
     fragmentUrl: fragmentUrl,
-    lod: 0,
-    sharding: metadata?.sharding,
-    nBitsForLayerId,
+    metadata: metadata,
+    sharding: metadata.sharding,
+    nBitsForLayerId: nBitsForLayerId,
   };
-  const transform = metadata?.transform || mat4.create();
   return {
-    source: getShardedMeshSource(chunkManager, parameters, credentialsProvider),
-    transform,
+    source: chunkManager.getChunkSource(GrapheneMultiscaleMeshSource, {
+      credentialsProvider,
+      parameters: parameters,
+      format: {
+        fragmentRelativeVertices: false,
+        vertexPositionFormat: VertexPositionFormat.float32,
+      }
+    }),
+    transform: metadata.transform,
     segmentPropertyMap,
   };
 }
@@ -1478,7 +1508,7 @@ const synchronizeAnnotationSource = (source: WatchableSet<SegmentSelection>, sta
 
   annotationSource.childDeleted.add(annotationId => {
     const selection = [...source].find(selection => selection.annotationReference?.id === annotationId)
-    if (selection) source.delete(selection); 
+    if (selection) source.delete(selection);
   });
 
   const addSelection = (selection: SegmentSelection) => {
