@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from .server import set_static_content_source, set_server_bind_address, is_server_running, stop
 from .viewer import Viewer, UnsynchronizedViewer
 from .local_volume import LocalVolume
+from .local_multiscale_volume import LocalMultiscaleVolume
 from .viewer_state import *
 from .viewer_config_state import LayerSelectedValues, LayerSelectionState, SegmentIdMapEntry, PrefetchState, ScaleBarOptions
 from .equivalence_map import EquivalenceMap
