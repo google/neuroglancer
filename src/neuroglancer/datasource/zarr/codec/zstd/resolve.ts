@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2020 Google Inc.
+ * Copyright 2023 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,7 +14,17 @@
  * limitations under the License.
  */
 
-// Re-export just the blosc codec to allow for a smaller bundle when dynamically importing this
-// module.
+import {CodecKind} from 'neuroglancer/datasource/zarr/codec';
+import {registerCodec} from 'neuroglancer/datasource/zarr/codec/resolve';
+import {verifyObject} from 'neuroglancer/util/json';
 
-export {Blosc} from 'numcodecs';
+export interface Configuration {}
+
+registerCodec({
+  name: 'zstd',
+  kind: CodecKind.bytesToBytes,
+  resolve(configuration: unknown): {configuration: Configuration} {
+    verifyObject(configuration);
+    return {configuration: {}};
+  },
+});

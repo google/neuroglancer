@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2020 Google Inc.
+ * Copyright 2023 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,12 +14,17 @@
  * limitations under the License.
  */
 
-import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
-import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
+import {CodecKind} from 'neuroglancer/datasource/zarr/codec';
+import {registerCodec} from 'neuroglancer/datasource/zarr/codec/resolve';
+import {verifyObject} from 'neuroglancer/util/json';
 
-registerAsyncComputation(decodeBlosc, async function(data: Uint8Array) {
-  const {default: Blosc} = await import(/*webpackChunkName: "blosc" */ 'numcodecs/blosc');
-  const codec = Blosc.fromConfig({id: 'blosc'});
-  const result = await codec.decode(data);
-  return {value: result, transfer: [result.buffer]};
+export interface Configuration {}
+
+registerCodec({
+  name: 'blosc',
+  kind: CodecKind.bytesToBytes,
+  resolve(configuration: unknown): {configuration: Configuration} {
+    verifyObject(configuration);
+    return {configuration: {}};
+  },
 });

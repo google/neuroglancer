@@ -14,61 +14,70 @@
  * limitations under the License.
  */
 
-import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
-import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
-import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
+import 'neuroglancer/datasource/zarr/codec/blosc/decode';
+import 'neuroglancer/datasource/zarr/codec/zstd/decode';
+import 'neuroglancer/datasource/zarr/codec/bytes/decode';
+import 'neuroglancer/datasource/zarr/codec/crc32c/decode';
+import 'neuroglancer/datasource/zarr/codec/gzip/decode';
+import 'neuroglancer/datasource/zarr/codec/sharding_indexed/decode';
+import 'neuroglancer/datasource/zarr/codec/transpose/decode';
+
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {VolumeChunkSourceParameters, ZarrCompressor, ZarrEncoding} from 'neuroglancer/datasource/zarr/base';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/zarr/base';
+import {applySharding, decodeArray} from 'neuroglancer/datasource/zarr/codec/decode';
+import {ChunkKeyEncoding} from 'neuroglancer/datasource/zarr/metadata';
+import {getSpecialProtocolKvStore} from 'neuroglancer/kvstore/special';
+import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {isNotFoundError, responseArrayBuffer} from 'neuroglancer/util/http_request';
-import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
+import {SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
-async function decodeChunk(
-    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer,
-    encoding: ZarrEncoding) {
-  let buffer = new Uint8Array(response);
-  switch (encoding.compressor) {
-    case ZarrCompressor.GZIP:
-      buffer =
-          await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
-      break;
-    case ZarrCompressor.RAW:
-      break;
-    case ZarrCompressor.BLOSC:
-      buffer =
-          await requestAsyncComputation(decodeBlosc, cancellationToken, [buffer.buffer], buffer);
-  }
-  await decodeRawChunk(chunk, cancellationToken, buffer.buffer, encoding.endianness);
-}
-
-
-@registerSharedObject() export class PrecomputedVolumeChunkSource extends
+@registerSharedObject() export class ZarrVolumeChunkSource extends
 (WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {
+  private chunkKvStore = applySharding(
+      this.chunkManager, this.parameters.metadata.codecs,
+      getSpecialProtocolKvStore(this.credentialsProvider, this.parameters.url + '/'));
+
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const {parameters} = this;
     const {chunkGridPosition} = chunk;
-    let {url, separator, order} = parameters;
+    let {metadata} = parameters;
+    let baseKey = '';
     const rank = this.spec.rank;
-    if (order === 'C') {
-      for (let i = rank; i > 0; --i) {
-        url += `${i == rank ? '/' : separator}${chunkGridPosition[i - 1]}`;
-      }
+    const {physicalToLogicalDimension} = metadata.codecs.layoutInfo[0];
+    let sep: string;
+    if (metadata.chunkKeyEncoding === ChunkKeyEncoding.DEFAULT) {
+      baseKey += 'c';
+      sep = metadata.dimensionSeparator;
     } else {
-      for (let i = 0; i < rank; ++i) {
-        url += `${i == 0 ? '/' : separator}${chunkGridPosition[i]}`;
+      sep = '';
+      if (rank === 0) {
+        baseKey += '0';
       }
     }
-    try {
-      const response = await cancellableFetchSpecialOk(
-          this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
-      await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
-    } catch (e) {
-      if (!isNotFoundError(e)) throw e;
+    const keyCoords = new Array<number>(rank);
+    const {readChunkShape} = metadata.codecs.layoutInfo[0];
+    const {chunkShape} = metadata;
+    for (let fOrderPhysicalDim = 0; fOrderPhysicalDim < rank; ++fOrderPhysicalDim) {
+      const decodedDim = physicalToLogicalDimension[rank - 1 - fOrderPhysicalDim];
+      keyCoords[decodedDim] = Math.floor(
+          chunkGridPosition[fOrderPhysicalDim] * readChunkShape[decodedDim] /
+          chunkShape[decodedDim]);
+    }
+    for (let i = 0; i < rank; ++i) {
+      baseKey += `${sep}${keyCoords[i]}`;
+      sep = metadata.dimensionSeparator;
+    }
+    const {chunkKvStore} = this;
+    const response = await chunkKvStore.kvStore.read(
+      chunkKvStore.getChunkKey(chunkGridPosition, baseKey), {cancellationToken});
+    if (response !== undefined) {
+      const decoded =
+          await decodeArray(chunkKvStore.decodeCodecs, response.data, cancellationToken);
+      await postProcessRawData(chunk, cancellationToken, decoded);
     }
   }
 }
