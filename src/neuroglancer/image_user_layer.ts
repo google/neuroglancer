@@ -28,12 +28,13 @@ import {defineImageLayerShader, getTrackableFragmentMain, ImageRenderLayer} from
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
-import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {verifyPositiveInt, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
@@ -59,6 +60,7 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 const VOLUME_RENDER_SCALE_JSON_KEY = 'volumeRenderScale';
+const VOLUME_RENDER_SAMPLING_JSON_KEY = 'volumeRenderSampling';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -74,7 +76,7 @@ export class ImageUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   volumeRenderingRenderScaleHistogram = new RenderScaleHistogram();
-  // unused
+  // FIXME (skm) unused
   volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(1);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
@@ -84,6 +86,7 @@ export class ImageUserLayer extends Base {
       channelCoordinateSpace => makeValueOrError(() => getChannelSpace(channelCoordinateSpace)),
       this.channelCoordinateSpace));
   volumeRendering = new TrackableBoolean(false, false);
+  volumeRenderingSampling = new TrackableValue<number>(64, verifyPositiveInt)
 
   shaderControlState = this.registerDisposer(new ShaderControlState(
       this.fragmentMain,
@@ -316,6 +319,15 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
                                  histogram: layer.volumeRenderingRenderScaleHistogram,
                                  target: layer.volumeRenderingRenderScaleTarget
                                })),
+  },
+  {
+    label: 'Samples per ray',
+    toolJson: VOLUME_RENDER_SAMPLING_JSON_KEY,
+    isValid: layer => layer.volumeRendering,
+    ...rangeLayerControl(layer => ({
+                          value: layer.volumeRenderingSampling,
+                          options: {min: 1, max: 1024, step: 1}
+                        })),
   },
   {
     label: 'Opacity',
