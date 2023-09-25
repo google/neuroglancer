@@ -42,11 +42,13 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager
 (RenderLayerBackend) {
   localPosition: SharedWatchableValue<Float32Array>;
   renderScaleTarget: SharedWatchableValue<number>;
+  samplesPerRay: SharedWatchableValue<number>;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
     this.localPosition = rpc.get(options.localPosition);
+    this.samplesPerRay = rpc.get(options.samplesPerRay);
     const scheduleUpdateChunkPriorities = () => this.chunkManager.scheduleUpdateChunkPriorities();
     this.registerDisposer(this.localPosition.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
@@ -101,6 +103,7 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager
       chunkManager.registerLayer(this);
       forEachVisibleVolumeRenderingChunk(
           projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+          this.samplesPerRay.value,
           transformedSources[0],
           (tsource, scaleIndex) => {
             const {chunkLayout} = tsource;

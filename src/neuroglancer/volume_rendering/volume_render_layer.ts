@@ -31,7 +31,7 @@ import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
+import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID} from 'neuroglancer/volume_rendering/base';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -55,6 +55,7 @@ export interface VolumeRenderingRenderLayerOptions {
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
+  samplesPerRay: WatchableValueInterface<number>;
 }
 
 const tempMat4 = mat4.create();
@@ -68,6 +69,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
+  samplesPerRay: WatchableValueInterface<number>;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
@@ -95,6 +97,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.localPosition = options.localPosition;
     this.renderScaleTarget = options.renderScaleTarget;
     this.renderScaleHistogram = options.renderScaleHistogram;
+    this.samplesPerRay = options.samplesPerRay;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
     const numChannelDimensions = this.registerDisposer(
         makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
@@ -323,7 +326,7 @@ void main() {
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
     forEachVisibleVolumeRenderingChunk(
-        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, this.samplesPerRay.value,
         allSources[0],
         (transformedSource, _, physicalSpacing, pixelSpacing) => {
           curPhysicalSpacing = physicalSpacing;
@@ -372,14 +375,14 @@ void main() {
           const {near, far, adjustedNear, adjustedFar} = getVolumeRenderingNearFarBounds(
               clippingPlanes, transformedSource.lowerClipDisplayBound,
               transformedSource.upperClipDisplayBound);
-          const step = (adjustedFar - adjustedNear) / (volumeRenderingDepthSamples - 1);
+          const step = (adjustedFar - adjustedNear) / (this.samplesPerRay.value - 1);
           const brightnessFactor = step / (far - near);
           gl.uniform1f(shader.uniform('uBrightnessFactor'), brightnessFactor);
           const nearLimitFraction = (adjustedNear - near) / (far - near);
           const farLimitFraction = (adjustedFar - near) / (far - near);
           gl.uniform1f(shader.uniform('uNearLimitFraction'), nearLimitFraction);
           gl.uniform1f(shader.uniform('uFarLimitFraction'), farLimitFraction);
-          gl.uniform1i(shader.uniform('uMaxSteps'), volumeRenderingDepthSamples);
+          gl.uniform1i(shader.uniform('uMaxSteps'), this.samplesPerRay.value);
           gl.uniform3fv(shader.uniform('uLowerClipBound'), transformedSource.lowerClipDisplayBound);
           gl.uniform3fv(shader.uniform('uUpperClipBound'), transformedSource.upperClipDisplayBound);
         },
@@ -438,7 +441,7 @@ void main() {
     if (allSources.length === 0) return true;
     let missing = false;
     forEachVisibleVolumeRenderingChunk(
-        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, this.samplesPerRay.value,
         allSources[0], () => {}, tsource => {
           const chunk = tsource.source.chunks.get(tsource.curPositionInChunks.join());
           if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {

@@ -23,9 +23,6 @@ export const VOLUME_RENDERING_RENDER_LAYER_RPC_ID = 'volume_rendering/VolumeRend
 export const VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID =
     'volume_rendering/VolumeRenderingRenderLayer/update';
 
-// FIXME: make this variable
-export const volumeRenderingDepthSamples = 64;
-
 const tempMat3 = mat3.create();
 // const tempMat4 = mat4.create();
 // const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
@@ -68,7 +65,7 @@ export function forEachVisibleVolumeRenderingChunk<
     RLayer extends MultiscaleVolumetricDataRenderLayer, Source extends
         VolumeChunkSource, Transformed extends TransformedSource<RLayer, Source>>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
-    renderScaleTarget: number, transformedSources: readonly Transformed[],
+    renderScaleTarget: number, volumeRenderingDepthSamples: number, transformedSources: readonly Transformed[],
     beginScale: (
         source: Transformed, index: number, physicalSpacing: number, pixelSpacing: number,
         clippingPlanes: Float32Array) => void,

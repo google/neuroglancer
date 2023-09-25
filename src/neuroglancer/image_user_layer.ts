@@ -76,7 +76,7 @@ export class ImageUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   volumeRenderingRenderScaleHistogram = new RenderScaleHistogram();
-  // FIXME (skm) unused
+  // unused
   volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(1);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
@@ -86,7 +86,7 @@ export class ImageUserLayer extends Base {
       channelCoordinateSpace => makeValueOrError(() => getChannelSpace(channelCoordinateSpace)),
       this.channelCoordinateSpace));
   volumeRendering = new TrackableBoolean(false, false);
-  volumeRenderingSampling = new TrackableValue<number>(64, verifyPositiveInt)
+  volumeRenderingSamplesPerRay = new TrackableValue<number>(64, verifyPositiveInt)
 
   shaderControlState = this.registerDisposer(new ShaderControlState(
       this.fragmentMain,
@@ -169,6 +169,7 @@ export class ImageUserLayer extends Base {
           transform: loadedSubsource.getRenderLayerTransform(this.channelCoordinateSpace),
           renderScaleTarget: this.volumeRenderingRenderScaleTarget,
           renderScaleHistogram: this.volumeRenderingRenderScaleHistogram,
+          samplesPerRay: this.volumeRenderingSamplesPerRay,
           localPosition: this.localPosition,
           channelCoordinateSpace: this.channelCoordinateSpace,
         }));
@@ -325,7 +326,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     toolJson: VOLUME_RENDER_SAMPLING_JSON_KEY,
     isValid: layer => layer.volumeRendering,
     ...rangeLayerControl(layer => ({
-                          value: layer.volumeRenderingSampling,
+                          value: layer.volumeRenderingSamplesPerRay,
                           options: {min: 1, max: 1024, step: 1}
                         })),
   },
