@@ -16,17 +16,18 @@
 
 import debounce from 'lodash/debounce';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {Chunk, ChunkManager, ChunkRequesterState, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {applyRenderViewportToProjectionMatrix} from 'neuroglancer/display_context';
 import {LayerManager} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
 import {updateProjectionParametersFromInverseViewAndProjection} from 'neuroglancer/projection_parameters';
 import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDisplayTransformParameters, getChunkTransformParameters, getLayerDisplayDimensionMapping, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglancer/renderlayer';
-import {forEachPlaneIntersectingVolumetricChunk, getNormalizedChunkLayout, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
+import {forEachPlaneIntersectingVolumetricChunk, getNormalizedChunkLayout, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REQUEST_CHUNK_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {Borrowed, Disposer, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {kOneVec, kZeroVec4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {MessageList, MessageSeverity} from 'neuroglancer/util/message_list';
@@ -361,7 +362,7 @@ export class SliceView extends Base {
       if (histogramInputTextures.length < count) {
         histogramInputTextures.push(...makeTextureBuffers(
             gl, count - histogramInputTextures.length, WebGL2RenderingContext.R8,
-          WebGL2RenderingContext.RED));
+            WebGL2RenderingContext.RED));
       }
       let colorBuffers = [offscreenFramebuffer.colorBuffers[0].addRef()];
       for (let i = 0; i < count; ++i) {
@@ -476,6 +477,53 @@ export abstract class SliceViewChunkSource<
   initializeCounterpart(rpc: RPC, options: any) {
     options['spec'] = this.spec;
     super.initializeCounterpart(rpc, options);
+  }
+
+
+  // Requests a chunk by its grid position, and returns the result of `transform(chunk)`, where
+  // `transform` is guaranteed to be called while the chunk is present in system memory.
+  //
+  // The `transform` function is used in place of simply returning the chunk, because it is not
+  // possible to guarantee that the chunk remains in system memory by the time the promise resolves.
+  async fetchChunk<T>(
+      chunkGridPosition: Float32Array, transform: (chunk: Chunk) => T,
+      cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
+    const key = chunkGridPosition.join();
+    const existingChunk = this.chunks.get(key);
+    if (existingChunk !== undefined && existingChunk.state <= ChunkState.SYSTEM_MEMORY) {
+      return transform(existingChunk);
+    }
+    this.addRef();
+    let {chunkRequesters} = this;
+    if (chunkRequesters === undefined) {
+      chunkRequesters = this.chunkRequesters = new Map();
+    }
+    let requester: ChunkRequesterState;
+    let entry = chunkRequesters!.get(key);
+    if (entry === undefined) {
+      entry = [];
+      chunkRequesters!.set(key, entry);
+    }
+    const promise = new Promise<T>(resolve => {
+      requester = chunk => resolve(transform(chunk));
+      entry!.push(requester);
+    });
+    try {
+      await this.rpc!.promiseInvoke(
+          SLICEVIEW_REQUEST_CHUNK_RPC_ID, {source: this.rpcId, chunkGridPosition},
+          cancellationToken);
+      return await promise;
+    } finally {
+      const entryIndex = entry.indexOf(requester!);
+      entry.splice(entryIndex, 1);
+      if (entry.length === 0) {
+        chunkRequesters!.delete(key);
+      }
+      if (chunkRequesters.size === 0) {
+        this.chunkRequesters = undefined;
+      }
+      this.dispose();
+    }
   }
 }
 
