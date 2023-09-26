@@ -119,7 +119,6 @@ class ActionState(JsonObjectWrapper):
     screenshot_statistics = screenshotStatistics = wrapped_property('screenshotStatistics',
                                                                     optional(ScreenshotStatistics))
 
-
 class Actions(object):
     def __init__(self, set_config):
         self._action_handlers = dict()
@@ -198,6 +197,31 @@ class ScaleBarOptions(JsonObjectWrapper):
                                                                optional(int, 10))
 
 
+class VolumeInfo(JsonObjectWrapper):
+    __slots__ = ()
+
+    dimensions = wrapped_property('dimensions', viewer_state.CoordinateSpace)
+    order = wrapped_property('order', typed_list(int))
+    data_type = dataType = wrapped_property('dataType', str)
+    chunk_shape = chunkShape = wrapped_property('chunkShape', array_wrapper(np.int64))
+    grid_origin = gridOrigin = wrapped_property('gridOrigin', array_wrapper(np.int64))
+    lower_bound = lowerBound = wrapped_property('lowerBound', array_wrapper(np.int64))
+    upper_bound = upperBound = wrapped_property('upperBound', array_wrapper(np.int64))
+
+    @property
+    def rank(self):
+        return self.dimensions.rank
+
+class VolumeRequest(JsonObjectWrapper):
+    __slots__ = ()
+    id = wrapped_property('id', str)
+    kind = wrapped_property('kind', str)
+    layer = wrapped_property('layer', str)
+    dimensions = wrapped_property('dimensions', optional(viewer_state.CoordinateSpace))
+    volume_info = volumeInfo = wrapped_property('volumeInfo', optional(VolumeInfo))
+    chunk_grid_position = chunkGridPosition = wrapped_property('chunkGridPosition', optional(array_wrapper(np.int64)))
+
+
 class ConfigState(JsonObjectWrapper):
     __slots__ = ()
     credentials = wrapped_property('credentials', typed_string_map(dict))
@@ -224,6 +248,7 @@ class ConfigState(JsonObjectWrapper):
                                                                       optional(bool, True))
     viewer_size = viewerSize = wrapped_property('viewerSize', optional(array_wrapper(np.int64, 2)))
     prefetch = wrapped_property('prefetch', typed_list(PrefetchState))
+    volume_requests = volumeRequests = wrapped_property('volumeRequests', typed_list(VolumeRequest))
 
 
 class PrivateState(JsonObjectWrapper):

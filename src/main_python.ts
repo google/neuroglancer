@@ -30,6 +30,7 @@ import {PrefetchManager} from 'neuroglancer/python_integration/prefetch';
 import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
 import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
 import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
+import {VolumeRequestHandler} from 'neuroglancer/python_integration/volume';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
@@ -117,6 +118,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const screenshotHandler = new ScreenshotHandler(viewer);
   configState.add('screenshot', screenshotHandler.requestState);
 
+  const volumeHandler = new VolumeRequestHandler(viewer);
+  configState.add('volumeRequests', volumeHandler.requestState);
+
   let sharedState: Trackable|undefined = viewer.state;
 
   if (window.location.hash) {
@@ -176,7 +180,13 @@ window.addEventListener('DOMContentLoaded', () => {
   screenshotHandler.sendScreenshotRequested.add(
       state => client.sendActionNotification('screenshot', state));
   screenshotHandler.sendStatisticsRequested.add(
-      state => client.sendActionNotification('screenshotStatistics', state));
+    state => client.sendActionNotification('screenshotStatistics', state));
+
+  volumeHandler.sendVolumeInfoResponseRequested.add(
+      (requestId, info) => client.sendVolumeInfoNotification(requestId, info));
+
+  volumeHandler.sendVolumeChunkResponseRequested.add(
+      (requestId, info) => client.sendVolumeChunkNotification(requestId, info));
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

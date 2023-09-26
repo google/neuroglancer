@@ -41,12 +41,13 @@ def to_json(value):
 
 class JsonObjectWrapper(object):
     supports_readonly = True
+    supports_validation = True
 
     __slots__ = ('_json_data', '_cached_wrappers', '_lock', '_readonly')
 
     def __init__(self, json_data=None, _readonly=False, **kwargs):
         if json_data is None:
-            json_data = collections.OrderedDict()
+            json_data = {}
         elif isinstance(json_data, type(self)):
             json_data = json_data.to_json()
         elif not isinstance(json_data, dict):
@@ -186,7 +187,7 @@ def typed_string_map(wrapped_type, validator=None):
             if isinstance(json_data, MapBase):
                 json_data = json_data.to_json()
             elif json_data is not None:
-                new_map = collections.OrderedDict()
+                new_map = {}
                 for k, v in six.viewitems(json_data):
                     validator(v)
                     new_map[k] = to_json(v)
@@ -257,7 +258,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
             if isinstance(json_data, MapBase):
                 json_data = json_data.to_json()
             elif json_data is not None:
-                new_map = collections.OrderedDict()
+                new_map = {}
                 for k, v in six.viewitems(json_data):
                     key_validator(k)
                     value_validator(v)

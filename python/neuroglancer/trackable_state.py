@@ -120,10 +120,10 @@ class TrackableState(ChangeNotifier):
             if lock:
                 self._lock.release()
 
-    def retry_txn(self, func, retries=10):
+    def retry_txn(self, func, retries=10, lock=False):
         for retry in range(retries):
             try:
-                with self.txn(lock=False) as s:
+                with self.txn(lock=lock) as s:
                     return func(s)
             except ConcurrentModificationError:
                 if retry + 1 < retries:

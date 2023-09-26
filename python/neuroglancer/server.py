@@ -47,6 +47,10 @@ STATIC_PATH_REGEX = r'^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_\-][a-z
 
 ACTION_PATH_REGEX = r'^/action/(?P<viewer_token>[^/]+)$'
 
+VOLUME_INFO_RESPONSE_PATH_REGEX = r'^/volume_response/(?P<viewer_token>[^/]+)/(?P<request_id>[^/]+)/info$'
+
+VOLUME_CHUNK_RESPONSE_PATH_REGEX = r'^/volume_response/(?P<viewer_token>[^/]+)/(?P<request_id>[^/]+)/chunk$'
+
 EVENTS_PATH_REGEX = r'^/events/(?P<viewer_token>[^/]+)$'
 
 SET_STATE_PATH_REGEX = r'^/state/(?P<viewer_token>[^/]+)$'
@@ -104,6 +108,8 @@ class Server(object):
                 (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
                 (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
                 (ACTION_PATH_REGEX, ActionHandler, dict(server=self)),
+                (VOLUME_INFO_RESPONSE_PATH_REGEX, VolumeInfoResponseHandler, dict(server=self)),
+                (VOLUME_CHUNK_RESPONSE_PATH_REGEX, VolumeChunkResponseHandler, dict(server=self)),
                 (EVENTS_PATH_REGEX, EventStreamHandler, dict(server=self)),
                 (SET_STATE_PATH_REGEX, SetStateHandler, dict(server=self)),
                 (CREDENTIALS_PATH_REGEX, CredentialsHandler, dict(server=self)),
@@ -168,6 +174,31 @@ class ActionHandler(BaseRequestHandler):
             return
         action = json.loads(self.request.body)
         self.server.ioloop.add_callback(viewer.actions.invoke, action['action'], action['state'])
+        self.finish('')
+
+
+class VolumeInfoResponseHandler(BaseRequestHandler):
+    def post(self, viewer_token, request_id):
+        viewer = self.server.viewers.get(viewer_token)
+        if viewer is None:
+            self.send_error(404)
+            return
+
+        info = json.loads(self.request.body)
+        self.server.ioloop.add_callback(viewer._handle_volume_info_reply, request_id, info)
+        self.finish('')
+
+
+class VolumeChunkResponseHandler(BaseRequestHandler):
+    def post(self, viewer_token, request_id):
+        viewer = self.server.viewers.get(viewer_token)
+        if viewer is None:
+            self.send_error(404)
+            return
+
+        params = json.loads(self.get_argument('p'))
+        data = self.request.body
+        self.server.ioloop.add_callback(viewer._handle_volume_chunk_reply, request_id, params, data)
         self.finish('')
 
 

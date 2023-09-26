@@ -117,6 +117,8 @@ export class UserLayer extends RefCounted {
 
   selectionState: UserLayerSelectionState;
 
+  messages = new MessageList();
+
   initializeSelectionState(state: this['selectionState']) {
     state.generation = -1;
     state.localPositionValid = false;
@@ -265,6 +267,7 @@ export class UserLayer extends RefCounted {
     this.pick.changed.add(this.layersChanged.dispatch);
     this.dataSourcesChanged.add(this.specificationChanged.dispatch);
     this.dataSourcesChanged.add(() => this.updateDataSubsourceActivations());
+    this.messages.changed.add(this.layersChanged.dispatch);
     this.tabs.add('source', {
       label: 'Source',
       order: -100,

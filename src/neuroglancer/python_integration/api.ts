@@ -34,6 +34,7 @@ function getServerUrls() {
   return {
     socket: `${prefix}/socket/${token}`,
     action: `${prefix}/action/${token}`,
+    volumeInfo: `${prefix}/volume_response/${token}`,
     events: `${prefix}/events/${token}`,
     state: `${prefix}/state/${token}`,
     credentials: `${prefix}/credentials/${token}`,
@@ -212,5 +213,17 @@ export class Client {
 
   sendActionNotification(action: string, state: any) {
     fetch(this.urls.action, {method: 'POST', body: JSON.stringify({action, state})});
+  }
+
+  sendVolumeInfoNotification(requestId: string, info: any) {
+    fetch(
+        `${this.urls.volumeInfo}/${requestId}/info`, {method: 'POST', body: JSON.stringify(info)});
+  }
+
+  sendVolumeChunkNotification(requestId: string, info: any) {
+    const {data, ...params} = info;
+    fetch(
+        `${this.urls.volumeInfo}/${requestId}/chunk?p=${encodeURIComponent(JSON.stringify(params))}`,
+        {method: 'POST', body: data});
   }
 }
