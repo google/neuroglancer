@@ -42,7 +42,6 @@ class GenericSharedDataChunk<Key, Data> extends Chunk {
   decodedKey?: Key;
   data?: Data;
   requesters?: Set<FileDataRequester<Data>>;
-  backendOnly = true;
 
   initialize(key: string) {
     super.initialize(key);
@@ -110,7 +109,7 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
         for (let requester of requesters) {
           const {priorityTier, priority} = requester.getPriority();
           if (priorityTier === ChunkPriorityTier.RECENT) continue;
-          chunkManager.requestChunk(chunk, priorityTier, priority);
+          chunkManager.requestChunk(chunk, priorityTier, priority, ChunkState.SYSTEM_MEMORY_WORKER);
         }
       }
     }
@@ -195,7 +194,6 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
 }
 
 class AsyncCacheChunk<Data> extends Chunk {
-  backendOnly = true;
   promise: Promise<Data>|undefined;
   cancellationSource: MultipleConsumerCancellationTokenSource|undefined;
 

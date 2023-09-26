@@ -229,7 +229,9 @@ export class ChunkQueueManager extends SharedObject {
               visibleChunksChanged = true;
               break;
             case ChunkState.SYSTEM_MEMORY:
-              chunk.freeGPUMemory(this.gl);
+              if (oldState === ChunkState.GPU_MEMORY) {
+                chunk.freeGPUMemory(this.gl);
+              }
               break;
             default:
               throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
