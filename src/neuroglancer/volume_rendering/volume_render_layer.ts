@@ -26,8 +26,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/frontend';
-import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -330,8 +329,8 @@ void main() {
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
     forEachVisibleVolumeRenderingChunk(
-        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, this.samplesPerRay.value,
-        allSources[0],
+        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+        this.samplesPerRay.value, allSources[0],
         (transformedSource, _, physicalSpacing, pixelSpacing) => {
           curPhysicalSpacing = physicalSpacing;
           curPixelSpacing = pixelSpacing;
@@ -445,8 +444,8 @@ void main() {
     if (allSources.length === 0) return true;
     let missing = false;
     forEachVisibleVolumeRenderingChunk(
-        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, this.samplesPerRay.value,
-        allSources[0], () => {}, tsource => {
+        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+        this.samplesPerRay.value, allSources[0], () => {}, tsource => {
           const chunk = tsource.source.chunks.get(tsource.curPositionInChunks.join());
           if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
             missing = true;

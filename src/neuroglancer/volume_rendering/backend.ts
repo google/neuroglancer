@@ -104,8 +104,7 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager
       chunkManager.registerLayer(this);
       forEachVisibleVolumeRenderingChunk(
           projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
-          this.samplesPerRay.value,
-          transformedSources[0],
+          this.samplesPerRay.value, transformedSources[0],
           (tsource, scaleIndex) => {
             const {chunkLayout} = tsource;
             for (let i = 0; i < 3; ++i) {
