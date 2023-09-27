@@ -59,8 +59,8 @@ const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
-const VOLUME_RENDER_SCALE_JSON_KEY = 'volumeRenderScale';
-const VOLUME_RENDER_SAMPLING_JSON_KEY = 'volumeRenderSamplesPerRay';
+const VOLUME_RENDER_SCALE_JSON_KEY = 'volumeRenderingScale';
+const VOLUME_RENDER_SAMPLING_JSON_KEY = 'volumeRenderingSamplesPerRay';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
