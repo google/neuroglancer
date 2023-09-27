@@ -225,6 +225,7 @@ void main() {
     this.registerDisposer(this.renderScaleTarget.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.shaderControlState.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.localPosition.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(this.samplesPerRay.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.transform.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
         this.shaderControlState.fragmentMain.changed.add(this.redrawNeeded.dispatch));
@@ -240,6 +241,9 @@ void main() {
               .rpcId,
       renderScaleTarget:
           this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
+              .rpcId,
+      samplesPerRay:
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.samplesPerRay))
               .rpcId,
     });
     this.backend = sharedObject;

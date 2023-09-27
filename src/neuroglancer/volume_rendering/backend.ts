@@ -52,6 +52,7 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager
     const scheduleUpdateChunkPriorities = () => this.chunkManager.scheduleUpdateChunkPriorities();
     this.registerDisposer(this.localPosition.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
+    this.registerDisposer(this.samplesPerRay.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(
         this.chunkManager.recomputeChunkPriorities.add(() => this.recomputeChunkPriorities()));
   }
