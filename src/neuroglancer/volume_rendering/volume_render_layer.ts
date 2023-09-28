@@ -32,7 +32,8 @@ import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, Wat
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
-import {fragmentExtras, userDefinedFragmentShader, vertexShader, maxProjectionFragmentShader} from 'neuroglancer/volume_rendering/shaders';
+import {fragmentExtras, vertexShader} from 'neuroglancer/volume_rendering/shaders';
+import {TrackableShaderModeValue, SHADER_FUNCTIONS} from 'neuroglancer/volume_rendering/trackable_shader_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -48,14 +49,14 @@ interface VolumeRenderingAttachmentState {
 }
 
 export interface VolumeRenderingRenderLayerOptions {
-  multiscaleSource: MultiscaleVolumeChunkSource;
-  transform: WatchableValueInterface<RenderLayerTransformOrError>;
+  multiscaleSource: MultiscaleVolumeChunkSource; transform: WatchableValueInterface<RenderLayerTransformOrError>;
   shaderError: WatchableShaderError;
   shaderControlState: ShaderControlState;
   channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
+  shaderSelection: TrackableShaderModeValue;
 }
 
 const tempMat4 = mat4.create();
@@ -69,6 +70,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
+  shaderSelection: TrackableShaderModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
@@ -96,6 +98,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.localPosition = options.localPosition;
     this.renderScaleTarget = options.renderScaleTarget;
     this.renderScaleHistogram = options.renderScaleHistogram;
+    this.shaderSelection = options.shaderSelection;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
     const numChannelDimensions = this.registerDisposer(
         makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
@@ -146,9 +149,12 @@ void userMain();
 `);
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(fragmentExtras);
-        // FIXME (skm): allow user to specify fragment shader.
-        userDefinedFragmentShader;
-        builder.setFragmentMainFunction(maxProjectionFragmentShader);
+        const selectedShader = this.shaderSelection.value;
+        const fragmentShader = SHADER_FUNCTIONS.get(selectedShader);
+        if (fragmentShader === undefined) {
+          throw new Error(`Invalid shader selection: ${selectedShader}`);
+        }
+        builder.setFragmentMainFunction(fragmentShader);
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(
