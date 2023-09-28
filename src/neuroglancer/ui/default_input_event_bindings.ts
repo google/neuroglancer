@@ -68,6 +68,8 @@ export function getDefaultAnnotationListBindings() {
         {
           'click0': 'pin-annotation',
           'mousedown2': 'move-to-annotation',
+          'arrowup': 'select-previous-annotation',
+          'arrowdown': 'select-next-annotation',
         },
         {parents: [[getDefaultSelectBindings(), 0]]});
   }
