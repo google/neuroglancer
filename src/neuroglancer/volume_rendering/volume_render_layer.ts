@@ -26,14 +26,13 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/frontend';
-import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
 import {fragmentExtras, vertexShader} from 'neuroglancer/volume_rendering/shaders';
-import {TrackableShaderModeValue, SHADER_FUNCTIONS} from 'neuroglancer/volume_rendering/trackable_shader_mode';
+import {SHADER_FUNCTIONS, TrackableShaderModeValue} from 'neuroglancer/volume_rendering/trackable_shader_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -49,7 +48,8 @@ interface VolumeRenderingAttachmentState {
 }
 
 export interface VolumeRenderingRenderLayerOptions {
-  multiscaleSource: MultiscaleVolumeChunkSource; transform: WatchableValueInterface<RenderLayerTransformOrError>;
+  multiscaleSource: MultiscaleVolumeChunkSource;
+  transform: WatchableValueInterface<RenderLayerTransformOrError>;
   shaderError: WatchableShaderError;
   shaderControlState: ShaderControlState;
   channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
@@ -100,9 +100,9 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.shaderSelection = options.shaderSelection;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
-    // FIXME (skm): This is to get the shader to recompile when the channel coordinate space changes.
-    // However, I'm not sure how to combine that with getting the shader to recompile when the shader selection changes.
-    // const numChannelDimensions = this.registerDisposer(
+    // FIXME (skm): This is to get the shader to recompile when the channel coordinate space
+    // changes. However, I'm not sure how to combine that with getting the shader to recompile when
+    // the shader selection changes. const numChannelDimensions = this.registerDisposer(
     //     makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
