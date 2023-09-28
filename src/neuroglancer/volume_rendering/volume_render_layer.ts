@@ -28,7 +28,7 @@ import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAll
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/frontend';
 import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
@@ -100,15 +100,17 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.shaderSelection = options.shaderSelection;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
-    const numChannelDimensions = this.registerDisposer(
-        makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
+    // FIXME (skm): This is to get the shader to recompile when the channel coordinate space changes.
+    // However, I'm not sure how to combine that with getting the shader to recompile when the shader selection changes.
+    // const numChannelDimensions = this.registerDisposer(
+    //     makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
       getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
       shaderError: options.shaderError,
-      extraParameters: numChannelDimensions,
-      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, numChannelDimensions) => {
+      extraParameters: this.shaderSelection,
+      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, shaderSelection) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
         }
@@ -147,12 +149,13 @@ vec3 curChunkPosition;
 vec4 outputColor;
 void userMain();
 `);
+        // FIXME (skm) : just a hack to get the shader to compile
+        const numChannelDimensions = 1;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(fragmentExtras);
-        const selectedShader = this.shaderSelection.value;
-        const fragmentShader = SHADER_FUNCTIONS.get(selectedShader);
+        const fragmentShader = SHADER_FUNCTIONS.get(shaderSelection);
         if (fragmentShader === undefined) {
-          throw new Error(`Invalid shader selection: ${selectedShader}`);
+          throw new Error(`Invalid shader selection: ${shaderSelection}`);
         }
         builder.setFragmentMainFunction(fragmentShader);
         builder.addFragmentCode(glsl_COLORMAPS);
@@ -168,6 +171,7 @@ void userMain();
     this.registerDisposer(this.shaderControlState.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.localPosition.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.transform.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(this.shaderSelection.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
         this.shaderControlState.fragmentMain.changed.add(this.redrawNeeded.dispatch));
     const {chunkManager} = this.multiscaleSource;
