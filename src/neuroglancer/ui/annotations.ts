@@ -221,8 +221,14 @@ export class AnnotationLayerView extends Tab {
             (annotationId) => this.deleteAnnotationElement(annotationId, state)));
       }
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
+      refCounted.registerDisposer(state.displayState.relationshipStates.changed.add(this.forceUpdateView));
       newAttachedAnnotationStates.set(
           state, {refCounted, annotations: [], idToIndex: new Map(), listOffset: 0});
+      if (source instanceof MultiscaleAnnotationSource) {
+        refCounted.registerDisposer(source.chunkManager.chunkQueueManager.visibleChunksChanged.add(() => {
+          this.forceUpdateView();
+        }));
+      }
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
@@ -538,7 +544,7 @@ export class AnnotationLayerView extends Tab {
       if (!state.source.readonly) isMutable = true;
       if (state.chunkTransform.value.error !== undefined) continue;
       const {source} = state;
-      const annotations = Array.from(source);
+      const annotations = source instanceof MultiscaleAnnotationSource ? source.activeAnnotations(state) : Array.from(source);
       info.annotations = annotations;
       const {idToIndex} = info;
       idToIndex.clear();
@@ -551,8 +557,13 @@ export class AnnotationLayerView extends Tab {
     }
     const oldLength = this.virtualListSource.length;
     this.updateListLength();
+    // TODO, what problems does this change cause?
+    // this prevents the scroll list position from resetting when updateView is run
+    const insertCount = Math.max(0, listElements.length - oldLength);
+    const deleteCount = Math.max(0, oldLength - listElements.length);
+    const retainCount = Math.min(listElements.length, oldLength);
     this.virtualListSource.changed!.dispatch(
-        [{retainCount: 0, deleteCount: oldLength, insertCount: listElements.length}]);
+        [{retainCount, deleteCount, insertCount}]);
     this.mutableControls.style.display = isMutable ? 'contents' : 'none';
     this.resetOnUpdate();
   }

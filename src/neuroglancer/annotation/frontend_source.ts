@@ -18,7 +18,7 @@ import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationProper
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource, SliceViewChunkSourceOptions, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -29,6 +29,8 @@ import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
 
 export interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
   spec: AnnotationGeometryChunkSpecification;
@@ -377,6 +379,37 @@ export function makeTemporaryChunk() {
       {data: new Uint8Array(0), numPickIds: 0, typeToOffset, typeToIds, typeToIdMaps});
 }
 
+export function deserializeAnnotations(
+    serializedAnnotations: SerializedAnnotations,
+    rank: number, properties: Readonly<AnnotationPropertySpec>[]) {
+  const annotations: Annotation[] = [];
+  const annotationBuffer = serializedAnnotations.data;
+  let annotation: Annotation|undefined;
+  for (let [annotationType, annotationsOfType] of serializedAnnotations.typeToIdMaps.entries()) {
+    const handler = annotationTypeHandlers[annotationType as AnnotationType];
+    const numGeometryBytes = handler.serializedBytes(rank);
+    const baseOffset = annotationBuffer.byteOffset;
+    const dataView = new DataView(annotationBuffer.buffer);
+    const isLittleEndian = Endianness.LITTLE === ENDIANNESS;
+    const annotationPropertySerializer =
+        new AnnotationPropertySerializer(rank, numGeometryBytes, properties);
+    const annotationCount = annotationsOfType.size;
+    for (const [annotationId, annotationIndex] of annotationsOfType) {
+      annotation = handler.deserialize(
+          dataView,
+          baseOffset +
+              annotationPropertySerializer.propertyGroupBytes[0] *
+                  annotationIndex,
+          isLittleEndian, rank, annotationId);
+      annotationPropertySerializer.deserialize(
+          dataView, baseOffset, annotationIndex, annotationCount, isLittleEndian,
+          annotation.properties = new Array(properties.length));
+      annotations.push(annotation);
+    }
+  }
+  return annotations;
+}
+
 export class MultiscaleAnnotationSource extends SharedObject implements
     MultiscaleSliceViewChunkSource<AnnotationGeometryChunkSource>, AnnotationSourceSignals {
   OPTIONS: {};
@@ -407,6 +440,44 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       segmentFilteredSources.push(
           this.registerDisposer(new AnnotationSubsetGeometryChunkSource(chunkManager, this, i)));
     }
+  }
+
+  activeAnnotations(state: AnnotationLayerState): Annotation[] {
+    const annotations: Annotation[] = [];
+    const {segmentFilteredSources, spatiallyIndexedSources, rank, properties, relationships} = this;
+    const {relationshipStates} = state.displayState;
+    let hasVisibleSegments = false;
+    for (let i = 0; i < relationships.length; i++) {
+      const relationship = relationships[i];
+      const state = relationshipStates.get(relationship)
+      if (state) {
+        const {showMatches: {value: showMatches}, segmentationState: {value: segmentationState}} = state;
+        if (!showMatches || !segmentationState) continue;
+        const chunks = segmentFilteredSources[i].chunks;
+        forEachVisibleSegment(segmentationState.segmentationGroupState.value, objectId => {
+          hasVisibleSegments = true;
+          const key = getObjectKey(objectId);
+          const chunk = chunks.get(key);
+          if (chunk !== undefined && chunk.state === ChunkState.GPU_MEMORY) {
+              const {data} = chunk;
+              if (data === undefined) return;
+              const {serializedAnnotations} = data;
+              annotations.push(...deserializeAnnotations(serializedAnnotations, rank, properties));
+          }
+        });
+      }
+    }
+    if (!hasVisibleSegments) {
+      for (const source of spatiallyIndexedSources) {
+        for (const [_key, chunk] of source.chunks) {
+          const {data} = chunk;
+          if (data === undefined) continue;
+          const {serializedAnnotations} = data;
+          annotations.push(...deserializeAnnotations(serializedAnnotations, rank, properties));
+        }
+      }
+    }
+    return annotations;
   }
 
   hasNonSerializedProperties() {
