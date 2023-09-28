@@ -221,8 +221,16 @@ export class AnnotationLayerView extends Tab {
             (annotationId) => this.deleteAnnotationElement(annotationId, state)));
       }
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
+      refCounted.registerDisposer(
+          state.displayState.relationshipStates.changed.add(this.forceUpdateView));
       newAttachedAnnotationStates.set(
           state, {refCounted, annotations: [], idToIndex: new Map(), listOffset: 0});
+      if (source instanceof MultiscaleAnnotationSource) {
+        refCounted.registerDisposer(
+            source.chunkManager.chunkQueueManager.visibleChunksChanged.add(() => {
+              this.forceUpdateView();
+            }));
+      }
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
@@ -431,7 +439,7 @@ export class AnnotationLayerView extends Tab {
     if (selectionState === undefined) return;
     const element = this.getRenderedAnnotationListElement(
         selectionState.annotationLayerState, selectionState.annotationId,
-        /*scrollIntoView=*/selectionState.pin);
+        /*scrollIntoView=*/ selectionState.pin);
     if (element !== undefined) {
       element.classList.add('neuroglancer-annotation-selected');
     }
@@ -538,7 +546,9 @@ export class AnnotationLayerView extends Tab {
       if (!state.source.readonly) isMutable = true;
       if (state.chunkTransform.value.error !== undefined) continue;
       const {source} = state;
-      const annotations = Array.from(source);
+      const annotations = source instanceof MultiscaleAnnotationSource ?
+          source.activeAnnotations(state) :
+          Array.from(source);
       info.annotations = annotations;
       const {idToIndex} = info;
       idToIndex.clear();
@@ -551,8 +561,12 @@ export class AnnotationLayerView extends Tab {
     }
     const oldLength = this.virtualListSource.length;
     this.updateListLength();
-    this.virtualListSource.changed!.dispatch(
-        [{retainCount: 0, deleteCount: oldLength, insertCount: listElements.length}]);
+    // TODO, what problems does this change cause?
+    // this prevents the scroll list position from resetting when updateView is run
+    const insertCount = Math.max(0, listElements.length - oldLength);
+    const deleteCount = Math.max(0, oldLength - listElements.length);
+    const retainCount = Math.min(listElements.length, oldLength);
+    this.virtualListSource.changed!.dispatch([{retainCount, deleteCount, insertCount}]);
     this.mutableControls.style.display = isMutable ? 'contents' : 'none';
     this.resetOnUpdate();
   }
@@ -786,7 +800,8 @@ function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState, ge
       if (segmentationState.segmentSelectionState.hasSelectedSegment) {
         segments[i] = [segmentationState.segmentSelectionState.selectedSegment.clone()];
         if (getBase) {
-          segments[i] = [...segments[i], segmentationState.segmentSelectionState.baseSelectedSegment.clone()];
+          segments[i] =
+              [...segments[i], segmentationState.segmentSelectionState.baseSelectedSegment.clone()];
         }
         continue;
       }
@@ -834,7 +849,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
         type: AnnotationType.POINT,
         properties: annotationLayer.source.properties.map(x => x.default),
       };
-      const reference = annotationLayer.source.add(annotation, /*commit=*/true);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/ true);
       this.layer.selectAnnotation(annotationLayer, reference.id, true);
       reference.dispose();
     }
@@ -896,7 +911,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 
       if (inProgressAnnotation.value === undefined) {
         const reference = annotationLayer.source.add(
-            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/false);
+            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/ false);
         this.layer.selectAnnotation(annotationLayer, reference.id, true);
         const mouseDisposer = mouseState.changed.add(updatePointB);
         const disposer = () => {
@@ -1328,7 +1343,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       state.annotationId = mouseState.pickedAnnotationId;
       state.annotationType = mouseState.pickedAnnotationType;
       state.annotationBuffer = new Uint8Array(
-        mouseState.pickedAnnotationBuffer!, mouseState.pickedAnnotationBufferBaseOffset!);
+          mouseState.pickedAnnotationBuffer!, mouseState.pickedAnnotationBufferBaseOffset!);
       state.annotationIndex = mouseState.pickedAnnotationIndex!;
       state.annotationCount = mouseState.pickedAnnotationCount!;
       state.annotationPartIndex = mouseState.pickedOffset;
@@ -1341,7 +1356,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       if (state.annotationId === undefined) return false;
       const annotationLayer = this.annotationStates.states.find(
           x => x.sourceIndex === state.annotationSourceIndex &&
-               x.subsubsourceId === state.annotationSubsubsourceId &&
+              x.subsubsourceId === state.annotationSubsubsourceId &&
               (state.annotationSubsource === undefined ||
                x.subsourceId === state.annotationSubsource));
       if (annotationLayer === undefined) return false;
@@ -1368,7 +1383,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                         const isLittleEndian = Endianness.LITTLE === ENDIANNESS;
                         const {properties} = annotationLayer.source;
                         const annotationPropertySerializer =
-                          new AnnotationPropertySerializer(rank, numGeometryBytes, properties);
+                            new AnnotationPropertySerializer(rank, numGeometryBytes, properties);
                         const annotationIndex = state.annotationIndex!;
                         const annotationCount = state.annotationCount!;
                         annotation = handler.deserialize(

@@ -55,14 +55,7 @@ export class WatchableAnnotationRelationshipStates extends
         nestedContext.registerDisposer(segmentationGroupState.changed.add(this.changed.dispatch));
         nestedContext.registerDisposer(registerNested((groupContext, groupState) => {
           const {visibleSegments} = groupState;
-          let wasEmpty = visibleSegments.size === 0;
-          groupContext.registerDisposer(visibleSegments.changed.add(() => {
-            const isEmpty = visibleSegments.size === 0;
-            if (isEmpty !== wasEmpty) {
-              wasEmpty = isEmpty;
-              this.changed.dispatch();
-            }
-          }));
+          groupContext.registerDisposer(visibleSegments.changed.add(this.changed.dispatch));
         }, segmentationGroupState));
       }, segmentationState));
     });
