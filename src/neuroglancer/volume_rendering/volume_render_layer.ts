@@ -32,7 +32,7 @@ import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, Wat
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
-import {fragmentExtras, userDefinedFragmentShader, vertexShader} from 'neuroglancer/volume_rendering/shaders';
+import {fragmentExtras, userDefinedFragmentShader, vertexShader, maxProjectionFragmentShader} from 'neuroglancer/volume_rendering/shaders';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -146,7 +146,9 @@ void userMain();
 `);
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(fragmentExtras);
-        builder.setFragmentMainFunction(userDefinedFragmentShader);
+        // FIXME (skm): allow user to specify fragment shader.
+        userDefinedFragmentShader;
+        builder.setFragmentMainFunction(maxProjectionFragmentShader);
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(

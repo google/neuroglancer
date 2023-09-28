@@ -69,4 +69,21 @@ const doColorShader = `
 }
 `;
 
+const maxProjectionShader = `
+  outputColor = vec4(1.0, 0.0, 0.0, 1.0);
+  float maxValue = 0.0;
+  for (int step = startStep; step < endStep; ++step) {
+    vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
+    curChunkPosition = position - uTranslation;
+    float normChunkValue = toNormalized(getDataValue(0));
+    if (normChunkValue > maxValue) {
+        maxValue = normChunkValue;
+    }
+  }
+  outputColor = vec4(vec3(maxValue), 1.0);
+  emit(outputColor, 0u);
+}
+`;
+
 export const userDefinedFragmentShader = findStepsShader + doColorShader;
+export const maxProjectionFragmentShader = findStepsShader + maxProjectionShader;
