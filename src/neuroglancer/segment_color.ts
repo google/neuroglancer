@@ -28,6 +28,33 @@ import {Trackable} from './util/trackable';
 
 const NUM_COMPONENTS = 2;
 
+export class BasicHashColorShaderManager {
+  constructor(public prefix: string) {}
+
+  defineShader(builder: ShaderBuilder) {
+    builder.addVertexCode(glsl_hashCombine);
+    builder.addVertexCode(glsl_hsvToRgb);
+    let s = `
+vec3 ${this.prefix}(highp uint x) {
+  highp uint seed = 0u;
+  uint h = hashCombine(seed, x);
+  vec${NUM_COMPONENTS} v;
+`;
+    for (let i = 0; i < NUM_COMPONENTS; ++i) {
+      s += `
+  v[${i}] = float(h & 0xFFu) / 255.0;
+  h >>= 8u;
+`;
+    }
+    s += `
+  vec3 hsv = vec3(v.x, 0.5 + v.y * 0.5, 1.0);
+  return hsvToRgb(hsv);
+}
+`;
+    builder.addVertexCode(s);
+  }
+}
+
 export class SegmentColorShaderManager {
   seedName = this.prefix + '_seed';
 
@@ -92,6 +119,14 @@ export class SegmentColorHash implements Trackable {
   compute(out: Float32Array, x: Uint64) {
     let h = hashCombine(this.hashSeed, x.low);
     h = hashCombine(h, x.high);
+    const c0 = (h & 0xFF) / 255;
+    const c1 = ((h >> 8) & 0xFF) / 255;
+    hsvToRgb(out, c0, 0.5 + 0.5 * c1, 1.0);
+    return out;
+  }
+
+  computeNumber(out: Float32Array, x: number) {
+    let h = hashCombine(this.hashSeed, x);
     const c0 = (h & 0xFF) / 255;
     const c1 = ((h >> 8) & 0xFF) / 255;
     hsvToRgb(out, c0, 0.5 + 0.5 * c1, 1.0);

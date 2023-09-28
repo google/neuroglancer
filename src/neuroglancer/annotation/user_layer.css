@@ -50,3 +50,19 @@
   content: "()";
   color: #999;
 }
+
+.neuroglancer-annotation-shader-property-type:hover > .neuroglancer-annotation-shader-property-enum-labels,
+.neuroglancer-annotation-shader-property-enum-labels:hover {
+  display: initial;
+}
+
+.neuroglancer-annotation-shader-property-enum-labels {
+    z-index: 100;
+    position: absolute;
+    background: black;
+    display: none;
+    user-select: text;
+    padding: 2px;
+    border: 1px solid white;
+    color: deepskyblue;
+}

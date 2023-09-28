@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationPropertySpec, AnnotationType, annotationTypeHandlers, getPropertyOffsets, propertyTypeDataType} from 'neuroglancer/annotation';
+import {Annotation, AnnotationNumericPropertySpec, AnnotationPropertySpec, AnnotationType, annotationTypeHandlers, getPropertyOffsets, propertyTypeDataType} from 'neuroglancer/annotation';
 import {AnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {ChunkDisplayTransformParameters} from 'neuroglancer/render_coordinate_transform';
@@ -29,6 +29,7 @@ import {ParameterizedContextDependentShaderGetter, parameterizedEmitterDependent
 import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {BasicHashColorShaderManager} from 'neuroglancer/segment_color';
 
 const DEBUG_HISTOGRAMS = false;
 
@@ -197,6 +198,8 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
   pickIdsPerInstance: number;
   targetIsSliceView: boolean;
 
+  protected hashColorShaderManager = new BasicHashColorShaderManager('hashColor');
+
   constructor(
       gl: GL, annotationType: AnnotationType, rank: number,
       properties: readonly Readonly<AnnotationPropertySpec>[],
@@ -225,8 +228,14 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
         const referencedProperties: number[] = [];
         const controlsReferencedProperties = parameters.referencedProperties;
         const processedCode = parameters.parseResult.code;
+        this.hashColorShaderManager.defineShader(builder);
         for (let i = 0, numProperties = properties.length; i < numProperties; ++i) {
           const property = properties[i];
+          const enumLabels = (property as AnnotationNumericPropertySpec).enumLabels || [];
+          const enumValues = (property as AnnotationNumericPropertySpec).enumValues || [];
+          for (let i = 0; i < enumLabels.length && i < enumValues.length; i++) {
+            builder.addVertexCode(`#define prop_${property.identifier}_${enumLabels[i]} uint(${enumValues[i]})\n`);
+          }
           const functionName = `prop_${property.identifier}`;
           if (!controlsReferencedProperties.includes(property.identifier) &&
               !processedCode.match(new RegExp(`\\b${functionName}\\b`))) {
