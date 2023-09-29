@@ -144,6 +144,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         builder.addFragmentCode(`
 vec3 curChunkPosition;
 vec4 outputColor;
+float maxValue;
 void userMain();
 `);
         // FIXME (skm) : just a hack to get the shader to compile
