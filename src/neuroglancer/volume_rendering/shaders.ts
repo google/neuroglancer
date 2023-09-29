@@ -85,5 +85,12 @@ const maxProjectionShader = `
 }
 `;
 
+const chunkValueShader = `
+  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+  emit(outputColor, 0u);
+}
+`;
+
 export const userDefinedFragmentShader = findStepsShader + doColorShader;
 export const maxProjectionFragmentShader = findStepsShader + maxProjectionShader;
+export const chunkValueFragmentShader = findStepsShader + chunkValueShader;

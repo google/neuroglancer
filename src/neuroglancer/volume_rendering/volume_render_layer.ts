@@ -13,15 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
-import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
-import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel'; import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer'; import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform'; import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
@@ -135,6 +131,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 
         // Chunk size in voxels.
         builder.addUniform('highp vec3', 'uChunkDataSize');
+        builder.addUniform('highp float', 'uChunkNumber');
 
         builder.addUniform('highp vec3', 'uLowerClipBound');
         builder.addUniform('highp vec3', 'uUpperClipBound');
@@ -264,6 +261,7 @@ void userMain();
     let chunks: Map<string, VolumeChunk>;
     let presentCount = 0, notPresentCount = 0;
     let chunkDataSize: Uint32Array|undefined;
+    let chunkNumber = 1;
 
     const chunkRank = this.multiscaleSource.rank;
     const chunkPosition = vec3.create();
@@ -345,6 +343,10 @@ void userMain();
               chunkTransform: {channelToChunkDimensionIndices}
             } = transformedSource;
             const {} = transformedSource;
+            const normChunkNumber = chunkNumber / chunks.size;
+            console.log(normChunkNumber);
+            gl.uniform1f(shader.uniform('uChunkNumber'), normChunkNumber);
+            ++chunkNumber;
             if (newChunkDataSize !== chunkDataSize) {
               chunkDataSize = newChunkDataSize;
 
