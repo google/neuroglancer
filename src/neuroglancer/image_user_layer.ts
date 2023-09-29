@@ -195,6 +195,7 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
+    this.volumeRenderingSamplesPerRay.restoreState(specification[VOLUME_RENDER_SAMPLING_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -205,6 +206,7 @@ export class ImageUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
+    x[VOLUME_RENDER_SAMPLING_JSON_KEY] = this.volumeRenderingSamplesPerRay.toJSON();
     return x;
   }
 
