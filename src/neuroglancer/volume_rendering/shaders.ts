@@ -70,7 +70,7 @@ const doColorShader = `
 `;
 
 const maxProjectionShader = `
-  outputColor = vec4(1.0, 0.0, 0.0, 1.0);
+  outputColor = vec4(0.0, 0.0, 0.0, 1.0);
   float maxValue = 0.0;
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
