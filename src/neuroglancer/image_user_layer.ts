@@ -28,13 +28,12 @@ import {defineImageLayerShader, getTrackableFragmentMain, ImageRenderLayer} from
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, TrackableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
-import {verifyPositiveInt, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {verifyOptionalObjectProperty, verifyPositiveInt} from 'neuroglancer/util/json';
 import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
@@ -327,10 +326,9 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     label: 'Samples per ray',
     toolJson: VOLUME_RENDER_SAMPLING_JSON_KEY,
     isValid: layer => layer.volumeRendering,
-    ...rangeLayerControl(layer => ({
-                          value: layer.volumeRenderingSamplesPerRay,
-                          options: {min: 1, max: 1024, step: 1}
-                        })),
+    ...rangeLayerControl(
+        layer =>
+            ({value: layer.volumeRenderingSamplesPerRay, options: {min: 1, max: 1024, step: 1}})),
   },
   {
     label: 'Opacity',
