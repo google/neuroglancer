@@ -45,8 +45,9 @@ class ImportlibResourcesContentSource(StaticContentSource):
     def get_content(self, name):
         if not re.match(r'^[a-z][a-z_\-\.]*\.(?:js|js\.map|css|html)$', name):
             raise ValueError('Invalid static resource name: %r' % name)
-        if importlib.resources.is_resource(__name__, name):
-            return importlib.resources.read_binary(__name__, name)
+        path = importlib.resources.files(__name__).joinpath(name)
+        if path.is_file():
+            return path.read_bytes()
         raise ValueError(
             'Static resources not built.  Run: "npm run build-python" or use an alternative static content source.'
         )
