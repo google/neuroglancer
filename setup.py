@@ -306,8 +306,7 @@ setuptools.setup(
             'pytest-timeout>=1.4.2',
         ],
         'test-browser': [
-            'selenium>=3.141.0',
-            'webdriver-manager>=3.5.0',
+            'selenium>=4',
         ],
     },
     ext_modules=[

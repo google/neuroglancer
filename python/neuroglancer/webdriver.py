@@ -70,43 +70,7 @@ class Webdriver:
         import selenium.webdriver.common.service
         import selenium.webdriver.chrome.service
 
-        def patched_init(self, executable_path, port=0, service_args=None, log_path=None, env=None):
-            log_path = '/dev/stderr'
-            self.service_args = service_args or []
-            if log_path:
-                self.service_args.append('--log-path=%s' % log_path)
-            selenium.webdriver.common.service.Service.__init__(
-                self,
-                executable_path,
-                port=port,
-                env=env,
-                log_file=None,
-                start_error_message=
-                "Please see https://sites.google.com/a/chromium.org/chromedriver/home")
-
         import selenium.webdriver.common.desired_capabilities
-        executable_path = 'chromedriver'
-        try:
-            # Use webdriver_manager package if available
-            import webdriver_manager.chrome
-            import webdriver_manager.core.utils
-            chrome_version = None
-            chrome_types = (webdriver_manager.core.utils.ChromeType.GOOGLE,
-                            webdriver_manager.core.utils.ChromeType.CHROMIUM)
-            for chrome_type in chrome_types:
-                try:
-                    chrome_version = webdriver_manager.core.utils.get_browser_version_from_os(chrome_type)
-                    if chrome_version is not None:
-                        break
-                except:
-                    if chrome_type == chrome_types[-1]:
-                        raise
-
-            executable_path = webdriver_manager.chrome.ChromeDriverManager(
-                chrome_type=chrome_type).install()
-        except ImportError:
-            # Fallback to system chromedriver
-            pass
         chrome_options = selenium.webdriver.chrome.options.Options()
         if self.headless:
             chrome_options.add_argument('--headless')
@@ -121,37 +85,19 @@ class Webdriver:
                                     (self.window_size[0], self.window_size[1]))
         for arg in self.extra_command_line_args:
             chrome_options.add_argument(arg)
-        caps = selenium.webdriver.common.desired_capabilities.DesiredCapabilities.CHROME.copy()
+        caps = chrome_options._caps
         caps['goog:loggingPrefs'] = {'browser': 'ALL'}
-        try:
-            orig_init = selenium.webdriver.chrome.service.Service.__init__
-            if self.debug:
-                selenium.webdriver.chrome.service.Service.__init__ = patched_init
-            self.driver = selenium.webdriver.Chrome(executable_path=executable_path,
-                                                    options=chrome_options,
-                                                    desired_capabilities=caps)
-        finally:
-            if self.debug:
-                selenium.webdriver.chrome.service.Service.__init__ = orig_init
+        self.driver = selenium.webdriver.Chrome(options=chrome_options)
 
     def _init_firefox(self):
         import selenium.webdriver
         import selenium.webdriver.firefox.firefox_binary
-        executable_path = 'geckodriver'
-        try:
-            # Use webdriver_manager package if available
-            import webdriver_manager.firefox
-            executable_path = webdriver_manager.firefox.GeckoDriverManager().install()
-        except (ImportError, SyntaxError):
-            # Fallback to system geckodriver
-            pass
         profile = selenium.webdriver.FirefoxProfile()
         profile.set_preference('devtools.console.stdout.content', True)
         binary = selenium.webdriver.firefox.firefox_binary.FirefoxBinary()
         for arg in self.extra_command_line_args:
             binary.add_command_line_options(arg)
         self.driver = selenium.webdriver.Firefox(firefox_profile=profile,
-                                                 executable_path=executable_path,
                                                  firefox_binary=binary,
                                                  service_log_path=self._logfile.name)
 
