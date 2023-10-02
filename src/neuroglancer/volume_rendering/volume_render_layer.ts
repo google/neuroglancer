@@ -23,7 +23,7 @@ import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
@@ -58,6 +58,11 @@ export interface VolumeRenderingRenderLayerOptions {
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
+interface VolumeRenderingShaderParameters {
+  dims: WatchableValueInterface<number>;
+  val: WatchableValueInterface<number>;
+}
+
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   multiscaleSource: MultiscaleVolumeChunkSource;
   transform: WatchableValueInterface<RenderLayerTransformOrError>;
@@ -71,7 +76,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState, number>;
+      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState, VolumeRenderingShaderParameters>;
 
   get gl() {
     return this.multiscaleSource.chunkManager.gl;
@@ -96,17 +101,19 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.shaderSelection = options.shaderSelection;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
-    // FIXME (skm): This is to get the shader to recompile when the channel coordinate space
-    // changes. However, I'm not sure how to combine that with getting the shader to recompile when
-    // the shader selection changes. const numChannelDimensions = this.registerDisposer(
-    //     makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
+    const numChannelDimensions = this.registerDisposer(
+        makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
+    const shaderParameters = new WatchableValue<VolumeRenderingShaderParameters>({
+      dims: numChannelDimensions,
+      val: this.shaderSelection,
+    });
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
       getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
       shaderError: options.shaderError,
-      extraParameters: this.shaderSelection,
-      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, shaderSelection) => {
+      extraParameters: shaderParameters,
+      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, shaderParametersState) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
         }
@@ -147,13 +154,12 @@ vec4 outputColor;
 float maxValue;
 void userMain();
 `);
-        // FIXME (skm) : just a hack to get the shader to compile
-        const numChannelDimensions = 1;
+        const numChannelDimensions = shaderParametersState.dims.value;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(glsl_COLOR_EMITTERS);
-        const fragmentShader = SHADER_FUNCTIONS.get(shaderSelection);
+        const fragmentShader = SHADER_FUNCTIONS.get(shaderParametersState.val.value);
         if (fragmentShader === undefined) {
-          throw new Error(`Invalid shader selection: ${shaderSelection}`);
+          throw new Error(`Invalid shader selection: ${shaderParametersState.val.value}`);
         }
         builder.setFragmentMainFunction(fragmentShader);
         builder.addFragmentCode(glsl_COLORMAPS);
@@ -235,7 +241,7 @@ void userMain();
     let curPixelSpacing: number = 0;
     let shader: ShaderProgram|null = null;
     let prevChunkFormat: ChunkFormat|undefined|null;
-    let shaderResult: ParameterizedShaderGetterResult<ShaderControlsBuilderState, number>;
+    let shaderResult: ParameterizedShaderGetterResult<ShaderControlsBuilderState, VolumeRenderingShaderParameters>;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
 
@@ -345,7 +351,6 @@ void userMain();
             } = transformedSource;
             const {} = transformedSource;
             const normChunkNumber = chunkNumber / chunks.size;
-            console.log(normChunkNumber);
             gl.uniform1f(shader.uniform('uChunkNumber'), normChunkNumber);
             ++chunkNumber;
             if (newChunkDataSize !== chunkDataSize) {
