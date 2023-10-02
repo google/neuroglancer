@@ -127,6 +127,7 @@ export class ImageUserLayer extends Base {
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.volumeRendering.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingSamplesPerRay.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
