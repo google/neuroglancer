@@ -197,7 +197,7 @@ export class ImageUserLayer extends Base {
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
     verifyOptionalObjectProperty(
-        specification, VOLUME_RENDER_SCALE_JSON_KEY,
+        specification, VOLUME_RENDERING_SHADER_JSON_KEY,
         shaderMode => this.volumeRenderingShaderSelection.restoreState(shaderMode));
   }
   toJSON() {
