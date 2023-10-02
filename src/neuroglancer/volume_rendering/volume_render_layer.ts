@@ -23,12 +23,12 @@ import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
 import {glsl_COLOR_EMITTERS, glsl_VERTEX_SHADER} from 'src/neuroglancer/volume_rendering/glsl';
-import {SHADER_FUNCTIONS, TrackableShaderModeValue} from 'neuroglancer/volume_rendering/trackable_shader_mode';
+import {SHADER_FUNCTIONS, TrackableShaderModeValue, SHADER_MODES} from 'neuroglancer/volume_rendering/trackable_shader_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -59,8 +59,8 @@ const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
 interface VolumeRenderingShaderParameters {
-  dims: WatchableValueInterface<number>;
-  val: WatchableValueInterface<number>;
+  numChannelDimensions: number;
+  selectedShader: SHADER_MODES;
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
@@ -101,18 +101,19 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.shaderSelection = options.shaderSelection;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
-    const numChannelDimensions = this.registerDisposer(
-        makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
-    const shaderParameters = new WatchableValue<VolumeRenderingShaderParameters>({
-      dims: numChannelDimensions,
-      val: this.shaderSelection,
-    });
+    const extraParameters = this.registerDisposer(
+        makeCachedDerivedWatchableValue(
+          (space: CoordinateSpace, selectedShader: SHADER_MODES) => ({numChannelDimensions: space.rank, selectedShader: selectedShader}), 
+        [this.channelCoordinateSpace, this.shaderSelection]));
+
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
       getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
       shaderError: options.shaderError,
-      extraParameters: shaderParameters,
+      // extraParameters: new AggregateWatchableValue(
+        // refCounted => ({,
+      extraParameters: extraParameters,
       defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, shaderParametersState) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
@@ -154,12 +155,12 @@ vec4 outputColor;
 float maxValue;
 void userMain();
 `);
-        const numChannelDimensions = shaderParametersState.dims.value;
+        const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(glsl_COLOR_EMITTERS);
-        const fragmentShader = SHADER_FUNCTIONS.get(shaderParametersState.val.value);
+        const fragmentShader = SHADER_FUNCTIONS.get(shaderParametersState.selectedShader);
         if (fragmentShader === undefined) {
-          throw new Error(`Invalid shader selection: ${shaderParametersState.val.value}`);
+          throw new Error(`Invalid shader selection: ${shaderParametersState.selectedShader}}`);
         }
         builder.setFragmentMainFunction(fragmentShader);
         builder.addFragmentCode(glsl_COLORMAPS);
