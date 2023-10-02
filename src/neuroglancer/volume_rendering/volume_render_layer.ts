@@ -111,8 +111,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       parameters: options.shaderControlState.builderState,
       getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
       shaderError: options.shaderError,
-      // extraParameters: new AggregateWatchableValue(
-        // refCounted => ({,
       extraParameters: extraParameters,
       defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, shaderParametersState) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
