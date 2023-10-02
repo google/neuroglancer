@@ -1,5 +1,5 @@
 import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
-import {glsl_MAX_PROJECTION_SHADER, glsl_USER_DEFINED_RAY_TRAVERSAL, glsl_CHUNK_NUMBER_SHADER} from 'src/neuroglancer/volume_rendering/glsl';
+import {glsl_CHUNK_NUMBER_SHADER, glsl_MAX_PROJECTION_SHADER, glsl_USER_DEFINED_RAY_TRAVERSAL} from 'src/neuroglancer/volume_rendering/glsl';
 
 export enum SHADER_MODES {
   DEFAULT = 0,

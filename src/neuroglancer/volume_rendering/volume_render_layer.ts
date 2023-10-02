@@ -17,7 +17,10 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
-import {PerspectivePanel} from 'neuroglancer/perspective_view/panel'; import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer'; import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform'; import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
+import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
+import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
@@ -27,14 +30,14 @@ import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, Wat
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
-import {glsl_COLOR_EMITTERS, glsl_VERTEX_SHADER} from 'src/neuroglancer/volume_rendering/glsl';
-import {SHADER_FUNCTIONS, TrackableShaderModeValue, SHADER_MODES} from 'neuroglancer/volume_rendering/trackable_shader_mode';
+import {SHADER_FUNCTIONS, SHADER_MODES, TrackableShaderModeValue} from 'neuroglancer/volume_rendering/trackable_shader_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
+import {glsl_COLOR_EMITTERS, glsl_VERTEX_SHADER} from 'src/neuroglancer/volume_rendering/glsl';
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -76,7 +79,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState, VolumeRenderingShaderParameters>;
+      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState,
+      VolumeRenderingShaderParameters>;
 
   get gl() {
     return this.multiscaleSource.chunkManager.gl;
@@ -101,9 +105,9 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.shaderSelection = options.shaderSelection;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
-    const extraParameters = this.registerDisposer(
-        makeCachedDerivedWatchableValue(
-          (space: CoordinateSpace, selectedShader: SHADER_MODES) => ({numChannelDimensions: space.rank, selectedShader: selectedShader}), 
+    const extraParameters = this.registerDisposer(makeCachedDerivedWatchableValue(
+        (space: CoordinateSpace, selectedShader: SHADER_MODES) =>
+            ({numChannelDimensions: space.rank, selectedShader: selectedShader}),
         [this.channelCoordinateSpace, this.shaderSelection]));
 
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
@@ -112,7 +116,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
       shaderError: options.shaderError,
       extraParameters: extraParameters,
-      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, shaderParametersState) => {
+      defineShader: (
+          builder, {emitter, chunkFormat}, shaderBuilderState, shaderParametersState) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
         }
@@ -240,7 +245,8 @@ void userMain();
     let curPixelSpacing: number = 0;
     let shader: ShaderProgram|null = null;
     let prevChunkFormat: ChunkFormat|undefined|null;
-    let shaderResult: ParameterizedShaderGetterResult<ShaderControlsBuilderState, VolumeRenderingShaderParameters>;
+    let shaderResult: ParameterizedShaderGetterResult<
+        ShaderControlsBuilderState, VolumeRenderingShaderParameters>;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
 
