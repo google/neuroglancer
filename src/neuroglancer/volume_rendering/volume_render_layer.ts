@@ -27,7 +27,7 @@ import {NestedStateManager, registerNested, WatchableValueInterface} from 'neuro
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
-import {fragmentExtras, vertexShader} from 'neuroglancer/volume_rendering/shaders';
+import {glsl_COLOR_EMITTERS, glsl_VERTEX_SHADER} from 'src/neuroglancer/volume_rendering/glsl';
 import {SHADER_FUNCTIONS, TrackableShaderModeValue} from 'neuroglancer/volume_rendering/trackable_shader_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
@@ -140,7 +140,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         builder.addVarying('highp vec4', 'vNormalizedPosition');
         builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
-        builder.setVertexMain(vertexShader);
+        builder.setVertexMain(glsl_VERTEX_SHADER);
         builder.addFragmentCode(`
 vec3 curChunkPosition;
 vec4 outputColor;
@@ -150,7 +150,7 @@ void userMain();
         // FIXME (skm) : just a hack to get the shader to compile
         const numChannelDimensions = 1;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
-        builder.addFragmentCode(fragmentExtras);
+        builder.addFragmentCode(glsl_COLOR_EMITTERS);
         const fragmentShader = SHADER_FUNCTIONS.get(shaderSelection);
         if (fragmentShader === undefined) {
           throw new Error(`Invalid shader selection: ${shaderSelection}`);

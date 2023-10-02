@@ -1,11 +1,11 @@
-export const vertexShader = `
+export const glsl_VERTEX_SHADER = `
 vec3 boxVertex = getBoxFaceVertexPosition(gl_VertexID);
 vec3 position = max(uLowerClipBound, min(uUpperClipBound, uTranslation + boxVertex * uChunkDataSize));
 vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
 gl_Position.z = 0.0;
 `;
 
-export const fragmentExtras = `
+export const glsl_COLOR_EMITTERS = `
 void emitRGBA(vec4 rgba) {
   float alpha = rgba.a * uBrightnessFactor;
   outputColor += vec4(rgba.rgb * alpha, alpha);
@@ -20,7 +20,7 @@ void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 `
-const findStepsShader = `
+const glsl_SETUP_RAYS = `
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
   vec4 nearPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, -1.0, 1.0);
@@ -58,7 +58,7 @@ void main() {
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
 `;
 
-const doColorShader = `
+const glsl_TRAVERSE_RAYS = `
   outputColor = vec4(0, 0, 0, 0);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
@@ -69,7 +69,7 @@ const doColorShader = `
 }
 `;
 
-const maxProjectionShader = `
+const glsl_MAX_PROJECTION_RAY_TRAVERSAL = `
   outputColor = vec4(0.0, 0.0, 0.0, 1.0);
   maxValue = 0.0;
   for (int step = startStep; step < endStep; ++step) {
@@ -85,12 +85,12 @@ const maxProjectionShader = `
 }
 `;
 
-const chunkValueShader = `
+const glsl_EMIT_CHUNK_VALUE = `
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
   emit(outputColor, 0u);
 }
 `;
 
-export const userDefinedFragmentShader = findStepsShader + doColorShader;
-export const maxProjectionFragmentShader = findStepsShader + maxProjectionShader;
-export const chunkValueFragmentShader = findStepsShader + chunkValueShader;
+export const glsl_USER_DEFINED_RAY_TRAVERSAL = glsl_SETUP_RAYS + glsl_TRAVERSE_RAYS;
+export const glsl_MAX_PROJECTION_SHADER = glsl_SETUP_RAYS + glsl_MAX_PROJECTION_RAY_TRAVERSAL;
+export const glsl_CHUNK_NUMBER_SHADER = glsl_SETUP_RAYS + glsl_EMIT_CHUNK_VALUE;
