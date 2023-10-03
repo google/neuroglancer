@@ -12,18 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import atexit
-import asyncio
-import concurrent.futures
 import os
 import pathlib
-import threading
 
+import neuroglancer.static_file_server
 import neuroglancer.webdriver
 import pytest
-import tornado.httpserver
-import tornado.netutil
-import tornado.platform
-import tornado.web
 
 
 def pytest_addoption(parser):
@@ -39,6 +33,10 @@ def pytest_addoption(parser):
                      action='store_true',
                      default=False,
                      help='Use webdriver configuration that supports running inside docker')
+    parser.addoption('--neuroglancer-server-debug',
+                     action='store_true',
+                     default=False,
+                     help='Debug the Neuroglancer web server.')
     parser.addoption('--static-content-url', default=None, help='URL to Neuroglancer Python client')
     parser.addoption('--browser',
                      choices=['chrome', 'firefox'],
@@ -65,6 +63,8 @@ def _webdriver_internal(request):
         debug=request.config.getoption('--debug-webdriver'),
         browser=request.config.getoption('--browser'),
     )
+    if request.config.getoption('--neuroglancer-server-debug'):
+        neuroglancer.server.debug = True
     atexit.register(webdriver.driver.close)
     return webdriver
 
@@ -98,65 +98,24 @@ def webdriver(_webdriver_internal, request):
                 os.path.join(screenshot_dir, request.node.nodeid + ".png"))
 
 
-class CorsStaticFileHandler(tornado.web.StaticFileHandler):
+@pytest.fixture
+def static_file_server():
 
-    def set_default_headers(self):
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Headers", "x-requested-with")
-        self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+    servers: neuroglancer.static_file_server.StaticFileServer = []
+    def serve_path(path: pathlib.Path):
+        server = neuroglancer.static_file_server.StaticFileServer(str(path))
+        servers.append(server)
+        return server.url
 
-    def options(self, *args):
-        self.set_status(204)
-        self.finish()
-
-
-def _start_server(bind_address: str, output_dir: str) -> int:
-
-    token = neuroglancer.random_token.make_random_token()
-    handlers = [
-        (fr'/{token}/(.*)', CorsStaticFileHandler, {
-            'path': output_dir
-        }),
-    ]
-    settings = {}
-    app = tornado.web.Application(handlers, settings=settings)
-
-    http_server = tornado.httpserver.HTTPServer(app)
-    sockets = tornado.netutil.bind_sockets(port=0, address=bind_address)
-    http_server.add_sockets(sockets)
-    actual_port = sockets[0].getsockname()[1]
-    url = neuroglancer.server._get_server_url(bind_address, actual_port)
-    return f'{url}/{token}'
+    try:
+        yield serve_path
+    finally:
+        for server in servers:
+            server.request_stop()
+        for server in servers:
+            server.stop()
 
 
 @pytest.fixture
-def tempdir_server(tmp_path: pathlib.Path):
-
-    bind_address = "localhost"
-
-    server_url_future = concurrent.futures.Future()
-
-    ioloop = None
-
-    def run_server():
-        nonlocal ioloop
-        try:
-            ioloop = tornado.platform.asyncio.AsyncIOLoop()
-            ioloop.make_current()
-            asyncio.set_event_loop(ioloop.asyncio_loop)
-            server_url_future.set_result(_start_server(bind_address, str(tmp_path)))
-        except Exception as e:
-            server_url_future.set_exception(e)
-            return
-        ioloop.start()
-        ioloop.close()
-
-    thread = threading.Thread(target=run_server)
-    try:
-        thread.start()
-        server_url = server_url_future.result()
-        yield (tmp_path, server_url)
-    finally:
-        if ioloop is not None:
-            ioloop.add_callback(ioloop.stop)
-        thread.join()
+def tempdir_server(tmp_path: pathlib.Path, static_file_server):
+    yield (tmp_path, static_file_server(tmp_path))

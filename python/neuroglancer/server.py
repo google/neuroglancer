@@ -28,6 +28,7 @@ import tornado.netutil
 import tornado.platform.asyncio
 import tornado.web
 
+from . import async_util
 from . import local_volume, static
 from . import skeleton
 from .json_utils import json_encoder_default, encode_json
@@ -85,15 +86,17 @@ def _get_colab_server_url(port: int) -> str:
     return google.colab.output.eval_js(f'google.colab.kernel.proxyPort({port})')
 
 
-class Server(object):
-    def __init__(self, ioloop, bind_address='127.0.0.1', bind_port=0):
+class Server(async_util.BackgroundTornadoServer):
+    def __init__(self, bind_address='127.0.0.1', bind_port=0):
+        super().__init__(daemon = True)
         self.viewers = weakref.WeakValueDictionary()
+        self._bind_address = bind_address
+        self._bind_port = bind_port
         self.token = make_random_token()
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=multiprocessing.cpu_count())
 
-        self.ioloop = ioloop
-
+    def _attempt_to_start_server(self):
         def log_function(handler):
             if debug:
                 print("%d %s %.2fs" %
@@ -118,22 +121,28 @@ class Server(object):
             # Set a large maximum message size to accommodate large screenshot
             # messages.
             websocket_max_message_size=100 * 1024 * 1024)
-        http_server = tornado.httpserver.HTTPServer(
+        self.http_server = tornado.httpserver.HTTPServer(
             app,
             # Allow very large requests to accommodate large screenshots.
             max_buffer_size=1024**3,
         )
-        sockets = tornado.netutil.bind_sockets(port=bind_port, address=bind_address)
-        http_server.add_sockets(sockets)
+        sockets = tornado.netutil.bind_sockets(port=self._bind_port, address=self._bind_address)
+        self.http_server.add_sockets(sockets)
         actual_port = sockets[0].getsockname()[1]
 
         global global_static_content_source
         if global_static_content_source is None:
             global_static_content_source = static.get_default_static_content_source()
         self.port = actual_port
-        self.server_url = _get_server_url(bind_address, actual_port)
-        self.regular_server_url = _get_regular_server_url(bind_address, actual_port)
+        self.server_url = _get_server_url(self._bind_address, actual_port)
+        self.regular_server_url = _get_regular_server_url(self._bind_address, actual_port)
         self._credentials_manager = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
 
     def get_volume(self, key):
         dot_index = key.find('.')
@@ -173,7 +182,7 @@ class ActionHandler(BaseRequestHandler):
             self.send_error(404)
             return
         action = json.loads(self.request.body)
-        self.server.ioloop.add_callback(viewer.actions.invoke, action['action'], action['state'])
+        self.server.loop.call_soon(viewer.actions.invoke, action['action'], action['state'])
         self.finish('')
 
 
@@ -185,7 +194,7 @@ class VolumeInfoResponseHandler(BaseRequestHandler):
             return
 
         info = json.loads(self.request.body)
-        self.server.ioloop.add_callback(viewer._handle_volume_info_reply, request_id, info)
+        self.server.loop.call_soon(viewer._handle_volume_info_reply, request_id, info)
         self.finish('')
 
 
@@ -198,7 +207,7 @@ class VolumeChunkResponseHandler(BaseRequestHandler):
 
         params = json.loads(self.get_argument('p'))
         data = self.request.body
-        self.server.ioloop.add_callback(viewer._handle_volume_chunk_reply, request_id, params, data)
+        self.server.loop.call_soon(viewer._handle_volume_chunk_reply, request_id, params, data)
         self.finish('')
 
 
@@ -221,6 +230,8 @@ class EventStreamStateWatcher:
         self.last_generation = generation
         msg = {'k': self.key, 's': raw_state, 'g': generation}
         handler.write(f'data: {encode_json(msg)}\n\n')
+        if debug:
+            print(f'data: {encode_json(msg)}\n\n')
         return True
 
 
@@ -234,7 +245,7 @@ class EventStreamHandler(BaseRequestHandler):
         self.set_header('cache-control', 'no-cache')
         must_flush = True
         wake_event = asyncio.Event()
-        self._wake_up = lambda: self.server.ioloop.add_callback(wake_event.set)
+        self._wake_up = lambda: self.server.loop.call_soon_threadsafe(wake_event.set)
         client_id = self.get_query_argument('c')
         self._closed = False
 
@@ -430,7 +441,7 @@ class SkeletonHandler(BaseRequestHandler):
 
 
 global_server = None
-
+_global_server_lock = threading.Lock()
 
 def set_static_content_source(*args, **kwargs):
     global global_static_content_source
@@ -443,7 +454,8 @@ def set_server_bind_address(bind_address='127.0.0.1', bind_port=0):
 
 
 def is_server_running():
-    return global_server is not None
+    with _global_server_lock:
+        return global_server is not None
 
 
 def stop():
@@ -453,22 +465,15 @@ def stop():
     references to them.
     """
     global global_server
-    if global_server is not None:
-        ioloop = global_server.ioloop
-
-        def stop_ioloop():
-            ioloop.stop()
-
-        global_server.ioloop.add_callback(stop_ioloop)
+    with _global_server_lock:
+        server = global_server
         global_server = None
+    if server is not None:
+        server.stop()
 
 
 def get_server_url():
     return global_server.server_url
-
-
-_global_server_lock = threading.Lock()
-
 
 def start():
     global global_server
@@ -479,23 +484,7 @@ def start():
         # https://www.tornadoweb.org/en/stable/index.html#installation
         if sys.platform == 'win32' and sys.version_info >= (3, 8):
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-        done = threading.Event()
-
-        def start_server():
-            global global_server
-            ioloop = tornado.platform.asyncio.AsyncIOLoop()
-            ioloop.make_current()
-            asyncio.set_event_loop(ioloop.asyncio_loop)
-            global_server = Server(ioloop=ioloop, **global_server_args)
-            done.set()
-            ioloop.start()
-            ioloop.close()
-
-        thread = threading.Thread(target=start_server)
-        thread.daemon = True
-        thread.start()
-        done.wait()
+        global_server = Server(**global_server_args)
 
 
 def register_viewer(viewer):
@@ -506,4 +495,4 @@ def register_viewer(viewer):
 def defer_callback(callback, *args, **kwargs):
     """Register `callback` to run in the server event loop thread."""
     start()
-    global_server.ioloop.add_callback(lambda: callback(*args, **kwargs))
+    global_server.loop.call_soon_threadsafe(lambda: callback(*args, **kwargs))
