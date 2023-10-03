@@ -103,10 +103,7 @@ export class ClientStateSynchronizer extends RefCounted {
             this.lastServerGeneration = responseJson['g'];
             this.clientGeneration = clientGeneration;
           } else if (response.status === 412) {
-            const responseJson = await response.json();
-            const newState = responseJson['s'];
-            const newGeneration = responseJson['g'];
-            this.setServerState(newState, newGeneration);
+            // Do nothing, updated state will be received via the `EventSource`.
           } else {
             throw HttpError.fromResponse(response);
           }

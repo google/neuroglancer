@@ -302,9 +302,7 @@ class SetStateHandler(BaseRequestHandler):
             self.finish(json.dumps({"g": new_generation}))
         except ConcurrentModificationError:
             self.set_status(412)
-            self.set_header('Content-type', 'application/json')
-            raw_state, generation = viewer.shared_state.raw_state_and_generation
-            self.finish(json.dumps({"s": raw_state, "g": generation}))
+            self.finish('')
 
 
 class CredentialsHandler(BaseRequestHandler):
