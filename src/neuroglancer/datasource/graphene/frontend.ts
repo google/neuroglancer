@@ -28,8 +28,8 @@ import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RP
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource, resolvePath} from 'neuroglancer/datasource/precomputed/frontend';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
-import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
-import {MeshLayer, MeshSource, MultiscaleMeshLayer} from 'neuroglancer/mesh/frontend';
+import {LoadedDataSubsource, LoadedLayerDataSource} from 'neuroglancer/layer_data_source';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayer, RenderLayerRole} from 'neuroglancer/renderlayer';
@@ -951,9 +951,20 @@ class GraphConnection extends SegmentationGraphSourceConnection {
 
   getMeshSource() {
     const {layer} = this;
-    for (const x of layer.renderLayers) {
-      if (x instanceof MeshLayer || x instanceof MultiscaleMeshLayer) {
-        return x.source;
+    for (const dataSource of layer.dataSources) {
+      const {loadState} = dataSource;
+      if (loadState instanceof LoadedLayerDataSource) {
+        const {subsources} = loadState.dataSource;
+        const graphSubsource = subsources.filter(subsource => subsource.id === 'graph')[0];
+        if (graphSubsource && graphSubsource.subsource.segmentationGraph) {
+          if (graphSubsource.subsource.segmentationGraph !== this.graph) {
+            continue;
+          }
+        }
+        const meshSubsource = subsources.filter(subsource => subsource.id === 'mesh')[0];
+        if (meshSubsource) {
+          return meshSubsource.subsource.mesh;
+        }
       }
     }
     return undefined;
