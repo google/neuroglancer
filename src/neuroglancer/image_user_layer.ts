@@ -59,7 +59,7 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 const VOLUME_RENDER_SCALE_JSON_KEY = 'volumeRenderingScale';
-const VOLUME_RENDER_SAMPLING_JSON_KEY = 'volumeRenderingSamplesPerRay';
+const VOLUME_RENDERING_SAMPLING_JSON_KEY = 'volumeRenderingSamplesPerRay';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -195,7 +195,7 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
-    this.volumeRenderingSamplesPerRay.restoreState(specification[VOLUME_RENDER_SAMPLING_JSON_KEY]);
+    this.volumeRenderingSamplesPerRay.restoreState(specification[VOLUME_RENDERING_SAMPLING_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -206,7 +206,7 @@ export class ImageUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
-    x[VOLUME_RENDER_SAMPLING_JSON_KEY] = this.volumeRenderingSamplesPerRay.toJSON();
+    x[VOLUME_RENDERING_SAMPLING_JSON_KEY] = this.volumeRenderingSamplesPerRay.toJSON();
     return x;
   }
 
@@ -325,7 +325,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   },
   {
     label: 'Samples per ray',
-    toolJson: VOLUME_RENDER_SAMPLING_JSON_KEY,
+    toolJson: VOLUME_RENDERING_SAMPLING_JSON_KEY,
     isValid: layer => layer.volumeRendering,
     ...rangeLayerControl(
         layer =>
