@@ -293,6 +293,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: 'Resolution (slice)',
     toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
+    isValid: layer => makeCachedDerivedWatchableValue(volumeRendering => !volumeRendering, [layer.volumeRendering]),
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.sliceViewRenderScaleHistogram,
                                  target: layer.sliceViewRenderScaleTarget
@@ -301,6 +302,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: 'Blending',
     toolJson: BLEND_JSON_KEY,
+    isValid: layer => makeCachedDerivedWatchableValue(volumeRendering => !volumeRendering, [layer.volumeRendering]),
     ...enumLayerControl(layer => layer.blendMode),
   },
   {
@@ -320,6 +322,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: 'Opacity',
     toolJson: OPACITY_JSON_KEY,
+    isValid: layer => makeCachedDerivedWatchableValue(volumeRendering => !volumeRendering, [layer.volumeRendering]),
     ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
 ];
