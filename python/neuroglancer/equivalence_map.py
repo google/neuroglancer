@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
 
 import copy
 
-import six
 
-
-class EquivalenceMap(object):
+class EquivalenceMap:
     """Union-find data structure"""
 
     supports_readonly = True
@@ -39,7 +36,7 @@ class EquivalenceMap(object):
             self._readonly = False
             if existing is not None:
                 if isinstance(existing, dict):
-                    existing = six.viewitems(existing)
+                    existing = existing.items()
                 for group in existing:
                     self.union(*group)
         self._readonly = _readonly
@@ -76,10 +73,10 @@ class EquivalenceMap(object):
         return iter(self._parents)
 
     def items(self):
-        return six.viewitems(self._parents)
+        return self._parents.items()
 
     def keys(self):
-        return six.viewkeys(self._parents)
+        return self._parents.keys()
 
     def clear(self):
         self._weights.clear()
@@ -148,7 +145,7 @@ class EquivalenceMap(object):
         sets = {}
         for x in self._parents:
             sets.setdefault(self[x], set()).add(x)
-        return frozenset(frozenset(v) for v in six.viewvalues(sets))
+        return frozenset(frozenset(v) for v in sets.values())
 
     def to_json(self):
         """Returns the equivalence classes a sorted list of sorted lists."""

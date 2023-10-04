@@ -13,18 +13,18 @@
 # limitations under the License.
 """Tests that skeleton rendering options can be controlled via ViewerState."""
 
-import numpy as np
 import neuroglancer
 import neuroglancer.skeleton
-import threading
-import pytest
+import numpy as np
 
-dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'], units='nm', scales=[1, 1, 1])
+dimensions = neuroglancer.CoordinateSpace(
+    names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+)
 
 
 class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
     def __init__(self):
-        super(SkeletonSource, self).__init__(dimensions=dimensions)
+        super().__init__(dimensions=dimensions)
 
     def get_skeleton(self, object_id):
         return neuroglancer.skeleton.Skeleton(
@@ -36,37 +36,43 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
 def test_skeleton_options(webdriver):
     with webdriver.viewer.txn() as s:
         s.dimensions = dimensions
-        s.layout = 'xy'
+        s.layout = "xy"
         s.layers.append(
-            name='a',
+            name="a",
             layer=neuroglancer.SegmentationLayer(
                 source=SkeletonSource(),
                 segments=[1],
             ),
         )
         s.layers[0].skeleton_rendering.line_width2d = 100
-        s.layers[0].skeleton_rendering.shader = '''
+        s.layers[0].skeleton_rendering.shader = """
 #uicontrol vec3 color color(default="white")
 void main () {
   emitRGB(color);
 }
-'''
-        s.layers[0].skeleton_rendering.shader_controls['color'] = '#f00'
+"""
+        s.layers[0].skeleton_rendering.shader_controls["color"] = "#f00"
         s.show_axis_lines = False
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(screenshot.image_pixels,
-                                  np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
+    np.testing.assert_array_equal(
+        screenshot.image_pixels,
+        np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
+    )
 
     with webdriver.viewer.txn() as s:
-        s.layout = '3d'
+        s.layout = "3d"
         s.layers[0].skeleton_rendering.line_width3d = 100
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(screenshot.image_pixels,
-                                  np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
+    np.testing.assert_array_equal(
+        screenshot.image_pixels,
+        np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
+    )
 
     with webdriver.viewer.txn() as s:
-        s.layers[0].source[0].subsources['default'] = False
+        s.layers[0].source[0].subsources["default"] = False
 
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(screenshot.image_pixels,
-                                  np.tile(np.array([0, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
+    np.testing.assert_array_equal(
+        screenshot.image_pixels,
+        np.tile(np.array([0, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
+    )

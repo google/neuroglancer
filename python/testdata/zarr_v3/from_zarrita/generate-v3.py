@@ -24,8 +24,8 @@
 
 import shutil
 
-import zarrita
 import numpy as np
+import zarrita
 
 shutil.rmtree("data.zarr", ignore_errors=True)
 

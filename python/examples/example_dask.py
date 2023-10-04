@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import argparse
-import numpy as np
 
 import neuroglancer
 import neuroglancer.cli
+import numpy as np
 
 
 def add_dask_layer(state):
@@ -26,21 +26,23 @@ def add_dask_layer(state):
     import dask.array
 
     def make_array(k):
-        print('Computing k=%d' % (k, ))
+        print("Computing k=%d" % (k,))
         return np.full(shape=(256, 256), fill_value=k, dtype=np.uint8)
 
     lazy_make_array = dask.delayed(make_array, pure=True)
     lazy_chunks = [lazy_make_array(k) for k in range(255)]
-    sample = lazy_chunks[0].compute()  # load the first chunk (assume rest are same shape/dtype)
+    sample = lazy_chunks[
+        0
+    ].compute()  # load the first chunk (assume rest are same shape/dtype)
     arrays = [
         dask.array.from_delayed(lazy_chunk, dtype=sample.dtype, shape=sample.shape)
         for lazy_chunk in lazy_chunks
     ]
     x = dask.array.concatenate(arrays)
-    state.layers['dask'] = neuroglancer.ImageLayer(source=neuroglancer.LocalVolume(x))
+    state.layers["dask"] = neuroglancer.ImageLayer(source=neuroglancer.LocalVolume(x))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_server_arguments(ap)
     args = ap.parse_args()

@@ -22,10 +22,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import zarr
-import numpy as np
 import shutil
-from numcodecs import Zlib, Blosc, LZ4, Zstd, VLenUTF8
+
+import numpy as np
+import zarr
+from numcodecs import LZ4, Blosc, VLenUTF8, Zlib, Zstd
 
 shutil.rmtree("data.zarr", ignore_errors=True)
 

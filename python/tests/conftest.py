@@ -14,6 +14,8 @@
 import atexit
 import os
 import pathlib
+from collections.abc import Iterator
+from typing import Callable
 
 import neuroglancer.static_file_server
 import neuroglancer.webdriver
@@ -21,49 +23,65 @@ import pytest
 
 
 def pytest_addoption(parser):
-    parser.addoption('--headless',
-                     action='store_true',
-                     default=False,
-                     help='Run Chrome browser headless')
-    parser.addoption('--debug-webdriver',
-                     action='store_true',
-                     default=False,
-                     help='Show webdriver debug logs')
-    parser.addoption('--webdriver-docker',
-                     action='store_true',
-                     default=False,
-                     help='Use webdriver configuration that supports running inside docker')
-    parser.addoption('--neuroglancer-server-debug',
-                     action='store_true',
-                     default=False,
-                     help='Debug the Neuroglancer web server.')
-    parser.addoption('--static-content-url', default=None, help='URL to Neuroglancer Python client')
-    parser.addoption('--browser',
-                     choices=['chrome', 'firefox'],
-                     default='chrome',
-                     help='Specifies the browser to use.')
-    parser.addoption('--skip-browser-tests',
-                     action='store_true',
-                     default=False,
-                     help='Skip tests that rely on a web browser.')
-    parser.addoption('--failure-screenshot-dir',
-                     help="Save screenshots to specified directory in case of test failures.")
+    parser.addoption(
+        "--headless",
+        action="store_true",
+        default=False,
+        help="Run Chrome browser headless",
+    )
+    parser.addoption(
+        "--debug-webdriver",
+        action="store_true",
+        default=False,
+        help="Show webdriver debug logs",
+    )
+    parser.addoption(
+        "--webdriver-docker",
+        action="store_true",
+        default=False,
+        help="Use webdriver configuration that supports running inside docker",
+    )
+    parser.addoption(
+        "--neuroglancer-server-debug",
+        action="store_true",
+        default=False,
+        help="Debug the Neuroglancer web server.",
+    )
+    parser.addoption(
+        "--static-content-url", default=None, help="URL to Neuroglancer Python client"
+    )
+    parser.addoption(
+        "--browser",
+        choices=["chrome", "firefox"],
+        default="chrome",
+        help="Specifies the browser to use.",
+    )
+    parser.addoption(
+        "--skip-browser-tests",
+        action="store_true",
+        default=False,
+        help="Skip tests that rely on a web browser.",
+    )
+    parser.addoption(
+        "--failure-screenshot-dir",
+        help="Save screenshots to specified directory in case of test failures.",
+    )
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def _webdriver_internal(request):
-    if request.config.getoption('--skip-browser-tests'):
-        pytest.skip('--skip-browser-tests')
-    static_content_url = request.config.getoption('--static-content-url')
+    if request.config.getoption("--skip-browser-tests"):
+        pytest.skip("--skip-browser-tests")
+    static_content_url = request.config.getoption("--static-content-url")
     if static_content_url is not None:
         neuroglancer.set_static_content_source(url=static_content_url)
     webdriver = neuroglancer.webdriver.Webdriver(
-        headless=request.config.getoption('--headless'),
-        docker=request.config.getoption('--webdriver-docker'),
-        debug=request.config.getoption('--debug-webdriver'),
-        browser=request.config.getoption('--browser'),
+        headless=request.config.getoption("--headless"),
+        docker=request.config.getoption("--webdriver-docker"),
+        debug=request.config.getoption("--debug-webdriver"),
+        browser=request.config.getoption("--browser"),
     )
-    if request.config.getoption('--neuroglancer-server-debug'):
+    if request.config.getoption("--neuroglancer-server-debug"):
         neuroglancer.server.debug = True
     atexit.register(webdriver.driver.close)
     return webdriver
@@ -90,18 +108,19 @@ def webdriver(_webdriver_internal, request):
     viewer.config_state.set_state({})
     yield _webdriver_internal
     if request.node.rep_setup.passed and request.node.rep_call.failed:
-        screenshot_dir = request.config.getoption('--failure-screenshot-dir')
+        screenshot_dir = request.config.getoption("--failure-screenshot-dir")
         if screenshot_dir:
             # Collect screenshot
             os.makedirs(screenshot_dir, exist_ok=True)
             _webdriver_internal.driver.save_screenshot(
-                os.path.join(screenshot_dir, request.node.nodeid + ".png"))
+                os.path.join(screenshot_dir, request.node.nodeid + ".png")
+            )
 
 
 @pytest.fixture
-def static_file_server():
+def static_file_server() -> Iterator[Callable[[pathlib.Path], str]]:
+    servers: list[neuroglancer.static_file_server.StaticFileServer] = []
 
-    servers: neuroglancer.static_file_server.StaticFileServer = []
     def serve_path(path: pathlib.Path):
         server = neuroglancer.static_file_server.StaticFileServer(str(path))
         servers.append(server)

@@ -16,7 +16,6 @@ import asyncio
 import concurrent.futures
 import json
 import multiprocessing
-import re
 import socket
 import sys
 import threading
@@ -28,43 +27,47 @@ import tornado.netutil
 import tornado.platform.asyncio
 import tornado.web
 
-from . import async_util
-from . import local_volume, static
-from . import skeleton
-from .json_utils import json_encoder_default, encode_json
+from . import async_util, local_volume, skeleton, static
+from .json_utils import encode_json, json_encoder_default
 from .random_token import make_random_token
 from .trackable_state import ConcurrentModificationError
 
-INFO_PATH_REGEX = r'^/neuroglancer/info/(?P<token>[^/]+)$'
-SKELETON_INFO_PATH_REGEX = r'^/neuroglancer/skeletoninfo/(?P<token>[^/]+)$'
+INFO_PATH_REGEX = r"^/neuroglancer/info/(?P<token>[^/]+)$"
+SKELETON_INFO_PATH_REGEX = r"^/neuroglancer/skeletoninfo/(?P<token>[^/]+)$"
 
-DATA_PATH_REGEX = r'^/neuroglancer/(?P<data_format>[^/]+)/(?P<token>[^/]+)/(?P<scale_key>[^/]+)/(?P<start>[0-9]+(?:,[0-9]+)*)/(?P<end>[0-9]+(?:,[0-9]+)*)$'
+DATA_PATH_REGEX = r"^/neuroglancer/(?P<data_format>[^/]+)/(?P<token>[^/]+)/(?P<scale_key>[^/]+)/(?P<start>[0-9]+(?:,[0-9]+)*)/(?P<end>[0-9]+(?:,[0-9]+)*)$"
 
-SKELETON_PATH_REGEX = r'^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$'
+SKELETON_PATH_REGEX = r"^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$"
 
-MESH_PATH_REGEX = r'^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$'
+MESH_PATH_REGEX = r"^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$"
 
-STATIC_PATH_REGEX = r'^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$'
+STATIC_PATH_REGEX = (
+    r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$"
+)
 
-ACTION_PATH_REGEX = r'^/action/(?P<viewer_token>[^/]+)$'
+ACTION_PATH_REGEX = r"^/action/(?P<viewer_token>[^/]+)$"
 
-VOLUME_INFO_RESPONSE_PATH_REGEX = r'^/volume_response/(?P<viewer_token>[^/]+)/(?P<request_id>[^/]+)/info$'
+VOLUME_INFO_RESPONSE_PATH_REGEX = (
+    r"^/volume_response/(?P<viewer_token>[^/]+)/(?P<request_id>[^/]+)/info$"
+)
 
-VOLUME_CHUNK_RESPONSE_PATH_REGEX = r'^/volume_response/(?P<viewer_token>[^/]+)/(?P<request_id>[^/]+)/chunk$'
+VOLUME_CHUNK_RESPONSE_PATH_REGEX = (
+    r"^/volume_response/(?P<viewer_token>[^/]+)/(?P<request_id>[^/]+)/chunk$"
+)
 
-EVENTS_PATH_REGEX = r'^/events/(?P<viewer_token>[^/]+)$'
+EVENTS_PATH_REGEX = r"^/events/(?P<viewer_token>[^/]+)$"
 
-SET_STATE_PATH_REGEX = r'^/state/(?P<viewer_token>[^/]+)$'
+SET_STATE_PATH_REGEX = r"^/state/(?P<viewer_token>[^/]+)$"
 
-CREDENTIALS_PATH_REGEX = r'^/credentials/(?P<viewer_token>[^/]+)$'
+CREDENTIALS_PATH_REGEX = r"^/credentials/(?P<viewer_token>[^/]+)$"
 
 global_static_content_source = None
 
-global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
+global_server_args = dict(bind_address="127.0.0.1", bind_port=0)
 
 debug = False
 
-_IS_GOOGLE_COLAB = 'google.colab' in sys.modules
+_IS_GOOGLE_COLAB = "google.colab" in sys.modules
 
 
 def _get_server_url(bind_address: str, port: int) -> str:
@@ -74,33 +77,41 @@ def _get_server_url(bind_address: str, port: int) -> str:
 
 
 def _get_regular_server_url(bind_address: str, port: int) -> str:
-    if bind_address == '0.0.0.0' or bind_address == '::':
+    if bind_address == "0.0.0.0" or bind_address == "::":
         hostname = socket.getfqdn()
     else:
         hostname = bind_address
-    return f'http://{hostname}:{port}'
+    return f"http://{hostname}:{port}"
 
 
 def _get_colab_server_url(port: int) -> str:
     import google.colab.output
-    return google.colab.output.eval_js(f'google.colab.kernel.proxyPort({port})')
+
+    return google.colab.output.eval_js(f"google.colab.kernel.proxyPort({port})")
 
 
 class Server(async_util.BackgroundTornadoServer):
-    def __init__(self, bind_address='127.0.0.1', bind_port=0):
-        super().__init__(daemon = True)
+    def __init__(self, bind_address="127.0.0.1", bind_port=0):
+        super().__init__(daemon=True)
         self.viewers = weakref.WeakValueDictionary()
         self._bind_address = bind_address
         self._bind_port = bind_port
         self.token = make_random_token()
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=multiprocessing.cpu_count())
+            max_workers=multiprocessing.cpu_count()
+        )
 
     def _attempt_to_start_server(self):
         def log_function(handler):
             if debug:
-                print("%d %s %.2fs" %
-                      (handler.get_status(), handler.request.uri, handler.request.request_time()))
+                print(
+                    "%d %s %.2fs"
+                    % (
+                        handler.get_status(),
+                        handler.request.uri,
+                        handler.request.request_time(),
+                    )
+                )
 
         app = self.app = tornado.web.Application(
             [
@@ -111,8 +122,16 @@ class Server(async_util.BackgroundTornadoServer):
                 (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
                 (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
                 (ACTION_PATH_REGEX, ActionHandler, dict(server=self)),
-                (VOLUME_INFO_RESPONSE_PATH_REGEX, VolumeInfoResponseHandler, dict(server=self)),
-                (VOLUME_CHUNK_RESPONSE_PATH_REGEX, VolumeChunkResponseHandler, dict(server=self)),
+                (
+                    VOLUME_INFO_RESPONSE_PATH_REGEX,
+                    VolumeInfoResponseHandler,
+                    dict(server=self),
+                ),
+                (
+                    VOLUME_CHUNK_RESPONSE_PATH_REGEX,
+                    VolumeChunkResponseHandler,
+                    dict(server=self),
+                ),
                 (EVENTS_PATH_REGEX, EventStreamHandler, dict(server=self)),
                 (SET_STATE_PATH_REGEX, SetStateHandler, dict(server=self)),
                 (CREDENTIALS_PATH_REGEX, CredentialsHandler, dict(server=self)),
@@ -120,13 +139,16 @@ class Server(async_util.BackgroundTornadoServer):
             log_function=log_function,
             # Set a large maximum message size to accommodate large screenshot
             # messages.
-            websocket_max_message_size=100 * 1024 * 1024)
+            websocket_max_message_size=100 * 1024 * 1024,
+        )
         self.http_server = tornado.httpserver.HTTPServer(
             app,
             # Allow very large requests to accommodate large screenshots.
             max_buffer_size=1024**3,
         )
-        sockets = tornado.netutil.bind_sockets(port=self._bind_port, address=self._bind_address)
+        sockets = tornado.netutil.bind_sockets(
+            port=self._bind_port, address=self._bind_address
+        )
         self.http_server.add_sockets(sockets)
         actual_port = sockets[0].getsockname()[1]
 
@@ -135,7 +157,9 @@ class Server(async_util.BackgroundTornadoServer):
             global_static_content_source = static.get_default_static_content_source()
         self.port = actual_port
         self.server_url = _get_server_url(self._bind_address, actual_port)
-        self.regular_server_url = _get_regular_server_url(self._bind_address, actual_port)
+        self.regular_server_url = _get_regular_server_url(
+            self._bind_address, actual_port
+        )
         self._credentials_manager = None
 
     def __enter__(self):
@@ -145,11 +169,11 @@ class Server(async_util.BackgroundTornadoServer):
         self.stop()
 
     def get_volume(self, key):
-        dot_index = key.find('.')
+        dot_index = key.find(".")
         if dot_index == -1:
             return None
         viewer_token = key[:dot_index]
-        volume_token = key[dot_index + 1:]
+        volume_token = key[dot_index + 1 :]
         viewer = self.viewers.get(viewer_token)
         if viewer is None:
             return None
@@ -163,7 +187,10 @@ class BaseRequestHandler(tornado.web.RequestHandler):
 
 class StaticPathHandler(BaseRequestHandler):
     def get(self, viewer_token, path):
-        if viewer_token != self.server.token and viewer_token not in self.server.viewers:
+        if (
+            viewer_token != self.server.token
+            and viewer_token not in self.server.viewers
+        ):
             self.send_error(404)
             return
         try:
@@ -171,7 +198,7 @@ class StaticPathHandler(BaseRequestHandler):
         except ValueError as e:
             self.send_error(404, message=e.args[0])
             return
-        self.set_header('Content-type', content_type)
+        self.set_header("Content-type", content_type)
         self.finish(data)
 
 
@@ -182,8 +209,10 @@ class ActionHandler(BaseRequestHandler):
             self.send_error(404)
             return
         action = json.loads(self.request.body)
-        self.server.loop.call_soon(viewer.actions.invoke, action['action'], action['state'])
-        self.finish('')
+        self.server.loop.call_soon(
+            viewer.actions.invoke, action["action"], action["state"]
+        )
+        self.finish("")
 
 
 class VolumeInfoResponseHandler(BaseRequestHandler):
@@ -195,7 +224,7 @@ class VolumeInfoResponseHandler(BaseRequestHandler):
 
         info = json.loads(self.request.body)
         self.server.loop.call_soon(viewer._handle_volume_info_reply, request_id, info)
-        self.finish('')
+        self.finish("")
 
 
 class VolumeChunkResponseHandler(BaseRequestHandler):
@@ -205,10 +234,12 @@ class VolumeChunkResponseHandler(BaseRequestHandler):
             self.send_error(404)
             return
 
-        params = json.loads(self.get_argument('p'))
+        params = json.loads(self.get_argument("p"))
         data = self.request.body
-        self.server.loop.call_soon(viewer._handle_volume_chunk_reply, request_id, params, data)
-        self.finish('')
+        self.server.loop.call_soon(
+            viewer._handle_volume_chunk_reply, request_id, params, data
+        )
+        self.finish("")
 
 
 class EventStreamStateWatcher:
@@ -225,13 +256,15 @@ class EventStreamStateWatcher:
 
     def maybe_send_update(self, handler):
         raw_state, generation = self.state.raw_state_and_generation
-        if generation == self.last_generation: return False
-        if generation.startswith(self._client_id + '/'): return False
+        if generation == self.last_generation:
+            return False
+        if generation.startswith(self._client_id + "/"):
+            return False
         self.last_generation = generation
-        msg = {'k': self.key, 's': raw_state, 'g': generation}
-        handler.write(f'data: {encode_json(msg)}\n\n')
+        msg = {"k": self.key, "s": raw_state, "g": generation}
+        handler.write(f"data: {encode_json(msg)}\n\n")
         if debug:
-            print(f'data: {encode_json(msg)}\n\n')
+            print(f"data: {encode_json(msg)}\n\n")
         return True
 
 
@@ -241,32 +274,41 @@ class EventStreamHandler(BaseRequestHandler):
         if viewer is None:
             self.send_error(404)
             return
-        self.set_header('content-type', 'text/event-stream')
-        self.set_header('cache-control', 'no-cache')
+        self.set_header("content-type", "text/event-stream")
+        self.set_header("cache-control", "no-cache")
         must_flush = True
         wake_event = asyncio.Event()
         self._wake_up = lambda: self.server.loop.call_soon_threadsafe(wake_event.set)
-        client_id = self.get_query_argument('c')
+        client_id = self.get_query_argument("c")
+        if client_id is None:
+            raise tornado.web.HTTPError(400, "missing client_id")
         self._closed = False
 
         watchers = []
 
         def watch(key: str, state):
+            last_generation = self.get_query_argument(f"g{key}")
+            if last_generation is None:
+                raise tornado.web.HTTPError(400, f"missing g{key}")
             watchers.append(
-                EventStreamStateWatcher(key=key,
-                                        state=state,
-                                        client_id=client_id,
-                                        wake_up=self._wake_up,
-                                        last_generation=self.get_query_argument(f'g{key}')))
+                EventStreamStateWatcher(
+                    key=key,
+                    state=state,
+                    client_id=client_id,
+                    wake_up=self._wake_up,
+                    last_generation=last_generation,
+                )
+            )
 
-        watch('c', viewer.config_state)
-        if hasattr(viewer, 'shared_state'):
-            watch('s', viewer.shared_state)
+        watch("c", viewer.config_state)
+        if hasattr(viewer, "shared_state"):
+            watch("s", viewer.shared_state)
 
         try:
             while True:
                 wake_event.clear()
-                if self._closed: break
+                if self._closed:
+                    break
                 try:
                     sent = False
                     for watcher in watchers:
@@ -290,7 +332,7 @@ class EventStreamHandler(BaseRequestHandler):
 
     def on_connection_close(self):
         if debug:
-            print('connection closed')
+            print("connection closed")
         super().on_connection_close()
         self._wake_up()
         self._closed = True
@@ -303,17 +345,19 @@ class SetStateHandler(BaseRequestHandler):
             self.send_error(404)
             return
         msg = json.loads(self.request.body)
-        prev_generation = msg['pg']
-        generation = msg['g']
-        state = msg['s']
-        client_id = msg['c']
+        prev_generation = msg["pg"]
+        generation = msg["g"]
+        state = msg["s"]
+        client_id = msg["c"]
         try:
-            new_generation = viewer.set_state(state, f'{client_id}/{generation}', existing_generation=prev_generation)
-            self.set_header('Content-type', 'application/json')
+            new_generation = viewer.set_state(
+                state, f"{client_id}/{generation}", existing_generation=prev_generation
+            )
+            self.set_header("Content-type", "application/json")
             self.finish(json.dumps({"g": new_generation}))
         except ConcurrentModificationError:
             self.set_status(412)
-            self.finish('')
+            self.finish("")
 
 
 class CredentialsHandler(BaseRequestHandler):
@@ -327,19 +371,23 @@ class CredentialsHandler(BaseRequestHandler):
             return
         if self.server._credentials_manager is None:
             from .default_credentials_manager import default_credentials_manager
+
             self.server._credentials_manager = default_credentials_manager
         msg = json.loads(self.request.body)
-        invalid = msg.get('invalid')
-        provider = self.server._credentials_manager.get(msg['key'], msg.get('parameters'))
+        invalid = msg.get("invalid")
+        provider = self.server._credentials_manager.get(
+            msg["key"], msg.get("parameters")
+        )
         if provider is None:
             self.send_error(400)
             return
         try:
             credentials = await asyncio.wrap_future(provider.get(invalid))
-            self.set_header('Content-type', 'application/json')
+            self.set_header("Content-type", "application/json")
             self.finish(json.dumps(credentials))
-        except:
+        except Exception:
             import traceback
+
             traceback.print_exc()
             self.send_error(401)
 
@@ -364,8 +412,8 @@ class SkeletonInfoHandler(BaseRequestHandler):
 
 class SubvolumeHandler(BaseRequestHandler):
     async def get(self, data_format, token, scale_key, start, end):
-        start_pos = np.array(start.split(','), dtype=np.int64)
-        end_pos = np.array(end.split(','), dtype=np.int64)
+        start_pos = np.array(start.split(","), dtype=np.int64)
+        end_pos = np.array(end.split(","), dtype=np.int64)
         vol = self.server.get_volume(token)
         if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
@@ -373,15 +421,18 @@ class SubvolumeHandler(BaseRequestHandler):
 
         try:
             data, content_type = await asyncio.wrap_future(
-                self.server.executor.submit(vol.get_encoded_subvolume,
-                                            data_format=data_format,
-                                            start=start_pos,
-                                            end=end_pos,
-                                            scale_key=scale_key))
+                self.server.executor.submit(
+                    vol.get_encoded_subvolume,
+                    data_format=data_format,
+                    start=start_pos,
+                    end=end_pos,
+                    scale_key=scale_key,
+                )
+            )
         except ValueError as e:
             self.send_error(400, message=e.args[0])
             return
-        self.set_header('Content-type', content_type)
+        self.set_header("Content-type", content_type)
         self.finish(data)
 
 
@@ -395,21 +446,22 @@ class MeshHandler(BaseRequestHandler):
 
         try:
             encoded_mesh = await asyncio.wrap_future(
-                self.server.executor.submit(vol.get_object_mesh, object_id))
+                self.server.executor.submit(vol.get_object_mesh, object_id)
+            )
         except local_volume.MeshImplementationNotAvailable:
-            self.send_error(501, message='Mesh implementation not available')
+            self.send_error(501, message="Mesh implementation not available")
             return
         except local_volume.MeshesNotSupportedForVolume:
-            self.send_error(405, message='Meshes not supported for volume')
+            self.send_error(405, message="Meshes not supported for volume")
             return
         except local_volume.InvalidObjectIdForMesh:
-            self.send_error(404, message='Mesh not available for specified object id')
+            self.send_error(404, message="Mesh not available for specified object id")
             return
         except ValueError as e:
             self.send_error(400, message=e.args[0])
             return
 
-        self.set_header('Content-type', 'application/octet-stream')
+        self.set_header("Content-type", "application/octet-stream")
         self.finish(encoded_mesh)
 
 
@@ -429,26 +481,30 @@ class SkeletonHandler(BaseRequestHandler):
 
         try:
             encoded_skeleton = await asyncio.wrap_future(
-                self.server.executor.submit(get_encoded_skeleton, vol, object_id))
-        except:
+                self.server.executor.submit(get_encoded_skeleton, vol, object_id)
+            )
+        except Exception as e:
             self.send_error(500, message=e.args[0])
             return
         if encoded_skeleton is None:
-            self.send_error(404, message='Skeleton not available for specified object id')
+            self.send_error(
+                404, message="Skeleton not available for specified object id"
+            )
             return
-        self.set_header('Content-type', 'application/octet-stream')
+        self.set_header("Content-type", "application/octet-stream")
         self.finish(encoded_skeleton)
 
 
 global_server = None
 _global_server_lock = threading.Lock()
 
+
 def set_static_content_source(*args, **kwargs):
     global global_static_content_source
     global_static_content_source = static.get_static_content_source(*args, **kwargs)
 
 
-def set_server_bind_address(bind_address='127.0.0.1', bind_port=0):
+def set_server_bind_address(bind_address="127.0.0.1", bind_port=0):
     global global_server_args
     global_server_args = dict(bind_address=bind_address, bind_port=bind_port)
 
@@ -475,14 +531,16 @@ def stop():
 def get_server_url():
     return global_server.server_url
 
+
 def start():
     global global_server
     with _global_server_lock:
-        if global_server is not None: return
+        if global_server is not None:
+            return
 
         # Workaround https://bugs.python.org/issue37373
         # https://www.tornadoweb.org/en/stable/index.html#installation
-        if sys.platform == 'win32' and sys.version_info >= (3, 8):
+        if sys.platform == "win32" and sys.version_info >= (3, 8):
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         global_server = Server(**global_server_args)
 

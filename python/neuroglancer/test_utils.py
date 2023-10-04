@@ -13,15 +13,17 @@
 # limitations under the License.
 
 import time
-from typing import Callable, TypeVar, Type, Tuple
-
+from typing import Callable, TypeVar
 
 T = TypeVar("T")
 
 
-def retry(func: Callable[[], T], max_attempts: int,
-          delay: float = 0.01,
-          exceptions: Tuple[Type[Exception], ...] = (Exception,)) -> T:
+def retry(
+    func: Callable[[], T],
+    max_attempts: int,
+    delay: float = 0.01,
+    exceptions: tuple[type[Exception], ...] = (Exception,),
+) -> T:
     """Invokes `func` up to `max_attempts` times.
 
     Reties after a delay of `delay` if an exception in `exceptions` is raised.
@@ -36,7 +38,7 @@ def retry(func: Callable[[], T], max_attempts: int,
     Raises:
       First exception not in `exceptions`, or any exception on last attempt.
     """
-    for i in range(max_attempts-1):
+    for i in range(max_attempts - 1):
         try:
             return func()
         except exceptions:

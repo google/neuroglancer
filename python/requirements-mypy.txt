@@ -1,0 +1,11 @@
+mypy
+types-requests
+types-setuptools
+types-Pillow
+types-atomicwrites
+pandas-stubs
+selenium
+tornado
+pytest
+requests
+argcomplete

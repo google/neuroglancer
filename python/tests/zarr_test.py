@@ -14,116 +14,82 @@
 """Tests that shader control parameters can be specified from Python."""
 
 import pathlib
-from typing import Tuple
 
 import neuroglancer
 import numpy as np
 import pytest
-import tensorstore as ts
 
 TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
 
 
-@pytest.mark.parametrize('spec', [
-    {
-        "driver": "zarr"
-    },
-    {
-        "driver": "zarr",
-        "schema": {
-            "chunk_layout": {
-                "inner_order": [2, 1, 0]
-            }
-        }
-    },
-    {
-        "driver": "zarr3"
-    },
-    {
-        "driver": "zarr3",
-        "schema": {
-            "chunk_layout": {
-                "inner_order": [2, 1, 0]
-            }
-        }
-    },
-    {
-        "driver": "zarr3",
-        "schema": {
-            "chunk_layout": {
-                "read_chunk": {
-                    "shape": [2, 3, 4]
-                },
-                "write_chunk": {
-                    "shape": [6, 12, 20]
+@pytest.mark.parametrize(
+    "spec",
+    [
+        {"driver": "zarr"},
+        {"driver": "zarr", "schema": {"chunk_layout": {"inner_order": [2, 1, 0]}}},
+        {"driver": "zarr3"},
+        {"driver": "zarr3", "schema": {"chunk_layout": {"inner_order": [2, 1, 0]}}},
+        {
+            "driver": "zarr3",
+            "schema": {
+                "chunk_layout": {
+                    "read_chunk": {"shape": [2, 3, 4]},
+                    "write_chunk": {"shape": [6, 12, 20]},
                 }
-            }
-        }
-    },
-    {
-        "driver": "zarr3",
-        "schema": {
-            "chunk_layout": {
-                "inner_order": [2, 0, 1],
-                "read_chunk": {
-                    "shape": [2, 3, 4]
-                },
-                "write_chunk": {
-                    "shape": [6, 12, 20]
-                }
-            }
-        }
-    },
-    {
-        "driver": "zarr3",
-        "schema": {
-            "chunk_layout": {
-                "write_chunk": {
-                    "shape": [6, 12, 24]
-                }
-            }
+            },
         },
-        "metadata": {
-            "codecs": [{
-                "name": "transpose",
-                "configuration": {
-                    "order": [0, 2, 1]
+        {
+            "driver": "zarr3",
+            "schema": {
+                "chunk_layout": {
+                    "inner_order": [2, 0, 1],
+                    "read_chunk": {"shape": [2, 3, 4]},
+                    "write_chunk": {"shape": [6, 12, 20]},
                 }
-            }, {
-                "name": "sharding_indexed",
-                "configuration": {
-                    "chunk_shape": [2, 3, 4],
-                    "index_codecs": [{
-                        "name": "transpose",
+            },
+        },
+        {
+            "driver": "zarr3",
+            "schema": {"chunk_layout": {"write_chunk": {"shape": [6, 12, 24]}}},
+            "metadata": {
+                "codecs": [
+                    {"name": "transpose", "configuration": {"order": [0, 2, 1]}},
+                    {
+                        "name": "sharding_indexed",
                         "configuration": {
-                            "order": [3, 1, 0, 2]
-                        }
-                    }, {
-                        "name": "bytes",
-                        "configuration": {
-                            "endian": "little"
-                        }
-                    }],
-                    "codecs": [{
-                        "name": "transpose",
-                        "configuration": {
-                            "order": [2, 1, 0]
-                        }
-                    }, {
-                        "name": "bytes",
-                        "configuration": {
-                            "endian": "little"
-                        }
-                    }, {
-                        "name": "gzip"
-                    }]
-                }
-            }]
-        }
-    },
-],
-                         ids=str)
-def test_zarr(tempdir_server: Tuple[pathlib.Path, str], webdriver, spec):
+                            "chunk_shape": [2, 3, 4],
+                            "index_codecs": [
+                                {
+                                    "name": "transpose",
+                                    "configuration": {"order": [3, 1, 0, 2]},
+                                },
+                                {
+                                    "name": "bytes",
+                                    "configuration": {"endian": "little"},
+                                },
+                            ],
+                            "codecs": [
+                                {
+                                    "name": "transpose",
+                                    "configuration": {"order": [2, 1, 0]},
+                                },
+                                {
+                                    "name": "bytes",
+                                    "configuration": {"endian": "little"},
+                                },
+                                {"name": "gzip"},
+                            ],
+                        },
+                    },
+                ]
+            },
+        },
+    ],
+    ids=str,
+)
+def test_zarr(tempdir_server: tuple[pathlib.Path, str], webdriver, spec):
+    import tensorstore as ts
+
     tmp_path, server_url = tempdir_server
 
     shape = [10, 20, 30]
@@ -131,9 +97,9 @@ def test_zarr(tempdir_server: Tuple[pathlib.Path, str], webdriver, spec):
     a = np.arange(np.prod(shape), dtype=np.int32).reshape(shape)
 
     full_spec = {
-        'kvstore': {
-            'driver': 'file',
-            'path': str(tmp_path),
+        "kvstore": {
+            "driver": "file",
+            "path": str(tmp_path),
         }
     }
     full_spec.update(spec)
@@ -142,68 +108,80 @@ def test_zarr(tempdir_server: Tuple[pathlib.Path, str], webdriver, spec):
     store[...] = a
 
     with webdriver.viewer.txn() as s:
-        s.layers.append(name="a", layer=neuroglancer.ImageLayer(source=f'zarr://{server_url}'))
+        s.layers.append(
+            name="a", layer=neuroglancer.ImageLayer(source=f"zarr://{server_url}")
+        )
 
-    vol = webdriver.viewer.volume('a').result()
+    vol = webdriver.viewer.volume("a").result()
     b = vol.read().result()
     np.testing.assert_equal(a, b)
 
 
 EXCLUDED_ZARR_V2_CASES = {
-    '.zgroup',
-    '.zattrs',
-    '.zmetadata',
+    ".zgroup",
+    ".zattrs",
+    ".zmetadata",
     # bool not supported by neuroglancer
-    '1d.contiguous.b1',
+    "1d.contiguous.b1",
     # float64 not supported by neuroglancer
-    '1d.contiguous.f8',
+    "1d.contiguous.f8",
     # LZ4 not supported by neuroglancer or tensorstore
-    '1d.contiguous.lz4.i2',
+    "1d.contiguous.lz4.i2",
     # S not supported by neuroglancer
-    '1d.contiguous.S7',
+    "1d.contiguous.S7",
     # U not supported by neuroglancer
-    '1d.contiguous.U13.be',
-    '1d.contiguous.U13.le',
-    '1d.contiguous.U7',
-    '2d.chunked.U7',
+    "1d.contiguous.U13.be",
+    "1d.contiguous.U13.le",
+    "1d.contiguous.U7",
+    "2d.chunked.U7",
     # VLenUTF8 not supported by neuroglancer
-    '3d.chunked.O',
+    "3d.chunked.O",
 }
 
 EXCLUDED_ZARR_V3_CASES = {
-    'zarr.json',
+    "zarr.json",
     # bool not supported by neuroglancer
-    '1d.contiguous.b1',
-    '1d.contiguous.compressed.sharded.b1',
+    "1d.contiguous.b1",
+    "1d.contiguous.compressed.sharded.b1",
     # float64 not supported by neuroglancer
-    '1d.contiguous.f8',
-    '1d.contiguous.compressed.sharded.f8',
+    "1d.contiguous.f8",
+    "1d.contiguous.compressed.sharded.f8",
 }
 
 
-@pytest.mark.parametrize('driver,data_dir',
-                         [('zarr', p)
-                          for p in TEST_DATA_DIR.glob('zarr_v2/from_zarr-python/data.zarr/*')
-                          if p.name != '.zgroup' and p.name not in EXCLUDED_ZARR_V2_CASES] +
-                         [('zarr3', p)
-                          for p in TEST_DATA_DIR.glob('zarr_v3/from_zarrita/data.zarr/*')
-                          if p.name not in EXCLUDED_ZARR_V3_CASES],
-                         ids=str)
+@pytest.mark.parametrize(
+    "driver,data_dir",
+    [
+        ("zarr", p)
+        for p in TEST_DATA_DIR.glob("zarr_v2/from_zarr-python/data.zarr/*")
+        if p.name != ".zgroup" and p.name not in EXCLUDED_ZARR_V2_CASES
+    ]
+    + [
+        ("zarr3", p)
+        for p in TEST_DATA_DIR.glob("zarr_v3/from_zarrita/data.zarr/*")
+        if p.name not in EXCLUDED_ZARR_V3_CASES
+    ],
+    ids=str,
+)
 def test_data(driver: str, data_dir: pathlib.Path, static_file_server, webdriver):
+    import tensorstore as ts
+
     server_url = static_file_server(data_dir)
     full_spec = {
-        'driver': driver,
-        'kvstore': {
-            'driver': 'file',
-            'path': str(data_dir),
-        }
+        "driver": driver,
+        "kvstore": {
+            "driver": "file",
+            "path": str(data_dir),
+        },
     }
     store = ts.open(full_spec, open=True, read=True).result()
     a = store.read().result()
 
     with webdriver.viewer.txn() as s:
-        s.layers.append(name="a", layer=neuroglancer.ImageLayer(source=f'zarr://{server_url}'))
+        s.layers.append(
+            name="a", layer=neuroglancer.ImageLayer(source=f"zarr://{server_url}")
+        )
 
-    vol = webdriver.viewer.volume('a').result()
+    vol = webdriver.viewer.volume("a").result()
     b = vol.read().result()
     np.testing.assert_equal(a, b)

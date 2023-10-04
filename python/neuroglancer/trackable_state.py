@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
 
 import contextlib
 import copy
@@ -24,7 +23,8 @@ from .random_token import make_random_token
 class ConcurrentModificationError(RuntimeError):
     pass
 
-class ChangeNotifier(object):
+
+class ChangeNotifier:
     def __init__(self):
         self.__changed_callbacks = set()
         self.change_count = 0
@@ -48,28 +48,36 @@ class ChangeNotifier(object):
             for callback in self.__changed_callbacks:
                 callback()
 
+
 class TrackableState(ChangeNotifier):
     def __init__(self, wrapper_type, transform_state=None):
-        super(TrackableState, self).__init__()
+        super().__init__()
         self._raw_state = {}
         self._lock = threading.RLock()
         self._generation = make_random_token()
         self._wrapped_state = None
         self._wrapper_type = wrapper_type
         if transform_state is None:
+
             def transform_state_function(new_state):
                 if isinstance(new_state, wrapper_type):
                     return new_state.to_json()
                 return new_state
+
             transform_state = transform_state_function
         self._transform_state = transform_state
 
     def set_state(self, new_state, generation=None, existing_generation=None):
         with self._lock:
-            if existing_generation is not None and self._generation != existing_generation:
+            if (
+                existing_generation is not None
+                and self._generation != existing_generation
+            ):
                 raise ConcurrentModificationError
             new_state = self._transform_state(new_state)
-            if new_state != self._raw_state or (generation is not None and generation != self._generation):
+            if new_state != self._raw_state or (
+                generation is not None and generation != self._generation
+            ):
                 if generation is None:
                     generation = make_random_token()
                 self._raw_state = new_state
@@ -101,7 +109,9 @@ class TrackableState(ChangeNotifier):
         with self._lock:
             wrapped_state = self._wrapped_state
             if wrapped_state is None:
-                wrapped_state = self._wrapped_state = self._wrapper_type(self._raw_state, _readonly=True)
+                wrapped_state = self._wrapped_state = self._wrapper_type(
+                    self._raw_state, _readonly=True
+                )
             return wrapped_state
 
     @contextlib.contextmanager
@@ -131,4 +141,4 @@ class TrackableState(ChangeNotifier):
                 raise
 
     def __repr__(self):
-        return u'%s(%r)' % (type(self).__name__, self.state)
+        return f"{type(self).__name__}({self.state!r})"

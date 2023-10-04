@@ -14,13 +14,12 @@
 
 """Various extensions to the concurrent.futures module."""
 
-from __future__ import absolute_import
 
 import concurrent.futures
 import threading
 
 
-def future_then_immediate(future, func, new_future = None):
+def future_then_immediate(future, func, new_future=None):
     """Returns a future that maps the result of `future` by `func`.
 
     If `future` succeeds, sets the result of the returned future to `func(future.result())`.  If
@@ -50,6 +49,7 @@ def run_on_new_thread(func, daemon=True):
     :returns: A concurrent.futures.Future object representing the result.
     """
     f = concurrent.futures.Future()
+
     def wrapper():
         if not f.set_running_or_notify_cancel():
             return
@@ -57,6 +57,7 @@ def run_on_new_thread(func, daemon=True):
             f.set_result(func())
         except Exception as e:
             f.set_exception(e)
+
     t = threading.Thread(target=wrapper)
     t.daemon = daemon
     t.start()

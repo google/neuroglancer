@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
 
 import base64
 import collections
@@ -21,39 +20,50 @@ import numbers
 import traceback
 
 import numpy as np
-import six
 
 from . import viewer_state
-from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
-                            typed_set, typed_string_map, wrapped_property)
+from .json_wrappers import (
+    JsonObjectWrapper,
+    array_wrapper,
+    optional,
+    text_type,
+    typed_list,
+    typed_set,
+    typed_string_map,
+    wrapped_property,
+)
 
-_uint64_keys = frozenset(['t', 'v'])
-_map_entry_keys = frozenset(['key', 'value'])
+_uint64_keys = frozenset(["t", "v"])
+_map_entry_keys = frozenset(["key", "value"])
 
 
-class SegmentIdMapEntry(collections.namedtuple('SegmentIdMapEntry', ['key', 'value', 'label'])):
+class SegmentIdMapEntry(
+    collections.namedtuple("SegmentIdMapEntry", ["key", "value", "label"])
+):
     def __new__(cls, key, value=None, label=None):
-        return super(SegmentIdMapEntry, cls).__new__(cls, key, value, label)
+        return super().__new__(cls, key, value, label)
 
 
 def layer_selected_value(x):
     if isinstance(x, numbers.Number):
         return x
-    if isinstance(x, six.string_types):
+    if isinstance(x, str):
         return int(x)
     if isinstance(x, dict):
-        value = x.get('value')
+        value = x.get("value")
         if value is not None:
             value = int(value)
-        return SegmentIdMapEntry(int(x['key']), value, x.get('label'))
+        return SegmentIdMapEntry(int(x["key"]), value, x.get("label"))
     return None
 
 
 class LayerSelectionState(JsonObjectWrapper):
     __slots__ = ()
     supports_validation = True
-    local_position = wrapped_property('localPosition', optional(array_wrapper(np.float32)))
-    value = wrapped_property('value', optional(layer_selected_value))
+    local_position = wrapped_property(
+        "localPosition", optional(array_wrapper(np.float32))
+    )
+    value = wrapped_property("value", optional(layer_selected_value))
 
 
 LayerSelectedValues = typed_string_map(LayerSelectionState)
@@ -61,65 +71,80 @@ LayerSelectedValues = typed_string_map(LayerSelectionState)
 
 class ScreenshotReply(JsonObjectWrapper):
     __slots__ = ()
-    id = wrapped_property('id', text_type)
-    image = wrapped_property('image', base64.b64decode)
-    width = wrapped_property('width', int)
-    height = wrapped_property('height', int)
-    image_type = imageType = wrapped_property('imageType', text_type)
-    depth_data = depthData = wrapped_property('depthData', optional(base64.b64decode))
+    id = wrapped_property("id", text_type)
+    image = wrapped_property("image", base64.b64decode)
+    width = wrapped_property("width", int)
+    height = wrapped_property("height", int)
+    image_type = imageType = wrapped_property("imageType", text_type)
+    depth_data = depthData = wrapped_property("depthData", optional(base64.b64decode))
 
     @property
     def image_pixels(self):
         """Returns the screenshot image as a numpy array of pixel values."""
         import PIL
+
         return np.asarray(PIL.Image.open(io.BytesIO(self.image)))
 
     @property
     def depth_array(self):
         """Returns the depth data as a numpy float32 array."""
         depth_data = self.depth_data
-        if depth_data is None: return None
-        return np.frombuffer(depth_data, dtype='<f4').reshape((self.height, self.width))
+        if depth_data is None:
+            return None
+        return np.frombuffer(depth_data, dtype="<f4").reshape((self.height, self.width))
 
 
 class AggregateChunkSourceStatistics(JsonObjectWrapper):
     __slots__ = ()
-    visible_chunks_total = visibleChunksTotal = wrapped_property('visibleChunksTotal', int)
+    visible_chunks_total = visibleChunksTotal = wrapped_property(
+        "visibleChunksTotal", int
+    )
     visible_chunks_downloading = visibleChunksDownloading = wrapped_property(
-        'visibleChunksDownloading', int)
+        "visibleChunksDownloading", int
+    )
     visible_chunks_system_memory = visibleChunksSystemMemory = wrapped_property(
-        'visibleChunksSystemMemory', int)
+        "visibleChunksSystemMemory", int
+    )
     visible_chunks_gpu_memory = visibleChunksGpuMemory = wrapped_property(
-        'visibleChunksGpuMemory', int)
-    visible_gpu_memory = visibleGpuMemory = wrapped_property('visibleGpuMemory', float)
-    download_latency = downloadLatency = wrapped_property('downloadLatency', float)
+        "visibleChunksGpuMemory", int
+    )
+    visible_gpu_memory = visibleGpuMemory = wrapped_property("visibleGpuMemory", float)
+    download_latency = downloadLatency = wrapped_property("downloadLatency", float)
 
 
 class ChunkSourceStatistics(JsonObjectWrapper):
     __slots__ = ()
-    distinct_id = distinctId = wrapped_property('distinctId', text_type)
+    distinct_id = distinctId = wrapped_property("distinctId", text_type)
 
 
 class ScreenshotStatistics(JsonObjectWrapper):
     __slots__ = ()
-    id = wrapped_property('id', text_type)
+    id = wrapped_property("id", text_type)
 
-    chunk_sources = chunkSources = wrapped_property('chunkSources',
-                                                    typed_list(ChunkSourceStatistics))
-    total = wrapped_property('total', AggregateChunkSourceStatistics)
+    chunk_sources = chunkSources = wrapped_property(
+        "chunkSources", typed_list(ChunkSourceStatistics)
+    )
+    total = wrapped_property("total", AggregateChunkSourceStatistics)
 
 
 class ActionState(JsonObjectWrapper):
     __slots__ = ()
-    viewer_state = viewerState = wrapped_property('viewerState', viewer_state.ViewerState)
-    selected_values = selectedValues = wrapped_property('selectedValues', LayerSelectedValues)
+    viewer_state = viewerState = wrapped_property(
+        "viewerState", viewer_state.ViewerState
+    )
+    selected_values = selectedValues = wrapped_property(
+        "selectedValues", LayerSelectedValues
+    )
     mouse_position = mouse_voxel_coordinates = mouseVoxelCoordinates = wrapped_property(
-        'mousePosition', optional(array_wrapper(np.float32)))
-    screenshot = wrapped_property('screenshot', optional(ScreenshotReply))
-    screenshot_statistics = screenshotStatistics = wrapped_property('screenshotStatistics',
-                                                                    optional(ScreenshotStatistics))
+        "mousePosition", optional(array_wrapper(np.float32))
+    )
+    screenshot = wrapped_property("screenshot", optional(ScreenshotReply))
+    screenshot_statistics = screenshotStatistics = wrapped_property(
+        "screenshotStatistics", optional(ScreenshotStatistics)
+    )
 
-class Actions(object):
+
+class Actions:
     def __init__(self, set_config):
         self._action_handlers = dict()
         self._set_config = set_config
@@ -129,10 +154,10 @@ class Actions(object):
         self._update_config()
 
     def clear(self):
-        screenshot_handler = self._action_handlers.get('screenshot')
+        screenshot_handler = self._action_handlers.get("screenshot")
         self._action_handlers.clear()
         if screenshot_handler is not None:
-            self._action_handlers['screenshot'] = screenshot_handler
+            self._action_handlers["screenshot"] = screenshot_handler
         self._update_config()
 
     def remove(self, name, handler):
@@ -145,7 +170,7 @@ class Actions(object):
         self._update_config()
 
     def _update_config(self):
-        self._set_config(six.viewkeys(self._action_handlers))
+        self._set_config(self._action_handlers.keys())
 
     def invoke(self, name, state):
         state = ActionState(state)
@@ -154,7 +179,7 @@ class Actions(object):
             for handler in handlers:
                 try:
                     handler(state)
-                except:
+                except Exception:
                     traceback.print_exc()
 
 
@@ -163,94 +188,138 @@ EventActionMap = typed_string_map(text_type)
 
 class InputEventBindings(JsonObjectWrapper):
     __slots__ = ()
-    viewer = wrapped_property('viewer', EventActionMap)
-    slice_view = sliceView = wrapped_property('sliceView', EventActionMap)
-    perspective_view = perspectiveView = wrapped_property('perspectiveView', EventActionMap)
-    data_view = dataView = wrapped_property('dataView', EventActionMap)
+    viewer = wrapped_property("viewer", EventActionMap)
+    slice_view = sliceView = wrapped_property("sliceView", EventActionMap)
+    perspective_view = perspectiveView = wrapped_property(
+        "perspectiveView", EventActionMap
+    )
+    data_view = dataView = wrapped_property("dataView", EventActionMap)
 
 
 class PrefetchState(JsonObjectWrapper):
     __slots__ = ()
     supports_validation = True
-    priority = wrapped_property('priority', optional(int, 0))
-    state = wrapped_property('state', viewer_state.ViewerState)
+    priority = wrapped_property("priority", optional(int, 0))
+    state = wrapped_property("state", viewer_state.ViewerState)
 
 
 class ScaleBarOptions(JsonObjectWrapper):
     __slots__ = ()
     supports_validation = True
-    scale_factor = scaleFactor = wrapped_property('scaleFactor', optional(float, 1))
-    text_height_in_pixels = textHeightInPixels = wrapped_property('textHeightInPixels',
-                                                                  optional(float, 15))
-    bar_height_in_pixels = barHeightInPixels = wrapped_property('barHeightInPixels',
-                                                                optional(float, 8))
+    scale_factor = scaleFactor = wrapped_property("scaleFactor", optional(float, 1))
+    text_height_in_pixels = textHeightInPixels = wrapped_property(
+        "textHeightInPixels", optional(float, 15)
+    )
+    bar_height_in_pixels = barHeightInPixels = wrapped_property(
+        "barHeightInPixels", optional(float, 8)
+    )
     bar_top_margin_in_pixels = barTopMarginInPixels = wrapped_property(
-        'barTopMarginInPixels', optional(float, 5))
-    font_name = fontName = wrapped_property('fontName', optional(text_type, 'sans-serif'))
-    padding_in_pixels = paddingInPixels = wrapped_property('paddingInPixels', optional(float, 2))
-    max_width_in_pixels = maxWidthInPixels = wrapped_property('maxWidthInPixels',
-                                                              optional(int, 100))
-    max_width_fraction = maxWidthFraction = wrapped_property('maxWidthFraction',
-                                                             optional(float, 0.25))
-    left_pixel_offset = leftPixelOffset = wrapped_property('leftPixelOffset', optional(int, 10))
-    bottom_pixel_offset = bottomPixelOffset = wrapped_property('bottomPixelOffset',
-                                                               optional(int, 10))
+        "barTopMarginInPixels", optional(float, 5)
+    )
+    font_name = fontName = wrapped_property(
+        "fontName", optional(text_type, "sans-serif")
+    )
+    padding_in_pixels = paddingInPixels = wrapped_property(
+        "paddingInPixels", optional(float, 2)
+    )
+    max_width_in_pixels = maxWidthInPixels = wrapped_property(
+        "maxWidthInPixels", optional(int, 100)
+    )
+    max_width_fraction = maxWidthFraction = wrapped_property(
+        "maxWidthFraction", optional(float, 0.25)
+    )
+    left_pixel_offset = leftPixelOffset = wrapped_property(
+        "leftPixelOffset", optional(int, 10)
+    )
+    bottom_pixel_offset = bottomPixelOffset = wrapped_property(
+        "bottomPixelOffset", optional(int, 10)
+    )
 
 
 class VolumeInfo(JsonObjectWrapper):
     __slots__ = ()
 
-    dimensions = wrapped_property('dimensions', viewer_state.CoordinateSpace)
-    order = wrapped_property('order', typed_list(int))
-    data_type = dataType = wrapped_property('dataType', str)
-    chunk_shape = chunkShape = wrapped_property('chunkShape', array_wrapper(np.int64))
-    grid_origin = gridOrigin = wrapped_property('gridOrigin', array_wrapper(np.int64))
-    lower_bound = lowerBound = wrapped_property('lowerBound', array_wrapper(np.int64))
-    upper_bound = upperBound = wrapped_property('upperBound', array_wrapper(np.int64))
+    dimensions = wrapped_property("dimensions", viewer_state.CoordinateSpace)
+    order = wrapped_property("order", typed_list(int))
+    data_type = dataType = wrapped_property("dataType", str)
+    chunk_shape = chunkShape = wrapped_property("chunkShape", array_wrapper(np.int64))
+    grid_origin = gridOrigin = wrapped_property("gridOrigin", array_wrapper(np.int64))
+    lower_bound = lowerBound = wrapped_property("lowerBound", array_wrapper(np.int64))
+    upper_bound = upperBound = wrapped_property("upperBound", array_wrapper(np.int64))
 
     @property
     def rank(self):
         return self.dimensions.rank
 
+
 class VolumeRequest(JsonObjectWrapper):
     __slots__ = ()
-    id = wrapped_property('id', str)
-    kind = wrapped_property('kind', str)
-    layer = wrapped_property('layer', str)
-    dimensions = wrapped_property('dimensions', optional(viewer_state.CoordinateSpace))
-    volume_info = volumeInfo = wrapped_property('volumeInfo', optional(VolumeInfo))
-    chunk_grid_position = chunkGridPosition = wrapped_property('chunkGridPosition', optional(array_wrapper(np.int64)))
+    id = wrapped_property("id", str)
+    kind = wrapped_property("kind", str)
+    layer = wrapped_property("layer", str)
+    dimensions = wrapped_property("dimensions", optional(viewer_state.CoordinateSpace))
+    volume_info = volumeInfo = wrapped_property("volumeInfo", optional(VolumeInfo))
+    chunk_grid_position = chunkGridPosition = wrapped_property(
+        "chunkGridPosition", optional(array_wrapper(np.int64))
+    )
 
 
 class ConfigState(JsonObjectWrapper):
     __slots__ = ()
-    credentials = wrapped_property('credentials', typed_string_map(dict))
-    actions = wrapped_property('actions', typed_set(text_type))
-    input_event_bindings = inputEventBindings = wrapped_property('inputEventBindings',
-                                                                 InputEventBindings)
-    status_messages = statusMessages = wrapped_property('statusMessages',
-                                                        typed_string_map(text_type))
-    source_generations = sourceGenerations = wrapped_property('sourceGenerations',
-                                                              typed_string_map(int))
-    screenshot = wrapped_property('screenshot', optional(text_type))
-    show_ui_controls = showUIControls = wrapped_property('showUIControls', optional(bool, True))
-    show_location = showLocation = wrapped_property('showLocation', optional(bool, True))
-    show_layer_panel = showLayerPanel = wrapped_property('showLayerPanel', optional(bool, True))
-    show_help_button = showHelpButton = wrapped_property('showHelpButton', optional(bool, True))
-    show_settings_button = showSettingsButton = wrapped_property('showSettingsButton', optional(bool, True))
-    show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property('showLayerSidePanelButton', optional(bool, True))
-    show_layer_list_panel_button = showLayerListPanelButton = wrapped_property('showLayerListPanelButton', optional(bool, True))
-    show_selection_panel_button = showSelectionPanelButton = wrapped_property('showSelectionPanelButton', optional(bool, True))
-    show_panel_borders = showPanelBorders = wrapped_property('showPanelBorders',
-                                                             optional(bool, True))
-    scale_bar_options = scaleBarOptions = wrapped_property('scaleBarOptions', ScaleBarOptions)
-    show_layer_hover_values = showLayerHoverValues = wrapped_property('showLayerHoverValues',
-                                                                      optional(bool, True))
-    viewer_size = viewerSize = wrapped_property('viewerSize', optional(array_wrapper(np.int64, 2)))
-    prefetch = wrapped_property('prefetch', typed_list(PrefetchState))
-    volume_requests = volumeRequests = wrapped_property('volumeRequests', typed_list(VolumeRequest))
+    credentials = wrapped_property("credentials", typed_string_map(dict))
+    actions = wrapped_property("actions", typed_set(text_type))
+    input_event_bindings = inputEventBindings = wrapped_property(
+        "inputEventBindings", InputEventBindings
+    )
+    status_messages = statusMessages = wrapped_property(
+        "statusMessages", typed_string_map(text_type)
+    )
+    source_generations = sourceGenerations = wrapped_property(
+        "sourceGenerations", typed_string_map(int)
+    )
+    screenshot = wrapped_property("screenshot", optional(text_type))
+    show_ui_controls = showUIControls = wrapped_property(
+        "showUIControls", optional(bool, True)
+    )
+    show_location = showLocation = wrapped_property(
+        "showLocation", optional(bool, True)
+    )
+    show_layer_panel = showLayerPanel = wrapped_property(
+        "showLayerPanel", optional(bool, True)
+    )
+    show_help_button = showHelpButton = wrapped_property(
+        "showHelpButton", optional(bool, True)
+    )
+    show_settings_button = showSettingsButton = wrapped_property(
+        "showSettingsButton", optional(bool, True)
+    )
+    show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
+        "showLayerSidePanelButton", optional(bool, True)
+    )
+    show_layer_list_panel_button = showLayerListPanelButton = wrapped_property(
+        "showLayerListPanelButton", optional(bool, True)
+    )
+    show_selection_panel_button = showSelectionPanelButton = wrapped_property(
+        "showSelectionPanelButton", optional(bool, True)
+    )
+    show_panel_borders = showPanelBorders = wrapped_property(
+        "showPanelBorders", optional(bool, True)
+    )
+    scale_bar_options = scaleBarOptions = wrapped_property(
+        "scaleBarOptions", ScaleBarOptions
+    )
+    show_layer_hover_values = showLayerHoverValues = wrapped_property(
+        "showLayerHoverValues", optional(bool, True)
+    )
+    viewer_size = viewerSize = wrapped_property(
+        "viewerSize", optional(array_wrapper(np.int64, 2))
+    )
+    prefetch = wrapped_property("prefetch", typed_list(PrefetchState))
+    volume_requests = volumeRequests = wrapped_property(
+        "volumeRequests", typed_list(VolumeRequest)
+    )
 
 
 class PrivateState(JsonObjectWrapper):
     __slots__ = ()
-    credentials = wrapped_property('credentials', typed_string_map(optional(int)))
+    credentials = wrapped_property("credentials", typed_string_map(optional(int)))

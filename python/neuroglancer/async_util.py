@@ -20,7 +20,6 @@ import tornado.platform.asyncio
 
 
 class BackgroundTornadoServerMetaclass(type):
-
     def __call__(cls, *args, **kwargs):
         obj = type.__call__(cls, *args, **kwargs)
         obj.__post_init__()
@@ -28,7 +27,6 @@ class BackgroundTornadoServerMetaclass(type):
 
 
 class BackgroundTornadoServer(metaclass=BackgroundTornadoServerMetaclass):
-
     def __init__(self, daemon=False):
         self._thread = threading.Thread(target=self._run_server)
         if daemon:
@@ -49,7 +47,7 @@ class BackgroundTornadoServer(metaclass=BackgroundTornadoServerMetaclass):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            ioloop = tornado.platform.asyncio.AsyncIOMainLoop()
+            tornado.platform.asyncio.AsyncIOMainLoop()
             self.loop = loop
             loop.call_soon(self._start_server)
             loop.run_forever()
@@ -72,7 +70,9 @@ class BackgroundTornadoServer(metaclass=BackgroundTornadoServerMetaclass):
         with self._stop_lock:
             if not self._stop_requested:
                 self._stop_requested = True
-                self.loop.call_soon_threadsafe(lambda: asyncio.create_task(self._stop()))
+                self.loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._stop())
+                )
 
     def stop(self):
         self.request_stop()
@@ -80,5 +80,7 @@ class BackgroundTornadoServer(metaclass=BackgroundTornadoServerMetaclass):
 
     async def _stop(self):
         self.http_server.stop()
-        await tornado.platform.asyncio.to_asyncio_future(self.http_server.close_all_connections())
+        await tornado.platform.asyncio.to_asyncio_future(
+            self.http_server.close_all_connections()
+        )
         self.loop.stop()

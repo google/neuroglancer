@@ -1,7 +1,6 @@
 #!/usr/bin/env python2
 """Tool for extending via equivalences a set of segments."""
 
-from __future__ import absolute_import, print_function
 
 import argparse
 import copy
@@ -11,7 +10,7 @@ import webbrowser
 import neuroglancer
 from neuroglancer.json_utils import decode_json, encode_json
 
-neuroglancer.set_static_content_source(url='http://localhost:8080')
+neuroglancer.set_static_content_source(url="http://localhost:8080")
 
 
 def get_segmentation_layer(layers):
@@ -20,27 +19,29 @@ def get_segmentation_layer(layers):
             return layer
 
 
-class Annotator(object):
+class Annotator:
     def __init__(self, filename):
         self.filename = filename
-        self.point_annotation_layer_name = 'false-merges'
+        self.point_annotation_layer_name = "false-merges"
         self.states = []
         self.state_index = None
         viewer = self.viewer = neuroglancer.Viewer()
         self.other_state_segment_ids = dict()
 
-        viewer.actions.add('anno-next-state', lambda s: self.next_state())
-        viewer.actions.add('anno-prev-state', lambda s: self.prev_state())
-        viewer.actions.add('anno-save', lambda s: self.save())
-        viewer.actions.add('anno-show-all', lambda s: self.set_combined_state())
-        viewer.actions.add('anno-add-segments-from-state',
-                           lambda s: self.add_segments_from_state(s.viewer_state))
+        viewer.actions.add("anno-next-state", lambda s: self.next_state())
+        viewer.actions.add("anno-prev-state", lambda s: self.prev_state())
+        viewer.actions.add("anno-save", lambda s: self.save())
+        viewer.actions.add("anno-show-all", lambda s: self.set_combined_state())
+        viewer.actions.add(
+            "anno-add-segments-from-state",
+            lambda s: self.add_segments_from_state(s.viewer_state),
+        )
 
         with viewer.config_state.txn() as s:
-            s.input_event_bindings.viewer['pageup'] = 'anno-prev-state'
-            s.input_event_bindings.viewer['pagedown'] = 'anno-next-state'
-            s.input_event_bindings.viewer['control+keys'] = 'anno-save'
-            s.input_event_bindings.viewer['control+keya'] = 'anno-show-all'
+            s.input_event_bindings.viewer["pageup"] = "anno-prev-state"
+            s.input_event_bindings.viewer["pagedown"] = "anno-next-state"
+            s.input_event_bindings.viewer["control+keys"] = "anno-save"
+            s.input_event_bindings.viewer["control+keya"] = "anno-show-all"
 
         viewer.shared_state.add_changed_callback(self.on_state_changed)
         self.cur_message = None
@@ -52,23 +53,25 @@ class Annotator(object):
 
     def update_message(self):
         if self.state_index is None:
-            message = '[No state selected]'
+            message = "[No state selected]"
         else:
-            message = '[%d/%d] ' % (self.state_index, len(self.states))
+            message = "[%d/%d] " % (self.state_index, len(self.states))
             segments = self.get_state_segment_ids(self.viewer.state)
             warnings = []
             for segment_id in segments:
                 other_state = self.other_state_segment_ids.get(segment_id)
                 if other_state is not None:
-                    warnings.append('Segment %d also in state %d' % (segment_id, other_state))
+                    warnings.append(
+                        "Segment %d also in state %d" % (segment_id, other_state)
+                    )
             if warnings:
-                message += 'WARNING: ' + ', '.join(warnings)
+                message += "WARNING: " + ", ".join(warnings)
         if message != self.cur_message:
             with self.viewer.config_state.txn() as s:
                 if message is not None:
-                    s.status_messages['status'] = message
+                    s.status_messages["status"] = message
                 else:
-                    s.status_messages.pop('status')
+                    s.status_messages.pop("status")
             self.cur_message = message
 
     def load(self):
@@ -76,17 +79,19 @@ class Annotator(object):
             return False
         self.state_index = None
 
-        with open(self.filename, 'r') as f:
+        with open(self.filename) as f:
             loaded_state = decode_json(f.read())
-        self.states = [neuroglancer.ViewerState(x) for x in loaded_state['states']]
-        self.set_state_index(loaded_state['state_index'])
+        self.states = [neuroglancer.ViewerState(x) for x in loaded_state["states"]]
+        self.set_state_index(loaded_state["state_index"])
         return True
 
     def set_state_index_relative(self, amount):
         if self.state_index is None:
             new_state = 0
         else:
-            new_state = (self.state_index + amount + len(self.states)) % len(self.states)
+            new_state = (self.state_index + amount + len(self.states)) % len(
+                self.states
+            )
         self.set_state_index(new_state)
 
     def next_state(self):
@@ -122,7 +127,7 @@ class Annotator(object):
         for segment_id in other_ids:
             state_numbers = other_ids[segment_id]
             if len(state_numbers) > 1:
-                print('%d in %r' % (segment_id, state_numbers))
+                print("%d in %r" % (segment_id, state_numbers))
 
     def _grab_viewer_state(self):
         if self.state_index is not None:
@@ -130,13 +135,18 @@ class Annotator(object):
 
     def save(self):
         self._grab_viewer_state()
-        tmp_filename = self.filename + '.tmp'
-        with open(tmp_filename, 'wb') as f:
+        tmp_filename = self.filename + ".tmp"
+        with open(tmp_filename, "wb") as f:
             f.write(
                 encode_json(
-                    dict(states=[s.to_json() for s in self.states], state_index=self.state_index)))
+                    dict(
+                        states=[s.to_json() for s in self.states],
+                        state_index=self.state_index,
+                    )
+                )
+            )
         os.rename(tmp_filename, self.filename)
-        print('Saved state to: %s' % (self.filename, ))
+        print(f"Saved state to: {self.filename}")
 
     def get_state_segment_ids(self, state):
         return get_segmentation_layer(state.layers).segments
@@ -159,7 +169,7 @@ class Annotator(object):
 
         for segment_id in segment_ids:
             if segment_id in existing_segment_ids:
-                print('Skipping redundant segment id %d' % segment_id)
+                print("Skipping redundant segment id %d" % segment_id)
                 continue
             self.states.append(self.make_initial_state(segment_id, base_state))
 
@@ -172,7 +182,9 @@ class Annotator(object):
         segments = self.get_state_segment_ids(state)
         segments.clear()
         segments[segment_id] = True
-        state.layers[self.point_annotation_layer_name] = neuroglancer.PointAnnotationLayer()
+        state.layers[
+            self.point_annotation_layer_name
+        ] = neuroglancer.PointAnnotationLayer()
 
         return state
 
@@ -185,7 +197,7 @@ class Annotator(object):
     def set_combined_state(self):
         state = self.make_combined_state()
         if state is None:
-            print('No states')
+            print("No states")
         else:
             self.set_state_index(None)
             self.viewer.set_state(state)
@@ -224,27 +236,33 @@ class Annotator(object):
         print(neuroglancer.to_url(self.make_combined_state()))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument('filename', type=str)
+    ap.add_argument("filename", type=str)
     ap.add_argument(
-        '-a',
-        '--add-segments-from-url',
+        "-a",
+        "--add-segments-from-url",
         type=str,
-        nargs='*',
+        nargs="*",
         default=[],
-        help='Add a new state for each selected segment specified by a Neuroglancer URL.')
+        help="Add a new state for each selected segment specified by a Neuroglancer URL.",
+    )
     ap.add_argument(
-        '-n', '--no-webbrowser', action='store_true', help='Don\'t open the webbrowser.')
-    ap.add_argument('--print-sets', action='store_true', help='Print the sets of supervoxels.')
+        "-n", "--no-webbrowser", action="store_true", help="Don't open the webbrowser."
+    )
     ap.add_argument(
-        '--print-combined-state',
-        action='store_true',
-        help='Prints a neuroglancer link for the combined state.')
+        "--print-sets", action="store_true", help="Print the sets of supervoxels."
+    )
     ap.add_argument(
-        '--print-summary',
-        action='store_true',
-        help='Prints a neuroglancer link for the combined state.')
+        "--print-combined-state",
+        action="store_true",
+        help="Prints a neuroglancer link for the combined state.",
+    )
+    ap.add_argument(
+        "--print-summary",
+        action="store_true",
+        help="Prints a neuroglancer link for the combined state.",
+    )
     args = ap.parse_args()
 
     anno = Annotator(args.filename)
@@ -258,12 +276,14 @@ if __name__ == '__main__':
         anno.print_combined_state_url()
 
     if args.print_summary:
-        print('<html>')
-        print('<h1>%s</h1>' % args.filename)
+        print("<html>")
+        print("<h1>%s</h1>" % args.filename)
         print(
-            '<a href="%s">Neuroglancer</a><br/>' % neuroglancer.to_url(anno.make_combined_state()))
+            '<a href="%s">Neuroglancer</a><br/>'
+            % neuroglancer.to_url(anno.make_combined_state())
+        )
         print(repr(anno.get_sets()))
-        print('</html>')
+        print("</html>")
     else:
         print(anno.get_viewer_url())
 
