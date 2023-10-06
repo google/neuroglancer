@@ -19,13 +19,26 @@ frustration later on.
 All submissions, including submissions by project members, require review.
 
 ### Coding Style
-For consistency, please ensure that all files are formatted by `clang-format` using the [.clang-format](.clang-format) style file.  You can verify this by running:
+For consistency, please ensure that all TypeScript/JavaScript files
+are formatted by `clang-format` using the
+[.clang-format](.clang-format) style file.  You can verify this by
+running:
+
 ```shell
 npm run gulp check-format
 ```
-To reformat all source files, run:
+To reformat all TypeScript/JavaScript source files, run:
 ```shell
 npm run gulp format
+```
+
+Python code is linted and formatted using
+[ruff](https://github.com/astral-sh/ruff) and typechecked using
+[mypy](https://mypy-lang.org/).  To verify, run:
+
+```shell
+pip install nox
+nox -s lint format mypy
 ```
 
 ### The small print
