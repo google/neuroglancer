@@ -329,7 +329,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: layer => layer.volumeRendering,
     ...rangeLayerControl(
         layer =>
-            ({value: layer.volumeRenderingSamplesPerRay, options: {min: 1, max: 1024, step: 1}})),
+            ({value: layer.volumeRenderingSamplesPerRay, options: {min: 1, max: 4096, step: 1}})),
   },
   {
     label: 'Opacity',
