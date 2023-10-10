@@ -291,19 +291,22 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
 
 const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
-    label: 'Resolution (slice)',
+    label: 'Resolution selector (2D)',
     toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
-    isValid: layer => makeCachedDerivedWatchableValue(volumeRendering => !volumeRendering, [layer.volumeRendering]),
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.sliceViewRenderScaleHistogram,
                                  target: layer.sliceViewRenderScaleTarget
                                })),
   },
   {
-    label: 'Blending',
+    label: 'Cross-section blending',
     toolJson: BLEND_JSON_KEY,
-    isValid: layer => makeCachedDerivedWatchableValue(volumeRendering => !volumeRendering, [layer.volumeRendering]),
     ...enumLayerControl(layer => layer.blendMode),
+  },
+  {
+    label: 'Cross-section opacity',
+    toolJson: OPACITY_JSON_KEY,
+    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
   {
     label: 'Volume rendering (experimental)',
@@ -318,12 +321,6 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
                                  histogram: layer.volumeRenderingRenderScaleHistogram,
                                  target: layer.volumeRenderingRenderScaleTarget
                                })),
-  },
-  {
-    label: 'Opacity',
-    toolJson: OPACITY_JSON_KEY,
-    isValid: layer => makeCachedDerivedWatchableValue(volumeRendering => !volumeRendering, [layer.volumeRendering]),
-    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
 ];
 
