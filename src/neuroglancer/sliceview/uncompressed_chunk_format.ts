@@ -242,10 +242,7 @@ class FillValueChunk extends RefCounted {
   texture: WebGLTexture|null;
 }
 
-function getFillValueChunk(
-    gl: GL, chunkFormat: ChunkFormat, fillValue: number|Uint64, rank: number,
-    textureDims: number): FillValueChunk {
-  const {dataType} = chunkFormat;
+export function getFillValueArray(dataType: DataType, fillValue: number|Uint64) {
   const array = new DATA_TYPE_ARRAY_CONSTRUCTOR[dataType](
       DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType]);
   if (dataType === DataType.UINT64) {
@@ -254,6 +251,14 @@ function getFillValueChunk(
   } else {
     array[0] = fillValue as number;
   }
+  return array;
+}
+
+function getFillValueChunk(
+    gl: GL, chunkFormat: ChunkFormat, fillValue: number|Uint64, rank: number,
+    textureDims: number): FillValueChunk {
+  const {dataType} = chunkFormat;
+  const array = getFillValueArray(dataType, fillValue);
   const chunkSizeInVoxels = new Uint32Array(rank);
   chunkSizeInVoxels.fill(1);
   const textureLayout = new TextureLayout(gl, chunkSizeInVoxels, textureDims);

@@ -19,14 +19,15 @@ import 'neuroglancer/render_layer_backend';
 import {Chunk, ChunkConstructor, ChunkRenderLayerBackend, ChunkSource, getNextMarkGeneration, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import { filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource, getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
+import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, getNormalizedChunkLayout, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_REQUEST_CHUNK_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {erf} from 'neuroglancer/util/erf';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {VelocityEstimator} from 'neuroglancer/util/velocity_estimation';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {registerPromiseRPC, registerRPC, registerSharedObject, RPC, RPCPromise, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 export const BASE_PRIORITY = -1e12;
 export const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -432,3 +433,49 @@ function getPrefetchChunkOffsets(
   }
   return offsets;
 }
+
+registerPromiseRPC(
+    SLICEVIEW_REQUEST_CHUNK_RPC_ID,
+    async function(
+        x: {this: RPC, source: number, chunkGridPosition: Float32Array},
+        cancellationToken: CancellationToken): RPCPromise<void> {
+      const source = this.get(x.source) as SliceViewChunkSourceBackend;
+      const {chunkManager} = source;
+      const chunk = source.getChunk(x.chunkGridPosition);
+      const key = chunk.key!;
+      if (chunk.state <= ChunkState.SYSTEM_MEMORY) {
+        // Already available on frontend.
+        return {value: undefined};
+      }
+      const disposeRecompute = chunkManager.recomputeChunkPriorities.add(() => {
+        chunkManager.requestChunk(
+            chunk, ChunkPriorityTier.VISIBLE, Number.POSITIVE_INFINITY, ChunkState.SYSTEM_MEMORY);
+      });
+      chunkManager.scheduleUpdateChunkPriorities();
+      let listener: (chunk: Chunk) => void;
+      const promise = new Promise<void>((resolve, reject) => {
+        listener = chunk => {
+          if (chunk.state === ChunkState.FAILED) {
+            reject(chunk.error);
+            return;
+          }
+          if (chunk.state <= ChunkState.SYSTEM_MEMORY) {
+            resolve();
+          }
+        };
+      });
+      source.registerChunkListener(key, listener!);
+      const cancelPromise = new Promise((_resolve, reject) => {
+        cancellationToken.add(() => {
+          reject(CANCELED);
+        });
+      });
+      try {
+        await Promise.race([promise, cancelPromise]);
+        return {value: undefined};
+      } finally {
+        source.unregisterChunkListener(key, listener!);
+        disposeRecompute();
+        chunkManager.scheduleUpdateChunkPriorities();
+      }
+    });

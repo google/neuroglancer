@@ -229,6 +229,7 @@ export class LayerDataSource extends RefCounted {
       public layer: Borrowed<UserLayer>, spec: DataSourceSpecification|undefined = undefined) {
     super();
     this.registerDisposer(this.changed.add(layer.dataSourcesChanged.dispatch));
+    this.registerDisposer(layer.messages.addChild(this.messages));
     if (spec === undefined) {
       this.spec_ = makeEmptyDataSourceSpecification();
     } else {

@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
 
 from . import server, url_state, viewer_base
 
 
-class _ViewerHelper(object):
+class _ViewerHelper:
     """Mixin for implementing viewers based on the built-in server."""
 
     def __init__(self, **kwargs):
-        super(_ViewerHelper, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         server.register_viewer(self)
 
     def defer_callback(self, callback, *args, **kwargs):
@@ -39,17 +38,19 @@ class _ViewerHelper(object):
 
 class Viewer(viewer_base.ViewerBase, _ViewerHelper):
     def __init__(self, **kwargs):
-        super(Viewer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         server.register_viewer(self)
 
     def get_viewer_url(self):
-        return '%s/v/%s/' % (server.get_server_url(), self.token)
+        return f"{server.get_server_url()}/v/{self.token}/"
 
 
 class UnsynchronizedViewer(viewer_base.UnsynchronizedViewerBase, _ViewerHelper):
     def __init__(self, **kwargs):
-        super(UnsynchronizedViewer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         server.register_viewer(self)
 
     def get_viewer_url(self):
-        return url_state.to_url(self.raw_state, '%s/v/%s/' % (server.get_server_url(), self.token))
+        return url_state.to_url(
+            self.raw_state, f"{server.get_server_url()}/v/{self.token}/"
+        )

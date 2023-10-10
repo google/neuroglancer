@@ -21,7 +21,7 @@
 
 import {Chunk, ChunkManager, ChunkSourceBase} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {CANCELED, CancellationToken, makeCancelablePromise} from 'neuroglancer/util/cancellation';
+import {CANCELED, CancellationToken, makeCancelablePromise, MultipleConsumerCancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
@@ -42,7 +42,6 @@ class GenericSharedDataChunk<Key, Data> extends Chunk {
   decodedKey?: Key;
   data?: Data;
   requesters?: Set<FileDataRequester<Data>>;
-  backendOnly = true;
 
   initialize(key: string) {
     super.initialize(key);
@@ -110,7 +109,7 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
         for (let requester of requesters) {
           const {priorityTier, priority} = requester.getPriority();
           if (priorityTier === ChunkPriorityTier.RECENT) continue;
-          chunkManager.requestChunk(chunk, priorityTier, priority);
+          chunkManager.requestChunk(chunk, priorityTier, priority, ChunkState.SYSTEM_MEMORY_WORKER);
         }
       }
     }
@@ -192,4 +191,78 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
         },
         url, getPriority, cancellationToken);
   }
+}
+
+class AsyncCacheChunk<Data> extends Chunk {
+  promise: Promise<Data>|undefined;
+  cancellationSource: MultipleConsumerCancellationTokenSource|undefined;
+
+  initialize(key: string) {
+    super.initialize(key);
+  }
+
+  freeSystemMemory() {
+    this.promise = undefined;
+    this.cancellationSource = undefined;
+  }
+}
+
+export interface SimpleAsyncCacheOptions<Key, Value> {
+  encodeKey?: (key: Key) => string;
+  get: (key: Key, cancellationToken: CancellationToken) => Promise<{size: number, data: Value}>;
+}
+
+export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
+  chunks: Map<string, AsyncCacheChunk<Value>>;
+
+  constructor(chunkManager: Owned<ChunkManager>, options: SimpleAsyncCacheOptions<Key, Value>) {
+    super(chunkManager);
+    this.registerDisposer(chunkManager);
+    this.downloadFunction = options.get;
+    this.encodeKeyFunction = options.encodeKey ?? stableStringify;
+  }
+  encodeKeyFunction: (key: Key) => string;
+  downloadFunction:
+      (key: Key, cancellationToken: CancellationToken) => Promise<{size: number, data: Value}>;
+
+  get(key: Key, cancellationToken: CancellationToken): Promise<Value> {
+    const encodedKey = this.encodeKeyFunction(key);
+    let chunk = this.chunks.get(encodedKey);
+    if (chunk === undefined) {
+      chunk = this.getNewChunk_<AsyncCacheChunk<Value>>(AsyncCacheChunk);
+      chunk.initialize(encodedKey);
+      this.addChunk(chunk);
+    }
+    if (chunk.promise === undefined) {
+      let completed = false;
+      const cancellationSource = chunk!.cancellationSource =
+          new MultipleConsumerCancellationTokenSource();
+      cancellationSource.add(() => {
+        if (!completed) {
+          chunk!.promise = undefined;
+        }
+      });
+      chunk.promise = (async () => {
+        try {
+          const {data, size} = await this.downloadFunction(key, cancellationSource);
+          chunk.systemMemoryBytes = size;
+          chunk!.queueManager.updateChunkState(chunk!, ChunkState.SYSTEM_MEMORY);
+          return data;
+        } catch (e) {
+          chunk!.queueManager.updateChunkState(chunk!, ChunkState.FAILED);
+          throw e;
+        } finally {
+          completed = true;
+        }
+      })();
+    }
+    chunk.cancellationSource!.addConsumer(cancellationToken);
+    return chunk.promise;
+  }
+}
+
+export function makeSimpleAsyncCache<Key, Data>(
+    chunkManager: ChunkManager, memoizeKey: string, options: SimpleAsyncCacheOptions<Key, Data>) {
+  return chunkManager.memoize.get(
+      `simpleAsyncCache:${memoizeKey}`, () => new SimpleAsyncCache(chunkManager.addRef(), options));
 }

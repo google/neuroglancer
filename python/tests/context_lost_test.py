@@ -13,43 +13,48 @@
 # limitations under the License.
 """Tests WebGL context lose/restore handling."""
 
-import numpy as np
+
 import neuroglancer
-import time
+import numpy as np
+
 
 def test_context_lost(webdriver):
     a = np.array([[[255]]], dtype=np.uint8)
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y", "z"],
-                                                    units="nm",
-                                                    scales=[1, 1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
         s.layers.append(
             name="a",
             layer=neuroglancer.ImageLayer(
                 source=neuroglancer.LocalVolume(data=a, dimensions=s.dimensions),
-                shader='void main () { emitRGB(vec3(1.0, 0.0, 0.0)); }',
+                shader="void main () { emitRGB(vec3(1.0, 0.0, 0.0)); }",
             ),
         )
-        s.layout = 'xy'
+        s.layout = "xy"
         s.cross_section_scale = 1e-6
         s.position = [0.5, 0.5, 0.5]
         s.show_axis_lines = False
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(screenshot.image_pixels,
-                                  np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
-    webdriver.driver.execute_script('''
+    np.testing.assert_array_equal(
+        screenshot.image_pixels,
+        np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
+    )
+    with webdriver.wait_for_log_message("Lost WebGL context.*", timeout=3):
+        webdriver.driver.execute_script(
+            """
 window.webglLoseContext = viewer.gl.getExtension('WEBGL_lose_context');
 window.webglLoseContext.loseContext();
-''')
-    time.sleep(3) # Wait a few seconds for log messages to be written
-    browser_log = webdriver.get_log_messages()
-    assert 'Lost WebGL context' in browser_log
-    webdriver.driver.execute_script('''
+"""
+        )
+    with webdriver.wait_for_log_message("WebGL context restored.*", timeout=3):
+        webdriver.driver.execute_script(
+            """
 window.webglLoseContext.restoreContext();
-''')
-    time.sleep(3) # Wait a few seconds for log messages to be written
-    browser_log = webdriver.get_log_messages()
-    assert 'WebGL context restored' in browser_log
+"""
+        )
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(screenshot.image_pixels,
-                                  np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
+    np.testing.assert_array_equal(
+        screenshot.image_pixels,
+        np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
+    )

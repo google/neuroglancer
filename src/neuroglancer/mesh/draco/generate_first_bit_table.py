@@ -25,4 +25,4 @@ for i in range(256):
 
     bit_list.append(bit)
 
-print('{' + ', '.join(str(b) for b in bit_list) + '}')
+print("{" + ", ".join(str(b) for b in bit_list) + "}")

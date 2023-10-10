@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function, division
 
 import argparse
-import collections
 import copy
 import json
 import math
@@ -31,18 +29,21 @@ import neuroglancer.cli
 import neuroglancer.url_state
 from neuroglancer.json_utils import json_encoder_default
 
+
 def get_segmentation_layer(layers):
     for layer in layers:
         if isinstance(layer.layer, neuroglancer.SegmentationLayer):
             return layer
 
-def _full_count_for_level(level):
-    return (2**level)**3
 
-class BlockMask(object):
+def _full_count_for_level(level):
+    return (2**level) ** 3
+
+
+class BlockMask:
     def __init__(self, max_level=3):
         # self.blocks[level_i][position] specifies the number of base elements contained within the block
-        self.blocks = [dict() for _ in range(max_level+1)]
+        self.blocks = [dict() for _ in range(max_level + 1)]
 
     def _remove_children(self, level, position):
         position = tuple(position)
@@ -71,25 +72,28 @@ class BlockMask(object):
             if level >= len(blocks):
                 return None, None
 
-    def _add_children(self, level, position, excluded_child_position, excluded_child_count):
+    def _add_children(
+        self, level, position, excluded_child_position, excluded_child_count
+    ):
         blocks = self.blocks
-        full_count_for_child = _full_count_for_level(level-1)
+        full_count_for_child = _full_count_for_level(level - 1)
         for offset in np.ndindex((2,) * 3):
             child_position = tuple(x * 2 + o for x, o in zip(position, offset))
             count = full_count_for_child
             if child_position == excluded_child_position:
                 count -= excluded_child_count
             if count != 0:
-                blocks[level-1][child_position] = count
+                blocks[level - 1][child_position] = count
 
     def _add_children_along_path(self, start_level, end_level, start_position):
         excluded_count = _full_count_for_level(start_level)
         while start_level < end_level:
             parent_position = tuple(x // 2 for x in start_position)
             start_level += 1
-            self._add_children(start_level, parent_position, start_position, excluded_count)
+            self._add_children(
+                start_level, parent_position, start_position, excluded_count
+            )
             start_position = parent_position
-
 
     def add(self, level, position):
         if self._contains(level, position)[0] is not None:
@@ -106,7 +110,9 @@ class BlockMask(object):
             if old_level is None:
                 return
             if old_level != level:
-                self._adjust_count(old_level, position_in_old_level, -_full_count_for_level(level))
+                self._adjust_count(
+                    old_level, position_in_old_level, -_full_count_for_level(level)
+                )
                 self._add_children_along_path(level, old_level, position)
                 return
         if old_count != _full_count_for_level(level):
@@ -129,28 +135,30 @@ class BlockMask(object):
         if level + 1 < len(self.blocks):
             self._adjust_count(level + 1, tuple(x // 2 for x in position), amount)
 
+
 def make_block_mask(annotations, block_size, max_level=3):
     mask = BlockMask(max_level=max_level)
     for x in annotations:
         if not isinstance(x, neuroglancer.AxisAlignedBoundingBoxAnnotation):
-            print('Warning: got non-box annotation: %r' % (x,))
+            print(f"Warning: got non-box annotation: {x!r}")
             continue
         size = (x.point_b - x.point_a) / block_size
         if size[0] != int(size[0]) or np.any(size != size[0]):
-            print('Warning: got invalid box: %r' % (x,))
+            print(f"Warning: got invalid box: {x!r}")
             continue
         level = math.log(size[0]) / math.log(2)
         if level != int(level):
-            print('Warning: got invalid box: %r' % (x,))
+            print(f"Warning: got invalid box: {x!r}")
             continue
         level = int(level)
         eff_block_size = block_size * (2**level)
         if np.any(x.point_a % eff_block_size != 0):
-            print('Warning: got invalid box: %r' % (x,))
+            print(f"Warning: got invalid box: {x!r}")
             continue
         position = tuple(int(z) for z in x.point_a // eff_block_size)
         mask.add(level, position)
     return mask
+
 
 def make_annotations_from_mask(mask, block_size):
     result = []
@@ -164,23 +172,27 @@ def make_annotations_from_mask(mask, block_size):
             position = np.array(position, dtype=np.int64)
             box_start = eff_block_size * position
             box_end = box_start + eff_block_size
-            result.append(neuroglancer.AxisAlignedBoundingBoxAnnotation(
-                point_a = box_start,
-                point_b = box_end,
-                id = uuid.uuid4().hex,
-            ))
+            result.append(
+                neuroglancer.AxisAlignedBoundingBoxAnnotation(
+                    point_a=box_start,
+                    point_b=box_end,
+                    id=uuid.uuid4().hex,
+                )
+            )
     return result
 
 
 def normalize_block_annotations(annotations, block_size, max_level=3):
-    mask = make_block_mask(annotations=annotations, block_size=block_size, max_level=max_level)
+    mask = make_block_mask(
+        annotations=annotations, block_size=block_size, max_level=max_level
+    )
     return make_annotations_from_mask(mask=mask, block_size=block_size)
 
 
-class Annotator(object):
+class Annotator:
     def __init__(self, filename):
         self.filename = filename
-        self.annotation_layer_name = 'false-merges'
+        self.annotation_layer_name = "false-merges"
         self.states = []
         self.state_index = None
         self.false_merge_block_size = np.array([32, 32, 32], dtype=np.int64)
@@ -189,26 +201,40 @@ class Annotator(object):
         viewer = self.viewer = neuroglancer.Viewer()
         self.other_state_segment_ids = dict()
 
-        viewer.actions.add('anno-next-state', lambda s: self.next_state())
-        viewer.actions.add('anno-prev-state', lambda s: self.prev_state())
-        viewer.actions.add('anno-save', lambda s: self.save())
-        viewer.actions.add('anno-show-all', lambda s: self.set_combined_state())
-        viewer.actions.add('anno-add-segments-from-state',
-                           lambda s: self.add_segments_from_state(s.viewer_state))
-        viewer.actions.add('anno-mark-false-merge', self.mark_false_merge)
-        viewer.actions.add('anno-unmark-false-merge', lambda s: self.mark_false_merge(s, erase=True))
-        viewer.actions.add('anno-decrease-block-size', self.decrease_false_merge_block_size)
-        viewer.actions.add('anno-increase-block-size', self.increase_false_merge_block_size)
+        viewer.actions.add("anno-next-state", lambda s: self.next_state())
+        viewer.actions.add("anno-prev-state", lambda s: self.prev_state())
+        viewer.actions.add("anno-save", lambda s: self.save())
+        viewer.actions.add("anno-show-all", lambda s: self.set_combined_state())
+        viewer.actions.add(
+            "anno-add-segments-from-state",
+            lambda s: self.add_segments_from_state(s.viewer_state),
+        )
+        viewer.actions.add("anno-mark-false-merge", self.mark_false_merge)
+        viewer.actions.add(
+            "anno-unmark-false-merge", lambda s: self.mark_false_merge(s, erase=True)
+        )
+        viewer.actions.add(
+            "anno-decrease-block-size", self.decrease_false_merge_block_size
+        )
+        viewer.actions.add(
+            "anno-increase-block-size", self.increase_false_merge_block_size
+        )
 
         with viewer.config_state.txn() as s:
-            s.input_event_bindings.data_view['pageup'] = 'anno-prev-state'
-            s.input_event_bindings.data_view['pagedown'] = 'anno-next-state'
-            s.input_event_bindings.data_view['bracketleft'] = 'anno-decrease-block-size'
-            s.input_event_bindings.data_view['bracketright'] = 'anno-increase-block-size'
-            s.input_event_bindings.data_view['control+keys'] = 'anno-save'
-            s.input_event_bindings.data_view['control+keya'] = 'anno-show-all'
-            s.input_event_bindings.data_view['control+mousedown0'] = 'anno-mark-false-merge'
-            s.input_event_bindings.data_view['control+shift+mousedown0'] = 'anno-unmark-false-merge'
+            s.input_event_bindings.data_view["pageup"] = "anno-prev-state"
+            s.input_event_bindings.data_view["pagedown"] = "anno-next-state"
+            s.input_event_bindings.data_view["bracketleft"] = "anno-decrease-block-size"
+            s.input_event_bindings.data_view[
+                "bracketright"
+            ] = "anno-increase-block-size"
+            s.input_event_bindings.data_view["control+keys"] = "anno-save"
+            s.input_event_bindings.data_view["control+keya"] = "anno-show-all"
+            s.input_event_bindings.data_view[
+                "control+mousedown0"
+            ] = "anno-mark-false-merge"
+            s.input_event_bindings.data_view[
+                "control+shift+mousedown0"
+            ] = "anno-unmark-false-merge"
 
         viewer.shared_state.add_changed_callback(self.on_state_changed)
         self.cur_message = None
@@ -216,7 +242,9 @@ class Annotator(object):
             self.set_state_index(None)
 
     def increase_false_merge_block_size(self, s):
-        self.false_merge_block_level = min(self.max_false_merge_block_levels, self.false_merge_block_level + 1)
+        self.false_merge_block_level = min(
+            self.max_false_merge_block_levels, self.false_merge_block_level + 1
+        )
         self.update_message()
 
     def decrease_false_merge_block_size(self, s):
@@ -234,12 +262,18 @@ class Annotator(object):
 
         with self.viewer.txn() as s:
             annotations = s.layers[self.annotation_layer_name].annotations
-            mask = make_block_mask(annotations=annotations, block_size=block_size, max_level=self.max_false_merge_block_levels)
+            mask = make_block_mask(
+                annotations=annotations,
+                block_size=block_size,
+                max_level=self.max_false_merge_block_levels,
+            )
             if erase:
                 mask.remove(level, block_position)
             else:
                 mask.add(level, block_position)
-            new_annotations = make_annotations_from_mask(mask=mask, block_size=block_size)
+            new_annotations = make_annotations_from_mask(
+                mask=mask, block_size=block_size
+            )
             s.layers[self.annotation_layer_name].annotations = new_annotations
 
     def on_state_changed(self):
@@ -247,25 +281,29 @@ class Annotator(object):
         self.update_message()
 
     def update_message(self):
-        message = '[Block size: %d vx] ' % (self.false_merge_block_size[0] * 2**self.false_merge_block_level)
+        message = "[Block size: %d vx] " % (
+            self.false_merge_block_size[0] * 2**self.false_merge_block_level
+        )
         if self.state_index is None:
-            message += '[No state selected]'
+            message += "[No state selected]"
         else:
-            message += '[%d/%d] ' % (self.state_index, len(self.states))
+            message += "[%d/%d] " % (self.state_index, len(self.states))
             segments = self.get_state_segment_ids(self.viewer.state)
             warnings = []
             for segment_id in segments:
                 other_state = self.other_state_segment_ids.get(segment_id)
                 if other_state is not None:
-                    warnings.append('Segment %d also in state %d' % (segment_id, other_state))
+                    warnings.append(
+                        "Segment %d also in state %d" % (segment_id, other_state)
+                    )
             if warnings:
-                message += 'WARNING: ' + ', '.join(warnings)
+                message += "WARNING: " + ", ".join(warnings)
         if message != self.cur_message:
             with self.viewer.config_state.txn() as s:
                 if message is not None:
-                    s.status_messages['status'] = message
+                    s.status_messages["status"] = message
                 else:
-                    s.status_messages.pop('status')
+                    s.status_messages.pop("status")
             self.cur_message = message
 
     def load(self):
@@ -273,18 +311,19 @@ class Annotator(object):
             return False
         self.state_index = None
 
-        with open(self.filename, 'r') as f:
-
-            loaded_state = json.load(f, object_pairs_hook=collections.OrderedDict)
-        self.states = [neuroglancer.ViewerState(x) for x in loaded_state['states']]
-        self.set_state_index(loaded_state['state_index'])
+        with open(self.filename) as f:
+            loaded_state = json.load(f)
+        self.states = [neuroglancer.ViewerState(x) for x in loaded_state["states"]]
+        self.set_state_index(loaded_state["state_index"])
         return True
 
     def set_state_index_relative(self, amount):
         if self.state_index is None:
             new_state = 0
         else:
-            new_state = (self.state_index + amount + len(self.states)) % len(self.states)
+            new_state = (self.state_index + amount + len(self.states)) % len(
+                self.states
+            )
         self.set_state_index(new_state)
 
     def next_state(self):
@@ -303,11 +342,12 @@ class Annotator(object):
             anno_layer = new_state.layers[self.annotation_layer_name]
             if anno_layer.annotation_fill_opacity == 0:
                 anno_layer.annotation_fill_opacity = 0.7
-            anno_layer.annotation_color = 'black'
+            anno_layer.annotation_color = "black"
             anno_layer.annotations = normalize_block_annotations(
                 anno_layer.annotations,
                 block_size=self.false_merge_block_size,
-                max_level=self.max_false_merge_block_levels)
+                max_level=self.max_false_merge_block_levels,
+            )
             self.viewer.set_state(new_state)
             other_ids = self.other_state_segment_ids
             other_ids.clear()
@@ -329,7 +369,7 @@ class Annotator(object):
         for segment_id in other_ids:
             state_numbers = other_ids[segment_id]
             if len(state_numbers) > 1:
-                print('%d in %r' % (segment_id, state_numbers))
+                print("%d in %r" % (segment_id, state_numbers))
 
     def _grab_viewer_state(self):
         if self.state_index is not None:
@@ -337,14 +377,19 @@ class Annotator(object):
 
     def save(self):
         self._grab_viewer_state()
-        tmp_filename = self.filename + '.tmp'
-        with open(tmp_filename, 'wb') as f:
+        tmp_filename = self.filename + ".tmp"
+        with open(tmp_filename, "wb") as f:
             f.write(
                 json.dumps(
-                    dict(states=[s.to_json() for s in self.states], state_index=self.state_index),
-                    default=json_encoder_default))
+                    dict(
+                        states=[s.to_json() for s in self.states],
+                        state_index=self.state_index,
+                    ),
+                    default=json_encoder_default,
+                )
+            )
         os.rename(tmp_filename, self.filename)
-        print('Saved state to: %s' % (self.filename, ))
+        print(f"Saved state to: {self.filename}")
 
     def get_state_segment_ids(self, state):
         return get_segmentation_layer(state.layers).segments
@@ -367,7 +412,7 @@ class Annotator(object):
 
         for segment_id in segment_ids:
             if segment_id in existing_segment_ids:
-                print('Skipping redundant segment id %d' % segment_id)
+                print("Skipping redundant segment id %d" % segment_id)
                 continue
             self.states.append(self.make_initial_state(segment_id, base_state))
 
@@ -393,7 +438,7 @@ class Annotator(object):
     def set_combined_state(self):
         state = self.make_combined_state()
         if state is None:
-            print('No states')
+            print("No states")
         else:
             self.set_state_index(None)
             self.viewer.set_state(state)
@@ -430,21 +475,26 @@ class Annotator(object):
         return sets
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument('filename', type=str)
-    ap.add_argument('--add-segments-from-url', type=str, nargs='*', default=[])
+    ap.add_argument("filename", type=str)
+    ap.add_argument("--add-segments-from-url", type=str, nargs="*", default=[])
     ap.add_argument(
-        '-n', '--no-webbrowser', action='store_true', help='Don\'t open the webbrowser.')
-    ap.add_argument('--print-sets', action='store_true', help='Print the sets of supervoxels.')
+        "-n", "--no-webbrowser", action="store_true", help="Don't open the webbrowser."
+    )
     ap.add_argument(
-        '--print-combined-state',
-        action='store_true',
-        help='Prints a neuroglancer link for the combined state.')
+        "--print-sets", action="store_true", help="Print the sets of supervoxels."
+    )
     ap.add_argument(
-        '--print-summary',
-        action='store_true',
-        help='Prints a neuroglancer link for the combined state.')
+        "--print-combined-state",
+        action="store_true",
+        help="Prints a neuroglancer link for the combined state.",
+    )
+    ap.add_argument(
+        "--print-summary",
+        action="store_true",
+        help="Prints a neuroglancer link for the combined state.",
+    )
     neuroglancer.cli.add_server_arguments(ap)
 
     args = ap.parse_args()
@@ -461,12 +511,14 @@ if __name__ == '__main__':
         print(neuroglancer.to_url(anno.make_combined_state()))
 
     if args.print_summary:
-        print('<html>')
-        print('<h1>%s</h1>' % args.filename)
+        print("<html>")
+        print("<h1>%s</h1>" % args.filename)
         print(
-            '<a href="%s">Neuroglancer</a><br/>' % neuroglancer.to_url(anno.make_combined_state()))
+            '<a href="%s">Neuroglancer</a><br/>'
+            % neuroglancer.to_url(anno.make_combined_state())
+        )
         print(repr(anno.get_sets()))
-        print('</html>')
+        print("</html>")
 
     else:
         print(anno.get_viewer_url())

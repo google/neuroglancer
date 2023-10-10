@@ -18,8 +18,8 @@ import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
 import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
 
 registerAsyncComputation(decodeBlosc, async function(data: Uint8Array) {
-  const {Blosc} = await import(/*webpackChunkName: "blosc" */ 'neuroglancer/util/blosc');
-  const codec = new Blosc();
+  const {default: Blosc} = await import(/*webpackChunkName: "blosc" */ 'numcodecs/blosc');
+  const codec = Blosc.fromConfig({id: 'blosc'});
   const result = await codec.decode(data);
   return {value: result, transfer: [result.buffer]};
 });

@@ -29,7 +29,7 @@ export interface OmeMultiscaleMetadata {
   coordinateSpace: CoordinateSpace;
 }
 
-const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(['0.4', '0.5-dev', '0.5']);
+const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(['0.4', '0.5-dev']);
 
 const OME_UNITS = new Map<string, {unit: string, scale: number}>([
   ['angstrom', {unit: 'm', scale: 1e-10}],

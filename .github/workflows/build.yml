@@ -56,7 +56,6 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - '3.8'
           - '3.9'
           - '3.10'
           - '3.11'
@@ -100,9 +99,6 @@ jobs:
     - uses: ./.github/actions/setup-firefox
     - name: Test with tox
       run: tox -e ${{ fromJSON('["skip-browser-tests","firefox-xvfb"]')[runner.os == 'Linux'] }}
-      env:
-        TOX_TESTENV_PASSENV: GH_TOKEN
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     # Verify that editable install works
     - name: Install in editable form
       run: pip install -e . --config-settings editable_mode=strict

@@ -221,11 +221,11 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
     const downsampleDims: number[] = [];
     const {rank, volumeType, dataType, shape, encoding} = this;
     const effectiveDisplayScales = new Float32Array(rank);
-    const {multiscaleToViewTransform, modelChannelDimensionIndices} = volumeSourceOptions;
+    const {multiscaleToViewTransform, modelChannelDimensionIndices, displayRank} = volumeSourceOptions;
     for (let modelDim = 0; modelDim < rank; ++modelDim) {
       let factor = 0;
-      for (let viewDim = 0; viewDim < 3; ++viewDim) {
-        const c = multiscaleToViewTransform[modelDim * 3 + viewDim];
+      for (let viewDim = 0; viewDim < displayRank; ++viewDim) {
+        const c = multiscaleToViewTransform[modelDim * displayRank + viewDim];
         factor += c * c;
       }
       if (factor !== 0) downsampleDims.push(modelDim);

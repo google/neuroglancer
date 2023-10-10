@@ -229,10 +229,23 @@ export class ChunkQueueManager extends SharedObject {
               visibleChunksChanged = true;
               break;
             case ChunkState.SYSTEM_MEMORY:
-              chunk.freeGPUMemory(this.gl);
+              if (oldState === ChunkState.GPU_MEMORY) {
+                chunk.freeGPUMemory(this.gl);
+              }
               break;
             default:
               throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+          }
+        }
+        if (newState <= ChunkState.SYSTEM_MEMORY) {
+          const {chunkRequesters} = source;
+          if (chunkRequesters !== undefined) {
+            const requesters = chunkRequesters.get(key);
+            if (requesters !== undefined) {
+              for (const requester of requesters) {
+                requester(chunk);
+              }
+            }
           }
         }
       }
@@ -356,9 +369,15 @@ export class ChunkManager extends SharedObject {
   }
 }
 
+export interface ChunkRequesterState {
+  (chunk: Chunk): void;
+}
+
 export class ChunkSource extends SharedObject {
   OPTIONS: {};
   chunks = new Map<string, Chunk>();
+
+  chunkRequesters: Map<string, ChunkRequesterState[]>|undefined;
 
   /**
    * If set to true, chunk updates will be applied to this source immediately, rather than queueing

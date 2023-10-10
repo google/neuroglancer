@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
 
 import argparse
 import collections
-import uuid
 import copy
 import heapq
 import json
-import re
-import sqlite3
 import logging
 import os
+import re
+import sqlite3
+import uuid
 
 import numpy as np
-import six
 
 import neuroglancer
 import neuroglancer.cli
@@ -30,7 +28,7 @@ def normalize_edge(e):
     return id_a, id_b
 
 
-class GreedyMulticut(object):
+class GreedyMulticut:
     def __init__(self, combine_edges, edge_priority):
         # Contains (score, edge_map_value) tuple values in heap order.  The
         # edge_map_value is the actual corresponding value in edge_map, not a copy.
@@ -84,7 +82,7 @@ class GreedyMulticut(object):
     def check_consistency(self):
         self._initialize_heap()
         expected_regions = dict()
-        for key, entry in six.viewitems(self.edge_map):
+        for key, entry in self.edge_map.items():
             assert entry[1] == key
             expected_regions.setdefault(key[0], set()).add(key[1])
             expected_regions.setdefault(key[1], set()).add(key[0])
@@ -111,7 +109,9 @@ class GreedyMulticut(object):
             new_edge = self.edge_map.get(new_ids)
             expired_edge = self.edge_map[expired_ids]
             if new_edge is not None:
-                edge_data = new_edge[2] = self.combine_edges(new_edge[2], expired_edge[2])
+                edge_data = new_edge[2] = self.combine_edges(
+                    new_edge[2], expired_edge[2]
+                )
                 if new_edge[0] is not None:
                     self.num_valid_edges -= 1
                 if expired_edge[0] is not None:
@@ -152,34 +152,40 @@ class GreedyMulticut(object):
                 return entry
 
 
-Edge = collections.namedtuple('Edge', ['segment_ids', 'score', 'position'])
+Edge = collections.namedtuple("Edge", ["segment_ids", "score", "position"])
 
 
 def load_edges(path):
     edges = []
-    with open(path, 'r') as f:
+    with open(path) as f:
         f.readline()
         for line in f:
-            parts = line.split(',')
+            parts = line.split(",")
             segment_a = int(parts[0].strip())
             segment_b = int(parts[1].strip())
             score = float(parts[2].strip())
-            position = (int(parts[3].strip()), int(parts[4].strip()), int(parts[5].strip()))
-            edges.append(Edge(segment_ids=(segment_a, segment_b), score=score, position=position))
+            position = (
+                int(parts[3].strip()),
+                int(parts[4].strip()),
+                int(parts[5].strip()),
+            )
+            edges.append(
+                Edge(segment_ids=(segment_a, segment_b), score=score, position=position)
+            )
     return edges
 
 
 def load_split_seeds(path):
-    with open(path, 'r') as f:
+    with open(path) as f:
         raw_seeds = json.loads(f.read())
-    seeds = collections.OrderedDict()
+    seeds = {}
     for component in raw_seeds:
-        seeds.setdefault(component['label'], []).extend(component['supervoxels'])
+        seeds.setdefault(component["label"], []).extend(component["supervoxels"])
     return seeds
 
 
 def build_graph(edges):
-    logging.info('Building graph with %d edges', len(edges))
+    logging.info("Building graph with %d edges", len(edges))
 
     def combine_edges(a, b):
         return a + b
@@ -196,7 +202,7 @@ def build_graph(edges):
     return greedy_multicut
 
 
-class AgglomerationGraph(object):
+class AgglomerationGraph:
     def __init__(self, conn):
         self.conn = conn
         self.agglo_members_cache = dict()
@@ -204,7 +210,10 @@ class AgglomerationGraph(object):
 
     def get_agglo_id(self, supervoxel_id):
         c = self.conn.cursor()
-        c.execute('SELECT agglo_id FROM supervoxels WHERE supervoxel_id=?', (int(supervoxel_id), ))
+        c.execute(
+            "SELECT agglo_id FROM supervoxels WHERE supervoxel_id=?",
+            (int(supervoxel_id),),
+        )
         result = c.fetchone()
         if result is None:
             return supervoxel_id
@@ -215,7 +224,9 @@ class AgglomerationGraph(object):
         if result is not None:
             return result
         c = self.conn.cursor()
-        c.execute('SELECT supervoxel_id FROM supervoxels WHERE agglo_id=?', (int(agglo_id), ))
+        c.execute(
+            "SELECT supervoxel_id FROM supervoxels WHERE agglo_id=?", (int(agglo_id),)
+        )
         result = [row[0] for row in c.fetchall()]
         self.agglo_members_cache[agglo_id] = result
         return result
@@ -225,10 +236,16 @@ class AgglomerationGraph(object):
         if result is not None:
             return result
         c = self.conn.cursor()
-        c.execute('SELECT segment_a, segment_b, score, x, y, z FROM edges WHERE agglo_id=?',
-                  (int(agglo_id), ))
+        c.execute(
+            "SELECT segment_a, segment_b, score, x, y, z FROM edges WHERE agglo_id=?",
+            (int(agglo_id),),
+        )
         result = [
-            Edge(segment_ids=(row[0], row[1]), score=row[2], position=(row[3], row[4], row[5]))
+            Edge(
+                segment_ids=(row[0], row[1]),
+                score=row[2],
+                position=(row[3], row[4], row[5]),
+            )
             for row in c.fetchall()
         ]
         self.agglo_edges_cache[agglo_id] = result
@@ -241,7 +258,7 @@ def _make_supervoxel_map(graph, split_seeds, need_agglo_ids):
 
     for label in [0, 1]:
         for seed in split_seeds[label]:
-            supervoxel_id = seed['supervoxel_id']
+            supervoxel_id = seed["supervoxel_id"]
             if need_agglo_ids:
                 agglo_id = graph.get_agglo_id(supervoxel_id)
                 if agglo_id == 0:
@@ -252,56 +269,73 @@ def _make_supervoxel_map(graph, split_seeds, need_agglo_ids):
 
 
 def do_split(graph, split_seeds, agglo_id=None, supervoxels=None):
-
-    agglo_ids, supervoxel_map = _make_supervoxel_map(graph, split_seeds, need_agglo_ids=agglo_id is None)
+    agglo_ids, supervoxel_map = _make_supervoxel_map(
+        graph, split_seeds, need_agglo_ids=agglo_id is None
+    )
 
     if agglo_id is None:
-
         agglo_id_counts = {
-            agglo_id: sum(z[1]['count'] for z in seeds)
-            for agglo_id, seeds in six.viewitems(agglo_ids)
+            agglo_id: sum(z[1]["count"] for z in seeds)
+            for agglo_id, seeds in agglo_ids.items()
         }
 
         agglo_id = max(agglo_ids, key=lambda x: agglo_id_counts[x])
 
         if len(agglo_ids) > 1:
-            logging.info('Warning: more than one agglomerated component.  ' +
-                         'Choosing component %d with maximum number of seed points.', agglo_id)
-            logging.info('agglo_id_counts = %r', agglo_id_counts)
+            logging.info(
+                "Warning: more than one agglomerated component.  "
+                + "Choosing component %d with maximum number of seed points.",
+                agglo_id,
+            )
+            logging.info("agglo_id_counts = %r", agglo_id_counts)
 
     input_edges = graph.get_agglo_edges(agglo_id)
     if supervoxels is not None:
-        input_edges = [x for x in input_edges if x.segment_ids[0] in supervoxels and x.segment_ids[1] in supervoxels]
+        input_edges = [
+            x
+            for x in input_edges
+            if x.segment_ids[0] in supervoxels and x.segment_ids[1] in supervoxels
+        ]
     graph = build_graph(input_edges)
     if debug_graph:
         graph.check_consistency()
 
     cur_eqs = neuroglancer.EquivalenceMap()
-    logging.info('Agglomerating')
-    threshold = float('inf')
+    logging.info("Agglomerating")
+    threshold = float("inf")
     while True:
         entry = graph.get_next_edge()
         if entry is None:
             if verbose_merging:
-                logging.info('Stopping because entry is None')
+                logging.info("Stopping because entry is None")
             break
         if entry[0] > threshold:
             if verbose_merging:
-                logging.info('Stopping because edge score %r is > threshold %r', entry[0],
-                             threshold)
+                logging.info(
+                    "Stopping because edge score %r is > threshold %r",
+                    entry[0],
+                    threshold,
+                )
             break
         segment_ids = entry[1]
         seeds_a = supervoxel_map.get(segment_ids[0])
         seeds_b = supervoxel_map.get(segment_ids[1])
-        if ((seeds_a is not None and len(seeds_a) > 1) or (seeds_b is not None and len(seeds_b) > 1)
-                or (seeds_a is not None and seeds_b is not None and seeds_a != seeds_b)):
+        if (
+            (seeds_a is not None and len(seeds_a) > 1)
+            or (seeds_b is not None and len(seeds_b) > 1)
+            or (seeds_a is not None and seeds_b is not None and seeds_a != seeds_b)
+        ):
             if verbose_merging:
-                logging.info('Excluding edge %r because of seeds: %r %r', segment_ids, seeds_a,
-                             seeds_b)
+                logging.info(
+                    "Excluding edge %r because of seeds: %r %r",
+                    segment_ids,
+                    seeds_a,
+                    seeds_b,
+                )
             graph.remove_edge_from_heap(segment_ids)
             continue
         if verbose_merging:
-            logging.info('Merging %r with score %r', segment_ids, entry[0])
+            logging.info("Merging %r with score %r", segment_ids, entry[0])
         graph.merge(segment_ids)
         if debug_graph:
             graph.check_consistency()
@@ -314,14 +348,14 @@ def do_split(graph, split_seeds, agglo_id=None, supervoxels=None):
     return dict(agglo_id=agglo_id, cur_eqs=cur_eqs, supervoxel_map=supervoxel_map)
 
 
-def display_split_result(graph, agglo_id, cur_eqs, supervoxel_map, split_seeds, image_url,
-                         segmentation_url):
-
+def display_split_result(
+    graph, agglo_id, cur_eqs, supervoxel_map, split_seeds, image_url, segmentation_url
+):
     agglo_members = set(graph.get_agglo_members(agglo_id))
     state = neuroglancer.ViewerState()
-    state.layers.append(name='image', layer=neuroglancer.ImageLayer(source=image_url))
+    state.layers.append(name="image", layer=neuroglancer.ImageLayer(source=image_url))
     state.layers.append(
-        name='original',
+        name="original",
         layer=neuroglancer.SegmentationLayer(
             source=segmentation_url,
             segments=agglo_members,
@@ -329,32 +363,33 @@ def display_split_result(graph, agglo_id, cur_eqs, supervoxel_map, split_seeds, 
         visible=False,
     )
     state.layers.append(
-        name='isolated-supervoxels',
+        name="isolated-supervoxels",
         layer=neuroglancer.SegmentationLayer(
             source=segmentation_url,
-            segments=set(x for x, seeds in six.viewitems(supervoxel_map) if len(seeds) > 1),
+            segments={x for x, seeds in supervoxel_map.items() if len(seeds) > 1},
         ),
         visible=False,
     )
     state.layers.append(
-        name='split',
+        name="split",
         layer=neuroglancer.SegmentationLayer(
             source=segmentation_url,
             equivalences=cur_eqs,
-            segments=set(cur_eqs[x] for x in agglo_members),
-        ))
-    for label, component in six.viewitems(split_seeds):
+            segments={cur_eqs[x] for x in agglo_members},
+        ),
+    )
+    for label, component in split_seeds.items():
         state.layers.append(
-            name='seed%d' % label,
+            name="seed%d" % label,
             layer=neuroglancer.PointAnnotationLayer(
-                points=[seed['position'] for seed in component],
+                points=[seed["position"] for seed in component],
             ),
         )
 
     state.show_slices = False
-    state.layout = '3d'
+    state.layout = "3d"
     all_seed_points = [
-        seed['position'] for component in six.viewvalues(split_seeds) for seed in component
+        seed["position"] for component in split_seeds.values() for seed in component
     ]
     state.voxel_coordinates = np.mean(all_seed_points, axis=0)
     return state
@@ -362,16 +397,17 @@ def display_split_result(graph, agglo_id, cur_eqs, supervoxel_map, split_seeds, 
 
 def _set_viewer_seeds(s, seeds):
     for inclusive in [False, True]:
-        layer_name = 'inclusive-seeds' if inclusive else 'exclusive-seeds'
+        layer_name = "inclusive-seeds" if inclusive else "exclusive-seeds"
         s.layers[layer_name] = neuroglancer.AnnotationLayer(
-            annotation_color='green' if inclusive else 'red',
+            annotation_color="green" if inclusive else "red",
             annotations=[
                 dict(
-                    type='point',
-                    id=x['id'],
-                    point=x['position'],
-                    description=str(x['supervoxel_id']),
-                ) for x in seeds[inclusive]
+                    type="point",
+                    id=x["id"],
+                    point=x["position"],
+                    description=str(x["supervoxel_id"]),
+                )
+                for x in seeds[inclusive]
             ],
         )
 
@@ -379,7 +415,7 @@ def _set_viewer_seeds(s, seeds):
 def _get_viewer_seeds(s):
     seeds = [[], []]
     for inclusive in [False, True]:
-        layer_name = 'inclusive-seeds' if inclusive else 'exclusive-seeds'
+        layer_name = "inclusive-seeds" if inclusive else "exclusive-seeds"
         try:
             layer = s.layers[layer_name]
         except KeyError:
@@ -390,11 +426,12 @@ def _get_viewer_seeds(s):
                     id=x.id,
                     supervoxel_id=int(x.description),
                     position=tuple(map(int, x.point)),
-                ))
+                )
+            )
     return seeds
 
 
-class ComponentState(object):
+class ComponentState:
     def __init__(self, data=None):
         self.supervoxels = set()
         self.seeds = [[], []]
@@ -402,17 +439,17 @@ class ComponentState(object):
             self.load(data)
 
     def load(self, data):
-        self.supervoxels = set(data['supervoxels'])
-        self.seeds = data['seeds']
+        self.supervoxels = set(data["supervoxels"])
+        self.seeds = data["seeds"]
 
     def to_json(self):
         return {
-            'supervoxels': sorted(self.supervoxels),
-            'seeds': self.seeds,
+            "supervoxels": sorted(self.supervoxels),
+            "seeds": self.seeds,
         }
 
 
-class InteractiveState(object):
+class InteractiveState:
     def __init__(self, path):
         self.unused_supervoxels = set()
         self.components = []
@@ -420,11 +457,11 @@ class InteractiveState(object):
         self.selected_component = None
 
     def load(self):
-        with open(self.path, 'r') as f:
+        with open(self.path) as f:
             data = json.load(f)
-            self.unused_supervoxels = set(data['unused_supervoxels'])
-            self.components = map(ComponentState, data['components'])
-            self.selected_component = data['selected_component']
+            self.unused_supervoxels = set(data["unused_supervoxels"])
+            self.components = map(ComponentState, data["components"])
+            self.selected_component = data["selected_component"]
 
     def initialize(self, supervoxel_ids):
         self.unused_supervoxels = set(supervoxel_ids)
@@ -433,16 +470,16 @@ class InteractiveState(object):
 
     def to_json(self):
         return {
-            'unused_supervoxels': sorted(self.unused_supervoxels),
-            'components': [x.to_json() for x in self.components],
-            'selected_component': self.selected_component,
+            "unused_supervoxels": sorted(self.unused_supervoxels),
+            "components": [x.to_json() for x in self.components],
+            "selected_component": self.selected_component,
         }
 
     def save(self):
         if self.path is None:
             return
-        tmp_path = self.path + '.tmp'
-        with open(tmp_path, 'w') as f:
+        tmp_path = self.path + ".tmp"
+        with open(tmp_path, "w") as f:
             f.write(json.dumps(self.to_json()))
         os.rename(tmp_path, self.path)
 
@@ -463,19 +500,19 @@ class InteractiveState(object):
                 self.selected_component = len(self.components) - 1
         else:
             self.selected_component = (
-                self.selected_component + amount + len(self.components)) % len(self.components)
+                self.selected_component + amount + len(self.components)
+            ) % len(self.components)
 
     def add_seed(self, supervoxel_id, position, inclusive):
         if self.selected_component is None:
             return
         c = self.components[self.selected_component]
         c.seeds[inclusive].append(
-            dict(
-                supervoxel_id=supervoxel_id,
-                position=position,
-                id=uuid.uuid4().hex))
+            dict(supervoxel_id=supervoxel_id, position=position, id=uuid.uuid4().hex)
+        )
 
-class CachedSplitResult(object):
+
+class CachedSplitResult:
     def __init__(self, state, graph, agglo_id):
         self.state = state
         self.graph = graph
@@ -503,15 +540,18 @@ class CachedSplitResult(object):
         self.selected_component = self.state.selected_component
         self.seeds = copy.deepcopy(component.seeds)
         self.supervoxels = set(component.supervoxels)
-        print('Recomputing split result')
+        print("Recomputing split result")
         self.split_result = do_split(
-            graph=self.graph, split_seeds=self.seeds, agglo_id=self.agglo_id,
-            supervoxels=self.supervoxels)
-        print('Done recomputing split result')
+            graph=self.graph,
+            split_seeds=self.seeds,
+            agglo_id=self.agglo_id,
+            supervoxels=self.supervoxels,
+        )
+        print("Done recomputing split result")
         return True
 
 
-class InteractiveSplitter(object):
+class InteractiveSplitter:
     def __init__(self, graph, agglo_id, image_url, segmentation_url, state_path):
         self.graph = graph
         self.agglo_id = agglo_id
@@ -519,7 +559,8 @@ class InteractiveSplitter(object):
         self.segmentation_url = segmentation_url
         self.state = InteractiveState(state_path)
         self.cached_split_result = CachedSplitResult(
-            state=self.state, graph=self.graph, agglo_id=self.agglo_id)
+            state=self.state, graph=self.graph, agglo_id=self.agglo_id
+        )
         self.agglo_members = set(self.graph.get_agglo_members(agglo_id))
 
         if state_path is not None and os.path.exists(state_path):
@@ -528,44 +569,45 @@ class InteractiveSplitter(object):
             self.state.initialize(self.agglo_members)
 
         viewer = self.viewer = neuroglancer.Viewer()
-        viewer.actions.add('inclusive-seed', self._add_inclusive_seed)
-        viewer.actions.add('exclusive-seed', self._add_exclusive_seed)
-        viewer.actions.add('next-component', self._next_component)
-        viewer.actions.add('prev-component', self._prev_component)
-        viewer.actions.add('new-component', self._make_new_component)
-        viewer.actions.add('exclude-component', self._exclude_component)
-        viewer.actions.add('exclude-all-but-component', self._exclude_all_but_component)
+        viewer.actions.add("inclusive-seed", self._add_inclusive_seed)
+        viewer.actions.add("exclusive-seed", self._add_exclusive_seed)
+        viewer.actions.add("next-component", self._next_component)
+        viewer.actions.add("prev-component", self._prev_component)
+        viewer.actions.add("new-component", self._make_new_component)
+        viewer.actions.add("exclude-component", self._exclude_component)
+        viewer.actions.add("exclude-all-but-component", self._exclude_all_but_component)
 
         key_bindings = [
-            ['bracketleft', 'prev-component'],
-            ['bracketright', 'next-component'],
-            ['at:dblclick0', 'exclude-component'],
-            ['at:shift+mousedown2', 'exclude-all-but-component'],
-            ['at:control+mousedown0', 'inclusive-seed'],
-            ['at:shift+mousedown0', 'exclusive-seed'],
-            ['enter', 'new-component'],
+            ["bracketleft", "prev-component"],
+            ["bracketright", "next-component"],
+            ["at:dblclick0", "exclude-component"],
+            ["at:shift+mousedown2", "exclude-all-but-component"],
+            ["at:control+mousedown0", "inclusive-seed"],
+            ["at:shift+mousedown0", "exclusive-seed"],
+            ["enter", "new-component"],
         ]
 
         with viewer.txn() as s:
             s.layers.append(
-                name='image',
+                name="image",
                 layer=neuroglancer.ImageLayer(source=self.image_url),
             )
             s.layers.append(
-                name='original',
+                name="original",
                 layer=neuroglancer.SegmentationLayer(
                     source=self.segmentation_url,
                     segments=self.agglo_members,
                 ),
             )
             s.layers.append(
-                name='unused',
-                layer=neuroglancer.SegmentationLayer(source=self.segmentation_url,
-                                                     ),
+                name="unused",
+                layer=neuroglancer.SegmentationLayer(
+                    source=self.segmentation_url,
+                ),
                 visible=False,
             )
             s.layers.append(
-                name='split-result',
+                name="split-result",
                 layer=neuroglancer.SegmentationLayer(
                     source=self.segmentation_url,
                     segments=self.agglo_members,
@@ -575,8 +617,9 @@ class InteractiveSplitter(object):
             self._update_state(s)
 
         with viewer.config_state.txn() as s:
-            s.status_messages['help'] = ('KEYS: ' + ' | '.join('%s=%s' % (key, command)
-                                                               for key, command in key_bindings))
+            s.status_messages["help"] = "KEYS: " + " | ".join(
+                f"{key}={command}" for key, command in key_bindings
+            )
             for key, command in key_bindings:
                 s.input_event_bindings.viewer[key] = command
                 s.input_event_bindings.slice_view[key] = command
@@ -584,7 +627,8 @@ class InteractiveSplitter(object):
             self._update_config_state(s)
 
         viewer.shared_state.add_changed_callback(
-            lambda: viewer.defer_callback(self._handle_state_changed))
+            lambda: viewer.defer_callback(self._handle_state_changed)
+        )
 
     def _add_inclusive_seed(self, s):
         self._add_seed(s, True)
@@ -603,8 +647,10 @@ class InteractiveSplitter(object):
             return
 
         self.cached_split_result.update()
-        members = set(self.cached_split_result.split_result['cur_eqs'].members(supervoxel_id))
-        component.supervoxels = set(x for x in component.supervoxels if x not in members)
+        members = set(
+            self.cached_split_result.split_result["cur_eqs"].members(supervoxel_id)
+        )
+        component.supervoxels = {x for x in component.supervoxels if x not in members}
         self.state.unused_supervoxels.update(members)
         self._update_view()
 
@@ -619,12 +665,13 @@ class InteractiveSplitter(object):
             return
 
         self.cached_split_result.update()
-        members = set(self.cached_split_result.split_result['cur_eqs'].members(supervoxel_id))
-        new_unused = set(x for x in component.supervoxels if x not in members)
+        members = set(
+            self.cached_split_result.split_result["cur_eqs"].members(supervoxel_id)
+        )
+        new_unused = {x for x in component.supervoxels if x not in members}
         component.supervoxels = members
         self.state.unused_supervoxels.update(new_unused)
         self._update_view()
-
 
     def _make_new_component(self, s):
         del s
@@ -653,11 +700,11 @@ class InteractiveSplitter(object):
             self._update_state(s)
 
     def _get_mouse_supervoxel(self, s):
-        supervoxel_id = s.selected_values.get('original')
+        supervoxel_id = s.selected_values.get("original")
         if supervoxel_id is not None:
             supervoxel_id = supervoxel_id.value
         if supervoxel_id is None:
-            m = s.selected_values.get('split-result')
+            m = s.selected_values.get("split-result")
             if m is not None:
                 m = m.value
             if m is not None:
@@ -686,57 +733,84 @@ class InteractiveSplitter(object):
 
     def _update_config_state(self, s):
         if self.state.selected_component is None:
-            msg = '[No component selected] %d unused supervoxels' % len(
-                self.state.unused_supervoxels)
+            msg = "[No component selected] %d unused supervoxels" % len(
+                self.state.unused_supervoxels
+            )
         else:
             selected_component = self.state.selected_component
 
-            msg = '[Component %d/%d] : %d supervoxels, %d connected components, %d unused' % (
-                selected_component, len(self.state.components),
-                len(self.cached_split_result.supervoxels),
-                len(self.cached_split_result.split_result['cur_eqs'].sets()), len(self.state.unused_supervoxels))
-        s.status_messages['status'] = msg
+            msg = (
+                "[Component %d/%d] : %d supervoxels, %d connected components, %d unused"
+                % (
+                    selected_component,
+                    len(self.state.components),
+                    len(self.cached_split_result.supervoxels),
+                    len(self.cached_split_result.split_result["cur_eqs"].sets()),
+                    len(self.state.unused_supervoxels),
+                )
+            )
+        s.status_messages["status"] = msg
 
     def _update_state(self, s):
         self.cached_split_result.update()
         self.state.save()
         _set_viewer_seeds(s, self.cached_split_result.seeds)
 
-        s.layers['unused'].segments = self.state.unused_supervoxels
-        s.layers['original'].segments = self.cached_split_result.supervoxels
-        s.layers['split-result'].segments = self.cached_split_result.supervoxels
+        s.layers["unused"].segments = self.state.unused_supervoxels
+        s.layers["original"].segments = self.cached_split_result.supervoxels
+        s.layers["split-result"].segments = self.cached_split_result.supervoxels
         split_result = self.cached_split_result.split_result
         if split_result is not None:
             self._show_split_result(
                 s,
-                cur_eqs=split_result['cur_eqs'],
+                cur_eqs=split_result["cur_eqs"],
             )
-        s.layout = neuroglancer.row_layout([
-            neuroglancer.LayerGroupViewer(
-                layout='3d',
-                layers=['image', 'original', 'unused', 'inclusive-seeds', 'exclusive-seeds']),
-            neuroglancer.LayerGroupViewer(
-                layout='3d', layers=['image', 'split-result', 'inclusive-seeds',
-                                     'exclusive-seeds']),
-        ])
+        s.layout = neuroglancer.row_layout(
+            [
+                neuroglancer.LayerGroupViewer(
+                    layout="3d",
+                    layers=[
+                        "image",
+                        "original",
+                        "unused",
+                        "inclusive-seeds",
+                        "exclusive-seeds",
+                    ],
+                ),
+                neuroglancer.LayerGroupViewer(
+                    layout="3d",
+                    layers=[
+                        "image",
+                        "split-result",
+                        "inclusive-seeds",
+                        "exclusive-seeds",
+                    ],
+                ),
+            ]
+        )
 
     def _show_split_result(self, s, cur_eqs):
-        split_layer = s.layers['split-result']
+        split_layer = s.layers["split-result"]
         split_layer.equivalences = cur_eqs
-        split_layer.segments = set(cur_eqs[x] for x in self.cached_split_result.supervoxels)
+        split_layer.segments = {
+            cur_eqs[x] for x in self.cached_split_result.supervoxels
+        }
 
 
 def run_batch(args, graph):
     for path in args.split_seeds:
         split_seeds = load_split_seeds(path)
-        split_result = do_split(graph=graph, split_seeds=split_seeds, agglo_id=args.agglo_id)
+        split_result = do_split(
+            graph=graph, split_seeds=split_seeds, agglo_id=args.agglo_id
+        )
         state = display_split_result(
             graph=graph,
             split_seeds=split_seeds,
             image_url=args.image_url,
             segmentation_url=args.segmentation_url,
-            **split_result)
-        print('<p><a href="%s">%s</a></p>' % (neuroglancer.to_url(state), path))
+            **split_result,
+        )
+        print(f'<p><a href="{neuroglancer.to_url(state)}">{path}</a></p>')
 
 
 def run_interactive(args, graph):
@@ -751,53 +825,73 @@ def run_interactive(args, graph):
         agglo_id=args.agglo_id,
         image_url=args.image_url,
         segmentation_url=args.segmentation_url,
-        state_path=args.state)
+        state_path=args.state,
+    )
     print(splitter.viewer)
 
 
 def open_graph(path, agglo_id):
     # Check if graph_db is sharded
     graph_db = path
-    m = re.match(r'(.*)@([0-9]+)((?:\..*)?)$', graph_db)
+    m = re.match(r"(.*)@([0-9]+)((?:\..*)?)$", graph_db)
     if m is not None:
         num_shards = int(m.group(2))
         shard = agglo_id % num_shards
-        graph_db = m.group(1) + ('-%05d-of-%05d' % (shard, num_shards)) + m.group(3)
+        graph_db = m.group(1) + ("-%05d-of-%05d" % (shard, num_shards)) + m.group(3)
 
     return AgglomerationGraph(sqlite3.connect(graph_db, check_same_thread=False))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
 
-    ap.add_argument('-v', '--verbose', action='store_true', help='Display verbose log messages.')
+    ap.add_argument(
+        "-v", "--verbose", action="store_true", help="Display verbose log messages."
+    )
 
     common_ap = argparse.ArgumentParser(add_help=False)
     common_ap.add_argument(
-        '--graph-db', required=True, help='Path to sqlite3 database specifying agglomeration graph')
+        "--graph-db",
+        required=True,
+        help="Path to sqlite3 database specifying agglomeration graph",
+    )
     common_ap.add_argument(
-        '--image-url', required=True, help='Neuroglancer data source URL for image')
+        "--image-url", required=True, help="Neuroglancer data source URL for image"
+    )
     common_ap.add_argument(
-        '--segmentation-url', required=True, help='Neuroglancer data source URL for segmentation')
+        "--segmentation-url",
+        required=True,
+        help="Neuroglancer data source URL for segmentation",
+    )
 
-    sub_aps = ap.add_subparsers(help='command to run')
+    sub_aps = ap.add_subparsers(help="command to run")
     interactive_ap = sub_aps.add_parser(
-        'interactive', help='Interactively split an aglomerated component', parents=[common_ap])
+        "interactive",
+        help="Interactively split an aglomerated component",
+        parents=[common_ap],
+    )
 
     batch_ap = sub_aps.add_parser(
-        'batch', help='Split based on pre-specified seed files', parents=[common_ap])
+        "batch", help="Split based on pre-specified seed files", parents=[common_ap]
+    )
 
     interactive_ap.add_argument(
-        '--agglo-id', type=int, required=True, help='Agglomerated component id to split')
-    interactive_ap.add_argument('--split-seeds', help='Path to JSON file specifying split seeds')
-    interactive_ap.add_argument('--state', help='Path to JSON state file.')
+        "--agglo-id", type=int, required=True, help="Agglomerated component id to split"
+    )
+    interactive_ap.add_argument(
+        "--split-seeds", help="Path to JSON file specifying split seeds"
+    )
+    interactive_ap.add_argument("--state", help="Path to JSON state file.")
     neuroglancer.cli.add_server_arguments(interactive_ap)
 
     interactive_ap.set_defaults(func=run_interactive)
 
     batch_ap.add_argument(
-        '--split-seeds', nargs='+', help='Path to JSON file specifying split seeds')
-    batch_ap.add_argument('--agglo-id', type=int, help='Agglomerated component id to split')
+        "--split-seeds", nargs="+", help="Path to JSON file specifying split seeds"
+    )
+    batch_ap.add_argument(
+        "--agglo-id", type=int, help="Agglomerated component id to split"
+    )
     batch_ap.set_defaults(func=run_batch)
 
     args = ap.parse_args()

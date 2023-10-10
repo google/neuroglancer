@@ -1,2 +1,51 @@
 [build-system]
-requires = ["setuptools>=64", "wheel", "setuptools_scm", "oldest-supported-numpy"]
+requires = [
+    "setuptools>=64",
+    "wheel",
+    "setuptools_scm",
+    "oldest-supported-numpy",
+]
+
+[tool.ruff]
+target-version = "py39"
+select = [
+    "E", # pycodestyle
+    "W", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
+    "UP", # pyupgrade
+    "NPY", # numpy
+]
+ignore = [
+    "E501",  # Line length regulated by ruff format
+]
+
+[tool.mypy]
+show_error_codes = true
+pretty = true
+exclude = [
+    "noxfile\\.py",
+    "^src/",
+    "/guide_video_recorder/",
+    "^docs/",
+    "^build/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "apitools",
+    "apitools.*",
+    "numcodecs",
+    "google",
+    "google.*",
+    "zarr",
+    "zarrita",
+    "tensorstore",
+    "dask",
+    "dask.*",
+    "scipy",
+    "scipy.*",
+    "cloudvolume",
+    "trio",
+]
+ignore_missing_imports = true

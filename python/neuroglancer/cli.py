@@ -15,42 +15,53 @@
 
 def add_server_arguments(ap):
     """Defines common options for the Neuroglancer server."""
-    g = ap.add_argument_group(title='Neuroglancer server options')
+    g = ap.add_argument_group(title="Neuroglancer server options")
     g.add_argument(
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
+        "--bind-address",
+        help="Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access "
+        "to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.",
     )
-    g.add_argument('--static-content-url',
-                   help='Obtain the Neuroglancer client code from the specified URL.')
-    g.add_argument('--debug-server',
-                   action='store_true',
-                   help='Log requests to web server used for Neuroglancer Python API')
+    g.add_argument(
+        "--static-content-url",
+        help="Obtain the Neuroglancer client code from the specified URL.",
+    )
+    g.add_argument(
+        "--debug-server",
+        action="store_true",
+        help="Log requests to web server used for Neuroglancer Python API",
+    )
 
 
-def add_state_arguments(ap, required=False, dest='state'):
+def add_state_arguments(ap, required=False, dest="state"):
     """Defines options for specifying a Neuroglancer state."""
     g = ap.add_mutually_exclusive_group(required=required)
 
     def neuroglancer_url(s):
         from .url_state import parse_url
+
         return parse_url(s)
 
-    g.add_argument('--url',
-                   type=neuroglancer_url,
-                   dest=dest,
-                   help='Neuroglancer URL from which to obtain state.')
+    g.add_argument(
+        "--url",
+        type=neuroglancer_url,
+        dest=dest,
+        help="Neuroglancer URL from which to obtain state.",
+    )
 
     def json_state(path):
         import json
+
         from . import viewer_state
-        with open(path, 'r') as f:
+
+        with open(path) as f:
             return viewer_state.ViewerState(json.load(f))
 
-    g.add_argument('--json',
-                   type=json_state,
-                   dest=dest,
-                   help='Path to file containing Neuroglancer JSON state.')
+    g.add_argument(
+        "--json",
+        type=json_state,
+        dest=dest,
+        help="Path to file containing Neuroglancer JSON state.",
+    )
 
 
 def handle_server_arguments(args):
