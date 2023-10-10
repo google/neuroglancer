@@ -30,54 +30,63 @@ import neuroglancer.cli
 try:
     import cloudvolume
 except ImportError:
-    print('cloud-volume package is required: pip install cloud-volume')
+    print("cloud-volume package is required: pip install cloud-volume")
     sys.exit(1)
 
 
 def save_meshes(state, output_dir, output_format, lod):
     for layer in state.layers:
-        if not isinstance(layer.layer, neuroglancer.SegmentationLayer): continue
-        if not layer.visible: return False
+        if not isinstance(layer.layer, neuroglancer.SegmentationLayer):
+            continue
+        if not layer.visible:
+            return False
         for source in layer.source:
-            if not source.url.startswith('precomputed://'):
+            if not source.url.startswith("precomputed://"):
                 continue
             vol = cloudvolume.CloudVolume(source.url, parallel=True, progress=True)
-            if len(layer.segments) == 0: continue
+            if len(layer.segments) == 0:
+                continue
             get_mesh_kwargs = {}
             if lod != 0:
                 get_mesh_kwargs.update(lod=lod)
             for segment in layer.segments:
-                output_path = os.path.join(output_dir, '%d.%s' % (segment, output_format))
-                print('Saving layer %r object %s -> %s' % (layer.name, segment, output_path))
+                output_path = os.path.join(
+                    output_dir, "%d.%s" % (segment, output_format)
+                )
+                print(f"Saving layer {layer.name!r} object {segment} -> {output_path}")
                 os.makedirs(output_dir, exist_ok=True)
                 mesh = vol.mesh.get(segment, **get_mesh_kwargs)
                 if isinstance(mesh, dict):
                     mesh = list(mesh.values())[0]
-                if output_format == 'obj':
+                if output_format == "obj":
                     data = mesh.to_obj()
-                elif output_format == 'ply':
+                elif output_format == "ply":
                     data = mesh.to_ply()
-                elif output_format == 'precomputed':
+                elif output_format == "precomputed":
                     data = mesh.to_precomputed()
-                with open(output_path, 'wb') as f:
+                with open(output_path, "wb") as f:
                     f.write(data)
             return
-    print('No segmentation layer found')
+    print("No segmentation layer found")
     sys.exit(1)
 
 
 def main(args=None):
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_state_arguments(ap, required=True)
-    ap.add_argument('--format', choices=['obj', 'ply'], default='obj')
-    ap.add_argument('--lod', type=int, default=0, help='Mesh level of detail to download')
-    ap.add_argument('--output-dir', default='.')
+    ap.add_argument("--format", choices=["obj", "ply"], default="obj")
+    ap.add_argument(
+        "--lod", type=int, default=0, help="Mesh level of detail to download"
+    )
+    ap.add_argument("--output-dir", default=".")
     parsed_args = ap.parse_args()
-    save_meshes(state=parsed_args.state,
-                output_dir=parsed_args.output_dir,
-                output_format=parsed_args.format,
-                lod=parsed_args.lod)
+    save_meshes(
+        state=parsed_args.state,
+        output_dir=parsed_args.output_dir,
+        output_format=parsed_args.format,
+        lod=parsed_args.lod,
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

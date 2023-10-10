@@ -36,4 +36,4 @@ def encode_npz(subvol):
 
 
 def encode_raw(subvol):
-    return subvol.tostring('C')
+    return subvol.tostring("C")

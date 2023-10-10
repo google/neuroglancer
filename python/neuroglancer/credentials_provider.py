@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
 
 import concurrent.futures
 import threading
@@ -20,7 +19,7 @@ import threading
 from .futures import future_then_immediate
 
 
-class CredentialsManager(object):
+class CredentialsManager:
     def __init__(self):
         self._providers = dict()
 
@@ -31,7 +30,7 @@ class CredentialsManager(object):
         return self._providers[key](parameters)
 
 
-class CredentialsProvider(object):
+class CredentialsProvider:
     next_generation = 0
     next_generation_lock = threading.Lock()
 
@@ -42,8 +41,10 @@ class CredentialsProvider(object):
 
     def get(self, invalid_generation=None):
         with self._lock:
-            if self.future is not None and (self.credentials is None or
-                                            invalid_generation != self.credentials['generation']):
+            if self.future is not None and (
+                self.credentials is None
+                or invalid_generation != self.credentials["generation"]
+            ):
                 return self.future
             self.credentials = None
             self.future = future = concurrent.futures.Future()
@@ -53,12 +54,15 @@ class CredentialsProvider(object):
                 with CredentialsProvider.next_generation_lock:
                     CredentialsProvider.next_generation += 1
                     next_generation = CredentialsProvider.next_generation
-                credentials_with_generation = dict(credentials=credentials,
-                                                   generation=next_generation)
+                credentials_with_generation = dict(
+                    credentials=credentials, generation=next_generation
+                )
                 self.credentials = credentials_with_generation
                 return credentials_with_generation
 
-        future_then_immediate(self.get_new(), attach_generation_and_save_credentials, future)
+        future_then_immediate(
+            self.get_new(), attach_generation_and_save_credentials, future
+        )
         return future
 
     def get_new(self):

@@ -18,3 +18,5 @@ import {registerProvider} from 'neuroglancer/datasource/default_provider';
 import {ZarrDataSource} from 'neuroglancer/datasource/zarr/frontend';
 
 registerProvider('zarr', () => new ZarrDataSource());
+registerProvider('zarr2', () => new ZarrDataSource(2));
+registerProvider('zarr3', () => new ZarrDataSource(3));

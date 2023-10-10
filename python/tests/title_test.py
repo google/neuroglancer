@@ -15,36 +15,35 @@
 
 import neuroglancer
 import numpy as np
-import pytest
 
 
 def test_title(webdriver):
     a = np.array([[[255]]], dtype=np.uint8)
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y", "z"],
-                                                    units="nm",
-                                                    scales=[1, 1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
         s.layers.append(
             name="a",
-            layer=neuroglancer.ImageLayer(source=neuroglancer.LocalVolume(data=a,
-                                                                          dimensions=s.dimensions),
-                                          ),
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(data=a, dimensions=s.dimensions),
+            ),
         )
 
     webdriver.sync()
 
-    assert webdriver.driver.title == 'neuroglancer'
+    assert webdriver.driver.title == "neuroglancer"
 
     with webdriver.viewer.txn() as s:
-        s.title = 'the title'
+        s.title = "the title"
 
     webdriver.sync()
 
-    assert webdriver.driver.title == 'the title - neuroglancer'
+    assert webdriver.driver.title == "the title - neuroglancer"
 
     with webdriver.viewer.txn() as s:
         s.title = None
 
     webdriver.sync()
 
-    assert webdriver.driver.title == 'neuroglancer'
+    assert webdriver.driver.title == "neuroglancer"

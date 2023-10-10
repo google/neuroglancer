@@ -14,26 +14,10 @@
  * limitations under the License.
  */
 
-import { Endianness } from "neuroglancer/util/endian";
-
-export enum ZarrCompressor {
-  RAW,
-  GZIP,
-  BLOSC,
-}
-
-export interface ZarrEncoding {
-  endianness: Endianness;
-  compressor: ZarrCompressor;
-}
-
-export type ZarrSeparator = '/' | '.';
+import {ArrayMetadata} from 'neuroglancer/datasource/zarr/metadata';
 
 export class VolumeChunkSourceParameters {
   url: string;
-  encoding: ZarrEncoding;
-  separator: ZarrSeparator;
-  order: 'C'|'F';
-
+  metadata: ArrayMetadata;
   static RPC_ID = 'zarr/VolumeChunkSource';
 }

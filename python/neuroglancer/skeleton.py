@@ -12,27 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
 
 import collections
 import io
 import struct
 
 import numpy as np
-import six
 
-from . import random_token
-from . import trackable_state
+from . import random_token, trackable_state
 
 
-class Skeleton(object):
+class Skeleton:
     def __init__(self, vertex_positions, edges, vertex_attributes=None):
-        self.vertex_positions = np.array(vertex_positions, dtype='<f4')
+        self.vertex_positions = np.array(vertex_positions, dtype="<f4")
         if self.vertex_positions.ndim != 2 or self.vertex_positions.shape[1] != 3:
-            raise ValueError('vertex_positions must be array of shape (N, 3)')
-        self.edges = np.array(edges, dtype='<u4')
+            raise ValueError("vertex_positions must be array of shape (N, 3)")
+        self.edges = np.array(edges, dtype="<u4")
         if self.edges.ndim != 2 or self.edges.shape[1] != 2:
-            raise ValueError('edges must be array of shape (N, 2)')
+            raise ValueError("edges must be array of shape (N, 2)")
         self.vertex_attributes = vertex_attributes
 
     def encode(self, source):
@@ -40,34 +37,40 @@ class Skeleton(object):
         edges = self.edges
         vertex_positions = self.vertex_positions
         vertex_attributes = self.vertex_attributes
-        result.write(struct.pack('<II', vertex_positions.shape[0], edges.shape[0]))
+        result.write(struct.pack("<II", vertex_positions.shape[0], edges.shape[0]))
         result.write(vertex_positions.tobytes())
         result.write(edges.tobytes())
         if len(source.vertex_attributes) > 0:
-            for name, info in six.iteritems(source.vertex_attributes):
-
-                attribute = np.array(vertex_attributes[name],
-                                     np.dtype(info.data_type).newbyteorder('<'))
+            for name, info in source.vertex_attributes.items():
+                attribute = np.array(
+                    vertex_attributes[name], np.dtype(info.data_type).newbyteorder("<")
+                )
                 expected_shape = (vertex_positions.shape[0], info.num_components)
-                if (attribute.shape[0] != expected_shape[0] or
-                        attribute.size != np.prod(expected_shape)):
-                    raise ValueError('Expected attribute %r to have shape %r, but was: %r' %
-                                     (name, expected_shape, attribute.shape))
+                if attribute.shape[0] != expected_shape[0] or attribute.size != np.prod(
+                    expected_shape
+                ):
+                    raise ValueError(
+                        "Expected attribute {!r} to have shape {!r}, but was: {!r}".format(
+                            name, expected_shape, attribute.shape
+                        )
+                    )
                 result.write(attribute.tobytes())
         return result.getvalue()
 
 
-VertexAttributeInfo = collections.namedtuple('VertexAttributeInfo', ['data_type', 'num_components'])
+VertexAttributeInfo = collections.namedtuple(
+    "VertexAttributeInfo", ["data_type", "num_components"]
+)
+
 
 class SkeletonSource(trackable_state.ChangeNotifier):
-
     def __init__(self, dimensions, voxel_offset=None):
-        super(SkeletonSource, self).__init__()
+        super().__init__()
         self.dimensions = dimensions
         if voxel_offset is None:
             voxel_offset = np.zeros(dimensions.rank, dtype=np.float64)
         self.voxel_offset = voxel_offset
-        self.vertex_attributes = collections.OrderedDict()
+        self.vertex_attributes = {}
         self.token = random_token.make_random_token()
 
     def info(self):
@@ -88,9 +91,11 @@ class SkeletonSource(trackable_state.ChangeNotifier):
         raise NotImplementedError
 
     def get_vertex_attributes_spec(self):
-        temp = collections.OrderedDict()
-        for k, v in six.iteritems(self.vertex_attributes):
-            temp[k] = dict(dataType=np.dtype(v.data_type).name, numComponents=v.num_components)
+        temp = {}
+        for k, v in self.vertex_attributes.items():
+            temp[k] = dict(
+                dataType=np.dtype(v.data_type).name, numComponents=v.num_components
+            )
         return temp
 
     def invalidate(self):

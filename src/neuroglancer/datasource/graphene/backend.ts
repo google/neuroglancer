@@ -128,7 +128,6 @@ async function decodeDracoFragmentChunk(
 }
 
 export class ChunkedGraphChunk extends Chunk {
-  backendOnly = true;
   chunkGridPosition: Float32Array;
   source: GrapheneChunkedGraphChunkSource|null = null;
   segment: Uint64;
@@ -339,7 +338,8 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState
         forEachVisibleSegment(this, (segment, _) => {
           if (isBaseSegmentId(segment, this.nBitsForLayerId.value)) return; // TODO maybe support highBitRepresentation?
           const chunk = source.getChunk(curPositionInChunks, segment.clone());
-          chunkManager.requestChunk(chunk, priorityTier, basePriority + priority);
+          chunkManager.requestChunk(
+              chunk, priorityTier, basePriority + priority, ChunkState.SYSTEM_MEMORY_WORKER);
           ++this.numVisibleChunksNeeded;
           if (chunk.state === ChunkState.GPU_MEMORY) {
             ++this.numVisibleChunksAvailable;

@@ -58,18 +58,18 @@ export function parseXYZ<A extends WritableArrayLike<number>>(
   out[0] = out[1] = out[2] = 0;
   for (const key of Object.keys(obj)) {
     switch (key) {
-    case 'x':
-      out[0] = validator(obj[key]);
-      break;
-    case 'y':
-      out[1] = validator(obj[key]);
-      break;
-    case 'z':
-      out[2] = validator(obj[key]);
-      break;
-    default:
-      throw new Error(
-          `Expected object to have keys ['x', 'y', 'z'], but received: ${JSON.stringify(obj)}.`);
+      case 'x':
+        out[0] = validator(obj[key]);
+        break;
+      case 'y':
+        out[1] = validator(obj[key]);
+        break;
+      case 'z':
+        out[2] = validator(obj[key]);
+        break;
+      default:
+        throw new Error(
+            `Expected object to have keys ['x', 'y', 'z'], but received: ${JSON.stringify(obj)}.`);
     }
   }
   return out;
@@ -233,7 +233,7 @@ const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\[^']))*)("|\\')/;
 const SINGLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)'/;
 
 function convertStringLiteral(
-  x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
+    x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
   if (x.length >= 2 && x.charAt(0) === quoteInitial && x.charAt(x.length - 1) === quoteInitial) {
     let inner = x.substr(1, x.length - 2);
     let s = quoteReplace;
@@ -558,8 +558,9 @@ export function unparseQueryStringParameters(parameters: any) {
  *
  * @returns The corresponding numerical value.
  */
-export function verifyEnumString<T extends number>(obj: any, enumType: {[x: string]: T|string}): T {
-  if (typeof obj === 'string' && obj.match(/^[a-zA-Z]/) !== null) {
+export function verifyEnumString<T extends number>(
+    obj: any, enumType: {[x: string]: T|string}, pattern: RegExp = /^[a-zA-Z]/): T {
+  if (typeof obj === 'string' && obj.match(pattern) !== null) {
     obj = obj.toUpperCase();
     if (enumType.hasOwnProperty(obj)) {
       return enumType[obj] as T;
@@ -617,4 +618,26 @@ export function emptyToUndefined(x: any) {
     return x;
   }
   return undefined;
+}
+
+export function verifyConstant<T>(actual: unknown, expected: T) {
+  if (actual !== expected) {
+    throw new Error(
+        `Expected ${JSON.stringify(expected)}, but received: ${JSON.stringify(actual)}`);
+  }
+  return expected;
+}
+
+export function verifyOptionalFixedLengthArrayOfStringOrNull(obj: unknown, rank: number) {
+  if (obj === undefined) {
+    const array = new Array<string|null>(rank);
+    array.fill(null);
+    return array;
+  }
+  return parseFixedLengthArray(new Array<string|null>(rank), obj, value => {
+    if (value !== null && typeof value !== 'string') {
+      throw new Error(`Expected string or null, but received: ${JSON.stringify(name)}`);
+    }
+    return value;
+  });
 }
