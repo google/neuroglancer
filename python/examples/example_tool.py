@@ -4,7 +4,7 @@ import webbrowser
 import neuroglancer
 import neuroglancer.cli
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_server_arguments(ap)
     args = ap.parse_args()
@@ -12,11 +12,11 @@ if __name__ == '__main__':
 
     viewer = neuroglancer.Viewer()
     with viewer.txn() as s:
-        s.layers['image'] = neuroglancer.ImageLayer(
-            source='precomputed://gs://neuroglancer-public-data/flyem_fib-25/image',
+        s.layers["image"] = neuroglancer.ImageLayer(
+            source="precomputed://gs://neuroglancer-public-data/flyem_fib-25/image",
             tool_bindings={
-                'A': neuroglancer.ShaderControlTool(control='normalized'),
-                'B': neuroglancer.OpacityTool(),
+                "A": neuroglancer.ShaderControlTool(control="normalized"),
+                "B": neuroglancer.OpacityTool(),
             },
         )
 

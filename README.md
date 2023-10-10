@@ -39,7 +39,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 
 - [Neuroglancer precomputed format](src/neuroglancer/datasource/precomputed)
 - [N5](src/neuroglancer/datasource/n5)
-- [Zarr](src/neuroglancer/datasource/zarr)
+- [Zarr v2/v3](src/neuroglancer/datasource/zarr)
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 - BOSS <https://bossdb.org/>
 - DVID <https://github.com/janelia-flyem/dvid>

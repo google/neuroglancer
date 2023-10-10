@@ -18,86 +18,94 @@ import numpy as np
 
 
 def test_invlerp(webdriver):
-
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y"], units="nm", scales=[1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y"], units="nm", scales=[1, 1]
+        )
         s.position = [0.5, 0.5]
         s.layers.append(
-            name='image',
-            layer=neuroglancer.ImageLayer(source=neuroglancer.LocalVolume(
-                dimensions=s.dimensions,
-                data=np.full(shape=(1, 1), dtype=np.uint32, fill_value=42),
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(
+                    dimensions=s.dimensions,
+                    data=np.full(shape=(1, 1), dtype=np.uint32, fill_value=42),
+                ),
             ),
-                                          ),
             visible=True,
             shader_controls={
-                'normalized': {
-                    'range': [0, 42],
+                "normalized": {
+                    "range": [0, 42],
                 },
             },
         )
-        s.layout = 'xy'
+        s.layout = "xy"
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
 
-    control = webdriver.viewer.state.layers['image'].shader_controls['normalized']
+    control = webdriver.viewer.state.layers["image"].shader_controls["normalized"]
     assert isinstance(control, neuroglancer.InvlerpParameters)
     np.testing.assert_equal(control.range, [0, 42])
 
     def expect_color(color):
         webdriver.sync()
         screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-        np.testing.assert_array_equal(screenshot.image_pixels,
-                                      np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)))
+        np.testing.assert_array_equal(
+            screenshot.image_pixels,
+            np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)),
+        )
 
     expect_color([255, 255, 255, 255])
     with webdriver.viewer.txn() as s:
-        s.layers['image'].shader_controls = {
-            'normalized': neuroglancer.InvlerpParameters(range=[42, 100]),
+        s.layers["image"].shader_controls = {
+            "normalized": neuroglancer.InvlerpParameters(range=[42, 100]),
         }
     expect_color([0, 0, 0, 255])
 
 
 def test_slider(webdriver):
-
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y"], units="nm", scales=[1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y"], units="nm", scales=[1, 1]
+        )
         s.position = [0.5, 0.5]
         s.layers.append(
-            name='image',
-            layer=neuroglancer.ImageLayer(source=neuroglancer.LocalVolume(
-                dimensions=s.dimensions,
-                data=np.full(shape=(1, 1), dtype=np.uint32, fill_value=42),
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(
+                    dimensions=s.dimensions,
+                    data=np.full(shape=(1, 1), dtype=np.uint32, fill_value=42),
+                ),
             ),
-                                          ),
             visible=True,
-            shader='''
+            shader="""
 #uicontrol float color slider(min=0, max=10)
 
 void main() {
   emitGrayscale(color);
 }
-''',
+""",
             shader_controls={
-                'color': 1,
+                "color": 1,
             },
         )
-        s.layout = 'xy'
+        s.layout = "xy"
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
 
-    control = webdriver.viewer.state.layers['image'].shader_controls['color']
+    control = webdriver.viewer.state.layers["image"].shader_controls["color"]
     assert control == 1
 
     def expect_color(color):
         webdriver.sync()
         screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-        np.testing.assert_array_equal(screenshot.image_pixels,
-                                      np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)))
+        np.testing.assert_array_equal(
+            screenshot.image_pixels,
+            np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)),
+        )
 
     expect_color([255, 255, 255, 255])
     with webdriver.viewer.txn() as s:
-        s.layers['image'].shader_controls = {
-            'color': 0,
+        s.layers["image"].shader_controls = {
+            "color": 0,
         }
     expect_color([0, 0, 0, 255])

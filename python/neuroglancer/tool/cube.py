@@ -3,14 +3,16 @@
 import argparse
 
 import neuroglancer
-import neuroglancer.coordinate_space
 import neuroglancer.cli
+import neuroglancer.coordinate_space
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cube-size",
-                    type=neuroglancer.coordinate_space.parse_unit,
-                    default=(4e-6, "m"))
+    ap.add_argument(
+        "--cube-size",
+        type=neuroglancer.coordinate_space.parse_unit_and_scale,
+        default=(4e-6, "m"),
+    )
     neuroglancer.cli.add_server_arguments(ap)
     neuroglancer.cli.add_state_arguments(ap, required=True)
     args = ap.parse_args()
@@ -40,23 +42,25 @@ if __name__ == '__main__':
         [0, 0, 0, 1],  # x+y+
     ]
 
-
     # Add 6 cube faces
     for face_dim in range(3):
         for face_dir in range(2):
-            state.layout.type = '3d'
+            state.layout.type = "3d"
             position = list(state.position)
-            position[face_dim] += ((face_dir * 2 - 1) * cube_size / 2 /
-                                   state.dimensions[face_dim].scale)
-            state.layout.cross_sections['%d_%d' % (face_dim, face_dir)] = neuroglancer.CrossSection(
+            position[face_dim] += (
+                (face_dir * 2 - 1) * cube_size / 2 / state.dimensions[face_dim].scale
+            )
+            state.layout.cross_sections[
+                "%d_%d" % (face_dim, face_dir)
+            ] = neuroglancer.CrossSection(
                 width=cube_size / canonical_scale,
                 height=cube_size / canonical_scale,
-                position=neuroglancer.LinkedPosition(link='relative', value=position),
+                position=neuroglancer.LinkedPosition(link="relative", value=position),
                 orientation=neuroglancer.LinkedOrientationState(
-                    link='unlinked',
+                    link="unlinked",
                     value=orientations[face_dim],
                 ),
-                scale=neuroglancer.LinkedZoomFactor(link='unlinked', value=1),
+                scale=neuroglancer.LinkedZoomFactor(link="unlinked", value=1),
             )
 
     print(neuroglancer.to_url(state))

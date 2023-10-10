@@ -18,22 +18,21 @@ import posixpath
 import re
 
 mime_type_map = {
-    '.css': 'text/css',
-    '.js': 'application/javascript',
-    '.html': 'text/html',
-    '.map': 'application/json'
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".html": "text/html",
+    ".map": "application/json",
 }
 
 
 def guess_mime_type_from_path(path):
-    return mime_type_map.get(posixpath.splitext(path)[1], 'application/octet-stream')
+    return mime_type_map.get(posixpath.splitext(path)[1], "application/octet-stream")
 
 
-class StaticContentSource(object):
-
+class StaticContentSource:
     def get(self, name):
-        if name == '':
-            name = 'index.html'
+        if name == "":
+            name = "index.html"
         return self.get_content(name), guess_mime_type_from_path(name)
 
     def get_content(self, name):
@@ -41,12 +40,12 @@ class StaticContentSource(object):
 
 
 class ImportlibResourcesContentSource(StaticContentSource):
-
     def get_content(self, name):
-        if not re.match(r'^[a-z][a-z_\-\.]*\.(?:js|js\.map|css|html)$', name):
-            raise ValueError('Invalid static resource name: %r' % name)
-        if importlib.resources.is_resource(__name__, name):
-            return importlib.resources.read_binary(__name__, name)
+        if not re.match(r"^[a-z][a-z_\-\.]*\.(?:js|js\.map|css|html)$", name):
+            raise ValueError("Invalid static resource name: %r" % name)
+        path = importlib.resources.files(__name__).joinpath(name)
+        if path.is_file():
+            return path.read_bytes()
         raise ValueError(
             'Static resources not built.  Run: "npm run build-python" or use an alternative static content source.'
         )
@@ -56,21 +55,20 @@ PkgResourcesContentSource = ImportlibResourcesContentSource
 
 
 class HttpSource(StaticContentSource):
-
     def __init__(self, url):
         self.url = url
 
     def get_content(self, name):
         import requests
+
         full_url = posixpath.join(self.url, name)
         r = requests.get(full_url)
         if r.status_code >= 200 and r.status_code < 300:
             return r.content
-        raise ValueError('Failed to retrieve %r: %s' % (full_url, r.reason))
+        raise ValueError(f"Failed to retrieve {full_url!r}: {r.reason}")
 
 
 class FileSource(StaticContentSource):
-
     def __init__(self, path, file_open=None):
         self.file_path = path
         self.file_open = file_open or open
@@ -78,10 +76,10 @@ class FileSource(StaticContentSource):
     def get_content(self, name):
         full_path = os.path.join(self.file_path, name)
         try:
-            with self.file_open(full_path, 'rb') as f:
+            with self.file_open(full_path, "rb") as f:
                 return f.read()
         except Exception as e:
-            raise ValueError('Failed to read local path %r: %s' % (full_path, e))
+            raise ValueError(f"Failed to read local path {full_path!r}: {e}")
 
 
 def get_default_static_content_source():

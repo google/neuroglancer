@@ -20,12 +20,12 @@ import numpy as np
 
 def test_annotate(webdriver):
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y"],
-                                                    units="nm",
-                                                    scales=[1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y"], units="nm", scales=[1, 1]
+        )
         s.position = [0, 0]
         s.layers.append(
-            name='seg1',
+            name="seg1",
             layer=neuroglancer.SegmentationLayer(
                 source=neuroglancer.LocalVolume(
                     dimensions=s.dimensions,
@@ -36,7 +36,7 @@ def test_annotate(webdriver):
             visible=False,
         )
         s.layers.append(
-            name='seg2',
+            name="seg2",
             layer=neuroglancer.SegmentationLayer(
                 source=neuroglancer.LocalVolume(
                     dimensions=s.dimensions,
@@ -50,62 +50,66 @@ def test_annotate(webdriver):
             name="a",
             layer=neuroglancer.LocalAnnotationLayer(
                 dimensions=s.dimensions,
-                annotation_relationships=['a', 'b'],
-                linked_segmentation_layer={'a': 'seg1', 'b': 'seg2'},
-                filter_by_segmentation=['a', 'b'],
+                annotation_relationships=["a", "b"],
+                linked_segmentation_layer={"a": "seg1", "b": "seg2"},
+                filter_by_segmentation=["a", "b"],
                 ignore_null_segment_filter=False,
                 annotation_properties=[
                     neuroglancer.AnnotationPropertySpec(
-                        id='color',
-                        type='rgb',
-                        default='red',
+                        id="color",
+                        type="rgb",
+                        default="red",
                     )
                 ],
                 annotations=[
                     neuroglancer.PointAnnotation(
-                        id='1',
+                        id="1",
                         point=[0, 0],
                         segments=[[42], []],
-                        props=['#0f0'],
+                        props=["#0f0"],
                     ),
                     neuroglancer.PointAnnotation(
-                        id='2',
+                        id="2",
                         point=[0, 0],
                         segments=[[], [43]],
-                        props=['#00f'],
+                        props=["#00f"],
                     ),
                     neuroglancer.PointAnnotation(
-                        id='3',
+                        id="3",
                         point=[0, 0],
                         segments=[[], [44]],
-                        props=['#0ff'],
+                        props=["#0ff"],
                     ),
                 ],
-                shader='''
+                shader="""
 void main() {
   setColor(prop_color());
   setPointMarkerSize(1000.0);
 }
-''',
+""",
             ),
         )
-        s.layout = 'xy'
+        s.layout = "xy"
         s.cross_section_scale = 1e-6
         s.show_axis_lines = False
-        s.selected_layer.layer = 'a'
+        s.selected_layer.layer = "a"
 
     def expect_color(seg1, seg2, color):
         with webdriver.viewer.txn() as s:
-            s.layers['seg1'].segments = seg1
-            s.layers['seg2'].segments = seg2
+            s.layers["seg1"].segments = seg1
+            s.layers["seg2"].segments = seg2
 
         def check_color():
             webdriver.sync()
             screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-            np.testing.assert_array_equal(screenshot.image_pixels,
-                                          np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)))
+            np.testing.assert_array_equal(
+                screenshot.image_pixels,
+                np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)),
+            )
 
-        neuroglancer.test_utils.retry(check_color, max_attempts=5, exceptions=(AssertionError, ))
+        neuroglancer.test_utils.retry(
+            check_color, max_attempts=5, exceptions=(AssertionError,)
+        )
 
     expect_color(seg1=[42], seg2=[], color=[0, 255, 0, 255])
     expect_color(seg1=[], seg2=[43], color=[0, 0, 255, 255])

@@ -13,59 +13,61 @@
 # limitations under the License.
 """Tests that ViewerState round trips through the Neuroglancer client."""
 
-import numpy as np
 import neuroglancer
-import threading
-import pytest
+import numpy as np
 
 
 def test_mesh_silhouette(webdriver):
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y", "z"],
-                                                    units="nm",
-                                                    scales=[1, 1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
         s.layers.append(
-            name='a',
-            layer=neuroglancer.SegmentationLayer(source=neuroglancer.LocalVolume(
-                data=np.zeros((10, 10, 10), dtype=np.uint8), dimensions=s.dimensions),
-                                                 mesh_silhouette_rendering=2),
+            name="a",
+            layer=neuroglancer.SegmentationLayer(
+                source=neuroglancer.LocalVolume(
+                    data=np.zeros((10, 10, 10), dtype=np.uint8), dimensions=s.dimensions
+                ),
+                mesh_silhouette_rendering=2,
+            ),
         )
 
     state = webdriver.sync()
-    assert state.layers['a'].mesh_silhouette_rendering == 2
+    assert state.layers["a"].mesh_silhouette_rendering == 2
 
 
 def test_layer_subsources(webdriver):
     with webdriver.viewer.txn() as s:
-        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y", "z"],
-                                                    units="nm",
-                                                    scales=[1, 1, 1])
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
         s.layers.append(
-            name='a',
+            name="a",
             layer=neuroglancer.SegmentationLayer(
-                source=neuroglancer.LayerDataSource(url=neuroglancer.LocalVolume(
-                    data=np.zeros((10, 10, 10), dtype=np.uint8), dimensions=s.dimensions),
-                                                    enable_default_subsources=False,
-                                                    subsources={
-                                                        'default': True,
-                                                        'bounds': False,
-                                                        'meshes': False
-                                                    })),
+                source=neuroglancer.LayerDataSource(
+                    url=neuroglancer.LocalVolume(
+                        data=np.zeros((10, 10, 10), dtype=np.uint8),
+                        dimensions=s.dimensions,
+                    ),
+                    enable_default_subsources=False,
+                    subsources={"default": True, "bounds": False, "meshes": False},
+                )
+            ),
         )
 
     state = webdriver.sync()
-    assert state.layers['a'].source[0].subsources['default'].enabled == True
-    assert 'bounds' not in state.layers['a'].source[0].subsources
-    assert 'meshes' not in state.layers['a'].source[0].subsources
-    assert state.layers['a'].source[0].enable_default_subsources == False
+    assert state.layers["a"].source[0].subsources["default"].enabled is True
+    assert "bounds" not in state.layers["a"].source[0].subsources
+    assert "meshes" not in state.layers["a"].source[0].subsources
+    assert state.layers["a"].source[0].enable_default_subsources is False
 
     with webdriver.viewer.txn() as s:
         s.layers[0].source[0].enable_default_subsources = True
-        s.layers[0].source[0].subsources['bounds'] = False
-        s.layers[0].source[0].subsources['meshes'] = False
+        s.layers[0].source[0].subsources["bounds"] = False
+        s.layers[0].source[0].subsources["meshes"] = False
 
     state = webdriver.sync()
-    assert state.layers[0].source[0].enable_default_subsources == True
-    assert sorted(state.layers[0].source[0].subsources.keys()) == ['bounds', 'meshes']
-    assert state.layers[0].source[0].subsources['bounds'].enabled == False
-    assert state.layers[0].source[0].subsources['meshes'].enabled == False
+    assert state.layers[0].source[0].enable_default_subsources is True
+    assert sorted(state.layers[0].source[0].subsources.keys()) == ["bounds", "meshes"]
+    assert state.layers[0].source[0].subsources["bounds"].enabled is False
+    assert state.layers[0].source[0].subsources["meshes"].enabled is False

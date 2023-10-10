@@ -72,19 +72,18 @@ Tips:
 """
 
 import argparse
-import collections
 import contextlib
 import copy
 import datetime
 import itertools
-import numbers
 import os
 import threading
 import time
-from typing import NamedTuple, Tuple, Callable, Iterator, List, Optional
+from collections.abc import Iterator
+from typing import Callable, NamedTuple, Optional
 
-import PIL
 import numpy as np
+import PIL
 
 import neuroglancer
 import neuroglancer.cli
@@ -111,7 +110,9 @@ def _calculate_num_shards(state, segment_shard_size):
 
 def _get_sharded_states(state, segment_shard_size, reverse_bits):
     if reverse_bits:
-        sort_key = lambda x: int('{:064b}'.format(x)[::-1], 2)
+
+        def sort_key(x):
+            return int(f"{x:064b}"[::-1], 2)
     else:
         sort_key = None
     num_shards = _calculate_num_shards(state, segment_shard_size)
@@ -136,8 +137,12 @@ class TileGenerator:
     def __init__(self, shape, tile_shape):
         self.tile_shape = tuple(tile_shape)
         self.shape = tuple(shape)
-        self.tile_grid_shape = tuple(-(-self.shape[i] // self.tile_shape[i]) for i in range(2))
-        self.tile_shape = tuple(-(-self.shape[i] // self.tile_grid_shape[i]) for i in range(2))
+        self.tile_grid_shape = tuple(
+            -(-self.shape[i] // self.tile_shape[i]) for i in range(2)
+        )
+        self.tile_shape = tuple(
+            -(-self.shape[i] // self.tile_grid_shape[i]) for i in range(2)
+        )
         self.num_tiles = self.tile_grid_shape[0] * self.tile_grid_shape[1]
 
     def get_tile_states(self, state):
@@ -149,23 +154,25 @@ class TileGenerator:
                 tile_height = min(self.tile_shape[1], self.shape[1] - y_offset)
                 new_state = copy.deepcopy(state)
                 new_state.partial_viewport = [
-                    x_offset / self.shape[0], y_offset / self.shape[1], tile_width / self.shape[0],
-                    tile_height / self.shape[1]
+                    x_offset / self.shape[0],
+                    y_offset / self.shape[1],
+                    tile_width / self.shape[0],
+                    tile_height / self.shape[1],
                 ]
                 params = {
-                    'tile_x': tile_x,
-                    'tile_y': tile_y,
-                    'x_offset': x_offset,
-                    'y_offset': y_offset,
-                    'tile_width': tile_width,
-                    'tile_height': tile_height,
+                    "tile_x": tile_x,
+                    "tile_y": tile_y,
+                    "x_offset": x_offset,
+                    "y_offset": y_offset,
+                    "tile_width": tile_width,
+                    "tile_height": tile_height,
                 }
                 yield params, new_state
 
 
 class ShardedTileGenerator(TileGenerator):
     def __init__(self, state, segment_shard_size, reverse_bits, **kwargs):
-        super(ShardedTileGenerator, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.state = state
         self.reverse_bits = reverse_bits
         self.total_segments = _get_total_segments(self.state)
@@ -175,11 +182,12 @@ class ShardedTileGenerator(TileGenerator):
 
     def get_states(self):
         for shard_i, state in enumerate(
-                _get_sharded_states(self.state,
-                                    self.segment_shard_size,
-                                    reverse_bits=self.reverse_bits)):
+            _get_sharded_states(
+                self.state, self.segment_shard_size, reverse_bits=self.reverse_bits
+            )
+        ):
             for params, state in self.get_tile_states(state):
-                params['segment_shard'] = shard_i
+                params["segment_shard"] = shard_i
                 yield params, state
 
 
@@ -187,7 +195,9 @@ class CaptureScreenshotRequest(NamedTuple):
     state: neuroglancer.ViewerState
     description: str
     config_callback: Callable[[neuroglancer.viewer_config_state.ConfigState], None]
-    response_callback: neuroglancer.viewer_config_state.ScreenshotReply
+    response_callback: Callable[
+        [neuroglancer.viewer_config_state.ScreenshotReply], None
+    ]
     include_depth: bool = False
 
 
@@ -195,16 +205,18 @@ def buffered_iterator(base_iter, lock, buffer_size):
     while True:
         with lock:
             buffered_items = list(itertools.islice(base_iter, buffer_size))
-        if not buffered_items: break
-        for item in buffered_items:
-            yield item
+        if not buffered_items:
+            break
+        yield from buffered_items
 
 
-def capture_screenshots(viewer: neuroglancer.Viewer,
-                        request_iter: Iterator[CaptureScreenshotRequest],
-                        refresh_browser_callback: Callable[[], None],
-                        refresh_browser_timeout: int,
-                        num_to_prefetch: int = 1) -> None:
+def capture_screenshots(
+    viewer: neuroglancer.Viewer,
+    request_iter: Iterator[CaptureScreenshotRequest],
+    refresh_browser_callback: Callable[[], None],
+    refresh_browser_timeout: int,
+    num_to_prefetch: int = 1,
+) -> None:
     prefetch_buffer = list(itertools.islice(request_iter, num_to_prefetch + 1))
     while prefetch_buffer:
         with viewer.config_state.txn() as s:
@@ -213,14 +225,19 @@ def capture_screenshots(viewer: neuroglancer.Viewer,
             del s.prefetch[:]
             for i, request in enumerate(prefetch_buffer[1:]):
                 s.prefetch.append(
-                    neuroglancer.PrefetchState(state=request.state, priority=num_to_prefetch - i))
+                    neuroglancer.PrefetchState(
+                        state=request.state, priority=num_to_prefetch - i
+                    )
+                )
             request = prefetch_buffer[0]
             request.config_callback(s)
         viewer.set_state(request.state)
-        print('%s [%s] Requesting screenshot' % (
-            datetime.datetime.now().strftime('%Y-%m-%dT%H:%M%S.%f'),
-            request.description,
-        ))
+        print(
+            "{} [{}] Requesting screenshot".format(
+                datetime.datetime.now().strftime("%Y-%m-%dT%H:%M%S.%f"),
+                request.description,
+            )
+        )
         last_statistics_time = time.time()
 
         def statistics_callback(statistics):
@@ -228,15 +245,16 @@ def capture_screenshots(viewer: neuroglancer.Viewer,
             last_statistics_time = time.time()
             total = statistics.total
             print(
-                '%s [%s] Screenshot in progress: %6d/%6d chunks loaded (%10d bytes), %3d downloading'
+                "%s [%s] Screenshot in progress: %6d/%6d chunks loaded (%10d bytes), %3d downloading"
                 % (
-                    datetime.datetime.now().strftime('%Y-%m-%dT%H:%M%S.%f'),
+                    datetime.datetime.now().strftime("%Y-%m-%dT%H:%M%S.%f"),
                     request.description,
                     total.visible_chunks_gpu_memory,
                     total.visible_chunks_total,
                     total.visible_gpu_memory,
                     total.visible_chunks_downloading,
-                ))
+                )
+            )
 
         event = threading.Event()
         screenshot = None
@@ -262,6 +280,7 @@ def capture_screenshots(viewer: neuroglancer.Viewer,
                 continue
             last_statistics_time = time.time()
             refresh_browser_callback()
+        assert screenshot is not None
         request.response_callback(screenshot)
         del prefetch_buffer[0]
         next_request = next(request_iter, None)
@@ -269,11 +288,14 @@ def capture_screenshots(viewer: neuroglancer.Viewer,
             prefetch_buffer.append(next_request)
 
 
-def capture_screenshots_in_parallel(viewers: List[Tuple[neuroglancer.Viewer, Callable[[], None]]],
-                                    request_iter: Iterator[CaptureScreenshotRequest],
-                                    refresh_browser_timeout: numbers.Number, num_to_prefetch: int,
-                                    total_requests: Optional[int] = None,
-                                    buffer_size: Optional[int] = None):
+def capture_screenshots_in_parallel(
+    viewers: list[tuple[neuroglancer.Viewer, Callable[[], None]]],
+    request_iter: Iterator[CaptureScreenshotRequest],
+    refresh_browser_timeout: float,
+    num_to_prefetch: int,
+    total_requests: Optional[int] = None,
+    buffer_size: Optional[int] = None,
+):
     if buffer_size is None:
         if total_requests is None:
             copy_of_requests = list(request_iter)
@@ -286,9 +308,9 @@ def capture_screenshots_in_parallel(viewers: List[Tuple[neuroglancer.Viewer, Cal
     for viewer, refresh_browser_callback in viewers:
 
         def capture_func(viewer, refresh_browser_callback):
-            viewer_request_iter = buffered_iterator(base_iter=request_iter,
-                                                    lock=buffer_lock,
-                                                    buffer_size=buffer_size)
+            viewer_request_iter = buffered_iterator(
+                base_iter=request_iter, lock=buffer_lock, buffer_size=buffer_size
+            )
             capture_screenshots(
                 viewer=viewer,
                 request_iter=viewer_request_iter,
@@ -297,7 +319,9 @@ def capture_screenshots_in_parallel(viewers: List[Tuple[neuroglancer.Viewer, Cal
                 refresh_browser_callback=refresh_browser_callback,
             )
 
-        t = threading.Thread(target=capture_func, args=(viewer, refresh_browser_callback))
+        t = threading.Thread(
+            target=capture_func, args=(viewer, refresh_browser_callback)
+        )
         t.start()
         threads.append(t)
     for t in threads:
@@ -305,21 +329,23 @@ def capture_screenshots_in_parallel(viewers: List[Tuple[neuroglancer.Viewer, Cal
 
 
 class MultiCapturer:
-    def __init__(self,
-                 shape,
-                 include_depth,
-                 output,
-                 config_callback,
-                 num_to_prefetch,
-                 checkpoint_interval=60):
+    def __init__(
+        self,
+        shape,
+        include_depth,
+        output,
+        config_callback,
+        num_to_prefetch,
+        checkpoint_interval=60,
+    ):
         self.include_depth = include_depth
         self.checkpoint_interval = checkpoint_interval
         self.config_callback = config_callback
         self.num_to_prefetch = num_to_prefetch
         self.output = output
         self._processed = set()
-        self.state_file = output + '.npz'
-        self.temp_state_file = self.state_file + '.tmp'
+        self.state_file = output + ".npz"
+        self.temp_state_file = self.state_file + ".tmp"
         self.image_array = np.zeros((shape[1], shape[0], 4), dtype=np.uint8)
         if self.include_depth:
             self.depth_array = np.zeros((shape[1], shape[0]), dtype=np.float32)
@@ -336,32 +362,32 @@ class MultiCapturer:
             return
         with np.load(self.state_file, allow_pickle=True) as f:
             if self.include_depth:
-                self.depth_array = f['depth']
-            self.image_array = f['image']
-            self._processed = set(f['processed'].ravel()[0])
+                self.depth_array = f["depth"]
+            self.image_array = f["image"]
+            self._processed = set(f["processed"].ravel()[0])
 
     def _save_state(self, save_image=False):
         with self._add_image_lock:
             processed = set(self._processed)
-        with open(self.temp_state_file, 'wb') as f:
+        with open(self.temp_state_file, "wb") as f:
             save_arrays = {
-                'image': self.image_array,
-                'processed': processed,
+                "image": self.image_array,
+                "processed": processed,
             }
             if self.include_depth:
-                save_arrays['depth'] = self.depth_array
+                save_arrays["depth"] = self.depth_array
             np.savez_compressed(f, **save_arrays)
         os.replace(self.temp_state_file, self.state_file)
         if save_image:
             self._save_image()
 
     def _save_state_async(self, save_image=False):
-        print('Starting checkpointing')
+        print("Starting checkpointing")
 
         def func():
             try:
                 self._save_state()
-                print('Done checkpointing')
+                print("Done checkpointing")
             finally:
                 self._save_state_in_progress.set()
 
@@ -374,13 +400,17 @@ class MultiCapturer:
     def _add_image(self, params, screenshot):
         with self._add_image_lock:
             tile_image = screenshot.image_pixels
-            tile_selector = np.s_[params['y_offset']:params['y_offset'] + params['tile_height'],
-                                  params['x_offset']:params['x_offset'] + params['tile_width']]
+            tile_selector = np.s_[
+                params["y_offset"] : params["y_offset"] + params["tile_height"],
+                params["x_offset"] : params["x_offset"] + params["tile_width"],
+            ]
             if self.include_depth:
                 tile_depth = screenshot.depth_array
                 depth_array_part = self.depth_array[tile_selector]
-                mask = np.logical_and(np.logical_or(tile_depth != 0, depth_array_part == 0),
-                                      tile_depth >= depth_array_part)
+                mask = np.logical_and(
+                    np.logical_or(tile_depth != 0, depth_array_part == 0),
+                    tile_depth >= depth_array_part,
+                )
                 depth_array_part[mask] = tile_depth[mask]
             else:
                 mask = Ellipsis
@@ -388,11 +418,18 @@ class MultiCapturer:
             self._processed.add(self._get_description(params))
             self._num_states_processed += 1
             elapsed = time.time() - self._start_time
-            print('%4d tiles rendered in %5d seconds: %.1f seconds/tile' %
-                  (self._num_states_processed, elapsed, elapsed / self._num_states_processed))
+            print(
+                "%4d tiles rendered in %5d seconds: %.1f seconds/tile"
+                % (
+                    self._num_states_processed,
+                    elapsed,
+                    elapsed / self._num_states_processed,
+                )
+            )
 
     def _maybe_save_state(self):
-        if not self._save_state_in_progress.is_set(): return
+        if not self._save_state_in_progress.is_set():
+            return
         with self._add_image_lock:
             if self._last_save_time + self.checkpoint_interval < time.time():
                 self._last_save_time = time.time()
@@ -400,46 +437,58 @@ class MultiCapturer:
                 self._save_state_async(save_image=False)
 
     def _get_description(self, params):
-        segment_shard = params.get('segment_shard')
+        segment_shard = params.get("segment_shard")
         if segment_shard is not None:
-            prefix = 'segment_shard=%d ' % (segment_shard, )
+            prefix = "segment_shard=%d " % (segment_shard,)
         else:
-            prefix = ''
-        return '%stile_x=%d tile_y=%d' % (prefix, params['tile_x'], params['tile_y'])
+            prefix = ""
+        return "%stile_x=%d tile_y=%d" % (prefix, params["tile_x"], params["tile_y"])
 
     def _make_capture_request(self, params, state):
         description = self._get_description(params)
 
-        if description in self._processed: return None
+        if description in self._processed:
+            return None
 
         def config_callback(s):
-            s.viewer_size = (params['tile_width'], params['tile_height'])
+            s.viewer_size = (params["tile_width"], params["tile_height"])
             self.config_callback(s)
 
         def response_callback(screenshot):
             self._add_image(params, screenshot)
             self._maybe_save_state()
 
-        return CaptureScreenshotRequest(state=state,
-                                        description=self._get_description(params),
-                                        config_callback=config_callback,
-                                        response_callback=response_callback,
-                                        include_depth=self.include_depth)
+        return CaptureScreenshotRequest(
+            state=state,
+            description=self._get_description(params),
+            config_callback=config_callback,
+            response_callback=response_callback,
+            include_depth=self.include_depth,
+        )
 
     def _get_capture_screenshot_request_iter(self, state_iter):
         for params, state in state_iter:
             request = self._make_capture_request(params, state)
-            if request is not None: yield request
+            if request is not None:
+                yield request
 
-    def capture(self, viewers, state_iter, refresh_browser_timeout: int, save_depth: bool, total_requests: int):
+    def capture(
+        self,
+        viewers,
+        state_iter,
+        refresh_browser_timeout: int,
+        save_depth: bool,
+        total_requests: int,
+    ):
         capture_screenshots_in_parallel(
             viewers=viewers,
             request_iter=self._get_capture_screenshot_request_iter(state_iter),
             refresh_browser_timeout=refresh_browser_timeout,
             num_to_prefetch=self.num_to_prefetch,
-            total_requests=total_requests)
+            total_requests=total_requests,
+        )
         if not self._save_state_in_progress.is_set():
-            print('Waiting for previous save state to complete')
+            print("Waiting for previous save state to complete")
             self._save_state_in_progress.wait()
         if save_depth:
             self._save_state()
@@ -458,11 +507,15 @@ def capture_image(viewers, args, state):
         shape=(args.width, args.height),
         tile_shape=(args.tile_width, args.tile_height),
     )
-    if segment_shard_size is not None and _should_shard_segments(state, segment_shard_size):
-        gen = ShardedTileGenerator(state=state,
-                                   segment_shard_size=segment_shard_size,
-                                   reverse_bits=args.sort_segments_by_reversed_bits,
-                                   **tile_parameters)
+    if segment_shard_size is not None and _should_shard_segments(
+        state, segment_shard_size
+    ):
+        gen = ShardedTileGenerator(
+            state=state,
+            segment_shard_size=segment_shard_size,
+            reverse_bits=args.sort_segments_by_reversed_bits,
+            **tile_parameters,
+        )
         num_states = gen.num_tiles
         state_iter = gen.get_states()
         include_depth = True
@@ -473,7 +526,7 @@ def capture_image(viewers, args, state):
         include_depth = False
 
     capturer = MultiCapturer(
-        shape=tile_parameters['shape'],
+        shape=tile_parameters["shape"],
         include_depth=include_depth,
         output=args.output,
         config_callback=config_callback,
@@ -483,26 +536,37 @@ def capture_image(viewers, args, state):
     num_output_shards = args.num_output_shards
     tiles_per_output_shard = args.tiles_per_output_shard
     output_shard = args.output_shard
-    if (output_shard is None) != (num_output_shards is None and tiles_per_output_shard is None):
+    if (output_shard is None) != (
+        num_output_shards is None and tiles_per_output_shard is None
+    ):
         raise ValueError(
-            '--output-shard must be specified in combination with --num-output-shards or --tiles-per-output-shard'
+            "--output-shard must be specified in combination with --num-output-shards or --tiles-per-output-shard"
         )
     if output_shard is not None:
         if num_output_shards is not None:
             if num_output_shards < 1:
-                raise ValueError('Invalid --num-output-shards: %d' % (num_output_shards, ))
+                raise ValueError(
+                    "Invalid --num-output-shards: %d" % (num_output_shards,)
+                )
             states_per_shard = -(-num_states // num_output_shards)
         else:
             if tiles_per_output_shard < 1:
-                raise ValueError('Invalid --tiles-per-output-shard: %d' %
-                                 (tiles_per_output_shard, ))
+                raise ValueError(
+                    "Invalid --tiles-per-output-shard: %d" % (tiles_per_output_shard,)
+                )
             num_output_shards = -(-num_states // tiles_per_output_shard)
             states_per_shard = tiles_per_output_shard
         if output_shard < 0 or output_shard >= num_output_shards:
-            raise ValueError('Invalid --output-shard: %d' % (output_shard, ))
-        print('Total states: %d, Number of output shards: %d' % (num_states, num_output_shards))
-        state_iter = itertools.islice(state_iter, states_per_shard * output_shard,
-                                      states_per_shard * (output_shard + 1))
+            raise ValueError("Invalid --output-shard: %d" % (output_shard,))
+        print(
+            "Total states: %d, Number of output shards: %d"
+            % (num_states, num_output_shards)
+        )
+        state_iter = itertools.islice(
+            state_iter,
+            states_per_shard * output_shard,
+            states_per_shard * (output_shard + 1),
+        )
     else:
         states_per_shard = num_states
     capturer.capture(
@@ -515,34 +579,52 @@ def capture_image(viewers, args, state):
 
 
 def define_state_modification_args(ap: argparse.ArgumentParser):
-    ap.add_argument('--hide-axis-lines',
-                    dest='show_axis_lines',
-                    action='store_false',
-                    help='Override showAxisLines setting in state.')
-    ap.add_argument('--hide-default-annotations',
-                    action='store_false',
-                    dest='show_default_annotations',
-                    help='Override showDefaultAnnotations setting in state.')
-    ap.add_argument('--projection-scale-multiplier',
-                    type=float,
-                    help='Multiply projection view scale by specified factor.')
-    ap.add_argument('--system-memory-limit',
-                    type=int,
-                    default=3 * 1024 * 1024 * 1024,
-                    help='System memory limit')
-    ap.add_argument('--gpu-memory-limit',
-                    type=int,
-                    default=3 * 1024 * 1024 * 1024,
-                    help='GPU memory limit')
-    ap.add_argument('--concurrent-downloads', type=int, default=32, help='Concurrent downloads')
-    ap.add_argument('--layout', type=str, help='Override layout setting in state.')
-    ap.add_argument('--cross-section-background-color',
-                    type=str,
-                    help='Background color for cross sections.')
-    ap.add_argument('--scale-bar-scale', type=float, help='Scale factor for scale bar', default=1)
+    ap.add_argument(
+        "--hide-axis-lines",
+        dest="show_axis_lines",
+        action="store_false",
+        help="Override showAxisLines setting in state.",
+    )
+    ap.add_argument(
+        "--hide-default-annotations",
+        action="store_false",
+        dest="show_default_annotations",
+        help="Override showDefaultAnnotations setting in state.",
+    )
+    ap.add_argument(
+        "--projection-scale-multiplier",
+        type=float,
+        help="Multiply projection view scale by specified factor.",
+    )
+    ap.add_argument(
+        "--system-memory-limit",
+        type=int,
+        default=3 * 1024 * 1024 * 1024,
+        help="System memory limit",
+    )
+    ap.add_argument(
+        "--gpu-memory-limit",
+        type=int,
+        default=3 * 1024 * 1024 * 1024,
+        help="GPU memory limit",
+    )
+    ap.add_argument(
+        "--concurrent-downloads", type=int, default=32, help="Concurrent downloads"
+    )
+    ap.add_argument("--layout", type=str, help="Override layout setting in state.")
+    ap.add_argument(
+        "--cross-section-background-color",
+        type=str,
+        help="Background color for cross sections.",
+    )
+    ap.add_argument(
+        "--scale-bar-scale", type=float, help="Scale factor for scale bar", default=1
+    )
 
 
-def apply_state_modifications(state: neuroglancer.ViewerState, args: argparse.Namespace):
+def apply_state_modifications(
+    state: neuroglancer.ViewerState, args: argparse.Namespace
+):
     state.selected_layer.visible = False
     state.statistics.visible = False
     if args.layout is not None:
@@ -562,70 +644,82 @@ def apply_state_modifications(state: neuroglancer.ViewerState, args: argparse.Na
 
 
 def define_viewer_args(ap: argparse.ArgumentParser):
-    ap.add_argument('--browser', choices=['chrome', 'firefox'], default='chrome')
-    ap.add_argument('--no-webdriver',
-                    action='store_true',
-                    help='Do not open browser automatically via webdriver.')
-    ap.add_argument('--no-headless',
-                    dest='headless',
-                    action='store_false',
-                    help='Use non-headless webdriver.')
-    ap.add_argument('--docker-chromedriver',
-                    action='store_true',
-                    help='Run Chromedriver with options suitable for running inside docker')
-    ap.add_argument('--debug-chromedriver',
-                    action='store_true',
-                    help='Enable debug logging in Chromedriver')
-    ap.add_argument('--jobs',
-                    '-j',
-                    type=int,
-                    default=1,
-                    help='Number of browsers to use concurrently.  '
-                    'This may improve performance at the cost of greater memory usage.  '
-                    'On a 64GiB 16 hyperthread machine, --jobs=6 works well.')
+    ap.add_argument("--browser", choices=["chrome", "firefox"], default="chrome")
+    ap.add_argument(
+        "--no-webdriver",
+        action="store_true",
+        help="Do not open browser automatically via webdriver.",
+    )
+    ap.add_argument(
+        "--no-headless",
+        dest="headless",
+        action="store_false",
+        help="Use non-headless webdriver.",
+    )
+    ap.add_argument(
+        "--docker-chromedriver",
+        action="store_true",
+        help="Run Chromedriver with options suitable for running inside docker",
+    )
+    ap.add_argument(
+        "--debug-chromedriver",
+        action="store_true",
+        help="Enable debug logging in Chromedriver",
+    )
+    ap.add_argument(
+        "--jobs",
+        "-j",
+        type=int,
+        default=1,
+        help="Number of browsers to use concurrently.  "
+        "This may improve performance at the cost of greater memory usage.  "
+        "On a 64GiB 16 hyperthread machine, --jobs=6 works well.",
+    )
 
 
 def define_size_args(ap: argparse.ArgumentParser):
-    ap.add_argument('--width', type=int, default=3840, help='Width in pixels of image.')
-    ap.add_argument('--height', type=int, default=2160, help='Height in pixels of image.')
+    ap.add_argument("--width", type=int, default=3840, help="Width in pixels of image.")
+    ap.add_argument(
+        "--height", type=int, default=2160, help="Height in pixels of image."
+    )
 
 
 def define_tile_args(ap: argparse.ArgumentParser):
     ap.add_argument(
-        '--tile-width',
+        "--tile-width",
         type=int,
         default=4096,
-        help=
-        'Width in pixels of single tile.  If total width is larger, the screenshot will be captured as multiple tiles.'
+        help="Width in pixels of single tile.  If total width is larger, the screenshot will be captured as multiple tiles.",
     )
     ap.add_argument(
-        '--tile-height',
+        "--tile-height",
         type=int,
         default=4096,
-        help=
-        'Height in pixels of single tile.  If total height is larger, the screenshot will be captured as multiple tiles.'
+        help="Height in pixels of single tile.  If total height is larger, the screenshot will be captured as multiple tiles.",
     )
-    ap.add_argument('--segment-shard-size',
-                    type=int,
-                    help='Maximum number of segments to render simultaneously.  '
-                    'If the number of selected segments exceeds this number, '
-                    'multiple passes will be used (transparency not supported).')
     ap.add_argument(
-        '--sort-segments-by-reversed-bits',
-        action='store_true',
-        help=
-        'When --segment-shard-size is also specified, normally segment ids are ordered numerically before being partitioned into shards.  If segment ids are spatially correlated, then this can lead to slower and more memory-intensive rendering.  If --sort-segments-by-reversed-bits is specified, segment ids are instead ordered by their bit reversed values, which may avoid the spatial correlation.'
+        "--segment-shard-size",
+        type=int,
+        help="Maximum number of segments to render simultaneously.  "
+        "If the number of selected segments exceeds this number, "
+        "multiple passes will be used (transparency not supported).",
+    )
+    ap.add_argument(
+        "--sort-segments-by-reversed-bits",
+        action="store_true",
+        help="When --segment-shard-size is also specified, normally segment ids are ordered numerically before being partitioned into shards.  If segment ids are spatially correlated, then this can lead to slower and more memory-intensive rendering.  If --sort-segments-by-reversed-bits is specified, segment ids are instead ordered by their bit reversed values, which may avoid the spatial correlation.",
     )
 
 
 def define_capture_args(ap: argparse.ArgumentParser):
-    ap.add_argument('--prefetch', type=int, default=1, help='Number of states to prefetch.')
     ap.add_argument(
-        '--refresh-browser-timeout',
+        "--prefetch", type=int, default=1, help="Number of states to prefetch."
+    )
+    ap.add_argument(
+        "--refresh-browser-timeout",
         type=int,
         default=60,
-        help=
-        'Number of seconds without receiving statistics while capturing a screenshot before browser is considered unresponsive.'
+        help="Number of seconds without receiving statistics while capturing a screenshot before browser is considered unresponsive.",
     )
 
 
@@ -633,12 +727,12 @@ def define_capture_args(ap: argparse.ArgumentParser):
 def get_viewers(args: argparse.Namespace):
     if args.no_webdriver:
         viewers = [neuroglancer.Viewer() for _ in range(args.jobs)]
-        print('Open the following URLs to begin rendering')
+        print("Open the following URLs to begin rendering")
         for viewer in viewers:
             print(viewer)
 
         def refresh_browser_callback():
-            print('Browser unresponsive, consider reloading')
+            print("Browser unresponsive, consider reloading")
 
         yield [(viewer, refresh_browser_callback) for viewer in viewers]
     else:
@@ -652,20 +746,22 @@ def get_viewers(args: argparse.Namespace):
             )
 
             def refresh_browser_callback():
-                print('Browser unresponsive, reloading')
+                print("Browser unresponsive, reloading")
                 webdriver.reload_browser()
 
             return webdriver, refresh_browser_callback
 
         webdrivers = [_make_webdriver() for _ in range(args.jobs)]
         try:
-            yield [(webdriver.viewer, refresh_browser_callback)
-                   for webdriver, refresh_browser_callback in webdrivers]
+            yield [
+                (webdriver.viewer, refresh_browser_callback)
+                for webdriver, refresh_browser_callback in webdrivers
+            ]
         finally:
             for webdriver, _ in webdrivers:
                 try:
                     webdriver.__exit__()
-                except:
+                except Exception:
                     pass
 
 
@@ -682,20 +778,22 @@ def main(args=None):
     neuroglancer.cli.add_server_arguments(ap)
     neuroglancer.cli.add_state_arguments(ap, required=True)
 
-    ap.add_argument('output', help='Output path of screenshot file in PNG format.')
+    ap.add_argument("output", help="Output path of screenshot file in PNG format.")
 
-    ap.add_argument('--output-shard', type=int, help='Output shard to write.')
+    ap.add_argument("--output-shard", type=int, help="Output shard to write.")
     output_shard_group = ap.add_mutually_exclusive_group(required=False)
-    output_shard_group.add_argument('--num-output-shards',
-                                    type=int,
-                                    help='Number of output shards.')
-    output_shard_group.add_argument('--tiles-per-output-shard',
-                                    type=int,
-                                    help='Number of tiles per output shard.')
-    ap.add_argument('--checkpoint-interval',
-                    type=float,
-                    default=60,
-                    help='Interval in seconds at which to save checkpoints.')
+    output_shard_group.add_argument(
+        "--num-output-shards", type=int, help="Number of output shards."
+    )
+    output_shard_group.add_argument(
+        "--tiles-per-output-shard", type=int, help="Number of tiles per output shard."
+    )
+    ap.add_argument(
+        "--checkpoint-interval",
+        type=float,
+        default=60,
+        help="Interval in seconds at which to save checkpoints.",
+    )
 
     define_state_modification_args(ap)
     define_viewer_args(ap)
@@ -706,5 +804,5 @@ def main(args=None):
     run(ap.parse_args(args))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

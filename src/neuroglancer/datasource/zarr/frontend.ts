@@ -14,12 +14,22 @@
  * limitations under the License.
  */
 
+import 'neuroglancer/datasource/zarr/codec/blosc/resolve';
+import 'neuroglancer/datasource/zarr/codec/zstd/resolve';
+import 'neuroglancer/datasource/zarr/codec/bytes/resolve';
+import 'neuroglancer/datasource/zarr/codec/crc32c/resolve';
+import 'neuroglancer/datasource/zarr/codec/gzip/resolve';
+import 'neuroglancer/datasource/zarr/codec/sharding_indexed/resolve';
+import 'neuroglancer/datasource/zarr/codec/transpose/resolve';
+
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
-import {VolumeChunkSourceParameters, ZarrCompressor, ZarrEncoding, ZarrSeparator} from 'neuroglancer/datasource/zarr/base';
+import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/zarr/base';
+import {ArrayMetadata, DimensionSeparator, Metadata, NodeType} from 'neuroglancer/datasource/zarr/metadata';
+import {parseDimensionSeparator, parseDimensionUnit, parseV2Metadata, parseV3Metadata} from 'neuroglancer/datasource/zarr/metadata/parse';
 import {OmeMultiscaleMetadata, parseOmeMetadata} from 'neuroglancer/datasource/zarr/ome';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -29,129 +39,13 @@ import {applyCompletionOffset, completeQueryStringParametersFromTable} from 'neu
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {parseQueryStringParameters, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
-import {createIdentity} from 'neuroglancer/util/matrix';
-import {parseNumpyDtype} from 'neuroglancer/util/numpy_dtype';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
-import {Uint64} from 'neuroglancer/util/uint64';
 
 class ZarrVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
-
-interface ZarrMetadata {
-  encoding: ZarrEncoding;
-  order: 'C'|'F';
-  dataType: DataType;
-  rank: number;
-  shape: number[];
-  chunks: number[];
-  dimensionSeparator: ZarrSeparator|undefined;
-  fillValue: number|Uint64|undefined;
-}
-
-function parseDimensionSeparator(obj: unknown): ZarrSeparator|undefined {
-  return verifyOptionalObjectProperty(obj, 'dimension_separator', value => {
-    if (value !== '.' && value !== '/') {
-      throw new Error(`Expected "." or "/", but received: ${JSON.stringify(value)}`);
-    }
-    return value;
-  });
-}
-
-function parseZarrMetadata(obj: unknown): ZarrMetadata {
-  try {
-    verifyObject(obj);
-    verifyObjectProperty(obj, 'zarr_format', zarrFormat => {
-      if (zarrFormat !== 2) {
-        throw new Error(`Expected 2 but received: ${JSON.stringify(zarrFormat)}`);
-      }
-    });
-    const shape = verifyObjectProperty(
-        obj, 'shape',
-        shape => parseArray(shape, x => {
-          if (typeof x !== 'number' || !Number.isInteger(x) || x < 0) {
-            throw new Error(`Expected non-negative integer, but received: ${JSON.stringify(x)}`);
-          }
-          return x;
-        }));
-    const chunks = verifyObjectProperty(
-        obj, 'chunks',
-        chunks => parseFixedLengthArray(new Array<number>(shape.length), chunks, x => {
-          if (typeof x !== 'number' || !Number.isInteger(x) || x <= 0) {
-            throw new Error(`Expected positive integer, but received: ${JSON.stringify(x)}`);
-          }
-          return x;
-        }));
-    const order = verifyObjectProperty(obj, 'order', order => {
-      if (order !== 'C' && order !== 'F') {
-        throw new Error(`Expected "C" or "F", but received: ${JSON.stringify(order)}`);
-      }
-      return order;
-    });
-    const dimensionSeparator = parseDimensionSeparator(obj);
-    const numpyDtype =
-        verifyObjectProperty(obj, 'dtype', dtype => parseNumpyDtype(verifyString(dtype)));
-    const compressor = verifyObjectProperty(obj, 'compressor', compressor => {
-      if (compressor === null) return ZarrCompressor.RAW;
-      verifyObject(compressor);
-      const id = verifyObjectProperty(compressor, 'id', verifyString);
-      switch (id) {
-        case 'blosc':
-          return ZarrCompressor.BLOSC;
-        case 'gzip':
-          return ZarrCompressor.GZIP;
-        case 'zlib':
-          return ZarrCompressor.GZIP;
-        default:
-          throw new Error(`Unsupported compressor: ${JSON.stringify(id)}`);
-      }
-    });
-    const dataType = numpyDtype.dataType;
-    const fillValue = verifyObjectProperty(obj, 'fill_value', fillValue => {
-      if (fillValue === null) return undefined;
-      switch (dataType) {
-        case DataType.FLOAT32:
-          if (fillValue === 'NaN') {
-            return Number.NaN;
-          }
-          if (fillValue === 'Infinity') {
-            return Number.POSITIVE_INFINITY;
-          }
-          if (fillValue === '-Infinity') {
-            return Number.NEGATIVE_INFINITY;
-          }
-          return verifyFloat(fillValue);
-        default:
-          return verifyInt(fillValue);
-      }
-    });
-    return {
-      rank: shape.length,
-      shape,
-      chunks,
-      order,
-      dataType,
-      encoding: {compressor, endianness: numpyDtype.endianness},
-      fillValue,
-      dimensionSeparator,
-    };
-  } catch (e) {
-    throw new Error(`Error parsing zarr metadata: ${e.message}`);
-  }
-}
-
-function parseArrayDimensionsAttr(rank: number, attrs: unknown): string[] {
-  let names = verifyOptionalObjectProperty(
-      attrs, '_ARRAY_DIMENSIONS',
-      names => parseFixedLengthArray(new Array<string>(rank), names, verifyString));
-  names = new Array(rank);
-  for (let i = 0; i < rank; ++i) {
-    names[i] = `d${i}`;
-  }
-  return names;
-}
 
 export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
   volumeType: VolumeType;
@@ -179,24 +73,18 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     return transposeNestedArrays(this.multiscale.scales.map(scale => {
       const {metadata} = scale;
-      const {rank, chunks, shape} = metadata;
-      let permutedChunkShape: Uint32Array;
-      let permutedDataShape: Float32Array;
-      let orderTransform: Float32Array;
-      if (metadata.order === 'F') {
-        permutedChunkShape = Uint32Array.from(chunks);
-        permutedDataShape = Float32Array.from(shape);
-        orderTransform = createIdentity(Float32Array, rank + 1);
-      } else {
-        permutedChunkShape = new Uint32Array(rank);
-        permutedDataShape = new Float32Array(rank);
-        orderTransform = new Float32Array((rank + 1) ** 2);
-        orderTransform[(rank + 1) ** 2 - 1] = 1;
-        for (let i = 0; i < rank; ++i) {
-          permutedChunkShape[i] = chunks[rank - 1 - i];
-          permutedDataShape[i] = shape[rank - 1 - i];
-          orderTransform[i + (rank - 1 - i) * (rank + 1)] = 1;
-        }
+      const {rank, codecs, shape} = metadata;
+      const readChunkShape = codecs.layoutInfo[0].readChunkShape;
+      const {physicalToLogicalDimension} = metadata.codecs.layoutInfo[0];
+      const permutedChunkShape = new Uint32Array(rank);
+      const permutedDataShape = new Float32Array(rank);
+      const orderTransform = new Float32Array((rank + 1) ** 2);
+      orderTransform[(rank + 1) ** 2 - 1] = 1;
+      for (let i = 0; i < rank; ++i) {
+        const decodedDim = physicalToLogicalDimension[rank - 1 - i];
+        permutedChunkShape[i] = readChunkShape[decodedDim];
+        permutedDataShape[i] = shape[decodedDim];
+        orderTransform[i + decodedDim * (rank + 1)] = 1;
       }
       const transform = new Float32Array((rank + 1) ** 2);
       matrix.multiply<Float32Array|Float64Array>(
@@ -218,9 +106,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
                    spec,
                    parameters: {
                      url: scale.url,
-                     encoding: metadata.encoding,
-                     separator: scale.dimensionSeparator,
-                     order: metadata.order,
+                     metadata,
                    }
                  }),
                  chunkToMultiscaleTransform: transform,
@@ -229,37 +115,15 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   }
 }
 
-function getAttributes(
+function getJsonResource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string): Promise<any> {
+    url: string): Promise<any|undefined> {
   return chunkManager.memoize.getUncounted(
-      {type: 'zarr:.zattrs json', url, credentialsProvider: getObjectId(credentialsProvider)},
-      async () => {
+      {type: 'zarr:json', url, credentialsProvider: getObjectId(credentialsProvider)}, async () => {
         try {
-          const json = await cancellableFetchSpecialOk(
-              credentialsProvider, url + '/.zattrs', {}, responseJson);
-          verifyObject(json);
-          return json;
+          return await cancellableFetchSpecialOk(credentialsProvider, url, {}, responseJson);
         } catch (e) {
-          if (isNotFoundError(e)) return {};
-          throw e;
-        }
-      });
-}
-
-
-function getMetadata(
-    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, allowNotFound = true): Promise<ZarrMetadata|undefined> {
-  return chunkManager.memoize.getUncounted(
-      {type: 'zarr:.zarray json', url, credentialsProvider: getObjectId(credentialsProvider)},
-      async () => {
-        try {
-          const json = await cancellableFetchSpecialOk(
-              credentialsProvider, url + '/.zarray', {}, responseJson);
-          return parseZarrMetadata(json);
-        } catch (e) {
-          if (allowNotFound && isNotFoundError(e)) return undefined;
+          if (isNotFoundError(e)) return undefined;
           throw e;
         }
       });
@@ -278,8 +142,7 @@ const supportedQueryParameters = [
 interface ZarrScaleInfo {
   url: string;
   transform: Float64Array;
-  metadata: ZarrMetadata;
-  dimensionSeparator: ZarrSeparator;
+  metadata: ArrayMetadata;
 }
 
 interface ZarrMultiscaleInfo {
@@ -288,14 +151,44 @@ interface ZarrMultiscaleInfo {
   scales: ZarrScaleInfo[];
 }
 
-function getMultiscaleInfoForSingleArray(
-    url: string, separator: ZarrSeparator|undefined, metadata: ZarrMetadata,
-    attrs: unknown): ZarrMultiscaleInfo {
-  const names = parseArrayDimensionsAttr(metadata.rank, attrs);
+function getNormalizedDimensionNames(names: (string|null)[], zarrVersion: 2|3): string[] {
+  const seenNames = new Set<string>();
+  const dimPrefix = zarrVersion === 2 ? 'd' : 'dim_';
+  return names.map((name, i) => {
+    if (name === null) {
+      let j = i;
+      while (true) {
+        name = `${dimPrefix}${j}`;
+        if (!seenNames.has(name)) {
+          seenNames.add(name);
+          return name;
+        }
+        ++j;
+      }
+    }
+    if (!seenNames.has(name)) {
+      seenNames.add(name);
+      return name;
+    }
+    let j = 1;
+    while (true) {
+      const newName = `${name}${j}`;
+      if (!seenNames.has(newName)) {
+        seenNames.add(newName);
+        return newName;
+      }
+      ++j;
+    }
+  });
+}
+
+function getMultiscaleInfoForSingleArray(url: string, metadata: ArrayMetadata): ZarrMultiscaleInfo {
+  const names = getNormalizedDimensionNames(metadata.dimensionNames, metadata.zarrVersion);
+  const unitsAndScales = metadata.dimensionUnits.map(parseDimensionUnit);
   const modelSpace = makeCoordinateSpace({
     names,
-    scales: Float64Array.from(metadata.shape, () => 1),
-    units: Array.from(metadata.shape, () => ''),
+    scales: Float64Array.from(Array.from(unitsAndScales, x => x.scale)),
+    units: Array.from(unitsAndScales, x => x.unit),
     boundingBoxes: [makeIdentityTransformedBoundingBox({
       lowerBounds: new Float64Array(metadata.rank),
       upperBounds: Float64Array.from(metadata.shape),
@@ -309,33 +202,26 @@ function getMultiscaleInfoForSingleArray(
       url,
       transform,
       metadata,
-      dimensionSeparator: validateSeparator(url, separator, metadata.dimensionSeparator)
     }]
   };
 }
 
-function validateSeparator(
-    url: string, expectedSeparator: ZarrSeparator|undefined,
-    actualSeparator: ZarrSeparator|undefined): ZarrSeparator {
-  if (actualSeparator !== undefined && expectedSeparator !== undefined &&
-      actualSeparator !== expectedSeparator) {
-    throw new Error(
-        `Explicitly specified dimension separator ` +
-        `${JSON.stringify(expectedSeparator)} does not match value ` +
-        `in ${url}/.zarray ${JSON.stringify(actualSeparator)}`);
-  }
-  return actualSeparator ?? expectedSeparator ?? '.';
-}
-
 async function resolveOmeMultiscale(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    separator: ZarrSeparator|undefined,
-    multiscale: OmeMultiscaleMetadata): Promise<ZarrMultiscaleInfo> {
-  const scaleZarrMetadata =
-      (await Promise.all(multiscale.scales.map(
-          scale => getMetadata(
-              chunkManager, credentialsProvider, scale.url, /*allowNotFound=*/ false)))) as
-      ZarrMetadata[];
+    multiscale: OmeMultiscaleMetadata,
+    options: {explicitDimensionSeparator: DimensionSeparator|undefined, zarrVersion: 2|3}):
+    Promise<ZarrMultiscaleInfo> {
+  const scaleZarrMetadata = await Promise.all(multiscale.scales.map(async scale => {
+    const metadata = await getMetadata(chunkManager, credentialsProvider, scale.url, {
+      zarrVersion: options.zarrVersion,
+      expectedNodeType: 'array',
+      explicitDimensionSeparator: options.explicitDimensionSeparator
+    });
+    if (metadata === undefined) {
+      throw new Error(`zarr v{zarrVersion} array metadata not found at ${scale.url}`);
+    }
+    return metadata as ArrayMetadata;
+  }));
   const dataType = scaleZarrMetadata[0].dataType;
   const numScales = scaleZarrMetadata.length;
   const rank = multiscale.coordinateSpace.rank;
@@ -384,23 +270,70 @@ async function resolveOmeMultiscale(
         url: scale.url,
         transform: scale.transform,
         metadata: zarrMetadata,
-        dimensionSeparator:
-            validateSeparator(scale.url, separator, zarrMetadata.dimensionSeparator),
       };
     }),
   };
 }
 
+async function getMetadata(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, options: {
+      zarrVersion?: 2|3|undefined,
+      expectedNodeType?: NodeType|undefined,
+      explicitDimensionSeparator?: DimensionSeparator|undefined
+    }): Promise<Metadata|undefined> {
+  if (options.zarrVersion === 2) {
+    const [zarray, zattrs] = await Promise.all([
+      getJsonResource(chunkManager, credentialsProvider, `${url}/.zarray`),
+      getJsonResource(chunkManager, credentialsProvider, `${url}/.zattrs`),
+    ]);
+    if (zarray === undefined) {
+      if (zattrs === undefined) {
+        return undefined;
+      }
+      if (options.expectedNodeType === 'array') {
+        return undefined;
+      }
+      return {zarrVersion: 2, nodeType: 'group', userAttributes: verifyObject(zattrs)};
+    }
+    if (options.expectedNodeType === 'group') {
+      return undefined;
+    }
+    return parseV2Metadata(zarray, zattrs ?? {}, options.explicitDimensionSeparator);
+  }
+  if (options.zarrVersion === 3) {
+    const zarrJson = await getJsonResource(chunkManager, credentialsProvider, `${url}/zarr.json`);
+    if (zarrJson === undefined) return undefined;
+    if (options.explicitDimensionSeparator !== undefined) {
+      throw new Error(`dimension_separator query parameter not supported for zarr v3`)
+    }
+    return parseV3Metadata(zarrJson, options.expectedNodeType);
+  }
+  const [v2Result, v3Result] = await Promise.all([
+    getMetadata(chunkManager, credentialsProvider, url, {...options, zarrVersion: 2}),
+    getMetadata(chunkManager, credentialsProvider, url, {...options, zarrVersion: 3}),
+  ]);
+  if (v2Result !== undefined && v3Result !== undefined) {
+    throw new Error(`Both zarr v2 and v3 metadata found`);
+  }
+  return v2Result ?? v3Result;
+}
+
 export class ZarrDataSource extends DataSourceProvider {
+  constructor(public zarrVersion: 2|3|undefined = undefined) {
+    super();
+  }
   get description() {
-    return 'Zarr data source';
+    const versionStr = this.zarrVersion === undefined ? '' : ` v${this.zarrVersion}`;
+    return `Zarr${versionStr} data source`;
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
     // Pattern is infallible.
     let [, providerUrl, query] = options.providerUrl.match(/([^?]*)(?:\?(.*))?$/)!;
     const parameters = parseQueryStringParameters(query || '');
     verifyObject(parameters);
-    const dimensionSeparator = parseDimensionSeparator(parameters);
+    const dimensionSeparator =
+        verifyOptionalObjectProperty(parameters, 'dimension_separator', parseDimensionSeparator);
     if (providerUrl.endsWith('/')) {
       providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
@@ -408,21 +341,26 @@ export class ZarrDataSource extends DataSourceProvider {
         {'type': 'zarr:MultiscaleVolumeChunkSource', providerUrl, dimensionSeparator}, async () => {
           const {url, credentialsProvider} =
               parseSpecialUrl(providerUrl, options.credentialsManager);
-          const [metadata, attrs] = await Promise.all([
-            getMetadata(options.chunkManager, credentialsProvider, url),
-            getAttributes(options.chunkManager, credentialsProvider, url)
-          ]);
-          let multiscaleInfo: ZarrMultiscaleInfo;
+          const metadata = await getMetadata(
+              options.chunkManager, credentialsProvider, url,
+              {zarrVersion: this.zarrVersion, explicitDimensionSeparator: dimensionSeparator});
           if (metadata === undefined) {
+            throw new Error(`No zarr metadata found`);
+          }
+          let multiscaleInfo: ZarrMultiscaleInfo;
+          if (metadata.nodeType === 'group') {
             // May be an OME-zarr multiscale dataset.
-            const multiscale = parseOmeMetadata(url, attrs);
+            const multiscale = parseOmeMetadata(url, metadata.userAttributes);
             if (multiscale === undefined) {
-              throw new Error(`Neither .zarray metadata nor OME multiscale metadata found`);
+              throw new Error(`Neithre array nor OME multiscale metadata found`);
             }
-            multiscaleInfo = await resolveOmeMultiscale(
-                options.chunkManager, credentialsProvider, dimensionSeparator, multiscale);
+            multiscaleInfo =
+                await resolveOmeMultiscale(options.chunkManager, credentialsProvider, multiscale, {
+                  zarrVersion: metadata.zarrVersion,
+                  explicitDimensionSeparator: dimensionSeparator
+                });
           } else {
-            multiscaleInfo = getMultiscaleInfoForSingleArray(url, dimensionSeparator, metadata, attrs);
+            multiscaleInfo = getMultiscaleInfoForSingleArray(url, metadata);
           }
           const volume = new MultiscaleVolumeChunkSource(
             options.chunkManager, credentialsProvider, multiscaleInfo);

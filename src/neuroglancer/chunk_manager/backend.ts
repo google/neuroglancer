@@ -15,12 +15,11 @@
  */
 
 import throttle from 'lodash/throttle';
-import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, LayerChunkProgressInfo, ChunkSourceParametersConstructor, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStatistics, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, LayerChunkProgressInfo, numChunkMemoryStatistics, numChunkStatistics, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
-import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
-import {Borrowed} from 'neuroglancer/util/disposable';
+import {Borrowed, Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
 import LinkedList1 from 'neuroglancer/util/linked_list.1';
@@ -34,7 +33,7 @@ import {initializeSharedObjectCounterpart, registerPromiseRPC, registerRPC, regi
 const DEBUG_CHUNK_UPDATES = false;
 
 export interface ChunkStateListener {
-  stateChanged(chunk: Chunk, oldState: ChunkState): void;
+  (chunk: Chunk, oldState: ChunkState): void;
 }
 
 let nextMarkGeneration = 0;
@@ -84,10 +83,16 @@ export class Chunk implements Disposable {
   private systemMemoryBytes_: number = 0;
   private gpuMemoryBytes_: number = 0;
   private downloadSlots_: number = 1;
-  backendOnly = false;
   isComputational = false;
-  newlyRequestedToFrontend = false;
-  requestedToFrontend = false;
+
+  /**
+   * Specifies lowest numeric state required by any request, if `prioritTier !==
+   * ChunkPriorityTier.RECENT`, then this must be one of `GPU_MEMORY`, `SYSTEM_MEMORY`, or
+   * `SYSTEM_MEMORY_WORKER`.
+   */
+  requestedState = ChunkState.NEW;
+
+  newRequestedState = ChunkState.NEW;
 
   /**
    * Cancellation token used to cancel the pending download.  Set to undefined except when state !==
@@ -103,8 +108,8 @@ export class Chunk implements Disposable {
     this.newPriorityTier = ChunkPriorityTier.RECENT;
     this.error = null;
     this.state = ChunkState.NEW;
-    this.requestedToFrontend = false;
-    this.newlyRequestedToFrontend = false;
+    this.requestedState = ChunkState.NEW;
+    this.newRequestedState = ChunkState.NEW;
   }
 
   /**
@@ -118,7 +123,8 @@ export class Chunk implements Disposable {
     this.priority = this.newPriority;
     this.newPriorityTier = ChunkPriorityTier.RECENT;
     this.newPriority = Number.NEGATIVE_INFINITY;
-    this.requestedToFrontend = this.newlyRequestedToFrontend;
+    this.requestedState = this.newRequestedState;
+    this.newRequestedState = ChunkState.NEW;
   }
 
   dispose() {
@@ -140,7 +146,12 @@ export class Chunk implements Disposable {
   }
 
   downloadSucceeded() {
-    this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
+    if (this.requestedState === ChunkState.SYSTEM_MEMORY) {
+      this.queueManager.moveChunkToFrontend(this);
+      this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY);
+    } else {
+      this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
+    }
   }
 
   freeSystemMemory() {}
@@ -335,14 +346,12 @@ export class ChunkSourceBase extends SharedObject {
   }
 
   chunkStateChanged(chunk: Chunk, oldState: ChunkState) {
-    if (!chunk.key) {
-      return;
-    }
-    if (!this.listeners_.has(chunk.key)) {
-      return;
-    }
-    for (const listener of [...this.listeners_.get(chunk.key)!]) {
-      listener.stateChanged(chunk, oldState);
+    const {key} = chunk;
+    if (key === null) return;
+    const listeners = this.listeners_.get(key);
+    if (listeners === undefined) return;
+    for (const listener of listeners.slice()) {
+      listener(chunk, oldState);
     }
   }
 }
@@ -688,8 +697,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       case ChunkState.SYSTEM_MEMORY_WORKER:
       case ChunkState.SYSTEM_MEMORY:
         yield this.systemMemoryEvictionQueue;
-        if (chunk.priorityTier !== ChunkPriorityTier.RECENT && !chunk.backendOnly &&
-            chunk.requestedToFrontend) {
+        if (chunk.requestedState === ChunkState.GPU_MEMORY) {
           yield this.gpuMemoryPromotionQueue;
         }
         break;
@@ -853,6 +861,15 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       msg['state'] = ChunkState.GPU_MEMORY;
       rpc.invoke('Chunk.update', msg, transfers);
     }
+  }
+
+  moveChunkToFrontend(chunk: Chunk) {
+    let rpc = this.rpc!;
+    let msg: any = {};
+    let transfers: any[] = [];
+    chunk.serialize(msg, transfers);
+    msg['state'] = ChunkState.SYSTEM_MEMORY;
+    rpc.invoke('Chunk.update', msg, transfers);
   }
 
   private processQueuePromotions_() {
@@ -1057,10 +1074,12 @@ export class ChunkManager extends SharedObjectCounterpart {
    * @param chunk
    * @param tier New priority tier.  Must not equal ChunkPriorityTier.RECENT.
    * @param priority Priority within tier.
-   * @param toFrontend true if the chunk should be moved to the frontend when ready.
+   * @param requestedState Indicates requested chunk state.
    */
-  requestChunk(chunk: Chunk, tier: ChunkPriorityTier, priority: number, toFrontend = true) {
-    if (!Number.isFinite(priority)) {
+  requestChunk(
+      chunk: Chunk, tier: ChunkPriorityTier, priority: number,
+      requestedState: ChunkState = ChunkState.GPU_MEMORY) {
+    if (Number.isNaN(priority)) {
       // Non-finite priority indicates a bug.
       debugger;
       return;
@@ -1068,7 +1087,7 @@ export class ChunkManager extends SharedObjectCounterpart {
     if (tier === ChunkPriorityTier.RECENT) {
       throw new Error('Not going to request a chunk with the RECENT tier');
     }
-    chunk.newlyRequestedToFrontend = chunk.newlyRequestedToFrontend || toFrontend;
+    chunk.newRequestedState = Math.min(chunk.newRequestedState, requestedState);
     if (chunk.newPriorityTier === ChunkPriorityTier.RECENT) {
       this.newTierChunks.push(chunk);
     }

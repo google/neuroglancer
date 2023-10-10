@@ -16,6 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
+import {numChunkStatistics} from 'neuroglancer/chunk_manager/base';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {columnSpecifications, getChunkSourceIdentifier, getFormattedNames} from 'neuroglancer/ui/statistics';
 import {toBase64} from 'neuroglancer/util/base64';
@@ -25,7 +26,6 @@ import {verifyOptionalString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {getCachedJson} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
-import { numChunkStatistics } from '../chunk_manager/base';
 
 export class ScreenshotHandler extends RefCounted {
   sendScreenshotRequested = new Signal<(state: any) => void>();
