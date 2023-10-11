@@ -30,14 +30,13 @@ import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, Wat
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
-import {SHADER_FUNCTIONS, SHADER_MODES, TrackableShaderModeValue} from 'neuroglancer/volume_rendering/trackable_shader_mode';
+import {VOLUME_RENDERING_MODES, TrackableVolumeRenderingModeValue} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
-import {glsl_COLOR_EMITTERS, glsl_VERTEX_SHADER} from 'src/neuroglancer/volume_rendering/glsl';
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -55,7 +54,7 @@ export interface VolumeRenderingRenderLayerOptions {
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
-  mode: TrackableShaderModeValue;
+  mode: TrackableVolumeRenderingModeValue;
 }
 
 const tempMat4 = mat4.create();
@@ -63,7 +62,12 @@ const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
 interface VolumeRenderingShaderParameters {
   numChannelDimensions: number;
-  mode: SHADER_MODES;
+  mode: VOLUME_RENDERING_MODES;
+}
+
+interface VolumeRenderingShaderSnippets {
+  intensityCalculation: string;
+  beforeColorEmission: string;
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
@@ -74,7 +78,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
-  mode: TrackableShaderModeValue;
+  mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
@@ -106,7 +110,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.mode = options.mode;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
     const extraParameters = this.registerDisposer(makeCachedDerivedWatchableValue(
-        (space: CoordinateSpace, mode: SHADER_MODES) =>
+        (space: CoordinateSpace, mode: VOLUME_RENDERING_MODES) =>
             ({numChannelDimensions: space.rank, mode}),
         [this.channelCoordinateSpace, this.mode]));
 
@@ -150,21 +154,117 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         builder.addVarying('highp vec4', 'vNormalizedPosition');
         builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
-        builder.setVertexMain(glsl_VERTEX_SHADER);
+        builder.setVertexMain(`
+        vec3 boxVertex = getBoxFaceVertexPosition(gl_VertexID);
+        vec3 position = max(uLowerClipBound, min(uUpperClipBound, uTranslation + boxVertex * uChunkDataSize));
+        vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
+        gl_Position.z = 0.0;
+`);
         builder.addFragmentCode(`
 vec3 curChunkPosition;
 vec4 outputColor;
-float maxValue;
+float intensity;
 void userMain();
 `);
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
-        builder.addFragmentCode(glsl_COLOR_EMITTERS);
-        const fragmentShader = SHADER_FUNCTIONS.get(shaderParametersState.mode);
-        if (fragmentShader === undefined) {
-          throw new Error(`Invalid shader selection: ${shaderParametersState.mode}}`);
-        }
-        builder.setFragmentMainFunction(fragmentShader);
+        builder.addFragmentCode(`
+void emitRGBA(vec4 rgba) {
+  float alpha = rgba.a * uBrightnessFactor;
+  outputColor += vec4(rgba.rgb * alpha, alpha);
+}
+void emitRGB(vec3 rgb) {
+  emitRGBA(vec4(rgb, 1.0));
+}
+void emitGrayscale(float value) {
+  emitRGB(vec3(value, value, value));
+}
+void emitTransparent() {
+  emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
+}
+`);
+        let glslSnippets : VolumeRenderingShaderSnippets;
+        switch (shaderParametersState.mode) {
+          case VOLUME_RENDERING_MODES.DIRECT_COMPOSITING:
+            glslSnippets = {
+              intensityCalculation: `
+    userMain();
+`,
+              beforeColorEmission: ``};
+            break;
+          case VOLUME_RENDERING_MODES.MAX_PROJECTION:
+            glslSnippets = {
+              intensityCalculation: `
+    float normChunkValue = toNormalized(getInterpolatedDataValue(0));
+    if (normChunkValue > intensity) {
+      intensity = normChunkValue;
+    }
+`,
+              beforeColorEmission: `
+  userMain();
+`};
+            break;
+          case VOLUME_RENDERING_MODES.CHUNK_VISUALIZATION:
+            glslSnippets = {
+              intensityCalculation: ``,
+              beforeColorEmission: `
+  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+`};
+            break;
+          default:
+            glslSnippets = {
+              intensityCalculation: ``,
+              beforeColorEmission: ``
+            }
+            break;
+        };
+        builder.setFragmentMainFunction(`
+void main() {
+  vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
+  vec4 nearPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, -1.0, 1.0);
+  vec4 farPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, 1.0, 1.0);
+  vec3 nearPoint = nearPointH.xyz / nearPointH.w;
+  vec3 farPoint = farPointH.xyz / farPointH.w;
+  vec3 rayVector = farPoint - nearPoint;
+  vec3 boxStart = max(uLowerClipBound, uTranslation);
+  vec3 boxEnd = min(boxStart + uChunkDataSize, uUpperClipBound);
+  float intersectStart = uNearLimitFraction;
+  float intersectEnd = uFarLimitFraction;
+  for (int i = 0; i < 3; ++i) {
+    float startPt = nearPoint[i];
+    float endPt = farPoint[i];
+    float boxLower = boxStart[i];
+    float boxUpper = boxEnd[i];
+    float r = rayVector[i];
+    float startFraction;
+    float endFraction;
+    if (startPt >= boxLower && startPt <= boxUpper) {
+      startFraction = 0.0;
+    } else {
+      startFraction = min((boxLower - startPt) / r, (boxUpper - startPt) / r);
+    }
+    if (endPt >= boxLower && endPt <= boxUpper) {
+      endFraction = 1.0;
+    } else {
+      endFraction = max((boxLower - startPt) / r, (boxUpper - startPt) / r);
+    }
+    intersectStart = max(intersectStart, startFraction);
+    intersectEnd = min(intersectEnd, endFraction);
+  }
+  float stepSize = (uFarLimitFraction - uNearLimitFraction) / float(uMaxSteps - 1);
+  int startStep = int(floor((intersectStart - uNearLimitFraction) / stepSize));
+  int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
+  outputColor = vec4(0, 0, 0, 0);
+  intensity = 0.0;
+  for (int step = startStep; step < endStep; ++step) {
+    vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
+    curChunkPosition = position - uTranslation;
+    ${glslSnippets.intensityCalculation}
+  }
+  ${glslSnippets.beforeColorEmission}
+  emit(outputColor, 0u);
+} 
+`);
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(

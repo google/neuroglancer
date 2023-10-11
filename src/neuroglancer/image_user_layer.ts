@@ -34,7 +34,7 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
-import {trackableShaderModeValue, SHADER_MODES} from 'neuroglancer/volume_rendering/trackable_shader_mode';
+import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
@@ -171,7 +171,7 @@ export class ImageUserLayer extends Base {
         }));
         context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
         context.registerDisposer(registerNested((context, volumeRendering) => {
-          if (volumeRendering === SHADER_MODES.DISABLED) return;
+          if (volumeRendering === VOLUME_RENDERING_MODES.DISABLED) return;
           context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
         }, this.volumeRendering));
         this.shaderError.changed.dispatch();
@@ -313,7 +313,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     label: 'Resolution (3d)',
     toolJson: VOLUME_RENDERING_SCALE_JSON_KEY,
     isValid: layer => makeCachedDerivedWatchableValue(
-      volumeRendering => (volumeRendering !== SHADER_MODES.DISABLED),
+      volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.DISABLED),
       [layer.volumeRendering]
     ),
     ...renderScaleLayerControl(layer => ({
