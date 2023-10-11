@@ -42,7 +42,6 @@ import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
 import {addLayerControlToOptionsTab, LayerControlDefinition, registerLayerControl} from 'neuroglancer/widget/layer_control';
-import {checkboxLayerControl} from 'neuroglancer/widget/layer_control_checkbox';
 import {enumLayerControl} from 'neuroglancer/widget/layer_control_enum';
 import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
@@ -59,7 +58,6 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 const VOLUME_RENDERING_SCALE_JSON_KEY = 'volumeRenderingScale';
-const VOLUME_RENDERING_MODE_JSON_KEY = 'volumeRenderingMode';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -173,7 +171,7 @@ export class ImageUserLayer extends Base {
         }));
         context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
         context.registerDisposer(registerNested((context, volumeRendering) => {
-          if (!volumeRendering) return;
+          if (volumeRendering === SHADER_MODES.DISABLED) return;
           context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
         }, this.volumeRendering));
         this.shaderError.changed.dispatch();
