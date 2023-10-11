@@ -55,7 +55,7 @@ export interface VolumeRenderingRenderLayerOptions {
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
-  shaderSelection: TrackableShaderModeValue;
+  mode: TrackableShaderModeValue;
 }
 
 const tempMat4 = mat4.create();
@@ -63,7 +63,7 @@ const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
 interface VolumeRenderingShaderParameters {
   numChannelDimensions: number;
-  selectedShader: SHADER_MODES;
+  mode: SHADER_MODES;
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
@@ -74,7 +74,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
-  shaderSelection: TrackableShaderModeValue;
+  mode: TrackableShaderModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
@@ -103,12 +103,12 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.localPosition = options.localPosition;
     this.renderScaleTarget = options.renderScaleTarget;
     this.renderScaleHistogram = options.renderScaleHistogram;
-    this.shaderSelection = options.shaderSelection;
+    this.mode = options.mode;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
     const extraParameters = this.registerDisposer(makeCachedDerivedWatchableValue(
-        (space: CoordinateSpace, selectedShader: SHADER_MODES) =>
-            ({numChannelDimensions: space.rank, selectedShader: selectedShader}),
-        [this.channelCoordinateSpace, this.shaderSelection]));
+        (space: CoordinateSpace, mode: SHADER_MODES) =>
+            ({numChannelDimensions: space.rank, mode}),
+        [this.channelCoordinateSpace, this.mode]));
 
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
@@ -125,7 +125,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         builder.addFragmentCode(`
 #define VOLUME_RENDERING true
 `);
-
         emitter(builder);
         // Near limit in [0, 1] as fraction of full limit.
         builder.addUniform('highp float', 'uNearLimitFraction');
@@ -161,9 +160,9 @@ void userMain();
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(glsl_COLOR_EMITTERS);
-        const fragmentShader = SHADER_FUNCTIONS.get(shaderParametersState.selectedShader);
+        const fragmentShader = SHADER_FUNCTIONS.get(shaderParametersState.mode);
         if (fragmentShader === undefined) {
-          throw new Error(`Invalid shader selection: ${shaderParametersState.selectedShader}}`);
+          throw new Error(`Invalid shader selection: ${shaderParametersState.mode}}`);
         }
         builder.setFragmentMainFunction(fragmentShader);
         builder.addFragmentCode(glsl_COLORMAPS);
@@ -179,7 +178,7 @@ void userMain();
     this.registerDisposer(this.shaderControlState.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.localPosition.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.transform.changed.add(this.redrawNeeded.dispatch));
-    this.registerDisposer(this.shaderSelection.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(this.mode.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
         this.shaderControlState.fragmentMain.changed.add(this.redrawNeeded.dispatch));
     const {chunkManager} = this.multiscaleSource;
