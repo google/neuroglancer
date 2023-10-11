@@ -82,7 +82,7 @@ export class ImageUserLayer extends Base {
   channelSpace = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
       channelCoordinateSpace => makeValueOrError(() => getChannelSpace(channelCoordinateSpace)),
       this.channelCoordinateSpace));
-  volumeRendering = trackableShaderModeValue();
+  volumeRenderingMode = trackableShaderModeValue();
 
   shaderControlState = this.registerDisposer(new ShaderControlState(
       this.fragmentMain,
@@ -123,7 +123,7 @@ export class ImageUserLayer extends Base {
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
-    this.volumeRendering.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingMode.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -167,13 +167,13 @@ export class ImageUserLayer extends Base {
           renderScaleHistogram: this.volumeRenderingRenderScaleHistogram,
           localPosition: this.localPosition,
           channelCoordinateSpace: this.channelCoordinateSpace,
-          mode: this.volumeRendering,
+          mode: this.volumeRenderingMode,
         }));
         context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
         context.registerDisposer(registerNested((context, volumeRendering) => {
           if (volumeRendering === VOLUME_RENDERING_MODES.DISABLED) return;
           context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
-        }, this.volumeRendering));
+        }, this.volumeRenderingMode));
         this.shaderError.changed.dispatch();
       });
     }
@@ -191,7 +191,7 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     verifyOptionalObjectProperty(
-        specification, VOLUME_RENDERING_JSON_KEY, mode => this.volumeRendering.restoreState(mode));
+        specification, VOLUME_RENDERING_JSON_KEY, mode => this.volumeRenderingMode.restoreState(mode));
   }
   toJSON() {
     const x = super.toJSON();
@@ -201,7 +201,7 @@ export class ImageUserLayer extends Base {
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
-    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
+    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRenderingMode.toJSON();
     return x;
   }
 
@@ -307,14 +307,14 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: 'Volume rendering (experimental)',
     toolJson: VOLUME_RENDERING_JSON_KEY,
-    ...enumLayerControl(layer => layer.volumeRendering),
+    ...enumLayerControl(layer => layer.volumeRenderingMode),
   },
   {
     label: 'Resolution (3d)',
     toolJson: VOLUME_RENDERING_SCALE_JSON_KEY,
     isValid: layer => makeCachedDerivedWatchableValue(
       volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.DISABLED),
-      [layer.volumeRendering]
+      [layer.volumeRenderingMode]
     ),
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.volumeRenderingRenderScaleHistogram,
