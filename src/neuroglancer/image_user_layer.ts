@@ -171,7 +171,7 @@ export class ImageUserLayer extends Base {
         }));
         context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
         context.registerDisposer(registerNested((context, volumeRendering) => {
-          if (volumeRendering === VOLUME_RENDERING_MODES.DISABLED) return;
+          if (volumeRendering === VOLUME_RENDERING_MODES.OFF) return;
           context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
         }, this.volumeRenderingMode));
         this.shaderError.changed.dispatch();
@@ -313,7 +313,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     label: 'Resolution (3d)',
     toolJson: VOLUME_RENDERING_SCALE_JSON_KEY,
     isValid: layer => makeCachedDerivedWatchableValue(
-      volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.DISABLED),
+      volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.OFF),
       [layer.volumeRenderingMode]
     ),
     ...renderScaleLayerControl(layer => ({

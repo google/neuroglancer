@@ -193,14 +193,14 @@ void main() {
         else {
           let glslSnippets : VolumeRenderingShaderSnippets;
           switch (shaderParametersState.mode) {
-            case VOLUME_RENDERING_MODES.DIRECT_COMPOSITING:
+            case VOLUME_RENDERING_MODES.DIRECT:
               glslSnippets = {
                 intensityCalculation: `
     userMain();
 `,
                 beforeColorEmission: ``};
               break;
-            case VOLUME_RENDERING_MODES.MAX_PROJECTION:
+            case VOLUME_RENDERING_MODES.MAX:
               glslSnippets = {
                 intensityCalculation: `
     float normChunkValue = toNormalized(getInterpolatedDataValue(0));
