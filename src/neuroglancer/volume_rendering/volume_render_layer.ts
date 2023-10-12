@@ -83,7 +83,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState,
+      {emitter: ShaderModule, chunkFormat: ChunkFormat, wireFrame: boolean}, ShaderControlsBuilderState,
       VolumeRenderingShaderParameters>;
 
   get gl() {
@@ -117,11 +117,11 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
-      getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
+      getContextKey: ({emitter, chunkFormat, wireFrame}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
       shaderError: options.shaderError,
       extraParameters: extraParameters,
       defineShader: (
-          builder, {emitter, chunkFormat}, shaderBuilderState, shaderParametersState) => {
+          builder, {emitter, chunkFormat, wireFrame}, shaderBuilderState, shaderParametersState) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
         }
@@ -183,42 +183,43 @@ void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 `);
-        let glslSnippets : VolumeRenderingShaderSnippets;
-        switch (shaderParametersState.mode) {
-          case VOLUME_RENDERING_MODES.DIRECT_COMPOSITING:
-            glslSnippets = {
-              intensityCalculation: `
+        if (wireFrame) {
+          builder.setFragmentMainFunction(`
+void main() {
+  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+  emit(outputColor, 0u);
+}
+`)}
+        else {
+          let glslSnippets : VolumeRenderingShaderSnippets;
+          switch (shaderParametersState.mode) {
+            case VOLUME_RENDERING_MODES.DIRECT_COMPOSITING:
+              glslSnippets = {
+                intensityCalculation: `
     userMain();
 `,
-              beforeColorEmission: ``};
-            break;
-          case VOLUME_RENDERING_MODES.MAX_PROJECTION:
-            glslSnippets = {
-              intensityCalculation: `
+                beforeColorEmission: ``};
+              break;
+            case VOLUME_RENDERING_MODES.MAX_PROJECTION:
+              glslSnippets = {
+                intensityCalculation: `
     float normChunkValue = toNormalized(getInterpolatedDataValue(0));
     if (normChunkValue > intensity) {
       intensity = normChunkValue;
     }
 `,
-              beforeColorEmission: `
+                beforeColorEmission: `
   userMain();
 `};
-            break;
-          case VOLUME_RENDERING_MODES.CHUNK_VISUALIZATION:
-            glslSnippets = {
-              intensityCalculation: ``,
-              beforeColorEmission: `
-  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
-`};
-            break;
-          default:
-            glslSnippets = {
-              intensityCalculation: ``,
-              beforeColorEmission: ``
-            }
-            break;
-        };
-        builder.setFragmentMainFunction(`
+              break;
+            default:
+              glslSnippets = {
+                intensityCalculation: ``,
+                beforeColorEmission: ``
+              }
+              break;
+          };
+          builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
   vec4 nearPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, -1.0, 1.0);
@@ -264,7 +265,7 @@ void main() {
   ${glslSnippets.beforeColorEmission}
   emit(outputColor, 0u);
 } 
-`);
+`)};
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(
@@ -398,7 +399,7 @@ void main() {
             prevChunkFormat = chunkFormat;
             endShader();
             shaderResult =
-                this.shaderGetter({emitter: renderContext.emitter, chunkFormat: chunkFormat!});
+                this.shaderGetter({emitter: renderContext.emitter, chunkFormat: chunkFormat!, wireFrame: renderContext.wireFrame});
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();
