@@ -190,6 +190,7 @@ export class RenderScaleWidget extends RefCounted {
       }
       maxCount = Math.max(count, maxCount);
     }
+    totalNotPresent -= histogram.fakeChunkCount;
 
     const maxBarHeight = height;
 

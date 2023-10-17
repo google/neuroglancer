@@ -29,6 +29,11 @@ const tempMat3 = mat3.create();
 // const tempMat4 = mat4.create();
 // const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
+export interface HistogramInformation {
+  spatialScales: Map<number, number>;
+  activeIndex: number;
+}
+
 export function getVolumeRenderingNearFarBounds(
     clippingPlanes: Float32Array, displayLowerBound: Float32Array,
     displayUpperBound: Float32Array) {
@@ -70,7 +75,7 @@ export function forEachVisibleVolumeRenderingChunk<
     renderScaleTarget: number, transformedSources: readonly Transformed[],
     beginScale: (
         source: Transformed, index: number, physicalSpacing: number, optimalSamples: number,
-        clippingPlanes: Float32Array) => void,
+        clippingPlanes: Float32Array, histogramInformation: HistogramInformation) => void,
     callback: (source: Transformed, index: number, positionInChunks: vec3) => void) {
   if (transformedSources.length === 0) return;
   const {viewMatrix, projectionMat, displayDimensionRenderInfo} = projectionParameters;
@@ -88,6 +93,11 @@ export function forEachVisibleVolumeRenderingChunk<
   // const targetViewVolume = getTargetVolume(transformedSources[0], projectionParameters) *physicalSpacing
   // viewDet;
 
+  const histogramInformation: HistogramInformation = {
+    spatialScales: new Map(),
+    activeIndex: -1,
+  };
+
   // Returns volume of a single voxel of source `scaleIndex` in "view" space.
   const getViewVolume = (scaleIndex: number) => {
     const tsource = transformedSources[scaleIndex];
@@ -98,14 +108,16 @@ export function forEachVisibleVolumeRenderingChunk<
   let bestScaleIndex = transformedSources.length - 1;
   // Voxel volume in "view" space of source `bestScaleIndex`.
   let bestViewVolume = getViewVolume(bestScaleIndex);
-  for (let scaleIndex = bestScaleIndex - 1; scaleIndex >= 0; --scaleIndex) {
+  for (let scaleIndex = bestScaleIndex; scaleIndex >= 0; --scaleIndex) {
     const viewVolume = getViewVolume(scaleIndex);
+    const physicalSpacing = Math.cbrt(viewVolume * canonicalToPhysicalScale / viewDet);
+    const optimalSamples = depthRange / Math.cbrt(viewVolume);
+    histogramInformation.spatialScales.set(physicalSpacing,optimalSamples);
     if ((viewVolume - targetViewVolume) > 0) {
       bestViewVolume = viewVolume;
       bestScaleIndex = scaleIndex;
-    } else {
-      break;
     }
+    histogramInformation.activeIndex = bestScaleIndex;
   }
 
   if (DEBUG_CHUNK_LEVEL) {
@@ -118,14 +130,14 @@ export function forEachVisibleVolumeRenderingChunk<
     }
   }
   
-  const physicalSpacing = Math.pow(bestViewVolume * canonicalToPhysicalScale / viewDet, 1 / 3);
+  const physicalSpacing = Math.cbrt(bestViewVolume * canonicalToPhysicalScale / viewDet);
   const optimalSamples = depthRange / Math.cbrt(bestViewVolume);
   let firstChunk = true;
   const tsource = transformedSources[bestScaleIndex];
   forEachVisibleVolumetricChunk(
       projectionParameters, localPosition, tsource, (positionInChunks, clippingPlanes) => {
         if (firstChunk) {
-          beginScale(tsource, bestScaleIndex, physicalSpacing, optimalSamples, clippingPlanes);
+          beginScale(tsource, bestScaleIndex, physicalSpacing, optimalSamples, clippingPlanes, histogramInformation);
           firstChunk = false;
         }
         callback(tsource, bestScaleIndex, positionInChunks);

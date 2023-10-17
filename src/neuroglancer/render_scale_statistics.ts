@@ -65,11 +65,17 @@ export class RenderScaleHistogram {
    */
   value = new Uint32Array(numRenderScaleHistogramBins * this.numHistogramRows * 2);
 
+  /**
+   * Number of chunks that are indication only (not present in the data).
+   */
+  fakeChunkCount = 0;
+
   begin(frameNumber: number) {
     if (frameNumber !== this.frameNumber) {
       this.value.fill(0);
       this.frameNumber = frameNumber;
       this.spatialScales.clear();
+      this.fakeChunkCount = 0;
       this.changed.dispatch();
     }
   }
@@ -81,8 +87,9 @@ export class RenderScaleHistogram {
    * @param renderScale Rendered scale of data in screen pixels.
    * @param presentCount Number of present chunks.
    * @param notPresentCount Number of desired but not-present chunks.
+   * @param renderOnly If true, indicates that the added bar is for display only, and is not linked to actual chunk loading stats.
    */
-  add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number) {
+  add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number, renderOnly: boolean = false) {
     let {spatialScales, numHistogramRows, value} = this;
     let spatialScaleIndex = spatialScales.get(spatialScale);
     if (spatialScaleIndex === undefined) {
@@ -101,5 +108,8 @@ export class RenderScaleHistogram {
             numRenderScaleHistogramBins - 1);
     value[index] += presentCount;
     value[index + numRenderScaleHistogramBins] += notPresentCount;
+    if (renderOnly) {
+      this.fakeChunkCount = this.fakeChunkCount + notPresentCount;
+    }
   }
 }

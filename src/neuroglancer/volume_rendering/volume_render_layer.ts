@@ -30,7 +30,7 @@ import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, V
 import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID} from 'neuroglancer/volume_rendering/base';
+import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, HistogramInformation, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID} from 'neuroglancer/volume_rendering/base';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -285,6 +285,10 @@ void main() {
     if (allSources.length === 0) return;
     let curPhysicalSpacing: number = 0;
     let curOptimalSamples: number = 0;
+    let curHistogramInformation: HistogramInformation = {
+      spatialScales: new Map(),
+      activeIndex: 0,
+    };
     let shader: ShaderProgram|null = null;
     let prevChunkFormat: ChunkFormat|undefined|null;
     let shaderResult: ParameterizedShaderGetterResult<ShaderControlsBuilderState, number>;
@@ -303,6 +307,15 @@ void main() {
         prevChunkFormat!.endDrawing(gl, shader);
       }
       if (presentCount !== 0 || notPresentCount !== 0) {
+        // TODO skm: try to get loaded chunk amount
+        let index = curHistogramInformation.spatialScales.size - 1;
+        curHistogramInformation.spatialScales.forEach((optimalSamples, physicalSpacing) => {
+          if (index != curHistogramInformation.activeIndex) {
+          renderScaleHistogram.add(
+              physicalSpacing, optimalSamples, 0, 10, true)
+          }
+          index--;
+        });
         renderScaleHistogram.add(
             curPhysicalSpacing, curOptimalSamples, presentCount, notPresentCount);
       }
@@ -323,9 +336,12 @@ void main() {
 
     forEachVisibleVolumeRenderingChunk(
         renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, allSources[0],
-        (transformedSource, _, physicalSpacing, optimalSamples) => {
+        (transformedSource, ignored1, physicalSpacing, optimalSamples, ignored2, histogramInformation) => {
+          ignored1;
+          ignored2;
           curPhysicalSpacing = physicalSpacing;
           curOptimalSamples = optimalSamples;
+          curHistogramInformation = histogramInformation;
           const chunkLayout =
               getNormalizedChunkLayout(projectionParameters, transformedSource.chunkLayout);
           const source = transformedSource.source as VolumeChunkSource;
