@@ -56,7 +56,7 @@ export function getVolumeRenderingNearFarBounds(
 //       clippingPlanes, tsource.lowerClipDisplayBound, tsource.upperClipDisplayBound);
 //   if (near === far) return -1;
 //   const depthRange = (far - near);
-//   const targetSpacing = depthRange / samplesPerRay;
+//   const targetSpacing = depthRange / renderScaleTarget;
 //   const targetVolume = targetSpacing ** 3;
 //   return targetVolume * tsource.chunkLayout.detTransform;
 // }
@@ -65,19 +65,18 @@ export function forEachVisibleVolumeRenderingChunk<
     RLayer extends MultiscaleVolumetricDataRenderLayer, Source extends
         VolumeChunkSource, Transformed extends TransformedSource<RLayer, Source>>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
-    renderScaleTarget: number, samplesPerRay: number, transformedSources: readonly Transformed[],
+    renderScaleTarget: number, transformedSources: readonly Transformed[],
     beginScale: (
         source: Transformed, index: number, physicalSpacing: number, pixelSpacing: number,
         clippingPlanes: Float32Array) => void,
     callback: (source: Transformed, index: number, positionInChunks: vec3) => void) {
-  renderScaleTarget;
   if (transformedSources.length === 0) return;
   const {viewMatrix, projectionMat, displayDimensionRenderInfo} = projectionParameters;
   const {voxelPhysicalScales} = displayDimensionRenderInfo;
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
 
   // Target voxel spacing in view space.
-  const targetViewSpacing = getViewFrustrumDepthRange(projectionMat) / samplesPerRay;
+  const targetViewSpacing = getViewFrustrumDepthRange(projectionMat) / renderScaleTarget;
   // Target voxel volume in view space.
   const targetViewVolume = targetViewSpacing ** 3;
   const viewDet = mat3.determinant(mat3FromMat4(tempMat3, viewMatrix));
@@ -105,6 +104,7 @@ export function forEachVisibleVolumeRenderingChunk<
     }
   }
 
+  // TODO (skm) lets modify this for now, then base widget for scale
   const physicalSpacing = Math.pow(bestViewVolume * canonicalToPhysicalScale / viewDet, 1 / 3);
   const pixelSpacing =
       Math.pow(bestViewVolume, 1 / 3) * projectionParameters.width / (2 * projectionMat[0]);

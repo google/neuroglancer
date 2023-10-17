@@ -299,7 +299,7 @@ export class RenderScaleWidget extends RefCounted {
 }
 
 export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
-  protected unit : string = 'samples/ray';
+  protected unit : string = 'samples';
 }
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
