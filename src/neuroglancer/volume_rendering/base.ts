@@ -23,6 +23,8 @@ export const VOLUME_RENDERING_RENDER_LAYER_RPC_ID = 'volume_rendering/VolumeRend
 export const VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID =
     'volume_rendering/VolumeRenderingRenderLayer/update';
 
+const DEBUG_CHUNK_LEVEL = false;
+
 const tempMat3 = mat3.create();
 // const tempMat4 = mat4.create();
 // const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
@@ -67,7 +69,7 @@ export function forEachVisibleVolumeRenderingChunk<
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
     renderScaleTarget: number, transformedSources: readonly Transformed[],
     beginScale: (
-        source: Transformed, index: number, physicalSpacing: number, pixelSpacing: number,
+        source: Transformed, index: number, physicalSpacing: number, optimalSamples: number,
         clippingPlanes: Float32Array) => void,
     callback: (source: Transformed, index: number, positionInChunks: vec3) => void) {
   if (transformedSources.length === 0) return;
@@ -76,13 +78,14 @@ export function forEachVisibleVolumeRenderingChunk<
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
 
   // Target voxel spacing in view space.
-  const targetViewSpacing = getViewFrustrumDepthRange(projectionMat) / renderScaleTarget;
+  const depthRange = getViewFrustrumDepthRange(projectionMat);
+  const targetViewSpacing = depthRange / renderScaleTarget;
   // Target voxel volume in view space.
   const targetViewVolume = targetViewSpacing ** 3;
   const viewDet = mat3.determinant(mat3FromMat4(tempMat3, viewMatrix));
 
   // Target voxel volume in view space.
-  // const targetViewVolume = getTargetVolume(transformedSources[0], projectionParameters) *
+  // const targetViewVolume = getTargetVolume(transformedSources[0], projectionParameters) *physicalSpacing
   // viewDet;
 
   // Returns volume of a single voxel of source `scaleIndex` in "view" space.
@@ -90,13 +93,14 @@ export function forEachVisibleVolumeRenderingChunk<
     const tsource = transformedSources[scaleIndex];
     return Math.abs(tsource.chunkLayout.detTransform * viewDet);
   };
-  // Index of source with voxel volume that is closest to `targetViewVolume`.
+  // Index of high resolution source with voxel volume greater than `targetViewVolume`.
+  // This allows to find the highest resolution source that is not greatly under-sampled.
   let bestScaleIndex = transformedSources.length - 1;
   // Voxel volume in "view" space of source `bestScaleIndex`.
   let bestViewVolume = getViewVolume(bestScaleIndex);
   for (let scaleIndex = bestScaleIndex - 1; scaleIndex >= 0; --scaleIndex) {
     const viewVolume = getViewVolume(scaleIndex);
-    if (Math.abs(viewVolume - targetViewVolume) < Math.abs(bestViewVolume - targetViewVolume)) {
+    if ((viewVolume - targetViewVolume) > 0) {
       bestViewVolume = viewVolume;
       bestScaleIndex = scaleIndex;
     } else {
@@ -104,16 +108,24 @@ export function forEachVisibleVolumeRenderingChunk<
     }
   }
 
-  // TODO (skm) lets modify this for now, then base widget for scale
+  if (DEBUG_CHUNK_LEVEL) {
+    console.log(transformedSources)
+    for (let scaleIndex = 0; scaleIndex < transformedSources.length; ++scaleIndex) {
+      const viewVolume = getViewVolume(scaleIndex);
+      const desiredSamples = depthRange / Math.cbrt(viewVolume);
+      console.log(
+          `scaleIndex=${scaleIndex} viewVolume=${viewVolume} bestScaleIndex=${bestScaleIndex} actualViewVolume=${targetViewVolume}, desiredSamples=${desiredSamples}, difference=${viewVolume - targetViewVolume}`);
+    }
+  }
+  
   const physicalSpacing = Math.pow(bestViewVolume * canonicalToPhysicalScale / viewDet, 1 / 3);
-  const pixelSpacing =
-      Math.pow(bestViewVolume, 1 / 3) * projectionParameters.width / (2 * projectionMat[0]);
+  const optimalSamples = depthRange / Math.cbrt(bestViewVolume);
   let firstChunk = true;
   const tsource = transformedSources[bestScaleIndex];
   forEachVisibleVolumetricChunk(
       projectionParameters, localPosition, tsource, (positionInChunks, clippingPlanes) => {
         if (firstChunk) {
-          beginScale(tsource, bestScaleIndex, physicalSpacing, pixelSpacing, clippingPlanes);
+          beginScale(tsource, bestScaleIndex, physicalSpacing, optimalSamples, clippingPlanes);
           firstChunk = false;
         }
         callback(tsource, bestScaleIndex, positionInChunks);

@@ -284,7 +284,7 @@ void main() {
     const allSources = attachment.state!.sources.value;
     if (allSources.length === 0) return;
     let curPhysicalSpacing: number = 0;
-    let curPixelSpacing: number = 0;
+    let curOptimalSamples: number = 0;
     let shader: ShaderProgram|null = null;
     let prevChunkFormat: ChunkFormat|undefined|null;
     let shaderResult: ParameterizedShaderGetterResult<ShaderControlsBuilderState, number>;
@@ -304,7 +304,7 @@ void main() {
       }
       if (presentCount !== 0 || notPresentCount !== 0) {
         renderScaleHistogram.add(
-            curPhysicalSpacing, curPixelSpacing, presentCount, notPresentCount);
+            curPhysicalSpacing, curOptimalSamples, presentCount, notPresentCount);
       }
     };
     let newSource = true;
@@ -323,9 +323,9 @@ void main() {
 
     forEachVisibleVolumeRenderingChunk(
         renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, allSources[0],
-        (transformedSource, _, physicalSpacing, pixelSpacing) => {
+        (transformedSource, _, physicalSpacing, optimalSamples) => {
           curPhysicalSpacing = physicalSpacing;
-          curPixelSpacing = pixelSpacing;
+          curOptimalSamples = optimalSamples;
           const chunkLayout =
               getNormalizedChunkLayout(projectionParameters, transformedSource.chunkLayout);
           const source = transformedSource.source as VolumeChunkSource;
