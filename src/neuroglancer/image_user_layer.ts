@@ -73,8 +73,7 @@ export class ImageUserLayer extends Base {
   dataType = new WatchableValue<DataType|undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram();
-  // unused
+  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram(0);
   volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(1);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();

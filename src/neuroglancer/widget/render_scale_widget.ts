@@ -19,7 +19,7 @@ import 'neuroglancer/widget/render_scale_widget.css';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import {UserLayer} from 'neuroglancer/layer';
-import {getRenderScaleFromHistogramOffset, getRenderScaleHistogramOffset, numRenderScaleHistogramBins, RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
+import {getRenderScaleFromHistogramOffset, getRenderScaleHistogramOffset, numRenderScaleHistogramBins, RenderScaleHistogram, renderScaleHistogramOrigin} from 'neuroglancer/render_scale_statistics';
 import {TrackableValueInterface, WatchableValue} from 'neuroglancer/trackable_value';
 import {serializeColor} from 'neuroglancer/util/color';
 import {hsvToRgb} from 'neuroglancer/util/colorspace';
@@ -62,6 +62,7 @@ export class RenderScaleWidget extends RefCounted {
   legendRenderScale = document.createElement('div');
   legendSpatialScale = document.createElement('div');
   legendChunks = document.createElement('div');
+  protected origin = renderScaleHistogramOrigin;
   protected unit : string = 'px';
   private ctx = this.canvas.getContext('2d')!;
   hoverTarget = new WatchableValue<[number, number]|undefined>(undefined);
@@ -105,7 +106,7 @@ export class RenderScaleWidget extends RefCounted {
 
     const getTargetValue = (event: MouseEvent) => {
       const position = event.offsetX / canvas.width * numRenderScaleHistogramBins;
-      return getRenderScaleFromHistogramOffset(position);
+      return getRenderScaleFromHistogramOffset(position, this.origin);
     };
     this.registerEventListener(canvas, 'pointermove', (event: MouseEvent) => {
       this.hoverTarget.value = [getTargetValue(event), event.offsetY];
@@ -200,7 +201,7 @@ export class RenderScaleWidget extends RefCounted {
 
     let hoverSpatialScale: number|undefined = undefined;
     if (hoverValue !== undefined) {
-      const i = Math.floor(getRenderScaleHistogramOffset(hoverValue[0]));
+      const i = Math.floor(getRenderScaleHistogramOffset(hoverValue[0], this.origin));
       if (i >= 0 && i < numRenderScaleHistogramBins) {
         let sum = 0;
         const hoverY = hoverValue[1];
@@ -283,7 +284,7 @@ export class RenderScaleWidget extends RefCounted {
     {
       const value = targetValue;
       ctx.fillStyle = '#fff';
-      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value));
+      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value, this.origin));
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
     }
@@ -291,7 +292,7 @@ export class RenderScaleWidget extends RefCounted {
     if (hoverValue !== undefined) {
       const value = hoverValue[0];
       ctx.fillStyle = '#888';
-      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value));
+      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value, this.origin));
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
     }
@@ -300,6 +301,7 @@ export class RenderScaleWidget extends RefCounted {
 
 export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
   protected unit : string = 'samples';
+  protected origin = 0;
 }
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({

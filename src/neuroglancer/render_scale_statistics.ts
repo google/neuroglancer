@@ -23,12 +23,12 @@ export const numRenderScaleHistogramBins = 40;
 export const renderScaleHistogramBinSize = 0.5;
 export const renderScaleHistogramOrigin = -4;
 
-export function getRenderScaleHistogramOffset(renderScale: number): number {
-  return (Math.log2(renderScale) - renderScaleHistogramOrigin) / renderScaleHistogramBinSize;
+export function getRenderScaleHistogramOffset(renderScale: number, origin: number = renderScaleHistogramOrigin): number {
+  return (Math.log2(renderScale) - origin) / renderScaleHistogramBinSize;
 }
 
-export function getRenderScaleFromHistogramOffset(offset: number): number {
-  return 2 ** (offset * renderScaleHistogramBinSize + renderScaleHistogramOrigin);
+export function getRenderScaleFromHistogramOffset(offset: number, origin: number = renderScaleHistogramOrigin): number {
+  return 2 ** (offset * renderScaleHistogramBinSize + origin);
 }
 
 export function trackableRenderScaleTarget(initialValue: number) {
@@ -38,6 +38,11 @@ export function trackableRenderScaleTarget(initialValue: number) {
 export class RenderScaleHistogram {
   visibility = new VisibilityPriorityAggregator();
   changed = new NullarySignal();
+  origin: number;
+
+  constructor(origin: number = renderScaleHistogramOrigin) {
+    this.origin = origin;
+  }
 
   /**
    * Frame number corresponding to the current histogram.
@@ -92,7 +97,7 @@ export class RenderScaleHistogram {
     }
     const index = spatialScaleIndex * numRenderScaleHistogramBins * 2 +
         Math.min(
-            Math.max(0, Math.round(getRenderScaleHistogramOffset(renderScale))),
+            Math.max(0, Math.round(getRenderScaleHistogramOffset(renderScale, this.origin))),
             numRenderScaleHistogramBins - 1);
     value[index] += presentCount;
     value[index + numRenderScaleHistogramBins] += notPresentCount;
