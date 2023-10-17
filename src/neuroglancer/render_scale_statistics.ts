@@ -87,7 +87,7 @@ export class RenderScaleHistogram {
    * @param renderScale Rendered scale of data in screen pixels.
    * @param presentCount Number of present chunks.
    * @param notPresentCount Number of desired but not-present chunks.
-   * @param renderOnly If true, indicates that the added bar is for display only, and is not linked to actual chunk loading stats.
+   * @param renderOnly If true, indicates that the added bar is for display only, and is not linked to actual chunk loading stats. Defaults to false.
    */
   add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number, renderOnly: boolean = false) {
     let {spatialScales, numHistogramRows, value} = this;
