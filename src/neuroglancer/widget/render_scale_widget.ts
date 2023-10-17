@@ -62,6 +62,7 @@ export class RenderScaleWidget extends RefCounted {
   legendRenderScale = document.createElement('div');
   legendSpatialScale = document.createElement('div');
   legendChunks = document.createElement('div');
+  protected unit : string = 'px';
   private ctx = this.canvas.getContext('2d')!;
   hoverTarget = new WatchableValue<[number, number]|undefined>(undefined);
   private throttledUpdateView = this.registerCancellable(
@@ -151,7 +152,7 @@ export class RenderScaleWidget extends RefCounted {
       const {legendRenderScale} = this;
       const value = hoverValue === undefined ? targetValue : hoverValue[0];
       const valueString = formatPixelNumber(value);
-      legendRenderScale.textContent = valueString + ' px';
+      legendRenderScale.textContent = valueString + ' ' + this.unit;
     }
 
     function binToCanvasX(bin: number) {
@@ -297,18 +298,23 @@ export class RenderScaleWidget extends RefCounted {
   }
 }
 
+export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
+  protected unit : string = 'samples/ray';
+}
+
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift+wheel': {action: 'adjust-via-wheel'},
   'at:shift+dblclick0': {action: 'reset'},
 });
 
-export function renderScaleLayerControl<LayerType extends UserLayer>(
-    getter: (layer: LayerType) =>
-        RenderScaleWidgetOptions): LayerControlFactory<LayerType, RenderScaleWidget> {
+export function renderScaleLayerControl<LayerType extends UserLayer, WidgetType extends RenderScaleWidget>(
+  getter: (layer: LayerType) => RenderScaleWidgetOptions,
+  widgetClass: new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) => WidgetType = RenderScaleWidget as new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) => WidgetType
+  ): LayerControlFactory<LayerType, RenderScaleWidget> {
   return {
     makeControl: (layer, context) => {
       const {histogram, target} = getter(layer);
-      const control = context.registerDisposer(new RenderScaleWidget(histogram, target));
+      const control = context.registerDisposer(new widgetClass(histogram, target));
       return {control, controlElement: control.element};
     },
     activateTool: (activation, control) => {

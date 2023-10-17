@@ -46,7 +46,7 @@ import {checkboxLayerControl} from 'neuroglancer/widget/layer_control_checkbox';
 import {enumLayerControl} from 'neuroglancer/widget/layer_control_enum';
 import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
-import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
+import {renderScaleLayerControl, VolumeRenderingRenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
@@ -128,6 +128,7 @@ export class ImageUserLayer extends Base {
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.volumeRendering.changed.add(this.specificationChanged.dispatch);
     this.volumeRenderingSamplesPerRay.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -196,6 +197,8 @@ export class ImageUserLayer extends Base {
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
     this.volumeRenderingSamplesPerRay.restoreState(specification[VOLUME_RENDERING_SAMPLING_JSON_KEY]);
+    this.volumeRenderingRenderScaleTarget.restoreState(
+        specification[VOLUME_RENDER_SCALE_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -207,6 +210,7 @@ export class ImageUserLayer extends Base {
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
     x[VOLUME_RENDERING_SAMPLING_JSON_KEY] = this.volumeRenderingSamplesPerRay.toJSON();
+    x[VOLUME_RENDER_SCALE_JSON_KEY] = this.volumeRenderingRenderScaleTarget.toJSON();
     return x;
   }
 
@@ -318,10 +322,13 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     label: 'Resolution (3d)',
     toolJson: VOLUME_RENDER_SCALE_JSON_KEY,
     isValid: layer => layer.volumeRendering,
-    ...renderScaleLayerControl(layer => ({
-                                 histogram: layer.volumeRenderingRenderScaleHistogram,
-                                 target: layer.volumeRenderingRenderScaleTarget
-                               })),
+    ...renderScaleLayerControl(
+      layer => ({
+        histogram: layer.volumeRenderingRenderScaleHistogram,
+        target: layer.volumeRenderingRenderScaleTarget
+      }),
+      VolumeRenderingRenderScaleWidget,
+    )
   },
   {
     label: 'Samples per ray',
