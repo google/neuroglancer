@@ -302,7 +302,7 @@ export class RenderScaleWidget extends RefCounted {
 
 export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
   protected unit: string = 'samples';
-  protected origin = 0;
+  protected origin = 1;
 }
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
