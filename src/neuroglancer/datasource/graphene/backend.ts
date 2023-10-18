@@ -113,7 +113,6 @@ async function decodeDracoFragmentChunk(
     }
     const url = `${parameters.manifestUrl}/manifest`;
     const manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
-    console.log("DOWNLOAD MANIFEST", chunk.objectId, parameters.lod);
     await cancellableFetchSpecialOk(this.credentialsProvider, manifestUrl, {}, responseJson, cancellationToken)
         .then(response => {
           const chunkIdentifier = manifestUrl;
@@ -121,7 +120,6 @@ async function decodeDracoFragmentChunk(
             const requestCount = (manifestRequestCount.get(chunkIdentifier) || 0) + 1;
             manifestRequestCount.set(chunkIdentifier, requestCount);
             setTimeout(() => {
-              console.log("RETRY CAUSE STILL NEW", chunk.objectId, requestCount);
               this.chunkManager.queueManager.updateChunkState(chunk, ChunkState.QUEUED);
             }, Math.pow(2, requestCount) * 1000);
           } else {
@@ -440,7 +438,6 @@ registerRPC(CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, function(x) {
 });
 
 registerRPC(GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, function(x) {
-  console.log('adding new segment', x.segment);
-  let obj = <GrapheneMeshSource>this.get(x.rpcId);
+  const obj = <GrapheneMeshSource>this.get(x.rpcId);
   obj.addNewSegment(Uint64.parseString(x.segment));
 });
