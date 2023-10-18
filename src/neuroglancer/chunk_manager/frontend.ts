@@ -224,10 +224,9 @@ export class ChunkQueueManager extends SharedObject {
         if (newState !== oldState) {
           switch (newState) {
             case ChunkState.GPU_MEMORY:
+              // console.log("Copying to GPU", chunk);
               chunk.copyToGPU(this.gl);
-              if (chunk.constructor.name !== "ManifestChunk") {
-                visibleChunksChanged = true;
-              }
+              visibleChunksChanged = true;
               break;
             case ChunkState.SYSTEM_MEMORY:
               chunk.freeGPUMemory(this.gl);
