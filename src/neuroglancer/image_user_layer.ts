@@ -291,7 +291,7 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
 
 const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
-    label: 'Resolution selector (2D)',
+    label: 'Resolution (2D)',
     toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.sliceViewRenderScaleHistogram,
@@ -314,7 +314,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     ...checkboxLayerControl(layer => layer.volumeRendering),
   },
   {
-    label: 'Resolution indicator (3D)',
+    label: 'Resolution (3D)',
     toolJson: VOLUME_RENDER_SCALE_JSON_KEY,
     isValid: layer => layer.volumeRendering,
     ...renderScaleLayerControl(layer => ({
