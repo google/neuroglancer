@@ -291,7 +291,7 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
 
 const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
-    label: 'Resolution (2D)',
+    label: 'Resolution (slice)',
     toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.sliceViewRenderScaleHistogram,
