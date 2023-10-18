@@ -17,8 +17,7 @@
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyFinitePositiveFloat} from 'neuroglancer/util/json';
 import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
-
-import {NullarySignal} from './util/signal';
+import {NullarySignal} from 'neuroglancer/util/signal';
 
 export const numRenderScaleHistogramBins = 40;
 export const renderScaleHistogramBinSize = 0.5;

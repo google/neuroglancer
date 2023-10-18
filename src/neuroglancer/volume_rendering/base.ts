@@ -82,8 +82,8 @@ export function forEachVisibleVolumeRenderingChunk<
   const {voxelPhysicalScales} = displayDimensionRenderInfo;
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
 
-  // Target voxel spacing in view space.
   const depthRange = getViewFrustrumDepthRange(projectionMat);
+  // Target voxel spacing in view space
   const targetViewSpacing = depthRange / renderScaleTarget;
   // Target voxel volume in view space.
   const targetViewVolume = targetViewSpacing ** 3;
