@@ -63,7 +63,7 @@ export class RenderScaleWidget extends RefCounted {
   legendSpatialScale = document.createElement('div');
   legendChunks = document.createElement('div');
   protected origin = renderScaleHistogramOrigin;
-  protected unit : string = 'px';
+  protected unit: string = 'px';
   private ctx = this.canvas.getContext('2d')!;
   hoverTarget = new WatchableValue<[number, number]|undefined>(undefined);
   private throttledUpdateView = this.registerCancellable(
@@ -301,7 +301,7 @@ export class RenderScaleWidget extends RefCounted {
 }
 
 export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
-  protected unit : string = 'samples';
+  protected unit: string = 'samples';
   protected origin = 0;
 }
 
@@ -310,10 +310,13 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift+dblclick0': {action: 'reset'},
 });
 
-export function renderScaleLayerControl<LayerType extends UserLayer, WidgetType extends RenderScaleWidget>(
-  getter: (layer: LayerType) => RenderScaleWidgetOptions,
-  widgetClass: new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) => WidgetType = RenderScaleWidget as new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) => WidgetType
-  ): LayerControlFactory<LayerType, RenderScaleWidget> {
+export function
+renderScaleLayerControl<LayerType extends UserLayer, WidgetType extends RenderScaleWidget>(
+    getter: (layer: LayerType) => RenderScaleWidgetOptions,
+    widgetClass: new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) =>
+        WidgetType = RenderScaleWidget as
+        new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) =>
+                         WidgetType): LayerControlFactory<LayerType, RenderScaleWidget> {
   return {
     makeControl: (layer, context) => {
       const {histogram, target} = getter(layer);

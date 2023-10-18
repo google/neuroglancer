@@ -191,8 +191,7 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
-    this.volumeRenderingRenderScaleTarget.restoreState(
-        specification[VOLUME_RENDER_SCALE_JSON_KEY]);
+    this.volumeRenderingRenderScaleTarget.restoreState(specification[VOLUME_RENDER_SCALE_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -316,12 +315,12 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     toolJson: VOLUME_RENDER_SCALE_JSON_KEY,
     isValid: layer => layer.volumeRendering,
     ...renderScaleLayerControl(
-      layer => ({
-        histogram: layer.volumeRenderingRenderScaleHistogram,
-        target: layer.volumeRenderingRenderScaleTarget
-      }),
-      VolumeRenderingRenderScaleWidget,
-    )
+        layer => ({
+          histogram: layer.volumeRenderingRenderScaleHistogram,
+          target: layer.volumeRenderingRenderScaleTarget
+        }),
+        VolumeRenderingRenderScaleWidget,
+        )
   },
   {
     label: 'Opacity',

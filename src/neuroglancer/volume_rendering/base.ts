@@ -90,8 +90,8 @@ export function forEachVisibleVolumeRenderingChunk<
   const viewDet = mat3.determinant(mat3FromMat4(tempMat3, viewMatrix));
 
   // Target voxel volume in view space.
-  // const targetViewVolume = getTargetVolume(transformedSources[0], projectionParameters) *physicalSpacing
-  // viewDet;
+  // const targetViewVolume = getTargetVolume(transformedSources[0], projectionParameters)
+  // *physicalSpacing viewDet;
 
   const histogramInformation: HistogramInformation = {
     spatialScales: new Map(),
@@ -112,7 +112,7 @@ export function forEachVisibleVolumeRenderingChunk<
     const viewVolume = getViewVolume(scaleIndex);
     const physicalSpacing = Math.cbrt(viewVolume * canonicalToPhysicalScale / viewDet);
     const optimalSamples = depthRange / Math.cbrt(viewVolume);
-    histogramInformation.spatialScales.set(physicalSpacing,optimalSamples);
+    histogramInformation.spatialScales.set(physicalSpacing, optimalSamples);
     if ((viewVolume - targetViewVolume) > 0) {
       bestViewVolume = viewVolume;
       bestScaleIndex = scaleIndex;
@@ -125,11 +125,12 @@ export function forEachVisibleVolumeRenderingChunk<
     for (let scaleIndex = 0; scaleIndex < transformedSources.length; ++scaleIndex) {
       const viewVolume = getViewVolume(scaleIndex);
       const desiredSamples = depthRange / Math.cbrt(viewVolume);
-      console.log(
-          `scaleIndex=${scaleIndex} viewVolume=${viewVolume} bestScaleIndex=${bestScaleIndex} actualViewVolume=${targetViewVolume}, desiredSamples=${desiredSamples}, difference=${viewVolume - targetViewVolume}`);
+      console.log(`scaleIndex=${scaleIndex} viewVolume=${viewVolume} bestScaleIndex=${
+          bestScaleIndex} actualViewVolume=${targetViewVolume}, desiredSamples=${
+          desiredSamples}, difference=${viewVolume - targetViewVolume}`);
     }
   }
-  
+
   const physicalSpacing = Math.cbrt(bestViewVolume * canonicalToPhysicalScale / viewDet);
   const optimalSamples = depthRange / Math.cbrt(bestViewVolume);
   let firstChunk = true;
@@ -137,7 +138,9 @@ export function forEachVisibleVolumeRenderingChunk<
   forEachVisibleVolumetricChunk(
       projectionParameters, localPosition, tsource, (positionInChunks, clippingPlanes) => {
         if (firstChunk) {
-          beginScale(tsource, bestScaleIndex, physicalSpacing, optimalSamples, clippingPlanes, histogramInformation);
+          beginScale(
+              tsource, bestScaleIndex, physicalSpacing, optimalSamples, clippingPlanes,
+              histogramInformation);
           firstChunk = false;
         }
         callback(tsource, bestScaleIndex, positionInChunks);

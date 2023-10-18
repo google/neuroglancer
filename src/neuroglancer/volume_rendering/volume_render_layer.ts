@@ -311,8 +311,7 @@ void main() {
         let index = curHistogramInformation.spatialScales.size - 1;
         curHistogramInformation.spatialScales.forEach((optimalSamples, physicalSpacing) => {
           if (index != curHistogramInformation.activeIndex) {
-          renderScaleHistogram.add(
-              physicalSpacing, optimalSamples, 0, 10, true)
+            renderScaleHistogram.add(physicalSpacing, optimalSamples, 0, 10, true)
           }
           index--;
         });
@@ -335,8 +334,10 @@ void main() {
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
     forEachVisibleVolumeRenderingChunk(
-        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, allSources[0],
-        (transformedSource, ignored1, physicalSpacing, optimalSamples, ignored2, histogramInformation) => {
+        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+        allSources[0],
+        (transformedSource, ignored1, physicalSpacing, optimalSamples, ignored2,
+         histogramInformation) => {
           ignored1;
           ignored2;
           curPhysicalSpacing = physicalSpacing;
@@ -452,7 +453,8 @@ void main() {
     if (allSources.length === 0) return true;
     let missing = false;
     forEachVisibleVolumeRenderingChunk(
-        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value, allSources[0], () => {}, tsource => {
+        renderContext.projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+        allSources[0], () => {}, tsource => {
           const chunk = tsource.source.chunks.get(tsource.curPositionInChunks.join());
           if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
             missing = true;

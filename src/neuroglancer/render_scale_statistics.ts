@@ -17,17 +17,20 @@
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyFinitePositiveFloat} from 'neuroglancer/util/json';
 import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
-import { NullarySignal } from './util/signal';
+
+import {NullarySignal} from './util/signal';
 
 export const numRenderScaleHistogramBins = 40;
 export const renderScaleHistogramBinSize = 0.5;
 export const renderScaleHistogramOrigin = -4;
 
-export function getRenderScaleHistogramOffset(renderScale: number, origin: number = renderScaleHistogramOrigin): number {
+export function getRenderScaleHistogramOffset(
+    renderScale: number, origin: number = renderScaleHistogramOrigin): number {
   return (Math.log2(renderScale) - origin) / renderScaleHistogramBinSize;
 }
 
-export function getRenderScaleFromHistogramOffset(offset: number, origin: number = renderScaleHistogramOrigin): number {
+export function getRenderScaleFromHistogramOffset(
+    offset: number, origin: number = renderScaleHistogramOrigin): number {
   return 2 ** (offset * renderScaleHistogramBinSize + origin);
 }
 
@@ -87,9 +90,11 @@ export class RenderScaleHistogram {
    * @param renderScale Rendered scale of data in screen pixels.
    * @param presentCount Number of present chunks.
    * @param notPresentCount Number of desired but not-present chunks.
-   * @param renderOnly If true, indicates that the added bar is for display only, and is not linked to actual chunk loading stats. Defaults to false.
+   * @param renderOnly If true, indicates that the added bar is for display only, and is not linked
+   *     to actual chunk loading stats. Defaults to false.
    */
-  add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number, renderOnly: boolean = false) {
+  add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number,
+      renderOnly: boolean = false) {
     let {spatialScales, numHistogramRows, value} = this;
     let spatialScaleIndex = spatialScales.get(spatialScale);
     if (spatialScaleIndex === undefined) {
