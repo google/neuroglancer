@@ -30,13 +30,13 @@ import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, Wat
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {forEachVisibleVolumeRenderingChunk, getVolumeRenderingNearFarBounds, VOLUME_RENDERING_RENDER_LAYER_RPC_ID, VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, volumeRenderingDepthSamples} from 'neuroglancer/volume_rendering/base';
-import {VOLUME_RENDERING_MODES, TrackableVolumeRenderingModeValue} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bounding_box';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
+import {TrackableVolumeRenderingModeValue, VOLUME_RENDERING_MODES} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -83,8 +83,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-      {emitter: ShaderModule, chunkFormat: ChunkFormat, wireFrame: boolean}, ShaderControlsBuilderState,
-      VolumeRenderingShaderParameters>;
+      {emitter: ShaderModule, chunkFormat: ChunkFormat, wireFrame: boolean},
+      ShaderControlsBuilderState, VolumeRenderingShaderParameters>;
 
   get gl() {
     return this.multiscaleSource.chunkManager.gl;
@@ -117,11 +117,13 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
-      getContextKey: ({emitter, chunkFormat, wireFrame}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
+      getContextKey: ({emitter, chunkFormat, wireFrame}) =>
+          `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
       shaderError: options.shaderError,
       extraParameters: extraParameters,
       defineShader: (
-          builder, {emitter, chunkFormat, wireFrame}, shaderBuilderState, shaderParametersState) => {
+          builder, {emitter, chunkFormat, wireFrame}, shaderBuilderState,
+          shaderParametersState) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
         }
@@ -189,16 +191,17 @@ void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
   emit(outputColor, 0u);
 }
-`)}
-        else {
-          let glslSnippets : VolumeRenderingShaderSnippets;
+`)
+        } else {
+          let glslSnippets: VolumeRenderingShaderSnippets;
           switch (shaderParametersState.mode) {
             case VOLUME_RENDERING_MODES.DIRECT:
               glslSnippets = {
                 intensityCalculation: `
     userMain();
 `,
-                beforeColorEmission: ``};
+                beforeColorEmission: ``
+              };
               break;
             case VOLUME_RENDERING_MODES.MAX:
               glslSnippets = {
@@ -210,13 +213,11 @@ void main() {
 `,
                 beforeColorEmission: `
   userMain();
-`};
+`
+              };
               break;
             default:
-              glslSnippets = {
-                intensityCalculation: ``,
-                beforeColorEmission: ``
-              }
+              glslSnippets = {intensityCalculation: ``, beforeColorEmission: ``};
               break;
           };
           builder.setFragmentMainFunction(`
@@ -265,7 +266,8 @@ void main() {
   ${glslSnippets.beforeColorEmission}
   emit(outputColor, 0u);
 } 
-`)};
+`)
+        };
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(
@@ -398,8 +400,11 @@ void main() {
           if (chunkFormat !== prevChunkFormat) {
             prevChunkFormat = chunkFormat;
             endShader();
-            shaderResult =
-                this.shaderGetter({emitter: renderContext.emitter, chunkFormat: chunkFormat!, wireFrame: renderContext.wireFrame});
+            shaderResult = this.shaderGetter({
+              emitter: renderContext.emitter,
+              chunkFormat: chunkFormat!,
+              wireFrame: renderContext.wireFrame
+            });
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();

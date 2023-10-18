@@ -34,7 +34,6 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
-import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
@@ -49,6 +48,7 @@ import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
@@ -191,7 +191,8 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     verifyOptionalObjectProperty(
-        specification, VOLUME_RENDERING_JSON_KEY, mode => this.volumeRenderingMode.restoreState(mode));
+        specification, VOLUME_RENDERING_JSON_KEY,
+        mode => this.volumeRenderingMode.restoreState(mode));
   }
   toJSON() {
     const x = super.toJSON();
@@ -313,9 +314,8 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     label: 'Resolution (3d)',
     toolJson: VOLUME_RENDERING_SCALE_JSON_KEY,
     isValid: layer => makeCachedDerivedWatchableValue(
-      volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.OFF),
-      [layer.volumeRenderingMode]
-    ),
+        volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.OFF),
+        [layer.volumeRenderingMode]),
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.volumeRenderingRenderScaleHistogram,
                                  target: layer.volumeRenderingRenderScaleTarget
