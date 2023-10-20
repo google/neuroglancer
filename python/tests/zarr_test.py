@@ -29,6 +29,7 @@ TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
         {"driver": "zarr", "schema": {"chunk_layout": {"inner_order": [2, 1, 0]}}},
         {"driver": "zarr3"},
         {"driver": "zarr3", "schema": {"chunk_layout": {"inner_order": [2, 1, 0]}}},
+        {"driver": "zarr3", "schema": {"dimension_units": ["nm", None, ""]}},
         {
             "driver": "zarr3",
             "schema": {

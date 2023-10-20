@@ -48,6 +48,7 @@ export function parseDimensionSeparator(value: unknown): '/'|'.' {
 }
 
 const UNITS = new Map<string, {unit: string, scale: number}>([
+  ['', {unit: '', scale: 1}],
   ['angstrom', {unit: 'm', scale: 1e-10}],
   ['foot', {unit: 'm', scale: 0.3048}],
   ['inch', {unit: 'm', scale: 0.0254}],
@@ -61,10 +62,11 @@ const UNITS = new Map<string, {unit: string, scale: number}>([
 
 for (const unit of ['meter', 'second']) {
   for (const siPrefix of allSiPrefixes) {
-    const {longPrefix} = siPrefix;
+    const {longPrefix, prefix} = siPrefix;
     if (longPrefix === undefined) continue;
-    UNITS.set(`${longPrefix}${unit}`, {unit: unit[0], scale: Math.pow(10, siPrefix.exponent)});
-    UNITS.set(`${longPrefix}${unit[0]}`, {unit: unit[0], scale: Math.pow(10, siPrefix.exponent)});
+    const unitInfo = {unit: unit[0], scale: Math.pow(10, siPrefix.exponent)};
+    UNITS.set(`${longPrefix}${unit}`, unitInfo);
+    UNITS.set(`${prefix}${unit[0]}`, unitInfo);
   }
 }
 
