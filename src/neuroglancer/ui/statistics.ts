@@ -61,7 +61,7 @@ export class StatisticsDisplayState implements Trackable {
 function getProperties(obj: any): Map<string, string> {
   const map = new Map<string, string>();
   function handleObject(o: any, prefix: string) {
-    if (typeof o !== 'object') {
+    if (o == null || typeof o !== 'object') {
       map.set(prefix, '' + o);
       return;
     }
