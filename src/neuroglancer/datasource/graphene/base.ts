@@ -20,6 +20,7 @@ import {ChunkLayoutOptions, makeSliceViewChunkSpecification, SliceViewChunkSourc
 import {DataType} from 'neuroglancer/sliceview/base';
 
 export const PYCG_APP_VERSION = 1;
+export const GRAPHENE_MESH_NEW_SEGMENT_RPC_ID = 'GrapheneMeshSource:NewSegment';
 
 export enum VolumeChunkEncoding {
   RAW,
