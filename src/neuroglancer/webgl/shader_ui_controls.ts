@@ -69,8 +69,13 @@ export interface ShaderCheckboxControl {
   default: boolean;
 }
 
-export type ShaderUiControl =
-    ShaderSliderControl|ShaderColorControl|ShaderImageInvlerpControl|ShaderPropertyInvlerpControl|ShaderCheckboxControl;
+export interface ShaderTransferFunctionControl {
+  type: 'transferFunction';
+  default: any;
+}
+
+export type ShaderUiControl = ShaderSliderControl|ShaderColorControl|ShaderImageInvlerpControl|
+    ShaderPropertyInvlerpControl|ShaderCheckboxControl|ShaderTransferFunctionControl;
 
 export interface ShaderControlParseError {
   line: number;
@@ -360,6 +365,22 @@ function parseInvlerpDirective(
   return {errors};
 }
 
+function parseTransferFunctionDirective(
+    valueType: string, parameters: DirectiveParameters): DirectiveParseResult {
+  let errors = [];
+  if (valueType !== 'transferFunction') {
+    errors.push('type must be transferFunction');
+  }
+  if (errors.length > 0) {
+    return {errors};
+  }
+  return {
+    control: {type: 'transferFunction', default: 1} as ShaderTransferFunctionControl,
+    errors: undefined,
+  };
+}
+
+
 function parseImageInvlerpDirective(
     valueType: string, parameters: DirectiveParameters, imageData: ImageDataSpecification) {
   let errors = [];
@@ -506,6 +527,7 @@ const controlParsers = new Map<
   ['color', parseColorDirective],
   ['invlerp', parseInvlerpDirective],
   ['checkbox', parseCheckboxDirective],
+  ['transferFunction', parseTransferFunctionDirective],
 ]);
 
 export function parseShaderUiControls(
@@ -608,6 +630,9 @@ float ${uName}() {
         builder.addVertexCode(code);
         break;
       }
+      case 'transferFunction': {
+        break;
+      }
       default: {
         builder.addUniform(`highp ${control.valueType}`, uName);
         builder.addVertexCode(`#define ${name} ${uName}\n`);
@@ -708,14 +733,13 @@ function parsePropertyInvlerpParameters(
     defaultValue: PropertyInvlerpParameters): PropertyInvlerpParameters {
   if (obj === undefined) return defaultValue;
   verifyObject(obj);
-  const property =
-    verifyOptionalObjectProperty(obj, 'property', property => {
-      property = verifyString(property);
-      if (!properties.has(property)) {
-        throw new Error(`Invalid value: ${JSON.stringify(property)}`);
-      }
-      return property;
-    }, defaultValue.property);
+  const property = verifyOptionalObjectProperty(obj, 'property', property => {
+    property = verifyString(property);
+    if (!properties.has(property)) {
+      throw new Error(`Invalid value: ${JSON.stringify(property)}`);
+    }
+    return property;
+  }, defaultValue.property);
   const dataType = properties.get(property)!;
   return {
     property,
@@ -729,7 +753,8 @@ function parsePropertyInvlerpParameters(
 }
 
 class TrackablePropertyInvlerpParameters extends TrackableValue<PropertyInvlerpParameters> {
-  constructor(public properties: PropertiesSpecification, public defaultValue: PropertyInvlerpParameters) {
+  constructor(
+      public properties: PropertiesSpecification, public defaultValue: PropertyInvlerpParameters) {
     super(defaultValue, obj => parsePropertyInvlerpParameters(obj, properties, defaultValue));
   }
 
@@ -789,6 +814,8 @@ function getControlTrackable(control: ShaderUiControl):
         trackable: new TrackableBoolean(control.default),
         getBuilderValue: value => ({value}),
       };
+    case 'transferFunction':
+      return {trackable: new TrackableValue<number>(1, verifyInt), getBuilderValue: () => null};
   }
 }
 
@@ -1115,6 +1142,9 @@ function setControlInShader(
     }
     case 'checkbox':
       // Value is hard-coded in shader.
+      break;
+    case 'transferFunction':
+      // TEMP.
       break;
   }
 }
