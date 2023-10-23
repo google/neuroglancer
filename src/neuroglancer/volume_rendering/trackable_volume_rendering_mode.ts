@@ -2,7 +2,7 @@ import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
 
 export enum VOLUME_RENDERING_MODES {
   OFF = 0,
-  DIRECT = 1,
+  ON = 1,
   MAX = 2
 }
 

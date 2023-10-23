@@ -195,7 +195,7 @@ void main() {
         } else {
           let glslSnippets: VolumeRenderingShaderSnippets;
           switch (shaderParametersState.mode) {
-            case VOLUME_RENDERING_MODES.DIRECT:
+            case VOLUME_RENDERING_MODES.ON:
               glslSnippets = {
                 intensityCalculation: `
     userMain();
