@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+
 import {CoordinateSpaceCombiner} from 'neuroglancer/coordinate_transform';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {constantWatchableValue, makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -30,6 +31,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
 import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {defineTransferFunctionShader} from 'neuroglancer/widget/transfer_function'
 
 export interface ShaderSliderControl {
   type: 'slider';
@@ -631,6 +633,8 @@ float ${uName}() {
         break;
       }
       case 'transferFunction': {
+        builder.addFragmentCode(`#define ${name} ${uName}\n`)
+        builder.addFragmentCode(defineTransferFunctionShader(builder, uName));
         break;
       }
       default: {

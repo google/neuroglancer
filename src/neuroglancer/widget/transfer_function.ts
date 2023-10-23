@@ -34,7 +34,7 @@ import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
 });
-const transferFunctionSamplerTextureUnit = Symbol('histogramSamplerTexture');
+const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 
 export class TransferFunctionPanel extends IndirectRenderedPanel {
   get drawOrder() {
@@ -72,20 +72,19 @@ out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
 `);
     builder.setFragmentMain(`
-out_color = texelFetch(uSampler, ivec2(0, 0), 0);
+out_color = texelFetch(uSampler, ivec2(3, 0), 0);
 `);
     return builder.build();
   })());
 
-  private tempTextureArray = new Uint8Array(
-    [255, 255, 0, 255,]
-  )
+  private tempTextureArray = new Uint8Array([
+    255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255
+  ]);
 
   // private pixelBuffer = this.registerDisposer(
   //   getMemoizedBuffer(this.gl, WebGL2RenderingContext.PIXEL_UNPACK_BUFFER, () => this.tempTextureArray)).value;
 
   drawIndirect() {
-    console.log('drawIndirect for TransferFunctionPanel')
     const {lineShader, gl, transferFunctionShader} = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -104,7 +103,7 @@ out_color = texelFetch(uSampler, ivec2(0, 0), 0);
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       setRawTextureParameters(gl);
-      gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 1, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, this.tempTextureArray);
+      gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 4, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, this.tempTextureArray);
       gl.drawArrays(WebGL2RenderingContext.TRIANGLE_FAN, 0, 4);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
@@ -125,7 +124,6 @@ out_color = texelFetch(uSampler, ivec2(0, 0), 0);
   }
 }
 
-
 export class TransferFunctionWidget extends Tab {
   transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this));
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext) {
@@ -137,6 +135,7 @@ export class TransferFunctionWidget extends Tab {
     element.addEventListener('mousedown', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
+      console.log(event)
       this.addPoint();
     })
   };
@@ -149,6 +148,18 @@ export class TransferFunctionWidget extends Tab {
     this.updateView();
   }
 }
+
+export function defineTransferFunctionShader(builder: ShaderBuilder, name: string) {
+  builder.addTextureSampler('sampler2D', 'uTransferSampler', transferFunctionSamplerTextureUnit);
+  let code = `
+vec4 ${name}(float inputValue) {
+  int index = int(inputValue);
+  return texelFetch(uTransferSampler, ivec2(index, 0), 0);
+}
+`;
+  return code
+}
+
 
 export function activateTransferFunctionTool(
     activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
