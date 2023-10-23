@@ -176,8 +176,8 @@ void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 
-vec4 getTFA(float value) {
-  return vec4(texelFetch(uTransferFunctionSampler, ivec2(int(value), 0), 0));
+vec4 getTF(float value) {
+  return vec4(texelFetch(uTransferFunctionSampler, ivec2(int(floor(value)), 0), 0));
 }
 `);
         builder.setFragmentMainFunction(`
@@ -217,7 +217,7 @@ void main() {
   int startStep = int(floor((intersectStart - uNearLimitFraction) / stepSize));
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
-  tempColor = getTFA(1.0);
+  tempColor = getTF(1.0);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
     curChunkPosition = position - uTranslation;
