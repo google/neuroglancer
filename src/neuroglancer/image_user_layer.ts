@@ -299,12 +299,12 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
                                })),
   },
   {
-    label: 'Cross-section blending',
+    label: 'Blending (slice)',
     toolJson: BLEND_JSON_KEY,
     ...enumLayerControl(layer => layer.blendMode),
   },
   {
-    label: 'Cross-section opacity',
+    label: 'Opacity (slice)',
     toolJson: OPACITY_JSON_KEY,
     ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
