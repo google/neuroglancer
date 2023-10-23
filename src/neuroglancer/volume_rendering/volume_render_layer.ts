@@ -39,7 +39,8 @@ import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
-import { transferFunctionSamplerTextureUnit } from 'src/neuroglancer/widget/transfer_function';
+
+const transferFunctionVRSamplerTextureUnit = Symbol('transferFunctionVRSamplerTextureUnit');
 
 const tempTextureArray = new Uint8Array([
   255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255
@@ -122,7 +123,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 `);
 
         emitter(builder);
-        builder.addTextureSampler('sampler2D', 'uTransferFunctionSampler', transferFunctionSamplerTextureUnit);
+        builder.addTextureSampler('sampler2D', 'uTransferFunctionSampler', transferFunctionVRSamplerTextureUnit);
         // Near limit in [0, 1] as fraction of full limit.
         builder.addUniform('highp float', 'uNearLimitFraction');
         // Far limit in [0, 1] as fraction of full limit.
@@ -359,7 +360,7 @@ void main() {
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();
-              const textureUnit = shader.textureUnit(transferFunctionSamplerTextureUnit);
+              const textureUnit = shader.textureUnit(transferFunctionVRSamplerTextureUnit);
               gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
               gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.texture);
               setRawTextureParameters(gl);
