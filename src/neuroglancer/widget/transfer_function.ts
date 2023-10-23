@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import './transfer_function.css';
+
 import {DisplayContext, IndirectRenderedPanel} from 'neuroglancer/display_context';
 import {ToolActivation} from 'neuroglancer/ui/tool';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -60,20 +62,20 @@ out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
     console.log("drawIndirect for TransferFunctionPanel")
     const {lineShader, gl, parent} = this;
     this.setGLLogicalViewport();
-    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     gl.enable(WebGL2RenderingContext.BLEND);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     gl.disable(WebGL2RenderingContext.DEPTH_TEST);
     gl.disable(WebGL2RenderingContext.STENCIL_TEST);
-    // {
-    //   const {renderViewport} = this;
-    //   lineShader.bind();
-    //   initializeLineShader(
-    //       lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
-    //       /*featherWidthInPixels=*/ 1.0);
-    //   drawLines(gl, 1, 1)
-    // }
+    {
+      const {renderViewport} = this;
+      lineShader.bind();
+      initializeLineShader(
+          lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
+          /*featherWidthInPixels=*/ 1.0);
+      drawLines(gl, 1, 1)
+    }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
 
@@ -100,10 +102,8 @@ export class TransferFunctionWidget extends Tab {
 
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
-    // this.transferFunctionPanel.draw();
   }
   addPoint() {
-    // TODO can't get the draw event on the panel to trigger
     console.log('addPoint');
     this.updateView();
   }
