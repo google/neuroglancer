@@ -34,7 +34,7 @@ import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
 });
-const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
+export const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 
 export class TransferFunctionPanel extends IndirectRenderedPanel {
   get drawOrder() {

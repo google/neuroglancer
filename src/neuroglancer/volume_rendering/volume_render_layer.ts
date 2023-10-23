@@ -38,6 +38,12 @@ import {ParameterizedContextDependentShaderGetter, parameterizedContextDependent
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
+import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
+import { transferFunctionSamplerTextureUnit } from 'src/neuroglancer/widget/transfer_function';
+
+const tempTextureArray = new Uint8Array([
+  255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255
+]);
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -69,6 +75,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
   backend: ChunkRenderLayerFrontend;
+  texture: WebGLTexture|null;
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
@@ -96,6 +103,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.renderScaleTarget = options.renderScaleTarget;
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
+    this.texture = this.gl.createTexture();
     const numChannelDimensions = this.registerDisposer(
         makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
@@ -114,6 +122,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 `);
 
         emitter(builder);
+        builder.addTextureSampler('sampler2D', 'uTransferFunctionSampler', transferFunctionSamplerTextureUnit);
         // Near limit in [0, 1] as fraction of full limit.
         builder.addUniform('highp float', 'uNearLimitFraction');
         // Far limit in [0, 1] as fraction of full limit.
@@ -147,6 +156,7 @@ gl_Position.z = 0.0;
         builder.addFragmentCode(`
 vec3 curChunkPosition;
 vec4 outputColor;
+vec4 tempColor;
 void userMain();
 `);
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
@@ -163,6 +173,10 @@ void emitGrayscale(float value) {
 }
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
+}
+
+vec4 getTFA(float value) {
+  return vec4(texelFetch(uTransferFunctionSampler, ivec2(int(value), 0), 0));
 }
 `);
         builder.setFragmentMainFunction(`
@@ -202,6 +216,7 @@ void main() {
   int startStep = int(floor((intersectStart - uNearLimitFraction) / stepSize));
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
+  tempColor = getTFA(1.0);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
     curChunkPosition = position - uTranslation;
@@ -344,13 +359,18 @@ void main() {
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();
+              const textureUnit = shader.textureUnit(transferFunctionSamplerTextureUnit);
+              gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
+              gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.texture);
+              setRawTextureParameters(gl);
+              gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 4, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, tempTextureArray);
               if (chunkFormat !== null) {
                 setControlsInShader(
-                    gl, shader, this.shaderControlState,
-                    shaderResult.parameters.parseResult.controls);
-                chunkFormat.beginDrawing(gl, shader);
-                chunkFormat.beginSource(gl, shader);
-              }
+                  gl, shader, this.shaderControlState,
+                  shaderResult.parameters.parseResult.controls);
+                  chunkFormat.beginDrawing(gl, shader);
+                  chunkFormat.beginSource(gl, shader);
+                }
             }
           }
           chunkDataSize = undefined;
