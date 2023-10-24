@@ -23,6 +23,7 @@ export const hedwigSetup = (options: {
   target: HTMLElement | undefined,
   bundleRoot: string | undefined,
   chunkWorkerFileName: string,
+  hedwigHideZScaleBar: boolean 
 }) => {
 
   registerPositionWidgetTool()
@@ -31,6 +32,7 @@ export const hedwigSetup = (options: {
   disableWheel();
   let viewer = makeMinimalViewer({
     chunkWorkerFileName: options.chunkWorkerFileName,
+    hedwigHideZScaleBar: options.hedwigHideZScaleBar,
   }, options.target);
   setDefaultInputEventBindings(viewer.inputEventBindings);
   bindDefaultCopyHandler(viewer);

@@ -162,6 +162,7 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
   chunkWorkerFileName: string;
+  hedwigHideZScaleBar: boolean
 }
 
 const defaultViewerOptions = 'undefined' !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
@@ -190,6 +191,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('showAxisLines', viewer.showAxisLines);
     this.add('wireFrame', viewer.wireFrame);
     this.add('showScaleBar', viewer.showScaleBar);
+    this.add('hedwigHideZScaleBar', viewer.hedwigHideZScaleBar);
     this.add('showDefaultAnnotations', viewer.showDefaultAnnotations);
 
     this.add('showSlices', viewer.showPerspectiveSliceViews);
@@ -288,6 +290,7 @@ export class Viewer extends RefCounted implements ViewerState {
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
   showScaleBar = new TrackableBoolean(true, true);
+  hedwigHideZScaleBar = new TrackableBoolean(false, false);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
@@ -353,6 +356,10 @@ export class Viewer extends RefCounted implements ViewerState {
 
   constructor(public display: DisplayContext, options: Partial<ViewerOptions> = {}) {
     super();
+
+    if (options.hedwigHideZScaleBar === true) {
+      this.hedwigHideZScaleBar.value = options.hedwigHideZScaleBar
+    }
 
     const {
       dataContext = new DataManagementContext(display.gl, display, options.chunkWorkerFileName),

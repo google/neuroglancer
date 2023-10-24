@@ -55,6 +55,7 @@ export interface LayerGroupViewerState {
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  hedwigHideZScaleBar: TrackableBoolean
   scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
   layerSpecification: Owned<LayerListSpecification>;
@@ -267,6 +268,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get showScaleBar() {
     return this.viewerState.showScaleBar;
+  }
+  get hedwigHideZScaleBar() {
+    return this.viewerState.hedwigHideZScaleBar;
   }
   get showPerspectiveSliceViews() {
     return this.viewerState.showPerspectiveSliceViews;

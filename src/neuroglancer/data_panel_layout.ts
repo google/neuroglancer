@@ -63,6 +63,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  hedwigHideZScaleBar: TrackableBoolean
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   selectedLayer: SelectedLayerState;
@@ -264,11 +265,13 @@ export class FourPanelLayout extends RefCounted {
     const sliceViewerState = {
       ...getCommonSliceViewerState(viewer),
       showScaleBar: viewer.showScaleBar,
+      hedwigHideZScaleBar: viewer.hedwigHideZScaleBar,
     };
 
     const sliceViewerStateWithoutScaleBar = {
       ...getCommonSliceViewerState(viewer),
       showScaleBar: new TrackableBoolean(false, false),
+      hedwigHideZScaleBar: new TrackableBoolean(false, false),
     };
 
     const makeSliceViewPanel =
@@ -337,6 +340,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
     const sliceViewerState = {
       ...getCommonSliceViewerState(viewer),
       showScaleBar: viewer.showScaleBar,
+      hedwigHideZScaleBar: viewer.hedwigHideZScaleBar,
     };
 
     L.withFlex(1, L.box(direction, [
@@ -376,6 +380,7 @@ export class SinglePanelLayout extends RefCounted {
     const sliceViewerState = {
       ...getCommonSliceViewerState(viewer),
       showScaleBar: viewer.showScaleBar,
+      hedwigHideZScaleBar: viewer.hedwigHideZScaleBar,
     };
 
     L.box('row', [L.withFlex(1, element => {

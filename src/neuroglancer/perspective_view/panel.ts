@@ -194,7 +194,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private sharedObject: PerspectiveViewState;
 
-  private scaleBars = this.registerDisposer(new MultipleScaleBarTextures(this.gl));
+  private scaleBars = this.registerDisposer(new MultipleScaleBarTextures(this.gl, false));
 
   flushBackendProjectionParameters() {
     this.sharedObject.sharedProjectionParameters.flush();

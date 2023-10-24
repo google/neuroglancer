@@ -34,6 +34,7 @@ import {MultipleScaleBarTextures, TrackableScaleBarOptions} from 'neuroglancer/w
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
+  hedwigHideZScaleBar: TrackableBoolean
   wireFrame: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
@@ -110,7 +111,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }));
 
   private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
-  private scaleBars = this.registerDisposer(new MultipleScaleBarTextures(this.gl));
+  private scaleBars = this.registerDisposer(new MultipleScaleBarTextures(this.gl, this.viewer.hedwigHideZScaleBar.value));
 
   get navigationState() {
     return this.sliceView.navigationState;
@@ -170,6 +171,11 @@ export class SliceViewPanel extends RenderedDataPanel {
     }));
 
     this.registerDisposer(viewer.showScaleBar.changed.add(() => {
+      if (this.visible) {
+        this.context.scheduleRedraw();
+      }
+    }));
+    this.registerDisposer(viewer.hedwigHideZScaleBar.changed.add(() => {
       if (this.visible) {
         this.context.scheduleRedraw();
       }

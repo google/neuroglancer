@@ -245,7 +245,7 @@ export class MultipleScaleBarTextures extends RefCounted {
   private scaleBarCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
   private scaleBars: ScaleBarTexture[] = [];
 
-  constructor(public gl: GL) {
+  constructor(public gl: GL, public hedwigHideZScaleBar: boolean) {
     super();
     for (let i = 0; i < 3; ++i) {
       this.scaleBars.push(this.registerDisposer(new ScaleBarTexture(gl)));
@@ -320,7 +320,10 @@ export class MultipleScaleBarTextures extends RefCounted {
               (1 - (viewport.visibleTopFraction + viewport.visibleHeightFraction)) *
                   viewport.logicalHeight,
           scaleBar.width, scaleBar.height);
-      scaleBarCopyHelper.draw(scaleBar.texture);
+      if (this.hedwigHideZScaleBar !== true || scaleBar.label !== "z : ") {
+        scaleBarCopyHelper.draw(scaleBar.texture);
+      }
+
       bottomPixelOffset +=
           scaleBar.height + options.marginPixelsBetweenScaleBars * options.scaleFactor;
     }
