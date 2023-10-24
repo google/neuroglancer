@@ -312,6 +312,7 @@ function getCommonViewerState(viewer: Viewer) {
     showAxisLines: viewer.showAxisLines,
     wireFrame: viewer.wireFrame,
     showScaleBar: viewer.showScaleBar,
+    hedwigHideZScaleBar: viewer.hedwigHideZScaleBar,
     scaleBarOptions: viewer.scaleBarOptions,
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
     inputEventBindings: viewer.inputEventBindings,
