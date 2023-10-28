@@ -21,7 +21,7 @@ import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
+import {RenderScaleHistogram, numRenderScaleHistogramBins, renderScaleHistogramBinSize} from 'neuroglancer/render_scale_statistics';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
@@ -37,6 +37,10 @@ import {ParameterizedContextDependentShaderGetter, parameterizedContextDependent
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
+import {clampToInterval} from 'src/neuroglancer/util/lerp';
+
+export const VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN = 1;
+const VOLUME_RENDERING_RESOLUTION_DEFAULT_BAR_HEIGHT = 10;
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -58,6 +62,13 @@ export interface VolumeRenderingRenderLayerOptions {
 
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
+
+function clampAndRoundResolutionTargetValue(value: number) {
+  const logScaleMax =
+      Math.round(VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN + numRenderScaleHistogramBins * renderScaleHistogramBinSize);
+  return clampToInterval(
+      [2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN , 2 ** (logScaleMax - 1)], Math.round(value)) as number;
+}
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   multiscaleSource: MultiscaleVolumeChunkSource;
@@ -307,12 +318,15 @@ void main() {
         prevChunkFormat!.endDrawing(gl, shader);
       }
       if (presentCount !== 0 || notPresentCount !== 0) {
-        // TODO skm: try to get loaded chunk amount
         let index = curHistogramInformation.spatialScales.size - 1;
+        const alreadyStoredSamples = new Set<number>([clampAndRoundResolutionTargetValue(curOptimalSamples)]);
         curHistogramInformation.spatialScales.forEach((optimalSamples, physicalSpacing) => {
-          if (index != curHistogramInformation.activeIndex) {
-            renderScaleHistogram.add(physicalSpacing, optimalSamples, 0, 10, true)
+          const roundedSamples = clampAndRoundResolutionTargetValue(optimalSamples);
+          if (index != curHistogramInformation.activeIndex && !alreadyStoredSamples.has(roundedSamples)) {
+            renderScaleHistogram.add(physicalSpacing, optimalSamples, 0, VOLUME_RENDERING_RESOLUTION_DEFAULT_BAR_HEIGHT, true)
+            alreadyStoredSamples.add(roundedSamples);
           }
+          console.log(alreadyStoredSamples);
           index--;
         });
         renderScaleHistogram.add(
