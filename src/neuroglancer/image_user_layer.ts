@@ -34,7 +34,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
-import {VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN, VolumeRenderingRenderLayer, } from 'neuroglancer/volume_rendering/volume_render_layer';
+import {VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
@@ -73,8 +73,10 @@ export class ImageUserLayer extends Base {
   dataType = new WatchableValue<DataType|undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram(VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
-  volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
+  volumeRenderingRenderScaleHistogram =
+      new RenderScaleHistogram(VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
+  volumeRenderingRenderScaleTarget =
+      trackableRenderScaleTarget(2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
   channelCoordinateSpaceCombiner =
@@ -191,7 +193,8 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
-    this.volumeRenderingRenderScaleTarget.restoreState(specification[VOLUME_RENDERING_SCALE_JSON_KEY]);
+    this.volumeRenderingRenderScaleTarget.restoreState(
+        specification[VOLUME_RENDERING_SCALE_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();

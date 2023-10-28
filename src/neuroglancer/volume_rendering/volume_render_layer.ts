@@ -21,7 +21,7 @@ import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {RenderScaleHistogram, numRenderScaleHistogramBins, renderScaleHistogramBinSize} from 'neuroglancer/render_scale_statistics';
+import {numRenderScaleHistogramBins, RenderScaleHistogram, renderScaleHistogramBinSize} from 'neuroglancer/render_scale_statistics';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
@@ -64,10 +64,12 @@ const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
 function clampAndRoundResolutionTargetValue(value: number) {
-  const logScaleMax =
-      Math.round(VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN + numRenderScaleHistogramBins * renderScaleHistogramBinSize);
+  const logScaleMax = Math.round(
+      VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN +
+      numRenderScaleHistogramBins * renderScaleHistogramBinSize);
   return clampToInterval(
-      [2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN , 2 ** (logScaleMax - 1)], Math.round(value)) as number;
+             [2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN, 2 ** (logScaleMax - 1)],
+             Math.round(value)) as number;
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
@@ -319,11 +321,15 @@ void main() {
       }
       if (presentCount !== 0 || notPresentCount !== 0) {
         let index = curHistogramInformation.spatialScales.size - 1;
-        const alreadyStoredSamples = new Set<number>([clampAndRoundResolutionTargetValue(curOptimalSamples)]);
+        const alreadyStoredSamples =
+            new Set<number>([clampAndRoundResolutionTargetValue(curOptimalSamples)]);
         curHistogramInformation.spatialScales.forEach((optimalSamples, physicalSpacing) => {
           const roundedSamples = clampAndRoundResolutionTargetValue(optimalSamples);
-          if (index != curHistogramInformation.activeIndex && !alreadyStoredSamples.has(roundedSamples)) {
-            renderScaleHistogram.add(physicalSpacing, optimalSamples, 0, VOLUME_RENDERING_RESOLUTION_DEFAULT_BAR_HEIGHT, true)
+          if (index != curHistogramInformation.activeIndex &&
+              !alreadyStoredSamples.has(roundedSamples)) {
+            renderScaleHistogram.add(
+                physicalSpacing, optimalSamples, 0, VOLUME_RENDERING_RESOLUTION_DEFAULT_BAR_HEIGHT,
+                true)
             alreadyStoredSamples.add(roundedSamples);
           }
           console.log(alreadyStoredSamples);
