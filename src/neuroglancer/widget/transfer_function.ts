@@ -27,22 +27,102 @@ import {ShaderBuilder, ShaderCodePart} from 'neuroglancer/webgl/shader';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'src/neuroglancer/layer';
+import {RefCounted} from 'src/neuroglancer/util/disposable';
+import {vec4, vec3} from 'src/neuroglancer/util/geom';
+import {computeLerp} from 'src/neuroglancer/util/lerp';
+import {GL} from 'src/neuroglancer/webgl/context';
 import {getSquareCornersBuffer} from 'src/neuroglancer/webgl/square_corners_buffer';
 import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
 
+// TODO (skm): remove hardcoded UINT8
+const DATA_TYPE = DataType.UINT8;
 // const NUM_TF_LINES = 256;
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
 });
 export const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 
+export interface ControlPoint {
+  x: number;
+  color: vec4;
+}
+
+export interface TransferFunctionTextureOptions {
+  controlPoints: Map<number, vec4>;
+}
+
+export class TransferFunctionTexture extends RefCounted {
+  texture: WebGLTexture|null = null;
+  width = 0;
+  height = 0;
+  label = '';
+  factor = 1;
+  private priorOptions: TransferFunctionTextureOptions|undefined = undefined;
+  private prevLabel: string = '';
+
+  constructor(public gl: GL) {
+    super();
+  }
+
+  update(options: TransferFunctionTextureOptions) {
+    const {label} = this;
+    let {texture} = this;
+    if (texture !== null && options === this.priorOptions && label == this.prevLabel) {
+      return;
+    }
+    if (texture === null) {
+      texture = this.texture = this.gl.createTexture();
+    }
+    const {width, height} = makeTransferFunctionTexture(this.gl, texture, label, options);
+    this.priorOptions = options;
+    this.prevLabel = label;
+    this.width = width;
+    this.height = height;
+  }
+
+  disposed() {
+    this.gl.deleteTexture(this.texture);
+    this.texture = null;
+    super.disposed();
+  }
+}
+
+function makeTransferFunctionTexture(gl: GL, texture: WebGLTexture|null, label: string, options: TransferFunctionTextureOptions): {width: number, height: number} {
+  const {controlPoints} = options;
+  const dataType = DATA_TYPE;
+  switch (dataType) {
+    case DataType.UINT8:
+      const textureValues = new Uint8Array(4 * 256);
+      break;
+    default:
+      throw new Error('Invalid data type');
+  }
+  for (let i = 0; i < controlPoints.size - 1; ++i) {
+    const start_index = controlPoints.get()[i];
+  
+  
+  }
+
+}
+
+function colorLerp(a: vec4, b: vec4, t: number, dataType: DataType) {
+  for (let i = 0; i < 4; ++i) {
+    const lerpedValue = computeLerp([a[i], b[i]], dataType, t);
+  }
+}
+
+
+
+
 export class TransferFunctionPanel extends IndirectRenderedPanel {
+  texture: WebGLTexture;
   get drawOrder() {
     return 1;
   }
   constructor(public parent: TransferFunctionWidget) {
     super(parent.display, document.createElement('div'), parent.visibility);
     const {element} = this;
+    this.texture = this.registerDisposer(this.gl.createTexture());
     element.classList.add('neuroglancer-transfer-function-panel');
   }
 
@@ -124,8 +204,31 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
   }
 }
 
+class ControlPoints extends RefCounted {
+  controlPoints = Array<ControlPoint>();
+  constructor(dataType: DataType) {
+    super();
+    switch (dataType) {
+      case DataType.UINT8:
+        break;
+      default:
+        throw new Error('Invalid data type');
+    }
+  }
+
+  addPoint(x: number, opacity: number, color: vec3) {
+    this.controlPoints.push({x, vec4.fromValues(color[0], color[1], color[2], opacity)});
+  }
+  
+  // TODO (skm) correct disposal
+  disposed() {
+    super.disposed();
+  }
+}
+
 export class TransferFunctionWidget extends Tab {
   transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this));
+  controlPoints = this.registerDisposer(new ControlPoints(DATA_TYPE));
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext) {
     super(visibility);
     const {element} = this;
@@ -136,15 +239,19 @@ export class TransferFunctionWidget extends Tab {
       event.stopPropagation();
       event.preventDefault();
       console.log(event)
-      this.addPoint();
+      console.log(element)
+      this.addPoint(event, element.clientWidth, element.clientHeight);
     })
   };
 
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
   }
-  addPoint() {
-    console.log('addPoint');
+  addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+    const normalizedX = event.offsetX / canvasX;
+    const normalizedY = event.offsetY / canvasY;
+    // TODO (skm) add color picker
+    this.controlPoints.addPoint(normalizedX, normalizedY, vec3.fromValues(1, 1, 1));
     this.updateView();
   }
 }
