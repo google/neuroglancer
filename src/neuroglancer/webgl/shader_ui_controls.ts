@@ -376,6 +376,7 @@ function parseTransferFunctionDirective(
   if (errors.length > 0) {
     return {errors};
   }
+  console.log(parameters)
   return {
     control: {type: 'transferFunction', default: 1} as ShaderTransferFunctionControl,
     errors: undefined,

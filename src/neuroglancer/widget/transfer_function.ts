@@ -21,21 +21,20 @@ import {ToolActivation} from 'neuroglancer/ui/tool';
 import {DataType} from 'neuroglancer/util/data_type';
 import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
-import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
-import {ShaderBuilder, ShaderCodePart} from 'neuroglancer/webgl/shader';
+import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
+import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'src/neuroglancer/layer';
 import {RefCounted} from 'src/neuroglancer/util/disposable';
 import {vec4, vec3} from 'src/neuroglancer/util/geom';
-import {computeLerp} from 'src/neuroglancer/util/lerp';
 import {GL} from 'src/neuroglancer/webgl/context';
 import {getSquareCornersBuffer} from 'src/neuroglancer/webgl/square_corners_buffer';
 import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
 
 // TODO (skm): remove hardcoded UINT8
 const DATA_TYPE = DataType.UINT8;
+const NUM_COLOR_CHANNELS = 4;
 // const NUM_TF_LINES = 256;
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
@@ -43,41 +42,51 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
 export const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 
 export interface ControlPoint {
-  x: number;
+  position: number;
   color: vec4;
 }
 
 export interface TransferFunctionTextureOptions {
-  controlPoints: Map<number, vec4>;
+  controlPoints: ControlPoints;
+  textureUnit: number;
 }
 
 export class TransferFunctionTexture extends RefCounted {
-  texture: WebGLTexture|null = null;
-  width = 0;
-  height = 0;
-  label = '';
-  factor = 1;
-  private priorOptions: TransferFunctionTextureOptions|undefined = undefined;
-  private prevLabel: string = '';
+  texture: WebGLTexture | null = null;
+  width: number;
+  height: number = 1;
+  private priorOptions: TransferFunctionTextureOptions | undefined = undefined;
 
-  constructor(public gl: GL) {
+  constructor(public gl: GL, dataType: DataType) {
     super();
+    switch (dataType) {
+      case DataType.UINT8:
+        this.width = 256;
+        break;
+      default:
+        throw new Error('Invalid data type');
+    }
   }
 
-  update(options: TransferFunctionTextureOptions) {
-    const {label} = this;
+  updateAndActivate(options: TransferFunctionTextureOptions) {
+    const {gl} = this;
     let {texture} = this;
-    if (texture !== null && options === this.priorOptions && label == this.prevLabel) {
+    if (texture !== null && options === this.priorOptions) {
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture); 
       return;
     }
     if (texture === null) {
-      texture = this.texture = this.gl.createTexture();
+      texture = this.texture = gl.createTexture();
     }
-    const {width, height} = makeTransferFunctionTexture(this.gl, texture, label, options);
+    gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    setRawTextureParameters(gl);
+    // TODO probably more efficient to pack the
+    // 2D texture. I think there are some helper functions
+    // to help with this.
+    gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, this.width, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, options.controlPoints.lookupTable);
     this.priorOptions = options;
-    this.prevLabel = label;
-    this.width = width;
-    this.height = height;
   }
 
   disposed() {
@@ -87,43 +96,16 @@ export class TransferFunctionTexture extends RefCounted {
   }
 }
 
-function makeTransferFunctionTexture(gl: GL, texture: WebGLTexture|null, label: string, options: TransferFunctionTextureOptions): {width: number, height: number} {
-  const {controlPoints} = options;
-  const dataType = DATA_TYPE;
-  switch (dataType) {
-    case DataType.UINT8:
-      const textureValues = new Uint8Array(4 * 256);
-      break;
-    default:
-      throw new Error('Invalid data type');
-  }
-  for (let i = 0; i < controlPoints.size - 1; ++i) {
-    const start_index = controlPoints.get()[i];
-  
-  
-  }
-
-}
-
-function colorLerp(a: vec4, b: vec4, t: number, dataType: DataType) {
-  for (let i = 0; i < 4; ++i) {
-    const lerpedValue = computeLerp([a[i], b[i]], dataType, t);
-  }
-}
-
-
-
-
 export class TransferFunctionPanel extends IndirectRenderedPanel {
-  texture: WebGLTexture;
+  texture: TransferFunctionTexture;
   get drawOrder() {
     return 1;
   }
-  constructor(public parent: TransferFunctionWidget) {
+  constructor(public parent: TransferFunctionWidget, public dataType: DataType) {
     super(parent.display, document.createElement('div'), parent.visibility);
     const {element} = this;
-    this.texture = this.registerDisposer(this.gl.createTexture());
     element.classList.add('neuroglancer-transfer-function-panel');
+    this.texture = this.registerDisposer(new TransferFunctionTexture(this.gl, dataType));
   }
 
   private cornersBuffer = getSquareCornersBuffer(this.gl);
@@ -157,14 +139,8 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
     return builder.build();
   })());
 
-  private tempTextureArray = new Uint8Array([
-    255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255
-  ]);
-
-  // private pixelBuffer = this.registerDisposer(
-  //   getMemoizedBuffer(this.gl, WebGL2RenderingContext.PIXEL_UNPACK_BUFFER, () => this.tempTextureArray)).value;
-
   drawIndirect() {
+    console.log('draw indirect for transfer function')
     const {lineShader, gl, transferFunctionShader} = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -179,11 +155,7 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
       this.cornersBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
 
-      const texture = gl.createTexture();
-      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setRawTextureParameters(gl);
-      gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 4, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, this.tempTextureArray);
+      this.texture.updateAndActivate({controlPoints: this.parent.controlPoints, textureUnit});
       gl.drawArrays(WebGL2RenderingContext.TRIANGLE_FAN, 0, 4);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
@@ -192,7 +164,7 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
       const {renderViewport} = this;
       lineShader.bind();
       initializeLineShader(
-          lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
+        lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
           /*featherWidthInPixels=*/ 1.0);
       drawLines(gl, 1, 1)
     }
@@ -206,10 +178,12 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
 
 class ControlPoints extends RefCounted {
   controlPoints = Array<ControlPoint>();
+  lookupTable: Uint8Array;
   constructor(dataType: DataType) {
     super();
     switch (dataType) {
       case DataType.UINT8:
+        this.lookupTable = new Uint8Array(256 * NUM_COLOR_CHANNELS).fill(0);
         break;
       default:
         throw new Error('Invalid data type');
@@ -217,9 +191,53 @@ class ControlPoints extends RefCounted {
   }
 
   addPoint(x: number, opacity: number, color: vec3) {
-    this.controlPoints.push({x, vec4.fromValues(color[0], color[1], color[2], opacity)});
+    this.controlPoints.push({position: x, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
+    this.controlPoints.sort((a, b) => a.position - b.position);
   }
-  
+
+  lookupTableFromControlPoints() {
+    // TODO (skm) implement change based on data type
+    const {lookupTable, controlPoints} = this;
+
+    function addLookupValue(index: number, color: vec4) {
+      lookupTable[index] = color[0];
+      lookupTable[index + 1] = color[1];
+      lookupTable[index + 2] = color[2];
+      lookupTable[index + 3] = color[3];
+    }
+
+    if (controlPoints.length === 0) {
+      this.lookupTable.fill(0);
+      return;
+    }
+
+    if (controlPoints.length === 1) {
+      const {position, color} = controlPoints[0];
+      for (let i = position; i < 256; ++i) {
+        // TODO (skm) handle x non-int
+        const index = i * NUM_COLOR_CHANNELS;
+        addLookupValue(index, color);
+      }
+      return;
+    }
+
+    const firstPoint = controlPoints[0];
+    let controlPointIndex = 0;
+    for (let i = firstPoint.position; i < 256; ++i) {
+      const currentPoint = controlPoints[controlPointIndex];
+      const nextPoint = controlPoints[controlPointIndex + 1];
+      if (i < nextPoint.position) {
+        const t = (i - currentPoint.position) / (nextPoint.position - currentPoint.position);
+        const index = i * NUM_COLOR_CHANNELS;
+        const lerpedColor = vec4.create();
+        vec4.lerp(lerpedColor, currentPoint.color, nextPoint.color, t);
+        addLookupValue(index, lerpedColor);
+      } else {
+        controlPointIndex++;
+      }
+    }
+  }
+
   // TODO (skm) correct disposal
   disposed() {
     super.disposed();
@@ -227,7 +245,8 @@ class ControlPoints extends RefCounted {
 }
 
 export class TransferFunctionWidget extends Tab {
-  transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this));
+  transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, DATA_TYPE));
+  // TODO variable data type
   controlPoints = this.registerDisposer(new ControlPoints(DATA_TYPE));
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext) {
     super(visibility);
@@ -238,10 +257,9 @@ export class TransferFunctionWidget extends Tab {
     element.addEventListener('mousedown', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      console.log(event)
-      console.log(element)
       this.addPoint(event, element.clientWidth, element.clientHeight);
     })
+    // TODO (skm) add color picker
   };
 
   updateView() {
@@ -249,9 +267,10 @@ export class TransferFunctionWidget extends Tab {
   }
   addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
     const normalizedX = event.offsetX / canvasX;
-    const normalizedY = event.offsetY / canvasY;
+    const normalizedY = 1 - (event.offsetY / canvasY);
     // TODO (skm) add color picker
     this.controlPoints.addPoint(normalizedX, normalizedY, vec3.fromValues(1, 1, 1));
+    this.controlPoints.lookupTableFromControlPoints();
     this.updateView();
   }
 }
@@ -267,24 +286,23 @@ vec4 ${name}(float inputValue) {
   return code
 }
 
-
 export function activateTransferFunctionTool(
-    activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
+  activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
   activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
   activation.bindAction('add-point', (event: ActionEvent<MouseEvent>) => {
     event.stopPropagation();
     event.preventDefault();
-    control.addPoint();
+    control.addPoint(event.detail, control.element.clientWidth, control.element.clientHeight);
   });
 }
 
 export function transferFunctionLayerControl<LayerType extends UserLayer>(
-    getter: (layer: LayerType) => void): LayerControlFactory<LayerType, TransferFunctionWidget> {
+  getter: (layer: LayerType) => void): LayerControlFactory<LayerType, TransferFunctionWidget> {
   return {
     makeControl: (layer, context, options) => {
       getter(layer);
       const control =
-          context.registerDisposer(new TransferFunctionWidget(options.visibility, options.display));
+        context.registerDisposer(new TransferFunctionWidget(options.visibility, options.display));
       return {control, controlElement: control.element};
     },
     activateTool: (activation, control) => {
