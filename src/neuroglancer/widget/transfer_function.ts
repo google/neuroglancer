@@ -31,7 +31,7 @@ import {vec4, vec3} from 'src/neuroglancer/util/geom';
 import {computeLerp} from 'src/neuroglancer/util/lerp';
 import {GL} from 'src/neuroglancer/webgl/context';
 import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
-import {VERTICES_PER_QUAD, drawQuads} from 'src/neuroglancer/webgl/quad';
+import {VERTICES_PER_QUAD} from 'src/neuroglancer/webgl/quad';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 
 // TODO (skm): remove hardcoded UINT8
@@ -236,14 +236,25 @@ class ControlPointsLookupTable extends RefCounted {
     }
   }
 
+  positionToIndex(position: number) {
+    return Math.floor(position * this.lookupTable.length / NUM_COLOR_CHANNELS);
+  }
+
   addPoint(position: number, opacity: number, color: vec3) {
-    this.controlPoints.push({position: position, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
+    const positionAsIndex = this.positionToIndex(position);
+    // TODO temporary to ensure no duplicate positions
+    const existingIndex = this.controlPoints.findIndex((point) => point.position === positionAsIndex);
+    if (existingIndex !== -1) {
+      this.controlPoints.splice(existingIndex, 1);
+    }
+    this.controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
     this.controlPoints.sort((a, b) => a.position - b.position);
   }
 
   lookupTableFromControlPoints() {
     // TODO (skm) implement change based on data type
     const {lookupTable, controlPoints} = this;
+    console.log(controlPoints);
 
     function addLookupValue(index: number, color: vec4) {
       lookupTable[index] = color[0];
@@ -252,21 +263,16 @@ class ControlPointsLookupTable extends RefCounted {
       lookupTable[index + 3] = color[3];
     }
 
-    function positionToIndex(position: number) {
-      return Math.floor(position * lookupTable.length / NUM_COLOR_CHANNELS);
-    }
-
     if (controlPoints.length === 0) {
       this.lookupTable.fill(0);
       return;
     }
     const firstPoint = controlPoints[0];
-    const positionAsIndex = positionToIndex(firstPoint.position); 
 
     if (firstPoint.position > 0) {
       const {color} = controlPoints[0];
-      for (let i = 0; i < positionAsIndex; ++i) {
-        const t = i / positionAsIndex;
+      for (let i = 0; i < firstPoint.position; ++i) {
+        const t = i / firstPoint.position;
         const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
         const index = i * NUM_COLOR_CHANNELS;
         addLookupValue(index, lerpedColor);
@@ -274,18 +280,18 @@ class ControlPointsLookupTable extends RefCounted {
     }
 
     let controlPointIndex = 0;
-    for (let i = positionAsIndex; i < 256; ++i) {
+    for (let i = firstPoint.position; i < 256; ++i) {
       const currentPoint = controlPoints[controlPointIndex];
       const nextPoint = controlPoints[Math.min(controlPointIndex + 1, controlPoints.length - 1)];
+      const lookupIndex = i * NUM_COLOR_CHANNELS;
       if (currentPoint === nextPoint) {
-        const index = i * NUM_COLOR_CHANNELS;
-        addLookupValue(index, currentPoint.color);
-      } else if (i < positionToIndex(nextPoint.position)) {
+        addLookupValue(lookupIndex, currentPoint.color);
+      } else if (i < nextPoint.position) {
         const t = (i - currentPoint.position) / (nextPoint.position - currentPoint.position);
-        const index = i * NUM_COLOR_CHANNELS;
         const lerpedColor = lerpUint8Color(currentPoint.color, nextPoint.color, t);
-        addLookupValue(index, lerpedColor);
+        addLookupValue(lookupIndex, lerpedColor);
       } else {
+        addLookupValue(lookupIndex, nextPoint.color);
         controlPointIndex++;
       }
     }
