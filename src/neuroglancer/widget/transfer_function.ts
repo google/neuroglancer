@@ -28,9 +28,11 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'src/neuroglancer/layer';
 import {RefCounted} from 'src/neuroglancer/util/disposable';
 import {vec4, vec3} from 'src/neuroglancer/util/geom';
+import {computeLerp} from 'src/neuroglancer/util/lerp';
 import {GL} from 'src/neuroglancer/webgl/context';
-import {getSquareCornersBuffer} from 'src/neuroglancer/webgl/square_corners_buffer';
 import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
+import {VERTICES_PER_QUAD, drawQuads} from 'src/neuroglancer/webgl/quad';
+import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 
 // TODO (skm): remove hardcoded UINT8
 const DATA_TYPE = DataType.UINT8;
@@ -47,8 +49,45 @@ export interface ControlPoint {
 }
 
 export interface TransferFunctionTextureOptions {
-  controlPoints: ControlPoints;
+  controlPoints: ControlPointsLookupTable;
   textureUnit: number;
+}
+
+function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
+  const color = vec4.create();
+  for (let i = 0; i < 4; ++i) {
+    color[i] = computeLerp([startColor[i], endColor[i]],DataType.UINT8, t) as number;
+  }
+  return color;
+}
+
+function griddedRectangleArray(numGrids: number) {
+  const result = new Float32Array(numGrids * VERTICES_PER_QUAD * 2);
+  const width = 1;
+  const height = 1;
+  for (let i = 0; i < numGrids; ++i) {
+    const start = -width * i / numGrids;
+    const end = width * (i + 1) / numGrids;
+    const index = i * VERTICES_PER_QUAD;
+
+    // TODO (skm) check if y is inverted
+    // Triangle 1 - top-left, top-right, bottom-right
+    result[index] = start; // top-left x
+    result[index + 1] = -height; // top-left y
+    result[index + 2] = end // top-right x
+    result[index + 3] = -height; // top-right y
+    result[index + 4] = end; // bottom-right x
+    result[index + 5] = height; // bottom-right y
+
+    // Triangle 2 - top-left, bottom-right, bottom-left
+    result[index + 6] = start; // top-left x
+    result[index + 7] = -height; // top-left y
+    result[index + 8] = end; // bottom-right x
+    result[index + 9] = height; // bottom-right y
+    result[index + 10] = start; // bottom-left x
+    result[index + 11] = height; // bottom-left y
+  }
+  return result;
 }
 
 export class TransferFunctionTexture extends RefCounted {
@@ -98,6 +137,7 @@ export class TransferFunctionTexture extends RefCounted {
 
 export class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: TransferFunctionTexture;
+  private vertexBuffer: Buffer;
   get drawOrder() {
     return 1;
   }
@@ -106,9 +146,12 @@ export class TransferFunctionPanel extends IndirectRenderedPanel {
     const {element} = this;
     element.classList.add('neuroglancer-transfer-function-panel');
     this.texture = this.registerDisposer(new TransferFunctionTexture(this.gl, dataType));
+    // TODO remove fixed 256
+    this.vertexBuffer =
+        this.registerDisposer(getMemoizedBuffer(
+                                this.gl, WebGL2RenderingContext.ARRAY_BUFFER, griddedRectangleArray,
+                                256)).value;
   }
-
-  private cornersBuffer = getSquareCornersBuffer(this.gl);
 
   private lineShader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
@@ -128,13 +171,17 @@ out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
   private transferFunctionShader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
     builder.addAttribute('vec2', 'aVertexPosition');
+    builder.addVarying('vec2', 'vTexCoord');
     builder.addOutputBuffer('vec4', 'out_color', 0);
     builder.addTextureSampler('sampler2D', 'uSampler', transferFunctionSamplerTextureUnit);
     builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+vTexCoord = (aVertexPosition + 1.0) / 2.0;
 `);
     builder.setFragmentMain(`
-out_color = texelFetch(uSampler, ivec2(3, 0), 0);
+ivec2 texel = ivec2(vTexCoord * vec2(256.0, 0.0));
+out_color = texelFetch(uSampler, texel, 0);
+// out_color = vec4(vTexCoord.x, 0.0, 0.0, 1.0);
 `);
     return builder.build();
   })());
@@ -152,11 +199,11 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
     {
       transferFunctionShader.bind();
       const aVertexPosition = transferFunctionShader.attribute('aVertexPosition');
-      this.cornersBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      this.vertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
 
-      this.texture.updateAndActivate({controlPoints: this.parent.controlPoints, textureUnit});
-      gl.drawArrays(WebGL2RenderingContext.TRIANGLE_FAN, 0, 4);
+      this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
+      drawQuads(this.gl, 256, 1);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
@@ -176,7 +223,7 @@ out_color = texelFetch(uSampler, ivec2(3, 0), 0);
   }
 }
 
-class ControlPoints extends RefCounted {
+class ControlPointsLookupTable extends RefCounted {
   controlPoints = Array<ControlPoint>();
   lookupTable: Uint8Array;
   constructor(dataType: DataType) {
@@ -190,8 +237,8 @@ class ControlPoints extends RefCounted {
     }
   }
 
-  addPoint(x: number, opacity: number, color: vec3) {
-    this.controlPoints.push({position: x, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
+  addPoint(position: number, opacity: number, color: vec3) {
+    this.controlPoints.push({position: position, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
     this.controlPoints.sort((a, b) => a.position - b.position);
   }
 
@@ -206,36 +253,44 @@ class ControlPoints extends RefCounted {
       lookupTable[index + 3] = color[3];
     }
 
+    function positionToIndex(position: number) {
+      return Math.floor(position * lookupTable.length / NUM_COLOR_CHANNELS);
+    }
+
     if (controlPoints.length === 0) {
       this.lookupTable.fill(0);
       return;
     }
+    const firstPoint = controlPoints[0];
+    const positionAsIndex = positionToIndex(firstPoint.position); 
 
-    if (controlPoints.length === 1) {
-      const {position, color} = controlPoints[0];
-      for (let i = position; i < 256; ++i) {
-        // TODO (skm) handle x non-int
+    if (firstPoint.position > 0) {
+      const {color} = controlPoints[0];
+      for (let i = 0; i < positionAsIndex; ++i) {
+        const t = i / positionAsIndex;
+        const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
         const index = i * NUM_COLOR_CHANNELS;
-        addLookupValue(index, color);
+        addLookupValue(index, lerpedColor);
       }
-      return;
     }
 
-    const firstPoint = controlPoints[0];
     let controlPointIndex = 0;
-    for (let i = firstPoint.position; i < 256; ++i) {
+    for (let i = positionAsIndex; i < 256; ++i) {
       const currentPoint = controlPoints[controlPointIndex];
-      const nextPoint = controlPoints[controlPointIndex + 1];
-      if (i < nextPoint.position) {
+      const nextPoint = controlPoints[Math.min(controlPointIndex + 1, controlPoints.length - 1)];
+      if (currentPoint === nextPoint) {
+        const index = i * NUM_COLOR_CHANNELS;
+        addLookupValue(index, currentPoint.color);
+      } else if (i < positionToIndex(nextPoint.position)) {
         const t = (i - currentPoint.position) / (nextPoint.position - currentPoint.position);
         const index = i * NUM_COLOR_CHANNELS;
-        const lerpedColor = vec4.create();
-        vec4.lerp(lerpedColor, currentPoint.color, nextPoint.color, t);
+        const lerpedColor = lerpUint8Color(currentPoint.color, nextPoint.color, t);
         addLookupValue(index, lerpedColor);
       } else {
         controlPointIndex++;
       }
     }
+    console.log(this.lookupTable);
   }
 
   // TODO (skm) correct disposal
@@ -247,7 +302,7 @@ class ControlPoints extends RefCounted {
 export class TransferFunctionWidget extends Tab {
   transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, DATA_TYPE));
   // TODO variable data type
-  controlPoints = this.registerDisposer(new ControlPoints(DATA_TYPE));
+  controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(DATA_TYPE));
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext) {
     super(visibility);
     const {element} = this;
@@ -268,9 +323,11 @@ export class TransferFunctionWidget extends Tab {
   addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
     const normalizedX = event.offsetX / canvasX;
     const normalizedY = 1 - (event.offsetY / canvasY);
+    const opacity = Math.round(normalizedY * 255)
     // TODO (skm) add color picker
-    this.controlPoints.addPoint(normalizedX, normalizedY, vec3.fromValues(1, 1, 1));
-    this.controlPoints.lookupTableFromControlPoints();
+    this.controlPointsLookupTable.addPoint(normalizedX, opacity, vec3.fromValues(255, 255, 255));
+    this.controlPointsLookupTable.lookupTableFromControlPoints();
+    console.log(this.controlPointsLookupTable.controlPoints);
     this.updateView();
   }
 }
