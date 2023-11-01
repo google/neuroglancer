@@ -63,29 +63,30 @@ function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
 
 function griddedRectangleArray(numGrids: number) {
   const result = new Float32Array(numGrids * VERTICES_PER_QUAD * 2);
-  const width = 1;
+  const width = 2;
   const height = 1;
+  let start = -width / 2;
+  const step = width / numGrids;
   for (let i = 0; i < numGrids; ++i) {
-    const start = -width * i / numGrids;
-    const end = width * (i + 1) / numGrids;
-    const index = i * VERTICES_PER_QUAD;
-
-    // TODO (skm) check if y is inverted
+    const end = start + step;
+    const index = i * VERTICES_PER_QUAD * 2;
+    
     // Triangle 1 - top-left, top-right, bottom-right
     result[index] = start; // top-left x
-    result[index + 1] = -height; // top-left y
+    result[index + 1] = height; // top-left y
     result[index + 2] = end // top-right x
-    result[index + 3] = -height; // top-right y
+    result[index + 3] = height; // top-right y
     result[index + 4] = end; // bottom-right x
-    result[index + 5] = height; // bottom-right y
+    result[index + 5] = -height; // bottom-right y
 
     // Triangle 2 - top-left, bottom-right, bottom-left
     result[index + 6] = start; // top-left x
-    result[index + 7] = -height; // top-left y
+    result[index + 7] = height; // top-left y
     result[index + 8] = end; // bottom-right x
-    result[index + 9] = height; // bottom-right y
+    result[index + 9] = -height; // bottom-right y
     result[index + 10] = start; // bottom-left x
-    result[index + 11] = height; // bottom-left y
+    result[index + 11] = -height; // bottom-left y
+    start += step;
   }
   return result;
 }
@@ -179,15 +180,13 @@ gl_Position = vec4(aVertexPosition, 0.0, 1.0);
 vTexCoord = (aVertexPosition + 1.0) / 2.0;
 `);
     builder.setFragmentMain(`
-ivec2 texel = ivec2(vTexCoord * vec2(256.0, 0.0));
+ivec2 texel = ivec2(floor(vTexCoord.x * 255.0), 0);
 out_color = texelFetch(uSampler, texel, 0);
-// out_color = vec4(vTexCoord.x, 0.0, 0.0, 1.0);
 `);
     return builder.build();
   })());
 
   drawIndirect() {
-    console.log('draw indirect for transfer function')
     const {lineShader, gl, transferFunctionShader} = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -203,7 +202,7 @@ out_color = texelFetch(uSampler, texel, 0);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
 
       this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
-      drawQuads(this.gl, 256, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 256 * VERTICES_PER_QUAD);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
