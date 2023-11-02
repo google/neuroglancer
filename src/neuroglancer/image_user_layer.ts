@@ -59,6 +59,7 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 const VOLUME_RENDERING_SCALE_JSON_KEY = 'volumeRenderingScale';
+const VOLUME_RENDERING_STARTING_LOG_SCALE = 6
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -76,7 +77,7 @@ export class ImageUserLayer extends Base {
   volumeRenderingRenderScaleHistogram =
       new RenderScaleHistogram(VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
   volumeRenderingRenderScaleTarget =
-      trackableRenderScaleTarget(2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
+      trackableRenderScaleTarget(2 ** VOLUME_RENDERING_STARTING_LOG_SCALE);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
   channelCoordinateSpaceCombiner =
