@@ -73,8 +73,9 @@ export class StateShare extends RefCounted { // call it a widget? no because it 
             }, responseJson)
           .then((res) => {
             const stateUrl = new URL(res);
-            stateUrl.protocol = protocol; // copy protocol in case it contains authentication type
-            const link = `${window.location.origin}/#!${stateUrl}`;
+            const stateUrlWithoutProtocol = stateUrl.toString().split(stateUrl.protocol)[1];
+            const stateUrlWithCredentialsProtocol = `${protocol}${stateUrlWithoutProtocol}`;
+            const link = `${window.location.origin}/#!${stateUrlWithCredentialsProtocol}`;
             navigator.clipboard.writeText(link).then(() => {
               StatusMessage.showTemporaryMessage('Share link copied to clipboard');
             });
