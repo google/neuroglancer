@@ -307,9 +307,14 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
                                })),
   },
   {
-    label: 'Blending',
+    label: 'Blending (slice)',
     toolJson: BLEND_JSON_KEY,
     ...enumLayerControl(layer => layer.blendMode),
+  },
+  {
+    label: 'Opacity (slice)',
+    toolJson: OPACITY_JSON_KEY,
+    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
   {
     label: 'Volume rendering (experimental)',
@@ -327,11 +332,6 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
         }),
         VolumeRenderingRenderScaleWidget,
         )
-  },
-  {
-    label: 'Opacity',
-    toolJson: OPACITY_JSON_KEY,
-    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
 ];
 
