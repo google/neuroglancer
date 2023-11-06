@@ -56,7 +56,7 @@ const SHADER_JSON_KEY = 'shader';
 const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
-const VOLUME_RENDERING_JSON_KEY = 'volumeRenderingMode';
+const VOLUME_RENDERING_MODE_JSON_KEY = 'volumeRenderingMode';
 const VOLUME_RENDERING_SCALE_JSON_KEY = 'volumeRenderingScale';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
@@ -170,8 +170,8 @@ export class ImageUserLayer extends Base {
           mode: this.volumeRenderingMode,
         }));
         context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
-        context.registerDisposer(registerNested((context, volumeRendering) => {
-          if (volumeRendering === VOLUME_RENDERING_MODES.OFF) return;
+        context.registerDisposer(registerNested((context, volumeRenderingMode) => {
+          if (volumeRenderingMode === VOLUME_RENDERING_MODES.OFF) return;
           context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
         }, this.volumeRenderingMode));
         this.shaderError.changed.dispatch();
@@ -191,7 +191,7 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     verifyOptionalObjectProperty(
-        specification, VOLUME_RENDERING_JSON_KEY,
+        specification, VOLUME_RENDERING_MODE_JSON_KEY,
         mode => this.volumeRenderingMode.restoreState(mode));
   }
   toJSON() {
@@ -202,7 +202,7 @@ export class ImageUserLayer extends Base {
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
-    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRenderingMode.toJSON();
+    x[VOLUME_RENDERING_MODE_JSON_KEY] = this.volumeRenderingMode.toJSON();
     return x;
   }
 
@@ -307,7 +307,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   },
   {
     label: 'Volume rendering (experimental)',
-    toolJson: VOLUME_RENDERING_JSON_KEY,
+    toolJson: VOLUME_RENDERING_MODE_JSON_KEY,
     ...enumLayerControl(layer => layer.volumeRenderingMode),
   },
   {
