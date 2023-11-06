@@ -39,7 +39,8 @@ import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, S
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 import {clampToInterval} from 'src/neuroglancer/util/lerp';
 
-export const VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN = 1;
+export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64
+const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_DEFAULT_BAR_HEIGHT = 10;
 
 interface TransformedVolumeSource extends
@@ -63,13 +64,15 @@ export interface VolumeRenderingRenderLayerOptions {
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
-function clampAndRoundResolutionTargetValue(value: number) {
+export function getVolumeRenderingDepthSamplesBounds(): [number, number] {
   const logScaleMax = Math.round(
-      VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN +
+      VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN +
       numRenderScaleHistogramBins * renderScaleHistogramBinSize);
-  return clampToInterval(
-             [2 ** VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN, 2 ** (logScaleMax - 1)],
-             Math.round(value)) as number;
+  return [2 ** VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN, 2 ** logScaleMax - 1]
+}
+
+function clampAndRoundResolutionTargetValue(value: number) {
+  return clampToInterval(getVolumeRenderingDepthSamplesBounds(), Math.round(value)) as number;
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {

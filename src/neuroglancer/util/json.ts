@@ -52,6 +52,17 @@ export function verifyFinitePositiveFloat(obj: any): number {
   throw new Error(`Expected positive finite floating-point number, but received: ${x}.`);
 }
 
+export function makeVerifyNumberInInterval(minValue: number, maxValue: number) {
+  return (obj: any) => {
+    let x = verifyFloat(obj);
+    if (x >= minValue && x <= maxValue) {
+      return x;
+    }
+    throw new Error(
+        `Expected floating-point number in range [${minValue}, ${maxValue}], but received: ${x}.`);
+  };
+}
+
 export function parseXYZ<A extends WritableArrayLike<number>>(
     out: A, obj: any, validator: (x: any) => number = verifyFloat): A {
   verifyObject(obj);

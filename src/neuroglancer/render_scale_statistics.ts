@@ -15,9 +15,9 @@
  */
 
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyFinitePositiveFloat} from 'neuroglancer/util/json';
-import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
+import {makeVerifyNumberInInterval} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
 
 export const numRenderScaleHistogramBins = 40;
 export const renderScaleHistogramBinSize = 0.5;
@@ -33,8 +33,18 @@ export function getRenderScaleFromHistogramOffset(
   return 2 ** (offset * renderScaleHistogramBinSize + origin);
 }
 
-export function trackableRenderScaleTarget(initialValue: number) {
-  return new TrackableValue<number>(initialValue, verifyFinitePositiveFloat);
+export function trackableRenderScaleTarget(
+    initialValue: number, scaleOrigin: number = 2 ** renderScaleHistogramOrigin,
+    scaleMax?: number) {
+  if (scaleMax === undefined) {
+    scaleMax = 2 **
+            Math.round(
+                renderScaleHistogramBinSize * numRenderScaleHistogramBins +
+                renderScaleHistogramOrigin) -
+        1;
+  }
+  const verifyNumberInInterval = makeVerifyNumberInInterval(scaleOrigin, scaleMax);
+  return new TrackableValue<number>(initialValue, verifyNumberInInterval);
 }
 
 export class RenderScaleHistogram {

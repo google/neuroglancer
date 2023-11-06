@@ -34,7 +34,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
-import {VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
+import {getVolumeRenderingDepthSamplesBounds, VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
@@ -59,13 +59,14 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 const VOLUME_RENDERING_DEPTH_SAMPLES_KEY = 'volumeRenderingDepthSamples';
-const VOLUME_RENDERING_STARTING_LOG_SCALE = 6
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+const [volumeRenderingDepthSamplesOrigin, volumeRenderingDepthSamplesMax] =
+    getVolumeRenderingDepthSamplesBounds();
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
@@ -73,11 +74,11 @@ export class ImageUserLayer extends Base {
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType|undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
-  sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  volumeRenderingRenderScaleHistogram =
-      new RenderScaleHistogram(VOLUME_RENDERING_RESOLUTION_LOG_SCALE_ORIGIN);
-  volumeRenderingRenderScaleTarget =
-      trackableRenderScaleTarget(2 ** VOLUME_RENDERING_STARTING_LOG_SCALE);
+  sliceViewRenderScaleTarget = trackableRenderScaleTarget(1, );
+  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram(volumeRenderingDepthSamplesOrigin);
+  volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(
+      VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, volumeRenderingDepthSamplesOrigin,
+      volumeRenderingDepthSamplesMax);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
   channelCoordinateSpaceCombiner =
