@@ -316,7 +316,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     ...checkboxLayerControl(layer => layer.volumeRendering),
   },
   {
-    label: 'Resolution (3d)',
+    label: 'Resolution (3D)',
     toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_KEY,
     isValid: layer => layer.volumeRendering,
     ...renderScaleLayerControl(
