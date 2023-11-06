@@ -19,7 +19,7 @@ import 'neuroglancer/widget/render_scale_widget.css';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import {UserLayer} from 'neuroglancer/layer';
-import {getRenderScaleFromHistogramOffset, getRenderScaleHistogramOffset, numRenderScaleHistogramBins, RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
+import {getRenderScaleFromHistogramOffset, getRenderScaleHistogramOffset, numRenderScaleHistogramBins, RenderScaleHistogram, renderScaleHistogramBinSize, renderScaleHistogramOrigin} from 'neuroglancer/render_scale_statistics';
 import {TrackableValueInterface, WatchableValue} from 'neuroglancer/trackable_value';
 import {serializeColor} from 'neuroglancer/util/color';
 import {hsvToRgb} from 'neuroglancer/util/colorspace';
@@ -30,6 +30,7 @@ import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
 import {LayerControlFactory} from 'neuroglancer/widget/layer_control';
+import {clampToInterval} from 'src/neuroglancer/util/lerp';
 
 const updateInterval = 200;
 
@@ -62,6 +63,8 @@ export class RenderScaleWidget extends RefCounted {
   legendRenderScale = document.createElement('div');
   legendSpatialScale = document.createElement('div');
   legendChunks = document.createElement('div');
+  protected logScaleOrigin = renderScaleHistogramOrigin;
+  protected unitOfTarget: string = 'px';
   private ctx = this.canvas.getContext('2d')!;
   hoverTarget = new WatchableValue<[number, number]|undefined>(undefined);
   private throttledUpdateView = this.registerCancellable(
@@ -69,12 +72,17 @@ export class RenderScaleWidget extends RefCounted {
   private debouncedUpdateView = this.registerCancellable(debounce(() => this.updateView(), 0));
 
   adjustViaWheel(event: WheelEvent) {
-    const {deltaY} = event;
+    const deltaY = this.getWheelMoveValue(event);
     if (deltaY === 0) {
       return;
     }
     this.hoverTarget.value = undefined;
-    this.target.value *= 2 ** Math.sign(deltaY);
+    const logScaleMax =
+        Math.round(this.logScaleOrigin + numRenderScaleHistogramBins * renderScaleHistogramBinSize);
+    const targetValue = clampToInterval(
+                            [2 ** this.logScaleOrigin, 2 ** (logScaleMax - 1)],
+                            this.target.value * 2 ** Math.sign(deltaY)) as number;
+    this.target.value = targetValue;
     event.preventDefault();
   }
 
@@ -104,7 +112,7 @@ export class RenderScaleWidget extends RefCounted {
 
     const getTargetValue = (event: MouseEvent) => {
       const position = event.offsetX / canvas.width * numRenderScaleHistogramBins;
-      return getRenderScaleFromHistogramOffset(position);
+      return getRenderScaleFromHistogramOffset(position, this.logScaleOrigin);
     };
     this.registerEventListener(canvas, 'pointermove', (event: MouseEvent) => {
       this.hoverTarget.value = [getTargetValue(event), event.offsetY];
@@ -134,6 +142,10 @@ export class RenderScaleWidget extends RefCounted {
     this.updateView();
   }
 
+  getWheelMoveValue(event: WheelEvent) {
+    return event.deltaY;
+  }
+
   reset() {
     this.hoverTarget.value = undefined;
     this.target.reset();
@@ -151,7 +163,7 @@ export class RenderScaleWidget extends RefCounted {
       const {legendRenderScale} = this;
       const value = hoverValue === undefined ? targetValue : hoverValue[0];
       const valueString = formatPixelNumber(value);
-      legendRenderScale.textContent = valueString + ' px';
+      legendRenderScale.textContent = valueString + ' ' + this.unitOfTarget;
     }
 
     function binToCanvasX(bin: number) {
@@ -188,6 +200,7 @@ export class RenderScaleWidget extends RefCounted {
       }
       maxCount = Math.max(count, maxCount);
     }
+    totalNotPresent -= histogram.fakeChunkCount;
 
     const maxBarHeight = height;
 
@@ -199,7 +212,7 @@ export class RenderScaleWidget extends RefCounted {
 
     let hoverSpatialScale: number|undefined = undefined;
     if (hoverValue !== undefined) {
-      const i = Math.floor(getRenderScaleHistogramOffset(hoverValue[0]));
+      const i = Math.floor(getRenderScaleHistogramOffset(hoverValue[0], this.logScaleOrigin));
       if (i >= 0 && i < numRenderScaleHistogramBins) {
         let sum = 0;
         const hoverY = hoverValue[1];
@@ -282,7 +295,7 @@ export class RenderScaleWidget extends RefCounted {
     {
       const value = targetValue;
       ctx.fillStyle = '#fff';
-      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value));
+      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value, this.logScaleOrigin));
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
     }
@@ -290,10 +303,19 @@ export class RenderScaleWidget extends RefCounted {
     if (hoverValue !== undefined) {
       const value = hoverValue[0];
       ctx.fillStyle = '#888';
-      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value));
+      const startOffset = binToCanvasX(getRenderScaleHistogramOffset(value, this.logScaleOrigin));
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
     }
+  }
+}
+
+export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
+  protected unitOfTarget: string = 'samples';
+  protected logScaleOrigin = 1;
+
+  getWheelMoveValue(event: WheelEvent) {
+    return -event.deltaY
   }
 }
 
@@ -302,13 +324,17 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift+dblclick0': {action: 'reset'},
 });
 
-export function renderScaleLayerControl<LayerType extends UserLayer>(
-    getter: (layer: LayerType) =>
-        RenderScaleWidgetOptions): LayerControlFactory<LayerType, RenderScaleWidget> {
+export function
+renderScaleLayerControl<LayerType extends UserLayer, WidgetType extends RenderScaleWidget>(
+    getter: (layer: LayerType) => RenderScaleWidgetOptions,
+    widgetClass: new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) =>
+        WidgetType = RenderScaleWidget as
+        new (histogram: RenderScaleHistogram, target: TrackableValueInterface<number>) =>
+                         WidgetType): LayerControlFactory<LayerType, RenderScaleWidget> {
   return {
     makeControl: (layer, context) => {
       const {histogram, target} = getter(layer);
-      const control = context.registerDisposer(new RenderScaleWidget(histogram, target));
+      const control = context.registerDisposer(new widgetClass(histogram, target));
       return {control, controlElement: control.element};
     },
     activateTool: (activation, control) => {

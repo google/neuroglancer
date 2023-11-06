@@ -15,29 +15,46 @@
  */
 
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyFinitePositiveFloat} from 'neuroglancer/util/json';
+import {makeVerifyNumberInInterval} from 'neuroglancer/util/json';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
-import { NullarySignal } from './util/signal';
 
 export const numRenderScaleHistogramBins = 40;
 export const renderScaleHistogramBinSize = 0.5;
 export const renderScaleHistogramOrigin = -4;
 
-export function getRenderScaleHistogramOffset(renderScale: number): number {
-  return (Math.log2(renderScale) - renderScaleHistogramOrigin) / renderScaleHistogramBinSize;
+export function getRenderScaleHistogramOffset(
+    renderScale: number, origin: number = renderScaleHistogramOrigin): number {
+  return (Math.log2(renderScale) - origin) / renderScaleHistogramBinSize;
 }
 
-export function getRenderScaleFromHistogramOffset(offset: number): number {
-  return 2 ** (offset * renderScaleHistogramBinSize + renderScaleHistogramOrigin);
+export function getRenderScaleFromHistogramOffset(
+    offset: number, origin: number = renderScaleHistogramOrigin): number {
+  return 2 ** (offset * renderScaleHistogramBinSize + origin);
 }
 
-export function trackableRenderScaleTarget(initialValue: number) {
-  return new TrackableValue<number>(initialValue, verifyFinitePositiveFloat);
+export function trackableRenderScaleTarget(
+    initialValue: number, scaleOrigin: number = 2 ** renderScaleHistogramOrigin,
+    scaleMax?: number) {
+  if (scaleMax === undefined) {
+    scaleMax = 2 **
+            Math.round(
+                renderScaleHistogramBinSize * numRenderScaleHistogramBins +
+                renderScaleHistogramOrigin) -
+        1;
+  }
+  const verifyNumberInInterval = makeVerifyNumberInInterval(scaleOrigin, scaleMax);
+  return new TrackableValue<number>(initialValue, verifyNumberInInterval);
 }
 
 export class RenderScaleHistogram {
   visibility = new VisibilityPriorityAggregator();
   changed = new NullarySignal();
+  logScaleOrigin: number;
+
+  constructor(origin: number = renderScaleHistogramOrigin) {
+    this.logScaleOrigin = origin;
+  }
 
   /**
    * Frame number corresponding to the current histogram.
@@ -60,11 +77,17 @@ export class RenderScaleHistogram {
    */
   value = new Uint32Array(numRenderScaleHistogramBins * this.numHistogramRows * 2);
 
+  /**
+   * Number of chunks that are indication only (not present in the data).
+   */
+  fakeChunkCount = 0;
+
   begin(frameNumber: number) {
     if (frameNumber !== this.frameNumber) {
       this.value.fill(0);
       this.frameNumber = frameNumber;
       this.spatialScales.clear();
+      this.fakeChunkCount = 0;
       this.changed.dispatch();
     }
   }
@@ -76,8 +99,11 @@ export class RenderScaleHistogram {
    * @param renderScale Rendered scale of data in screen pixels.
    * @param presentCount Number of present chunks.
    * @param notPresentCount Number of desired but not-present chunks.
+   * @param renderOnly If true, indicates that the added bar is for display only, and is not linked
+   *     to actual chunk loading stats. Defaults to false.
    */
-  add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number) {
+  add(spatialScale: number, renderScale: number, presentCount: number, notPresentCount: number,
+      renderOnly: boolean = false) {
     let {spatialScales, numHistogramRows, value} = this;
     let spatialScaleIndex = spatialScales.get(spatialScale);
     if (spatialScaleIndex === undefined) {
@@ -92,9 +118,12 @@ export class RenderScaleHistogram {
     }
     const index = spatialScaleIndex * numRenderScaleHistogramBins * 2 +
         Math.min(
-            Math.max(0, Math.round(getRenderScaleHistogramOffset(renderScale))),
+            Math.max(0, Math.round(getRenderScaleHistogramOffset(renderScale, this.logScaleOrigin))),
             numRenderScaleHistogramBins - 1);
     value[index] += presentCount;
     value[index + numRenderScaleHistogramBins] += notPresentCount;
+    if (renderOnly) {
+      this.fakeChunkCount = this.fakeChunkCount + notPresentCount;
+    }
   }
 }

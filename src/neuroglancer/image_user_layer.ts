@@ -34,7 +34,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
-import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
+import {getVolumeRenderingDepthSamplesBoundsLogScale, VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
@@ -46,7 +46,7 @@ import {checkboxLayerControl} from 'neuroglancer/widget/layer_control_checkbox';
 import {enumLayerControl} from 'neuroglancer/widget/layer_control_enum';
 import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
-import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
+import {renderScaleLayerControl, VolumeRenderingRenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
@@ -58,13 +58,15 @@ const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
-const VOLUME_RENDER_SCALE_JSON_KEY = 'volumeRenderScale';
+const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = 'volumeRenderingDepthSamples';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+const [volumeRenderingDepthSamplesOriginLogScale, volumeRenderingDepthSamplesMaxLogScale] =
+    getVolumeRenderingDepthSamplesBoundsLogScale();
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
@@ -73,9 +75,11 @@ export class ImageUserLayer extends Base {
   dataType = new WatchableValue<DataType|undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram();
-  // unused
-  volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(1);
+  volumeRenderingChunkResolutionHistogram =
+      new RenderScaleHistogram(volumeRenderingDepthSamplesOriginLogScale);
+  volumeRenderingDepthSamplesTarget = trackableRenderScaleTarget(
+      VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, 2 ** volumeRenderingDepthSamplesOriginLogScale,
+      2 ** volumeRenderingDepthSamplesMaxLogScale - 1);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
   channelCoordinateSpaceCombiner =
@@ -125,6 +129,7 @@ export class ImageUserLayer extends Base {
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.volumeRendering.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingDepthSamplesTarget.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -164,8 +169,8 @@ export class ImageUserLayer extends Base {
           shaderControlState: this.shaderControlState,
           shaderError: this.shaderError,
           transform: loadedSubsource.getRenderLayerTransform(this.channelCoordinateSpace),
-          renderScaleTarget: this.volumeRenderingRenderScaleTarget,
-          renderScaleHistogram: this.volumeRenderingRenderScaleHistogram,
+          depthSamplesTarget: this.volumeRenderingDepthSamplesTarget,
+          chunkResolutionHistogram: this.volumeRenderingChunkResolutionHistogram,
           localPosition: this.localPosition,
           channelCoordinateSpace: this.channelCoordinateSpace,
         }));
@@ -191,6 +196,8 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
+    this.volumeRenderingDepthSamplesTarget.restoreState(
+        specification[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -201,6 +208,7 @@ export class ImageUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
+    x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] = this.volumeRenderingDepthSamplesTarget.toJSON();
     return x;
   }
 
@@ -315,12 +323,15 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   },
   {
     label: 'Resolution (3D)',
-    toolJson: VOLUME_RENDER_SCALE_JSON_KEY,
+    toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
     isValid: layer => layer.volumeRendering,
-    ...renderScaleLayerControl(layer => ({
-                                 histogram: layer.volumeRenderingRenderScaleHistogram,
-                                 target: layer.volumeRenderingRenderScaleTarget
-                               })),
+    ...renderScaleLayerControl(
+        layer => ({
+          histogram: layer.volumeRenderingChunkResolutionHistogram,
+          target: layer.volumeRenderingDepthSamplesTarget
+        }),
+        VolumeRenderingRenderScaleWidget,
+        )
   },
 ];
 

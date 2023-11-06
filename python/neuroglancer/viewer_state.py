@@ -165,6 +165,12 @@ class OpacityTool(Tool):
 
 
 @export_tool
+class VolumeRenderingDepthSamplesTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = "volumeRenderingDepthSamples"
+
+
+@export_tool
 class CrossSectionRenderScaleTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "crossSectionRenderScale"
@@ -537,6 +543,9 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     )
     opacity = wrapped_property("opacity", optional(float, 0.5))
     blend = wrapped_property("blend", optional(str))
+    volume_rendering_depth_samples = volumeRenderingDepthSamples = wrapped_property(
+        "volumeRenderingDepthSamples", optional(float, 64)
+    )
     cross_section_render_scale = crossSectionRenderScale = wrapped_property(
         "crossSectionRenderScale", optional(float, 1)
     )
