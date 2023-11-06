@@ -41,6 +41,7 @@ const tempCenterDataPosition = vec3.create();
 class VolumeRenderingRenderLayerBackend extends withChunkManager
 (RenderLayerBackend) {
   localPosition: SharedWatchableValue<Float32Array>;
+  // The render scale target for volume rendering is the number of depth samples
   renderScaleTarget: SharedWatchableValue<number>;
 
   constructor(rpc: RPC, options: any) {

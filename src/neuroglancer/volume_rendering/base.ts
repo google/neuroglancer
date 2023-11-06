@@ -63,7 +63,7 @@ export function getVolumeRenderingNearFarBounds(
 //       clippingPlanes, tsource.lowerClipDisplayBound, tsource.upperClipDisplayBound);
 //   if (near === far) return -1;
 //   const depthRange = (far - near);
-//   const targetSpacing = depthRange / renderScaleTarget;
+//   const targetSpacing = depthRange / volumeRenderingDepthSamples;
 //   const targetVolume = targetSpacing ** 3;
 //   return targetVolume * tsource.chunkLayout.detTransform;
 // }
@@ -72,7 +72,7 @@ export function forEachVisibleVolumeRenderingChunk<
     RLayer extends MultiscaleVolumetricDataRenderLayer, Source extends
         VolumeChunkSource, Transformed extends TransformedSource<RLayer, Source>>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
-    renderScaleTarget: number, transformedSources: readonly Transformed[],
+    volumeRenderingDepthSamples: number, transformedSources: readonly Transformed[],
     beginScale: (
         source: Transformed, index: number, physicalSpacing: number, optimalSamples: number,
         clippingPlanes: Float32Array, histogramInformation: HistogramInformation) => void,
@@ -84,7 +84,7 @@ export function forEachVisibleVolumeRenderingChunk<
 
   const depthRange = getViewFrustrumDepthRange(projectionMat);
   // Target voxel spacing in view space
-  const targetViewSpacing = depthRange / renderScaleTarget;
+  const targetViewSpacing = depthRange / volumeRenderingDepthSamples;
   // Target voxel volume in view space.
   const targetViewVolume = targetViewSpacing ** 3;
   const viewDet = mat3.determinant(mat3FromMat4(tempMat3, viewMatrix));
