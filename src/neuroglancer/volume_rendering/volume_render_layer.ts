@@ -36,7 +36,7 @@ import {ParameterizedContextDependentShaderGetter, parameterizedContextDependent
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
-import {TrackableVolumeRenderingModeValue, VOLUME_RENDERING_MODES} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
+import {TrackableVolumeRenderingModeValue, VOLUME_RENDERING_MODES} from 'neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -207,9 +207,7 @@ void main() {
               glslSnippets = {
                 intensityCalculation: `
     float normChunkValue = toNormalized(getInterpolatedDataValue(0));
-    if (normChunkValue > intensity) {
-      intensity = normChunkValue;
-    }
+    intensity = max(intensity, normChunkValue);
 `,
                 beforeColorEmission: `
   userMain();
@@ -460,9 +458,11 @@ void main() {
               chunkTransform: {channelToChunkDimensionIndices}
             } = transformedSource;
             const {} = transformedSource;
-            const normChunkNumber = chunkNumber / chunks.size;
-            gl.uniform1f(shader.uniform('uChunkNumber'), normChunkNumber);
-            ++chunkNumber;
+            if (renderContext.wireFrame) {
+              const normChunkNumber = chunkNumber / chunks.size;
+              gl.uniform1f(shader.uniform('uChunkNumber'), normChunkNumber);
+              ++chunkNumber;
+            }
             if (newChunkDataSize !== chunkDataSize) {
               chunkDataSize = newChunkDataSize;
 
