@@ -24,11 +24,11 @@ import {makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, DataSubsourceEntry, GetDataSourceOptions, RedirectError} from 'neuroglancer/datasource';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, ChunkedGraphSourceParameters, getGrapheneFragmentKey, isBaseSegmentId, makeChunkedGraphChunkSpecification, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, responseIdentity} from 'neuroglancer/datasource/graphene/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, ChunkedGraphSourceParameters, getGrapheneFragmentKey, GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, isBaseSegmentId, makeChunkedGraphChunkSpecification, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, responseIdentity} from 'neuroglancer/datasource/graphene/base';
 import {DataEncoding, ShardingHashFunction, ShardingParameters} from 'neuroglancer/datasource/precomputed/base';
 import {getSegmentPropertyMap, MultiscaleVolumeInfo, parseMultiscaleVolumeInfo, parseProviderUrl, PrecomputedDataSource, PrecomputedMultiscaleVolumeChunkSource, resolvePath} from 'neuroglancer/datasource/precomputed/frontend';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
-import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
+import {LoadedDataSubsource, LoadedLayerDataSource} from 'neuroglancer/layer_data_source';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
@@ -950,6 +950,38 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
+  getMeshSource() {
+    const {layer} = this;
+    for (const dataSource of layer.dataSources) {
+      const {loadState} = dataSource;
+      if (loadState instanceof LoadedLayerDataSource) {
+        const {subsources} = loadState.dataSource;
+        const graphSubsource = subsources.filter(subsource => subsource.id === 'graph')[0];
+        if (graphSubsource && graphSubsource.subsource.segmentationGraph) {
+          if (graphSubsource.subsource.segmentationGraph !== this.graph) {
+            continue;
+          }
+        }
+        const meshSubsource = subsources.filter(subsource => subsource.id === 'mesh')[0];
+        if (meshSubsource) {
+          return meshSubsource.subsource.mesh;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  meshAddNewSegments(segments: Uint64[]) {
+    const meshSource = this.getMeshSource();
+    if (meshSource) {
+      for (const segment of segments) {
+        meshSource.rpc!.invoke(
+          GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
+          {'rpcId': meshSource.rpcId!, 'segment': segment.toString()});
+      }
+    }
+  }
+
   async submitMulticut(annotationToNanometers: Float64Array): Promise<boolean> {
     const {state: {multicutState}} = this;
     const {sinks, sources} = multicutState;
@@ -972,6 +1004,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         for (const segment of [...sinks, ...sources]) {
           segmentsState.selectedSegments.delete(segment.rootId);
         }
+        this.meshAddNewSegments(splitRoots);
         segmentsState.selectedSegments.add(splitRoots);
         segmentsState.visibleSegments.add(splitRoots);
         return true;
@@ -1087,6 +1120,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       const {visibleSegments, selectedSegments} = segmentsState;
       selectedSegments.delete(segmentsToRemove);
       const latestRoots = await this.graph.graphServer.filterLatestRoots(segmentsToAdd);
+      this.meshAddNewSegments(latestRoots);
       selectedSegments.add(latestRoots);
       visibleSegments.add(latestRoots);
       merges.changed.dispatch();
