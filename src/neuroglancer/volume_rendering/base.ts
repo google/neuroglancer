@@ -113,7 +113,7 @@ export function forEachVisibleVolumeRenderingChunk<
     const physicalSpacing = Math.cbrt(viewVolume * canonicalToPhysicalScale / viewDet);
     const optimalSamples = depthRange / Math.cbrt(viewVolume);
     histogramInformation.spatialScales.set(physicalSpacing, optimalSamples);
-    if ((viewVolume - targetViewVolume) > 0) {
+    if ((viewVolume - targetViewVolume) >= 0) {
       bestViewVolume = viewVolume;
       bestScaleIndex = scaleIndex;
     }

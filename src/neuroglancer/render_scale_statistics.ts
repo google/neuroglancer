@@ -50,10 +50,10 @@ export function trackableRenderScaleTarget(
 export class RenderScaleHistogram {
   visibility = new VisibilityPriorityAggregator();
   changed = new NullarySignal();
-  origin: number;
+  logScaleOrigin: number;
 
   constructor(origin: number = renderScaleHistogramOrigin) {
-    this.origin = origin;
+    this.logScaleOrigin = origin;
   }
 
   /**
@@ -118,7 +118,7 @@ export class RenderScaleHistogram {
     }
     const index = spatialScaleIndex * numRenderScaleHistogramBins * 2 +
         Math.min(
-            Math.max(0, Math.round(getRenderScaleHistogramOffset(renderScale, this.origin))),
+            Math.max(0, Math.round(getRenderScaleHistogramOffset(renderScale, this.logScaleOrigin))),
             numRenderScaleHistogramBins - 1);
     value[index] += presentCount;
     value[index + numRenderScaleHistogramBins] += notPresentCount;

@@ -64,15 +64,18 @@ export interface VolumeRenderingRenderLayerOptions {
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
-export function getVolumeRenderingDepthSamplesBounds(): [number, number] {
+export function getVolumeRenderingDepthSamplesBoundsLogScale(): [number, number] {
   const logScaleMax = Math.round(
       VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN +
       numRenderScaleHistogramBins * renderScaleHistogramBinSize);
-  return [2 ** VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN, 2 ** logScaleMax - 1]
+  return [VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN, logScaleMax]
 }
 
 function clampAndRoundResolutionTargetValue(value: number) {
-  return clampToInterval(getVolumeRenderingDepthSamplesBounds(), Math.round(value)) as number;
+  const logScaleDepthSamplesBounds = getVolumeRenderingDepthSamplesBoundsLogScale();
+  const depthSamplesBounds: [number, number] =
+      [2 ** logScaleDepthSamplesBounds[0], 2 ** logScaleDepthSamplesBounds[1] - 1];
+  return clampToInterval(depthSamplesBounds, Math.round(value)) as number;
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
@@ -335,7 +338,6 @@ void main() {
                 VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT, true)
             alreadyStoredSamples.add(roundedSamples);
           }
-          console.log(alreadyStoredSamples);
           index--;
         });
         renderScaleHistogram.add(

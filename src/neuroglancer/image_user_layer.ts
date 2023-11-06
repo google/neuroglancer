@@ -34,7 +34,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
-import {getVolumeRenderingDepthSamplesBounds, VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
+import {getVolumeRenderingDepthSamplesBoundsLogScale, VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
@@ -65,8 +65,8 @@ export interface ImageLayerSelectionState extends UserLayerSelectionState {
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
-const [volumeRenderingDepthSamplesOrigin, volumeRenderingDepthSamplesMax] =
-    getVolumeRenderingDepthSamplesBounds();
+const [volumeRenderingDepthSamplesOriginLogScale, volumeRenderingDepthSamplesMaxLogScale] =
+    getVolumeRenderingDepthSamplesBoundsLogScale();
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
@@ -76,10 +76,10 @@ export class ImageUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   volumeRenderingChunkResolutionHistogram =
-      new RenderScaleHistogram(volumeRenderingDepthSamplesOrigin);
+      new RenderScaleHistogram(volumeRenderingDepthSamplesOriginLogScale);
   volumeRenderingDepthSamplesTarget = trackableRenderScaleTarget(
-      VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, volumeRenderingDepthSamplesOrigin,
-      volumeRenderingDepthSamplesMax);
+      VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, 2 ** volumeRenderingDepthSamplesOriginLogScale,
+      2 ** volumeRenderingDepthSamplesMaxLogScale - 1);
 
   channelCoordinateSpace = new TrackableCoordinateSpace();
   channelCoordinateSpaceCombiner =
