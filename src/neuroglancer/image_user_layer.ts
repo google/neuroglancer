@@ -74,9 +74,10 @@ export class ImageUserLayer extends Base {
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType|undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
-  sliceViewRenderScaleTarget = trackableRenderScaleTarget(1, );
-  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram(volumeRenderingDepthSamplesOrigin);
-  volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(
+  sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
+  volumeRenderingChunkResolutionHistogram =
+      new RenderScaleHistogram(volumeRenderingDepthSamplesOrigin);
+  volumeRenderingDepthSamplesTarget = trackableRenderScaleTarget(
       VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, volumeRenderingDepthSamplesOrigin,
       volumeRenderingDepthSamplesMax);
 
@@ -128,7 +129,7 @@ export class ImageUserLayer extends Base {
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.volumeRendering.changed.add(this.specificationChanged.dispatch);
-    this.volumeRenderingRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingDepthSamplesTarget.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -168,8 +169,8 @@ export class ImageUserLayer extends Base {
           shaderControlState: this.shaderControlState,
           shaderError: this.shaderError,
           transform: loadedSubsource.getRenderLayerTransform(this.channelCoordinateSpace),
-          renderScaleTarget: this.volumeRenderingRenderScaleTarget,
-          renderScaleHistogram: this.volumeRenderingRenderScaleHistogram,
+          depthSamplesTarget: this.volumeRenderingDepthSamplesTarget,
+          chunkResolutionHistogram: this.volumeRenderingChunkResolutionHistogram,
           localPosition: this.localPosition,
           channelCoordinateSpace: this.channelCoordinateSpace,
         }));
@@ -195,7 +196,7 @@ export class ImageUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
-    this.volumeRenderingRenderScaleTarget.restoreState(
+    this.volumeRenderingDepthSamplesTarget.restoreState(
         specification[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY]);
   }
   toJSON() {
@@ -207,7 +208,7 @@ export class ImageUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
-    x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] = this.volumeRenderingRenderScaleTarget.toJSON();
+    x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] = this.volumeRenderingDepthSamplesTarget.toJSON();
     return x;
   }
 
@@ -321,8 +322,8 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: layer => layer.volumeRendering,
     ...renderScaleLayerControl(
         layer => ({
-          histogram: layer.volumeRenderingRenderScaleHistogram,
-          target: layer.volumeRenderingRenderScaleTarget
+          histogram: layer.volumeRenderingChunkResolutionHistogram,
+          target: layer.volumeRenderingDepthSamplesTarget
         }),
         VolumeRenderingRenderScaleWidget,
         )
