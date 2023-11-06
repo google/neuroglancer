@@ -72,10 +72,9 @@ export class StateShare extends RefCounted { // call it a widget? no because it 
               body: JSON.stringify(viewer.state.toJSON())
             }, responseJson)
           .then((res) => {
-            const stateUrl = new URL(res);
-            const stateUrlWithoutProtocol = stateUrl.toString().split(stateUrl.protocol)[1];
-            const stateUrlWithCredentialsProtocol = `${protocol}${stateUrlWithoutProtocol}`;
-            const link = `${window.location.origin}/#!${stateUrlWithCredentialsProtocol}`;
+            const stateUrlProtcol = new URL(res).protocol;
+            const stateUrlWithoutProtocol = res.substring(stateUrlProtcol.length);
+            const link = `${window.location.origin}/#!${protocol}${stateUrlWithoutProtocol}`;
             navigator.clipboard.writeText(link).then(() => {
               StatusMessage.showTemporaryMessage('Share link copied to clipboard');
             });
