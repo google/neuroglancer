@@ -58,7 +58,7 @@ const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
 const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
-const VOLUME_RENDERING_DEPTH_SAMPLES_KEY = 'volumeRenderingDepthSamples';
+const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = 'volumeRenderingDepthSamples';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -196,7 +196,7 @@ export class ImageUserLayer extends Base {
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
     this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
     this.volumeRenderingRenderScaleTarget.restoreState(
-        specification[VOLUME_RENDERING_DEPTH_SAMPLES_KEY]);
+        specification[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -207,7 +207,7 @@ export class ImageUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
-    x[VOLUME_RENDERING_DEPTH_SAMPLES_KEY] = this.volumeRenderingRenderScaleTarget.toJSON();
+    x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] = this.volumeRenderingRenderScaleTarget.toJSON();
     return x;
   }
 
@@ -317,7 +317,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   },
   {
     label: 'Resolution (3D)',
-    toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_KEY,
+    toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
     isValid: layer => layer.volumeRendering,
     ...renderScaleLayerControl(
         layer => ({
