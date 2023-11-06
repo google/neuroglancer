@@ -299,9 +299,14 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
                                })),
   },
   {
-    label: 'Blending',
+    label: 'Blending (slice)',
     toolJson: BLEND_JSON_KEY,
     ...enumLayerControl(layer => layer.blendMode),
+  },
+  {
+    label: 'Opacity (slice)',
+    toolJson: OPACITY_JSON_KEY,
+    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
   {
     label: 'Volume rendering (experimental)',
@@ -309,18 +314,13 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     ...checkboxLayerControl(layer => layer.volumeRendering),
   },
   {
-    label: 'Resolution (3d)',
+    label: 'Resolution (3D)',
     toolJson: VOLUME_RENDER_SCALE_JSON_KEY,
     isValid: layer => layer.volumeRendering,
     ...renderScaleLayerControl(layer => ({
                                  histogram: layer.volumeRenderingRenderScaleHistogram,
                                  target: layer.volumeRenderingRenderScaleTarget
                                })),
-  },
-  {
-    label: 'Opacity',
-    toolJson: OPACITY_JSON_KEY,
-    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
 ];
 
