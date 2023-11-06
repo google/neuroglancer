@@ -48,7 +48,7 @@ import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
-import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'src/neuroglancer/volume_rendering/trackable_volume_rendering_mode';
+import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
