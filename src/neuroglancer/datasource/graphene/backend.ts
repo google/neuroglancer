@@ -150,6 +150,10 @@ function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, r
     clipUpperBound: vec3.clone(response.clipUpperBound),
   }
   chunk.fragmentIds = response.fragments;
+  chunk.manifest.clipLowerBound.fill(0);
+  chunk.manifest.clipUpperBound.fill(100000);
+  chunk.manifest.octree[5*(response.fragments.length-1) + 4] &= 0x7FFFFFFF;
+  chunk.manifest.octree[5*(response.fragments.length-1) + 3] |= 0x80000000;
 }
 
 async function decodeMultiscaleFragmentChunk(
