@@ -27,7 +27,6 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {defineImageLayerShader, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {setClipboard} from 'neuroglancer/util/clipboard';
@@ -42,7 +41,6 @@ import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
 import {addLayerControlToOptionsTab, LayerControlDefinition, registerLayerControl} from 'neuroglancer/widget/layer_control';
-import {checkboxLayerControl} from 'neuroglancer/widget/layer_control_checkbox';
 import {enumLayerControl} from 'neuroglancer/widget/layer_control_enum';
 import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
@@ -50,6 +48,7 @@ import {renderScaleLayerControl, VolumeRenderingRenderScaleWidget} from 'neurogl
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
@@ -57,8 +56,8 @@ const SHADER_JSON_KEY = 'shader';
 const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
-const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = 'volumeRenderingDepthSamples';
+const VOLUME_RENDERING_MODE_JSON_KEY = 'volumeRenderingMode';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -87,7 +86,7 @@ export class ImageUserLayer extends Base {
   channelSpace = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
       channelCoordinateSpace => makeValueOrError(() => getChannelSpace(channelCoordinateSpace)),
       this.channelCoordinateSpace));
-  volumeRendering = new TrackableBoolean(false, false);
+  volumeRenderingMode = trackableShaderModeValue();
 
   shaderControlState = this.registerDisposer(new ShaderControlState(
       this.fragmentMain,
@@ -128,8 +127,8 @@ export class ImageUserLayer extends Base {
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
-    this.volumeRendering.changed.add(this.specificationChanged.dispatch);
     this.volumeRenderingDepthSamplesTarget.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingMode.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -173,12 +172,13 @@ export class ImageUserLayer extends Base {
           chunkResolutionHistogram: this.volumeRenderingChunkResolutionHistogram,
           localPosition: this.localPosition,
           channelCoordinateSpace: this.channelCoordinateSpace,
+          mode: this.volumeRenderingMode,
         }));
         context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
-        context.registerDisposer(registerNested((context, volumeRendering) => {
-          if (!volumeRendering) return;
+        context.registerDisposer(registerNested((context, volumeRenderingMode) => {
+          if (volumeRenderingMode === VOLUME_RENDERING_MODES.OFF) return;
           context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
-        }, this.volumeRendering));
+        }, this.volumeRenderingMode));
         this.shaderError.changed.dispatch();
       });
     }
@@ -195,9 +195,11 @@ export class ImageUserLayer extends Base {
     this.sliceViewRenderScaleTarget.restoreState(
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
-    this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
     this.volumeRenderingDepthSamplesTarget.restoreState(
         specification[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY]);
+    verifyOptionalObjectProperty(
+        specification, VOLUME_RENDERING_MODE_JSON_KEY,
+        mode => this.volumeRenderingMode.restoreState(mode));
   }
   toJSON() {
     const x = super.toJSON();
@@ -207,8 +209,8 @@ export class ImageUserLayer extends Base {
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
-    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
     x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] = this.volumeRenderingDepthSamplesTarget.toJSON();
+    x[VOLUME_RENDERING_MODE_JSON_KEY] = this.volumeRenderingMode.toJSON();
     return x;
   }
 
@@ -318,20 +320,26 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   },
   {
     label: 'Volume rendering (experimental)',
-    toolJson: VOLUME_RENDERING_JSON_KEY,
-    ...checkboxLayerControl(layer => layer.volumeRendering),
+    toolJson: VOLUME_RENDERING_MODE_JSON_KEY,
+    ...enumLayerControl(layer => layer.volumeRenderingMode),
   },
   {
     label: 'Resolution (3D)',
     toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
-    isValid: layer => layer.volumeRendering,
-    ...renderScaleLayerControl(
-        layer => ({
-          histogram: layer.volumeRenderingChunkResolutionHistogram,
-          target: layer.volumeRenderingDepthSamplesTarget
-        }),
+    isValid: layer => makeCachedDerivedWatchableValue(
+        volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.OFF),
+        [layer.volumeRenderingMode]),
+    ...renderScaleLayerControl(layer => ({
+      histogram: layer.volumeRenderingChunkResolutionHistogram,
+      target: layer.volumeRenderingDepthSamplesTarget
+                               }),
         VolumeRenderingRenderScaleWidget,
-        )
+      ),
+  },
+  {
+    label: 'Opacity',
+    toolJson: OPACITY_JSON_KEY,
+    ...rangeLayerControl(layer => ({value: layer.opacity})),
   },
 ];
 
