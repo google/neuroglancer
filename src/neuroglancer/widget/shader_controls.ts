@@ -32,6 +32,7 @@ import {colorLayerControl} from 'neuroglancer/widget/layer_control_color';
 import {propertyInvlerpLayerControl} from 'neuroglancer/widget/layer_control_property_invlerp';
 import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {transferFunctionLayerControl} from 'neuroglancer/widget/transfer_function';
 
 export interface LegendShaderOptions extends ParameterizedEmitterDependentShaderOptions {
   initializeShader: (shaderResult: ParameterizedShaderGetterResult) => void;
@@ -91,6 +92,9 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
             histogramIndex,
             legendShaderOptions: layerShaderControls.legendShaderOptions,
           }));
+    }
+    case 'transferFunction': {
+      return transferFunctionLayerControl(() => controlState.trackable);
     }
   }
 }
