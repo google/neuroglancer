@@ -189,10 +189,12 @@ void userMain();
 `);
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
+        // TODO (skm): make samplingRatio a uniform
         builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
-  float alpha = rgba.a * uBrightnessFactor;
-  outputColor += vec4(rgba.rgb * alpha, alpha);
+  float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
+  outputColor.rgb += (1.0 - outputColor.a) * alpha * rgba.rgb;
+  outputColor.a += (1.0 - outputColor.a) * alpha;
 }
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
