@@ -181,10 +181,13 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
         gl_Position.z = 0.0;
 `);
+// TODO (skm) build a UI instead of maxParameters - most likely shader widget
         builder.addFragmentCode(`
 vec3 curChunkPosition;
 vec4 outputColor;
-float intensity;
+float maxIntensity;
+vec3 maxParameters;
+float uSamplingRatio;
 void userMain();
 `);
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
@@ -206,6 +209,22 @@ void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 `);
+// TODO skm (move out of shader as uniform)
+builder.addFragmentCode(`
+float numVoxelsAlongViewDir() {
+  vec4 straightAheadStart = uInvModelViewProjectionMatrix * vec4(0.0, 0.0, -1.0, 1.0);
+  vec4 straightAheadEnd = uInvModelViewProjectionMatrix * vec4(0.0, 0.0, 1.0, 1.0);
+  vec3 straightAheadDir = normalize(straightAheadEnd.xyz / straightAheadEnd.w - straightAheadStart.xyz / straightAheadStart.w);
+  vec3 chunksAlongViewDir = straightAheadDir * uChunkDataSize;
+  float numVoxels = length(chunksAlongViewDir);
+  return numVoxels;
+}
+float sampleRatio(float actualSamplingRate) {
+  float numVoxels = numVoxelsAlongViewDir();
+  float referenceSamplingRate = 1.0 / numVoxels;
+  return referenceSamplingRate / actualSamplingRate;
+}
+`);
         if (wireFrame) {
           builder.setFragmentMainFunction(`
 void main() {
@@ -215,6 +234,7 @@ void main() {
 `)
         } else {
           let glslSnippets: VolumeRenderingShaderSnippets;
+          // TODO (skm) provide a switch for interpolated vs. nearest neighbor
           switch (shaderParametersState.mode) {
             case VOLUME_RENDERING_MODES.ON:
               glslSnippets = {
@@ -225,10 +245,17 @@ void main() {
               };
               break;
             case VOLUME_RENDERING_MODES.MAX:
+              builder.addFragmentCode(`#define MAX_PROJECTION`);
               glslSnippets = {
                 intensityCalculation: `
     float normChunkValue = toNormalized(getInterpolatedDataValue(0));
-    intensity = max(intensity, normChunkValue);
+    if maxParameters: {
+      maxIntensity = max(maxIntensity, normChunkValue);
+    }
+    else {
+      maxIntensity = max(maxIntensity, -normChunkValue);
+    }
+
 `,
                 beforeColorEmission: `
   userMain();
@@ -277,6 +304,7 @@ void main() {
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
   intensity = 0.0;
+  uSamplingRatio = sampleRatio(stepSize);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
     curChunkPosition = position - uTranslation;
