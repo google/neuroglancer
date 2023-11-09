@@ -33,6 +33,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 import {getVolumeRenderingDepthSamplesBoundsLogScale, VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE, VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
@@ -48,7 +49,6 @@ import {renderScaleLayerControl, VolumeRenderingRenderScaleWidget} from 'neurogl
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {LegendShaderOptions, registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
-import {trackableShaderModeValue, VOLUME_RENDERING_MODES} from 'neuroglancer/volume_rendering/trackable_volume_rendering_mode';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
@@ -329,12 +329,13 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: layer => makeCachedDerivedWatchableValue(
         volumeRendering => (volumeRendering !== VOLUME_RENDERING_MODES.OFF),
         [layer.volumeRenderingMode]),
-    ...renderScaleLayerControl(layer => ({
-      histogram: layer.volumeRenderingChunkResolutionHistogram,
-      target: layer.volumeRenderingDepthSamplesTarget
-                               }),
+    ...renderScaleLayerControl(
+        layer => ({
+          histogram: layer.volumeRenderingChunkResolutionHistogram,
+          target: layer.volumeRenderingDepthSamplesTarget
+        }),
         VolumeRenderingRenderScaleWidget,
-      ),
+        ),
   },
   {
     label: 'Opacity',
