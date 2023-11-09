@@ -25,13 +25,13 @@ import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/we
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
-import {UserLayer} from 'src/neuroglancer/layer';
-import {RefCounted} from 'src/neuroglancer/util/disposable';
-import {vec4, vec3} from 'src/neuroglancer/util/geom';
-import {computeLerp} from 'src/neuroglancer/util/lerp';
-import {GL} from 'src/neuroglancer/webgl/context';
-import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
-import {VERTICES_PER_QUAD} from 'src/neuroglancer/webgl/quad';
+import {UserLayer} from 'neuroglancer/layer';
+import {RefCounted} from 'neuroglancer/util/disposable';
+import {vec4, vec3} from 'neuroglancer/util/geom';
+import {computeLerp} from 'neuroglancer/util/lerp';
+import {GL} from 'neuroglancer/webgl/context';
+import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
+import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 
 // TODO (skm): remove hardcoded UINT8
@@ -91,7 +91,7 @@ function griddedRectangleArray(numGrids: number) {
   return result;
 }
 
-export class TransferFunctionTexture extends RefCounted {
+class TransferFunctionTexture extends RefCounted {
   texture: WebGLTexture | null = null;
   width: number;
   height: number = 1;
@@ -136,7 +136,7 @@ export class TransferFunctionTexture extends RefCounted {
   }
 }
 
-export class TransferFunctionPanel extends IndirectRenderedPanel {
+class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: TransferFunctionTexture;
   private vertexBuffer: Buffer;
   get drawOrder() {
@@ -254,7 +254,6 @@ class ControlPointsLookupTable extends RefCounted {
   lookupTableFromControlPoints() {
     // TODO (skm) implement change based on data type
     const {lookupTable, controlPoints} = this;
-    console.log(controlPoints);
 
     function addLookupValue(index: number, color: vec4) {
       lookupTable[index] = color[0];
@@ -295,7 +294,6 @@ class ControlPointsLookupTable extends RefCounted {
         controlPointIndex++;
       }
     }
-    console.log(this.lookupTable);
   }
 
   // TODO (skm) correct disposal
@@ -332,12 +330,11 @@ export class TransferFunctionWidget extends Tab {
     // TODO (skm) add color picker
     this.controlPointsLookupTable.addPoint(normalizedX, opacity, vec3.fromValues(255, 255, 255));
     this.controlPointsLookupTable.lookupTableFromControlPoints();
-    console.log(this.controlPointsLookupTable.controlPoints);
     this.updateView();
   }
 }
 
-export function defineTransferFunctionShader(builder: ShaderBuilder, name: string) {
+export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, controlPoints: Array<ControlPoint>) {
   builder.addTextureSampler('sampler2D', 'uTransferSampler', transferFunctionSamplerTextureUnit);
   let code = `
 vec4 ${name}(float inputValue) {

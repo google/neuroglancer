@@ -38,7 +38,7 @@ import {ParameterizedContextDependentShaderGetter, parameterizedContextDependent
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
-import {setRawTextureParameters} from 'src/neuroglancer/webgl/texture';
+import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 const transferFunctionVRSamplerTextureUnit = Symbol('transferFunctionVRSamplerTextureUnit');
 
@@ -204,6 +204,7 @@ void userMain();
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         // TODO (skm): make samplingRatio a uniform
+        // TODO (skm): consider basing this off the calculation per chunk
         builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
   float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
@@ -493,11 +494,7 @@ void main() {
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();
-              const textureUnit = shader.textureUnit(transferFunctionVRSamplerTextureUnit);
-              gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
-              gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.texture);
-              setRawTextureParameters(gl);
-              gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 4, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, tempTextureArray);
+              
               if (chunkFormat !== null) {
                 setControlsInShader(
                   gl, shader, this.shaderControlState,
@@ -579,6 +576,11 @@ void main() {
             }
             newSource = false;
             gl.uniform3fv(shader.uniform('uTranslation'), chunkPosition);
+            const textureUnit = 0;
+            gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
+            gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.texture);
+            setRawTextureParameters(gl);
+            gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 4, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, tempTextureArray);
             drawBoxes(gl, 1, 1);
             ++presentCount;
           } else {

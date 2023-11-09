@@ -30,7 +30,7 @@ import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
 import {LayerControlFactory} from 'neuroglancer/widget/layer_control';
-import {clampToInterval} from 'src/neuroglancer/util/lerp';
+import {clampToInterval} from 'neuroglancer/util/lerp';
 
 const updateInterval = 200;
 

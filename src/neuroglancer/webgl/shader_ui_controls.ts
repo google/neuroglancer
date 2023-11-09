@@ -31,7 +31,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
 import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {defineTransferFunctionShader} from 'neuroglancer/widget/transfer_function'
+import {defineTransferFunctionShader, ControlPoint} from 'neuroglancer/widget/transfer_function'
 
 export interface ShaderSliderControl {
   type: 'slider';
@@ -73,7 +73,8 @@ export interface ShaderCheckboxControl {
 
 export interface ShaderTransferFunctionControl {
   type: 'transferFunction';
-  default: any;
+  controlPoints: Array<ControlPoint>;
+  default: TransferFunctionParameters;
 }
 
 export type ShaderUiControl = ShaderSliderControl|ShaderColorControl|ShaderImageInvlerpControl|
@@ -367,23 +368,6 @@ function parseInvlerpDirective(
   return {errors};
 }
 
-function parseTransferFunctionDirective(
-    valueType: string, parameters: DirectiveParameters): DirectiveParseResult {
-  let errors = [];
-  if (valueType !== 'transferFunction') {
-    errors.push('type must be transferFunction');
-  }
-  if (errors.length > 0) {
-    return {errors};
-  }
-  console.log(parameters)
-  return {
-    control: {type: 'transferFunction', default: 1} as ShaderTransferFunctionControl,
-    errors: undefined,
-  };
-}
-
-
 function parseImageInvlerpDirective(
     valueType: string, parameters: DirectiveParameters, imageData: ImageDataSpecification) {
   let errors = [];
@@ -512,6 +496,23 @@ function parsePropertyInvlerpDirective(
   };
 }
 
+function parseTransferFunctionDirective(
+  valueType: string, parameters: DirectiveParameters): DirectiveParseResult {
+let errors = [];
+const controlPoints = new Array<ControlPoint>();
+if (valueType !== 'transferFunction') {
+  errors.push('type must be transferFunction');
+}
+if (errors.length > -1) {
+  return {errors};
+}
+console.log(parameters)
+return {
+  control: {type: 'transferFunction', default: {controlPoints: new Array}, controlPoints: controlPoints} as ShaderTransferFunctionControl,
+  errors: undefined,
+};
+}
+
 export interface ImageDataSpecification {
   dataType: DataType;
   channelRank: number;
@@ -635,7 +636,7 @@ float ${uName}() {
       }
       case 'transferFunction': {
         builder.addFragmentCode(`#define ${name} ${uName}\n`)
-        builder.addFragmentCode(defineTransferFunctionShader(builder, uName));
+        builder.addFragmentCode(defineTransferFunctionShader(builder, uName, control.controlPoints));
         break;
       }
       default: {
@@ -775,6 +776,17 @@ class TrackablePropertyInvlerpParameters extends TrackableValue<PropertyInvlerpP
       return undefined;
     }
     return {range: rangeJson, window: windowJson, property: propertyJson};
+  }
+}
+
+export interface TransferFunctionParameters {
+  controlPoints: Array<ControlPoint>;
+}
+
+// TODO (skm) may not need new class
+class TrackableTransferFunctionParameters extends TrackableValue<Array<ControlPoint>> {
+  constructor(public defaultValue: Array<ControlPoint>) {
+    super(defaultValue, obj => obj);
   }
 }
 
@@ -1137,6 +1149,7 @@ function setControlInShader(
       gl.uniform3fv(uniform, value);
       break;
     case 'imageInvlerp':
+      console.log(value.range)
       enableLerpShaderFunction(shader, uName, control.dataType, value.range);
       break;
     case 'propertyInvlerp': {
@@ -1150,6 +1163,7 @@ function setControlInShader(
       break;
     case 'transferFunction':
       // TEMP.
+      console.log(control, value);
       break;
   }
 }
