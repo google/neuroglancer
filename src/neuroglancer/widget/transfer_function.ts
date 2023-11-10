@@ -33,6 +33,8 @@ import {GL} from 'neuroglancer/webgl/context';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
+import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 // TODO (skm): remove hardcoded UINT8
 const DATA_TYPE = DataType.UINT8;
@@ -223,9 +225,8 @@ out_color = texelFetch(uSampler, texel, 0);
 }
 
 class ControlPointsLookupTable extends RefCounted {
-  controlPoints = Array<ControlPoint>();
   lookupTable: Uint8Array;
-  constructor(dataType: DataType) {
+  constructor(dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     super();
     switch (dataType) {
       case DataType.UINT8:
@@ -241,19 +242,21 @@ class ControlPointsLookupTable extends RefCounted {
   }
 
   addPoint(position: number, opacity: number, color: vec3) {
+    const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
     // TODO temporary to ensure no duplicate positions
-    const existingIndex = this.controlPoints.findIndex((point) => point.position === positionAsIndex);
+    const existingIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
     if (existingIndex !== -1) {
-      this.controlPoints.splice(existingIndex, 1);
+      controlPoints.splice(existingIndex, 1);
     }
-    this.controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
-    this.controlPoints.sort((a, b) => a.position - b.position);
+    controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
+    controlPoints.sort((a, b) => a.position - b.position);
   }
 
   lookupTableFromControlPoints() {
     // TODO (skm) implement change based on data type
-    const {lookupTable, controlPoints} = this;
+    const {lookupTable} = this;
+    const {controlPoints} = this.trackable.value;
 
     function addLookupValue(index: number, color: vec4) {
       lookupTable[index] = color[0];
@@ -303,10 +306,9 @@ class ControlPointsLookupTable extends RefCounted {
 }
 
 export class TransferFunctionWidget extends Tab {
-  transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, DATA_TYPE));
-  // TODO variable data type
-  controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(DATA_TYPE));
-  constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext) {
+  transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
+  controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
+  constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext, public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     super(visibility);
     const {element} = this;
     element.appendChild(this.transferFunctionPanel.element);
@@ -357,12 +359,15 @@ export function activateTransferFunctionTool(
 }
 
 export function transferFunctionLayerControl<LayerType extends UserLayer>(
-  getter: (layer: LayerType) => void): LayerControlFactory<LayerType, TransferFunctionWidget> {
+  getter: (layer: LayerType) => {
+    watchableValue: WatchableValueInterface<TransferFunctionParameters>,
+    dataType: DataType,
+  }): LayerControlFactory<LayerType, TransferFunctionWidget> {
   return {
     makeControl: (layer, context, options) => {
-      getter(layer);
+      const {watchableValue, dataType} = getter(layer);
       const control =
-        context.registerDisposer(new TransferFunctionWidget(options.visibility, options.display));
+        context.registerDisposer(new TransferFunctionWidget(options.visibility, options.display, dataType, watchableValue));
       return {control, controlElement: control.element};
     },
     activateTool: (activation, control) => {

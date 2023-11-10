@@ -94,7 +94,10 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
           }));
     }
     case 'transferFunction': {
-      return transferFunctionLayerControl(() => controlState.trackable);
+      return transferFunctionLayerControl(() => ({
+        dataType: control.dataType,
+        watchableValue: controlState.trackable,
+      }));
     }
   }
 }

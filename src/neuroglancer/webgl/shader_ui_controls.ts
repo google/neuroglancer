@@ -510,7 +510,7 @@ if (valueType !== 'transferFunction') {
 if (dataType === undefined) {
   errors.push('image data must be provided to use transfer function');
 }
-if (errors.length > -1) {
+if (errors.length > 0) {
   return {errors};
 }
 return {
