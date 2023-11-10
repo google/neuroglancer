@@ -46,6 +46,7 @@ export function defineImageLayerShader(
     builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) {
   builder.addFragmentCode(`
 #define VOLUME_RENDERING false
+#define MAX_PROJECTION false
 
 void emitRGBA(vec4 rgba) {
   emit(vec4(rgba.rgb, rgba.a * uOpacity));

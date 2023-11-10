@@ -85,6 +85,7 @@ interface VolumeRenderingShaderParameters {
 }
 
 interface VolumeRenderingShaderSnippets {
+  colorEmissionFunctions: string;
   intensityCalculation: string;
   beforeColorEmission: string;
 }
@@ -181,7 +182,7 @@ vec3 position = max(uLowerClipBound, min(uUpperClipBound, uTranslation + boxVert
 vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
 gl_Position.z = 0.0;
 `);
-// TODO (skm) build a UI instead of maxParameters - most likely shader widget
+        // TODO (skm) build a UI instead of maxParameters - most likely shader widget
         builder.addFragmentCode(`
 vec3 curChunkPosition;
 vec4 outputColor;
@@ -193,25 +194,8 @@ void userMain();
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         // TODO (skm): make samplingRatio a uniform
-        // TODO (skm): consider basing this off the calculation per chunk
+        // TODO skm (move out of shader as uniform)
         builder.addFragmentCode(`
-void emitRGBA(vec4 rgba) {
-  float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
-  outputColor.rgb += (1.0 - outputColor.a) * alpha * rgba.rgb;
-  outputColor.a += (1.0 - outputColor.a) * alpha;
-}
-void emitRGB(vec3 rgb) {
-  emitRGBA(vec4(rgb, 1.0));
-}
-void emitGrayscale(float value) {
-  emitRGB(vec3(value, value, value));
-}
-void emitTransparent() {
-  emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
-}
-`);
-// TODO skm (move out of shader as uniform)
-builder.addFragmentCode(`
 float numVoxelsAlongViewDir() {
   vec4 straightAheadStart = uInvModelViewProjectionMatrix * vec4(0.0, 0.0, -1.0, 1.0);
   vec4 straightAheadEnd = uInvModelViewProjectionMatrix * vec4(0.0, 0.0, 1.0, 1.0);
@@ -237,26 +221,26 @@ void main() {
           let glslSnippets: VolumeRenderingShaderSnippets;
           // TODO (skm) provide a switch for interpolated vs. nearest neighbor
           switch (shaderParametersState.mode) {
-            case VOLUME_RENDERING_MODES.ON:
-              glslSnippets = {
-                intensityCalculation: `
-    userMain();
-`,
-                beforeColorEmission: ``
-              };
-              break;
             case VOLUME_RENDERING_MODES.MAX:
-              builder.addFragmentCode(`#define MAX_PROJECTION`);
+              builder.addFragmentCode(`#define MAX_PROJECTION true\n`)
               glslSnippets = {
+                colorEmissionFunctions: `
+void emitRGBA(vec4 rgba) {
+  outputColor = rgba;
+}
+void emitRGB(vec3 rgb) {
+  emitRGBA(vec4(rgb, 1.0));
+}
+void emitGrayscale(float ignored) {
+  emitRGBA(vec4(maxIntensity, maxIntensity, maxIntensity, maxIntensity));
+}
+void emitTransparent() {
+  emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
+}
+`,
                 intensityCalculation: `
     float normChunkValue = toNormalized(getInterpolatedDataValue(0));
-    if maxParameters: {
-      maxIntensity = max(maxIntensity, normChunkValue);
-    }
-    else {
-      maxIntensity = max(maxIntensity, -normChunkValue);
-    }
-
+    maxIntensity = max(maxIntensity, normChunkValue);
 `,
                 beforeColorEmission: `
   userMain();
@@ -264,9 +248,35 @@ void main() {
               };
               break;
             default:
-              glslSnippets = {intensityCalculation: ``, beforeColorEmission: ``};
+              builder.addFragmentCode(`#define MAX_PROJECTION false\n`)
+              glslSnippets = {
+                colorEmissionFunctions: `
+void emitRGBA(vec4 rgba) {
+  float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
+  outputColor.rgb += (1.0 - outputColor.a) * alpha * rgba.rgb;
+  outputColor.a += (1.0 - outputColor.a) * alpha;
+}
+void emitRGB(vec3 rgb) {
+  emitRGBA(vec4(rgb, 1.0));
+}
+void emitGrayscale(float value) {
+  emitRGBA(vec4(value, value, value, value));
+}
+void emitTransparent() {
+  emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
+}
+`,
+                intensityCalculation: `
+    userMain();
+    if (outputColor.a > 0.99) {
+      break;
+    }
+`,
+                beforeColorEmission: ``
+              };
               break;
           };
+          builder.addFragmentCode(glslSnippets.colorEmissionFunctions);
           builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
@@ -305,6 +315,7 @@ void main() {
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
   maxIntensity = 0.0;
+  maxParameters = vec3(1.0, 0.0, 0.0);
   uSamplingRatio = sampleRatio(stepSize);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
@@ -478,14 +489,14 @@ void main() {
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();
-              
+
               if (chunkFormat !== null) {
                 setControlsInShader(
-                  gl, shader, this.shaderControlState,
-                  shaderResult.parameters.parseResult.controls);
-                  chunkFormat.beginDrawing(gl, shader);
-                  chunkFormat.beginSource(gl, shader);
-                }
+                    gl, shader, this.shaderControlState,
+                    shaderResult.parameters.parseResult.controls);
+                chunkFormat.beginDrawing(gl, shader);
+                chunkFormat.beginSource(gl, shader);
+              }
             }
           }
           chunkDataSize = undefined;
@@ -559,6 +570,7 @@ void main() {
                   channelToChunkDimensionIndices, newSource);
             }
             newSource = false;
+            gl.uniform3fv(shader.uniform('uTranslation'), chunkPosition);
             drawBoxes(gl, 1, 1);
             ++presentCount;
           } else {
