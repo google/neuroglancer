@@ -176,10 +176,10 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
         builder.setVertexMain(`
-        vec3 boxVertex = getBoxFaceVertexPosition(gl_VertexID);
-        vec3 position = max(uLowerClipBound, min(uUpperClipBound, uTranslation + boxVertex * uChunkDataSize));
-        vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
-        gl_Position.z = 0.0;
+vec3 boxVertex = getBoxFaceVertexPosition(gl_VertexID);
+vec3 position = max(uLowerClipBound, min(uUpperClipBound, uTranslation + boxVertex * uChunkDataSize));
+vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
+gl_Position.z = 0.0;
 `);
 // TODO (skm) build a UI instead of maxParameters - most likely shader widget
         builder.addFragmentCode(`
@@ -312,7 +312,6 @@ void main() {
     ${glslSnippets.intensityCalculation}
   }
   ${glslSnippets.beforeColorEmission}
-  outputColor = vec4(1.0, 1.0, 1.0, 1.0);
   emit(outputColor, 0u);
 } 
 `)

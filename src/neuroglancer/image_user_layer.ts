@@ -337,11 +337,6 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
         VolumeRenderingRenderScaleWidget,
         ),
   },
-  {
-    label: 'Opacity',
-    toolJson: OPACITY_JSON_KEY,
-    ...rangeLayerControl(layer => ({value: layer.opacity})),
-  },
 ];
 
 for (const control of LAYER_CONTROLS) {
