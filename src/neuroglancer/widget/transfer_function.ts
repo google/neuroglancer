@@ -70,10 +70,10 @@ function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: A
   const firstPoint = controlPoints[0];
 
   if (firstPoint.position > 0) {
-    const {color} = controlPoints[0];
     const transparent = vec4.fromValues(0, 0, 0, 0);
     for (let i = 0; i < firstPoint.position; ++i) {
       const index = i * NUM_COLOR_CHANNELS;
+      // const {color} = controlPoints[0];
       // use this to lerp between 0 and the first point
       // const t = i / firstPoint.position;
       // const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
