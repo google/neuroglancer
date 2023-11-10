@@ -71,11 +71,14 @@ function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: A
 
   if (firstPoint.position > 0) {
     const {color} = controlPoints[0];
+    const transparent = vec4.fromValues(0, 0, 0, 0);
     for (let i = 0; i < firstPoint.position; ++i) {
-      const t = i / firstPoint.position;
-      const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
       const index = i * NUM_COLOR_CHANNELS;
-      addLookupValue(index, lerpedColor);
+      // use this to lerp between 0 and the first point
+      // const t = i / firstPoint.position;
+      // const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
+      // addLookupValue(index, lerpedColor);
+      addLookupValue(index, transparent);
     }
   }
 
@@ -293,6 +296,13 @@ class ControlPointsLookupTable extends RefCounted {
     if (existingIndex !== -1) {
       controlPoints.splice(existingIndex, 1);
     }
+    // TODO skm (temp for testing)
+    if (opacity <= 30) {
+      opacity = 0;
+    }
+    if (opacity >= 225) {
+      opacity = 255;
+    }
     controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
     controlPoints.sort((a, b) => a.position - b.position);
   }
@@ -348,7 +358,7 @@ export function defineTransferFunctionShader(builder: ShaderBuilder, name: strin
   let code = `
 vec4 ${name}(${shaderType} inputValue) {
   int index = int(round(toNormalized(inputValue) * 255.0));
-  return vec4(uTransferFunctionParams_${name}[index]);
+  return vec4(uTransferFunctionParams_${name}[index]) / 255.0;
 }
 vec4 ${name}() {
   return ${name}(getDataValue(${channel.join(',')}));
@@ -363,6 +373,8 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
   const transferFunction = new Int32Array(256 * NUM_COLOR_CHANNELS);
   lerpBetweenControlPoints(transferFunction, controlPoints);
   gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
+  console.log('control points', controlPoints);
+  console.log('transfer function', transferFunction);
   dataType;
 }
 

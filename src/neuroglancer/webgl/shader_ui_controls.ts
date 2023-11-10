@@ -1214,6 +1214,7 @@ function setControlInShader(
       // Value is hard-coded in shader.
       break;
     case 'transferFunction':
+      console.log('transfer function value', value);
       enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints);
       break;
   }
