@@ -187,6 +187,10 @@ class TransferFunctionTexture extends RefCounted {
 class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: TransferFunctionTexture;
   private vertexBuffer: Buffer;
+  private controlPointsVertexBuffer: Buffer;
+  private controlPointsColorBuffer: Buffer;
+  private controlPointsPositionArray: Float32Array;
+  private controlPointsColorArray: Float32Array;
   get drawOrder() {
     return 1;
   }
@@ -200,6 +204,24 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         this.registerDisposer(getMemoizedBuffer(
                                 this.gl, WebGL2RenderingContext.ARRAY_BUFFER, griddedRectangleArray,
                                 256)).value;
+    this.controlPointsVertexBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsPositionArray)).value;
+    this.controlPointsColorBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsColorArray)).value;
+  }
+
+  updateControlPointArrays() {
+    const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
+    const controlPoints = this.parent.controlPointsLookupTable.trackable.value.controlPoints;
+    const colorArray = new Float32Array(controlPoints.length * colorChannels);
+    const positionArray = new Float32Array(controlPoints.length * 2);
+    for (let i = 0; i < controlPoints.length; ++i) {
+      const index = i * colorChannels;
+      const {color} = controlPoints[i];
+      colorArray[index] = color[0];
+      colorArray[index + 1] = color[1];
+      colorArray[index + 2] = color[2];
+    }
+    this.controlPointsColorArray = colorArray
+    this.controlPointsPositionArray = positionArray;
   }
 
   private lineShader = this.registerDisposer((() => {
@@ -217,7 +239,7 @@ out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
     return builder.build();
   })());
 
-  private transferFunctionShader = this.registerDisposer((() => {
+  private controlPointsShader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
     builder.addAttribute('vec2', 'aVertexPosition');
     builder.addVarying('vec2', 'vTexCoord');
@@ -234,8 +256,25 @@ out_color = texelFetch(uSampler, texel, 0);
     return builder.build();
   })());
 
+  private transferFunctionShader = this.registerDisposer((() => {
+    const builder = new ShaderBuilder(this.gl);
+    builder.addAttribute('vec2', 'aVertexPosition');
+    builder.addAttribute('vec3', 'aVertexColor');
+    builder.addVarying('vec3', 'vColor');
+    builder.addOutputBuffer('vec4', 'out_color', 0);
+    builder.addTextureSampler('sampler2D', 'uSampler', transferFunctionSamplerTextureUnit);
+    builder.setVertexMain(`
+gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+vColor = aVertexColor;
+`);
+    builder.setFragmentMain(`
+out_color = vec4(vColor / 255.0, 0.0);
+`);
+    return builder.build();
+  })());
+
   drawIndirect() {
-    const {lineShader, gl, transferFunctionShader} = this;
+    const {lineShader, gl, transferFunctionShader, controlPointsShader} = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
@@ -247,14 +286,13 @@ out_color = texelFetch(uSampler, texel, 0);
       transferFunctionShader.bind();
       const aVertexPosition = transferFunctionShader.attribute('aVertexPosition');
       this.vertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
-      // const textureUnit = transferFunctionShader.textureUnit(this.texture.symbol);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
-
       this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
       gl.drawArrays(gl.TRIANGLES, 0, 256 * VERTICES_PER_QUAD);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
+    // TODO (skm) fix the line and control point shaders
     {
       const {renderViewport} = this;
       lineShader.bind();
@@ -262,6 +300,13 @@ out_color = texelFetch(uSampler, texel, 0);
         lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
           /*featherWidthInPixels=*/ 1.0);
       drawLines(gl, 1, 1)
+    }
+    {
+      controlPointsShader.bind();
+      const aVertexPosition = controlPointsShader.attribute('aVertexPosition');
+      this.controlPointsVertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      const aVertexColor = controlPointsShader.attribute('aVertexColor');
+      this.controlPointsColorBuffer.bindToVertexAttrib(aVertexColor, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
