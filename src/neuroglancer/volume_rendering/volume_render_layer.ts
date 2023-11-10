@@ -38,13 +38,6 @@ import {ParameterizedContextDependentShaderGetter, parameterizedContextDependent
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
-
-const transferFunctionVRSamplerTextureUnit = Symbol('transferFunctionVRSamplerTextureUnit');
-
-const tempTextureArray = new Uint8Array([
-  255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255
-]);
 
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
@@ -106,7 +99,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
-  texture: WebGLTexture|null;
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
@@ -141,7 +133,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
             ({numChannelDimensions: space.rank, mode}),
         [this.channelCoordinateSpace, this.mode]));
 
-    this.texture = this.gl.createTexture();
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
@@ -160,7 +151,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 #define VOLUME_RENDERING true
 `);
         emitter(builder);
-        builder.addTextureSampler('sampler2D', 'uTransferFunctionSampler', transferFunctionVRSamplerTextureUnit);
         // Near limit in [0, 1] as fraction of full limit.
         builder.addUniform('highp float', 'uNearLimitFraction');
         // Far limit in [0, 1] as fraction of full limit.
@@ -198,7 +188,6 @@ vec4 outputColor;
 float maxIntensity;
 vec3 maxParameters;
 float uSamplingRatio;
-vec4 tempColor;
 void userMain();
 `);
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
@@ -219,10 +208,6 @@ void emitGrayscale(float value) {
 }
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
-}
-
-vec4 getTF(float value) {
-  return vec4(texelFetch(uTransferFunctionSampler, ivec2(int(floor(value)), 0), 0));
 }
 `);
 // TODO skm (move out of shader as uniform)
@@ -321,13 +306,13 @@ void main() {
   outputColor = vec4(0, 0, 0, 0);
   maxIntensity = 0.0;
   uSamplingRatio = sampleRatio(stepSize);
-  tempColor = getTF(1.0);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
     curChunkPosition = position - uTranslation;
     ${glslSnippets.intensityCalculation}
   }
   ${glslSnippets.beforeColorEmission}
+  outputColor = vec4(1.0, 1.0, 1.0, 1.0);
   emit(outputColor, 0u);
 } 
 `)
@@ -575,12 +560,6 @@ void main() {
                   channelToChunkDimensionIndices, newSource);
             }
             newSource = false;
-            gl.uniform3fv(shader.uniform('uTranslation'), chunkPosition);
-            const textureUnit = 0;
-            gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
-            gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.texture);
-            setRawTextureParameters(gl);
-            gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, 4, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, tempTextureArray);
             drawBoxes(gl, 1, 1);
             ++presentCount;
           } else {

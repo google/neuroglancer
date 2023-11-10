@@ -335,6 +335,7 @@ export class TransferFunctionWidget extends Tab {
 }
 
 export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, controlPoints: Array<ControlPoint>) {
+  controlPoints;
   builder.addTextureSampler('sampler2D', 'uTransferSampler', transferFunctionSamplerTextureUnit);
   let code = `
 vec4 ${name}(float inputValue) {

@@ -73,6 +73,7 @@ export interface ShaderCheckboxControl {
 
 export interface ShaderTransferFunctionControl {
   type: 'transferFunction';
+  dataType: DataType;
   controlPoints: Array<ControlPoint>;
   default: TransferFunctionParameters;
 }
@@ -497,18 +498,23 @@ function parsePropertyInvlerpDirective(
 }
 
 function parseTransferFunctionDirective(
-  valueType: string, parameters: DirectiveParameters): DirectiveParseResult {
+  valueType: string, parameters: DirectiveParameters, dataContext: ShaderDataContext): DirectiveParseResult {
+// TODO (skm) allow to specify parameters such as control points
+parameters;
+const dataType = dataContext.imageData?.dataType;
 let errors = [];
 const controlPoints = new Array<ControlPoint>();
 if (valueType !== 'transferFunction') {
   errors.push('type must be transferFunction');
 }
+if (dataType === undefined) {
+  errors.push('image data must be provided to use transfer function');
+}
 if (errors.length > -1) {
   return {errors};
 }
-console.log(parameters)
 return {
-  control: {type: 'transferFunction', default: {controlPoints: new Array}, controlPoints: controlPoints} as ShaderTransferFunctionControl,
+  control: {type: 'transferFunction', dataType: dataType, default: {controlPoints: new Array}, controlPoints: controlPoints} as ShaderTransferFunctionControl,
   errors: undefined,
 };
 }
@@ -783,10 +789,34 @@ export interface TransferFunctionParameters {
   controlPoints: Array<ControlPoint>;
 }
 
+function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
+  const out = new Array();
+  dataType;
+  // TODO (skm) implement proper validation
+  parseFixedLengthArray(out, value, x => {
+    if (!Number.isInteger(x) || x < 0) {
+      throw new Error(`Expected non-negative integer, but received: ${JSON.stringify(x)}`);
+    }
+    return x;
+  });
+  return out;
+}
+
+function parseTransferFunctionParameters(
+  obj: unknown, dataType: DataType,
+  defaultValue: TransferFunctionParameters): TransferFunctionParameters {
+  if (obj === undefined) return defaultValue;
+  verifyObject(obj);
+  return {
+    controlPoints: verifyOptionalObjectProperty(
+      obj, 'controlPoints', x => parseTransferFunctionControlPoints(x, dataType), defaultValue.controlPoints),
+  };
+}
+
 // TODO (skm) may not need new class
-class TrackableTransferFunctionParameters extends TrackableValue<Array<ControlPoint>> {
-  constructor(public defaultValue: Array<ControlPoint>) {
-    super(defaultValue, obj => obj);
+class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
+  constructor(public dataType: DataType, public defaultValue: TransferFunctionParameters) {
+    super(defaultValue, obj => parseTransferFunctionParameters(obj, dataType, defaultValue));
   }
 }
 
@@ -832,7 +862,7 @@ function getControlTrackable(control: ShaderUiControl):
         getBuilderValue: value => ({value}),
       };
     case 'transferFunction':
-      return {trackable: new TrackableValue<number>(1, verifyInt), getBuilderValue: () => null};
+      return {trackable: new TrackableTransferFunctionParameters(control.dataType, control.default), getBuilderValue: () => control.dataType};
   }
 }
 
@@ -1149,7 +1179,6 @@ function setControlInShader(
       gl.uniform3fv(uniform, value);
       break;
     case 'imageInvlerp':
-      console.log(value.range)
       enableLerpShaderFunction(shader, uName, control.dataType, value.range);
       break;
     case 'propertyInvlerp': {
