@@ -31,7 +31,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
 import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {defineTransferFunctionShader, ControlPoint} from 'neuroglancer/widget/transfer_function'
+import {defineTransferFunctionShader, ControlPoint, enableTransferFunctionShader} from 'neuroglancer/widget/transfer_function'
 
 export interface ShaderSliderControl {
   type: 'slider';
@@ -501,8 +501,11 @@ function parseTransferFunctionDirective(
   valueType: string, parameters: DirectiveParameters, dataContext: ShaderDataContext): DirectiveParseResult {
 // TODO (skm) allow to specify parameters such as control points
 parameters;
-const dataType = dataContext.imageData?.dataType;
+const imageData = dataContext.imageData;
+const dataType = imageData?.dataType;
+const channelRank = imageData?.channelRank;
 let errors = [];
+let channel = new Array(channelRank).fill(0);
 const controlPoints = new Array<ControlPoint>();
 if (valueType !== 'transferFunction') {
   errors.push('type must be transferFunction');
@@ -510,11 +513,26 @@ if (valueType !== 'transferFunction') {
 if (dataType === undefined) {
   errors.push('image data must be provided to use transfer function');
 }
+for (let [key, value] of parameters) {
+  try {
+    switch (key) {
+      case 'channel': {
+        channel = parseInvlerpChannel(value, channel.length);
+        break;
+      }
+      default:
+        errors.push(`Invalid parameter: ${key}`);
+        break;
+    }
+  } catch (e) {
+    errors.push(`Invalid ${key} value: ${e.message}`);
+  }
+}
 if (errors.length > 0) {
   return {errors};
 }
 return {
-  control: {type: 'transferFunction', dataType: dataType, default: {controlPoints: new Array}, controlPoints: controlPoints} as ShaderTransferFunctionControl,
+  control: {type: 'transferFunction', dataType, default: {controlPoints, channel}, controlPoints, channel} as ShaderTransferFunctionControl,
   errors: undefined,
 };
 }
@@ -642,7 +660,7 @@ float ${uName}() {
       }
       case 'transferFunction': {
         builder.addFragmentCode(`#define ${name} ${uName}\n`)
-        builder.addFragmentCode(defineTransferFunctionShader(builder, uName, control.controlPoints));
+        builder.addFragmentCode(defineTransferFunctionShader(builder, uName, control.dataType, builderValue.channel));
         break;
       }
       default: {
@@ -787,6 +805,7 @@ class TrackablePropertyInvlerpParameters extends TrackableValue<PropertyInvlerpP
 
 export interface TransferFunctionParameters {
   controlPoints: Array<ControlPoint>;
+  channel: number[];
 }
 
 function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
@@ -810,6 +829,9 @@ function parseTransferFunctionParameters(
   return {
     controlPoints: verifyOptionalObjectProperty(
       obj, 'controlPoints', x => parseTransferFunctionControlPoints(x, dataType), defaultValue.controlPoints),
+    channel: verifyOptionalObjectProperty(
+        obj, 'channel', x => parseInvlerpChannel(x, defaultValue.channel.length),
+        defaultValue.channel),
   };
 }
 
@@ -862,7 +884,8 @@ function getControlTrackable(control: ShaderUiControl):
         getBuilderValue: value => ({value}),
       };
     case 'transferFunction':
-      return {trackable: new TrackableTransferFunctionParameters(control.dataType, control.default), getBuilderValue: () => control.dataType};
+      return {trackable: new TrackableTransferFunctionParameters(control.dataType, control.default), getBuilderValue: (value: TransferFunctionParameters) => ({channel: value.channel, dataType: control.dataType}),
+    };
   }
 }
 
@@ -1191,8 +1214,7 @@ function setControlInShader(
       // Value is hard-coded in shader.
       break;
     case 'transferFunction':
-      // TEMP.
-      console.log(control, value);
+      enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints);
       break;
   }
 }

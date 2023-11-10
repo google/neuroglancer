@@ -22,7 +22,7 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'neuroglancer/layer';
@@ -35,6 +35,7 @@ import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
 // TODO (skm): remove hardcoded UINT8
 const NUM_COLOR_CHANNELS = 4;
@@ -52,6 +53,48 @@ export interface ControlPoint {
 export interface TransferFunctionTextureOptions {
   controlPoints: ControlPointsLookupTable;
   textureUnit: number;
+}
+
+function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: Array<ControlPoint>) {
+  function addLookupValue(index: number, color: vec4) {
+    out[index] = color[0];
+    out[index + 1] = color[1];
+    out[index + 2] = color[2];
+    out[index + 3] = color[3];
+  }
+
+  if (controlPoints.length === 0) {
+    out.fill(0);
+    return;
+  }
+  const firstPoint = controlPoints[0];
+
+  if (firstPoint.position > 0) {
+    const {color} = controlPoints[0];
+    for (let i = 0; i < firstPoint.position; ++i) {
+      const t = i / firstPoint.position;
+      const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
+      const index = i * NUM_COLOR_CHANNELS;
+      addLookupValue(index, lerpedColor);
+    }
+  }
+
+  let controlPointIndex = 0;
+  for (let i = firstPoint.position; i < 256; ++i) {
+    const currentPoint = controlPoints[controlPointIndex];
+    const nextPoint = controlPoints[Math.min(controlPointIndex + 1, controlPoints.length - 1)];
+    const lookupIndex = i * NUM_COLOR_CHANNELS;
+    if (currentPoint === nextPoint) {
+      addLookupValue(lookupIndex, currentPoint.color);
+    } else if (i < nextPoint.position) {
+      const t = (i - currentPoint.position) / (nextPoint.position - currentPoint.position);
+      const lerpedColor = lerpUint8Color(currentPoint.color, nextPoint.color, t);
+      addLookupValue(lookupIndex, lerpedColor);
+    } else {
+      addLookupValue(lookupIndex, nextPoint.color);
+      controlPointIndex++;
+    }
+  }
 }
 
 function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
@@ -258,46 +301,7 @@ class ControlPointsLookupTable extends RefCounted {
     // TODO (skm) implement change based on data type
     const {lookupTable} = this;
     const {controlPoints} = this.trackable.value;
-
-    function addLookupValue(index: number, color: vec4) {
-      lookupTable[index] = color[0];
-      lookupTable[index + 1] = color[1];
-      lookupTable[index + 2] = color[2];
-      lookupTable[index + 3] = color[3];
-    }
-
-    if (controlPoints.length === 0) {
-      this.lookupTable.fill(0);
-      return;
-    }
-    const firstPoint = controlPoints[0];
-
-    if (firstPoint.position > 0) {
-      const {color} = controlPoints[0];
-      for (let i = 0; i < firstPoint.position; ++i) {
-        const t = i / firstPoint.position;
-        const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
-        const index = i * NUM_COLOR_CHANNELS;
-        addLookupValue(index, lerpedColor);
-      }
-    }
-
-    let controlPointIndex = 0;
-    for (let i = firstPoint.position; i < 256; ++i) {
-      const currentPoint = controlPoints[controlPointIndex];
-      const nextPoint = controlPoints[Math.min(controlPointIndex + 1, controlPoints.length - 1)];
-      const lookupIndex = i * NUM_COLOR_CHANNELS;
-      if (currentPoint === nextPoint) {
-        addLookupValue(lookupIndex, currentPoint.color);
-      } else if (i < nextPoint.position) {
-        const t = (i - currentPoint.position) / (nextPoint.position - currentPoint.position);
-        const lerpedColor = lerpUint8Color(currentPoint.color, nextPoint.color, t);
-        addLookupValue(lookupIndex, lerpedColor);
-      } else {
-        addLookupValue(lookupIndex, nextPoint.color);
-        controlPointIndex++;
-      }
-    }
+    lerpBetweenControlPoints(lookupTable, controlPoints);
   }
 
   // TODO (skm) correct disposal
@@ -337,15 +341,29 @@ export class TransferFunctionWidget extends Tab {
   }
 }
 
-export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, controlPoints: Array<ControlPoint>) {
-  controlPoints;
-  builder;
+export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
+  builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, 256);
+  const shaderType = getShaderType(dataType);
+  // TODO (SKM) - bring in intepolation code option
   let code = `
-vec4 ${name}(float inputValue) {
-  return vec4(0.0, 0.0, 0.0, 0.0);
+vec4 ${name}(${shaderType} inputValue) {
+  int index = int(round(toNormalized(inputValue) * 255.0));
+  return vec4(uTransferFunctionParams_${name}[index]);
+}
+vec4 ${name}() {
+  return ${name}(getDataValue(${channel.join(',')}));
 }
 `;
   return code
+}
+
+// TODO (skm) can likely optimize this
+export function enableTransferFunctionShader(shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>) {
+  const {gl} = shader;
+  const transferFunction = new Int32Array(256 * NUM_COLOR_CHANNELS);
+  lerpBetweenControlPoints(transferFunction, controlPoints);
+  gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
+  dataType;
 }
 
 export function activateTransferFunctionTool(
