@@ -37,13 +37,12 @@ import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls'
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 // TODO (skm): remove hardcoded UINT8
-const DATA_TYPE = DataType.UINT8;
 const NUM_COLOR_CHANNELS = 4;
 // const NUM_TF_LINES = 256;
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
 });
-export const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
+const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 
 export interface ControlPoint {
   position: number;
@@ -113,6 +112,7 @@ class TransferFunctionTexture extends RefCounted {
   updateAndActivate(options: TransferFunctionTextureOptions) {
     const {gl} = this;
     let {texture} = this;
+    // TODO (skm) might be able to do more efficient updates
     if (texture !== null && options === this.priorOptions) {
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture); 
@@ -124,7 +124,7 @@ class TransferFunctionTexture extends RefCounted {
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     setRawTextureParameters(gl);
-    // TODO probably more efficient to pack the
+    // TODO (skm) probably more efficient to pack the
     // 2D texture. I think there are some helper functions
     // to help with this.
     gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, this.width, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, options.controlPoints.lookupTable);
@@ -201,6 +201,7 @@ out_color = texelFetch(uSampler, texel, 0);
       transferFunctionShader.bind();
       const aVertexPosition = transferFunctionShader.attribute('aVertexPosition');
       this.vertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      // const textureUnit = transferFunctionShader.textureUnit(this.texture.symbol);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
 
       this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
@@ -338,11 +339,10 @@ export class TransferFunctionWidget extends Tab {
 
 export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, controlPoints: Array<ControlPoint>) {
   controlPoints;
-  builder.addTextureSampler('sampler2D', 'uTransferSampler', transferFunctionSamplerTextureUnit);
+  builder;
   let code = `
 vec4 ${name}(float inputValue) {
-  int index = int(inputValue);
-  return texelFetch(uTransferSampler, ivec2(index, 0), 0);
+  return vec4(0.0, 0.0, 0.0, 0.0);
 }
 `;
   return code
