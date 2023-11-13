@@ -46,6 +46,7 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
 });
 const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
+const CONTROL_POINT_GRAB_DISTANCE = 5;
 
 export interface ControlPoint {
   position: number;
@@ -102,10 +103,36 @@ function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: A
   }
 }
 
+function findClosestValueIndexInSortedArray(array: Array<number>, value: number) {
+  if (array.length === 0) {
+    return -1;
+  }
+
+  let start = 0;
+  let end = array.length - 1;
+
+  while (start <= end) {
+    const mid = Math.floor((start + end) / 2);
+    if (array[mid] === value) {
+      return mid;
+    } else if (array[mid] < value) {
+      start = mid + 1;
+    } else {
+      end = mid - 1;
+    }
+  }
+
+  start = Math.min(start, array.length - 1); 
+  end = Math.max(end, 0);
+  const startDiff = Math.abs(array[start] - value);
+  const endDiff = Math.abs(array[end] - value);
+  return startDiff < endDiff ? start : end;
+}
+
 function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
   const color = vec4.create();
   for (let i = 0; i < 4; ++i) {
-    color[i] = computeLerp([startColor[i], endColor[i]],DataType.UINT8, t) as number;
+    color[i] = computeLerp([startColor[i], endColor[i]], DataType.UINT8, t) as number;
   }
   return color;
 }
@@ -119,7 +146,7 @@ function griddedRectangleArray(numGrids: number) {
   for (let i = 0; i < numGrids; ++i) {
     const end = start + step;
     const index = i * VERTICES_PER_QUAD * 2;
-    
+
     // Triangle 1 - top-left, top-right, bottom-right
     result[index] = start; // top-left x
     result[index + 1] = height; // top-left y
@@ -163,7 +190,7 @@ class TransferFunctionTexture extends RefCounted {
     // TODO (skm) might be able to do more efficient updates
     if (texture !== null && options === this.priorOptions) {
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture); 
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       return;
     }
     if (texture === null) {
@@ -202,9 +229,9 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     this.texture = this.registerDisposer(new TransferFunctionTexture(this.gl, dataType));
     // TODO remove fixed 256
     this.vertexBuffer =
-        this.registerDisposer(getMemoizedBuffer(
-                                this.gl, WebGL2RenderingContext.ARRAY_BUFFER, griddedRectangleArray,
-                                256)).value;
+      this.registerDisposer(getMemoizedBuffer(
+        this.gl, WebGL2RenderingContext.ARRAY_BUFFER, griddedRectangleArray,
+        256)).value;
     this.controlPointsVertexBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsPositionArray)).value;
     this.controlPointsColorBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsColorArray)).value;
     this.linePositionBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.linePositionArray)).value;
@@ -219,7 +246,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       return (colorComponent / 255);
     }
 
-    function createLinePoints(array: Float32Array, index: number, positions: vec4) : number{
+    function createLinePoints(array: Float32Array, index: number, positions: vec4): number {
       for (let i = 0; i < VERTICES_PER_LINE; ++i) {
         array[index++] = normalizePosition(positions[0]);
         array[index++] = normalizePosition(positions[1]);
@@ -247,7 +274,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         endAdd = {position: 255, color: controlPoints[controlPoints.length - 1].color};
       }
     }
-    
+
     const linePositionArray = new Float32Array(numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE);
     if (startAdd !== null) {
       const linePosition = vec4.fromValues(startAdd.position, startAdd.color[3], controlPoints[0].position, controlPoints[0].color[3]);
@@ -268,7 +295,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
       }
     }
-    
+
     if (endAdd !== null) {
       const linePosition = vec4.fromValues(controlPoints[controlPoints.length - 1].position, controlPoints[controlPoints.length - 1].color[3], endAdd.position, endAdd.color[3]);
       lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
@@ -356,8 +383,7 @@ out_color = tempColor * alpha;
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
-    if (this.controlPointsPositionArray.length > 0) 
-    {
+    if (this.controlPointsPositionArray.length > 0) {
       const {renderViewport} = this;
       transferFunctionLineShader.bind();
       const aLineStartEnd = transferFunctionLineShader.attribute('aLineStartEnd');
@@ -402,6 +428,25 @@ class ControlPointsLookupTable extends RefCounted {
     return Math.floor(position * this.lookupTable.length / NUM_COLOR_CHANNELS);
   }
 
+  findNearestControlPointIndex(position: number) {
+    return findClosestValueIndexInSortedArray(this.trackable.value.controlPoints.map((point) => point.position), this.positionToIndex(position));
+  }
+
+  grabControlPoint(position: number) {
+    const nearestIndex = this.findNearestControlPointIndex(position);
+    if (nearestIndex === -1) {
+      return -1;
+    }
+    const nearestPosition = this.trackable.value.controlPoints[nearestIndex].position;
+    const desiredPosition = this.positionToIndex(position);
+    if (Math.abs(nearestPosition - desiredPosition) < CONTROL_POINT_GRAB_DISTANCE) {
+      return nearestIndex;
+    }
+    else {
+      return -1;
+    }
+  }
+
   addPoint(position: number, opacity: number, color: vec3) {
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
@@ -410,11 +455,10 @@ class ControlPointsLookupTable extends RefCounted {
     if (existingIndex !== -1) {
       controlPoints.splice(existingIndex, 1);
     }
-    // TODO skm (temp for testing)
-    if (opacity <= 30) {
+    if (opacity <= 25) {
       opacity = 0;
     }
-    if (opacity >= 225) {
+    if (opacity >= 230) {
       opacity = 255;
     }
     controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
@@ -422,7 +466,6 @@ class ControlPointsLookupTable extends RefCounted {
   }
 
   lookupTableFromControlPoints() {
-    // TODO (skm) implement change based on data type
     const {lookupTable} = this;
     const {controlPoints} = this.trackable.value;
     lerpBetweenControlPoints(lookupTable, controlPoints);
@@ -437,6 +480,7 @@ class ControlPointsLookupTable extends RefCounted {
 export class TransferFunctionWidget extends Tab {
   transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
   controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
+  currentGrabbedControlPointIndex: number = -1;
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext, public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     super(visibility);
     const {element} = this;
@@ -446,13 +490,27 @@ export class TransferFunctionWidget extends Tab {
     element.addEventListener('mousedown', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.addPoint(event, element.clientWidth, element.clientHeight);
+      this.grabOrAddControlPoint(event, element.clientWidth, element.clientHeight);
     })
-    // TODO (skm) add color picker
   };
 
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
+  }
+  findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
+    return this.controlPointsLookupTable.grabControlPoint(event.offsetX / canvasX);
+  }
+  grabOrAddControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+    const nearestIndex = this.findNearestControlPointIndex(event, canvasX);
+    if (nearestIndex !== -1) {
+      this.currentGrabbedControlPointIndex = nearestIndex;
+      console.log("grabbed control point index", this.currentGrabbedControlPointIndex)
+    }
+    else {
+      console.log("adding control point")
+      this.addPoint(event, canvasX, canvasY);
+      this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX); 
+    }
   }
   addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
     const normalizedX = event.offsetX / canvasX;
