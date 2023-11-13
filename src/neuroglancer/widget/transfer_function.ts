@@ -222,6 +222,8 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     }
     this.controlPointsColorArray = colorArray
     this.controlPointsPositionArray = positionArray;
+    this.controlPointsVertexBuffer.setData(this.controlPointsPositionArray);
+    this.controlPointsColorBuffer.setData(this.controlPointsColorArray);
   }
 
   private lineShader = this.registerDisposer((() => {
@@ -264,10 +266,18 @@ out_color = texelFetch(uSampler, texel, 0);
     builder.addOutputBuffer('vec4', 'out_color', 0);
     builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+gl_PointSize = 8.0;
 vColor = aVertexColor;
 `);
+// Points with border are very aliased - will have to revisit
+// TODO may need to discard
     builder.setFragmentMain(`
-out_color = vec4(vColor, 0.0);
+float dist = distance(gl_PointCoord, vec2(0.5, 0.5));
+float delta = fwidth(dist);
+float alpha = smoothstep(0.3, 0.4, dist);
+vec4 tempColor = vec4(mix(vColor, vec3(0.0, 0.0, 0.0), alpha), 1.0);
+alpha = smoothstep(0.5 - delta, 0.5 + delta, dist);
+out_color = tempColor * alpha;
 `);
     return builder.build();
   })());
@@ -298,7 +308,7 @@ out_color = vec4(vColor, 0.0);
       initializeLineShader(
         lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
           /*featherWidthInPixels=*/ 1.0);
-      drawLines(gl, 1, 1)
+      drawLines(gl, 1, 1);
     }
     if (this.controlPointsPositionArray.length > 0) 
     {
