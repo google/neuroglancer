@@ -21,7 +21,7 @@ import {ToolActivation} from 'neuroglancer/ui/tool';
 import {DataType} from 'neuroglancer/util/data_type';
 import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
-import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
+import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
@@ -39,6 +39,8 @@ import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
 // TODO (skm): remove hardcoded UINT8
 const NUM_COLOR_CHANNELS = 4;
+// x1, y1, x2, y2
+const POSITION_VALUES_PER_LINE = 4;
 // const NUM_TF_LINES = 256;
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   'at:shift?+mousedown0': {action: 'add-point'},
@@ -188,6 +190,8 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
   private controlPointsColorBuffer: Buffer;
   private controlPointsPositionArray = new Float32Array();
   private controlPointsColorArray = new Float32Array();
+  private linePositionBuffer: Buffer;
+  private linePositionArray = new Float32Array();
   get drawOrder() {
     return 1;
   }
@@ -203,36 +207,101 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
                                 256)).value;
     this.controlPointsVertexBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsPositionArray)).value;
     this.controlPointsColorBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsColorArray)).value;
+    this.linePositionBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.linePositionArray)).value;
   }
 
   updateControlPointArrays() {
+    function normalizePosition(position: number) {
+      return (position / 255) * 2 - 1;
+    }
+
+    function normalizeColor(colorComponent: number) {
+      return (colorComponent / 255);
+    }
+
+    function createLinePoints(array: Float32Array, index: number, positions: vec4) : number{
+      for (let i = 0; i < VERTICES_PER_LINE; ++i) {
+        array[index++] = normalizePosition(positions[0]);
+        array[index++] = normalizePosition(positions[1]);
+        array[index++] = normalizePosition(positions[2]);
+        array[index++] = normalizePosition(positions[3]);
+      }
+      return index
+    }
+
     const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
     const controlPoints = this.parent.controlPointsLookupTable.trackable.value.controlPoints;
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
     const positionArray = new Float32Array(controlPoints.length * 2);
+    let numLines = controlPoints.length - 1;
+    let startAdd = null;
+    let endAdd = null;
+    let lineIndex = 0;
+    if (controlPoints.length > 0) {
+      if (controlPoints[0].position > 0) {
+        numLines += 1;
+        startAdd = {position: 0, color: vec4.fromValues(0, 0, 0, 0)};
+      }
+      if (controlPoints[controlPoints.length - 1].position < 255) {
+        numLines += 1;
+        endAdd = {position: 255, color: controlPoints[controlPoints.length - 1].color};
+      }
+    }
+    else {
+      return;
+    }
+    
+    // temp
+    numLines = 1;
+    const linePositionArray = new Float32Array(numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE);
+    if (startAdd !== null) {
+      lineIndex = createLinePoints(linePositionArray, lineIndex, vec4.fromValues(0, 100, 255, 255));
+    }
+    this.linePositionArray = linePositionArray;
+    this.linePositionBuffer.setData(this.linePositionArray);
+
     for (let i = 0; i < controlPoints.length; ++i) {
       const colorIndex = i * colorChannels;
       const positionIndex = i * 2;
       const {color, position} = controlPoints[i];
-      colorArray[colorIndex] = color[0] / 255;
-      colorArray[colorIndex + 1] = color[1] / 255;
-      colorArray[colorIndex + 2] = color[2] / 255;
-      positionArray[positionIndex] = (position / 255) * 2 - 1;
-      positionArray[positionIndex + 1] = (color[3] / 255) * 2 - 1;
+      colorArray[colorIndex] = normalizeColor(color[0]);
+      colorArray[colorIndex + 1] = normalizeColor(color[1]);
+      colorArray[colorIndex + 2] = normalizeColor(color[2]);
+      positionArray[positionIndex] = normalizePosition(position);
+      positionArray[positionIndex + 1] = normalizePosition(color[3]);
+      // if (i < controlPoints.length - 1) {
+      //   linePositionArray[lineIndex] = normalizePosition(position);
+      //   linePositionArray[lineIndex + 1] = normalizePosition(0);
+      //   linePositionArray[lineIndex + 2] = normalizePosition(controlPoints[i + 1].position);
+      //   linePositionArray[lineIndex + 3] = normalizePosition(controlPoints[i + 1].color[3]);
+      //   lineIndex += 4;
+      // }
     }
+    
+    // if (endAdd !== null) {
+    //   linePositionArray[lineIndex] = normalizePosition(controlPoints[controlPoints.length - 1].position);
+    //   linePositionArray[lineIndex + 1] = normalizePosition(controlPoints[controlPoints.length - 1].color[3]);
+    //   linePositionArray[lineIndex + 2] = normalizePosition(endAdd.position);
+    //   linePositionArray[lineIndex + 3] = normalizePosition(endAdd.color[3]);
+    // }
+
     this.controlPointsColorArray = colorArray
     this.controlPointsPositionArray = positionArray;
+    // this.linePositionArray = linePositionArray;
     this.controlPointsVertexBuffer.setData(this.controlPointsPositionArray);
     this.controlPointsColorBuffer.setData(this.controlPointsColorArray);
+    // this.linePositionBuffer.setData(this.linePositionArray);
   }
 
-  private lineShader = this.registerDisposer((() => {
+  private transferFunctionLineShader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
     defineLineShader(builder);
+    builder.addAttribute('vec4', 'aLineStartEnd');
     builder.addOutputBuffer('vec4', 'out_color', 0);
+    builder.addVarying('float', 'vColor');
     builder.setVertexMain(`
-vec4 start = vec4(-1.0, 0.0, 0.0, 1.0);
-vec4 end = vec4(1.0, 0.0, 0.0, 1.0);
+vec4 start = vec4(aLineStartEnd[0], aLineStartEnd[1], 0.0, 1.0);
+vec4 end = vec4(aLineStartEnd[2], aLineStartEnd[3], 0.0, 1.0);
 emitLine(start, end, 1.0);
 `);
     builder.setFragmentMain(`
@@ -280,7 +349,7 @@ out_color = tempColor * alpha;
   })());
 
   drawIndirect() {
-    const {lineShader, gl, transferFunctionShader, controlPointsShader} = this;
+    const {transferFunctionLineShader, gl, transferFunctionShader, controlPointsShader} = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
@@ -298,23 +367,26 @@ out_color = tempColor * alpha;
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
-    // TODO (skm) fix the line and control point shaders
-    {
-      const {renderViewport} = this;
-      lineShader.bind();
-      initializeLineShader(
-        lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
-          /*featherWidthInPixels=*/ 1.0);
-      drawLines(gl, 1, 1);
-    }
     if (this.controlPointsPositionArray.length > 0) 
     {
+      const {renderViewport} = this;
+      transferFunctionLineShader.bind();
+      const aLineStartEnd = transferFunctionLineShader.attribute('aVertexPosition');
+      this.linePositionBuffer.bindToVertexAttrib(aLineStartEnd, /*components=*/4, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      initializeLineShader(
+        transferFunctionLineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
+          /*featherWidthInPixels=*/ 1);
+      drawLines(gl, this.linePositionArray.length / VERTICES_PER_LINE, 1);
+      gl.disableVertexAttribArray(aLineStartEnd);
+
       controlPointsShader.bind();
       const aVertexPosition = controlPointsShader.attribute('aVertexPosition');
       this.controlPointsVertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       const aVertexColor = controlPointsShader.attribute('aVertexColor');
       this.controlPointsColorBuffer.bindToVertexAttrib(aVertexColor, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       gl.drawArrays(gl.POINTS, 0, this.controlPointsPositionArray.length / 2);
+      gl.disableVertexAttribArray(aVertexPosition);
+      gl.disableVertexAttribArray(aVertexColor);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
