@@ -36,7 +36,6 @@ import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {normalize} from 'gl-matrix/src/gl-matrix/vec2';
 
 // TODO (skm): remove hardcoded UINT8
 const NUM_COLOR_CHANNELS = 4;
@@ -48,7 +47,7 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
 });
 const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 const CONTROL_POINT_GRAB_DISTANCE = 5;
-const TRANSFER_FUNCTION_BORDER_WIDTH = 20;
+const TRANSFER_FUNCTION_BORDER_WIDTH = 23;
 
 export interface ControlPoint {
   position: number;
@@ -124,7 +123,7 @@ function findClosestValueIndexInSortedArray(array: Array<number>, value: number)
     }
   }
 
-  start = Math.min(start, array.length - 1); 
+  start = Math.min(start, array.length - 1);
   end = Math.max(end, 0);
   const startDiff = Math.abs(array[start] - value);
   const endDiff = Math.abs(array[end] - value);
@@ -486,6 +485,7 @@ class ControlPointsLookupTable extends RefCounted {
   }
 }
 
+// TODO (skm) the widget needs to have a controller for bindings
 export class TransferFunctionWidget extends Tab {
   transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
   controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
@@ -506,11 +506,25 @@ export class TransferFunctionWidget extends Tab {
       event.preventDefault();
       this.moveControlPoint(event, element.clientWidth, element.clientHeight);
     })
-    // TODO (skm) need to handle mouseup outside of element
     element.addEventListener('mouseup', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
       this.currentGrabbedControlPointIndex = -1;
+    })
+    // TODO (skm) is this desired or is it better to leave it out
+    element.addEventListener('mouseleave', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      this.currentGrabbedControlPointIndex = -1;
+    })
+    element.addEventListener('dblclick', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      const nearestIndex = this.findNearestControlPointIndex(event, element.clientWidth);
+      if (nearestIndex !== -1) {
+        this.controlPointsLookupTable.trackable.value.controlPoints.splice(nearestIndex, 1);
+        this.updateControlPointsAndDraw();
+      }
     })
   };
   updateView() {
@@ -531,7 +545,7 @@ export class TransferFunctionWidget extends Tab {
     }
     else {
       this.addPoint(event, canvasX, canvasY);
-      this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX); 
+      this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX);
     }
   }
   getControlPointPosition(event: MouseEvent, canvasX: number, canvasY: number) {
@@ -580,6 +594,7 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
   dataType;
 }
 
+// TODO (skm) this renders in the popup, but not in the main viewAA
 export function activateTransferFunctionTool(
   activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
   activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
