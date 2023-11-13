@@ -266,17 +266,14 @@ out_color = texelFetch(uSampler, texel, 0);
     builder.addOutputBuffer('vec4', 'out_color', 0);
     builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
-gl_PointSize = 8.0;
+gl_PointSize = 12.0;
 vColor = aVertexColor;
 `);
-// Points with border are very aliased - will have to revisit
-// TODO may need to discard
     builder.setFragmentMain(`
 float dist = distance(gl_PointCoord, vec2(0.5, 0.5));
-float delta = fwidth(dist);
-float alpha = smoothstep(0.3, 0.4, dist);
+float alpha = smoothstep(0.25, 0.4, dist);
 vec4 tempColor = vec4(mix(vColor, vec3(0.0, 0.0, 0.0), alpha), 1.0);
-alpha = smoothstep(0.5 - delta, 0.5 + delta, dist);
+alpha = 1.0 - smoothstep(0.4, 0.5, dist);
 out_color = tempColor * alpha;
 `);
     return builder.build();

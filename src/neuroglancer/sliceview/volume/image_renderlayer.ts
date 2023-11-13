@@ -26,6 +26,7 @@ import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, getFallbackBuilderState, parseShaderUiControls, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
 const DEFAULT_FRAGMENT_MAIN = `#uicontrol invlerp normalized
+#uicontrol transferFunction colormap
 void main() {
   emitGrayscale(normalized());
 }
