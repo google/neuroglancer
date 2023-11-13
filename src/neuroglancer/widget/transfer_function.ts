@@ -36,6 +36,7 @@ import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {normalize} from 'gl-matrix/src/gl-matrix/vec2';
 
 // TODO (skm): remove hardcoded UINT8
 const NUM_COLOR_CHANNELS = 4;
@@ -47,6 +48,7 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
 });
 const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 const CONTROL_POINT_GRAB_DISTANCE = 5;
+const TRANSFER_FUNCTION_BORDER_WIDTH = 20;
 
 export interface ControlPoint {
   position: number;
@@ -423,15 +425,12 @@ class ControlPointsLookupTable extends RefCounted {
         throw new Error('Invalid data type');
     }
   }
-
   positionToIndex(position: number) {
     return Math.floor(position * this.lookupTable.length / NUM_COLOR_CHANNELS);
   }
-
   findNearestControlPointIndex(position: number) {
     return findClosestValueIndexInSortedArray(this.trackable.value.controlPoints.map((point) => point.position), this.positionToIndex(position));
   }
-
   grabControlPoint(position: number) {
     const nearestIndex = this.findNearestControlPointIndex(position);
     if (nearestIndex === -1) {
@@ -446,31 +445,41 @@ class ControlPointsLookupTable extends RefCounted {
       return -1;
     }
   }
-
   addPoint(position: number, opacity: number, color: vec3) {
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
-    // TODO temporary to ensure no duplicate positions
     const existingIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
     if (existingIndex !== -1) {
       controlPoints.splice(existingIndex, 1);
     }
-    if (opacity <= 25) {
+    if (opacity <= TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacity = 0;
     }
-    if (opacity >= 230) {
+    if (opacity >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacity = 255;
     }
     controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
     controlPoints.sort((a, b) => a.position - b.position);
   }
-
   lookupTableFromControlPoints() {
     const {lookupTable} = this;
     const {controlPoints} = this.trackable.value;
     lerpBetweenControlPoints(lookupTable, controlPoints);
   }
-
+  updatePoint(index: number, position: number, opacity: number, color: vec3) {
+    const {controlPoints} = this.trackable.value;
+    const positionAsIndex = this.positionToIndex(position);
+    if (opacity <= TRANSFER_FUNCTION_BORDER_WIDTH) {
+      opacity = 0;
+    }
+    if (opacity >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
+      opacity = 255;
+    }
+    controlPoints[index] = {position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)};
+    controlPoints.sort((a, b) => a.position - b.position);
+    const newControlPointIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
+    return newControlPointIndex;
+  }
   // TODO (skm) correct disposal
   disposed() {
     super.disposed();
@@ -492,10 +501,25 @@ export class TransferFunctionWidget extends Tab {
       event.preventDefault();
       this.grabOrAddControlPoint(event, element.clientWidth, element.clientHeight);
     })
+    element.addEventListener('mousemove', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      this.moveControlPoint(event, element.clientWidth, element.clientHeight);
+    })
+    // TODO (skm) need to handle mouseup outside of element
+    element.addEventListener('mouseup', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      this.currentGrabbedControlPointIndex = -1;
+    })
   };
-
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
+  }
+  updateControlPointsAndDraw() {
+    this.controlPointsLookupTable.lookupTableFromControlPoints();
+    this.transferFunctionPanel.updateControlPointArrays();
+    this.updateView();
   }
   findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
     return this.controlPointsLookupTable.grabControlPoint(event.offsetX / canvasX);
@@ -504,23 +528,30 @@ export class TransferFunctionWidget extends Tab {
     const nearestIndex = this.findNearestControlPointIndex(event, canvasX);
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
-      console.log("grabbed control point index", this.currentGrabbedControlPointIndex)
     }
     else {
-      console.log("adding control point")
       this.addPoint(event, canvasX, canvasY);
       this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX); 
     }
   }
-  addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+  getControlPointPosition(event: MouseEvent, canvasX: number, canvasY: number) {
     const normalizedX = event.offsetX / canvasX;
     const normalizedY = 1 - (event.offsetY / canvasY);
     const opacity = Math.round(normalizedY * 255)
+    return {normalizedX, opacity};
+  }
+  moveControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+    if (this.currentGrabbedControlPointIndex !== -1) {
+      const {normalizedX, opacity} = this.getControlPointPosition(event, canvasX, canvasY);
+      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(this.currentGrabbedControlPointIndex, normalizedX, opacity, vec3.fromValues(255, 255, 255));
+      this.updateControlPointsAndDraw();
+    }
+  }
+  addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+    const {normalizedX, opacity} = this.getControlPointPosition(event, canvasX, canvasY);
     // TODO (skm) add color picker
     this.controlPointsLookupTable.addPoint(normalizedX, opacity, vec3.fromValues(255, 255, 255));
-    this.controlPointsLookupTable.lookupTableFromControlPoints();
-    this.transferFunctionPanel.updateControlPointArrays();
-    this.updateView();
+    this.updateControlPointsAndDraw();
   }
 }
 
