@@ -71,6 +71,7 @@ export interface ShaderCheckboxControl {
   default: boolean;
 }
 
+// TODO (skm) make control points a class potentially
 export interface ShaderTransferFunctionControl {
   type: 'transferFunction';
   dataType: DataType;
@@ -1214,7 +1215,6 @@ function setControlInShader(
       // Value is hard-coded in shader.
       break;
     case 'transferFunction':
-      console.log('transfer function value', value);
       enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints);
       break;
   }

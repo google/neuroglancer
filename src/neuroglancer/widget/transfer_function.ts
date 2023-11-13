@@ -170,9 +170,6 @@ class TransferFunctionTexture extends RefCounted {
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     setRawTextureParameters(gl);
-    // TODO (skm) probably more efficient to pack the
-    // 2D texture. I think there are some helper functions
-    // to help with this.
     gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, this.width, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, options.controlPoints.lookupTable);
     this.priorOptions = options;
   }
@@ -189,8 +186,8 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
   private vertexBuffer: Buffer;
   private controlPointsVertexBuffer: Buffer;
   private controlPointsColorBuffer: Buffer;
-  private controlPointsPositionArray: Float32Array;
-  private controlPointsColorArray: Float32Array;
+  private controlPointsPositionArray = new Float32Array();
+  private controlPointsColorArray = new Float32Array();
   get drawOrder() {
     return 1;
   }
@@ -214,11 +211,14 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
     const positionArray = new Float32Array(controlPoints.length * 2);
     for (let i = 0; i < controlPoints.length; ++i) {
-      const index = i * colorChannels;
-      const {color} = controlPoints[i];
-      colorArray[index] = color[0];
-      colorArray[index + 1] = color[1];
-      colorArray[index + 2] = color[2];
+      const colorIndex = i * colorChannels;
+      const positionIndex = i * 2;
+      const {color, position} = controlPoints[i];
+      colorArray[colorIndex] = color[0] / 255;
+      colorArray[colorIndex + 1] = color[1] / 255;
+      colorArray[colorIndex + 2] = color[2] / 255;
+      positionArray[positionIndex] = (position / 255) * 2 - 1;
+      positionArray[positionIndex + 1] = (color[3] / 255) * 2 - 1;
     }
     this.controlPointsColorArray = colorArray
     this.controlPointsPositionArray = positionArray;
@@ -239,7 +239,7 @@ out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
     return builder.build();
   })());
 
-  private controlPointsShader = this.registerDisposer((() => {
+  private transferFunctionShader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
     builder.addAttribute('vec2', 'aVertexPosition');
     builder.addVarying('vec2', 'vTexCoord');
@@ -256,19 +256,18 @@ out_color = texelFetch(uSampler, texel, 0);
     return builder.build();
   })());
 
-  private transferFunctionShader = this.registerDisposer((() => {
+  private controlPointsShader = this.registerDisposer((() => {
     const builder = new ShaderBuilder(this.gl);
     builder.addAttribute('vec2', 'aVertexPosition');
     builder.addAttribute('vec3', 'aVertexColor');
     builder.addVarying('vec3', 'vColor');
     builder.addOutputBuffer('vec4', 'out_color', 0);
-    builder.addTextureSampler('sampler2D', 'uSampler', transferFunctionSamplerTextureUnit);
     builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
 vColor = aVertexColor;
 `);
     builder.setFragmentMain(`
-out_color = vec4(vColor / 255.0, 0.0);
+out_color = vec4(vColor, 0.0);
 `);
     return builder.build();
   })());
@@ -301,12 +300,14 @@ out_color = vec4(vColor / 255.0, 0.0);
           /*featherWidthInPixels=*/ 1.0);
       drawLines(gl, 1, 1)
     }
+    if (this.controlPointsPositionArray.length > 0) 
     {
       controlPointsShader.bind();
       const aVertexPosition = controlPointsShader.attribute('aVertexPosition');
       this.controlPointsVertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       const aVertexColor = controlPointsShader.attribute('aVertexColor');
       this.controlPointsColorBuffer.bindToVertexAttrib(aVertexColor, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      gl.drawArrays(gl.POINTS, 0, this.controlPointsPositionArray.length / 2);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
@@ -392,6 +393,7 @@ export class TransferFunctionWidget extends Tab {
     // TODO (skm) add color picker
     this.controlPointsLookupTable.addPoint(normalizedX, opacity, vec3.fromValues(255, 255, 255));
     this.controlPointsLookupTable.lookupTableFromControlPoints();
+    this.transferFunctionPanel.updateControlPointArrays();
     this.updateView();
   }
 }
@@ -418,8 +420,6 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
   const transferFunction = new Int32Array(256 * NUM_COLOR_CHANNELS);
   lerpBetweenControlPoints(transferFunction, controlPoints);
   gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
-  console.log('control points', controlPoints);
-  console.log('transfer function', transferFunction);
   dataType;
 }
 
