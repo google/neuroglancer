@@ -247,18 +247,12 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         endAdd = {position: 255, color: controlPoints[controlPoints.length - 1].color};
       }
     }
-    else {
-      return;
-    }
     
-    // temp
-    numLines = 1;
     const linePositionArray = new Float32Array(numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE);
     if (startAdd !== null) {
-      lineIndex = createLinePoints(linePositionArray, lineIndex, vec4.fromValues(0, 100, 255, 255));
+      const linePosition = vec4.fromValues(startAdd.position, startAdd.color[3], controlPoints[0].position, controlPoints[0].color[3]);
+      lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
     }
-    this.linePositionArray = linePositionArray;
-    this.linePositionBuffer.setData(this.linePositionArray);
 
     for (let i = 0; i < controlPoints.length; ++i) {
       const colorIndex = i * colorChannels;
@@ -269,28 +263,23 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       colorArray[colorIndex + 2] = normalizeColor(color[2]);
       positionArray[positionIndex] = normalizePosition(position);
       positionArray[positionIndex + 1] = normalizePosition(color[3]);
-      // if (i < controlPoints.length - 1) {
-      //   linePositionArray[lineIndex] = normalizePosition(position);
-      //   linePositionArray[lineIndex + 1] = normalizePosition(0);
-      //   linePositionArray[lineIndex + 2] = normalizePosition(controlPoints[i + 1].position);
-      //   linePositionArray[lineIndex + 3] = normalizePosition(controlPoints[i + 1].color[3]);
-      //   lineIndex += 4;
-      // }
+      if (i < controlPoints.length - 1) {
+        const linePosition = vec4.fromValues(position, color[3], controlPoints[i + 1].position, controlPoints[i + 1].color[3]);
+        lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
+      }
     }
     
-    // if (endAdd !== null) {
-    //   linePositionArray[lineIndex] = normalizePosition(controlPoints[controlPoints.length - 1].position);
-    //   linePositionArray[lineIndex + 1] = normalizePosition(controlPoints[controlPoints.length - 1].color[3]);
-    //   linePositionArray[lineIndex + 2] = normalizePosition(endAdd.position);
-    //   linePositionArray[lineIndex + 3] = normalizePosition(endAdd.color[3]);
-    // }
+    if (endAdd !== null) {
+      const linePosition = vec4.fromValues(controlPoints[controlPoints.length - 1].position, controlPoints[controlPoints.length - 1].color[3], endAdd.position, endAdd.color[3]);
+      lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
+    }
 
     this.controlPointsColorArray = colorArray
     this.controlPointsPositionArray = positionArray;
-    // this.linePositionArray = linePositionArray;
+    this.linePositionArray = linePositionArray;
     this.controlPointsVertexBuffer.setData(this.controlPointsPositionArray);
     this.controlPointsColorBuffer.setData(this.controlPointsColorArray);
-    // this.linePositionBuffer.setData(this.linePositionArray);
+    this.linePositionBuffer.setData(this.linePositionArray);
   }
 
   private transferFunctionLineShader = this.registerDisposer((() => {
@@ -371,12 +360,12 @@ out_color = tempColor * alpha;
     {
       const {renderViewport} = this;
       transferFunctionLineShader.bind();
-      const aLineStartEnd = transferFunctionLineShader.attribute('aVertexPosition');
+      const aLineStartEnd = transferFunctionLineShader.attribute('aLineStartEnd');
       this.linePositionBuffer.bindToVertexAttrib(aLineStartEnd, /*components=*/4, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       initializeLineShader(
         transferFunctionLineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
           /*featherWidthInPixels=*/ 1);
-      drawLines(gl, this.linePositionArray.length / VERTICES_PER_LINE, 1);
+      drawLines(gl, this.linePositionArray.length / (VERTICES_PER_LINE * POSITION_VALUES_PER_LINE), 1);
       gl.disableVertexAttribArray(aLineStartEnd);
 
       controlPointsShader.bind();
