@@ -500,9 +500,10 @@ class ControlPointsLookupTable extends RefCounted {
 
 // TODO (skm) the widget needs to have a controller for bindings
 export class TransferFunctionWidget extends Tab {
-  transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
+  private transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
   controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
-  currentGrabbedControlPointIndex: number = -1;
+  private currentGrabbedControlPointIndex: number = -1;
+  // TODO (skm) consider adding a hover state to show the color of the control point
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext, public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     super(visibility);
     const {element} = this;
