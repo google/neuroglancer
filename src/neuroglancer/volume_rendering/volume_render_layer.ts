@@ -210,21 +210,13 @@ float sampleRatio(float actualSamplingRate) {
   return referenceSamplingRate / actualSamplingRate;
 }
 `);
-        if (wireFrame) {
-          builder.setFragmentMainFunction(`
-void main() {
-  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
-  emit(outputColor, 0u);
-}
-`)
-        } else {
-          let glslSnippets: VolumeRenderingShaderSnippets;
-          // TODO (skm) provide a switch for interpolated vs. nearest neighbor
-          switch (shaderParametersState.mode) {
-            case VOLUME_RENDERING_MODES.MAX:
-              builder.addFragmentCode(`#define MAX_PROJECTION true\n`)
-              glslSnippets = {
-                colorEmissionFunctions: `
+         let glslSnippets: VolumeRenderingShaderSnippets;
+        // TODO (skm) provide a switch for interpolated vs. nearest neighbor
+        switch (shaderParametersState.mode) {
+          case VOLUME_RENDERING_MODES.MAX:
+            builder.addFragmentCode(`#define MAX_PROJECTION true\n`)
+            glslSnippets = {
+              colorEmissionFunctions: `
 void emitRGBA(vec4 rgba) {
   outputColor = rgba;
 }
@@ -277,6 +269,15 @@ void emitTransparent() {
               break;
           };
           builder.addFragmentCode(glslSnippets.colorEmissionFunctions);
+          if (wireFrame) {
+            builder.setFragmentMainFunction(`
+  void main() {
+    outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+    emit(outputColor, 0u);
+  }
+  `)
+}
+  else {
           builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
@@ -326,7 +327,7 @@ void main() {
   emit(outputColor, 0u);
 } 
 `)
-        };
+};
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(
