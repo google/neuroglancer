@@ -531,7 +531,7 @@ export class TransferFunctionWidget extends Tab {
     transferFunctionElement.addEventListener('mouseleave', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.currentGrabbedControlPointIndex = -1;
+      // this.currentGrabbedControlPointIndex = -1;
     })
     transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
