@@ -28,7 +28,12 @@ import {addControlsToBuilder, getFallbackBuilderState, parseShaderUiControls, se
 const DEFAULT_FRAGMENT_MAIN = `#uicontrol invlerp normalized
 #uicontrol transferFunction colormap
 void main() {
-  emitGrayscale(normalized());
+  if (!VOLUME_RENDERING) {
+    emitGrayscale(normalized());
+  }
+  else {
+    emitRGBA(colormap());
+  }
 }
 `;
 
