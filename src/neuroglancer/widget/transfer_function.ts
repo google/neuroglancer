@@ -507,13 +507,14 @@ export class TransferFunctionWidget extends Tab {
     super(visibility);
     const {element} = this;
     element.classList.add('neuroglancer-transfer-function-widget');
-    this.transferFunctionPanel.element.title = 'Mousedown to add a control point, drag to move, double click to remove'
+    this.transferFunctionPanel.element.title = 'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
     const transferFunctionElement = this.transferFunctionPanel.element;
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
+      const modifierPressed = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
       event.stopPropagation();
       event.preventDefault();
-      this.grabOrAddControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight, trackable.value.color);
+      this.grabOrAddControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight, trackable.value.color, modifierPressed);
     })
     transferFunctionElement.addEventListener('mousemove', (event: MouseEvent) => {
       event.stopPropagation();
@@ -576,12 +577,14 @@ export class TransferFunctionWidget extends Tab {
   findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
     return this.controlPointsLookupTable.grabControlPoint(event.offsetX / canvasX);
   }
-  grabOrAddControlPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3) {
+  grabOrAddControlPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3, shouldChangeColor: boolean) {
     const nearestIndex = this.findNearestControlPointIndex(event, canvasX);
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
-      this.controlPointsLookupTable.setPointColor(this.currentGrabbedControlPointIndex, color);
-      this.updateControlPointsAndDraw();
+      if (shouldChangeColor) {
+        this.controlPointsLookupTable.setPointColor(this.currentGrabbedControlPointIndex, color);
+        this.updateControlPointsAndDraw();
+      }
     }
     else {
       this.addPoint(event, canvasX, canvasY, color);
