@@ -40,7 +40,7 @@ import {ColorWidget} from 'neuroglancer/widget/color';
 
 const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
-const TRANSFER_FUNCTION_GRID_SIZE = 256;
+const TRANSFER_FUNCTION_GRID_SIZE = 512;
 const CONTROL_POINT_GRAB_DISTANCE = 5;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 23;
 
@@ -232,9 +232,11 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
   updateControlPointArrays() {
     function normalizePosition(position: number) {
-      return (position / 255) * 2 - 1;
+      return (position / (TRANSFER_FUNCTION_GRID_SIZE - 1)) * 2 - 1;
     }
-
+    function normalizeOpacity(opacity: number) {
+      return (opacity / 255) * 2 - 1;
+    }
     function normalizeColor(colorComponent: number) {
       return (colorComponent / 255);
     }
@@ -242,9 +244,9 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     function createLinePoints(array: Float32Array, index: number, positions: vec4): number {
       for (let i = 0; i < VERTICES_PER_LINE; ++i) {
         array[index++] = normalizePosition(positions[0]);
-        array[index++] = normalizePosition(positions[1]);
+        array[index++] = normalizeOpacity(positions[1]);
         array[index++] = normalizePosition(positions[2]);
-        array[index++] = normalizePosition(positions[3]);
+        array[index++] = normalizeOpacity(positions[3]);
       }
       return index
     }
@@ -282,7 +284,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       colorArray[colorIndex + 1] = normalizeColor(color[1]);
       colorArray[colorIndex + 2] = normalizeColor(color[2]);
       positionArray[positionIndex] = normalizePosition(position);
-      positionArray[positionIndex + 1] = normalizePosition(color[3]);
+      positionArray[positionIndex + 1] = normalizeOpacity(color[3]);
       if (i < controlPoints.length - 1) {
         const linePosition = vec4.fromValues(position, color[3], controlPoints[i + 1].position, controlPoints[i + 1].color[3]);
         lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
