@@ -34,8 +34,10 @@ import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {WatchableValueInterface, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {ColorWidget} from 'src/neuroglancer/widget/color';
+import {create} from 'lodash';
 
 // TODO (skm): remove hardcoded UINT8
 const NUM_COLOR_CHANNELS = 4;
@@ -493,39 +495,59 @@ export class TransferFunctionWidget extends Tab {
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext, public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     super(visibility);
     const {element} = this;
-    element.appendChild(this.transferFunctionPanel.element);
     element.classList.add('neuroglancer-transfer-function-widget');
-    this.updateView();
-    element.addEventListener('mousedown', (event: MouseEvent) => {
+    this.transferFunctionPanel.element.title = 'Mousedown to add a control point, drag to move, double click to remove'
+    element.appendChild(this.transferFunctionPanel.element);
+    const transferFunctionElement = this.transferFunctionPanel.element;
+    transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.grabOrAddControlPoint(event, element.clientWidth, element.clientHeight);
+      this.grabOrAddControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight);
+      console.log('mousedown on transfer function')
     })
-    element.addEventListener('mousemove', (event: MouseEvent) => {
+    transferFunctionElement.addEventListener('mousemove', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.moveControlPoint(event, element.clientWidth, element.clientHeight);
+      this.moveControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight);
     })
-    element.addEventListener('mouseup', (event: MouseEvent) => {
+    transferFunctionElement.addEventListener('mouseup', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
       this.currentGrabbedControlPointIndex = -1;
     })
     // TODO (skm) is this desired or is it better to leave it out
-    element.addEventListener('mouseleave', (event: MouseEvent) => {
+    transferFunctionElement.addEventListener('mouseleave', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
       this.currentGrabbedControlPointIndex = -1;
     })
-    element.addEventListener('dblclick', (event: MouseEvent) => {
+    transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      const nearestIndex = this.findNearestControlPointIndex(event, element.clientWidth);
+      const nearestIndex = this.findNearestControlPointIndex(event, transferFunctionElement.clientWidth);
       if (nearestIndex !== -1) {
         this.controlPointsLookupTable.trackable.value.controlPoints.splice(nearestIndex, 1);
         this.updateControlPointsAndDraw();
       }
     })
+    transferFunctionElement.addEventListener('click', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+    })
+
+    const colorPickerDiv = document.createElement('div');
+    colorPickerDiv.classList.add('neuroglancer-transfer-function-color-picker');
+    const colorPicker = this.registerDisposer(new ColorWidget(makeCachedDerivedWatchableValue((x: TransferFunctionParameters) => x.color, [trackable]), () => vec3.fromValues(1, 1, 1)));
+    colorPicker.element.title = 'Transfer Function Color Picker'
+    colorPicker.element.id = 'neuroglancer-tf-color-widget';
+    colorPickerDiv.appendChild(colorPicker.element);
+    
+    const colorLabel = document.createElement('label');
+    colorLabel.setAttribute('for', 'neuroglancer-tf-color-widget');
+    colorPickerDiv.appendChild(colorLabel);
+    element.appendChild(colorPickerDiv);
+
+    this.updateView();
   };
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();

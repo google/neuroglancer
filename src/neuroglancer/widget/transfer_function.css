@@ -18,3 +18,8 @@
   height: 60px;
   border: 1px solid #666;
 }
+
+.neuroglancer-transfer-function-color-picker {
+  padding-top: 4px;
+  text-align: right;
+}

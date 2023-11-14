@@ -507,6 +507,7 @@ const dataType = imageData?.dataType;
 const channelRank = imageData?.channelRank;
 let errors = [];
 let channel = new Array(channelRank).fill(0);
+let color = vec3.fromValues(1.0, 1.0, 1.0); 
 const controlPoints = new Array<ControlPoint>();
 if (valueType !== 'transferFunction') {
   errors.push('type must be transferFunction');
@@ -521,6 +522,10 @@ for (let [key, value] of parameters) {
         channel = parseInvlerpChannel(value, channel.length);
         break;
       }
+      case 'color': {
+        color = parseRGBColorSpecification(value);
+        break;
+      }
       default:
         errors.push(`Invalid parameter: ${key}`);
         break;
@@ -533,7 +538,7 @@ if (errors.length > 0) {
   return {errors};
 }
 return {
-  control: {type: 'transferFunction', dataType, default: {controlPoints, channel}, controlPoints, channel} as ShaderTransferFunctionControl,
+  control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color}, controlPoints, channel, color} as ShaderTransferFunctionControl,
   errors: undefined,
 };
 }
@@ -807,6 +812,7 @@ class TrackablePropertyInvlerpParameters extends TrackableValue<PropertyInvlerpP
 export interface TransferFunctionParameters {
   controlPoints: Array<ControlPoint>;
   channel: number[];
+  color: vec3;
 }
 
 function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
@@ -833,6 +839,8 @@ function parseTransferFunctionParameters(
     channel: verifyOptionalObjectProperty(
         obj, 'channel', x => parseInvlerpChannel(x, defaultValue.channel.length),
         defaultValue.channel),
+    color: verifyOptionalObjectProperty(
+      obj, 'color', x => parseRGBColorSpecification(x), defaultValue.color),
   };
 }
 
