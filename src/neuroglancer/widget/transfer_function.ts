@@ -36,8 +36,7 @@ import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
 import {WatchableValueInterface, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {ColorWidget} from 'src/neuroglancer/widget/color';
-import {create} from 'lodash';
+import {ColorWidget} from 'neuroglancer/widget/color';
 
 // TODO (skm): remove hardcoded UINT8
 const NUM_COLOR_CHANNELS = 4;
@@ -130,6 +129,10 @@ function findClosestValueIndexInSortedArray(array: Array<number>, value: number)
   const startDiff = Math.abs(array[start] - value);
   const endDiff = Math.abs(array[end] - value);
   return startDiff < endDiff ? start : end;
+}
+
+function floatToUint8(float: number) {
+  return Math.round(float * 255);
 }
 
 function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
@@ -426,6 +429,7 @@ class ControlPointsLookupTable extends RefCounted {
         throw new Error('Invalid data type');
     }
   }
+
   positionToIndex(position: number) {
     return Math.floor(position * this.lookupTable.length / NUM_COLOR_CHANNELS);
   }
@@ -447,6 +451,7 @@ class ControlPointsLookupTable extends RefCounted {
     }
   }
   addPoint(position: number, opacity: number, color: vec3) {
+    const colorAsUint8 = vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
     const existingIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
@@ -459,7 +464,7 @@ class ControlPointsLookupTable extends RefCounted {
     if (opacity >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacity = 255;
     }
-    controlPoints.push({position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)});
+    controlPoints.push({position: positionAsIndex, color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacity)});
     controlPoints.sort((a, b) => a.position - b.position);
   }
   lookupTableFromControlPoints() {
@@ -467,7 +472,7 @@ class ControlPointsLookupTable extends RefCounted {
     const {controlPoints} = this.trackable.value;
     lerpBetweenControlPoints(lookupTable, controlPoints);
   }
-  updatePoint(index: number, position: number, opacity: number, color: vec3) {
+  updatePoint(index: number, position: number, opacity: number) {
     const {controlPoints} = this.trackable.value;
     const positionAsIndex = this.positionToIndex(position);
     if (opacity <= TRANSFER_FUNCTION_BORDER_WIDTH) {
@@ -476,10 +481,16 @@ class ControlPointsLookupTable extends RefCounted {
     if (opacity >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacity = 255;
     }
+    const color = controlPoints[index].color;
     controlPoints[index] = {position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)};
     controlPoints.sort((a, b) => a.position - b.position);
     const newControlPointIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
     return newControlPointIndex;
+  }
+  setPointColor(index: number, color: vec3) {
+    const {controlPoints} = this.trackable.value;
+    const colorAsUint8 = vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
+    controlPoints[index].color = vec4.fromValues(colorAsUint8[0],colorAsUint8[1], colorAsUint8[2], controlPoints[index].color[3]);
   }
   // TODO (skm) correct disposal
   disposed() {
@@ -502,8 +513,7 @@ export class TransferFunctionWidget extends Tab {
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.grabOrAddControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight);
-      console.log('mousedown on transfer function')
+      this.grabOrAddControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight, trackable.value.color);
     })
     transferFunctionElement.addEventListener('mousemove', (event: MouseEvent) => {
       event.stopPropagation();
@@ -540,6 +550,12 @@ export class TransferFunctionWidget extends Tab {
     const colorPicker = this.registerDisposer(new ColorWidget(makeCachedDerivedWatchableValue((x: TransferFunctionParameters) => x.color, [trackable]), () => vec3.fromValues(1, 1, 1)));
     colorPicker.element.title = 'Transfer Function Color Picker'
     colorPicker.element.id = 'neuroglancer-tf-color-widget';
+    colorPicker.element.addEventListener('change', () => {
+      trackable.value.color = colorPicker.model.value;
+    });
+    colorPicker.element.addEventListener('input', () => {
+      trackable.value.color = colorPicker.model.value;
+    });
     colorPickerDiv.appendChild(colorPicker.element);
     
     const colorLabel = document.createElement('label');
@@ -560,13 +576,15 @@ export class TransferFunctionWidget extends Tab {
   findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
     return this.controlPointsLookupTable.grabControlPoint(event.offsetX / canvasX);
   }
-  grabOrAddControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+  grabOrAddControlPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3) {
     const nearestIndex = this.findNearestControlPointIndex(event, canvasX);
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
+      this.controlPointsLookupTable.setPointColor(this.currentGrabbedControlPointIndex, color);
+      this.updateControlPointsAndDraw();
     }
     else {
-      this.addPoint(event, canvasX, canvasY);
+      this.addPoint(event, canvasX, canvasY, color);
       this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX);
     }
   }
@@ -579,14 +597,13 @@ export class TransferFunctionWidget extends Tab {
   moveControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
     if (this.currentGrabbedControlPointIndex !== -1) {
       const {normalizedX, opacity} = this.getControlPointPosition(event, canvasX, canvasY);
-      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(this.currentGrabbedControlPointIndex, normalizedX, opacity, vec3.fromValues(255, 255, 255));
+      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(this.currentGrabbedControlPointIndex, normalizedX, opacity);
       this.updateControlPointsAndDraw();
     }
   }
-  addPoint(event: MouseEvent, canvasX: number, canvasY: number) {
+  addPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3) {
     const {normalizedX, opacity} = this.getControlPointPosition(event, canvasX, canvasY);
-    // TODO (skm) add color picker
-    this.controlPointsLookupTable.addPoint(normalizedX, opacity, vec3.fromValues(255, 255, 255));
+    this.controlPointsLookupTable.addPoint(normalizedX, opacity, color);
     this.updateControlPointsAndDraw();
   }
 }
@@ -623,7 +640,7 @@ export function activateTransferFunctionTool(
   activation.bindAction('add-point', (event: ActionEvent<MouseEvent>) => {
     event.stopPropagation();
     event.preventDefault();
-    control.addPoint(event.detail, control.element.clientWidth, control.element.clientHeight);
+    control.addPoint(event.detail, control.element.clientWidth, control.element.clientHeight, control.trackable.value.color);
   });
 }
 
