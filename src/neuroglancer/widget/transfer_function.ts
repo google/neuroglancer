@@ -28,7 +28,7 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'neuroglancer/layer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4, vec3} from 'neuroglancer/util/geom';
-import {computeLerp} from 'neuroglancer/util/lerp';
+import {clampToInterval, computeLerp} from 'neuroglancer/util/lerp';
 import {GL} from 'neuroglancer/webgl/context';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
@@ -78,11 +78,6 @@ function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: A
     const transparent = vec4.fromValues(0, 0, 0, 0);
     for (let i = 0; i < firstPoint.position; ++i) {
       const index = i * NUM_COLOR_CHANNELS;
-      // const {color} = controlPoints[0];
-      // use this to lerp between 0 and the first point
-      // const t = i / firstPoint.position;
-      // const lerpedColor = lerpUint8Color(vec4.fromValues(0, 0, 0, 0), color, t);
-      // addLookupValue(index, lerpedColor);
       addLookupValue(index, transparent);
     }
   }
@@ -132,7 +127,7 @@ function findClosestValueIndexInSortedArray(array: Array<number>, value: number)
 }
 
 function floatToUint8(float: number) {
-  return Math.round(float * 255);
+  return Math.min(255, Math.max(Math.round(float * 255), 0));
 }
 
 function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
@@ -539,6 +534,7 @@ export class TransferFunctionWidget extends Tab {
       event.stopPropagation();
       event.preventDefault();
       this.currentGrabbedControlPointIndex = -1;
+      this.updateControlPointsAndDraw();
     })
     transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
@@ -554,9 +550,35 @@ export class TransferFunctionWidget extends Tab {
       event.preventDefault();
     })
 
+    const paddingDiv = document.createElement('div');
+    paddingDiv.classList.add('neuroglancer-transfer-function-padding');
+    element.appendChild(paddingDiv);
+    // TODO (skm) dont think is needed
+    // paddingDiv.addEventListener('mouseenter', (event: MouseEvent) => {
+    //   event.stopPropagation();
+    //   event.preventDefault();
+    //   colorPicker.element.disabled = true;
+    // })
+    // paddingDiv.addEventListener('mouseleave', (event: MouseEvent) => {
+    //   event.stopPropagation();
+    //   event.preventDefault();
+    //   colorPicker.element.disabled = false;
+    // })
+
     const colorPickerDiv = document.createElement('div');
     colorPickerDiv.classList.add('neuroglancer-transfer-function-color-picker');
+    colorPickerDiv.addEventListener('mouseenter', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      colorPicker.element.disabled = false;
+    })
+    colorPickerDiv.addEventListener('mouseleave', (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      colorPicker.element.disabled = true;
+    })
     const colorPicker = this.registerDisposer(new ColorWidget(makeCachedDerivedWatchableValue((x: TransferFunctionParameters) => x.color, [trackable]), () => vec3.fromValues(1, 1, 1)));
+    colorPicker.element.disabled = true;
     colorPicker.element.title = 'Transfer Function Color Picker'
     colorPicker.element.id = 'neuroglancer-tf-color-widget';
     colorPicker.element.addEventListener('change', () => {

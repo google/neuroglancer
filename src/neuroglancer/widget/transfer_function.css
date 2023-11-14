@@ -19,7 +19,10 @@
   border: 1px solid #666;
 }
 
+.neuroglancer-transfer-function-padding {
+  padding-top: 10px;
+}
+
 .neuroglancer-transfer-function-color-picker {
-  padding-top: 4px;
   text-align: right;
 }
