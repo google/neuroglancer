@@ -357,13 +357,18 @@ out_color = texelFetch(uSampler, texel, 0);
     builder.addOutputBuffer('vec4', 'out_color', 0);
     builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
-gl_PointSize = 12.0;
+gl_PointSize = 14.0;
 vColor = aVertexColor;
 `);
     builder.setFragmentMain(`
+float vColorSum = vColor.r + vColor.g + vColor.b;
+vec3 bordercolor = vec3(0.0, 0.0, 0.0);
+if (vColorSum < 0.4) {
+  bordercolor = vec3(1.0, 1.0, 1.0);
+}
 float dist = distance(gl_PointCoord, vec2(0.5, 0.5));
 float alpha = smoothstep(0.25, 0.4, dist);
-vec4 tempColor = vec4(mix(vColor, vec3(0.0, 0.0, 0.0), alpha), 1.0);
+vec4 tempColor = vec4(mix(vColor, bordercolor, alpha), 1.0);
 alpha = 1.0 - smoothstep(0.4, 0.5, dist);
 out_color = tempColor * alpha;
 `);
@@ -429,9 +434,18 @@ class ControlPointsLookupTable extends RefCounted {
         throw new Error('Invalid data type');
     }
   }
-
   positionToIndex(position: number) {
     return Math.floor(position * this.lookupTable.length / NUM_COLOR_CHANNELS);
+  }
+  opacityToIndex(opacity: number) {
+    let opacityAsUint8 = floatToUint8(opacity);
+    if (opacityAsUint8 <= TRANSFER_FUNCTION_BORDER_WIDTH) {
+      opacityAsUint8 = 0;
+    }
+    else if (opacityAsUint8 >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
+      opacityAsUint8 = 255;
+    }
+    return opacityAsUint8;
   }
   findNearestControlPointIndex(position: number) {
     return findClosestValueIndexInSortedArray(this.trackable.value.controlPoints.map((point) => point.position), this.positionToIndex(position));
@@ -452,19 +466,14 @@ class ControlPointsLookupTable extends RefCounted {
   }
   addPoint(position: number, opacity: number, color: vec3) {
     const colorAsUint8 = vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
+    let opacityAsUint8 = this.opacityToIndex(opacity);
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
     const existingIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
     if (existingIndex !== -1) {
       controlPoints.splice(existingIndex, 1);
     }
-    if (opacity <= TRANSFER_FUNCTION_BORDER_WIDTH) {
-      opacity = 0;
-    }
-    if (opacity >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
-      opacity = 255;
-    }
-    controlPoints.push({position: positionAsIndex, color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacity)});
+    controlPoints.push({position: positionAsIndex, color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacityAsUint8)});
     controlPoints.sort((a, b) => a.position - b.position);
   }
   lookupTableFromControlPoints() {
@@ -475,14 +484,9 @@ class ControlPointsLookupTable extends RefCounted {
   updatePoint(index: number, position: number, opacity: number) {
     const {controlPoints} = this.trackable.value;
     const positionAsIndex = this.positionToIndex(position);
-    if (opacity <= TRANSFER_FUNCTION_BORDER_WIDTH) {
-      opacity = 0;
-    }
-    if (opacity >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
-      opacity = 255;
-    }
+    let opacityAsUint8 = floatToUint8(opacity);
     const color = controlPoints[index].color;
-    controlPoints[index] = {position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacity)};
+    controlPoints[index] = {position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacityAsUint8)};
     controlPoints.sort((a, b) => a.position - b.position);
     const newControlPointIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
     return newControlPointIndex;
@@ -510,6 +514,9 @@ export class TransferFunctionWidget extends Tab {
     element.classList.add('neuroglancer-transfer-function-widget');
     this.transferFunctionPanel.element.title = 'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
+    // TODO (skm) make sure this works on reload
+    this.controlPointsLookupTable.addPoint(0.3, 0.0, vec3.fromValues(0.0, 0.0, 0.0));
+    this.controlPointsLookupTable.addPoint(0.7, 1.0, vec3.fromValues(1.0, 1.0, 1.0));
     const transferFunctionElement = this.transferFunctionPanel.element;
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
       const modifierPressed = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
@@ -531,7 +538,7 @@ export class TransferFunctionWidget extends Tab {
     transferFunctionElement.addEventListener('mouseleave', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      // this.currentGrabbedControlPointIndex = -1;
+      this.currentGrabbedControlPointIndex = -1;
     })
     transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
@@ -564,8 +571,7 @@ export class TransferFunctionWidget extends Tab {
     colorLabel.setAttribute('for', 'neuroglancer-tf-color-widget');
     colorPickerDiv.appendChild(colorLabel);
     element.appendChild(colorPickerDiv);
-
-    this.updateView();
+    this.updateControlPointsAndDraw();
   };
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
@@ -595,19 +601,18 @@ export class TransferFunctionWidget extends Tab {
   getControlPointPosition(event: MouseEvent, canvasX: number, canvasY: number) {
     const normalizedX = event.offsetX / canvasX;
     const normalizedY = 1 - (event.offsetY / canvasY);
-    const opacity = Math.round(normalizedY * 255)
-    return {normalizedX, opacity};
+    return {normalizedX, normalizedY};
   }
   moveControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
     if (this.currentGrabbedControlPointIndex !== -1) {
-      const {normalizedX, opacity} = this.getControlPointPosition(event, canvasX, canvasY);
-      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(this.currentGrabbedControlPointIndex, normalizedX, opacity);
+      const {normalizedX, normalizedY} = this.getControlPointPosition(event, canvasX, canvasY);
+      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(this.currentGrabbedControlPointIndex, normalizedX, normalizedY);
       this.updateControlPointsAndDraw();
     }
   }
   addPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3) {
-    const {normalizedX, opacity} = this.getControlPointPosition(event, canvasX, canvasY);
-    this.controlPointsLookupTable.addPoint(normalizedX, opacity, color);
+    const {normalizedX, normalizedY} = this.getControlPointPosition(event, canvasX, canvasY);
+    this.controlPointsLookupTable.addPoint(normalizedX, normalizedY, color);
     this.updateControlPointsAndDraw();
   }
 }
