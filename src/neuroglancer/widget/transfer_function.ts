@@ -262,9 +262,9 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         numLines += 1;
         startAdd = {position: 0, color: vec4.fromValues(0, 0, 0, 0)};
       }
-      if (controlPoints[controlPoints.length - 1].position < 255) {
+      if (controlPoints[controlPoints.length - 1].position < TRANSFER_FUNCTION_GRID_SIZE - 1) {
         numLines += 1;
-        endAdd = {position: 255, color: controlPoints[controlPoints.length - 1].color};
+        endAdd = {position: TRANSFER_FUNCTION_GRID_SIZE - 1, color: controlPoints[controlPoints.length - 1].color};
       }
     }
 
@@ -325,12 +325,13 @@ out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
     builder.addVarying('vec2', 'vTexCoord');
     builder.addOutputBuffer('vec4', 'out_color', 0);
     builder.addTextureSampler('sampler2D', 'uSampler', transferFunctionSamplerTextureUnit);
+    builder.addUniform('float', 'uTransferFunctionEnd');
     builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
 vTexCoord = (aVertexPosition + 1.0) / 2.0;
 `);
     builder.setFragmentMain(`
-ivec2 texel = ivec2(floor(vTexCoord.x * 255.0), 0);
+ivec2 texel = ivec2(floor(vTexCoord.x * uTransferFunctionEnd), 0);
 out_color = texelFetch(uSampler, texel, 0);
 `);
     return builder.build();
@@ -374,6 +375,7 @@ out_color = tempColor * alpha;
     {
       transferFunctionShader.bind();
       const aVertexPosition = transferFunctionShader.attribute('aVertexPosition');
+      gl.uniform1f(transferFunctionShader.uniform('uTransferFunctionEnd'), TRANSFER_FUNCTION_GRID_SIZE - 1);
       this.vertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
       this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
@@ -618,11 +620,13 @@ export class TransferFunctionWidget extends Tab {
 
 export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
   builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, TRANSFER_FUNCTION_GRID_SIZE);
+  builder.addUniform(`float`, `uTransferFunctionGridSize_${name}`);
   const shaderType = getShaderType(dataType);
   // TODO (SKM) - bring in intepolation code option
   let code = `
 vec4 ${name}(${shaderType} inputValue) {
-  int index = clamp(int(round(toNormalized(inputValue) * 255.0)), 0, 255);
+  float gridMultiplier = uTransferFunctionGridSize_${name} - 1.0;
+  int index = clamp(int(round(toNormalized(inputValue) * gridMultiplier)), 0, int(gridMultiplier));
   return vec4(uTransferFunctionParams_${name}[index]) / 255.0;
 }
 vec4 ${name}() {
@@ -638,6 +642,7 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
   const transferFunction = new Int32Array(TRANSFER_FUNCTION_GRID_SIZE * NUM_COLOR_CHANNELS);
   lerpBetweenControlPoints(transferFunction, controlPoints);
   gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
+  gl.uniform1f(shader.uniform(`uTransferFunctionGridSize_${name}`), TRANSFER_FUNCTION_GRID_SIZE);
   dataType;
 }
 
