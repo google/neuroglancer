@@ -500,7 +500,7 @@ function parsePropertyInvlerpDirective(
 
 function parseTransferFunctionDirective(
   valueType: string, parameters: DirectiveParameters, dataContext: ShaderDataContext): DirectiveParseResult {
-// TODO (skm) allow to specify parameters such as control points
+// TODO (skm) allow to specify control points as parameter
 parameters;
 const imageData = dataContext.imageData;
 const dataType = imageData?.dataType;
@@ -508,12 +508,16 @@ const channelRank = imageData?.channelRank;
 let errors = [];
 let channel = new Array(channelRank).fill(0);
 let color = vec3.fromValues(1.0, 1.0, 1.0); 
+let range: DataTypeInterval|undefined;
 const controlPoints = new Array<ControlPoint>();
 if (valueType !== 'transferFunction') {
   errors.push('type must be transferFunction');
 }
 if (dataType === undefined) {
   errors.push('image data must be provided to use transfer function');
+}
+else {
+  range = defaultDataTypeRange[dataType];
 }
 for (let [key, value] of parameters) {
   try {
@@ -524,6 +528,12 @@ for (let [key, value] of parameters) {
       }
       case 'color': {
         color = parseRGBColorSpecification(value);
+        break;
+      }
+      case 'range': {
+        if (dataType !== undefined) {
+          range = validateDataTypeInterval(parseDataTypeInterval(value, dataType));
+        }
         break;
       }
       default:
@@ -537,8 +547,10 @@ for (let [key, value] of parameters) {
 if (errors.length > 0) {
   return {errors};
 }
+// TODO (skm) temp
+// range: range ?? normalizeDataTypeInterval(range)
 return {
-  control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color}, controlPoints, channel, color} as ShaderTransferFunctionControl,
+  control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color, range}, controlPoints, channel, color} as ShaderTransferFunctionControl,
   errors: undefined,
 };
 }
@@ -813,6 +825,7 @@ export interface TransferFunctionParameters {
   controlPoints: Array<ControlPoint>;
   channel: number[];
   color: vec3;
+  range: DataTypeInterval|undefined;
 }
 
 function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
@@ -841,6 +854,9 @@ function parseTransferFunctionParameters(
         defaultValue.channel),
     color: verifyOptionalObjectProperty(
       obj, 'color', x => parseRGBColorSpecification(x), defaultValue.color),
+    range: verifyOptionalObjectProperty(
+      obj, 'range', x => validateDataTypeInterval(parseDataTypeInterval(x, dataType)),
+      defaultValue.range),
   };
 }
 
@@ -1222,8 +1238,9 @@ function setControlInShader(
     case 'checkbox':
       // Value is hard-coded in shader.
       break;
+    // TODO (skm) pass range into shader uniform
     case 'transferFunction':
-      enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints);
+      enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints, value.range);
       break;
   }
 }

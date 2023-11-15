@@ -22,13 +22,13 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'neuroglancer/layer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4, vec3} from 'neuroglancer/util/geom';
-import {computeLerp} from 'neuroglancer/util/lerp';
+import {DataTypeInterval, computeLerp, defaultDataTypeRange} from 'neuroglancer/util/lerp';
 import {GL} from 'neuroglancer/webgl/context';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
@@ -37,11 +37,12 @@ import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls'
 import {WatchableValueInterface, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {ColorWidget} from 'neuroglancer/widget/color';
+import {defineInvlerpShaderFunction} from 'src/neuroglancer/webgl/lerp';
 
 const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
 const TRANSFER_FUNCTION_GRID_SIZE = 512;
-const CONTROL_POINT_GRAB_DISTANCE = 5;
+const CONTROL_POINT_GRAB_DISTANCE = TRANSFER_FUNCTION_GRID_SIZE / 40;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 23;
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
@@ -413,16 +414,18 @@ out_color = tempColor * alpha;
   }
 }
 
+// TODO (skm) control points might need two positions, one for the actual position and one for the display position
+// TODO (skm) however, this might make it a bit awkward for texturing
+// TODO (skm) does this need data type?
 class ControlPointsLookupTable extends RefCounted {
   lookupTable: Uint8Array;
-  constructor(dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
+  constructor(public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     //TODO temp
-    dataType;
     super();
     this.lookupTable = new Uint8Array(TRANSFER_FUNCTION_GRID_SIZE * NUM_COLOR_CHANNELS).fill(0);
   }
   positionToIndex(position: number) {
-    return Math.floor(position * this.lookupTable.length / NUM_COLOR_CHANNELS);
+    return Math.floor(position * (TRANSFER_FUNCTION_GRID_SIZE - 1));
   }
   opacityToIndex(opacity: number) {
     let opacityAsUint8 = floatToUint8(opacity);
@@ -491,6 +494,7 @@ class ControlPointsLookupTable extends RefCounted {
 
 // TODO (skm) the widget needs to have a controller for bindings
 export class TransferFunctionWidget extends Tab {
+  // TODO (skm) does the panel need data type?
   private transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
   controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
   private currentGrabbedControlPointIndex: number = -1;
@@ -505,6 +509,7 @@ export class TransferFunctionWidget extends Tab {
     this.controlPointsLookupTable.addPoint(0.3, 0.0, vec3.fromValues(0.0, 0.0, 0.0));
     this.controlPointsLookupTable.addPoint(0.7, 1.0, vec3.fromValues(1.0, 1.0, 1.0));
     const transferFunctionElement = this.transferFunctionPanel.element;
+    // TODO (skm) can I use some existing mouse drag code?
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
       const modifierPressed = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
       event.stopPropagation();
@@ -623,29 +628,51 @@ export class TransferFunctionWidget extends Tab {
 export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
   builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, TRANSFER_FUNCTION_GRID_SIZE);
   builder.addUniform(`float`, `uTransferFunctionGridSize_${name}`);
+  const invlerpShaderCode = defineInvlerpShaderFunction(builder, name, dataType, true) as ShaderCodePart[];
   const shaderType = getShaderType(dataType);
   // TODO (SKM) - bring in intepolation code option
+  // TODO (SKM) - use invlerp code to help this
   let code = `
 vec4 ${name}(${shaderType} inputValue) {
+  float v = computeInvlerp(inputValue, uLerpParams_${name});
+  v = clamp(v, 0.0, 1.0);
   float gridMultiplier = uTransferFunctionGridSize_${name} - 1.0;
-  int index = clamp(int(round(toNormalized(inputValue) * gridMultiplier)), 0, int(gridMultiplier));
+  int index = clamp(int(round(v * gridMultiplier)), 0, int(gridMultiplier));
   return vec4(uTransferFunctionParams_${name}[index]) / 255.0;
 }
 vec4 ${name}() {
   return ${name}(getDataValue(${channel.join(',')}));
 }
 `;
-  return code
+  return [
+    invlerpShaderCode[0],
+    invlerpShaderCode[1],
+    invlerpShaderCode[2],
+    code
+  ]
 }
 
 // TODO (skm) can likely optimize this
-export function enableTransferFunctionShader(shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>) {
+export function enableTransferFunctionShader(shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>, interval: DataTypeInterval) {
   const {gl} = shader;
   const transferFunction = new Int32Array(TRANSFER_FUNCTION_GRID_SIZE * NUM_COLOR_CHANNELS);
   lerpBetweenControlPoints(transferFunction, controlPoints);
-  gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
-  gl.uniform1f(shader.uniform(`uTransferFunctionGridSize_${name}`), TRANSFER_FUNCTION_GRID_SIZE);
-  dataType;
+  switch (dataType) {
+    case DataType.UINT8:
+    case DataType.UINT16:
+    case DataType.INT8:
+    case DataType.INT16:
+    case DataType.FLOAT32:
+      gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
+      gl.uniform1f(shader.uniform(`uTransferFunctionGridSize_${name}`), TRANSFER_FUNCTION_GRID_SIZE);
+      gl.uniform2f(shader.uniform(`uLerpParams_${name}`), interval[0] as number, 1 / ((interval[1] as number) - (interval[0] as number)));
+      break;
+    // TODO (skm) add support for other data types
+    // TODO (skm) easiest way might be to use the invlerp function
+    // TODO (skm) might be able to use a texture for this
+    default:
+      throw new Error(`Data type for transfer function not yet implemented: ${dataType}`);
+  }
 }
 
 // TODO (skm) this renders in the popup, but not in the main viewAA
