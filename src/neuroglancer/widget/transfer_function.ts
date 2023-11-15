@@ -678,7 +678,7 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
   }
 }
 
-// TODO (skm) this renders in the popup, but not in the main viewAA
+// TODO (skm) this renders in the popup, but not in the main view
 export function activateTransferFunctionTool(
   activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
   activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);

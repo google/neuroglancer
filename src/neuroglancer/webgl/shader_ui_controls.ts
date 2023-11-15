@@ -890,7 +890,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
     const colorJson = arraysEqual(defaultValue.color, this.value.color) ? undefined : this.value.color;
     const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, this.value.controlPoints, (a, b) => a.color === b.color && a.position === b.position) ? undefined : this.value.controlPoints;
-    if (rangeJson === undefined && channelJson === undefined) {
+    if (rangeJson === undefined && channelJson === undefined && colorJson === undefined && controlPointsJson === undefined) {
       return undefined;
     }
     return {range: rangeJson, channel: channelJson, color: colorJson, controlPoints: controlPointsJson};
@@ -1227,7 +1227,6 @@ export class ShaderControlState extends RefCounted implements
     let empty = true;
     for (const [key, value] of state) {
       const valueJson = value.trackable.toJSON();
-      ;
       if (valueJson !== undefined) {
         obj[key] = valueJson;
         empty = false;
