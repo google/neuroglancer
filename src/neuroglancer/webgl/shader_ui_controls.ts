@@ -22,16 +22,16 @@ import {arraysEqual, arraysEqualWithPredicate} from 'neuroglancer/util/array';
 import {parseRGBColorSpecification, TrackableRGB} from 'neuroglancer/util/color';
 import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
-import {parseFixedLengthArray, verifyFiniteFloat, verifyInt, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
-import {convertDataTypeInterval, DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, normalizeDataTypeInterval, parseDataTypeInterval, parseUnknownDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/util/lerp';
+import {vec3, vec4} from 'neuroglancer/util/geom';
+import {parseArray, parseFixedLengthArray, verifyFiniteFloat, verifyInt, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {computeInvlerp, computeLerp, convertDataTypeInterval, DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, normalizeDataTypeInterval, parseDataTypeInterval, parseUnknownDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/util/lerp';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {GL} from 'neuroglancer/webgl/context';
 import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
 import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {defineTransferFunctionShader, ControlPoint, enableTransferFunctionShader} from 'neuroglancer/widget/transfer_function'
+import {defineTransferFunctionShader, ControlPoint, enableTransferFunctionShader, TRANSFER_FUNCTION_LENGTH} from 'neuroglancer/widget/transfer_function'
 
 export interface ShaderSliderControl {
   type: 'slider';
@@ -75,7 +75,6 @@ export interface ShaderCheckboxControl {
 export interface ShaderTransferFunctionControl {
   type: 'transferFunction';
   dataType: DataType;
-  controlPoints: Array<ControlPoint>;
   default: TransferFunctionParameters;
 }
 
@@ -501,7 +500,6 @@ function parsePropertyInvlerpDirective(
 function parseTransferFunctionDirective(
   valueType: string, parameters: DirectiveParameters, dataContext: ShaderDataContext): DirectiveParseResult {
 // TODO (skm) allow to specify control points as parameter
-parameters;
 const imageData = dataContext.imageData;
 const dataType = imageData?.dataType;
 const channelRank = imageData?.channelRank;
@@ -536,6 +534,12 @@ for (let [key, value] of parameters) {
         }
         break;
       }
+      case 'points': {
+        if (dataType !== undefined) {
+          controlPoints.push(...parseTransferFunctionControlPoints(value, dataType));
+        }
+        break;
+      }
       default:
         errors.push(`Invalid parameter: ${key}`);
         break;
@@ -547,10 +551,19 @@ for (let [key, value] of parameters) {
 if (errors.length > 0) {
   return {errors};
 }
-// TODO (skm) temp
-// range: range ?? normalizeDataTypeInterval(range)
+if (controlPoints.length === 0) {
+  const transferFunctionRange = [0, TRANSFER_FUNCTION_LENGTH - 1] as [number, number];
+  const startPoint = computeLerp(transferFunctionRange, DataType.UINT16, 0.4) as number;
+  const endPoint = computeLerp(transferFunctionRange, DataType.UINT16, 0.7) as number;
+  //TODO (skm) when using texture, need to use normalized values
+  controlPoints.push({position: startPoint, color: vec4.fromValues(0, 0, 0, 0)});
+  controlPoints.push({position: endPoint, color: vec4.fromValues(255, 255, 255, 255)});
+}
+if (range === undefined && dataType !== undefined) {
+  range = defaultDataTypeRange[dataType];
+}
 return {
-  control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color, range}, controlPoints, channel, color} as ShaderTransferFunctionControl,
+  control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color, range}} as ShaderTransferFunctionControl,
   errors: undefined,
 };
 }
@@ -829,16 +842,19 @@ export interface TransferFunctionParameters {
 }
 
 function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
-  const out = new Array();
   dataType;
-  // TODO (skm) implement proper validation
-  parseFixedLengthArray(out, value, x => {
-    if (!Number.isInteger(x) || x < 0) {
-      throw new Error(`Expected non-negative integer, but received: ${JSON.stringify(x)}`);
+  return parseArray(value, x => {
+    if (x.length !== 5) {
+      throw new Error(`Expected array of length 5 (x, R, G, B, A), but received: ${JSON.stringify(x)}`);
     }
-    return x;
+    // TODO (skm) implement proper validation of array elements
+    for (const val of x) {
+      if (typeof val !== 'number') {
+        throw new Error(`Expected number, but received: ${JSON.stringify(val)}`);
+      }
+    }
+    return {position: x[0], color: vec4.fromValues(x[1], x[2], x[3], x[4])};
   });
-  return out;
 }
 
 function parseTransferFunctionParameters(
@@ -864,6 +880,20 @@ function parseTransferFunctionParameters(
 class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
   constructor(public dataType: DataType, public defaultValue: TransferFunctionParameters) {
     super(defaultValue, obj => parseTransferFunctionParameters(obj, dataType, defaultValue));
+  }
+  
+  toJSON() {
+    const {value: {channel}, dataType, defaultValue} = this;
+    let range = this.value.range;
+    range = range ?? defaultDataTypeRange[dataType];
+    const rangeJson = dataTypeIntervalToJson(range, dataType, defaultValue.range);
+    const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
+    const colorJson = arraysEqual(defaultValue.color, this.value.color) ? undefined : this.value.color;
+    const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, this.value.controlPoints, (a, b) => a.color === b.color && a.position === b.position) ? undefined : this.value.controlPoints;
+    if (rangeJson === undefined && channelJson === undefined) {
+      return undefined;
+    }
+    return {range: rangeJson, channel: channelJson, color: colorJson, controlPoints: controlPointsJson};
   }
 }
 

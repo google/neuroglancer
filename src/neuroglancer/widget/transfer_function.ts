@@ -41,8 +41,8 @@ import {defineInvlerpShaderFunction} from 'src/neuroglancer/webgl/lerp';
 
 const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
-const TRANSFER_FUNCTION_GRID_SIZE = 512;
-const CONTROL_POINT_GRAB_DISTANCE = TRANSFER_FUNCTION_GRID_SIZE / 40;
+export const TRANSFER_FUNCTION_LENGTH = 512;
+const CONTROL_POINT_GRAB_DISTANCE = TRANSFER_FUNCTION_LENGTH / 40;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 23;
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
@@ -84,7 +84,7 @@ function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: A
   }
 
   let controlPointIndex = 0;
-  for (let i = firstPoint.position; i < TRANSFER_FUNCTION_GRID_SIZE; ++i) {
+  for (let i = firstPoint.position; i < TRANSFER_FUNCTION_LENGTH; ++i) {
     const currentPoint = controlPoints[controlPointIndex];
     const nextPoint = controlPoints[Math.min(controlPointIndex + 1, controlPoints.length - 1)];
     const lookupIndex = i * NUM_COLOR_CHANNELS;
@@ -171,7 +171,7 @@ function griddedRectangleArray(numGrids: number) {
 
 class TransferFunctionTexture extends RefCounted {
   texture: WebGLTexture | null = null;
-  width: number = TRANSFER_FUNCTION_GRID_SIZE;
+  width: number = TRANSFER_FUNCTION_LENGTH;
   height: number = 1;
   private priorOptions: TransferFunctionTextureOptions | undefined = undefined;
 
@@ -225,7 +225,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     this.vertexBuffer =
       this.registerDisposer(getMemoizedBuffer(
         this.gl, WebGL2RenderingContext.ARRAY_BUFFER, griddedRectangleArray,
-        TRANSFER_FUNCTION_GRID_SIZE)).value;
+        TRANSFER_FUNCTION_LENGTH)).value;
     this.controlPointsVertexBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsPositionArray)).value;
     this.controlPointsColorBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsColorArray)).value;
     this.linePositionBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.linePositionArray)).value;
@@ -233,7 +233,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
   updateControlPointArrays() {
     function normalizePosition(position: number) {
-      return (position / (TRANSFER_FUNCTION_GRID_SIZE - 1)) * 2 - 1;
+      return (position / (TRANSFER_FUNCTION_LENGTH - 1)) * 2 - 1;
     }
     function normalizeOpacity(opacity: number) {
       return (opacity / 255) * 2 - 1;
@@ -265,10 +265,13 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         numLines += 1;
         startAdd = {position: 0, color: vec4.fromValues(0, 0, 0, 0)};
       }
-      if (controlPoints[controlPoints.length - 1].position < TRANSFER_FUNCTION_GRID_SIZE - 1) {
+      if (controlPoints[controlPoints.length - 1].position < TRANSFER_FUNCTION_LENGTH - 1) {
         numLines += 1;
-        endAdd = {position: TRANSFER_FUNCTION_GRID_SIZE - 1, color: controlPoints[controlPoints.length - 1].color};
+        endAdd = {position: TRANSFER_FUNCTION_LENGTH - 1, color: controlPoints[controlPoints.length - 1].color};
       }
+    }
+    else {
+      numLines = 0;
     }
 
     const linePositionArray = new Float32Array(numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE);
@@ -378,11 +381,11 @@ out_color = tempColor * alpha;
     {
       transferFunctionShader.bind();
       const aVertexPosition = transferFunctionShader.attribute('aVertexPosition');
-      gl.uniform1f(transferFunctionShader.uniform('uTransferFunctionEnd'), TRANSFER_FUNCTION_GRID_SIZE - 1);
+      gl.uniform1f(transferFunctionShader.uniform('uTransferFunctionEnd'), TRANSFER_FUNCTION_LENGTH - 1);
       this.vertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
       this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
-      gl.drawArrays(gl.TRIANGLES, 0, TRANSFER_FUNCTION_GRID_SIZE * VERTICES_PER_QUAD);
+      gl.drawArrays(gl.TRIANGLES, 0, TRANSFER_FUNCTION_LENGTH * VERTICES_PER_QUAD);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
@@ -422,10 +425,10 @@ class ControlPointsLookupTable extends RefCounted {
   constructor(public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     //TODO temp
     super();
-    this.lookupTable = new Uint8Array(TRANSFER_FUNCTION_GRID_SIZE * NUM_COLOR_CHANNELS).fill(0);
+    this.lookupTable = new Uint8Array(TRANSFER_FUNCTION_LENGTH * NUM_COLOR_CHANNELS).fill(0);
   }
   positionToIndex(position: number) {
-    return Math.floor(position * (TRANSFER_FUNCTION_GRID_SIZE - 1));
+    return Math.floor(position * (TRANSFER_FUNCTION_LENGTH - 1));
   }
   opacityToIndex(opacity: number) {
     let opacityAsUint8 = floatToUint8(opacity);
@@ -506,8 +509,8 @@ export class TransferFunctionWidget extends Tab {
     this.transferFunctionPanel.element.title = 'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
     // TODO (skm) make sure this works on reload
-    this.controlPointsLookupTable.addPoint(0.3, 0.0, vec3.fromValues(0.0, 0.0, 0.0));
-    this.controlPointsLookupTable.addPoint(0.7, 1.0, vec3.fromValues(1.0, 1.0, 1.0));
+    //this.controlPointsLookupTable.addPoint(0.3, 0.0, vec3.fromValues(0.0, 0.0, 0.0));
+    //this.controlPointsLookupTable.addPoint(0.7, 1.0, vec3.fromValues(1.0, 1.0, 1.0));
     const transferFunctionElement = this.transferFunctionPanel.element;
     // TODO (skm) can I use some existing mouse drag code?
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
@@ -626,7 +629,7 @@ export class TransferFunctionWidget extends Tab {
 }
 
 export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
-  builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, TRANSFER_FUNCTION_GRID_SIZE);
+  builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, TRANSFER_FUNCTION_LENGTH);
   builder.addUniform(`float`, `uTransferFunctionGridSize_${name}`);
   const invlerpShaderCode = defineInvlerpShaderFunction(builder, name, dataType, true) as ShaderCodePart[];
   const shaderType = getShaderType(dataType);
@@ -655,7 +658,7 @@ vec4 ${name}() {
 // TODO (skm) can likely optimize this
 export function enableTransferFunctionShader(shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>, interval: DataTypeInterval) {
   const {gl} = shader;
-  const transferFunction = new Int32Array(TRANSFER_FUNCTION_GRID_SIZE * NUM_COLOR_CHANNELS);
+  const transferFunction = new Int32Array(TRANSFER_FUNCTION_LENGTH * NUM_COLOR_CHANNELS);
   lerpBetweenControlPoints(transferFunction, controlPoints);
   switch (dataType) {
     case DataType.UINT8:
@@ -664,7 +667,7 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
     case DataType.INT16:
     case DataType.FLOAT32:
       gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
-      gl.uniform1f(shader.uniform(`uTransferFunctionGridSize_${name}`), TRANSFER_FUNCTION_GRID_SIZE);
+      gl.uniform1f(shader.uniform(`uTransferFunctionGridSize_${name}`), TRANSFER_FUNCTION_LENGTH);
       gl.uniform2f(shader.uniform(`uLerpParams_${name}`), interval[0] as number, 1 / ((interval[1] as number) - (interval[0] as number)));
       break;
     // TODO (skm) add support for other data types
