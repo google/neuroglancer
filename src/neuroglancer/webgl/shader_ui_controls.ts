@@ -24,7 +24,7 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3, vec4} from 'neuroglancer/util/geom';
 import {parseArray, parseFixedLengthArray, verifyFiniteFloat, verifyInt, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
-import {computeInvlerp, computeLerp, convertDataTypeInterval, DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, normalizeDataTypeInterval, parseDataTypeInterval, parseUnknownDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/util/lerp';
+import {computeLerp, convertDataTypeInterval, DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, normalizeDataTypeInterval, parseDataTypeInterval, parseUnknownDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/util/lerp';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {GL} from 'neuroglancer/webgl/context';
@@ -536,7 +536,7 @@ for (let [key, value] of parameters) {
       }
       case 'points': {
         if (dataType !== undefined) {
-          controlPoints.push(...parseTransferFunctionControlPoints(value, dataType));
+          controlPoints.push(...convertTransferFunctionControlPoints(value, dataType));
         }
         break;
       }
@@ -841,7 +841,7 @@ export interface TransferFunctionParameters {
   range: DataTypeInterval|undefined;
 }
 
-function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
+function convertTransferFunctionControlPoints(value: unknown, dataType: DataType) {
   dataType;
   return parseArray(value, x => {
     if (x.length !== 5) {
@@ -854,6 +854,26 @@ function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) 
       }
     }
     return {position: x[0], color: vec4.fromValues(x[1], x[2], x[3], x[4])};
+  });
+}
+
+function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) {
+  dataType;
+  return parseArray(value, x => {
+    if (x.position === undefined || x.color === undefined) {
+      throw new Error(`Expected object with position and color properties, but received: ${JSON.stringify(x)}`);
+    }
+    if (typeof x.position !== 'number') {
+      // TODO (skm) might need to be of dataType depending on final implementation
+      throw new Error(`Expected number, but received: ${JSON.stringify(x.position)}`);
+    }
+    if (Object.keys(x.color).length !== 4) {
+      throw new Error(`Expected array of length 4 (R, G, B, A), but received: ${JSON.stringify(x.color)}`);
+    }
+    if (typeof x.color[0] !== 'number' || typeof x.color[1] !== 'number' || typeof x.color[2] !== 'number' || typeof x.color[3] !== 'number') {
+      throw new Error(`Expected number, but received: ${JSON.stringify(x.color)}`);
+    }
+    return {position: x.position, color: vec4.fromValues(x.color[0], x.color[1], x.color[2], x.color[3])};
   });
 }
 
@@ -876,20 +896,30 @@ function parseTransferFunctionParameters(
   };
 }
 
-// TODO (skm) may not need new class
+function deepCopyTransferFunctionParameters(defaultValue: TransferFunctionParameters) {
+  return {
+    controlPoints: defaultValue.controlPoints.map(x => ({position: x.position, color: vec4.clone(x.color)})),
+    channel: defaultValue.channel,
+    color: vec3.clone(defaultValue.color),
+    range: defaultValue.range,
+  };
+}
+
 class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
   constructor(public dataType: DataType, public defaultValue: TransferFunctionParameters) {
-    super(defaultValue, obj => parseTransferFunctionParameters(obj, dataType, defaultValue));
+    console.log("Transfer trackable constructor");
+    const defaultValueCopy = deepCopyTransferFunctionParameters(defaultValue);
+    super(defaultValueCopy, obj => parseTransferFunctionParameters(obj, dataType, defaultValueCopy));
   }
   
   toJSON() {
-    const {value: {channel}, dataType, defaultValue} = this;
+    const {value: {channel, controlPoints, color}, dataType, defaultValue} = this;
     let range = this.value.range;
     range = range ?? defaultDataTypeRange[dataType];
     const rangeJson = dataTypeIntervalToJson(range, dataType, defaultValue.range);
     const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
-    const colorJson = arraysEqual(defaultValue.color, this.value.color) ? undefined : this.value.color;
-    const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, this.value.controlPoints, (a, b) => a.color === b.color && a.position === b.position) ? undefined : this.value.controlPoints;
+    const colorJson = arraysEqual(defaultValue.color, color) ? undefined : this.value.color;
+    const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, controlPoints, (a, b) => a.color === b.color && a.position === b.position) ? undefined : this.value.controlPoints;
     if (rangeJson === undefined && channelJson === undefined && colorJson === undefined && controlPointsJson === undefined) {
       return undefined;
     }

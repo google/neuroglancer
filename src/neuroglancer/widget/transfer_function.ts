@@ -28,7 +28,7 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'neuroglancer/layer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4, vec3} from 'neuroglancer/util/geom';
-import {DataTypeInterval, computeLerp, defaultDataTypeRange} from 'neuroglancer/util/lerp';
+import {DataTypeInterval, computeLerp} from 'neuroglancer/util/lerp';
 import {GL} from 'neuroglancer/webgl/context';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
@@ -508,9 +508,6 @@ export class TransferFunctionWidget extends Tab {
     element.classList.add('neuroglancer-transfer-function-widget');
     this.transferFunctionPanel.element.title = 'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
-    // TODO (skm) make sure this works on reload
-    //this.controlPointsLookupTable.addPoint(0.3, 0.0, vec3.fromValues(0.0, 0.0, 0.0));
-    //this.controlPointsLookupTable.addPoint(0.7, 1.0, vec3.fromValues(1.0, 1.0, 1.0));
     const transferFunctionElement = this.transferFunctionPanel.element;
     // TODO (skm) can I use some existing mouse drag code?
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
