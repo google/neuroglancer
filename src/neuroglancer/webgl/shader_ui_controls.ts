@@ -19,7 +19,7 @@ import {CoordinateSpaceCombiner} from 'neuroglancer/coordinate_transform';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {constantWatchableValue, makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual, arraysEqualWithPredicate} from 'neuroglancer/util/array';
-import {parseRGBColorSpecification, TrackableRGB} from 'neuroglancer/util/color';
+import {parseRGBColorSpecification, serializeColor, TrackableRGB} from 'neuroglancer/util/color';
 import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3, vec4} from 'neuroglancer/util/geom';
@@ -907,7 +907,6 @@ function deepCopyTransferFunctionParameters(defaultValue: TransferFunctionParame
 
 class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
   constructor(public dataType: DataType, public defaultValue: TransferFunctionParameters) {
-    console.log("Transfer trackable constructor");
     const defaultValueCopy = deepCopyTransferFunctionParameters(defaultValue);
     super(defaultValueCopy, obj => parseTransferFunctionParameters(obj, dataType, defaultValueCopy));
   }
@@ -918,7 +917,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     range = range ?? defaultDataTypeRange[dataType];
     const rangeJson = dataTypeIntervalToJson(range, dataType, defaultValue.range);
     const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
-    const colorJson = arraysEqual(defaultValue.color, color) ? undefined : this.value.color;
+    const colorJson = arraysEqual(defaultValue.color, color) ? undefined : serializeColor(this.value.color);
     const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, controlPoints, (a, b) => a.color === b.color && a.position === b.position) ? undefined : this.value.controlPoints;
     if (rangeJson === undefined && channelJson === undefined && colorJson === undefined && controlPointsJson === undefined) {
       return undefined;
@@ -1297,7 +1296,6 @@ function setControlInShader(
     case 'checkbox':
       // Value is hard-coded in shader.
       break;
-    // TODO (skm) pass range into shader uniform
     case 'transferFunction':
       enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints, value.range);
       break;
