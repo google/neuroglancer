@@ -59,6 +59,8 @@ const SOURCE_JSON_KEY = 'source';
 const TRANSFORM_JSON_KEY = 'transform';
 const PICK_JSON_KEY = 'pick';
 
+const METACELL_TAG = 'metacellNov16th2023'
+
 export interface UserLayerSelectionState {
   generation: number;
 
@@ -269,7 +271,7 @@ export class UserLayer extends RefCounted {
     this.dataSourcesChanged.add(() => this.updateDataSubsourceActivations());
     this.messages.changed.add(this.layersChanged.dispatch);
     this.tabs.add('source', {
-      label: 'Source',
+      label: `Source ${METACELL_TAG}`,
       order: -100,
       getter: () => new LayerDataSourcesTab(this),
     });
