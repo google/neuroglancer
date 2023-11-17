@@ -641,7 +641,7 @@ vec4 ${name}(${shaderType} inputValue) {
   return vec4(uTransferFunctionParams_${name}[index]) / 255.0;
 }
 vec4 ${name}() {
-  return ${name}(getDataValue(${channel.join(',')}));
+  return ${name}(getInterpolatedDataValue(${channel.join(',')}));
 }
 `;
   return [

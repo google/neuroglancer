@@ -172,7 +172,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         builder.addUniform('highp vec3', 'uLowerClipBound');
         builder.addUniform('highp vec3', 'uUpperClipBound');
 
-        builder.addUniform('highp float', 'uBrightnessFactor');
+        builder.addUniform('highp float', 'uSamplingRatio');
         builder.addVarying('highp vec4', 'vNormalizedPosition');
         builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
@@ -188,28 +188,10 @@ vec3 curChunkPosition;
 vec4 outputColor;
 float maxIntensity;
 vec3 maxParameters;
-float uSamplingRatio;
 void userMain();
 `);
         const numChannelDimensions = shaderParametersState.numChannelDimensions;
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
-        // TODO (skm): make samplingRatio a uniform
-        // TODO skm (move out of shader as uniform)
-        builder.addFragmentCode(`
-float numVoxelsAlongViewDir() {
-  vec4 straightAheadStart = uInvModelViewProjectionMatrix * vec4(0.0, 0.0, -1.0, 1.0);
-  vec4 straightAheadEnd = uInvModelViewProjectionMatrix * vec4(0.0, 0.0, 1.0, 1.0);
-  vec3 straightAheadDir = normalize(straightAheadEnd.xyz / straightAheadEnd.w - straightAheadStart.xyz / straightAheadStart.w);
-  vec3 chunksAlongViewDir = straightAheadDir * uChunkDataSize;
-  float numVoxels = length(chunksAlongViewDir);
-  return numVoxels;
-}
-float sampleRatio(float actualSamplingRate) {
-  float numVoxels = numVoxelsAlongViewDir();
-  float referenceSamplingRate = 1.0 / numVoxels;
-  return referenceSamplingRate / actualSamplingRate;
-}
-`);
          let glslSnippets: VolumeRenderingShaderSnippets;
         // TODO (skm) provide a switch for interpolated vs. nearest neighbor
         switch (shaderParametersState.mode) {
@@ -317,7 +299,6 @@ void main() {
   outputColor = vec4(0, 0, 0, 0);
   maxIntensity = 0.0;
   maxParameters = vec3(1.0, 0.0, 0.0);
-  uSamplingRatio = sampleRatio(stepSize);
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
     curChunkPosition = position - uTranslation;
@@ -519,9 +500,13 @@ void main() {
           const {near, far, adjustedNear, adjustedFar} = getVolumeRenderingNearFarBounds(
               clippingPlanes, transformedSource.lowerClipDisplayBound,
               transformedSource.upperClipDisplayBound);
-          const step = (adjustedFar - adjustedNear) / (this.depthSamplesTarget.value - 1);
-          const brightnessFactor = step / (far - near);
-          gl.uniform1f(shader.uniform('uBrightnessFactor'), brightnessFactor);
+          // The sampling ratio is used for opacity correction.
+          // arguably, the reference sampling rate should be at the nyquist frequency
+          // to avoid aliasing, but this is not always practical for large datasets.
+          const actualSamplingRate = (adjustedFar - adjustedNear) / (this.depthSamplesTarget.value - 1);
+          const referenceSamplingRate = (adjustedFar - adjustedNear) / (optimalSamples - 1);
+          const samplingRatio = actualSamplingRate / referenceSamplingRate;
+          gl.uniform1f(shader.uniform('uSamplingRatio'), samplingRatio);
           const nearLimitFraction = (adjustedNear - near) / (far - near);
           const farLimitFraction = (adjustedFar - near) / (far - near);
           gl.uniform1f(shader.uniform('uNearLimitFraction'), nearLimitFraction);
