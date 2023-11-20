@@ -213,7 +213,7 @@ void emitTransparent() {
 }
 `,
                 intensityCalculation: `
-    float normChunkValue = toNormalized(getInterpolatedDataValue(0));
+    float normChunkValue = float(toRaw(getInterpolatedDataValue(0)));
     maxIntensity = max(maxIntensity, normChunkValue);
 `,
                 beforeColorEmission: `

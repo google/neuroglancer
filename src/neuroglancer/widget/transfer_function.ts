@@ -633,15 +633,23 @@ export function defineTransferFunctionShader(builder: ShaderBuilder, name: strin
   // TODO (SKM) - bring in intepolation code option
   // TODO (SKM) - use invlerp code to help this
   let code = `
-vec4 ${name}(${shaderType} inputValue) {
-  float v = computeInvlerp(inputValue, uLerpParams_${name});
-  v = clamp(v, 0.0, 1.0);
+vec4 ${name}(float inputValue) {
   float gridMultiplier = uTransferFunctionGridSize_${name} - 1.0;
-  int index = clamp(int(round(v * gridMultiplier)), 0, int(gridMultiplier));
+  int index = clamp(int(round(inputValue * gridMultiplier)), 0, int(gridMultiplier));
   return vec4(uTransferFunctionParams_${name}[index]) / 255.0;
 }
+vec4 ${name}(${shaderType} inputValue) {
+  float v = computeInvlerp(inputValue, uLerpParams_${name});
+  return ${name}(clamp(v, 0.0, 1.0));
+}
 vec4 ${name}() {
-  return ${name}(getInterpolatedDataValue(${channel.join(',')}));
+  if (!MAX_PROJECTION) {
+    return ${name}(getInterpolatedDataValue(${channel.join(',')}));
+  }
+  else {
+    float v = computeInvlerp(maxIntensity, uLerpParams_${name});
+    return ${name}(clamp(v, 0.0, 1.0));
+  }
 }
 `;
   return [
