@@ -155,7 +155,19 @@ node.js is required to build the viewer.
    
    `npm test -- --pattern='src/neuroglancer/util/uint64*'`
 
-6. See [package.json](package.json) for other commands available.
+6. To run python scripts for the local server:
+
+   Run
+   
+   `npm build build-python`
+   
+    `pip install .`
+   
+    from the neuroglancer folder.
+    Now python scripts can run for the local server.
+
+   
+8. See [package.json](package.json) for other commands available.
 
 # Creating a dependent project
 
