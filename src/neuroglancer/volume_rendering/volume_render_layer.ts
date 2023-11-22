@@ -90,7 +90,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState, number>;
+      {emitter: ShaderModule, chunkFormat: ChunkFormat, wireFrame: boolean},
+      ShaderControlsBuilderState, number>;
 
   get gl() {
     return this.multiscaleSource.chunkManager.gl;
@@ -119,10 +120,12 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
       parameters: options.shaderControlState.builderState,
-      getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
+      getContextKey: ({emitter, chunkFormat, wireFrame}) =>
+          `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
       shaderError: options.shaderError,
       extraParameters: numChannelDimensions,
-      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, numChannelDimensions) => {
+      defineShader: (
+          builder, {emitter, chunkFormat, wireFrame}, shaderBuilderState, numChannelDimensions) => {
         if (shaderBuilderState.parseResult.errors.length !== 0) {
           throw new Error('Invalid UI control specification');
         }
@@ -141,18 +144,18 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         // Specifies translation of the current chunk.
         builder.addUniform('highp vec3', 'uTranslation');
 
-
         // Matrix by which computed vertices will be transformed.
         builder.addUniform('highp mat4', 'uModelViewProjectionMatrix');
         builder.addUniform('highp mat4', 'uInvModelViewProjectionMatrix');
 
         // Chunk size in voxels.
         builder.addUniform('highp vec3', 'uChunkDataSize');
+        builder.addUniform('highp float', 'uChunkNumber')
 
         builder.addUniform('highp vec3', 'uLowerClipBound');
         builder.addUniform('highp vec3', 'uUpperClipBound');
 
-        builder.addUniform('highp float', 'uBrightnessFactor');
+        builder.addUniform('highp float', 'uSamplingRatio');
         builder.addVarying('highp vec4', 'vNormalizedPosition');
         builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
@@ -170,20 +173,29 @@ void userMain();
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
         builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
-  float alpha = rgba.a * uBrightnessFactor;
-  outputColor += vec4(rgba.rgb * alpha, alpha);
+  float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
+  outputColor.rgb += (1.0 - outputColor.a) * alpha * rgba.rgb;
+  outputColor.a += (1.0 - outputColor.a) * alpha;
 }
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
-  emitRGB(vec3(value, value, value));
+  emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 `);
-        builder.setFragmentMainFunction(`
+        if (wireFrame) {
+          builder.setFragmentMainFunction(`
+void main() {
+  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+  emit(outputColor, 0u);
+}
+      `);
+        } else {
+          builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
   vec4 nearPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, -1.0, 1.0);
@@ -228,6 +240,7 @@ void main() {
   emit(outputColor, 0u);
 }
 `);
+        }
         builder.addFragmentCode(glsl_COLORMAPS);
         addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(
@@ -351,6 +364,7 @@ void main() {
     let chunks: Map<string, VolumeChunk>;
     let presentCount = 0, notPresentCount = 0;
     let chunkDataSize: Uint32Array|undefined;
+    let chunkNumber = 1;
 
     const chunkRank = this.multiscaleSource.rank;
     const chunkPosition = vec3.create();
@@ -379,8 +393,11 @@ void main() {
           if (chunkFormat !== prevChunkFormat) {
             prevChunkFormat = chunkFormat;
             endShader();
-            shaderResult =
-                this.shaderGetter({emitter: renderContext.emitter, chunkFormat: chunkFormat!});
+            shaderResult = this.shaderGetter({
+              emitter: renderContext.emitter,
+              chunkFormat: chunkFormat!,
+              wireFrame: renderContext.wireFrame
+            });
             shader = shaderResult.shader;
             if (shader !== null) {
               shader.bind();
@@ -412,9 +429,14 @@ void main() {
           const {near, far, adjustedNear, adjustedFar} = getVolumeRenderingNearFarBounds(
               clippingPlanes, transformedSource.lowerClipDisplayBound,
               transformedSource.upperClipDisplayBound);
-          const step = (adjustedFar - adjustedNear) / (this.depthSamplesTarget.value - 1);
-          const brightnessFactor = step / (far - near);
-          gl.uniform1f(shader.uniform('uBrightnessFactor'), brightnessFactor);
+          // The sampling ratio is used for opacity correction.
+          // arguably, the reference sampling rate should be at the nyquist frequency
+          // to avoid aliasing, but this is not always practical for large datasets.
+          const actualSamplingRate =
+              (adjustedFar - adjustedNear) / (this.depthSamplesTarget.value - 1);
+          const referenceSamplingRate = (adjustedFar - adjustedNear) / (optimalSamples - 1);
+          const samplingRatio = actualSamplingRate / referenceSamplingRate;
+          gl.uniform1f(shader.uniform('uSamplingRatio'), samplingRatio);
           const nearLimitFraction = (adjustedNear - near) / (far - near);
           const farLimitFraction = (adjustedFar - near) / (far - near);
           gl.uniform1f(shader.uniform('uNearLimitFraction'), nearLimitFraction);
@@ -436,6 +458,11 @@ void main() {
               chunkTransform: {channelToChunkDimensionIndices}
             } = transformedSource;
             const {} = transformedSource;
+            if (renderContext.wireFrame) {
+              const normChunkNumber = chunkNumber / chunks.size;
+              gl.uniform1f(shader.uniform('uChunkNumber'), normChunkNumber);
+              ++chunkNumber;
+            }
             if (newChunkDataSize !== chunkDataSize) {
               chunkDataSize = newChunkDataSize;
 
