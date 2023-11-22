@@ -159,7 +159,7 @@ node.js is required to build the viewer.
 
    Run
    
-   `npm build build-python`
+   `npm run build-python`
    
     `pip install .`
    
