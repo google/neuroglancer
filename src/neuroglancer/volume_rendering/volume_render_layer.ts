@@ -171,6 +171,7 @@ vec4 outputColor;
 void userMain();
 `);
         defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `curChunkPosition`);
+        // See Real-Time Volume Graphics, page 12
         builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
   float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
