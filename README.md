@@ -167,7 +167,7 @@ node.js is required to build the viewer.
     Now python scripts can run for the local server.
 
    
-8. See [package.json](package.json) for other commands available.
+7. See [package.json](package.json) for other commands available.
 
 # Creating a dependent project
 
