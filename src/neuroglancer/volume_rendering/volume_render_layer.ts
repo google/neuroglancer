@@ -174,9 +174,9 @@ void userMain();
         // See Real-Time Volume Graphics, page 12
         builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
-  float alpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
-  outputColor.rgb += (1.0 - outputColor.a) * alpha * rgba.rgb;
-  outputColor.a += (1.0 - outputColor.a) * alpha;
+  float opacityCorrectedAlpha = 1.0 - (pow(clamp(1.0 - rgba.a, 0.0, 1.0), uSamplingRatio));
+  float compositedAlpha = (1.0 - outputColor.a) * opacityCorrectedAlpha;
+  outputColor += vec4(rgba.rgb * compositedAlpha, compositedAlpha);
 }
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
