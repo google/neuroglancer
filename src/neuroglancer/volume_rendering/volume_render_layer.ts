@@ -194,7 +194,7 @@ void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
   emit(outputColor, 0u);
 }
-      `);
+`);
         } else {
           builder.setFragmentMainFunction(`
 void main() {
