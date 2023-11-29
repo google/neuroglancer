@@ -504,8 +504,10 @@ def set_static_content_source(*args, **kwargs):
     global_static_content_source = static.get_static_content_source(*args, **kwargs)
 
 
-def set_server_bind_address(bind_address="127.0.0.1", bind_port=0):
+def set_server_bind_address(bind_address=None, bind_port=0):
     global global_server_args
+    if bind_address is None:
+        bind_address = "127.0.0.1"
     global_server_args = dict(bind_address=bind_address, bind_port=bind_port)
 
 
