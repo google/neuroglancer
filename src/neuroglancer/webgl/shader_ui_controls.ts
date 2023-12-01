@@ -499,7 +499,6 @@ function parsePropertyInvlerpDirective(
 
 function parseTransferFunctionDirective(
   valueType: string, parameters: DirectiveParameters, dataContext: ShaderDataContext): DirectiveParseResult {
-// TODO (skm) allow to specify control points as parameter
 const imageData = dataContext.imageData;
 const dataType = imageData?.dataType;
 const channelRank = imageData?.channelRank;
@@ -524,6 +523,7 @@ for (let [key, value] of parameters) {
         channel = parseInvlerpChannel(value, channel.length);
         break;
       }
+      // TODO (skm) parse hex color values
       case 'color': {
         color = parseRGBColorSpecification(value);
         break;
@@ -561,6 +561,9 @@ if (controlPoints.length === 0) {
 }
 if (range === undefined && dataType !== undefined) {
   range = defaultDataTypeRange[dataType];
+}
+else if (range === undefined) {
+  range = [0, 1] as [number, number];
 }
 return {
   control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color, range}} as ShaderTransferFunctionControl,
@@ -838,7 +841,7 @@ export interface TransferFunctionParameters {
   controlPoints: Array<ControlPoint>;
   channel: number[];
   color: vec3;
-  range: DataTypeInterval|undefined;
+  range: DataTypeInterval;
 }
 
 function convertTransferFunctionControlPoints(value: unknown, dataType: DataType) {
@@ -901,24 +904,23 @@ function deepCopyTransferFunctionParameters(defaultValue: TransferFunctionParame
     controlPoints: defaultValue.controlPoints.map(x => ({position: x.position, color: vec4.clone(x.color)})),
     channel: defaultValue.channel,
     color: vec3.clone(defaultValue.color),
-    range: defaultValue.range,
+    range: [defaultValue.range[0], defaultValue.range[1]] as [number, number]
   };
 }
 
 class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
   constructor(public dataType: DataType, public defaultValue: TransferFunctionParameters) {
     const defaultValueCopy = deepCopyTransferFunctionParameters(defaultValue);
-    super(defaultValueCopy, obj => parseTransferFunctionParameters(obj, dataType, defaultValueCopy));
+    super(defaultValueCopy, obj => parseTransferFunctionParameters(obj, dataType, defaultValue));
   }
   
   toJSON() {
     const {value: {channel, controlPoints, color}, dataType, defaultValue} = this;
     let range = this.value.range;
-    range = range ?? defaultDataTypeRange[dataType];
     const rangeJson = dataTypeIntervalToJson(range, dataType, defaultValue.range);
     const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
     const colorJson = arraysEqual(defaultValue.color, color) ? undefined : serializeColor(this.value.color);
-    const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, controlPoints, (a, b) => a.color === b.color && a.position === b.position) ? undefined : this.value.controlPoints;
+    const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, controlPoints, (a, b) => arraysEqual(a.color, b.color) && a.position == b.position) ? undefined : this.value.controlPoints;
     if (rangeJson === undefined && channelJson === undefined && colorJson === undefined && controlPointsJson === undefined) {
       return undefined;
     }

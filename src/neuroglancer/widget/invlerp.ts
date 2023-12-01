@@ -492,11 +492,11 @@ function createRangeBoundInputs(
   return {container, inputs, spacers};
 }
 
-function updateInputBoundWidth(inputElement: HTMLInputElement) {
+export function updateInputBoundWidth(inputElement: HTMLInputElement) {
   updateInputFieldWidth(inputElement, Math.max(1, inputElement.value.length + 0.1));
 }
 
-function updateInputBoundValue(inputElement: HTMLInputElement, bound: number|Uint64) {
+export function updateInputBoundValue(inputElement: HTMLInputElement, bound: number|Uint64) {
   let boundString: string;
   if (bound instanceof Uint64 || Number.isInteger(bound)) {
     boundString = bound.toString();

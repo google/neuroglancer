@@ -28,7 +28,7 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {UserLayer} from 'neuroglancer/layer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4, vec3} from 'neuroglancer/util/geom';
-import {DataTypeInterval, computeLerp} from 'neuroglancer/util/lerp';
+import {DataTypeInterval, computeLerp, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {GL} from 'neuroglancer/webgl/context';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
@@ -37,7 +37,8 @@ import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls'
 import {WatchableValueInterface, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {ColorWidget} from 'neuroglancer/widget/color';
-import {defineInvlerpShaderFunction} from 'src/neuroglancer/webgl/lerp';
+import {defineInvlerpShaderFunction} from 'neuroglancer/webgl/lerp';
+import {getUpdatedRangeAndWindowParameters, updateInputBoundValue, updateInputBoundWidth} from 'neuroglancer/widget/invlerp';
 
 const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
@@ -495,11 +496,52 @@ class ControlPointsLookupTable extends RefCounted {
   }
 }
 
+function createRangeBoundInput(endpoint: number): HTMLInputElement {
+  const e = document.createElement('input');
+  e.addEventListener('focus', () => {
+    e.select();
+  });
+  e.classList.add('neuroglancer-transfer-function-widget-bound');
+  e.type = 'text';
+  e.spellcheck = false;
+  e.autocomplete = 'off';
+  e.title = `${endpoint === 0 ? 'Lower' : 'Upper'} bound for transfer function range`;
+  return e;
+}
+
+function createRangeBoundInputs(dataType: DataType, model: WatchableValueInterface<TransferFunctionParameters>) {
+  const container = document.createElement('div');
+  container.classList.add('neuroglancer-transfer-function-range-bounds');
+  const inputs = [createRangeBoundInput(0), createRangeBoundInput(1)];
+  for (let endpointIndex = 0; endpointIndex < 2; ++endpointIndex) {
+    const input = inputs[endpointIndex];
+    input.addEventListener('input', () => {
+      updateInputBoundWidth(input);
+    });
+    input.addEventListener('change', () => {
+      const existingBounds = model.value.range;
+      const intervals = {range: existingBounds, window: existingBounds};
+      try {
+        const value = parseDataTypeValue(dataType, input.value);
+        const range = getUpdatedRangeAndWindowParameters(
+          intervals, 'window', endpointIndex, value, /*fitRangeInWindow=*/ true).window;
+        model.value.range = range
+      } catch {
+        updateInputBoundValue(input, existingBounds[endpointIndex]);
+      }
+    });
+  }
+  container.appendChild(inputs[0]);
+  container.appendChild(inputs[1]);
+  return {container, inputs}
+}
+
 // TODO (skm) the widget needs to have a controller for bindings
 export class TransferFunctionWidget extends Tab {
   // TODO (skm) does the panel need data type?
   private transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
   controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
+  range = createRangeBoundInputs(this.dataType, this.trackable)
   private currentGrabbedControlPointIndex: number = -1;
   // TODO (skm) consider adding a hover state to show the color of the control point
   constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext, public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
@@ -508,6 +550,8 @@ export class TransferFunctionWidget extends Tab {
     element.classList.add('neuroglancer-transfer-function-widget');
     this.transferFunctionPanel.element.title = 'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
+
+    // Transfer function element
     const transferFunctionElement = this.transferFunctionPanel.element;
     // TODO (skm) can I use some existing mouse drag code?
     transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
@@ -547,10 +591,11 @@ export class TransferFunctionWidget extends Tab {
       event.preventDefault();
     })
 
-    const paddingDiv = document.createElement('div');
-    paddingDiv.classList.add('neuroglancer-transfer-function-padding');
-    element.appendChild(paddingDiv);
+    // Range bounds element
+    element.appendChild(this.range.container);
+    this.range.container.dispatchEvent(new Event('change'))
 
+    // Color picker element
     const colorPickerDiv = document.createElement('div');
     colorPickerDiv.classList.add('neuroglancer-transfer-function-color-picker');
     colorPickerDiv.addEventListener('mouseenter', (event: MouseEvent) => {
@@ -580,6 +625,8 @@ export class TransferFunctionWidget extends Tab {
     colorPickerDiv.appendChild(colorLabel);
     element.appendChild(colorPickerDiv);
     this.updateControlPointsAndDraw();
+    updateInputBoundValue(this.range.inputs[0], this.trackable.value.range[0]);
+    updateInputBoundValue(this.range.inputs[1], this.trackable.value.range[1]);
   };
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
