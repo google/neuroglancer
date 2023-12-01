@@ -31,7 +31,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
 import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {defineTransferFunctionShader, ControlPoint, enableTransferFunctionShader, TRANSFER_FUNCTION_LENGTH} from 'neuroglancer/widget/transfer_function'
+import {ControlPoint, defineTransferFunctionShader, enableTransferFunctionShader, TRANSFER_FUNCTION_LENGTH} from 'neuroglancer/widget/transfer_function'
 
 export interface ShaderSliderControl {
   type: 'slider';
@@ -498,77 +498,78 @@ function parsePropertyInvlerpDirective(
 }
 
 function parseTransferFunctionDirective(
-  valueType: string, parameters: DirectiveParameters, dataContext: ShaderDataContext): DirectiveParseResult {
-const imageData = dataContext.imageData;
-const dataType = imageData?.dataType;
-const channelRank = imageData?.channelRank;
-let errors = [];
-let channel = new Array(channelRank).fill(0);
-let color = vec3.fromValues(1.0, 1.0, 1.0); 
-let range: DataTypeInterval|undefined;
-const controlPoints = new Array<ControlPoint>();
-if (valueType !== 'transferFunction') {
-  errors.push('type must be transferFunction');
-}
-if (dataType === undefined) {
-  errors.push('image data must be provided to use transfer function');
-}
-else {
-  range = defaultDataTypeRange[dataType];
-}
-for (let [key, value] of parameters) {
-  try {
-    switch (key) {
-      case 'channel': {
-        channel = parseInvlerpChannel(value, channel.length);
-        break;
-      }
-      // TODO (skm) parse hex color values
-      case 'color': {
-        color = parseRGBColorSpecification(value);
-        break;
-      }
-      case 'range': {
-        if (dataType !== undefined) {
-          range = validateDataTypeInterval(parseDataTypeInterval(value, dataType));
-        }
-        break;
-      }
-      case 'points': {
-        if (dataType !== undefined) {
-          controlPoints.push(...convertTransferFunctionControlPoints(value, dataType));
-        }
-        break;
-      }
-      default:
-        errors.push(`Invalid parameter: ${key}`);
-        break;
-    }
-  } catch (e) {
-    errors.push(`Invalid ${key} value: ${e.message}`);
+    valueType: string, parameters: DirectiveParameters,
+    dataContext: ShaderDataContext): DirectiveParseResult {
+  const imageData = dataContext.imageData;
+  const dataType = imageData?.dataType;
+  const channelRank = imageData?.channelRank;
+  let errors = [];
+  let channel = new Array(channelRank).fill(0);
+  let color = vec3.fromValues(1.0, 1.0, 1.0);
+  let range: DataTypeInterval|undefined;
+  const controlPoints = new Array<ControlPoint>();
+  if (valueType !== 'transferFunction') {
+    errors.push('type must be transferFunction');
   }
-}
-if (errors.length > 0) {
-  return {errors};
-}
-if (controlPoints.length === 0) {
-  const transferFunctionRange = [0, TRANSFER_FUNCTION_LENGTH - 1] as [number, number];
-  const startPoint = computeLerp(transferFunctionRange, DataType.UINT16, 0.4) as number;
-  const endPoint = computeLerp(transferFunctionRange, DataType.UINT16, 0.7) as number;
-  //TODO (skm) when using texture, need to use normalized values
-  controlPoints.push({position: startPoint, color: vec4.fromValues(0, 0, 0, 0)});
-  controlPoints.push({position: endPoint, color: vec4.fromValues(255, 255, 255, 255)});
-}
-if (range === undefined && dataType !== undefined) {
-  range = defaultDataTypeRange[dataType];
-}
-else if (range === undefined) {
-  range = [0, 1] as [number, number];
-}
-return {
-  control: {type: 'transferFunction', dataType, default: {controlPoints, channel, color, range}} as ShaderTransferFunctionControl,
-  errors: undefined,
-};
+  if (dataType === undefined) {
+    errors.push('image data must be provided to use transfer function');
+  } else {
+    range = defaultDataTypeRange[dataType];
+  }
+  for (let [key, value] of parameters) {
+    try {
+      switch (key) {
+        case 'channel': {
+          channel = parseInvlerpChannel(value, channel.length);
+          break;
+        }
+        // TODO (skm) parse hex color values
+        case 'color': {
+          color = parseRGBColorSpecification(value);
+          break;
+        }
+        case 'range': {
+          if (dataType !== undefined) {
+            range = validateDataTypeInterval(parseDataTypeInterval(value, dataType));
+          }
+          break;
+        }
+        case 'points': {
+          if (dataType !== undefined) {
+            controlPoints.push(...convertTransferFunctionControlPoints(value, dataType));
+          }
+          break;
+        }
+        default:
+          errors.push(`Invalid parameter: ${key}`);
+          break;
+      }
+    } catch (e) {
+      errors.push(`Invalid ${key} value: ${e.message}`);
+    }
+  }
+  if (errors.length > 0) {
+    return {errors};
+  }
+  if (controlPoints.length === 0) {
+    const transferFunctionRange = [0, TRANSFER_FUNCTION_LENGTH - 1] as [number, number];
+    const startPoint = computeLerp(transferFunctionRange, DataType.UINT16, 0.4) as number;
+    const endPoint = computeLerp(transferFunctionRange, DataType.UINT16, 0.7) as number;
+    // TODO (skm) when using texture, need to use normalized values
+    controlPoints.push({position: startPoint, color: vec4.fromValues(0, 0, 0, 0)});
+    controlPoints.push({position: endPoint, color: vec4.fromValues(255, 255, 255, 255)});
+  }
+  if (range === undefined && dataType !== undefined) {
+    range = defaultDataTypeRange[dataType];
+  } else if (range === undefined) {
+    range = [0, 1] as [number, number];
+  }
+  return {
+    control:
+        {type: 'transferFunction', dataType, default: {controlPoints, channel, color, range}} as
+        ShaderTransferFunctionControl,
+    errors: undefined,
+  };
 }
 
 export interface ImageDataSpecification {
@@ -694,7 +695,8 @@ float ${uName}() {
       }
       case 'transferFunction': {
         builder.addFragmentCode(`#define ${name} ${uName}\n`)
-        builder.addFragmentCode(defineTransferFunctionShader(builder, uName, control.dataType, builderValue.channel));
+        builder.addFragmentCode(
+            defineTransferFunctionShader(builder, uName, control.dataType, builderValue.channel));
         break;
       }
       default: {
@@ -848,7 +850,8 @@ function convertTransferFunctionControlPoints(value: unknown, dataType: DataType
   dataType;
   return parseArray(value, x => {
     if (x.length !== 5) {
-      throw new Error(`Expected array of length 5 (x, R, G, B, A), but received: ${JSON.stringify(x)}`);
+      throw new Error(
+          `Expected array of length 5 (x, R, G, B, A), but received: ${JSON.stringify(x)}`);
     }
     // TODO (skm) implement proper validation of array elements
     for (const val of x) {
@@ -864,44 +867,52 @@ function parseTransferFunctionControlPoints(value: unknown, dataType: DataType) 
   dataType;
   return parseArray(value, x => {
     if (x.position === undefined || x.color === undefined) {
-      throw new Error(`Expected object with position and color properties, but received: ${JSON.stringify(x)}`);
+      throw new Error(
+          `Expected object with position and color properties, but received: ${JSON.stringify(x)}`);
     }
     if (typeof x.position !== 'number') {
       // TODO (skm) might need to be of dataType depending on final implementation
       throw new Error(`Expected number, but received: ${JSON.stringify(x.position)}`);
     }
     if (Object.keys(x.color).length !== 4) {
-      throw new Error(`Expected array of length 4 (R, G, B, A), but received: ${JSON.stringify(x.color)}`);
+      throw new Error(
+          `Expected array of length 4 (R, G, B, A), but received: ${JSON.stringify(x.color)}`);
     }
-    if (typeof x.color[0] !== 'number' || typeof x.color[1] !== 'number' || typeof x.color[2] !== 'number' || typeof x.color[3] !== 'number') {
+    if (typeof x.color[0] !== 'number' || typeof x.color[1] !== 'number' ||
+        typeof x.color[2] !== 'number' || typeof x.color[3] !== 'number') {
       throw new Error(`Expected number, but received: ${JSON.stringify(x.color)}`);
     }
-    return {position: x.position, color: vec4.fromValues(x.color[0], x.color[1], x.color[2], x.color[3])};
+    return {
+      position: x.position,
+      color: vec4.fromValues(x.color[0], x.color[1], x.color[2], x.color[3])
+    };
   });
 }
 
 function parseTransferFunctionParameters(
-  obj: unknown, dataType: DataType,
-  defaultValue: TransferFunctionParameters): TransferFunctionParameters {
+    obj: unknown, dataType: DataType,
+    defaultValue: TransferFunctionParameters): TransferFunctionParameters {
   if (obj === undefined) return defaultValue;
   verifyObject(obj);
   return {
     controlPoints: verifyOptionalObjectProperty(
-      obj, 'controlPoints', x => parseTransferFunctionControlPoints(x, dataType), defaultValue.controlPoints),
+        obj, 'controlPoints', x => parseTransferFunctionControlPoints(x, dataType),
+        defaultValue.controlPoints),
     channel: verifyOptionalObjectProperty(
         obj, 'channel', x => parseInvlerpChannel(x, defaultValue.channel.length),
         defaultValue.channel),
     color: verifyOptionalObjectProperty(
-      obj, 'color', x => parseRGBColorSpecification(x), defaultValue.color),
+        obj, 'color', x => parseRGBColorSpecification(x), defaultValue.color),
     range: verifyOptionalObjectProperty(
-      obj, 'range', x => validateDataTypeInterval(parseDataTypeInterval(x, dataType)),
-      defaultValue.range),
+        obj, 'range', x => validateDataTypeInterval(parseDataTypeInterval(x, dataType)),
+        defaultValue.range),
   };
 }
 
 function deepCopyTransferFunctionParameters(defaultValue: TransferFunctionParameters) {
   return {
-    controlPoints: defaultValue.controlPoints.map(x => ({position: x.position, color: vec4.clone(x.color)})),
+    controlPoints:
+        defaultValue.controlPoints.map(x => ({position: x.position, color: vec4.clone(x.color)})),
     channel: defaultValue.channel,
     color: vec3.clone(defaultValue.color),
     range: [defaultValue.range[0], defaultValue.range[1]] as [number, number]
@@ -913,18 +924,30 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     const defaultValueCopy = deepCopyTransferFunctionParameters(defaultValue);
     super(defaultValueCopy, obj => parseTransferFunctionParameters(obj, dataType, defaultValue));
   }
-  
+
   toJSON() {
     const {value: {channel, controlPoints, color}, dataType, defaultValue} = this;
     let range = this.value.range;
     const rangeJson = dataTypeIntervalToJson(range, dataType, defaultValue.range);
     const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
-    const colorJson = arraysEqual(defaultValue.color, color) ? undefined : serializeColor(this.value.color);
-    const controlPointsJson = arraysEqualWithPredicate(defaultValue.controlPoints, controlPoints, (a, b) => arraysEqual(a.color, b.color) && a.position == b.position) ? undefined : this.value.controlPoints;
-    if (rangeJson === undefined && channelJson === undefined && colorJson === undefined && controlPointsJson === undefined) {
+    const colorJson =
+        arraysEqual(defaultValue.color, color) ? undefined : serializeColor(this.value.color);
+    const controlPointsJson =
+        arraysEqualWithPredicate(
+            defaultValue.controlPoints, controlPoints,
+            (a, b) => arraysEqual(a.color, b.color) && a.position == b.position) ?
+        undefined :
+        this.value.controlPoints;
+    if (rangeJson === undefined && channelJson === undefined && colorJson === undefined &&
+        controlPointsJson === undefined) {
       return undefined;
     }
-    return {range: rangeJson, channel: channelJson, color: colorJson, controlPoints: controlPointsJson};
+    return {
+      range: rangeJson,
+      channel: channelJson,
+      color: colorJson,
+      controlPoints: controlPointsJson
+    };
   }
 }
 
@@ -970,8 +993,11 @@ function getControlTrackable(control: ShaderUiControl):
         getBuilderValue: value => ({value}),
       };
     case 'transferFunction':
-      return {trackable: new TrackableTransferFunctionParameters(control.dataType, control.default), getBuilderValue: (value: TransferFunctionParameters) => ({channel: value.channel, dataType: control.dataType}),
-    };
+      return {
+        trackable: new TrackableTransferFunctionParameters(control.dataType, control.default),
+        getBuilderValue: (value: TransferFunctionParameters) =>
+            ({channel: value.channel, dataType: control.dataType}),
+      };
   }
 }
 
@@ -1299,7 +1325,8 @@ function setControlInShader(
       // Value is hard-coded in shader.
       break;
     case 'transferFunction':
-      enableTransferFunctionShader(shader, uName, control.dataType, value.controlPoints, value.range);
+      enableTransferFunctionShader(
+          shader, uName, control.dataType, value.controlPoints, value.range);
       break;
   }
 }

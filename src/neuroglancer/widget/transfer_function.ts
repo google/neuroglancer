@@ -17,31 +17,31 @@
 import './transfer_function.css';
 
 import {DisplayContext, IndirectRenderedPanel} from 'neuroglancer/display_context';
+import {UserLayer} from 'neuroglancer/layer';
+import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ToolActivation} from 'neuroglancer/ui/tool';
 import {DataType} from 'neuroglancer/util/data_type';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
+import {vec3, vec4} from 'neuroglancer/util/geom';
+import {computeLerp, DataTypeInterval, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
+import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {defineInvlerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
+import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
+import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
+import {ColorWidget} from 'neuroglancer/widget/color';
+import {getUpdatedRangeAndWindowParameters, updateInputBoundValue, updateInputBoundWidth} from 'neuroglancer/widget/invlerp';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
-import {UserLayer} from 'neuroglancer/layer';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec4, vec3} from 'neuroglancer/util/geom';
-import {DataTypeInterval, computeLerp, parseDataTypeValue} from 'neuroglancer/util/lerp';
-import {GL} from 'neuroglancer/webgl/context';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
-import {VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
-import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {TransferFunctionParameters} from 'neuroglancer/webgl/shader_ui_controls';
-import {WatchableValueInterface, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {ColorWidget} from 'neuroglancer/widget/color';
-import {defineInvlerpShaderFunction} from 'neuroglancer/webgl/lerp';
-import {getUpdatedRangeAndWindowParameters, updateInputBoundValue, updateInputBoundWidth} from 'neuroglancer/widget/invlerp';
 
 const NUM_COLOR_CHANNELS = 4;
-const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
+const POSITION_VALUES_PER_LINE = 4;  // x1, y1, x2, y2
 export const TRANSFER_FUNCTION_LENGTH = 512;
 const CONTROL_POINT_GRAB_DISTANCE = TRANSFER_FUNCTION_LENGTH / 40;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 23;
@@ -62,7 +62,7 @@ export interface TransferFunctionTextureOptions {
   textureUnit: number;
 }
 
-function lerpBetweenControlPoints(out: Int32Array | Uint8Array, controlPoints: Array<ControlPoint>) {
+function lerpBetweenControlPoints(out: Int32Array|Uint8Array, controlPoints: Array<ControlPoint>) {
   function addLookupValue(index: number, color: vec4) {
     out[index] = color[0];
     out[index + 1] = color[1];
@@ -151,30 +151,30 @@ function griddedRectangleArray(numGrids: number) {
     const index = i * VERTICES_PER_QUAD * 2;
 
     // Triangle 1 - top-left, top-right, bottom-right
-    result[index] = start; // top-left x
-    result[index + 1] = height; // top-left y
-    result[index + 2] = end // top-right x
-    result[index + 3] = height; // top-right y
-    result[index + 4] = end; // bottom-right x
-    result[index + 5] = -height; // bottom-right y
+    result[index] = start;        // top-left x
+    result[index + 1] = height;   // top-left y
+    result[index + 2] = end       // top-right x
+    result[index + 3] = height;   // top-right y
+    result[index + 4] = end;      // bottom-right x
+    result[index + 5] = -height;  // bottom-right y
 
     // Triangle 2 - top-left, bottom-right, bottom-left
-    result[index + 6] = start; // top-left x
-    result[index + 7] = height; // top-left y
-    result[index + 8] = end; // bottom-right x
-    result[index + 9] = -height; // bottom-right y
-    result[index + 10] = start; // bottom-left x
-    result[index + 11] = -height; // bottom-left y
+    result[index + 6] = start;     // top-left x
+    result[index + 7] = height;    // top-left y
+    result[index + 8] = end;       // bottom-right x
+    result[index + 9] = -height;   // bottom-right y
+    result[index + 10] = start;    // bottom-left x
+    result[index + 11] = -height;  // bottom-left y
     start += step;
   }
   return result;
 }
 
 class TransferFunctionTexture extends RefCounted {
-  texture: WebGLTexture | null = null;
+  texture: WebGLTexture|null = null;
   width: number = TRANSFER_FUNCTION_LENGTH;
   height: number = 1;
-  private priorOptions: TransferFunctionTextureOptions | undefined = undefined;
+  private priorOptions: TransferFunctionTextureOptions|undefined = undefined;
 
   constructor(public gl: GL) {
     super();
@@ -195,7 +195,10 @@ class TransferFunctionTexture extends RefCounted {
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     setRawTextureParameters(gl);
-    gl.texImage2D(WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, this.width, 1, 0, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, options.controlPoints.lookupTable);
+    gl.texImage2D(
+        WebGL2RenderingContext.TEXTURE_2D, 0, WebGL2RenderingContext.RGBA, this.width, 1, 0,
+        WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE,
+        options.controlPoints.lookupTable);
     this.priorOptions = options;
   }
 
@@ -223,13 +226,25 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     const {element} = this;
     element.classList.add('neuroglancer-transfer-function-panel');
     this.texture = this.registerDisposer(new TransferFunctionTexture(this.gl));
-    this.vertexBuffer =
-      this.registerDisposer(getMemoizedBuffer(
-        this.gl, WebGL2RenderingContext.ARRAY_BUFFER, griddedRectangleArray,
-        TRANSFER_FUNCTION_LENGTH)).value;
-    this.controlPointsVertexBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsPositionArray)).value;
-    this.controlPointsColorBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsColorArray)).value;
-    this.linePositionBuffer = this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.linePositionArray)).value;
+    this.vertexBuffer = this.registerDisposer(getMemoizedBuffer(
+                                                  this.gl, WebGL2RenderingContext.ARRAY_BUFFER,
+                                                  griddedRectangleArray, TRANSFER_FUNCTION_LENGTH))
+                            .value;
+    this.controlPointsVertexBuffer =
+        this.registerDisposer(getMemoizedBuffer(
+                                  this.gl, WebGL2RenderingContext.ARRAY_BUFFER,
+                                  () => this.controlPointsPositionArray))
+            .value;
+    this.controlPointsColorBuffer =
+        this
+            .registerDisposer(getMemoizedBuffer(
+                this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.controlPointsColorArray))
+            .value;
+    this.linePositionBuffer =
+        this
+            .registerDisposer(getMemoizedBuffer(
+                this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => this.linePositionArray))
+            .value;
   }
 
   updateControlPointArrays() {
@@ -253,7 +268,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       return index
     }
 
-    const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
+    const colorChannels = NUM_COLOR_CHANNELS - 1;  // ignore alpha
     const controlPoints = this.parent.controlPointsLookupTable.trackable.value.controlPoints;
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
     const positionArray = new Float32Array(controlPoints.length * 2);
@@ -268,16 +283,21 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       }
       if (controlPoints[controlPoints.length - 1].position < TRANSFER_FUNCTION_LENGTH - 1) {
         numLines += 1;
-        endAdd = {position: TRANSFER_FUNCTION_LENGTH - 1, color: controlPoints[controlPoints.length - 1].color};
+        endAdd = {
+          position: TRANSFER_FUNCTION_LENGTH - 1,
+          color: controlPoints[controlPoints.length - 1].color
+        };
       }
-    }
-    else {
+    } else {
       numLines = 0;
     }
 
-    const linePositionArray = new Float32Array(numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE);
+    const linePositionArray =
+        new Float32Array(numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE);
     if (startAdd !== null) {
-      const linePosition = vec4.fromValues(startAdd.position, startAdd.color[3], controlPoints[0].position, controlPoints[0].color[3]);
+      const linePosition = vec4.fromValues(
+          startAdd.position, startAdd.color[3], controlPoints[0].position,
+          controlPoints[0].color[3]);
       lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
     }
 
@@ -291,17 +311,20 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       positionArray[positionIndex] = normalizePosition(position);
       positionArray[positionIndex + 1] = normalizeOpacity(color[3]);
       if (i < controlPoints.length - 1) {
-        const linePosition = vec4.fromValues(position, color[3], controlPoints[i + 1].position, controlPoints[i + 1].color[3]);
+        const linePosition = vec4.fromValues(
+            position, color[3], controlPoints[i + 1].position, controlPoints[i + 1].color[3]);
         lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
       }
     }
 
     if (endAdd !== null) {
-      const linePosition = vec4.fromValues(controlPoints[controlPoints.length - 1].position, controlPoints[controlPoints.length - 1].color[3], endAdd.position, endAdd.color[3]);
+      const linePosition = vec4.fromValues(
+          controlPoints[controlPoints.length - 1].position,
+          controlPoints[controlPoints.length - 1].color[3], endAdd.position, endAdd.color[3]);
       lineIndex = createLinePoints(linePositionArray, lineIndex, linePosition);
     }
 
-    this.controlPointsColorArray = colorArray
+    this.controlPointsColorArray = colorArray;
     this.controlPointsPositionArray = positionArray;
     this.linePositionArray = linePositionArray;
     this.controlPointsVertexBuffer.setData(this.controlPointsPositionArray);
@@ -382,10 +405,13 @@ out_color = tempColor * alpha;
     {
       transferFunctionShader.bind();
       const aVertexPosition = transferFunctionShader.attribute('aVertexPosition');
-      gl.uniform1f(transferFunctionShader.uniform('uTransferFunctionEnd'), TRANSFER_FUNCTION_LENGTH - 1);
-      this.vertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      gl.uniform1f(
+          transferFunctionShader.uniform('uTransferFunctionEnd'), TRANSFER_FUNCTION_LENGTH - 1);
+      this.vertexBuffer.bindToVertexAttrib(
+          aVertexPosition, /*components=*/ 2, /*attributeType=*/ WebGL2RenderingContext.FLOAT);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
-      this.texture.updateAndActivate({controlPoints: this.parent.controlPointsLookupTable, textureUnit});
+      this.texture.updateAndActivate(
+          {controlPoints: this.parent.controlPointsLookupTable, textureUnit});
       gl.drawArrays(gl.TRIANGLES, 0, TRANSFER_FUNCTION_LENGTH * VERTICES_PER_QUAD);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
@@ -394,18 +420,23 @@ out_color = tempColor * alpha;
       const {renderViewport} = this;
       transferFunctionLineShader.bind();
       const aLineStartEnd = transferFunctionLineShader.attribute('aLineStartEnd');
-      this.linePositionBuffer.bindToVertexAttrib(aLineStartEnd, /*components=*/4, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      this.linePositionBuffer.bindToVertexAttrib(
+          aLineStartEnd, /*components=*/ 4, /*attributeType=*/ WebGL2RenderingContext.FLOAT);
       initializeLineShader(
-        transferFunctionLineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
+          transferFunctionLineShader,
+          {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
           /*featherWidthInPixels=*/ 1);
-      drawLines(gl, this.linePositionArray.length / (VERTICES_PER_LINE * POSITION_VALUES_PER_LINE), 1);
+      drawLines(
+          gl, this.linePositionArray.length / (VERTICES_PER_LINE * POSITION_VALUES_PER_LINE), 1);
       gl.disableVertexAttribArray(aLineStartEnd);
 
       controlPointsShader.bind();
       const aVertexPosition = controlPointsShader.attribute('aVertexPosition');
-      this.controlPointsVertexBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      this.controlPointsVertexBuffer.bindToVertexAttrib(
+          aVertexPosition, /*components=*/ 2, /*attributeType=*/ WebGL2RenderingContext.FLOAT);
       const aVertexColor = controlPointsShader.attribute('aVertexColor');
-      this.controlPointsColorBuffer.bindToVertexAttrib(aVertexColor, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT);
+      this.controlPointsColorBuffer.bindToVertexAttrib(
+          aVertexColor, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT);
       gl.drawArrays(gl.POINTS, 0, this.controlPointsPositionArray.length / 2);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.disableVertexAttribArray(aVertexColor);
@@ -418,13 +449,16 @@ out_color = tempColor * alpha;
   }
 }
 
-// TODO (skm) control points might need two positions, one for the actual position and one for the display position
+// TODO (skm) control points might need two positions, one for the actual position and one for the
+// display position
 // TODO (skm) however, this might make it a bit awkward for texturing
 // TODO (skm) does this need data type?
 class ControlPointsLookupTable extends RefCounted {
   lookupTable: Uint8Array;
-  constructor(public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
-    //TODO temp
+  constructor(
+      public dataType: DataType,
+      public trackable: WatchableValueInterface<TransferFunctionParameters>) {
+    // TODO temp
     super();
     this.lookupTable = new Uint8Array(TRANSFER_FUNCTION_LENGTH * NUM_COLOR_CHANNELS).fill(0);
   }
@@ -435,14 +469,15 @@ class ControlPointsLookupTable extends RefCounted {
     let opacityAsUint8 = floatToUint8(opacity);
     if (opacityAsUint8 <= TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacityAsUint8 = 0;
-    }
-    else if (opacityAsUint8 >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
+    } else if (opacityAsUint8 >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacityAsUint8 = 255;
     }
     return opacityAsUint8;
   }
   findNearestControlPointIndex(position: number) {
-    return findClosestValueIndexInSortedArray(this.trackable.value.controlPoints.map((point) => point.position), this.positionToIndex(position));
+    return findClosestValueIndexInSortedArray(
+        this.trackable.value.controlPoints.map((point) => point.position),
+        this.positionToIndex(position));
   }
   grabControlPoint(position: number) {
     const nearestIndex = this.findNearestControlPointIndex(position);
@@ -453,13 +488,13 @@ class ControlPointsLookupTable extends RefCounted {
     const desiredPosition = this.positionToIndex(position);
     if (Math.abs(nearestPosition - desiredPosition) < CONTROL_POINT_GRAB_DISTANCE) {
       return nearestIndex;
-    }
-    else {
+    } else {
       return -1;
     }
   }
   addPoint(position: number, opacity: number, color: vec3) {
-    const colorAsUint8 = vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
+    const colorAsUint8 =
+        vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
     let opacityAsUint8 = this.opacityToIndex(opacity);
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
@@ -467,7 +502,10 @@ class ControlPointsLookupTable extends RefCounted {
     if (existingIndex !== -1) {
       controlPoints.splice(existingIndex, 1);
     }
-    controlPoints.push({position: positionAsIndex, color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacityAsUint8)});
+    controlPoints.push({
+      position: positionAsIndex,
+      color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacityAsUint8)
+    });
     controlPoints.sort((a, b) => a.position - b.position);
   }
   lookupTableFromControlPoints() {
@@ -480,15 +518,21 @@ class ControlPointsLookupTable extends RefCounted {
     const positionAsIndex = this.positionToIndex(position);
     let opacityAsUint8 = floatToUint8(opacity);
     const color = controlPoints[index].color;
-    controlPoints[index] = {position: positionAsIndex, color: vec4.fromValues(color[0], color[1], color[2], opacityAsUint8)};
+    controlPoints[index] = {
+      position: positionAsIndex,
+      color: vec4.fromValues(color[0], color[1], color[2], opacityAsUint8)
+    };
     controlPoints.sort((a, b) => a.position - b.position);
-    const newControlPointIndex = controlPoints.findIndex((point) => point.position === positionAsIndex);
+    const newControlPointIndex =
+        controlPoints.findIndex((point) => point.position === positionAsIndex);
     return newControlPointIndex;
   }
   setPointColor(index: number, color: vec3) {
     const {controlPoints} = this.trackable.value;
-    const colorAsUint8 = vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
-    controlPoints[index].color = vec4.fromValues(colorAsUint8[0],colorAsUint8[1], colorAsUint8[2], controlPoints[index].color[3]);
+    const colorAsUint8 =
+        vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
+    controlPoints[index].color = vec4.fromValues(
+        colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], controlPoints[index].color[3]);
   }
   // TODO (skm) correct disposal
   disposed() {
@@ -509,7 +553,8 @@ function createRangeBoundInput(endpoint: number): HTMLInputElement {
   return e;
 }
 
-function createRangeBoundInputs(dataType: DataType, model: WatchableValueInterface<TransferFunctionParameters>) {
+function createRangeBoundInputs(
+    dataType: DataType, model: WatchableValueInterface<TransferFunctionParameters>) {
   const container = document.createElement('div');
   container.classList.add('neuroglancer-transfer-function-range-bounds');
   const inputs = [createRangeBoundInput(0), createRangeBoundInput(1)];
@@ -524,7 +569,8 @@ function createRangeBoundInputs(dataType: DataType, model: WatchableValueInterfa
       try {
         const value = parseDataTypeValue(dataType, input.value);
         const range = getUpdatedRangeAndWindowParameters(
-          intervals, 'window', endpointIndex, value, /*fitRangeInWindow=*/ true).window;
+                          intervals, 'window', endpointIndex, value, /*fitRangeInWindow=*/ true)
+                          .window;
         model.value.range = range
       } catch {
         updateInputBoundValue(input, existingBounds[endpointIndex]);
@@ -533,22 +579,30 @@ function createRangeBoundInputs(dataType: DataType, model: WatchableValueInterfa
   }
   container.appendChild(inputs[0]);
   container.appendChild(inputs[1]);
-  return {container, inputs}
+  return {
+    container, inputs
+  }
 }
 
 // TODO (skm) the widget needs to have a controller for bindings
 export class TransferFunctionWidget extends Tab {
   // TODO (skm) does the panel need data type?
-  private transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
-  controlPointsLookupTable = this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
-  range = createRangeBoundInputs(this.dataType, this.trackable)
+  private transferFunctionPanel =
+      this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
+  controlPointsLookupTable =
+      this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
+  range = createRangeBoundInputs(this.dataType, this.trackable);
   private currentGrabbedControlPointIndex: number = -1;
   // TODO (skm) consider adding a hover state to show the color of the control point
-  constructor(visibility: WatchableVisibilityPriority, public display: DisplayContext, public dataType: DataType, public trackable: WatchableValueInterface<TransferFunctionParameters>) {
+  constructor(
+      visibility: WatchableVisibilityPriority, public display: DisplayContext,
+      public dataType: DataType,
+      public trackable: WatchableValueInterface<TransferFunctionParameters>) {
     super(visibility);
     const {element} = this;
     element.classList.add('neuroglancer-transfer-function-widget');
-    this.transferFunctionPanel.element.title = 'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
+    this.transferFunctionPanel.element.title =
+        'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
 
     // Transfer function element
@@ -558,12 +612,15 @@ export class TransferFunctionWidget extends Tab {
       const modifierPressed = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
       event.stopPropagation();
       event.preventDefault();
-      this.grabOrAddControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight, trackable.value.color, modifierPressed);
+      this.grabOrAddControlPoint(
+          event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight,
+          trackable.value.color, modifierPressed);
     })
     transferFunctionElement.addEventListener('mousemove', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.moveControlPoint(event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight);
+      this.moveControlPoint(
+          event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight);
     })
     transferFunctionElement.addEventListener('mouseup', (event: MouseEvent) => {
       event.stopPropagation();
@@ -580,7 +637,8 @@ export class TransferFunctionWidget extends Tab {
     transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      const nearestIndex = this.findNearestControlPointIndex(event, transferFunctionElement.clientWidth);
+      const nearestIndex =
+          this.findNearestControlPointIndex(event, transferFunctionElement.clientWidth);
       if (nearestIndex !== -1) {
         this.controlPointsLookupTable.trackable.value.controlPoints.splice(nearestIndex, 1);
         this.updateControlPointsAndDraw();
@@ -608,7 +666,9 @@ export class TransferFunctionWidget extends Tab {
       event.preventDefault();
       colorPicker.element.disabled = true;
     })
-    const colorPicker = this.registerDisposer(new ColorWidget(makeCachedDerivedWatchableValue((x: TransferFunctionParameters) => x.color, [trackable]), () => vec3.fromValues(1, 1, 1)));
+    const colorPicker = this.registerDisposer(new ColorWidget(
+        makeCachedDerivedWatchableValue((x: TransferFunctionParameters) => x.color, [trackable]),
+        () => vec3.fromValues(1, 1, 1)));
     colorPicker.element.disabled = true;
     colorPicker.element.title = 'Transfer Function Color Picker'
     colorPicker.element.id = 'neuroglancer-tf-color-widget';
@@ -619,7 +679,7 @@ export class TransferFunctionWidget extends Tab {
       trackable.value.color = colorPicker.model.value;
     });
     colorPickerDiv.appendChild(colorPicker.element);
-    
+
     const colorLabel = document.createElement('label');
     colorLabel.setAttribute('for', 'neuroglancer-tf-color-widget');
     colorPickerDiv.appendChild(colorLabel);
@@ -639,7 +699,9 @@ export class TransferFunctionWidget extends Tab {
   findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
     return this.controlPointsLookupTable.grabControlPoint(event.offsetX / canvasX);
   }
-  grabOrAddControlPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3, shouldChangeColor: boolean) {
+  grabOrAddControlPoint(
+      event: MouseEvent, canvasX: number, canvasY: number, color: vec3,
+      shouldChangeColor: boolean) {
     const nearestIndex = this.findNearestControlPointIndex(event, canvasX);
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
@@ -647,8 +709,7 @@ export class TransferFunctionWidget extends Tab {
         this.controlPointsLookupTable.setPointColor(this.currentGrabbedControlPointIndex, color);
         this.updateControlPointsAndDraw();
       }
-    }
-    else {
+    } else {
       this.addPoint(event, canvasX, canvasY, color);
       this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX);
     }
@@ -661,7 +722,8 @@ export class TransferFunctionWidget extends Tab {
   moveControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
     if (this.currentGrabbedControlPointIndex !== -1) {
       const {normalizedX, normalizedY} = this.getControlPointPosition(event, canvasX, canvasY);
-      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(this.currentGrabbedControlPointIndex, normalizedX, normalizedY);
+      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(
+          this.currentGrabbedControlPointIndex, normalizedX, normalizedY);
       this.updateControlPointsAndDraw();
     }
   }
@@ -672,10 +734,12 @@ export class TransferFunctionWidget extends Tab {
   }
 }
 
-export function defineTransferFunctionShader(builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
+export function defineTransferFunctionShader(
+    builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
   builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, TRANSFER_FUNCTION_LENGTH);
   builder.addUniform(`float`, `uTransferFunctionGridSize_${name}`);
-  const invlerpShaderCode = defineInvlerpShaderFunction(builder, name, dataType, true) as ShaderCodePart[];
+  const invlerpShaderCode =
+      defineInvlerpShaderFunction(builder, name, dataType, true) as ShaderCodePart[];
   const shaderType = getShaderType(dataType);
   // TODO (SKM) - bring in intepolation code option
   // TODO (SKM) - use invlerp code to help this
@@ -699,16 +763,13 @@ vec4 ${name}() {
   }
 }
 `;
-  return [
-    invlerpShaderCode[0],
-    invlerpShaderCode[1],
-    invlerpShaderCode[2],
-    code
-  ]
+  return [invlerpShaderCode[0], invlerpShaderCode[1], invlerpShaderCode[2], code]
 }
 
 // TODO (skm) can likely optimize this
-export function enableTransferFunctionShader(shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>, interval: DataTypeInterval) {
+export function enableTransferFunctionShader(
+    shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>,
+    interval: DataTypeInterval) {
   const {gl} = shader;
   const transferFunction = new Int32Array(TRANSFER_FUNCTION_LENGTH * NUM_COLOR_CHANNELS);
   lerpBetweenControlPoints(transferFunction, controlPoints);
@@ -720,7 +781,9 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
     case DataType.FLOAT32:
       gl.uniform4iv(shader.uniform(`uTransferFunctionParams_${name}`), transferFunction);
       gl.uniform1f(shader.uniform(`uTransferFunctionGridSize_${name}`), TRANSFER_FUNCTION_LENGTH);
-      gl.uniform2f(shader.uniform(`uLerpParams_${name}`), interval[0] as number, 1 / ((interval[1] as number) - (interval[0] as number)));
+      gl.uniform2f(
+          shader.uniform(`uLerpParams_${name}`), interval[0] as number,
+          1 / ((interval[1] as number) - (interval[0] as number)));
       break;
     // TODO (skm) add support for other data types
     // TODO (skm) easiest way might be to use the invlerp function
@@ -732,25 +795,27 @@ export function enableTransferFunctionShader(shader: ShaderProgram, name: string
 
 // TODO (skm) this renders in the popup, but not in the main view
 export function activateTransferFunctionTool(
-  activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
+    activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
   activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
   activation.bindAction('add-point', (event: ActionEvent<MouseEvent>) => {
     event.stopPropagation();
     event.preventDefault();
-    control.addPoint(event.detail, control.element.clientWidth, control.element.clientHeight, control.trackable.value.color);
+    control.addPoint(
+        event.detail, control.element.clientWidth, control.element.clientHeight,
+        control.trackable.value.color);
   });
 }
 
 export function transferFunctionLayerControl<LayerType extends UserLayer>(
-  getter: (layer: LayerType) => {
-    watchableValue: WatchableValueInterface<TransferFunctionParameters>,
-    dataType: DataType,
-  }): LayerControlFactory<LayerType, TransferFunctionWidget> {
+    getter: (layer: LayerType) => {
+      watchableValue: WatchableValueInterface<TransferFunctionParameters>,
+      dataType: DataType,
+    }): LayerControlFactory<LayerType, TransferFunctionWidget> {
   return {
     makeControl: (layer, context, options) => {
       const {watchableValue, dataType} = getter(layer);
-      const control =
-        context.registerDisposer(new TransferFunctionWidget(options.visibility, options.display, dataType, watchableValue));
+      const control = context.registerDisposer(new TransferFunctionWidget(
+          options.visibility, options.display, dataType, watchableValue));
       return {control, controlElement: control.element};
     },
     activateTool: (activation, control) => {
