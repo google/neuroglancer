@@ -126,6 +126,7 @@ export class ImageUserLayer extends Base {
     this.opacity.changed.add(this.specificationChanged.dispatch);
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
+    this.shaderControlState.changed.add(() => {console.log("shaderControlState changed");});
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.volumeRenderingDepthSamplesTarget.changed.add(this.specificationChanged.dispatch);
     this.volumeRenderingMode.changed.add(this.specificationChanged.dispatch);
