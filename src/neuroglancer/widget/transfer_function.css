@@ -26,3 +26,19 @@
 .neuroglancer-transfer-function-color-picker {
   text-align: right;
 }
+
+.neuroglancer-transfer-function-widget-bound {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border: 0;
+  margin: 0;
+  font-family: monospace;
+  font-size: medium;
+  color: cyan;
+}
+
+.neuroglancer-transfer-function-range-bounds {
+  display: flex;
+  justify-content: space-between;
+}
