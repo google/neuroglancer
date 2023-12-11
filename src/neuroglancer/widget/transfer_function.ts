@@ -247,7 +247,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
             .value;
   }
 
-  updateControlPointArrays() {
+  updateTransferFunctionPanelLines() {
     function normalizePosition(position: number) {
       return (position / (TRANSFER_FUNCTION_LENGTH - 1)) * 2 - 1;
     }
@@ -458,7 +458,6 @@ class ControlPointsLookupTable extends RefCounted {
   constructor(
       public dataType: DataType,
       public trackable: WatchableValueInterface<TransferFunctionParameters>) {
-    // TODO temp
     super();
     this.lookupTable = new Uint8Array(TRANSFER_FUNCTION_LENGTH * NUM_COLOR_CHANNELS).fill(0);
   }
@@ -507,11 +506,13 @@ class ControlPointsLookupTable extends RefCounted {
       color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacityAsUint8)
     });
     controlPoints.sort((a, b) => a.position - b.position);
+    this.trackable.value = {...this.trackable.value, controlPoints};
   }
   lookupTableFromControlPoints() {
     const {lookupTable} = this;
     const {controlPoints} = this.trackable.value;
     lerpBetweenControlPoints(lookupTable, controlPoints);
+    this.trackable.value = {...this.trackable.value, controlPoints};
   }
   updatePoint(index: number, position: number, opacity: number) {
     const {controlPoints} = this.trackable.value;
@@ -525,6 +526,7 @@ class ControlPointsLookupTable extends RefCounted {
     controlPoints.sort((a, b) => a.position - b.position);
     const newControlPointIndex =
         controlPoints.findIndex((point) => point.position === positionAsIndex);
+    this.trackable.value = {...this.trackable.value, controlPoints};
     return newControlPointIndex;
   }
   setPointColor(index: number, color: vec3) {
@@ -533,6 +535,7 @@ class ControlPointsLookupTable extends RefCounted {
         vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
     controlPoints[index].color = vec4.fromValues(
         colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], controlPoints[index].color[3]);
+    this.trackable.value = {...this.trackable.value, controlPoints};
   }
   // TODO (skm) correct disposal
   disposed() {
@@ -571,7 +574,7 @@ function createRangeBoundInputs(
         const range = getUpdatedRangeAndWindowParameters(
                           intervals, 'window', endpointIndex, value, /*fitRangeInWindow=*/ true)
                           .window;
-        model.value.range = range
+        model.value = {...model.value, range};
       } catch {
         updateInputBoundValue(input, existingBounds[endpointIndex]);
       }
@@ -693,7 +696,7 @@ export class TransferFunctionWidget extends Tab {
   }
   updateControlPointsAndDraw() {
     this.controlPointsLookupTable.lookupTableFromControlPoints();
-    this.transferFunctionPanel.updateControlPointArrays();
+    this.transferFunctionPanel.updateTransferFunctionPanelLines();
     this.updateView();
   }
   findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
@@ -733,6 +736,7 @@ export class TransferFunctionWidget extends Tab {
     this.updateControlPointsAndDraw();
   }
 }
+// TODO (skm) may need to follow the VariableDataTypeInvlerpWidget pattern
 
 export function defineTransferFunctionShader(
     builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
