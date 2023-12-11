@@ -279,7 +279,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     if (controlPoints.length > 0) {
       if (controlPoints[0].position > 0) {
         numLines += 1;
-        startAdd = {position: 0, color: vec4.fromValues(0, 0, 0, 0)};
+        startAdd = {position: controlPoints[0].position, color: vec4.fromValues(0, 0, 0, 0)};
       }
       if (controlPoints[controlPoints.length - 1].position < TRANSFER_FUNCTION_LENGTH - 1) {
         numLines += 1;
