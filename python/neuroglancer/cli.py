@@ -22,6 +22,10 @@ def add_server_arguments(ap):
         "to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.",
     )
     g.add_argument(
+        "--bind-port",
+        help="Bind port for Python web server.  Use 0 (the default) to choose a port automatically.",
+    )
+    g.add_argument(
         "--static-content-url",
         help="Obtain the Neuroglancer client code from the specified URL.",
     )
@@ -68,8 +72,8 @@ def handle_server_arguments(args):
     """Handles the options defined by `add_server_arguments`."""
     from . import server
 
-    if args.bind_address:
-        server.set_server_bind_address(args.bind_address)
+    if args.bind_address is not None or args.bind_port is not None:
+        server.set_server_bind_address(args.bind_address, args.bind_port)
     if args.static_content_url:
         server.set_static_content_source(url=args.static_content_url)
     if args.debug_server:
