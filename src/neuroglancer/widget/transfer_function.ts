@@ -22,9 +22,10 @@ import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neurogla
 import {ToolActivation} from 'neuroglancer/ui/tool';
 import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {ActionEvent, EventActionMap} from 'neuroglancer/util/event_action_map';
+import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3, vec4} from 'neuroglancer/util/geom';
 import {computeLerp, DataTypeInterval, parseDataTypeValue} from 'neuroglancer/util/lerp';
+import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -39,16 +40,13 @@ import {ColorWidget} from 'neuroglancer/widget/color';
 import {getUpdatedRangeAndWindowParameters, updateInputBoundValue, updateInputBoundWidth} from 'neuroglancer/widget/invlerp';
 import {LayerControlFactory, LayerControlTool} from 'neuroglancer/widget/layer_control';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {startRelativeMouseDrag} from 'src/neuroglancer/util/mouse_drag';
 
 const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4;  // x1, y1, x2, y2
 export const TRANSFER_FUNCTION_LENGTH = 512;
 const CONTROL_POINT_GRAB_DISTANCE = TRANSFER_FUNCTION_LENGTH / 40;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 23;
-
-const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
-  'at:shift?+mousedown0': {action: 'add-point'},
-});
 
 const transferFunctionSamplerTextureUnit = Symbol('transferFunctionSamplerTexture');
 
@@ -62,6 +60,18 @@ export interface TransferFunctionTextureOptions {
   textureUnit: number;
 }
 
+interface CanvasPosition {
+  normalizedX: number;
+  normalizedY: number;
+}
+
+/**
+ * Fill a lookup table with color values between control points via linear interpolation. Everything
+ * before the first point is transparent, everything after the last point has the color of the last
+ * point.
+ * @param out The lookup table to fill
+ * @param controlPoints The control points to interpolate between
+ */
 function lerpBetweenControlPoints(out: Int32Array|Uint8Array, controlPoints: Array<ControlPoint>) {
   function addLookupValue(index: number, color: vec4) {
     out[index] = color[0];
@@ -102,6 +112,7 @@ function lerpBetweenControlPoints(out: Int32Array|Uint8Array, controlPoints: Arr
   }
 }
 
+// TODO (skm) move this to a more general location
 function findClosestValueIndexInSortedArray(array: Array<number>, value: number) {
   if (array.length === 0) {
     return -1;
@@ -128,10 +139,16 @@ function findClosestValueIndexInSortedArray(array: Array<number>, value: number)
   return startDiff < endDiff ? start : end;
 }
 
+/**
+ * Convert a [0, 1] float to a uint8 value between 0 and 255
+ */
 function floatToUint8(float: number) {
   return Math.min(255, Math.max(Math.round(float * 255), 0));
 }
 
+/**
+ * Linearly interpolate between each component of two vec4s (color values)
+ */
 function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
   const color = vec4.create();
   for (let i = 0; i < 4; ++i) {
@@ -140,7 +157,11 @@ function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
   return color;
 }
 
-function griddedRectangleArray(numGrids: number) {
+/**
+ * Create a Float32Array of vertices for a canvas filling rectangle with the given number of grids
+ * in the x direction
+ */
+function griddedRectangleArray(numGrids: number): Float32Array {
   const result = new Float32Array(numGrids * VERTICES_PER_QUAD * 2);
   const width = 2;
   const height = 1;
@@ -170,6 +191,9 @@ function griddedRectangleArray(numGrids: number) {
   return result;
 }
 
+/**
+ * Represent the underlying transfer function as a texture
+ */
 class TransferFunctionTexture extends RefCounted {
   texture: WebGLTexture|null = null;
   width: number = TRANSFER_FUNCTION_LENGTH;
@@ -209,6 +233,10 @@ class TransferFunctionTexture extends RefCounted {
   }
 }
 
+/**
+ * Display the UI canvas for the transfer function widget and handle shader updates for elements of
+ * the canvas
+ */
 class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: TransferFunctionTexture;
   private vertexBuffer: Buffer;
@@ -221,7 +249,14 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
   get drawOrder() {
     return 1;
   }
-  constructor(public parent: TransferFunctionWidget, public dataType: DataType) {
+  controlPointsLookupTable = this.registerDisposer(
+      new ControlPointsLookupTable(this.parent.dataType, this.parent.trackable));
+  controller = this.registerDisposer(new TransferFunctionController(
+      this.element, this.parent.dataType, this.controlPointsLookupTable,
+      () => this.parent.trackable.value, (value: TransferFunctionParameters) => {
+        this.parent.trackable.value = value;
+      }));
+  constructor(public parent: TransferFunctionWidget) {
     super(parent.display, document.createElement('div'), parent.visibility);
     const {element} = this;
     element.classList.add('neuroglancer-transfer-function-panel');
@@ -269,7 +304,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     }
 
     const colorChannels = NUM_COLOR_CHANNELS - 1;  // ignore alpha
-    const controlPoints = this.parent.controlPointsLookupTable.trackable.value.controlPoints;
+    const controlPoints = this.controlPointsLookupTable.trackable.value.controlPoints;
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
     const positionArray = new Float32Array(controlPoints.length * 2);
     let numLines = controlPoints.length - 1;
@@ -410,8 +445,7 @@ out_color = tempColor * alpha;
       this.vertexBuffer.bindToVertexAttrib(
           aVertexPosition, /*components=*/ 2, /*attributeType=*/ WebGL2RenderingContext.FLOAT);
       const textureUnit = transferFunctionShader.textureUnit(transferFunctionSamplerTextureUnit);
-      this.texture.updateAndActivate(
-          {controlPoints: this.parent.controlPointsLookupTable, textureUnit});
+      this.texture.updateAndActivate({controlPoints: this.controlPointsLookupTable, textureUnit});
       gl.drawArrays(gl.TRIANGLES, 0, TRANSFER_FUNCTION_LENGTH * VERTICES_PER_QUAD);
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
@@ -443,7 +477,10 @@ out_color = tempColor * alpha;
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
-
+  update() {
+    this.controlPointsLookupTable.lookupTableFromControlPoints();
+    this.updateTransferFunctionPanelLines();
+  }
   isReady() {
     return true;
   }
@@ -453,6 +490,10 @@ out_color = tempColor * alpha;
 // display position
 // TODO (skm) however, this might make it a bit awkward for texturing
 // TODO (skm) does this need data type?
+/**
+ * Lookup table for control points. Handles adding, removing, and updating control points as well as
+ * consequent updates to the underlying lookup table formed from the control points.
+ */
 class ControlPointsLookupTable extends RefCounted {
   lookupTable: Uint8Array;
   constructor(
@@ -506,13 +547,11 @@ class ControlPointsLookupTable extends RefCounted {
       color: vec4.fromValues(colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], opacityAsUint8)
     });
     controlPoints.sort((a, b) => a.position - b.position);
-    this.trackable.value = {...this.trackable.value, controlPoints};
   }
   lookupTableFromControlPoints() {
     const {lookupTable} = this;
     const {controlPoints} = this.trackable.value;
     lerpBetweenControlPoints(lookupTable, controlPoints);
-    this.trackable.value = {...this.trackable.value, controlPoints};
   }
   updatePoint(index: number, position: number, opacity: number) {
     const {controlPoints} = this.trackable.value;
@@ -526,7 +565,6 @@ class ControlPointsLookupTable extends RefCounted {
     controlPoints.sort((a, b) => a.position - b.position);
     const newControlPointIndex =
         controlPoints.findIndex((point) => point.position === positionAsIndex);
-    this.trackable.value = {...this.trackable.value, controlPoints};
     return newControlPointIndex;
   }
   setPointColor(index: number, color: vec3) {
@@ -535,29 +573,28 @@ class ControlPointsLookupTable extends RefCounted {
         vec3.fromValues(floatToUint8(color[0]), floatToUint8(color[1]), floatToUint8(color[2]));
     controlPoints[index].color = vec4.fromValues(
         colorAsUint8[0], colorAsUint8[1], colorAsUint8[2], controlPoints[index].color[3]);
-    this.trackable.value = {...this.trackable.value, controlPoints};
-  }
-  // TODO (skm) correct disposal
-  disposed() {
-    super.disposed();
   }
 }
 
-function createRangeBoundInput(endpoint: number): HTMLInputElement {
-  const e = document.createElement('input');
-  e.addEventListener('focus', () => {
-    e.select();
-  });
-  e.classList.add('neuroglancer-transfer-function-widget-bound');
-  e.type = 'text';
-  e.spellcheck = false;
-  e.autocomplete = 'off';
-  e.title = `${endpoint === 0 ? 'Lower' : 'Upper'} bound for transfer function range`;
-  return e;
-}
 
+/**
+ * Create the bounds on the UI range inputs for the transfer function widget
+ */
 function createRangeBoundInputs(
     dataType: DataType, model: WatchableValueInterface<TransferFunctionParameters>) {
+  function createRangeBoundInput(endpoint: number): HTMLInputElement {
+    const e = document.createElement('input');
+    e.addEventListener('focus', () => {
+      e.select();
+    });
+    e.classList.add('neuroglancer-transfer-function-widget-bound');
+    e.type = 'text';
+    e.spellcheck = false;
+    e.autocomplete = 'off';
+    e.title = `${endpoint === 0 ? 'Lower' : 'Upper'} bound for transfer function range`;
+    return e;
+  }
+
   const container = document.createElement('div');
   container.classList.add('neuroglancer-transfer-function-range-bounds');
   const inputs = [createRangeBoundInput(0), createRangeBoundInput(1)];
@@ -587,16 +624,106 @@ function createRangeBoundInputs(
   }
 }
 
-// TODO (skm) the widget needs to have a controller for bindings
-export class TransferFunctionWidget extends Tab {
-  // TODO (skm) does the panel need data type?
-  private transferFunctionPanel =
-      this.registerDisposer(new TransferFunctionPanel(this, this.dataType));
-  controlPointsLookupTable =
-      this.registerDisposer(new ControlPointsLookupTable(this.dataType, this.trackable));
-  range = createRangeBoundInputs(this.dataType, this.trackable);
+const inputEventMap = EventActionMap.fromObject({
+  'shift?+mousedown0': {action: 'add-or-drag-point'},
+  'shift?+dblclick0': {action: 'remove-point'},
+  'shift?+mousedown2': {action: 'change-point-color'},
+});
+
+/**
+ * Controller for the transfer function widget. Handles mouse events and updates to the model.
+ */
+class TransferFunctionController extends RefCounted {
   private currentGrabbedControlPointIndex: number = -1;
-  // TODO (skm) consider adding a hover state to show the color of the control point
+  constructor(
+      public element: HTMLElement, public dataType: DataType,
+      private controlPointsLookupTable: ControlPointsLookupTable,
+      public getModel: () => TransferFunctionParameters,
+      public setModel: (value: TransferFunctionParameters) => void) {
+    super();
+    element.title = inputEventMap.describe();
+    this.registerDisposer(new MouseEventBinder(element, inputEventMap));
+    registerActionListener<MouseEvent>(element, 'add-or-drag-point', actionEvent => {
+      const mouseEvent = actionEvent.detail;
+      this.updateValue(this.addControlPoint(mouseEvent));
+      startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
+        this.updateValue(this.moveControlPoint(newEvent));
+      });
+    });
+    registerActionListener<MouseEvent>(element, 'remove-point', actionEvent => {
+      const mouseEvent = actionEvent.detail;
+      const nearestIndex = this.findNearestControlPointIndex(mouseEvent);
+      if (nearestIndex !== -1) {
+        this.controlPointsLookupTable.trackable.value.controlPoints.splice(nearestIndex, 1);
+        this.updateValue({...this.getModel(), controlPoints: this.controlPointsLookupTable.trackable.value.controlPoints});
+      }
+    });
+    registerActionListener<MouseEvent>(element, 'change-point-color', actionEvent => {
+      const mouseEvent = actionEvent.detail;
+      const nearestIndex = this.findNearestControlPointIndex(mouseEvent);
+      if (nearestIndex !== -1) {
+        const color = this.controlPointsLookupTable.trackable.value.color;
+        this.controlPointsLookupTable.setPointColor(nearestIndex, color);
+        this.updateValue({...this.getModel(), controlPoints: this.controlPointsLookupTable.trackable.value.controlPoints});
+      }
+    });
+  }
+  updateValue(value: TransferFunctionParameters|undefined) {
+    if (value === undefined) return;
+    this.setModel(value);
+  }
+  findNearestControlPointIndex(event: MouseEvent) {
+    const {normalizedX} = this.getControlPointPosition(event) as CanvasPosition;
+    return this.controlPointsLookupTable.grabControlPoint(normalizedX);
+  }
+  addControlPoint(event: MouseEvent) : TransferFunctionParameters|undefined{
+    const color = this.controlPointsLookupTable.trackable.value.color;
+    const nearestIndex = this.findNearestControlPointIndex(event);
+    if (nearestIndex !== -1) {
+      this.currentGrabbedControlPointIndex = nearestIndex;
+      // if (shouldChangeColor) {
+      //   this.controlPointsLookupTable.setPointColor(this.currentGrabbedControlPointIndex, color);
+      // }
+      return undefined;
+    } else {
+      this.addPoint(event, color);
+      this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event);
+      return {...this.getModel(), controlPoints: this.controlPointsLookupTable.trackable.value.controlPoints};
+    }
+  }
+  addPoint(event: MouseEvent, color: vec3) {
+    const {normalizedX, normalizedY} = this.getControlPointPosition(event) as CanvasPosition;
+    this.controlPointsLookupTable.addPoint(normalizedX, normalizedY, color);
+  }
+  moveControlPoint(event: MouseEvent): TransferFunctionParameters|undefined {
+    if (this.currentGrabbedControlPointIndex !== -1) {
+      const position = this.getControlPointPosition(event);
+      console.log(position);
+      if (position === undefined) return undefined;
+      const {normalizedX, normalizedY} = position;
+      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(
+          this.currentGrabbedControlPointIndex, normalizedX, normalizedY);
+      return {...this.getModel(), controlPoints: this.controlPointsLookupTable.trackable.value.controlPoints};
+    }
+    return undefined;
+  }
+  getControlPointPosition(event: MouseEvent) : CanvasPosition|undefined {
+    const clientRect = this.element.getBoundingClientRect();
+    const normalizedX = (event.clientX - clientRect.left) / clientRect.width;
+    const normalizedY = (clientRect.bottom - event.clientY) / clientRect.height;
+    if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return undefined;
+    return {normalizedX, normalizedY};
+  }
+}
+
+// TODO (skm) the widget needs to have a controller for bindings
+/**
+ * Widget for the transfer function. Creates the UI elements required for the transfer function.
+ */
+class TransferFunctionWidget extends Tab {
+  private transferFunctionPanel = this.registerDisposer(new TransferFunctionPanel(this));
+
+  range = createRangeBoundInputs(this.dataType, this.trackable);
   constructor(
       visibility: WatchableVisibilityPriority, public display: DisplayContext,
       public dataType: DataType,
@@ -604,55 +731,7 @@ export class TransferFunctionWidget extends Tab {
     super(visibility);
     const {element} = this;
     element.classList.add('neuroglancer-transfer-function-widget');
-    this.transferFunctionPanel.element.title =
-        'Mousedown add point, drag to move, double click remove. Shift/alt/ctrl-click change color.'
     element.appendChild(this.transferFunctionPanel.element);
-
-    // Transfer function element
-    const transferFunctionElement = this.transferFunctionPanel.element;
-    // TODO (skm) can I use some existing mouse drag code?
-    transferFunctionElement.addEventListener('mousedown', (event: MouseEvent) => {
-      const modifierPressed = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
-      event.stopPropagation();
-      event.preventDefault();
-      this.grabOrAddControlPoint(
-          event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight,
-          trackable.value.color, modifierPressed);
-    })
-    transferFunctionElement.addEventListener('mousemove', (event: MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-      this.moveControlPoint(
-          event, transferFunctionElement.clientWidth, transferFunctionElement.clientHeight);
-    })
-    transferFunctionElement.addEventListener('mouseup', (event: MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-      this.currentGrabbedControlPointIndex = -1;
-    })
-    // TODO (skm) is this desired or is it better to leave it out
-    transferFunctionElement.addEventListener('mouseleave', (event: MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-      if (this.currentGrabbedControlPointIndex !== -1) {
-        this.currentGrabbedControlPointIndex = -1;
-        this.updateControlPointsAndDraw();
-      }
-    })
-    transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-      const nearestIndex =
-          this.findNearestControlPointIndex(event, transferFunctionElement.clientWidth);
-      if (nearestIndex !== -1) {
-        this.controlPointsLookupTable.trackable.value.controlPoints.splice(nearestIndex, 1);
-        this.updateControlPointsAndDraw();
-      }
-    })
-    transferFunctionElement.addEventListener('click', (event: MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-    })
 
     // Range bounds element
     element.appendChild(this.range.container);
@@ -690,6 +769,9 @@ export class TransferFunctionWidget extends Tab {
     colorPickerDiv.appendChild(colorLabel);
     element.appendChild(colorPickerDiv);
     this.updateControlPointsAndDraw();
+    this.registerDisposer(this.trackable.changed.add(() => {
+      this.updateControlPointsAndDraw();
+    }));
     updateInputBoundValue(this.range.inputs[0], this.trackable.value.range[0]);
     updateInputBoundValue(this.range.inputs[1], this.trackable.value.range[1]);
   };
@@ -697,49 +779,15 @@ export class TransferFunctionWidget extends Tab {
     this.transferFunctionPanel.scheduleRedraw();
   }
   updateControlPointsAndDraw() {
-    this.controlPointsLookupTable.lookupTableFromControlPoints();
-    this.transferFunctionPanel.updateTransferFunctionPanelLines();
+    this.transferFunctionPanel.update();
     this.updateView();
-  }
-  findNearestControlPointIndex(event: MouseEvent, canvasX: number) {
-    return this.controlPointsLookupTable.grabControlPoint(event.offsetX / canvasX);
-  }
-  grabOrAddControlPoint(
-      event: MouseEvent, canvasX: number, canvasY: number, color: vec3,
-      shouldChangeColor: boolean) {
-    const nearestIndex = this.findNearestControlPointIndex(event, canvasX);
-    if (nearestIndex !== -1) {
-      this.currentGrabbedControlPointIndex = nearestIndex;
-      if (shouldChangeColor) {
-        this.controlPointsLookupTable.setPointColor(this.currentGrabbedControlPointIndex, color);
-        this.updateControlPointsAndDraw();
-      }
-    } else {
-      this.addPoint(event, canvasX, canvasY, color);
-      this.currentGrabbedControlPointIndex = this.findNearestControlPointIndex(event, canvasX);
-    }
-  }
-  getControlPointPosition(event: MouseEvent, canvasX: number, canvasY: number) {
-    const normalizedX = event.offsetX / canvasX;
-    const normalizedY = 1 - (event.offsetY / canvasY);
-    return {normalizedX, normalizedY};
-  }
-  moveControlPoint(event: MouseEvent, canvasX: number, canvasY: number) {
-    if (this.currentGrabbedControlPointIndex !== -1) {
-      const {normalizedX, normalizedY} = this.getControlPointPosition(event, canvasX, canvasY);
-      this.currentGrabbedControlPointIndex = this.controlPointsLookupTable.updatePoint(
-          this.currentGrabbedControlPointIndex, normalizedX, normalizedY);
-      this.updateControlPointsAndDraw();
-    }
-  }
-  addPoint(event: MouseEvent, canvasX: number, canvasY: number, color: vec3) {
-    const {normalizedX, normalizedY} = this.getControlPointPosition(event, canvasX, canvasY);
-    this.controlPointsLookupTable.addPoint(normalizedX, normalizedY, color);
-    this.updateControlPointsAndDraw();
   }
 }
 // TODO (skm) may need to follow the VariableDataTypeInvlerpWidget pattern
 
+/**
+ * Create a shader function for the transfer function to grab the nearest lookup table value
+ */
 export function defineTransferFunctionShader(
     builder: ShaderBuilder, name: string, dataType: DataType, channel: number[]) {
   builder.addUniform(`highp ivec4`, `uTransferFunctionParams_${name}`, TRANSFER_FUNCTION_LENGTH);
@@ -773,6 +821,9 @@ vec4 ${name}() {
 }
 
 // TODO (skm) can likely optimize this
+/**
+ * Create a lookup table and bind that lookup table to a shader via uniforms
+ */
 export function enableTransferFunctionShader(
     shader: ShaderProgram, name: string, dataType: DataType, controlPoints: Array<ControlPoint>,
     interval: DataTypeInterval) {
@@ -799,19 +850,18 @@ export function enableTransferFunctionShader(
   }
 }
 
-// TODO (skm) this renders in the popup, but not in the main view
+/**
+ * Describe the transfer function widget in the popup window for a tool
+ */
 export function activateTransferFunctionTool(
     activation: ToolActivation<LayerControlTool>, control: TransferFunctionWidget) {
-  activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
-  activation.bindAction('add-point', (event: ActionEvent<MouseEvent>) => {
-    event.stopPropagation();
-    event.preventDefault();
-    control.addPoint(
-        event.detail, control.element.clientWidth, control.element.clientHeight,
-        control.trackable.value.color);
-  });
+  activation.bindInputEventMap(inputEventMap);
+  control;
 }
 
+/**
+ * Create a layer control factory for the transfer function widget
+ */
 export function transferFunctionLayerControl<LayerType extends UserLayer>(
     getter: (layer: LayerType) => {
       watchableValue: WatchableValueInterface<TransferFunctionParameters>,
