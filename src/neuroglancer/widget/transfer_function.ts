@@ -634,8 +634,10 @@ export class TransferFunctionWidget extends Tab {
     transferFunctionElement.addEventListener('mouseleave', (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
-      this.currentGrabbedControlPointIndex = -1;
-      this.updateControlPointsAndDraw();
+      if (this.currentGrabbedControlPointIndex !== -1) {
+        this.currentGrabbedControlPointIndex = -1;
+        this.updateControlPointsAndDraw();
+      }
     })
     transferFunctionElement.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
@@ -676,10 +678,10 @@ export class TransferFunctionWidget extends Tab {
     colorPicker.element.title = 'Transfer Function Color Picker'
     colorPicker.element.id = 'neuroglancer-tf-color-widget';
     colorPicker.element.addEventListener('change', () => {
-      trackable.value.color = colorPicker.model.value;
+      trackable.value = {...this.trackable.value, color: colorPicker.model.value};
     });
     colorPicker.element.addEventListener('input', () => {
-      trackable.value.color = colorPicker.model.value;
+      trackable.value = {...this.trackable.value, color: colorPicker.model.value};
     });
     colorPickerDiv.appendChild(colorPicker.element);
 
