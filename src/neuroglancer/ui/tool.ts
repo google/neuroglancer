@@ -232,8 +232,7 @@ export class GlobalToolBinder extends RefCounted {
   changed = new Signal();
   activeTool_: Owned<ToolActivation>|undefined; // For internal use only- should only be called by ToolBinder and ToolActivation.cancel()
   private queuedTool: Tool|undefined;
-  private debounceDeactivate = this.registerCancellable(debounce(() => this.deactivate_(), 100));
-  private debounceReactivate = this.registerCancellable(debounce(() => this.reactivateQueuedTool(), 100));
+  private debounceDeactivate = this.registerCancellable(debounce(() => { this.deactivate_(); this.reactivateQueuedTool(); }, 100));
 
   constructor(private inputEventMapBinder: InputEventMapBinder) {
     super();
@@ -283,7 +282,6 @@ export class GlobalToolBinder extends RefCounted {
       return;
     }
     this.debounceDeactivate.cancel();
-    this.debounceReactivate.cancel();
     const activeTool = this.activeTool_;
     if (tool === activeTool?.tool) {
       if (tool.toggle) {
@@ -301,15 +299,20 @@ export class GlobalToolBinder extends RefCounted {
     this.activeTool_ = activation;
     if (!tool.toggle) {
       const expectedCode = `Key${key}`;
+      activation.registerEventListener(window, 'keydown', (event: KeyboardEvent) => {
+        // Prevent other key input while tool is activated.  This
+        // prevents `shift+key` from being interpreted as text input
+        // if an input element becomes focused.
+        event.stopPropagation();
+        event.preventDefault();
+      });
       activation.registerEventListener(window, 'keyup', (event: KeyboardEvent) => {
         if (event.code === expectedCode) {
           this.debounceDeactivate();
-          this.debounceReactivate();
         }
       });
       activation.registerEventListener(window, 'blur', () => {
         this.debounceDeactivate();
-        this.debounceReactivate();
       });
     }
     tool.activate(activation);
