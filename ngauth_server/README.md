@@ -90,9 +90,15 @@ following permissions:
    To grant these permissions project-wide:
 
    ```shell
-   gcloud projects add-iam-policy-binding OTHER_PROJECT_ID \
-     --member=serviceAccount:NGAUTH_PROJECT_ID@appspot.gserviceaccount.com \
-     --role=roles/storage.objectViewer,roles/iam.securityReviewer
+   OTHER_PROJECT_ID=...
+   NGAUTH_PROJECT_ID=...
+   gcloud projects add-iam-policy-binding ${OTHER_PROJECT_ID} \
+     --member=serviceAccount:${NGAUTH_PROJECT_ID}@appspot.gserviceaccount.com \
+     --role=roles/storage.objectViewer
+
+   gcloud projects add-iam-policy-binding ${OTHER_PROJECT_ID} \
+     --member=serviceAccount:${NGAUTH_PROJECT_ID}@appspot.gserviceaccount.com \
+     --role=roles/iam.securityReviewer
    ```
 
    If you only grant bucket-level `roles/iam.securityReviewer` access to the ngauth service account,
