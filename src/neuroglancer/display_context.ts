@@ -71,8 +71,7 @@ export function applyRenderViewportToProjectionMatrix(
 }
 
 export function renderViewportsEqual(a: RenderViewport, b: RenderViewport) {
-  return a.width === b.width &&
-      a.height === b.height && a.logicalWidth === b.logicalWidth &&
+  return a.width === b.width && a.height === b.height && a.logicalWidth === b.logicalWidth &&
       a.logicalHeight === b.logicalHeight && a.visibleLeftFraction === b.visibleLeftFraction &&
       a.visibleTopFraction === b.visibleTopFraction;
 }
@@ -94,7 +93,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   renderViewport = new RenderViewport();
 
-  private boundsObserversRegistered = false;
+  private monitorState: PanelMonitorState = {};
 
   constructor(
       public context: Borrowed<DisplayContext>, public element: HTMLElement,
@@ -119,10 +118,8 @@ export abstract class RenderedPanel extends RefCounted {
     if (boundsGeneration === this.boundsGeneration) return;
     this.boundsGeneration = boundsGeneration;
     const {element} = this;
-    if (!this.boundsObserversRegistered && context.monitorPanel(element)) {
-      this.boundsObserversRegistered = true;
-    }
     const clientRect = element.getBoundingClientRect();
+    context.ensureMonitorPanel(element, this.monitorState, clientRect);
     const root = context.container;
     const canvasRect = context.canvasRect!;
     const {canvas} = context;
@@ -173,7 +170,12 @@ export abstract class RenderedPanel extends RefCounted {
   // Sets the viewport to the clipped viewport.  Any drawing must take
   // `visible{Left,Top,Width,Height}Fraction` into account.  setGLClippedViewport() {
   setGLClippedViewport() {
-    const {gl, canvasRelativeClippedTop, canvasRelativeClippedLeft, renderViewport: {width, height}} = this;
+    const {
+      gl,
+      canvasRelativeClippedTop,
+      canvasRelativeClippedLeft,
+      renderViewport: {width, height}
+    } = this;
     const bottom = canvasRelativeClippedTop + height;
     gl.enable(WebGL2RenderingContext.SCISSOR_TEST);
     let glBottom = this.context.canvas.height - bottom;
@@ -200,9 +202,7 @@ export abstract class RenderedPanel extends RefCounted {
   abstract draw(): void;
 
   disposed() {
-    if (this.boundsObserversRegistered) {
-      this.context.unmonitorPanel(this.element);
-    }
+    this.context.unmonitorPanel(this.element, this.monitorState);
     this.context.removePanel(this);
     super.disposed();
   }
@@ -240,7 +240,7 @@ export abstract class IndirectRenderedPanel extends RenderedPanel {
   canvasRenderingContext = this.canvas.getContext('2d');
   constructor(
       context: Borrowed<DisplayContext>, element: HTMLElement,
-    visibility: WatchableVisibilityPriority) {
+      visibility: WatchableVisibilityPriority) {
     super(context, element, visibility);
     const {canvas} = this;
     element.appendChild(canvas);
@@ -262,8 +262,8 @@ export abstract class IndirectRenderedPanel extends RenderedPanel {
     canvas.height = logicalHeight;
     const {canvasRenderingContext} = this;
     canvasRenderingContext?.drawImage(
-      this.context.canvas, this.canvasRelativeLogicalLeft, this.canvasRelativeLogicalTop,
-      logicalWidth, logicalHeight, 0, 0, logicalWidth, logicalHeight);
+        this.context.canvas, this.canvasRelativeLogicalLeft, this.canvasRelativeLogicalTop,
+        logicalWidth, logicalHeight, 0, 0, logicalWidth, logicalHeight);
   }
 }
 
@@ -286,6 +286,25 @@ export class TrackableWindowedViewport extends TrackableValue<Float64Array> {
   }
 }
 
+// Size/position monitoring state for a single panel.
+interface PanelMonitorState {
+  // Intersection observer used to detect movement of a panel.  The root element is always the root
+  // container element.
+  intersectionObserver?: IntersectionObserver;
+
+  // Margin within the root element chosen to exactly match the bounds
+  // of the panel element when the IntersectionObserver was created.
+  // When the bounds of either the root element or the panel element
+  // have possibly changed, the new margin is computed and compared to
+  // this value.  This is stored separately, rather than just relying
+  // on `intersectionObserver?.rootMargin`, to avoid spuriously change
+  // detections due to normalization that the browser may do.
+  intersectionObserverMargin?: string;
+
+  // Indicates that the panel element was added to the resize observer.
+  addedToResizeObserver?: boolean;
+}
+
 export class DisplayContext extends RefCounted implements FrameNumberCounter {
   canvas = document.createElement('canvas');
   gl: GL;
@@ -293,7 +312,8 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   updateFinished = new NullarySignal();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
-  canvasRect: ClientRect|undefined;
+  canvasRect: DOMRect|undefined;
+  rootRect: DOMRect|undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
 
@@ -305,45 +325,36 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
    */
   frameNumber = 0;
 
-  private panelAncestors = new Map<HTMLElement, {parent: HTMLElement, count: number}>();
-
-  private resizeCallback = () => {
+  resizeCallback = () => {
     ++this.resizeGeneration;
     this.scheduleRedraw();
   };
 
-  monitorPanel(element: HTMLElement): boolean {
-    const {panelAncestors, container: root} = this;
-    if (!root.contains(element)) return false;
-    while (element !== root) {
-      let entry = panelAncestors.get(element);
-      if (entry !== undefined) {
-        ++entry.count;
-        break;
-      }
-      const parent = element.parentElement!;
-      entry = {parent, count: 1};
-      panelAncestors.set(element, entry);
-      element.addEventListener('scroll', this.resizeCallback, {capture: true});
+  ensureMonitorPanel(element: HTMLElement, state: PanelMonitorState, elementClientRect: DOMRect) {
+    if (!state.addedToResizeObserver) {
       this.resizeObserver.observe(element);
-      element = parent;
+      state.addedToResizeObserver = true;
     }
-    return true;
+    const rootRect = this.rootRect!;
+    const marginTop = rootRect.top - elementClientRect.top;
+    const marginLeft = rootRect.left - elementClientRect.left;
+    const marginRight = elementClientRect.right - rootRect.right;
+    const marginBottom = elementClientRect.bottom - rootRect.bottom;
+    const margin = `${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px`;
+    if (state.intersectionObserverMargin !== margin) {
+      state.intersectionObserverMargin = margin;
+      state.intersectionObserver?.disconnect();
+      const intersectionObserver = state.intersectionObserver = new IntersectionObserver(
+          this.resizeCallback, {root: this.container, rootMargin: margin, threshold: [0.99, 1]});
+      intersectionObserver.observe(element);
+    }
   }
 
-  unmonitorPanel(element: HTMLElement) {
-    const {panelAncestors, container: root} = this;
-    while (element !== root) {
-      const entry = panelAncestors.get(element)!;
-      if (entry.count !== 1) {
-        --entry.count;
-        break;
-      }
-      element.removeEventListener('scroll', this.resizeCallback, {capture: true});
+  unmonitorPanel(element: HTMLElement, state: PanelMonitorState) {
+    if (state.addedToResizeObserver) {
       this.resizeObserver.unobserve(element);
-      panelAncestors.delete(element);
-      element = entry.parent;
     }
+    state.intersectionObserver?.disconnect();
   }
 
   private resizeObserver = new ResizeObserver(this.resizeCallback);
@@ -444,6 +455,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
     this.canvasRect = canvas.getBoundingClientRect();
+    this.rootRect = this.container.getBoundingClientRect();
     this.boundsGeneration = resizeGeneration;
   }
 
@@ -483,7 +495,8 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       if (!panel.shouldDraw) continue;
       const panelDepthArray = panel.getDepthArray();
       if (panelDepthArray === undefined) continue;
-      const {canvasRelativeClippedTop, canvasRelativeClippedLeft, renderViewport: {width, height}} = panel;
+      const {canvasRelativeClippedTop, canvasRelativeClippedLeft, renderViewport: {width, height}} =
+          panel;
       for (let y = 0; y < height; ++y) {
         const panelDepthArrayOffset = (height - 1 - y) * width;
         depthArray.set(
