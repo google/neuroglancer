@@ -159,6 +159,8 @@ jobs:
       shell: bash
     - name: Check for dirty working directory
       run: git diff --exit-code
+    - name: Install setuptools
+      run: pip install setuptools
     - name: Build Python source distribution (sdist)
       run: python setup.py sdist --format gztar
       if: ${{ runner.os == 'Linux' }}
