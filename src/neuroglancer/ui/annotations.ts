@@ -20,6 +20,7 @@
 
 import './annotations.css';
 
+import {debounce} from 'lodash';
 import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, formatNumericProperty, Line} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
@@ -118,7 +119,7 @@ export class MergedAnnotationStates extends RefCounted implements
   }
 }
 
-function getCenterPosition(center: Float32Array, annotation: Annotation) {
+export function getCenterPosition(center: Float32Array, annotation: Annotation) {
   switch (annotation.type) {
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
     case AnnotationType.LINE:
@@ -161,11 +162,40 @@ function visitTransformedAnnotationGeometry(
   });
 }
 
-interface AnnotationLayerViewAttachedState {
-  refCounted: RefCounted;
+interface AnnotationSourceInfo {
   annotations: Annotation[];
   idToIndex: Map<AnnotationId, number>;
+}
+
+interface MultiscaleAnnotationSourceInfo {
+  idToIndexFunc: (id: string) => number | undefined;
+  length: number;
+}
+
+function instanceOfAnnotationSourceInfo(object: AnnotationSourceInfo|MultiscaleAnnotationSourceInfo|
+                                        undefined): object is AnnotationSourceInfo {
+  return object !== undefined && 'annotations' in object;
+}
+
+interface AnnotationLayerViewAttachedState {
+  refCounted: RefCounted;
+  source?: AnnotationSourceInfo|MultiscaleAnnotationSourceInfo;
   listOffset: number;
+}
+
+interface annotationListElement {
+  state: AnnotationLayerState;
+  annotation: Annotation;
+}
+interface multiscaleAnnotationListElement {
+  state: AnnotationLayerState, length: number;
+  indexToAnnotation: (index: number) => Annotation;
+}
+
+function instanceOfAnnotationListElement(
+    object: annotationListElement|
+    multiscaleAnnotationListElement): object is annotationListElement {
+  return 'annotation' in object;
 }
 
 export class AnnotationLayerView extends Tab {
@@ -181,7 +211,8 @@ export class AnnotationLayerView extends Tab {
     changed: new Signal<(splices: ArraySpliceOp[]) => void>(),
   };
   private virtualList = new VirtualList({source: this.virtualListSource});
-  private listElements: {state: AnnotationLayerState, annotation: Annotation}[] = [];
+
+  private listElements: (annotationListElement|multiscaleAnnotationListElement)[] = [];
   private updated = false;
   private mutableControls = document.createElement('div');
   private headerRow = document.createElement('div');
@@ -223,13 +254,13 @@ export class AnnotationLayerView extends Tab {
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
       refCounted.registerDisposer(
           state.displayState.relationshipStates.changed.add(this.forceUpdateView));
-      newAttachedAnnotationStates.set(
-          state, {refCounted, annotations: [], idToIndex: new Map(), listOffset: 0});
+      newAttachedAnnotationStates.set(state, {refCounted, listOffset: 0});
       if (source instanceof MultiscaleAnnotationSource) {
         refCounted.registerDisposer(
-            source.chunkManager.chunkQueueManager.visibleChunksChanged.add(() => {
-              this.forceUpdateView();
-            }));
+            source.chunkManager.chunkQueueManager.visibleChunksChanged.add(debounce(() => {
+              console.log('calling force update view!');
+              this.forceUpdateView()
+            }, 1000)));
       }
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
@@ -376,7 +407,10 @@ export class AnnotationLayerView extends Tab {
       |undefined {
     const attached = this.attachedAnnotationStates.get(state);
     if (attached == undefined) return undefined;
-    const index = attached.idToIndex.get(id);
+    const {source} = attached;
+    if (source == undefined) return undefined;
+    const index = instanceOfAnnotationSourceInfo(source) ? source.idToIndex.get(id) :
+                                                           source.idToIndexFunc(id);
     if (index === undefined) return undefined;
     const listIndex = attached.listOffset + index;
     if (scrollIntoView) {
@@ -468,8 +502,26 @@ export class AnnotationLayerView extends Tab {
   }
 
   private render(index: number) {
-    const {annotation, state} = this.listElements[index];
-    return this.makeAnnotationListElement(annotation, state);
+    this.makeAnnotationListElement;
+    let currentIndex = 0;
+    for (const element of this.listElements) {
+      if (instanceOfAnnotationListElement(element)) {
+        // TODO, this is innefficient, do we want lists to have a combination of multiscale and
+        // regular?
+        const {state, annotation} = element;
+        if (index === currentIndex) {
+          return this.makeAnnotationListElement(annotation, state);
+        }
+        currentIndex++;
+      } else {
+        const {state, length, indexToAnnotation} = element;
+        if (index < currentIndex + length) {
+          return this.makeAnnotationListElement(indexToAnnotation(index - currentIndex), state);
+        }
+        currentIndex += element.length;
+      }
+    }
+    throw new Error('trying to render an annotation element outside the available list');
   }
 
   private setColumnWidth(column: number, width: number) {
@@ -546,26 +598,36 @@ export class AnnotationLayerView extends Tab {
       if (!state.source.readonly) isMutable = true;
       if (state.chunkTransform.value.error !== undefined) continue;
       const {source} = state;
-      const annotations = source instanceof MultiscaleAnnotationSource ?
-          source.activeAnnotations(state) :
-          Array.from(source);
-      info.annotations = annotations;
-      const {idToIndex} = info;
-      idToIndex.clear();
-      for (let i = 0, length = annotations.length; i < length; ++i) {
-        idToIndex.set(annotations[i].id, i);
-      }
-      for (const annotation of annotations) {
-        listElements.push({state, annotation});
+      if (source instanceof MultiscaleAnnotationSource) {
+        const {globalPosition} = this.layer.managedLayer.manager.root;
+        const [sourceLength, indexToAnnotation, idToIndex] =
+            source.activeAnnotations(state, globalPosition);
+        info.source = {idToIndexFunc: idToIndex, length: sourceLength};
+        listElements.push({state, length: sourceLength, indexToAnnotation});
+      } else {
+        const annotations = Array.from(source);
+        if (info.source && instanceOfAnnotationSourceInfo(info.source)) {
+          info.source.idToIndex.clear();
+          info.source.annotations = annotations;
+        } else {
+          info.source = {
+            annotations: annotations,
+            idToIndex: new Map<string, number>(),
+          };
+        }
+        for (let i = 0, length = annotations.length; i < length; ++i) {
+          info.source.idToIndex.set(annotations[i].id, i);
+        }
+        for (const annotation of annotations) {
+          listElements.push({state, annotation});
+        }
       }
     }
     const oldLength = this.virtualListSource.length;
-    this.updateListLength();
-    // TODO, what problems does this change cause?
-    // this prevents the scroll list position from resetting when updateView is run
-    const insertCount = Math.max(0, listElements.length - oldLength);
-    const deleteCount = Math.max(0, oldLength - listElements.length);
-    const retainCount = Math.min(listElements.length, oldLength);
+    const newLength = this.updateListLength();
+    const insertCount = Math.max(0, newLength - oldLength);
+    const deleteCount = Math.max(0, oldLength - newLength);
+    const retainCount = Math.min(newLength, oldLength);
     this.virtualListSource.changed!.dispatch([{retainCount, deleteCount, insertCount}]);
     this.mutableControls.style.display = isMutable ? 'contents' : 'none';
     this.resetOnUpdate();
@@ -575,12 +637,23 @@ export class AnnotationLayerView extends Tab {
     let length = 0;
     for (const info of this.attachedAnnotationStates.values()) {
       info.listOffset = length;
-      length += info.annotations.length;
+      if (!info.source) continue;
+      if (instanceOfAnnotationSourceInfo(info.source)) {
+        length += info.source.annotations.length;
+      } else {
+        length += info.source.length;
+      }
     }
     this.virtualListSource.length = length;
+    return length;
   }
 
   private addAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
+    const {source} = state;
+    if (source instanceof MultiscaleAnnotationSource) {
+      return;  // only AnnotationSource has info.annotations
+    }
+
     if (!this.visible) {
       this.updated = false;
       return;
@@ -590,12 +663,12 @@ export class AnnotationLayerView extends Tab {
       return;
     }
     const info = this.attachedAnnotationStates.get(state);
-    if (info !== undefined) {
-      const index = info.annotations.length;
-      info.annotations.push(annotation);
-      info.idToIndex.set(annotation.id, index);
+    if (info !== undefined && instanceOfAnnotationSourceInfo(info.source)) {
+      const index = info.source.annotations.length;
+      info.source.annotations.push(annotation);
+      info.source.idToIndex.set(annotation.id, index);
       const spliceStart = info.listOffset + index;
-      this.listElements.splice(spliceStart, 0, {state, annotation});
+      this.listElements.splice(spliceStart, 0, {state, length: 0, annotation});  // TODO
       this.updateListLength();
       this.virtualListSource.changed!.dispatch(
           [{retainCount: spliceStart, deleteCount: 0, insertCount: 1}]);
@@ -604,6 +677,13 @@ export class AnnotationLayerView extends Tab {
   }
 
   private updateAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
+    const {source} = state;
+    if (source instanceof MultiscaleAnnotationSource) {
+      return;  // only AnnotationSource has info.annotations
+    }
+    annotation;
+    state;
+    console.log('as well as this');
     if (!this.visible) {
       this.updated = false;
       return;
@@ -613,20 +693,31 @@ export class AnnotationLayerView extends Tab {
       return;
     }
     const info = this.attachedAnnotationStates.get(state);
-    if (info !== undefined) {
-      const index = info.idToIndex.get(annotation.id);
+    if (info !== undefined && instanceOfAnnotationSourceInfo(info.source)) {
+      const {idToIndex, annotations} = info.source;
+      const index = idToIndex.get(annotation.id);
       if (index !== undefined) {
         const updateStart = info.listOffset + index;
-        info.annotations[index] = annotation;
-        this.listElements[updateStart].annotation = annotation;
-        this.virtualListSource.changed!.dispatch(
-            [{retainCount: updateStart, deleteCount: 1, insertCount: 1}]);
+        annotations[index] = annotation;
+        const listElement = this.listElements[updateStart];
+        if (instanceOfAnnotationListElement(listElement)) {
+          listElement.annotation = annotation;
+          this.virtualListSource.changed!.dispatch(
+              [{retainCount: updateStart, deleteCount: 1, insertCount: 1}]);
+        }
       }
     }
     this.resetOnUpdate();
   }
 
   private deleteAnnotationElement(annotationId: string, state: AnnotationLayerState) {
+    const {source} = state;
+    if (source instanceof MultiscaleAnnotationSource) {
+      return;  // only AnnotationSource has info.annotations
+    }
+    annotationId;
+    state;
+    console.log('and delete?');
     if (!this.visible) {
       this.updated = false;
       return;
@@ -636,12 +727,11 @@ export class AnnotationLayerView extends Tab {
       return;
     }
     const info = this.attachedAnnotationStates.get(state);
-    if (info !== undefined) {
-      const {idToIndex} = info;
+    if (info !== undefined && instanceOfAnnotationSourceInfo(info.source)) {
+      const {idToIndex, annotations} = info.source;
       const index = idToIndex.get(annotationId);
       if (index !== undefined) {
         const spliceStart = info.listOffset + index;
-        const {annotations} = info;
         annotations.splice(index, 1);
         idToIndex.delete(annotationId);
         for (let i = index, length = annotations.length; i < length; ++i) {
