@@ -476,6 +476,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
             const {serializedAnnotations} = data;
             const length = serializedAnnotations.typeToIds.reduce(
                 (sum, idsOfType) => sum + idsOfType.length, 0);
+            serializedAnnotationsList.push(serializedAnnotations);
             listOffsets.push(currentLength);
             currentLength += length;
           }
