@@ -1,19 +1,21 @@
-import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
-import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
-import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
-// import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
+import {
+  bindDefaultCopyHandler,
+  bindDefaultPasteHandler,
+} from "#/ui/default_clipboard_handling";
+import { setDefaultInputEventBindings } from "#/ui/default_input_event_bindings";
+import { makeMinimalViewer } from "#/ui/minimal_viewer";
+// import {UrlHashBinding} from '#/ui/url_hash_binding';
 
-import 'neuroglancer/datasource/dvid/register_credentials_provider';
-import 'neuroglancer/datasource/dvid/register_default';
-import 'neuroglancer/datasource/brainmaps/register_default';
-import 'neuroglancer/datasource/precomputed/register_default';
-import 'neuroglancer/segmentation_user_layer';
-import 'neuroglancer/image_user_layer';
+import "#/datasource/dvid/register_credentials_provider";
+import "#/datasource/dvid/register_default";
+import "#/datasource/brainmaps/register_default";
+import "#/datasource/precomputed/register_default";
+import "#/segmentation_user_layer";
+import "#/image_user_layer";
 
-import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
-import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
-import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/credentials_provider';
-
+import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
+import { credentialsKey } from "#/datasource/brainmaps/api";
+import { BrainmapsCredentialsProvider } from "#/datasource/brainmaps/credentials_provider";
 
 /**
  * Sets up the default neuroglancer viewer.
@@ -29,17 +31,23 @@ import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/cr
 // }
 
 export function setupDefaultViewer(options: {
-  brainMapsClientId: string | undefined,
-  target: HTMLElement | undefined,
-  bundleRoot: string | undefined
+  brainMapsClientId: string | undefined;
+  target: HTMLElement | undefined;
+  bundleRoot: string | undefined;
 }) {
   // register_brainmaps
   if (options.brainMapsClientId) {
     const clientId: string = options.brainMapsClientId;
-    defaultCredentialsManager.register(credentialsKey, () => new BrainmapsCredentialsProvider(clientId));
+    defaultCredentialsManager.register(
+      credentialsKey,
+      () => new BrainmapsCredentialsProvider(clientId),
+    );
   }
 
-  let viewer = makeMinimalViewer({ bundleRoot: options.bundleRoot }, options.target);
+  const viewer = makeMinimalViewer(
+    { bundleRoot: options.bundleRoot },
+    options.target,
+  );
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
   /* const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
@@ -62,6 +70,6 @@ export function setupDefaultViewer(options: {
 
 export default class Neuroglancer {
   version() {
-    return '0.0.1';
+    return "0.0.1";
   }
 }

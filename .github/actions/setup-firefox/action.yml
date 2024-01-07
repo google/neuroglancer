@@ -3,17 +3,17 @@ description: "Sets up firefox on Linux"
 runs:
   using: "composite"
   steps:
-  - run: |
-      sudo add-apt-repository ppa:mozillateam/ppa
-      echo '
-      Package: *
-      Pin: release o=LP-PPA-mozillateam
-      Pin-Priority: 1001
+    - run: |
+        sudo add-apt-repository ppa:mozillateam/ppa
+        echo '
+        Package: *
+        Pin: release o=LP-PPA-mozillateam
+        Pin-Priority: 1001
 
-      Package: firefox
-      Pin: version 1:1snap1-0ubuntu2
-      Pin-Priority: -1
-      ' | sudo tee /etc/apt/preferences.d/mozilla-firefox
-      sudo apt-get install firefox xvfb
-    if: startsWith(runner.os, 'Linux')
-    shell: bash
+        Package: firefox
+        Pin: version 1:1snap1-0ubuntu2
+        Pin-Priority: -1
+        ' | sudo tee /etc/apt/preferences.d/mozilla-firefox
+        sudo apt-get install firefox xvfb
+      if: startsWith(runner.os, 'Linux')
+      shell: bash

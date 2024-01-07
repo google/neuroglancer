@@ -14,139 +14,134 @@
  * limitations under the License.
  */
 
-'use strict';
+"use strict";
 
-const resolveReal = require('./resolve_real');
+const resolveReal = require("./resolve_real");
 
-const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
+const DEFAULT_DATA_SOURCES = (exports.DEFAULT_DATA_SOURCES = [
   {
-    source: 'neuroglancer/datasource/brainmaps',
-    registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider',
+    source: "#/datasource/brainmaps",
+    registerCredentials: "#/datasource/brainmaps/register_credentials_provider",
+    asyncComputation: ["#/async_computation/decode_jpeg"],
+  },
+  {
+    source: "#/datasource/boss",
+    registerCredentials: "#/datasource/boss/register_credentials_provider",
     asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
+      "#/async_computation/decode_jpeg",
+      "#/async_computation/decode_gzip",
     ],
   },
   {
-    source: 'neuroglancer/datasource/boss',
-    registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider',
+    source: "#/datasource/deepzoom",
     asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-      'neuroglancer/async_computation/decode_gzip',
+      "#/async_computation/decode_jpeg",
+      "#/async_computation/decode_png",
     ],
   },
   {
-    source: 'neuroglancer/datasource/deepzoom',
+    source: "#/datasource/dvid",
+    registerCredentials: "#/datasource/dvid/register_credentials_provider",
+    asyncComputation: ["#/async_computation/decode_jpeg"],
+  },
+  {
+    source: "#/datasource/render",
+    asyncComputation: ["#/async_computation/decode_jpeg"],
+  },
+  {
+    source: "#/datasource/precomputed",
     asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-      'neuroglancer/async_computation/decode_png',
+      "#/async_computation/decode_jpeg",
+      "#/async_computation/decode_gzip",
+      "#/async_computation/decode_compresso",
+      "#/async_computation/decode_png",
     ],
   },
   {
-    source: 'neuroglancer/datasource/dvid',
-    registerCredentials: 'neuroglancer/datasource/dvid/register_credentials_provider',
+    source: "#/datasource/nifti",
+    asyncComputation: ["#/async_computation/decode_gzip"],
+  },
+  {
+    source: "#/datasource/n5",
     asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
+      "#/async_computation/decode_gzip",
+      "#/async_computation/decode_blosc",
     ],
   },
   {
-    source: 'neuroglancer/datasource/render',
+    source: "#/datasource/zarr",
     asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
+      "#/async_computation/decode_gzip",
+      "#/async_computation/decode_blosc",
+      "#/async_computation/decode_zstd",
     ],
   },
+  // '#/datasource/computed',
+  // '#/datasource/computed/example',
+  // '#/datasource/computed/tensorflow',
   {
-    source: 'neuroglancer/datasource/precomputed',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-      'neuroglancer/async_computation/decode_gzip',
-      'neuroglancer/async_computation/decode_compresso',
-      'neuroglancer/async_computation/decode_png',
-    ],
+    source: "#/datasource/vtk",
+    asyncComputation: ["#/async_computation/vtk_mesh"],
   },
   {
-    source: 'neuroglancer/datasource/nifti',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_gzip',
-    ],
+    source: "#/datasource/obj",
+    asyncComputation: ["#/async_computation/obj_mesh"],
   },
   {
-    source: 'neuroglancer/datasource/n5',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_gzip',
-      'neuroglancer/async_computation/decode_blosc',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/zarr',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_gzip',
-      'neuroglancer/async_computation/decode_blosc',
-      'neuroglancer/async_computation/decode_zstd',
-    ],
-  },
-  // 'neuroglancer/datasource/computed',
-  // 'neuroglancer/datasource/computed/example',
-  // 'neuroglancer/datasource/computed/tensorflow',
-  {
-    source: 'neuroglancer/datasource/vtk',
-    asyncComputation: [
-      'neuroglancer/async_computation/vtk_mesh',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/obj',
-    asyncComputation: [
-      'neuroglancer/async_computation/obj_mesh',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/ngauth',
+    source: "#/datasource/ngauth",
     frontend: null,
     backend: null,
     register: null,
-    registerCredentials: 'neuroglancer/datasource/ngauth/register_credentials_provider',
+    registerCredentials: "#/datasource/ngauth/register_credentials_provider",
   },
   {
-    source: 'neuroglancer/datasource/middleauth',
+    source: "#/datasource/middleauth",
     frontend: null,
     backend: null,
     register: null,
-    registerCredentials: 'neuroglancer/datasource/middleauth/register_credentials_provider',
+    registerCredentials:
+      "#/datasource/middleauth/register_credentials_provider",
   },
   {
-    source: 'neuroglancer/datasource/nggraph',
+    source: "#/datasource/nggraph",
   },
   {
-    source: 'neuroglancer/datasource/graphene',
+    source: "#/datasource/graphene",
     asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-      'neuroglancer/async_computation/decode_gzip',
+      "#/async_computation/decode_jpeg",
+      "#/async_computation/decode_gzip",
     ],
   },
-];
+]);
 
-const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
-  'neuroglancer/image_user_layer',
-  'neuroglancer/segmentation_user_layer',
-  'neuroglancer/single_mesh_user_layer',
-  'neuroglancer/annotation/user_layer',
-];
+const DEFAULT_SUPPORTED_LAYERS = (exports.DEFAULT_SUPPORTED_LAYERS = [
+  "#/image_user_layer",
+  "#/segmentation_user_layer",
+  "#/single_mesh_user_layer",
+  "#/annotation/user_layer",
+]);
 
 function getBundleSources(options) {
-  let dataSources =
-      [...(options.dataSources || DEFAULT_DATA_SOURCES), ...(options.extraDataSources || [])];
-  let supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
-  let frontendDataSourceModules = [];
-  let backendDataSourceModules = [];
-  let asyncComputationDataSourceModules = new Set();
+  const dataSources = [
+    ...(options.dataSources || DEFAULT_DATA_SOURCES),
+    ...(options.extraDataSources || []),
+  ];
+  const supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
+  const frontendDataSourceModules = [];
+  const backendDataSourceModules = [];
+  const asyncComputationDataSourceModules = new Set();
   const registerCredentials =
-      options.registerCredentials !== undefined ? options.registerCredentials : !options.python;
+    options.registerCredentials !== undefined
+      ? options.registerCredentials
+      : !options.python;
   for (let datasource of dataSources) {
-    if (typeof datasource === 'string') {
-      datasource = {source: datasource};
+    if (typeof datasource === "string") {
+      datasource = { source: datasource };
     }
     if (datasource.frontend !== null) {
-      frontendDataSourceModules.push(datasource.frontend || `${datasource.source}/frontend`);
+      frontendDataSourceModules.push(
+        datasource.frontend || `${datasource.source}/frontend`,
+      );
     }
     if (registerCredentials && datasource.registerCredentials) {
       frontendDataSourceModules.push(datasource.registerCredentials);
@@ -157,7 +152,9 @@ function getBundleSources(options) {
       frontendDataSourceModules.push(datasource.register);
     }
     if (datasource.backend !== null) {
-      backendDataSourceModules.push(datasource.backend || `${datasource.source}/backend`);
+      backendDataSourceModules.push(
+        datasource.backend || `${datasource.source}/backend`,
+      );
     }
     if (datasource.asyncComputation !== undefined) {
       for (const m of datasource.asyncComputation) {
@@ -165,7 +162,7 @@ function getBundleSources(options) {
       }
     }
   }
-  let defaultDefines = {
+  const defaultDefines = {
     // This is the default client ID used for the hosted neuroglancer.
     // In addition to the hosted neuroglancer origin, it is valid for
     // the origins:
@@ -178,72 +175,83 @@ function getBundleSources(options) {
     // To deploy to a different origin, you will need to generate your
     // own client ID from on the Google Developer Console and substitute
     // it in.
-    'BRAINMAPS_CLIENT_ID':
-        JSON.stringify('639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com'),
+    BRAINMAPS_CLIENT_ID: JSON.stringify(
+      "639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com",
+    ),
 
-    'process.env.NODE_ENV': JSON.stringify('production'),
+    "process.env.NODE_ENV": JSON.stringify("production"),
 
-    'global': 'window',
+    global: "window",
   };
-  let extraDefines = options.defines || {};
-  let srcDir = resolveReal(__dirname, '..', 'src');
-  let extraChunkWorkerModules = options.chunkWorkerModules || [];
-  let extraAsyncComputationModules = options.asyncComputationModules || [];
-  let chunkWorkerModules = [
-    'neuroglancer/worker_rpc_context',
-    'neuroglancer/chunk_manager/backend',
-    'neuroglancer/sliceview/backend',
-    'neuroglancer/perspective_view/backend',
-    'neuroglancer/volume_rendering/backend',
-    'neuroglancer/annotation/backend',
+  const extraDefines = options.defines || {};
+  const srcDir = resolveReal(__dirname, "..", "src");
+  const extraChunkWorkerModules = options.chunkWorkerModules || [];
+  const extraAsyncComputationModules = options.asyncComputationModules || [];
+  const chunkWorkerModules = [
+    "#/worker_rpc_context",
+    "#/chunk_manager/backend",
+    "#/sliceview/backend",
+    "#/perspective_view/backend",
+    "#/volume_rendering/backend",
+    "#/annotation/backend",
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
   ];
-  let asyncComputationModules = [
-    'neuroglancer/async_computation/handler',
-    'neuroglancer/async_computation/encode_compressed_segmentation',
+  const asyncComputationModules = [
+    "#/async_computation/handler",
+    "#/async_computation/encode_compressed_segmentation",
     ...asyncComputationDataSourceModules,
     ...extraAsyncComputationModules,
   ];
-  let frontendModules = options.frontendModules || [resolveReal(srcDir, 'main.ts')];
-  let frontendLayerModules = [];
-  for (let name of supportedLayers) {
+  const frontendModules = options.frontendModules || [
+    resolveReal(srcDir, "main.ts"),
+  ];
+  const frontendLayerModules = [];
+  for (const name of supportedLayers) {
     frontendLayerModules.push(name);
   }
 
   return {
-    main: [...frontendDataSourceModules, ...frontendLayerModules, ...frontendModules],
+    main: [
+      ...frontendDataSourceModules,
+      ...frontendLayerModules,
+      ...frontendModules,
+    ],
     workers: {
-      'chunk_worker': chunkWorkerModules,
-      'async_computation': asyncComputationModules,
+      chunk_worker: chunkWorkerModules,
+      async_computation: asyncComputationModules,
     },
-    defines: {...defaultDefines, ...extraDefines},
+    defines: { ...defaultDefines, ...extraDefines },
   };
 }
 exports.getBundleSources = getBundleSources;
 
 function makePythonClientOptions(options) {
-  const srcDir = resolveReal(__dirname, '..', 'src');
+  const srcDir = resolveReal(__dirname, "..", "src");
   options = Object.assign({}, options);
   options.extraDataSources = [
     ...(options.extraDataSources || []),
-    {source: 'neuroglancer/datasource/python', register: null},
+    { source: "#/datasource/python", register: null },
   ];
-  options.frontendModules = options.frontendModules || [resolveReal(srcDir, 'main_python.ts')];
+  options.frontendModules = options.frontendModules || [
+    resolveReal(srcDir, "main_python.ts"),
+  ];
   options.registerCredentials = false;
-  options.defines = Object.assign(options.defines || {}, {NEUROGLANCER_PYTHON_INTEGRATION: 'true'});
+  options.defines = Object.assign(options.defines || {}, {
+    NEUROGLANCER_PYTHON_INTEGRATION: "true",
+  });
   return options;
 }
 
 exports.makePythonClientOptions = makePythonClientOptions;
 
-exports.getViewerOptions = function (baseConfig, options = {}) {
+exports.getViewerOptions = (baseConfig, options = {}) => {
   if (options.python) {
     baseConfig = makePythonClientOptions(baseConfig);
   }
   if (options.module) {
-    const srcDir = resolveReal(__dirname, '..', 'src');
-    baseConfig.frontendModules = [resolveReal(srcDir, 'main_module.ts')];
+    const srcDir = resolveReal(__dirname, "..", "src");
+    baseConfig.frontendModules = [resolveReal(srcDir, "main_module.ts")];
   }
   return baseConfig;
 };

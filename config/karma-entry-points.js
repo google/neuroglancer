@@ -14,66 +14,62 @@
  * limitations under the License.
  */
 
-'use strict';
+"use strict";
 
-const path = require('path');
-const yargs = require('yargs');
-const glob = require('glob');
-const {parseDefines} = require('./esbuild-cli');
-const {createEntryPointFile, getCommonPlugins} = require('./esbuild');
+const path = require("path");
+const yargs = require("yargs");
+const glob = require("glob");
+const { parseDefines } = require("./esbuild-cli");
+const { createEntryPointFile, getCommonPlugins } = require("./esbuild");
 
-const getEntryPoint = exports.getEntryPoint = (testPattern) => {
-  const {argv: {pattern: userPattern}} = yargs.options({
+const getTestSources = (exports.getTestSources = (testPattern) => {
+  const {
+    argv: { pattern: userPattern },
+  } = yargs.options({
     pattern: {
-      type: 'string',
+      type: "string",
       nargs: 1,
     },
   });
   let testPaths = glob.sync(testPattern);
   const userCwd = process.env.INIT_CWD || process.cwd();
   if (userPattern !== undefined) {
-    console.log('Restricting test files by glob pattern: ' + JSON.stringify(userPattern));
+    console.log(
+      "Restricting test files by glob pattern: " + JSON.stringify(userPattern),
+    );
     const userPaths = new Set(glob.sync(path.resolve(userCwd, userPattern)));
-    testPaths = testPaths.filter(x => userPaths.has(x));
-    console.log('Loading tests from: \n' + testPaths.join('\n'));
+    testPaths = testPaths.filter((x) => userPaths.has(x));
+    console.log("Loading tests from: \n" + testPaths.join("\n"));
   }
-  return createEntryPointFile('test', undefined, testPaths);
-};
+  return testPaths;
+});
 
 exports.getEntryPointConfig = (testPattern, preprocessors = []) => {
-  const entryPoint = getEntryPoint(testPattern);
+  const sources = getTestSources(testPattern);
   return {
-    files: [{
-      pattern: entryPoint,
-      watched: true,
-      type: 'js',
-    }],
-    preprocessors: {
-      [entryPoint]: ['esbuild', ...preprocessors],
-    },
+    files: sources.map((name) => ({ pattern: name, watched: true })),
+    preprocessors: Object.fromEntries(
+      sources.map((name) => [name, ["esbuild", ...preprocessors]]),
+    ),
   };
 };
 
 exports.getEsbuildConfig = () => {
-  const {argv} = yargs.options({
+  const { argv } = yargs.options({
     define: {
-      type: 'array',
+      type: "array",
       coerce: parseDefines,
       default: [],
     },
   });
   return {
-    target: 'es2019',
+    target: "es2019",
     plugins: getCommonPlugins(),
     loader: {
-      '.json': 'json',
-      '.dat': 'binary',
-      '.npy': 'binary',
+      ".json": "json",
+      ".dat": "binary",
+      ".npy": "binary",
     },
     define: argv.define,
-    // TODO(jbms): Remove this workaround once evanw/esbuild#1202 is fixed.
-    banner: {
-      js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
-    },
   };
 };

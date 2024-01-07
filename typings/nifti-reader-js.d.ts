@@ -19,7 +19,7 @@
  * https://github.com/fivetran/typescript-closure-tools applied to nifti-reader-js version 0.5.3.
  */
 
-declare module 'nifti-reader-js' {
+declare module "nifti-reader-js" {
   class NIFTI1 {
     // data type codes
     static TYPE_NONE: number;
@@ -39,7 +39,6 @@ declare module 'nifti-reader-js' {
     static TYPE_FLOAT128: number;
     static TYPE_COMPLEX128: number;
     static TYPE_COMPLEX256: number;
-
 
     // transform codes
     static XFORM_UNKNOWN: number;
@@ -61,8 +60,6 @@ declare module 'nifti-reader-js' {
     static UNITS_HZ: number;
     static UNITS_PPM: number;
     static UNITS_RADS: number;
-
-
 
     littleEndian: boolean;
     dim_info: number;
@@ -143,8 +140,17 @@ declare module 'nifti-reader-js' {
      * http://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1_io.c)
      */
     convertNiftiQFormToNiftiSForm(
-        qb: number, qc: number, qd: number, qx: number, qy: number, qz: number, dx: number,
-        dy: number, dz: number, qfac: number): number[][];
+      qb: number,
+      qc: number,
+      qd: number,
+      qx: number,
+      qy: number,
+      qz: number,
+      dx: number,
+      dy: number,
+      dz: number,
+      qfac: number,
+    ): number[][];
 
     /**
      * Converts sform to an orientation string (e.g., XYZ+--).  (See
@@ -258,8 +264,17 @@ declare module 'nifti-reader-js' {
      * http://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1_io.c)
      */
     convertNiftiQFormToNiftiSForm(
-        qb: number, qc: number, qd: number, qx: number, qy: number, qz: number, dx: number,
-        dy: number, dz: number, qfac: number): number[][];
+      qb: number,
+      qc: number,
+      qd: number,
+      qx: number,
+      qy: number,
+      qz: number,
+      dx: number,
+      dy: number,
+      dz: number,
+      qfac: number,
+    ): number[][];
 
     /**
      * Converts sform to an orientation string (e.g., XYZ+--).  (See
@@ -296,25 +311,31 @@ declare module 'nifti-reader-js' {
   /**
    * Reads and returns the header object.
    */
-  function readHeader(data: ArrayBuffer): NIFTI1|NIFTI2|null;
+  function readHeader(data: ArrayBuffer): NIFTI1 | NIFTI2 | null;
 
   /**
    * Returns true if this header contains an extension.
    */
-  function hasExtension(header: NIFTI1|NIFTI2): boolean;
+  function hasExtension(header: NIFTI1 | NIFTI2): boolean;
 
   /**
    * Returns the image data.
    */
-  function readImage(header: NIFTI1|NIFTI2, data: ArrayBuffer): ArrayBuffer;
+  function readImage(header: NIFTI1 | NIFTI2, data: ArrayBuffer): ArrayBuffer;
 
   /**
    * Returns the extension data (including extension header).
    */
-  function readExtension(header: NIFTI1|NIFTI2, data: ArrayBuffer): ArrayBuffer;
+  function readExtension(
+    header: NIFTI1 | NIFTI2,
+    data: ArrayBuffer,
+  ): ArrayBuffer;
 
   /**
    * Returns the extension data.
    */
-  function readExtensionData(header: NIFTI1|NIFTI2, data: ArrayBuffer): ArrayBuffer;
+  function readExtensionData(
+    header: NIFTI1 | NIFTI2,
+    data: ArrayBuffer,
+  ): ArrayBuffer;
 }

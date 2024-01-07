@@ -1,6 +1,7 @@
 Want to contribute? Great! First, read this page (including the small print at the end).
 
 ### Before you contribute
+
 Before we can use your code, you must sign the
 [Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
 (CLA), which you can do online. The CLA is necessary mainly because you own the
@@ -16,25 +17,36 @@ possibly guide you. Coordinating up front makes it much easier to avoid
 frustration later on.
 
 ### Code reviews
+
 All submissions, including submissions by project members, require review.
 
 ### Coding Style
+
 For consistency, please ensure that all TypeScript/JavaScript files
-are formatted by `clang-format` using the
-[.clang-format](.clang-format) style file.  You can verify this by
-running:
+are linted with Biome and formatted by `prettier`.
+
+You can check for lint/format issues with:
 
 ```shell
-npm run gulp check-format
+npm run lint:check
+npm run format:check
 ```
-To reformat all TypeScript/JavaScript source files, run:
+
+To reformat run:
+
 ```shell
-npm run gulp format
+npm run format:fix
+```
+
+To automatically apply safe lint fixes, run:
+
+```shell
+npm run lint:fix
 ```
 
 Python code is linted and formatted using
 [ruff](https://github.com/astral-sh/ruff) and typechecked using
-[mypy](https://mypy-lang.org/).  To verify, run:
+[mypy](https://mypy-lang.org/). To verify, run:
 
 ```shell
 pip install nox
@@ -42,6 +54,7 @@ nox -s lint format mypy
 ```
 
 ### The small print
+
 Contributions made by corporations are covered by a different agreement than
 the one above, the
 [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).

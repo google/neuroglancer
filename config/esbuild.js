@@ -16,55 +16,62 @@
 
 // esbuild/typescript configuration and launcher for Neuroglancer.
 
-'use strict';
+"use strict";
 
-const svgInlineLoader = require('./esbuild_svg_inline_loader');
+const svgInlineLoader = require("./esbuild_svg_inline_loader");
 
-const esbuild = require('esbuild');
-const path = require('path');
-const fs = require('fs');
-const bundleConfig = require('./bundle-config');
-const {spawn} = require('child_process');
+const esbuild = require("esbuild");
+const path = require("path");
+const fs = require("fs");
+const bundleConfig = require("./bundle-config");
+const { spawn } = require("child_process");
 
-function createEntryPointFile(cacheId, bundleName, sources) {
-  const tempEntryPointDir =
-      path.resolve(__dirname, '..', 'node_modules', '.cache', 'esbuild-entry-points', cacheId);
-  sources = sources.map(x => {
-    // Ensure all paths are relative and use forward slashes.
-    if (path.isAbsolute(x)) {
-      x = path.relative(tempEntryPointDir, x);
-    }
-    if (path.sep === '\\') {
-      x = x.replace(/\\/g, '/');
-    }
-    return x;
-  });
-  if (bundleName === undefined) {
-    sources = sources.slice();
-    sources.sort();
-    bundleName =
-        require('crypto').createHash('sha256').update(JSON.stringify(sources)).digest('hex') +
-        '.js';
-  }
-  fs.mkdirSync(tempEntryPointDir, {recursive: true});
-  const bundleInputPath = path.resolve(tempEntryPointDir, bundleName);
-  const source = sources.map(path => `import ${JSON.stringify(path)};\n`).join('');
-  fs.writeFileSync(bundleInputPath, source);
-  return bundleInputPath;
+function getEntryPointContents(sources) {
+  return sources.map((path) => `import ${JSON.stringify(path)};\n`).join("");
 }
 
-exports.createEntryPointFile = createEntryPointFile;
+const getEntryPointPlugin = (entryPointSources) => {
+  const entryPointResolveDir = path.resolve(__dirname, "..");
+  const plugin = {
+    name: "entrypoint",
+    setup(build) {
+      build.onResolve({ filter: /^neuroglancer_entrypoint\// }, (args) => ({
+        path: args.path.substr("neuroglancer_entrypoint/".length),
+        namespace: "neuroglancer_entrypoint",
+      }));
+      build.onLoad(
+        { filter: /.*/, namespace: "neuroglancer_entrypoint" },
+        (args) => {
+          const m = args.path.match(/(.*)\.bundle.js$/);
+          if (m === null) return undefined;
+          const entryPoint = m[1];
+          const sources = entryPointSources[entryPoint];
+          if (sources === undefined) return undefined;
+          return {
+            contents: getEntryPointContents(sources),
+            resolveDir: entryPointResolveDir,
+          };
+        },
+      );
+    },
+  };
+  const entryPoints = Object.keys(entryPointSources).map(
+    (name) => `neuroglancer_entrypoint/${name}.bundle.js`,
+  );
+  return { plugin, entryPoints };
+};
+exports.getEntryPointPlugin = getEntryPointPlugin;
 
 function getCommonPlugins() {
-  return [svgInlineLoader({removeSVGTagAttrs: false, removeTags: true})];
+  return [svgInlineLoader({ removeSVGTagAttrs: false, removeTags: true })];
 }
 exports.getCommonPlugins = getCommonPlugins;
 
 class Builder {
   constructor(options = {}) {
-    const {id = 'min'} = options;
+    const { id = "min" } = options;
     const {
-      outDir = path.resolve(__dirname, '..', 'dist', id),
+      outDir = path.resolve(__dirname, "..", "dist", id),
       python = false,
       module: moduleBuild = false,
       define = {},
@@ -75,15 +82,18 @@ class Builder {
     } = options;
     this.outDir = outDir;
     this.cacheId = id;
-    const viewerConfig = bundleConfig.getViewerOptions({}, {
-      python,
-      module: moduleBuild,
-    });
+    const viewerConfig = bundleConfig.getViewerOptions(
+      {},
+      {
+        python,
+        module: moduleBuild,
+      },
+    );
     this.module = options.module;
     this.bundleSources = bundleConfig.getBundleSources(viewerConfig);
     this.minify = minify;
     this.python = options.python;
-    this.srcDir = path.resolve(__dirname, '..', 'src');
+    this.srcDir = path.resolve(__dirname, "..", "src");
     this.plugins = getCommonPlugins();
     this.define = define;
     this.inject = inject;
@@ -106,7 +116,7 @@ class Builder {
           // Ignore errors removing output files
         }
       }
-    } catch  {
+    } catch {
       // ignore errors listing output directory (e.g. if it does not already exist)
     }
   }
@@ -120,14 +130,16 @@ class Builder {
     <link href="main.bundle.css" rel="stylesheet">
 `;
 
-    const {googleTagManager} = this;
+    const { googleTagManager } = this;
     if (googleTagManager) {
       indexHtml += `<!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer',${JSON.stringify(googleTagManager)});</script>
+})(window,document,'script','dataLayer',${JSON.stringify(
+        googleTagManager,
+      )});</script>
 <!-- End Google Tag Manager -->
 `;
     }
@@ -140,38 +152,43 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 </html>
 `;
 
-    await fs.promises.writeFile(path.resolve(this.outDir, 'index.html'), indexHtml);
+    await fs.promises.writeFile(
+      path.resolve(this.outDir, "index.html"),
+      indexHtml,
+    );
   }
 
-  getBaseEsbuildConfig() {
+  getBaseEsbuildConfig(entryPointSources) {
+    const { plugin: entryPointPlugin, entryPoints } =
+      getEntryPointPlugin(entryPointSources);
     return {
       outdir: this.outDir,
-      define: {...this.bundleSources.defines, ...this.define},
+      define: { ...this.bundleSources.defines, ...this.define },
       inject: this.inject,
       minify: this.minify,
-      target: 'es2019',
-      plugins: this.plugins,
-      loader: {'.wasm': 'dataurl'},
+      target: "es2019",
+      plugins: [entryPointPlugin, ...this.plugins],
+      entryPoints,
+      loader: { ".wasm": "dataurl" },
       // TODO(jbms): Remove this workaround once evanw/esbuild#1202 is fixed.
       banner: {
-        js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
+        js: "function require(x) { throw new Error('Cannot require ' + x) }",
       },
     };
   }
 
   getWorkerEntrypoints() {
-    return Object.entries(this.bundleSources.workers)
-        .map(([key, sources]) => createEntryPointFile(this.cacheId, key + '.bundle.js', sources));
+    return this.bundleSources.workers;
   }
 
-  getMainEntrypoint(name = 'main.bundle.js') {
-    return createEntryPointFile(this.cacheId, name, this.bundleSources.main);
+  getMainEntrypoint() {
+    return { main: this.bundleSources.main };
   }
 
   async build() {
     const startTime = Date.now();
     try {
-      await fs.promises.mkdir(this.outDir, {recursive: true});
+      await fs.promises.mkdir(this.outDir, { recursive: true });
       if (this.module) {
         await this.buildModule();
       } else {
@@ -189,15 +206,19 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     await this.writeIndex();
     if (!this.python) {
       await fs.promises.copyFile(
-          path.resolve(this.srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
-          path.resolve(this.outDir, 'bossauth.html'));
+        path.resolve(this.srcDir, "datasource/boss/bossauth.html"),
+        path.resolve(this.outDir, "bossauth.html"),
+      );
       await fs.promises.copyFile(
-          path.resolve(this.srcDir, 'neuroglancer/util/google_oauth2_redirect.html'),
-          path.resolve(this.outDir, 'google_oauth2_redirect.html'));
+        path.resolve(this.srcDir, "util/google_oauth2_redirect.html"),
+        path.resolve(this.outDir, "google_oauth2_redirect.html"),
+      );
     }
     const result = await esbuild.build({
-      ...this.getBaseEsbuildConfig(),
-      entryPoints: [this.getMainEntrypoint(), ...this.getWorkerEntrypoints()],
+      ...this.getBaseEsbuildConfig({
+        ...this.getMainEntrypoint(),
+        ...this.getWorkerEntrypoints(),
+      }),
       bundle: true,
       sourcemap: true,
       metafile: true,
@@ -208,40 +229,44 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   }
 
   async buildModule() {
-    await fs.promises.rmdir(this.outDir, {recursive: true});
-    const {outDir} = this;
+    await fs.promises.rm(this.outDir, { recursive: true });
+    const { outDir } = this;
     // Build workers and main bundle.  The main bundle won't be saved, it is
     // just to analyze dependencies and to generate the CSS bundle.
     const [mainBuildResult, workerBuildResult] = await Promise.all([
       esbuild.build({
-        ...this.getBaseEsbuildConfig(),
-        entryPoints: [this.getMainEntrypoint('main.bundle.js')],
+        ...this.getBaseEsbuildConfig(this.getMainEntrypoint()),
         bundle: true,
         write: false,
         metafile: true,
       }),
       esbuild.build({
-        ...this.getBaseEsbuildConfig(),
-        entryPoints: this.getWorkerEntrypoints(),
+        ...this.getBaseEsbuildConfig(this.getWorkerEntrypoints()),
         bundle: true,
-      })
+      }),
     ]);
     const metaEntry = mainBuildResult.metafile;
-    const cssEntry =
-        mainBuildResult.outputFiles.find(entry => entry.path.endsWith('.css')).contents;
-    await fs.promises.writeFile(path.resolve(this.outDir, 'main.css'), cssEntry);
+    const cssEntry = mainBuildResult.outputFiles.find((entry) =>
+      entry.path.endsWith(".css"),
+    ).contents;
+    await fs.promises.writeFile(
+      path.resolve(this.outDir, "main.css"),
+      cssEntry,
+    );
     const srcDirPrefix = this.srcDir + path.sep;
-    const dependencies = Object.keys(metaEntry.inputs).filter(x => x.startsWith('src/'));
+    const dependencies = Object.keys(metaEntry.inputs).filter((x) =>
+      x.startsWith("src/"),
+    );
     const buildResult = await esbuild.build({
-      ...this.getBaseEsbuildConfig(),
+      ...this.getBaseEsbuildConfig({}),
       entryPoints: dependencies,
       bundle: false,
       write: false,
-      format: 'esm',
+      format: "esm",
     });
     for (const entry of buildResult.outputFiles) {
-      if (entry.path.endsWith('.css')) continue;
-      await fs.promises.mkdir(path.dirname(entry.path), {recursive: true});
+      if (entry.path.endsWith(".css")) continue;
+      await fs.promises.mkdir(path.dirname(entry.path), { recursive: true });
       await fs.promises.writeFile(entry.path, entry.contents);
     }
   }
@@ -251,9 +276,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     try {
       await new Promise((resolve, reject) => {
         const child = spawn(
-            process.execPath, [require.resolve('typescript/lib/tsc.js'), '--noEmit'],
-            {stdio: 'inherit'});
-        child.on('close', (code) => {
+          process.execPath,
+          [require.resolve("typescript/lib/tsc.js"), "--noEmit"],
+          { stdio: "inherit" },
+        );
+        child.on("close", (code) => {
           if (code === 0) {
             resolve();
           } else {
@@ -262,20 +289,23 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         });
       });
     } finally {
-      console.log(`Type checked in ${(Date.now() - startTime) / 1000.0} seconds`);
+      console.log(
+        `Type checked in ${(Date.now() - startTime) / 1000.0} seconds`,
+      );
     }
   }
 
   typeCheckWatch() {
     const child = spawn(
-        process.execPath,
-        [
-          require.resolve('typescript/lib/tsc.js'),
-          '--noEmit',
-          '--watch',
-          '--preserveWatchOutput',
-        ],
-        {stdio: 'inherit'});
+      process.execPath,
+      [
+        require.resolve("typescript/lib/tsc.js"),
+        "--noEmit",
+        "--watch",
+        "--preserveWatchOutput",
+      ],
+      { stdio: "inherit" },
+    );
   }
 
   async buildAndTypeCheck(options) {

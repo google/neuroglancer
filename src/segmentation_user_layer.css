@@ -1,0 +1,138 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-segmentation-rendering-tab {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.neuroglancer-segmentation-rendering-tab .neuroglancer-shader-code-widget {
+  height: 6em;
+}
+
+.neuroglancer-segmentation-dropdown-skeleton-shader-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.neuroglancer-segmentation-layer-skeleton-shader-overlay
+  .neuroglancer-shader-code-widget {
+  width: 80vw;
+  height: 80vh;
+}
+
+.neuroglancer-segment-list-entry {
+  display: flex;
+  flex-direction: row;
+  width: min-content;
+  min-width: 100%;
+  background-color: black;
+  align-items: start;
+}
+
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-entry-double-line {
+  display: inline-flex;
+  min-width: initial;
+  background-color: initial;
+}
+
+.neuroglancer-segment-list-entry[data-selected="true"],
+.neuroglancer-selection-details-segment[data-selected="true"] {
+  background-color: #222;
+}
+
+.neuroglancer-segment-list-entry-copy-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-segment-list-entry-id-container {
+  order: 1;
+  align-self: center;
+}
+
+.neuroglancer-segment-list-entry-id,
+.neuroglancer-selection-details-segment-id {
+  display: block;
+  font-family: monospace;
+  font-size: medium;
+  flex-shrink: 0;
+  text-align: right;
+  color: black;
+  background-color: white;
+  user-select: text;
+  width: var(--neuroglancer-segment-list-width);
+}
+
+.neuroglancer-segment-list .neuroglancer-segment-list-entry-sticky {
+  position: sticky;
+  left: 0;
+}
+
+.neuroglancer-segment-list-entry-sticky {
+  white-space: nowrap;
+  flex-direction: row;
+  align-items: start;
+  background-color: inherit;
+  display: flex;
+}
+
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-header
+  .neuroglancer-segment-list-entry-star,
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-header:hover
+  .neuroglancer-segment-list-entry-copy {
+  visibility: hidden;
+}
+
+.neuroglancer-segment-list-entry-extra-property {
+  padding-left: 8px;
+  flex-shrink: 0;
+  text-align: right;
+  user-select: text;
+}
+
+.neuroglancer-selection-details-segment-description,
+.neuroglancer-selection-details-segment-property {
+  font-family: sans-serif;
+  font-size: small;
+}
+
+.neuroglancer-selection-details-segment-property {
+  display: flex;
+  flex-direction: row;
+}
+
+.neuroglancer-selection-details-segment-property-name {
+  user-select: text;
+  font-style: italic;
+}
+
+.neuroglancer-selection-details-segment-property-value {
+  text-align: right;
+  flex: 1;
+}
+
+.neuroglancer-segmentation-toolbox {
+  display: inline-block;
+}
+
+.neuroglancer-segmentation-toolbox
+  .neuroglancer-tool-button
+  + .neuroglancer-tool-button {
+  margin-left: 1em;
+}

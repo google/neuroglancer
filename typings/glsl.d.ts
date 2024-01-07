@@ -18,7 +18,7 @@
  * @file Permits .glsl files to be imported as strings.
  */
 
-declare module '*.glsl' {
+declare module "*.glsl" {
   const value: string;
   export default value;
 }

@@ -1,0 +1,12 @@
+# Prevent line ending conversions by default to avoid problems with binary files.
+* -text
+
+# Known text files should have LF line endings.
+*.py text eol=lf
+*.ts text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+*.md text eol=lf

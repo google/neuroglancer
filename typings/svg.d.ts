@@ -18,7 +18,7 @@
  * @file Permits .svg files to be imported as strings.
  */
 
-declare module '*.svg' {
+declare module "*.svg" {
   const value: string;
   export default value;
 }

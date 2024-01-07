@@ -16,11 +16,11 @@
 
 // Command-line interface for building Neuroglancer.
 
-'use strict';
+"use strict";
 
-const {Builder} = require('./esbuild');
-const path = require('path');
-const fs = require('fs');
+const { Builder } = require("./esbuild");
+const path = require("path");
+const fs = require("fs");
 
 // yargs strips quotes from string values in config objects
 // (https://github.com/yargs/yargs-parser/issues/385).  As a workaround, we add
@@ -29,14 +29,14 @@ function mungeConfig(config) {
   if (Array.isArray(config)) {
     return config.map(mungeConfig);
   }
-  if (typeof config === 'object') {
+  if (typeof config === "object") {
     const result = {};
     for (const key of Object.keys(config)) {
       result[key] = mungeConfig(config[key]);
     }
     return result;
   }
-  if (typeof config !== 'string') {
+  if (typeof config !== "string") {
     return config;
   }
   return `"${config}"`;
@@ -44,23 +44,24 @@ function mungeConfig(config) {
 
 function parseDefines(definesArg) {
   const defines = {};
-  if (typeof definesArg === 'object' && !Array.isArray(definesArg)) {
+  if (typeof definesArg === "object" && !Array.isArray(definesArg)) {
     definesArg = [definesArg];
   }
   let defineList = definesArg || [];
-  if (typeof defineList === 'string') {
+  if (typeof defineList === "string") {
     defineList = [defineList];
   }
   for (const entry of defineList) {
-    if (typeof entry !== 'string') {
+    if (typeof entry !== "string") {
       Object.assign(defines, entry);
       continue;
     }
-    const splitPoint = entry.indexOf('=');
-    let key, value;
+    const splitPoint = entry.indexOf("=");
+    let key;
+    let value;
     if (splitPoint === -1) {
       key = entry;
-      value = 'true';
+      value = "true";
     } else {
       key = entry.substring(0, splitPoint);
       value = entry.substring(splitPoint + 1);
@@ -69,7 +70,7 @@ function parseDefines(definesArg) {
   }
   for (const key of Object.keys(defines)) {
     const value = defines[key];
-    if (typeof value !== 'string') {
+    if (typeof value !== "string") {
       defines[key] = JSON.stringify(value);
     }
   }
@@ -82,27 +83,28 @@ async function main(argv) {
   let python = false;
   let moduleBuild = false;
   let outDir = argv.output;
-  let id = argv.config;
-  const pythonOutDir = argv.output !== undefined ?
-      argv.output :
-      path.resolve(__dirname, '..', 'python', 'neuroglancer', 'static');
+  const id = argv.config;
+  const pythonOutDir =
+    argv.output !== undefined
+      ? argv.output
+      : path.resolve(__dirname, "..", "python", "neuroglancer", "static");
 
   switch (id) {
-    case 'min':
+    case "min":
       break;
-    case 'dev':
+    case "dev":
       minify = false;
       break;
-    case 'python-min':
+    case "python-min":
       python = true;
       outDir = pythonOutDir;
       break;
-    case 'python-dev':
+    case "python-dev":
       python = true;
       minify = false;
       outDir = pythonOutDir;
       break;
-    case 'module':
+    case "module":
       minify = false;
       moduleBuild = true;
       break;
@@ -124,7 +126,7 @@ async function main(argv) {
   if (moduleBuild && argv.output === undefined) {
     try {
       if ((await fs.promises.lstat(builder.outDir)).isDirectory()) {
-        await fs.promises.rmdir(builder.outDir, {recursive: true});
+        await fs.promises.rm(builder.outDir, { recursive: true });
       }
     } catch (e) {
       // Ignore errors.
@@ -133,99 +135,98 @@ async function main(argv) {
     await builder.clearOutput();
   }
   if (argv.watch) {
-    await require('./esbuild-dev-server')(builder, {
+    await require("./esbuild-dev-server")(builder, {
       serve: argv.serve,
       host: argv.host,
       port: argv.port,
       skipTypeCheck,
     });
   } else {
-    await builder.buildOrExit({skipTypeCheck});
+    await builder.buildOrExit({ skipTypeCheck });
   }
 }
 if (require.main === module) {
-  const argv =
-      require('yargs')
-          .options({
-            config: {
-              description: 'Build configuration identifier',
-              type: 'string',
-              nargs: 1,
-              choices: ['min', 'dev', 'python-min', 'python-dev', 'module'],
-              default: 'min',
-            },
-            analyze: {
-              type: 'boolean',
-              default: false,
-              description: 'Print bundle analysis.',
-            },
-            typecheck: {
-              type: 'boolean',
-              default: true,
-              description: 'Typecheck the TypeScript code.',
-            },
-            define: {
-              type: 'array',
-              coerce: parseDefines,
-              default: [],
-              description:
-                  'JavaScript global identifiers to define when building.  Usage: `--define VARIABLE=EXPR`.',
-            },
-            inject: {
-              type: 'array',
-              default: [],
-              description: 'Additional modules to inject into global scope.',
-            },
-            watch: {
-              type: 'boolean',
-              default: false,
-              description: 'Watch sources for changes and rebuild automatically.',
-            },
-            serve: {
-              group: 'Development server options:',
-              type: 'boolean',
-              default: false,
-              description: 'Run a development server.',
-            },
-            host: {
-              group: 'Development server options:',
-              type: 'string',
-              nargs: 1,
-              description:
-                  'Specifies bind address for development server, e.g. 0.0.0.0 or 127.0.0.1',
-              default: '127.0.0.1',
-            },
-            port: {
-              group: 'Development server options:',
-              type: 'number',
-              nargs: 1,
-              default: 8080,
-              description: 'Port number for the development server',
-            },
-            configfile: {
-              config: true,
-              description: 'Additional JSON/JavaScript config file to load.',
-              configParser: x => mungeConfig(require(x)),
-            },
-            output: {
-              type: 'string',
-              nargs: 1,
-              description: 'Output directory.',
-            },
-            ['google-tag-manager']: {
-              group: 'Customization',
-              type: 'string',
-              nargs: 1,
-              description: 'Google tag manager id to include in index.html',
-            },
-          })
-          .strict()
-          .config(mungeConfig(require('./config.js')))
-          .demandCommand(0, 0)
-          .version(false)
-          .env('NEUROGLANCER')
-          .help()
-          .parse();
+  const argv = require("yargs")
+    .options({
+      config: {
+        description: "Build configuration identifier",
+        type: "string",
+        nargs: 1,
+        choices: ["min", "dev", "python-min", "python-dev", "module"],
+        default: "min",
+      },
+      analyze: {
+        type: "boolean",
+        default: false,
+        description: "Print bundle analysis.",
+      },
+      typecheck: {
+        type: "boolean",
+        default: true,
+        description: "Typecheck the TypeScript code.",
+      },
+      define: {
+        type: "array",
+        coerce: parseDefines,
+        default: [],
+        description:
+          "JavaScript global identifiers to define when building.  Usage: `--define VARIABLE=EXPR`.",
+      },
+      inject: {
+        type: "array",
+        default: [],
+        description: "Additional modules to inject into global scope.",
+      },
+      watch: {
+        type: "boolean",
+        default: false,
+        description: "Watch sources for changes and rebuild automatically.",
+      },
+      serve: {
+        group: "Development server options:",
+        type: "boolean",
+        default: false,
+        description: "Run a development server.",
+      },
+      host: {
+        group: "Development server options:",
+        type: "string",
+        nargs: 1,
+        description:
+          "Specifies bind address for development server, e.g. 0.0.0.0 or 127.0.0.1",
+        default: "127.0.0.1",
+      },
+      port: {
+        group: "Development server options:",
+        type: "number",
+        nargs: 1,
+        default: 8080,
+        description: "Port number for the development server",
+      },
+      configfile: {
+        config: true,
+        description: "Additional JSON/JavaScript config file to load.",
+        configParser: (x) => mungeConfig(require(x)),
+      },
+      output: {
+        type: "string",
+        nargs: 1,
+        description: "Output directory.",
+      },
+      "google-tag-manager": {
+        group: "Customization",
+        type: "string",
+        nargs: 1,
+        description: "Google tag manager id to include in index.html",
+      },
+    })
+    .strict()
+    .config(mungeConfig(require("./config.js")))
+    .demandCommand(0, 0)
+    .version(false)
+    .env("NEUROGLANCER")
+    .help()
+    .parse();
   if (argv.serve) {
     argv.watch = true;
   }

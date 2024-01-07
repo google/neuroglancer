@@ -1,0 +1,160 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+  --layer-number-color: #9a7518;
+}
+
+.neuroglancer-layer-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin-left: -5px;
+  margin-top: -1px;
+  z-index: -0.1;
+}
+
+.neuroglancer-layer-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: white;
+  cursor: pointer;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #ccc;
+  font-family: sans-serif;
+  font-size: 10pt;
+  background-color: black;
+  padding: 1px;
+}
+
+.neuroglancer-layer-item,
+.neuroglancer-layer-add-button {
+  margin: 1px;
+  margin-left: 5px;
+}
+
+.neuroglancer-layer-item[data-selected="true"] {
+  border-color: #8c8;
+}
+
+.neuroglancer-layer-item[data-selected="true"]:hover {
+  border-color: #3c3;
+}
+
+.neuroglancer-layer-item:hover {
+  border-color: #daa520;
+}
+
+.neuroglancer-layer-item[data-pick="true"] .neuroglancer-layer-item-label {
+  background-color: #939;
+}
+
+.neuroglancer-layer-item-label {
+  display: inline-block;
+  position: relative;
+  background-color: #222;
+  padding-right: 3px;
+}
+
+.neuroglancer-layer-item-number {
+  display: inline-block;
+  background-color: var(--layer-number-color);
+  font-weight: bold;
+  padding-left: 1px;
+  padding-right: 1px;
+}
+
+.neuroglancer-layer-panel[data-show-hover-values="true"]
+  .neuroglancer-layer-item-value {
+  display: inline-block;
+  font-family: monospace;
+  font-size: medium;
+  max-width: 50ch;
+  margin-left: 1ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipses;
+  text-align: center;
+}
+
+.neuroglancer-layer-panel[data-show-hover-values="false"]
+  .neuroglancer-layer-item-value {
+  display: none;
+}
+
+.neuroglancer-layer-item[data-visible="false"] .neuroglancer-layer-item-label {
+  text-decoration: line-through;
+}
+
+.neuroglancer-layer-item[data-visible="false"] {
+  color: #bbb;
+}
+
+.neuroglancer-layer-panel-drop-zone {
+  display: inline-block;
+  flex: 1;
+}
+
+.neuroglancer-layer-item-visible-progress,
+.neuroglancer-layer-item-prefetch-progress {
+  position: absolute;
+  left: 0px;
+  height: 2px;
+  background-color: #666;
+}
+
+.neuroglancer-layer-item-visible-progress {
+  top: 0px;
+}
+
+.neuroglancer-layer-item-prefetch-progress {
+  bottom: 0px;
+}
+
+.neuroglancer-layer-item-value-container {
+  display: grid;
+  grid-template-columns: min-content;
+  align-items: center;
+}
+
+.neuroglancer-layer-item-value {
+  grid-row: 1;
+  grid-column: 1;
+  visibility: visible;
+}
+
+.neuroglancer-layer-item-button-container {
+  grid-row: 1;
+  grid-column: 1;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  visibility: hidden;
+  justify-self: right;
+}
+
+.neuroglancer-layer-panel:hover .neuroglancer-layer-item-value {
+  visibility: hidden;
+}
+
+.neuroglancer-layer-panel:hover .neuroglancer-layer-item-button-container {
+  visibility: visible;
+}

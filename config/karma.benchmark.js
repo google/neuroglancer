@@ -14,32 +14,37 @@
  * limitations under the License.
  */
 
-'use strict';
+"use strict";
 
-const path = require('path');
-const {getEntryPointConfig, getEsbuildConfig} = require('./karma-entry-points');
+const path = require("path");
+const {
+  getEntryPointConfig,
+  getEsbuildConfig,
+} = require("./karma-entry-points");
 
-module.exports = function(config) {
+module.exports = (config) => {
   config.set({
-    ...getEntryPointConfig(path.resolve(__dirname, '..', 'src', '**', '*.benchmark.ts')),
+    ...getEntryPointConfig(
+      path.resolve(__dirname, "..", "src", "**", "*.benchmark.ts"),
+    ),
     esbuild: getEsbuildConfig(),
-    frameworks: ['benchmark'],
+    frameworks: ["benchmark"],
     browsers: [
-      'ChromeHeadless',
+      "ChromeHeadless",
       // 'Chrome',
       // 'ChromeCanary',
     ],
     colors: true,
     browserNoActivityTimeout: 60000,
-    reporters: ['benchmark'],
+    reporters: ["benchmark"],
     // logLevel: config.LOG_DEBUG,
     singleRun: true,
     plugins: [
-      'karma-benchmark',
-      'karma-benchmark-reporter',
-      'karma-chrome-launcher',
-      'karma-firefox-launcher',
-      require('./karma-esbuild'),
+      "karma-benchmark",
+      "karma-benchmark-reporter",
+      "karma-chrome-launcher",
+      "karma-firefox-launcher",
+      "karma-esbuild",
     ],
   });
 };

@@ -19,141 +19,175 @@
  * Sets up the Python-integrated neuroglancer viewer.
  */
 
-import debounce from 'lodash/debounce';
-import {CachingCredentialsManager} from 'neuroglancer/credentials_provider';
-import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
-import {PythonDataSource} from 'neuroglancer/datasource/python/frontend';
-import {Client, ClientStateReceiver, ClientStateSynchronizer} from 'neuroglancer/python_integration/api';
-import {PythonCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
-import {TrackableBasedEventActionMap} from 'neuroglancer/python_integration/event_action_map';
-import {PrefetchManager} from 'neuroglancer/python_integration/prefetch';
-import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
-import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
-import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
-import {VolumeRequestHandler} from 'neuroglancer/python_integration/volume';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
-import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
-import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
-import {bindTitle} from 'neuroglancer/ui/title';
-import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
-import {parseFixedLengthArray, verifyInt} from 'neuroglancer/util/json';
-import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
-import {InputEventBindings, VIEWER_UI_CONFIG_OPTIONS} from 'neuroglancer/viewer';
+import debounce from "lodash/debounce";
+import { CachingCredentialsManager } from "#/credentials_provider";
+import { getDefaultDataSourceProvider } from "#/datasource/default_provider";
+import { PythonDataSource } from "#/datasource/python/frontend";
+import {
+  Client,
+  ClientStateReceiver,
+  ClientStateSynchronizer,
+} from "#/python_integration/api";
+import { PythonCredentialsManager } from "#/python_integration/credentials_provider";
+import { TrackableBasedEventActionMap } from "#/python_integration/event_action_map";
+import { PrefetchManager } from "#/python_integration/prefetch";
+import { RemoteActionHandler } from "#/python_integration/remote_actions";
+import { TrackableBasedStatusMessages } from "#/python_integration/remote_status_messages";
+import { ScreenshotHandler } from "#/python_integration/screenshots";
+import { VolumeRequestHandler } from "#/python_integration/volume";
+import { TrackableValue } from "#/trackable_value";
+import {
+  bindDefaultCopyHandler,
+  bindDefaultPasteHandler,
+} from "#/ui/default_clipboard_handling";
+import { setDefaultInputEventBindings } from "#/ui/default_input_event_bindings";
+import { makeDefaultViewer } from "#/ui/default_viewer";
+import { bindTitle } from "#/ui/title";
+import { UrlHashBinding } from "#/ui/url_hash_binding";
+import { parseFixedLengthArray, verifyInt } from "#/util/json";
+import { CompoundTrackable, Trackable } from "#/util/trackable";
+import { InputEventBindings, VIEWER_UI_CONFIG_OPTIONS } from "#/viewer";
 
-function makeTrackableBasedEventActionMaps(inputEventBindings: InputEventBindings) {
+function makeTrackableBasedEventActionMaps(
+  inputEventBindings: InputEventBindings,
+) {
   const config = new CompoundTrackable();
   const globalMap = new TrackableBasedEventActionMap();
-  config.add('viewer', globalMap);
+  config.add("viewer", globalMap);
   inputEventBindings.global.addParent(globalMap.eventActionMap, 1000);
 
   const sliceViewMap = new TrackableBasedEventActionMap();
-  config.add('sliceView', sliceViewMap);
+  config.add("sliceView", sliceViewMap);
   inputEventBindings.sliceView.addParent(sliceViewMap.eventActionMap, 1000);
 
   const perspectiveViewMap = new TrackableBasedEventActionMap();
-  config.add('perspectiveView', perspectiveViewMap);
-  inputEventBindings.perspectiveView.addParent(perspectiveViewMap.eventActionMap, 1000);
+  config.add("perspectiveView", perspectiveViewMap);
+  inputEventBindings.perspectiveView.addParent(
+    perspectiveViewMap.eventActionMap,
+    1000,
+  );
 
   const dataViewMap = new TrackableBasedEventActionMap();
-  config.add('dataView', dataViewMap);
+  config.add("dataView", dataViewMap);
   inputEventBindings.perspectiveView.addParent(dataViewMap.eventActionMap, 999);
   inputEventBindings.sliceView.addParent(dataViewMap.eventActionMap, 999);
 
   return config;
 }
 
-function makeTrackableBasedSourceGenerationHandler(pythonDataSource: PythonDataSource) {
-  const state = new TrackableValue<{[key: string]: number}>({}, x => {
+function makeTrackableBasedSourceGenerationHandler(
+  pythonDataSource: PythonDataSource,
+) {
+  const state = new TrackableValue<{ [key: string]: number }>({}, (x) => {
     for (const key of Object.keys(x)) {
       const value = x[key];
-      if (typeof value !== 'number') {
-        throw new Error(`Expected key ${
-            JSON.stringify(key)} to have a numeric value, but received: ${JSON.stringify(value)}.`);
+      if (typeof value !== "number") {
+        throw new Error(
+          `Expected key ${JSON.stringify(
+            key,
+          )} to have a numeric value, but received: ${JSON.stringify(value)}.`,
+        );
       }
     }
     return x;
   });
-  state.changed.add(debounce(() => {
-    const generations = state.value;
-    for (const key of Object.keys(generations)) {
-      pythonDataSource.setSourceGeneration(key, generations[key]);
-    }
-    for (const key of pythonDataSource.sourceGenerations.keys()) {
-      if (!generations.hasOwnProperty(key)) {
-        pythonDataSource.deleteSourceGeneration(key);
+  state.changed.add(
+    debounce(() => {
+      const generations = state.value;
+      for (const key of Object.keys(generations)) {
+        pythonDataSource.setSourceGeneration(key, generations[key]);
       }
-    }
-  }, 0));
+      for (const key of pythonDataSource.sourceGenerations.keys()) {
+        if (!Object.prototype.hasOwnProperty.call(generations, key)) {
+          pythonDataSource.deleteSourceGeneration(key);
+        }
+      }
+    }, 0),
+  );
   return state;
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener("DOMContentLoaded", () => {
   const configState = new CompoundTrackable();
   const client = new Client();
 
   const credentialsManager = new PythonCredentialsManager(client);
 
-  const dataSourceProvider = getDefaultDataSourceProvider(
-      {credentialsManager: new CachingCredentialsManager(credentialsManager)});
+  const dataSourceProvider = getDefaultDataSourceProvider({
+    credentialsManager: new CachingCredentialsManager(credentialsManager),
+  });
   const pythonDataSource = new PythonDataSource();
-  dataSourceProvider.register('python', pythonDataSource);
-  configState.add('sourceGenerations', makeTrackableBasedSourceGenerationHandler(pythonDataSource));
+  dataSourceProvider.register("python", pythonDataSource);
+  configState.add(
+    "sourceGenerations",
+    makeTrackableBasedSourceGenerationHandler(pythonDataSource),
+  );
 
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer({
+  const viewer = ((<any>window).viewer = makeDefaultViewer({
     showLayerDialog: false,
     resetStateWhenEmpty: false,
     dataSourceProvider,
-  });
+  }));
   setDefaultInputEventBindings(viewer.inputEventBindings);
   configState.add(
-      'inputEventBindings', makeTrackableBasedEventActionMaps(viewer.inputEventBindings));
+    "inputEventBindings",
+    makeTrackableBasedEventActionMaps(viewer.inputEventBindings),
+  );
 
   const remoteActionHandler = new RemoteActionHandler(viewer);
-  (<any>window)['remoteActionHandler'] = remoteActionHandler;
-  configState.add('actions', remoteActionHandler.actionSet);
+  (<any>window).remoteActionHandler = remoteActionHandler;
+  configState.add("actions", remoteActionHandler.actionSet);
 
-  configState.add('statusMessages', new TrackableBasedStatusMessages());
+  configState.add("statusMessages", new TrackableBasedStatusMessages());
 
   const screenshotHandler = new ScreenshotHandler(viewer);
-  configState.add('screenshot', screenshotHandler.requestState);
+  configState.add("screenshot", screenshotHandler.requestState);
 
   const volumeHandler = new VolumeRequestHandler(viewer);
-  configState.add('volumeRequests', volumeHandler.requestState);
+  configState.add("volumeRequests", volumeHandler.requestState);
 
-  let sharedState: Trackable|undefined = viewer.state;
+  let sharedState: Trackable | undefined = viewer.state;
 
   if (window.location.hash) {
-    const hashBinding =
-        viewer.registerDisposer(new UrlHashBinding(viewer.state, credentialsManager));
+    const hashBinding = viewer.registerDisposer(
+      new UrlHashBinding(viewer.state, credentialsManager),
+    );
     hashBinding.updateFromUrlHash();
     sharedState = undefined;
   }
 
   const prefetchManager = new PrefetchManager(
-      viewer.display, dataSourceProvider, viewer.dataContext.addRef(), viewer.uiConfiguration);
-  configState.add('prefetch', prefetchManager);
+    viewer.display,
+    dataSourceProvider,
+    viewer.dataContext.addRef(),
+    viewer.uiConfiguration,
+  );
+  configState.add("prefetch", prefetchManager);
 
   for (const key of VIEWER_UI_CONFIG_OPTIONS) {
     configState.add(key, viewer.uiConfiguration[key]);
   }
-  configState.add('scaleBarOptions', viewer.scaleBarOptions);
-  const size = new TrackableValue<[number, number]|undefined>(
-      undefined,
-      x => x == null ? undefined : parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
-  configState.add('viewerSize', size);
+  configState.add("scaleBarOptions", viewer.scaleBarOptions);
+  const size = new TrackableValue<[number, number] | undefined>(
+    undefined,
+    (x) =>
+      x == null
+        ? undefined
+        : parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt),
+  );
+  configState.add("viewerSize", size);
 
   const updateSize = () => {
     const element = viewer.display.container;
     const value = size.value;
     if (value === undefined) {
-      element.style.position = 'relative';
-      element.style.width = '';
-      element.style.height = '';
-      element.style.transform = '';
-      element.style.transformOrigin = '';
+      element.style.position = "relative";
+      element.style.width = "";
+      element.style.height = "";
+      element.style.transform = "";
+      element.style.transformOrigin = "";
     } else {
-      element.style.position = 'absolute';
+      element.style.position = "absolute";
       element.style.width = `${value[0]}px`;
       element.style.height = `${value[1]}px`;
       const screenWidth = document.documentElement!.clientWidth;
@@ -162,31 +196,36 @@ window.addEventListener('DOMContentLoaded', () => {
       const scaleY = screenHeight / value[1];
       const scale = Math.min(scaleX, scaleY);
       element.style.transform = `scale(${scale})`;
-      element.style.transformOrigin = 'top left';
+      element.style.transformOrigin = "top left";
     }
   };
   updateSize();
-  window.addEventListener('resize', updateSize);
+  window.addEventListener("resize", updateSize);
   size.changed.add(debounce(() => updateSize(), 0));
 
   const states = new Map<string, ClientStateSynchronizer>();
-  states.set('c', new ClientStateSynchronizer(client, configState, null));
+  states.set("c", new ClientStateSynchronizer(client, configState, null));
   if (sharedState !== undefined) {
-    states.set('s', new ClientStateSynchronizer(client, sharedState, 100));
+    states.set("s", new ClientStateSynchronizer(client, sharedState, 100));
   }
   new ClientStateReceiver(client, states);
-  remoteActionHandler.sendActionRequested.add(
-      (action, state) => client.sendActionNotification(action, state));
-  screenshotHandler.sendScreenshotRequested.add(
-      state => client.sendActionNotification('screenshot', state));
-  screenshotHandler.sendStatisticsRequested.add(
-    state => client.sendActionNotification('screenshotStatistics', state));
+  remoteActionHandler.sendActionRequested.add((action, state) =>
+    client.sendActionNotification(action, state),
+  );
+  screenshotHandler.sendScreenshotRequested.add((state) =>
+    client.sendActionNotification("screenshot", state),
+  );
+  screenshotHandler.sendStatisticsRequested.add((state) =>
+    client.sendActionNotification("screenshotStatistics", state),
+  );
 
-  volumeHandler.sendVolumeInfoResponseRequested.add(
-      (requestId, info) => client.sendVolumeInfoNotification(requestId, info));
+  volumeHandler.sendVolumeInfoResponseRequested.add((requestId, info) =>
+    client.sendVolumeInfoNotification(requestId, info),
+  );
 
-  volumeHandler.sendVolumeChunkResponseRequested.add(
-      (requestId, info) => client.sendVolumeChunkNotification(requestId, info));
+  volumeHandler.sendVolumeChunkResponseRequested.add((requestId, info) =>
+    client.sendVolumeChunkNotification(requestId, info),
+  );
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

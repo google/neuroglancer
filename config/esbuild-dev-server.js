@@ -16,11 +16,11 @@
 
 // Live reload development server for static site bundled using esbuild
 
-'use strict';
+"use strict";
 
-const chokidar = require('chokidar');
-const LiveServer = require('./static-site-live-server');
-const path = require('path');
+const chokidar = require("chokidar");
+const LiveServer = require("./static-site-live-server");
+const path = require("path");
 
 async function tryBuild(builder) {
   try {
@@ -38,43 +38,44 @@ async function main(builder, options) {
   }
   await tryBuild(builder);
 
-  const {serve = false} = options;
+  const { serve = false } = options;
 
-  var liveServer = undefined;
+  let liveServer = undefined;
   if (serve) {
     liveServer = new LiveServer();
     liveServer.start({
       host: options.host,
       port: options.port,
       root: builder.outDir,
-      file: 'index.html',
+      file: "index.html",
     });
   }
 
   let building = false;
   let needBuild = false;
-  const sourceWatcher =
-      chokidar.watch(path.resolve(builder.srcDir, '**')).on('change', async function(filePath) {
-        if (building) {
-          needBuild = true;
-          return;
-        }
-        do {
-          needBuild = false;
-          try {
-            let result = await tryBuild(builder);
-            if (serve) {
-              if (result) {
-                liveServer.reload();
-              } else {
-                console.log('Not reloading due to errors');
-              }
+  const sourceWatcher = chokidar
+    .watch(path.resolve(builder.srcDir, "**"))
+    .on("change", async (filePath) => {
+      if (building) {
+        needBuild = true;
+        return;
+      }
+      do {
+        needBuild = false;
+        try {
+          const result = await tryBuild(builder);
+          if (serve) {
+            if (result) {
+              liveServer.reload();
+            } else {
+              console.log("Not reloading due to errors");
             }
-          } catch (e) {
-            console.log(`Error building: ${e.message}`);
           }
-        } while (needBuild);
-        building = false;
-      });
+        } catch (e) {
+          console.log(`Error building: ${e.message}`);
+        }
+      } while (needBuild);
+      building = false;
+    });
 }
 module.exports = main;

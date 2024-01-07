@@ -17,8 +17,8 @@
 /**
  * Basic typings for glsl-editor package.
  */
-declare module 'glsl-editor/glsl' {
-  import CodeMirror from 'codemirror';
+declare module "glsl-editor/glsl" {
+  import CodeMirror from "codemirror";
   const f: (codeMirror: typeof CodeMirror) => void;
   export default f;
 }

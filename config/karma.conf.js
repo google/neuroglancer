@@ -14,16 +14,22 @@
  * limitations under the License.
  */
 
-'use strict';
+"use strict";
 
-const path = require('path');
-const {getEntryPointConfig, getEsbuildConfig} = require('./karma-entry-points');
+const path = require("path");
+const {
+  getEntryPointConfig,
+  getEsbuildConfig,
+} = require("./karma-entry-points");
 
-module.exports = function(config) {
+module.exports = (config) => {
   config.set({
-    ...getEntryPointConfig(path.resolve(__dirname, '..', 'src', '**', '*.spec.ts'), ['sourcemap']),
+    ...getEntryPointConfig(
+      path.resolve(__dirname, "..", "src", "**", "*.spec.ts"),
+      ["sourcemap"],
+    ),
     esbuild: getEsbuildConfig(),
-    frameworks: ['jasmine'],
+    frameworks: ["jasmine"],
     browsers: [
       // 'Firefox',
       // 'FirefoxHeadless',
@@ -33,14 +39,14 @@ module.exports = function(config) {
     ],
     colors: true,
     browserNoActivityTimeout: 60000,
-    reporters: ['mocha'],
+    reporters: ["mocha"],
     plugins: [
-      'karma-sourcemap-loader',
-      'karma-jasmine',
-      'karma-mocha-reporter',
-      'karma-chrome-launcher',
-      'karma-firefox-launcher',
-      require('./karma-esbuild'),
+      "karma-sourcemap-loader",
+      "karma-jasmine",
+      "karma-mocha-reporter",
+      "karma-chrome-launcher",
+      "karma-firefox-launcher",
+      "karma-esbuild",
     ],
   });
 };
