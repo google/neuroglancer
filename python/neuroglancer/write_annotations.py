@@ -56,7 +56,7 @@ def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
 
 
 def _get_dtype_for_properties(
-    properties: Sequence[viewer_state.AnnotationPropertySpec]
+    properties: Sequence[viewer_state.AnnotationPropertySpec],
 ):
     dtype = []
     offset = 0
