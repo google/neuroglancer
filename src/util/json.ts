@@ -658,9 +658,9 @@ export function verifyEnumString<T extends number>(
   pattern: RegExp = /^[a-zA-Z]/,
 ): T {
   if (typeof obj === "string" && obj.match(pattern) !== null) {
-    obj = obj.toUpperCase();
-    if (Object.prototype.hasOwnProperty.call(enumType, obj)) {
-      return enumType[obj] as T;
+    const objUpperCase = obj.toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(enumType, objUpperCase)) {
+      return enumType[objUpperCase] as T;
     }
   }
   throw new Error(`Invalid enum value: ${JSON.stringify(obj)}.`);

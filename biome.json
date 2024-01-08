@@ -53,6 +53,7 @@
         "noParameterAssign": "off",
         "useTemplate": "off",
         "useLiteralEnumMembers": "off",
+        "useEnumInitializers": "off",
         "noArguments": "off"
       },
       "correctness": {

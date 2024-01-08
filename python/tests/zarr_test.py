@@ -85,6 +85,43 @@ TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
                 ]
             },
         },
+        {
+            "driver": "zarr3",
+            "schema": {"chunk_layout": {"write_chunk": {"shape": [6, 12, 24]}}},
+            "metadata": {
+                "codecs": [
+                    {"name": "transpose", "configuration": {"order": [0, 2, 1]}},
+                    {
+                        "name": "sharding_indexed",
+                        "configuration": {
+                            "chunk_shape": [2, 3, 4],
+                            "index_location": "start",
+                            "index_codecs": [
+                                {
+                                    "name": "transpose",
+                                    "configuration": {"order": [3, 1, 0, 2]},
+                                },
+                                {
+                                    "name": "bytes",
+                                    "configuration": {"endian": "little"},
+                                },
+                            ],
+                            "codecs": [
+                                {
+                                    "name": "transpose",
+                                    "configuration": {"order": [2, 1, 0]},
+                                },
+                                {
+                                    "name": "bytes",
+                                    "configuration": {"endian": "little"},
+                                },
+                                {"name": "gzip"},
+                            ],
+                        },
+                    },
+                ]
+            },
+        },
     ],
     ids=str,
 )

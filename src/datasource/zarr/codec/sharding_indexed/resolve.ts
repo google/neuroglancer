@@ -26,10 +26,21 @@ import {
 } from "#/datasource/zarr/codec/resolve";
 import { parseChunkShape } from "#/datasource/zarr/metadata/parse";
 import { DataType } from "#/util/data_type";
-import { verifyObject, verifyObjectProperty } from "#/util/json";
+import {
+  verifyEnumString,
+  verifyObject,
+  verifyObjectProperty,
+  verifyOptionalObjectProperty,
+} from "#/util/json";
+
+export enum ShardIndexLocation {
+  START,
+  END,
+}
 
 export interface Configuration {
   indexCodecs: CodecChainSpec;
+  indexLocation: ShardIndexLocation;
   subChunkCodecs: CodecChainSpec;
   subChunkShape: number[];
   subChunkGridShape: number[];
@@ -44,6 +55,12 @@ registerCodec({
       configuration,
       "chunk_shape",
       (value) => parseChunkShape(value, decodedArrayInfo.chunkShape.length),
+    );
+    const indexLocation = verifyOptionalObjectProperty(
+      configuration,
+      "index_location",
+      (x) => verifyEnumString(x, ShardIndexLocation, /^[a-z]+$/),
+      ShardIndexLocation.END,
     );
     const subChunkGridShape = Array.from(
       decodedArrayInfo.chunkShape,
@@ -92,6 +109,7 @@ registerCodec({
         subChunkCodecs,
         subChunkShape,
         subChunkGridShape,
+        indexLocation,
       },
       shardingInfo: { subChunkShape, subChunkGridShape, subChunkCodecs },
     };

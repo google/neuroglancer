@@ -18,8 +18,12 @@ import { ChunkManager } from "#/chunk_manager/backend";
 import { SimpleAsyncCache } from "#/chunk_manager/generic_file_source";
 import { CodecKind } from "#/datasource/zarr/codec";
 import { decodeArray, registerCodec } from "#/datasource/zarr/codec/decode";
-import type { Configuration } from "#/datasource/zarr/codec/sharding_indexed/resolve";
 import {
+  Configuration,
+  ShardIndexLocation,
+} from "#/datasource/zarr/codec/sharding_indexed/resolve";
+import {
+  ByteRangeRequest,
   composeByteRangeRequest,
   ReadableKvStore,
   ReadOptions,
@@ -50,9 +54,18 @@ class ShardedKvStore<BaseKey>
           const { indexCodecs } = configuration;
           const encodedSize =
             indexCodecs.encodedSize[indexCodecs.encodedSize.length - 1];
+          let byteRange: ByteRangeRequest;
+          switch (configuration.indexLocation) {
+            case ShardIndexLocation.START:
+              byteRange = { offset: 0, length: encodedSize! };
+              break;
+            case ShardIndexLocation.END:
+              byteRange = { suffixLength: encodedSize! };
+              break;
+          }
           const response = await base.read(key, {
             cancellationToken,
-            byteRange: { suffixLength: encodedSize! },
+            byteRange,
           });
           if (response === undefined) {
             return { size: 0, data: undefined };
