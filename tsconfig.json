@@ -12,7 +12,7 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "sourceMap": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "incremental": true,
     "target": "ES2017",
     "newLine": "LF",
