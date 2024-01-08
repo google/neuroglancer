@@ -18,6 +18,7 @@ export enum VolumeChunkEncoding {
   RAW = 0,
   GZIP = 1,
   BLOSC = 2,
+  ZSTD = 3,
 }
 
 export class VolumeChunkSourceParameters {

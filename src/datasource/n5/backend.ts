@@ -15,6 +15,7 @@
  */
 
 import { decodeBlosc } from "#/async_computation/decode_blosc_request";
+import { decodeZstd } from "#/async_computation/decode_zstd_request";
 import { decodeGzip } from "#/async_computation/decode_gzip_request";
 import { requestAsyncComputation } from "#/async_computation/request";
 import { WithParameters } from "#/chunk_manager/backend";
@@ -69,6 +70,14 @@ async function decodeChunk(
     case VolumeChunkEncoding.BLOSC:
       buffer = await requestAsyncComputation(
         decodeBlosc,
+        cancellationToken,
+        [buffer.buffer],
+        buffer,
+      );
+      break;
+    case VolumeChunkEncoding.ZSTD:
+      buffer = await requestAsyncComputation(
+        decodeZstd,
         cancellationToken,
         [buffer.buffer],
         buffer,
