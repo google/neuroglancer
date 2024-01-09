@@ -36,15 +36,15 @@ The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3
 
 Neuroglancer itself is purely a client-side program, but it depends on data being accessible via HTTP in a suitable format. It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
 
-- [Neuroglancer precomputed format](src/neuroglancer/datasource/precomputed)
-- [N5](src/neuroglancer/datasource/n5)
-- [Zarr v2/v3](src/neuroglancer/datasource/zarr)
+- [Neuroglancer precomputed format](src/datasource/precomputed)
+- [N5](src/datasource/n5)
+- [Zarr v2/v3](src/datasource/zarr)
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 - BOSS <https://bossdb.org/>
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
-- [Deep Zoom images](src/neuroglancer/datasource/deepzoom)
+- [Deep Zoom images](src/datasource/deepzoom)
 
 # Supported browsers
 
@@ -55,7 +55,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 # Keyboard and mouse bindings
 
 For the complete set of bindings, see
-[src/neuroglancer/ui/default_input_event_bindings.ts](src/neuroglancer/ui/default_input_event_bindings.ts),
+[src/ui/default_input_event_bindings.ts](src/ui/default_input_event_bindings.ts),
 or within Neuroglancer, press `h` or click on the button labeled `?` in the upper right corner.
 
 - Click on a layer name to toggle its visibility.
@@ -64,7 +64,7 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
 
 - Hover over a segmentation layer name to see the current list of objects shown and to access the opacity sliders.
 
-- Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/neuroglancer/sliceview/image_layer_rendering.md).
+- Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/sliceview/image_layer_rendering.md).
 
 # Troubleshooting
 
@@ -111,11 +111,11 @@ The "frontend" UI thread handles user actions and rendering, while the "backend"
 
 # Documentation Index
 
-- [Image Layer Rendering](src/neuroglancer/sliceview/image_layer_rendering.md)
-- [Cross-sectional view implementation architecture](src/neuroglancer/sliceview/README.md)
-- [Compressed segmentation format](src/neuroglancer/sliceview/compressed_segmentation/README.md)
-- [Data chunk management](src/neuroglancer/chunk_manager/)
-- [On-GPU hashing](src/neuroglancer/gpu_hash/)
+- [Image Layer Rendering](src/sliceview/image_layer_rendering.md)
+- [Cross-sectional view implementation architecture](src/sliceview/README.md)
+- [Compressed segmentation format](src/sliceview/compressed_segmentation/README.md)
+- [Data chunk management](src/chunk_manager/)
+- [On-GPU hashing](src/gpu_hash/)
 
 # Building
 
@@ -154,7 +154,7 @@ https://github.com/creationix/nvm
 
    For example,
 
-   `npm test -- --pattern='src/neuroglancer/util/uint64*'`
+   `npm test -- --pattern='src/util/uint64*'`
 
 6. See [package.json](package.json) for other commands available.
 
@@ -171,11 +171,11 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   Docker deployment of the [Neuroglancer Python integration](python/README.md).
 - [FZJ-INM1-BDA/neuroglancer-scripts](https://github.com/FZJ-INM1-BDA/neuroglancer-scripts) -
   Scripts for converting the [BigBrain](https://bigbrain.loris.ca) dataset to the
-  Neuroglancer [precomputed data format](src/neuroglancer/datasource/precomputed), which may serve
+  Neuroglancer [precomputed data format](src/datasource/precomputed), which may serve
   as a useful example for converting other datasets.
 - [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
 - [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
-- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/neuroglancer/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
+- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
 - [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and managment of large 3d images focusing on Neuroglancer Precomputed format.
 
 # Contributing

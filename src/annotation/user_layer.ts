@@ -799,7 +799,7 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(
       makeHelpButton({
         title: "Documentation on annotation rendering",
-        href: "https://github.com/google/neuroglancer/blob/master/src/neuroglancer/annotation/rendering.md",
+        href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
       }),
     );
     element.appendChild(topRow);

@@ -79,7 +79,7 @@ const tempMat3 = mat3.create();
 
 // To validate the octrees and to determine the multiscale fragment responsible for each framebuffer
 // location, set `DEBUG_MULTISCALE_FRAGMENTS=true` and also set `DEBUG_PICKING=true` in
-// `src/neuroglancer/object_picking.ts`.
+// `src/object_picking.ts`.
 const DEBUG_MULTISCALE_FRAGMENTS = false;
 
 function copyMeshDataToGpu(

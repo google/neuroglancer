@@ -1,6 +1,6 @@
 This directory implements hash functions, hash sets, and hash maps that support efficient use from
 both JavaScript and from WebGL shaders running on the GPU. These are used to
-perform [pseudo-random color mapping of uint64 object IDs](/src/neuroglancer/segment_color.ts),
+perform [pseudo-random color mapping of uint64 object IDs](/src/segment_color.ts),
 highlighting of a set of object ids, and equivalence maps over object ids.
 
 The design is heavily constrained by the limitations of WebGL 1.0 (OpenGL ES Shading Language 1.0) shaders:

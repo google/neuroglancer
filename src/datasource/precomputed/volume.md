@@ -24,7 +24,7 @@ The root value must be a JSON object with the following members:
   permits automatically detecting paths to volumes, meshes, and skeletons.
 - `"type"`: One of `"image"` or `"segmentation"`, specifying the type of the volume.
 - `"data_type"`: A string value equal (case-insensitively) to the name of one of the supported
-  `DataType` values specified in [data_type.ts](/src/neuroglancer/util/data_type.ts). May be one of
+  `DataType` values specified in [data_type.ts](/src/util/data_type.ts). May be one of
   `"uint8"`, `"uint16"`, `"uint32"`, `"uint64"`, or `"float32"`. `"float32"` should only be specified
   for `"image"` volumes.
 - `"num_channels"`: An integer value specifying the number of channels in the volume. Must be `1`
@@ -192,7 +192,7 @@ of the image corresponds to the flattened `[x, y, z]` Fortran-order representati
 ### compressed_segmentation chunk encoding
 
 The subvolume data for the chunk is encoded using the multi-channel
-format [compressed segmentation format](/src/neuroglancer/sliceview/compressed_segmentation). The
+format [compressed segmentation format](/src/sliceview/compressed_segmentation). The
 `"data_type"` must be either `"uint32"` or `"uint64"`. The compression block size is specified by
 the `"compressed_segmentation_block_size"` property in the `info` JSON file.
 
