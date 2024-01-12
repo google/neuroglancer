@@ -102,7 +102,6 @@ async function waitForRemoteFlow(
 }
 
 async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
-  console.log("wait for login");
   const data = await waitForRemoteFlow(
     `${serverUrl}/api/v1/authorize`,
     `middleauth server ${serverUrl} login required.`,
@@ -127,7 +126,7 @@ async function showTosForm(url: string, tosName: string) {
     url,
     `Before you can access ${tosName}, you need to accept its Terms of Service.`,
     "Open",
-    `Waiting for Terms of Service agreement...`,
+    "Waiting for Terms of Service agreement...",
     `Terms of Service closed for ${tosName}.`,
   );
   return data === "success";
@@ -216,13 +215,12 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
     error: HttpError,
     credentials: OAuth2Credentials,
   ): Promise<"refresh"> => {
-    console.log("ma handle error", error);
     const { status } = error;
     if (status === 401) {
       // 401: Authorization needed.  OAuth2 token may have expired.
       return "refresh";
-    } else if (status === 403) {
-      // Anonymous access denied.  Request credentials.
+    }
+    if (status === 403) {
       const { response } = error;
       if (response) {
         const { headers } = response;
@@ -230,6 +228,7 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
         if (contentType === "application/json") {
           const json = await response.json();
           if (json.error && json.error === "missing_tos") {
+            // Missing terms of service agreement.  Prompt user.
             const url = new URL(json.data.tos_form_url);
             url.searchParams.set("client", "ng");
             const success = await showTosForm(
@@ -244,6 +243,7 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
         }
       }
       if (!credentials.accessToken) {
+        // Anonymous access denied.  Request credentials.
         return "refresh";
       }
     }

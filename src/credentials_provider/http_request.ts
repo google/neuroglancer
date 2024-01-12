@@ -48,7 +48,7 @@ export async function fetchWithCredentials<Credentials, T>(
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
-  credentialsLoop: for (let credentialsAttempt = 0; ; ) {
+  for (let credentialsAttempt = 0; ; ) {
     throwIfCanceled(cancellationToken);
     if (credentialsAttempt > 1) {
       // Don't delay on the first attempt, and also don't delay on the second attempt, since if the

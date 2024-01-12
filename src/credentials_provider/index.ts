@@ -57,7 +57,8 @@ export abstract class CredentialsProvider<Credentials> extends RefCounted {
     if (status === 401) {
       // 401: Authorization needed.  OAuth2 token may have expired.
       return "refresh";
-    } else if (status === 403 && !credentials.accessToken) {
+    }
+    if (status === 403 && !credentials.accessToken) {
       // Anonymous access denied.  Request credentials.
       return "refresh";
     }
