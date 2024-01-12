@@ -57,23 +57,7 @@ export function fetchWithOAuth2Credentials<T>(
       );
       return { ...init, headers };
     },
-    (error, credentials) => {
-      const { status } = error;
-      if (status === 401) {
-        // 401: Authorization needed.  OAuth2 token may have expired.
-        return "refresh";
-      }
-      if (status === 403 && !credentials.accessToken) {
-        // Anonymous access denied.  Request credentials.
-        return "refresh";
-      }
-      if (error instanceof Error && credentials.email !== undefined) {
-        error.message += `  (Using credentials for ${JSON.stringify(
-          credentials.email,
-        )})`;
-      }
-      throw error;
-    },
+    credentialsProvider.errorHandler!,
     cancellationToken,
   );
 }
