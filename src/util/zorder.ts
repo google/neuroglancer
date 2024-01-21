@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { TypedArray } from "#/util/array";
-import { Uint64 } from "#/util/uint64";
+import type { TypedArray } from "#src/util/array.js";
+import type { Uint64 } from "#src/util/uint64.js";
 
 export function getOctreeChildIndex(x: number, y: number, z: number) {
   return (x & 1) | ((y << 1) & 2) | ((z << 2) & 4);

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { LayerManager, MouseSelectionState } from "#/layer";
+import type { LayerManager, MouseSelectionState } from "#src/layer/index.js";
 
 export function getSelectedAnnotation(
   mouseState: MouseSelectionState,

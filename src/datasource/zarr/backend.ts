@@ -14,25 +14,29 @@
  * limitations under the License.
  */
 
-import "#/datasource/zarr/codec/blosc/decode";
-import "#/datasource/zarr/codec/zstd/decode";
-import "#/datasource/zarr/codec/bytes/decode";
-import "#/datasource/zarr/codec/crc32c/decode";
-import "#/datasource/zarr/codec/gzip/decode";
-import "#/datasource/zarr/codec/sharding_indexed/decode";
-import "#/datasource/zarr/codec/transpose/decode";
+import "#src/datasource/zarr/codec/blosc/decode.js";
+import "#src/datasource/zarr/codec/zstd/decode.js";
+import "#src/datasource/zarr/codec/bytes/decode.js";
+import "#src/datasource/zarr/codec/crc32c/decode.js";
 
-import { WithParameters } from "#/chunk_manager/backend";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
-import { VolumeChunkSourceParameters } from "#/datasource/zarr/base";
-import { applySharding, decodeArray } from "#/datasource/zarr/codec/decode";
-import { ChunkKeyEncoding } from "#/datasource/zarr/metadata";
-import { getSpecialProtocolKvStore } from "#/kvstore/special";
-import { postProcessRawData } from "#/sliceview/backend_chunk_decoders/postprocess";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { SpecialProtocolCredentials } from "#/util/special_protocol_request";
-import { registerSharedObject } from "#/worker_rpc";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
+import {
+  applySharding,
+  decodeArray,
+} from "#src/datasource/zarr/codec/decode.js";
+import "#src/datasource/zarr/codec/gzip/decode.js";
+import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
+import "#src/datasource/zarr/codec/transpose/decode.js";
+import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
+import { getSpecialProtocolKvStore } from "#src/kvstore/special/index.js";
+import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
 export class ZarrVolumeChunkSource extends WithParameters(

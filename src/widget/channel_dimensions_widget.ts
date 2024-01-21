@@ -14,24 +14,26 @@
  * limitations under the License.
  */
 
-import "./channel_dimensions_widget.css";
+import "#src/widget/channel_dimensions_widget.css";
 
-import {
+import type {
   CoordinateSpace,
   CoordinateSpaceCombiner,
   DimensionId,
+} from "#src/coordinate_transform.js";
+import {
   getDisplayLowerUpperBounds,
   insertDimensionAt,
-} from "#/coordinate_transform";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { arraysEqual } from "#/util/array";
-import { RefCounted } from "#/util/disposable";
-import { updateChildren, updateInputFieldWidth } from "#/util/dom";
+} from "#src/coordinate_transform.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { arraysEqual } from "#src/util/array.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { updateChildren, updateInputFieldWidth } from "#src/util/dom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import { EventActionMap } from "#/util/mouse_bindings";
+} from "#src/util/keyboard_bindings.js";
+import { EventActionMap } from "#src/util/mouse_bindings.js";
 
 const inputEventMap = EventActionMap.fromObject({
   arrowup: { action: "tab-backward" },

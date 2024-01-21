@@ -18,99 +18,99 @@
  * @file User interface for display and editing annotations.
  */
 
-import "./annotations.css";
-
+import "#src/ui/annotations.css";
 import {
+  AnnotationDisplayState,
+  AnnotationLayerState,
+} from "#src/annotation/annotation_layer_state.js";
+import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
+import type {
   Annotation,
   AnnotationId,
-  AnnotationPropertySerializer,
   AnnotationReference,
+  AxisAlignedBoundingBox,
+  Ellipsoid,
+  Line,
+} from "#src/annotation/index.js";
+import {
+  AnnotationPropertySerializer,
   AnnotationSource,
   annotationToJson,
   AnnotationType,
   annotationTypeHandlers,
-  AxisAlignedBoundingBox,
-  Ellipsoid,
   formatNumericProperty,
-  Line,
-} from "#/annotation";
-import {
-  AnnotationDisplayState,
-  AnnotationLayerState,
-} from "#/annotation/annotation_layer_state";
-import { MultiscaleAnnotationSource } from "#/annotation/frontend_source";
+} from "#src/annotation/index.js";
 import {
   AnnotationLayer,
   PerspectiveViewAnnotationLayer,
   SliceViewAnnotationLayer,
   SpatiallyIndexedPerspectiveViewAnnotationLayer,
   SpatiallyIndexedSliceViewAnnotationLayer,
-} from "#/annotation/renderlayer";
-import { CoordinateSpace } from "#/coordinate_transform";
-import { MouseSelectionState, UserLayer } from "#/layer";
-import { LoadedDataSubsource } from "#/layer_data_source";
-import {
-  ChunkTransformParameters,
-  getChunkPositionFromCombinedGlobalLocalPositions,
-} from "#/render_coordinate_transform";
+} from "#src/annotation/renderlayer.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
+import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
+import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
-} from "#/render_scale_statistics";
-import { RenderLayerRole } from "#/renderlayer";
+} from "#src/render_scale_statistics.js";
+import { RenderLayerRole } from "#src/renderlayer.js";
+import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import {
   bindSegmentListWidth,
   registerCallbackWhenSegmentationDisplayStateChanged,
-  SegmentationDisplayState,
   SegmentWidgetFactory,
-} from "#/segmentation_display_state/frontend";
-import { ElementVisibilityFromTrackableBoolean } from "#/trackable_boolean";
+} from "#src/segmentation_display_state/frontend.js";
+import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   registerNested,
   WatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { getDefaultAnnotationListBindings } from "#/ui/default_input_event_bindings";
-import { LegacyTool, registerLegacyTool } from "#/ui/tool";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { arraysEqual, ArraySpliceOp } from "#/util/array";
-import { setClipboard } from "#/util/clipboard";
+} from "#src/trackable_value.js";
+import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
+import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { ArraySpliceOp } from "#src/util/array.js";
+import { arraysEqual } from "#src/util/array.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import {
   serializeColor,
   unpackRGB,
   unpackRGBA,
   useWhiteBackground,
-} from "#/util/color";
-import { Borrowed, disposableOnce, RefCounted } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
-import { Endianness, ENDIANNESS } from "#/util/endian";
-import { ValueOrError } from "#/util/error";
-import { vec3 } from "#/util/geom";
+} from "#src/util/color.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { disposableOnce, RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import { Endianness, ENDIANNESS } from "#src/util/endian.js";
+import type { ValueOrError } from "#src/util/error.js";
+import { vec3 } from "#src/util/geom.js";
 import {
   EventActionMap,
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import * as matrix from "#/util/matrix";
-import { MouseEventBinder } from "#/util/mouse_bindings";
-import { formatScaleWithUnitAsString } from "#/util/si_units";
-import { NullarySignal, Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
-import * as vector from "#/util/vector";
-import { makeAddButton } from "#/widget/add_button";
-import { ColorWidget } from "#/widget/color";
-import { makeCopyButton } from "#/widget/copy_button";
-import { makeDeleteButton } from "#/widget/delete_button";
-import {
-  DependentViewContext,
-  DependentViewWidget,
-} from "#/widget/dependent_view_widget";
-import { makeIcon } from "#/widget/icon";
-import { makeMoveToButton } from "#/widget/move_to_button";
-import { Tab } from "#/widget/tab_view";
-import { VirtualList, VirtualListSource } from "#/widget/virtual_list";
+} from "#src/util/keyboard_bindings.js";
+import * as matrix from "#src/util/matrix.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
+import { Uint64 } from "#src/util/uint64.js";
+import * as vector from "#src/util/vector.js";
+import { makeAddButton } from "#src/widget/add_button.js";
+import { ColorWidget } from "#src/widget/color.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { makeDeleteButton } from "#src/widget/delete_button.js";
+import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { makeIcon } from "#src/widget/icon.js";
+import { makeMoveToButton } from "#src/widget/move_to_button.js";
+import { Tab } from "#src/widget/tab_view.js";
+import type { VirtualListSource } from "#src/widget/virtual_list.js";
+import { VirtualList } from "#src/widget/virtual_list.js";
 
 export class MergedAnnotationStates
   extends RefCounted

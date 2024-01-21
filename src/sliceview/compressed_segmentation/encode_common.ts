@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-import { Uint32ArrayBuilder } from "#/util/uint32array_builder";
+import type { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 export const BLOCK_HEADER_SIZE = 2;
 

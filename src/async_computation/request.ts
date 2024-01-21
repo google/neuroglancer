@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import { AsyncComputationSpec } from "#/async_computation";
-import { CANCELED, CancellationToken } from "#/util/cancellation";
-import { WORKER_RPC_ID } from "#/worker_rpc";
-import { rpc } from "#/worker_rpc_context";
+import type { AsyncComputationSpec } from "#src/async_computation/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { CANCELED } from "#src/util/cancellation.js";
 
-const freeWorkers: (Worker | MessagePort)[] = [];
+const freeWorkers: Worker[] = [];
 const pendingTasks = new Map<
   number,
   { msg: any; transfer: Transferable[] | undefined }
@@ -39,7 +38,7 @@ const maxWorkers =
     : Math.min(12, navigator.hardwareConcurrency);
 let nextTaskId = 0;
 
-function returnWorker(worker: Worker | MessagePort) {
+function returnWorker(worker: Worker) {
   for (const [id, task] of pendingTasks) {
     pendingTasks.delete(id);
     worker.postMessage(task.msg, task.transfer as Transferable[]);
@@ -48,21 +47,14 @@ function returnWorker(worker: Worker | MessagePort) {
   freeWorkers.push(worker);
 }
 
-function getNewWorker(): Worker | MessagePort {
-  let port: Worker | MessagePort;
-  if (typeof Worker === "undefined") {
-    // On Safari, the `Worker` constructor is not available from workers.  Instead, we request the
-    // main thread to create a worker.
-    const channel = new MessageChannel();
-    port = channel.port2;
-    rpc.invoke(
-      WORKER_RPC_ID,
-      { port: channel.port1, path: "async_computation.bundle.js" },
-      [channel.port1],
-    );
-  } else {
-    port = new Worker("async_computation.bundle.js");
-  }
+function getNewWorker(): Worker {
+  // Note: For compatibility with multiple bundlers, a browser-compatible URL
+  // must be used with `new URL`, which means a Node.js subpath import like
+  // "#src/async_computation.bundle.js" cannot be used.
+  const port = new Worker(
+    new URL("../async_computation.bundle.js", import.meta.url),
+    { type: "module" },
+  );
   port.onmessage = (msg) => {
     const { id, value, error } = msg.data as {
       id: number;

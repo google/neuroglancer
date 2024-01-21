@@ -18,28 +18,31 @@
  * @file Support for rendering line annotations.
  */
 
-import { AnnotationType, Line } from "#/annotation";
-import {
+import type { Line } from "#src/annotation/index.js";
+import { AnnotationType } from "#src/annotation/index.js";
+import type {
   AnnotationRenderContext,
-  AnnotationRenderHelper,
   AnnotationShaderGetter,
+} from "#src/annotation/type_handler.js";
+import {
+  AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
-} from "#/annotation/type_handler";
-import { projectPointToLineSegment } from "#/util/geom";
+} from "#src/annotation/type_handler.js";
+import { projectPointToLineSegment } from "#src/util/geom.js";
 import {
   defineCircleShader,
   drawCircles,
   initializeCircleShader,
   VERTICES_PER_CIRCLE,
-} from "#/webgl/circles";
+} from "#src/webgl/circles.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
-} from "#/webgl/lines";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { defineVectorArrayVertexShaderInput } from "#/webgl/shader_lib";
-import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
+} from "#src/webgl/lines.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
+import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;

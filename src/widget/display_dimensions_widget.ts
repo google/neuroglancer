@@ -14,34 +14,35 @@
  * limitations under the License.
  */
 
-import "./display_dimensions_widget.css";
+import "#src/widget/display_dimensions_widget.css";
 
-import debounce from "lodash/debounce";
+import { debounce } from "lodash-es";
 import {
   getDimensionNameValidity,
   validateDimensionNames,
-} from "#/coordinate_transform";
-import {
+} from "#src/coordinate_transform.js";
+import type {
   TrackableDepthRange,
   TrackableZoomInterface,
   WatchableDisplayDimensionRenderInfo,
-} from "#/navigation_state";
-import { registerNested } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { arraysEqual } from "#/util/array";
-import { Owned, RefCounted } from "#/util/disposable";
+} from "#src/navigation_state.js";
+import { registerNested } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { arraysEqual } from "#src/util/array.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
   removeChildren,
   removeFromParent,
   updateInputFieldWidth,
-} from "#/util/dom";
+} from "#src/util/dom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import { EventActionMap, MouseEventBinder } from "#/util/mouse_bindings";
-import { numberToStringFixed } from "#/util/number_to_string";
-import { formatScaleWithUnitAsString, parseScale } from "#/util/si_units";
+} from "#src/util/keyboard_bindings.js";
+import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
 

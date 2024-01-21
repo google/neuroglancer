@@ -26,6 +26,7 @@ from .server import (
     is_server_running,  # noqa: F401
     set_server_bind_address,  # noqa: F401
     set_static_content_source,  # noqa: F401
+    set_dev_server_content_source,  # noqa: F401
     stop,  # noqa: F401
 )
 from .url_state import parse_url, to_json_dump, to_url  # noqa: F401

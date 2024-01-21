@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import { decodeZstd } from "#/async_computation/decode_zstd_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
+import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
 
 registerAsyncComputation(decodeZstd, async (data: Uint8Array) => {
-  const { default: Zstd } = await import(
-    /*webpackChunkName: "zstd" */ "numcodecs/zstd"
-  );
+  const { default: Zstd } = await import("numcodecs/zstd");
   const codec = Zstd.fromConfig({ id: "blosc" });
   const result = await codec.decode(data);
   return { value: result, transfer: [result.buffer] };

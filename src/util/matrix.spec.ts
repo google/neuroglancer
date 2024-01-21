@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import * as matrix from "#/util/matrix";
+import { describe, it, expect } from "vitest";
+import * as matrix from "#src/util/matrix.js";
 
 describe("matrix identity", () => {
   it("works for n=0", () => {

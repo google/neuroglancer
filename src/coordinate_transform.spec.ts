@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
+import type { TransformedBoundingBox } from "#src/coordinate_transform.js";
 import {
   transformedBoundingBoxesEqual,
   CoordinateSpaceCombiner,
@@ -23,11 +25,10 @@ import {
   makeCoordinateSpace,
   makeIdentityTransform,
   newDimensionId,
-  TransformedBoundingBox,
   WatchableCoordinateSpaceTransform,
   coordinateTransformSpecificationFromJson,
-} from "#/coordinate_transform";
-import { WatchableValue } from "#/trackable_value";
+} from "#src/coordinate_transform.js";
+import { WatchableValue } from "#src/trackable_value.js";
 
 describe("newDimensionId", () => {
   it("returns unique values", () => {
@@ -75,11 +76,11 @@ describe("boundingBoxesEqual", () => {
 
     boxes.forEach((x, xIndex) => {
       boxes.forEach((y, yIndex) => {
-        expect(transformedBoundingBoxesEqual(x, y)).toBe(
-          x === y,
+        expect(
+          transformedBoundingBoxesEqual(x, y),
           `${xIndex}: ${JSON.stringify(x)}, ` +
             `${yIndex}: ${JSON.stringify(y)}`,
-        );
+        ).toBe(x === y);
       });
     });
   });
@@ -147,7 +148,8 @@ describe("CoordinateSpaceCombiner", () => {
         emptyInvalidCoordinateSpace,
         combiner.combined.value,
       ),
-    ).toBeTruthy(combiner.combined.value);
+      JSON.stringify(combiner.combined.value),
+    ).toBeTruthy();
   });
 
   it("handle renames", () => {

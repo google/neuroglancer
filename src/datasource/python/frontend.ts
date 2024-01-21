@@ -19,54 +19,54 @@
  * Support for Python integration.
  */
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import {
   ChunkManager,
   ChunkSource,
   ChunkSourceConstructor,
   GettableChunkSource,
   WithParameters,
-} from "#/chunk_manager/frontend";
+} from "#src/chunk_manager/frontend.js";
 import {
   CoordinateSpace,
   coordinateSpaceFromJson,
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
+} from "#src/coordinate_transform.js";
 import {
   DataSource,
   DataSourceProvider,
   GetDataSourceOptions,
-} from "#/datasource";
+} from "#src/datasource/index.js";
 import {
   MeshSourceParameters,
   PythonSourceParameters,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/python/base";
-import { MeshSource } from "#/mesh/frontend";
-import { VertexAttributeInfo } from "#/skeleton/base";
-import { SkeletonSource } from "#/skeleton/frontend";
+} from "#src/datasource/python/base.js";
+import { MeshSource } from "#src/mesh/frontend.js";
+import { VertexAttributeInfo } from "#src/skeleton/base.js";
+import { SkeletonSource } from "#src/skeleton/frontend.js";
 import {
   ChunkLayoutPreference,
   DataType,
   DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2,
-} from "#/sliceview/base";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/sliceview/base.js";
+import { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import {
   makeDefaultVolumeChunkSpecifications,
   VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
-import { Borrowed, Owned } from "#/util/disposable";
-import { fetchOk } from "#/util/http_request";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
+import { Borrowed, Owned } from "#src/util/disposable.js";
+import { fetchOk } from "#src/util/http_request.js";
 import {
   parseFixedLengthArray,
   verifyEnumString,
@@ -77,10 +77,10 @@ import {
   verifyObjectProperty,
   verifyOptionalObjectProperty,
   verifyPositiveInt,
-} from "#/util/json";
-import * as matrix from "#/util/matrix";
-import { getObjectId } from "#/util/object_id";
-import * as vector from "#/util/vector";
+} from "#src/util/json.js";
+import * as matrix from "#src/util/matrix.js";
+import { getObjectId } from "#src/util/object_id.js";
+import * as vector from "#src/util/vector.js";
 
 interface PythonChunkSource extends ChunkSource {
   dataSource: PythonDataSource;
@@ -375,6 +375,7 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
               dataSource: this.dataSource,
               generation: this.generation,
               parameters: {
+                baseUrl: window.location.href,
                 key: this.key,
                 scaleKey: downsampleFactors.join(),
                 encoding: encoding,
@@ -439,6 +440,7 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
         dataSource: this.dataSource,
         generation: this.generation,
         parameters: {
+          baseUrl: window.location.href,
           key: this.key,
           vertexAttributes: skeletonVertexAttributes,
         },
@@ -448,6 +450,7 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       dataSource: this.dataSource,
       generation: this.generation,
       parameters: {
+        baseUrl: window.location.href,
         key: this.key,
       },
     });
@@ -481,7 +484,9 @@ function getVolumeDataSource(
     { type: "python:VolumeDataSource", key },
     async () => {
       const response = await (
-        await fetchOk(`../../neuroglancer/info/${key}`)
+        await fetchOk(
+          new URL(`../../neuroglancer/info/${key}`, window.location.href).href,
+        )
       ).json();
       const volume = new PythonMultiscaleVolumeChunkSource(
         dataSourceProvider,
@@ -526,6 +531,7 @@ function getVolumeDataSource(
               dataSource: dataSourceProvider,
               generation: volume.generation,
               parameters: {
+                baseUrl: window.location.href,
                 key: key,
               },
             }),
@@ -546,7 +552,12 @@ function getSkeletonDataSource(
     { type: "python:SkeletonDataSource", key },
     async () => {
       const response = await (
-        await fetchOk(`../../neuroglancer/skeletoninfo/${key}`)
+        await fetchOk(
+          new URL(
+            `../../neuroglancer/skeletoninfo/${key}`,
+            window.location.href,
+          ).href,
+        )
       ).json();
       const { baseModelSpace, subsourceToModelTransform } =
         parseCoordinateSpaceAndVoxelOffset(response);
@@ -562,6 +573,7 @@ function getSkeletonDataSource(
           dataSource: dataSourceProvider,
           generation,
           parameters: {
+            baseUrl: window.location.href,
             key,
             vertexAttributes,
           },

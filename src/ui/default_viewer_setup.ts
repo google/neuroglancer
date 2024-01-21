@@ -14,23 +14,24 @@
  * limitations under the License.
  */
 
-import { StatusMessage } from "#/status";
+import { StatusMessage } from "#src/status.js";
 import {
   bindDefaultCopyHandler,
   bindDefaultPasteHandler,
-} from "#/ui/default_clipboard_handling";
-import { setDefaultInputEventBindings } from "#/ui/default_input_event_bindings";
-import { makeDefaultViewer } from "#/ui/default_viewer";
-import { bindTitle } from "#/ui/title";
-import { UrlHashBinding } from "#/ui/url_hash_binding";
+} from "#src/ui/default_clipboard_handling.js";
+import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
+import { makeDefaultViewer } from "#src/ui/default_viewer.js";
+import type { MinimalViewerOptions } from "#src/ui/minimal_viewer.js";
+import { bindTitle } from "#src/ui/title.js";
+import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
 
 declare let NEUROGLANCER_DEFAULT_STATE_FRAGMENT: string | undefined;
 
 /**
  * Sets up the default neuroglancer viewer.
  */
-export function setupDefaultViewer() {
-  const viewer = ((<any>window).viewer = makeDefaultViewer());
+export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
+  const viewer = ((<any>window).viewer = makeDefaultViewer(options));
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
   const hashBinding = viewer.registerDisposer(

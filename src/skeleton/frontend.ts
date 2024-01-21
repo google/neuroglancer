@@ -14,83 +14,83 @@
  * limitations under the License.
  */
 
-import { ChunkState, LayerChunkProgressInfo } from "#/chunk_manager/base";
-import { Chunk, ChunkManager, ChunkSource } from "#/chunk_manager/frontend";
-import { LayerView, VisibleLayerInfo } from "#/layer";
-import { PerspectivePanel } from "#/perspective_view/panel";
-import {
-  PerspectiveViewRenderContext,
-  PerspectiveViewRenderLayer,
-} from "#/perspective_view/render_layer";
-import {
+import { ChunkState, LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
+import type { LayerView, VisibleLayerInfo } from "#src/layer/index.js";
+import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
+import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
+import type {
   RenderLayer,
   ThreeDimensionalRenderLayerAttachmentState,
-  update3dRenderLayerAttachment,
-} from "#/renderlayer";
+} from "#src/renderlayer.js";
+import { update3dRenderLayerAttachment } from "#src/renderlayer.js";
 import {
   forEachVisibleSegment,
   getObjectKey,
-} from "#/segmentation_display_state/base";
+} from "#src/segmentation_display_state/base.js";
+import type { SegmentationDisplayState3D } from "#src/segmentation_display_state/frontend.js";
 import {
   forEachVisibleSegmentToDraw,
   registerRedrawWhenSegmentationDisplayState3DChanged,
-  SegmentationDisplayState3D,
   SegmentationLayerSharedObject,
-} from "#/segmentation_display_state/frontend";
-import { SKELETON_LAYER_RPC_ID, VertexAttributeInfo } from "#/skeleton/base";
-import { SliceViewPanel } from "#/sliceview/panel";
-import {
-  SliceViewPanelRenderContext,
-  SliceViewPanelRenderLayer,
-} from "#/sliceview/renderlayer";
-import { TrackableValue, WatchableValue } from "#/trackable_value";
-import { DataType } from "#/util/data_type";
-import { RefCounted } from "#/util/disposable";
-import { mat4, vec3 } from "#/util/geom";
-import { verifyFinitePositiveFloat } from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { CompoundTrackable, Trackable } from "#/util/trackable";
-import { TrackableEnum } from "#/util/trackable_enum";
-import { Buffer } from "#/webgl/buffer";
+} from "#src/segmentation_display_state/frontend.js";
+import type { VertexAttributeInfo } from "#src/skeleton/base.js";
+import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
+import type { SliceViewPanel } from "#src/sliceview/panel.js";
+import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
+import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
+import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { vec3 } from "#src/util/geom.js";
+import { mat4 } from "#src/util/geom.js";
+import { verifyFinitePositiveFloat } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { CompoundTrackable } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
+import { Buffer } from "#src/webgl/buffer.js";
 import {
   defineCircleShader,
   drawCircles,
   initializeCircleShader,
-} from "#/webgl/circles";
-import { glsl_COLORMAPS } from "#/webgl/colormaps";
-import { GL } from "#/webgl/context";
+} from "#src/webgl/circles.js";
+import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
+import type { GL } from "#src/webgl/context.js";
+import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
   makeTrackableFragmentMain,
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
-  WatchableShaderError,
-} from "#/webgl/dynamic_shader";
+} from "#src/webgl/dynamic_shader.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
-} from "#/webgl/lines";
-import {
+} from "#src/webgl/lines.js";
+import type {
   ShaderBuilder,
   ShaderProgram,
   ShaderSamplerType,
-} from "#/webgl/shader";
+} from "#src/webgl/shader.js";
+import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
   getFallbackBuilderState,
   parseShaderUiControls,
   setControlsInShader,
-  ShaderControlsBuilderState,
   ShaderControlState,
-} from "#/webgl/shader_ui_controls";
+} from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
   getSamplerPrefixForDataType,
   OneDimensionalTextureAccessHelper,
   setOneDimensionalTextureData,
   TextureFormat,
-} from "#/webgl/texture_access";
-import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
+} from "#src/webgl/texture_access.js";
+import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const tempMat2 = mat4.create();
 
@@ -848,7 +848,7 @@ function getAttributeTextureFormats(
   return attributeTextureFormats;
 }
 
-export type SkeletonSourceOptions = {};
+export type SkeletonSourceOptions = object;
 
 export class SkeletonSource extends ChunkSource {
   private attributeTextureFormats_?: TextureFormat[];

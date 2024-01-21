@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import "./segmentation_color_mode.css";
+import "#src/widget/segmentation_color_mode.css";
 
-import svg_rotate from "ikonate/icons/rotate.svg";
-import { SegmentationUserLayer } from "#/segmentation_user_layer";
-import { observeWatchable } from "#/trackable_value";
-import { vec3 } from "#/util/geom";
-import { ColorWidget } from "#/widget/color";
-import { makeIcon } from "#/widget/icon";
-import { LayerControlFactory } from "#/widget/layer_control";
-import { colorLayerControl } from "#/widget/layer_control_color";
-import { TextInputWidget } from "#/widget/text_input";
+import svg_rotate from "ikonate/icons/rotate.svg?raw";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { observeWatchable } from "#src/trackable_value.js";
+import { vec3 } from "#src/util/geom.js";
+import type { ColorWidget } from "#src/widget/color.js";
+import { makeIcon } from "#src/widget/icon.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
+import { colorLayerControl } from "#src/widget/layer_control_color.js";
+import { TextInputWidget } from "#src/widget/text_input.js";
 
 function chooseColorMode(layer: SegmentationUserLayer, useFixedColor: boolean) {
   if (!useFixedColor) {

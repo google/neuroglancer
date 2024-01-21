@@ -23,40 +23,47 @@
  * https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
  */
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
-import {
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
+import type {
   CoordinateArray,
   CoordinateSpace,
+} from "#src/coordinate_transform.js";
+import {
   makeCoordinateSpace,
   makeIdentityTransform,
-} from "#/coordinate_transform";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
-import {
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
+import type {
   CompleteUrlOptions,
   DataSource,
-  DataSourceProvider,
   GetDataSourceOptions,
-} from "#/datasource";
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
 import {
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/n5/base";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/datasource/n5/base.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   DataType,
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
-import { Borrowed } from "#/util/disposable";
-import { completeHttpPath } from "#/util/http_path_completion";
-import { isNotFoundError, parseUrl, responseJson } from "#/util/http_request";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { completeHttpPath } from "#src/util/http_path_completion.js";
+import {
+  isNotFoundError,
+  parseUrl,
+  responseJson,
+} from "#src/util/http_request.js";
 import {
   expectArray,
   parseArray,
@@ -69,16 +76,18 @@ import {
   verifyPositiveInt,
   verifyString,
   verifyStringArray,
-} from "#/util/json";
-import { createHomogeneousScaleMatrix } from "#/util/matrix";
-import { getObjectId } from "#/util/object_id";
-import { scaleByExp10, unitFromJson } from "#/util/si_units";
+} from "#src/util/json.js";
+import { createHomogeneousScaleMatrix } from "#src/util/matrix.js";
+import { getObjectId } from "#src/util/object_id.js";
+import { scaleByExp10, unitFromJson } from "#src/util/si_units.js";
+import type {
+  SpecialProtocolCredentials,
+  SpecialProtocolCredentialsProvider,
+} from "#src/util/special_protocol_request.js";
 import {
   cancellableFetchSpecialOk,
   parseSpecialUrl,
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
+} from "#src/util/special_protocol_request.js";
 
 class N5VolumeChunkSource extends WithParameters(
   WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),

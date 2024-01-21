@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import { RefCounted, registerEventListener } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
-import { NullarySignal } from "#/util/signal";
-
-import "./context_menu.css";
+import { RefCounted, registerEventListener } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
+import { NullarySignal } from "#src/util/signal.js";
+import "#src/ui/context_menu.css";
 
 export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
   // Set the display to block before checking the offset, or the offset will be

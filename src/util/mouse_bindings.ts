@@ -18,14 +18,16 @@
  * @file Facility for triggering named actions in response to mouse events.
  */
 
-import { RefCounted } from "#/util/disposable";
-import {
+import { RefCounted } from "#src/util/disposable.js";
+import type {
   ActionEvent,
+  EventActionMapInterface,
+} from "#src/util/event_action_map.js";
+import {
   dispatchEventWithModifiers,
   EventActionMap,
-  EventActionMapInterface,
   registerActionListener,
-} from "#/util/event_action_map";
+} from "#src/util/event_action_map.js";
 
 export class MouseEventBinder<
   EventMap extends EventActionMapInterface,

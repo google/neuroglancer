@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { verifyEnumString } from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
+import { verifyEnumString } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
 
 export class TrackableEnum<T extends number> implements Trackable {
   changed = new NullarySignal();

@@ -14,49 +14,55 @@
  * limitations under the License.
  */
 
-import { Chunk, ChunkSource, withChunkManager } from "#/chunk_manager/backend";
-import { ChunkPriorityTier, ChunkState } from "#/chunk_manager/base";
 import {
+  Chunk,
+  ChunkSource,
+  withChunkManager,
+} from "#src/chunk_manager/backend.js";
+import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
+import type {
   EncodedMeshData,
   EncodedVertexPositions,
+  MeshVertexIndices,
+  MultiscaleFragmentFormat,
+} from "#src/mesh/base.js";
+import {
   FRAGMENT_SOURCE_RPC_ID,
   MESH_LAYER_RPC_ID,
-  MeshVertexIndices,
   MULTISCALE_FRAGMENT_SOURCE_RPC_ID,
   MULTISCALE_MESH_LAYER_RPC_ID,
-  MultiscaleFragmentFormat,
   VertexPositionFormat,
-} from "#/mesh/base";
+} from "#src/mesh/base.js";
+import type { MultiscaleMeshManifest } from "#src/mesh/multiscale.js";
+import { getDesiredMultiscaleMeshChunks } from "#src/mesh/multiscale.js";
+import { computeTriangleStrips } from "#src/mesh/triangle_strips.js";
+import type { PerspectiveViewBackend } from "#src/perspective_view/backend.js";
+import { PerspectiveViewRenderLayerBackend } from "#src/perspective_view/backend.js";
+import { get3dModelToDisplaySpaceMatrix } from "#src/render_coordinate_transform.js";
+import type { RenderLayerBackendAttachment } from "#src/render_layer_backend.js";
+import { withSegmentationLayerBackendState } from "#src/segmentation_display_state/backend.js";
 import {
-  getDesiredMultiscaleMeshChunks,
-  MultiscaleMeshManifest,
-} from "#/mesh/multiscale";
-import { computeTriangleStrips } from "#/mesh/triangle_strips";
-import {
-  PerspectiveViewBackend,
-  PerspectiveViewRenderLayerBackend,
-} from "#/perspective_view/backend";
-import { get3dModelToDisplaySpaceMatrix } from "#/render_coordinate_transform";
-import { RenderLayerBackendAttachment } from "#/render_layer_backend";
-import { withSegmentationLayerBackendState } from "#/segmentation_display_state/backend";
-import { getObjectKey } from "#/segmentation_display_state/base";
-import { forEachVisibleSegment } from "#/segmentation_display_state/base";
-import { CancellationToken } from "#/util/cancellation";
-import { convertEndian32, Endianness } from "#/util/endian";
-import { getFrustrumPlanes, mat4, vec3 } from "#/util/geom";
+  getObjectKey,
+  forEachVisibleSegment,
+} from "#src/segmentation_display_state/base.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { Endianness } from "#src/util/endian.js";
+import { convertEndian32 } from "#src/util/endian.js";
+import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
 import {
   verifyObject,
   verifyObjectProperty,
   verifyStringArray,
-} from "#/util/json";
-import { Uint64 } from "#/util/uint64";
-import { zorder3LessThan } from "#/util/zorder";
+} from "#src/util/json.js";
+import { Uint64 } from "#src/util/uint64.js";
+import { zorder3LessThan } from "#src/util/zorder.js";
 import {
   getBasePriority,
   getPriorityTier,
-} from "#/visibility_priority/backend";
-import { withSharedVisibility } from "#/visibility_priority/backend";
-import { registerSharedObject, RPC } from "#/worker_rpc";
+  withSharedVisibility,
+} from "#src/visibility_priority/backend.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
@@ -360,6 +366,7 @@ export function decodeTriangleVertexPositionsAndIndices(
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export interface MeshSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.
@@ -369,6 +376,7 @@ export interface MeshSource {
   ): Promise<void>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class MeshSource extends ChunkSource {
   fragmentSource: FragmentSource;
 
@@ -556,6 +564,7 @@ export class MultiscaleFragmentChunk extends Chunk {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export interface MultiscaleMeshSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.
@@ -565,6 +574,7 @@ export interface MultiscaleMeshSource {
   ): Promise<void>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class MultiscaleMeshSource extends ChunkSource {
   fragmentSource: MultiscaleFragmentSource;
   format: MultiscaleFragmentFormat;

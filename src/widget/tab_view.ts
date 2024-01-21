@@ -18,18 +18,19 @@
  * @file Tabbed view widget.
  */
 
-import "#/widget/tab_view.css";
+import "#src/widget/tab_view.css";
 
-import {
+import type {
   WatchableValueChangeInterface,
   WatchableValueInterface,
-} from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { Owned, RefCounted } from "#/util/disposable";
-import { removeChildren, removeFromParent } from "#/util/dom";
-import { NullarySignal, Signal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
+} from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren, removeFromParent } from "#src/util/dom.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 
 export class Tab extends RefCounted {
   element = document.createElement("div");
@@ -146,6 +147,7 @@ export class OptionSpecification<T> extends RefCounted implements Trackable {
     if (value !== this.ready_) {
       this.ready_ = value;
       if (value) {
+        // eslint-disable-next-line no-self-assign
         this.value = this.value;
       }
       this.changed.dispatch();

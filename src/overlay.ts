@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-import { AutomaticallyFocusedElement } from "#/util/automatic_focus";
-import { RefCounted } from "#/util/disposable";
-import { EventActionMap, KeyboardEventBinder } from "#/util/keyboard_bindings";
+import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
+import { RefCounted } from "#src/util/disposable.js";
+import {
+  EventActionMap,
+  KeyboardEventBinder,
+} from "#src/util/keyboard_bindings.js";
+import "#src/overlay.css";
 
 export const overlayKeyboardHandlerPriority = 100;
-
-import "./overlay.css";
 
 export let overlaysOpen = 0;
 

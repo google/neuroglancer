@@ -14,19 +14,16 @@
  * limitations under the License.
  */
 
-import "./annotation_tool_status.css";
+import "#src/widget/annotation_tool_status.css";
 
-import { SelectedLayerState, UserLayer } from "#/layer";
-import {
-  addToolKeyBindHandlers,
-  Tool,
-  GlobalToolBinder,
-  LegacyTool,
-} from "#/ui/tool";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { RefCounted } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
-import { defaultStringCompare } from "#/util/string";
+import type { SelectedLayerState } from "#src/layer/index.js";
+import { UserLayer } from "#src/layer/index.js";
+import type { GlobalToolBinder } from "#src/ui/tool.js";
+import { addToolKeyBindHandlers, Tool, LegacyTool } from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import { defaultStringCompare } from "#src/util/string.js";
 
 export class AnnotationToolStatusWidget extends RefCounted {
   element = document.createElement("div");

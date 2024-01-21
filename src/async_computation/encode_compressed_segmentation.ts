@@ -17,11 +17,11 @@
 import {
   encodeCompressedSegmentationUint32,
   encodeCompressedSegmentationUint64,
-} from "#/async_computation/encode_compressed_segmentation_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
-import { encodeChannels as encodeChannelsUint32 } from "#/sliceview/compressed_segmentation/encode_uint32";
-import { encodeChannels as encodeChannelsUint64 } from "#/sliceview/compressed_segmentation/encode_uint64";
-import { Uint32ArrayBuilder } from "#/util/uint32array_builder";
+} from "#src/async_computation/encode_compressed_segmentation_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { encodeChannels as encodeChannelsUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
+import { encodeChannels as encodeChannelsUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
+import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 const tempBuffer = new Uint32ArrayBuilder(20000);
 

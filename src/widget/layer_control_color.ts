@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import { UserLayer } from "#/layer";
-import { WatchableValueInterface } from "#/trackable_value";
-import { ActionEvent, EventActionMap } from "#/util/event_action_map";
-import { vec3 } from "#/util/geom";
-import { ColorWidget } from "#/widget/color";
-import { LayerControlFactory } from "#/widget/layer_control";
+import type { UserLayer } from "#src/layer/index.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import type { vec3 } from "#src/util/geom.js";
+import { ColorWidget } from "#src/widget/color.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift+wheel": { action: "adjust-hue-via-wheel" },

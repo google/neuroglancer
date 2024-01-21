@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import { CoordinateSpaceCombiner } from "#/coordinate_transform";
-import { UserLayer } from "#/layer";
-import { Position } from "#/navigation_state";
-import { WatchableValueInterface } from "#/trackable_value";
-import { arraysEqual } from "#/util/array";
-import { DataType } from "#/util/data_type";
-import { HistogramSpecifications } from "#/webgl/empirical_cdf";
-import { ImageInvlerpParameters } from "#/webgl/shader_ui_controls";
-import { activateInvlerpTool, InvlerpWidget } from "#/widget/invlerp";
-import { LayerControlFactory } from "#/widget/layer_control";
-import { PositionWidget } from "#/widget/position_widget";
-import { LegendShaderOptions } from "#/widget/shader_controls";
+import type { CoordinateSpaceCombiner } from "#src/coordinate_transform.js";
+import type { UserLayer } from "#src/layer/index.js";
+import { Position } from "#src/navigation_state.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { arraysEqual } from "#src/util/array.js";
+import type { DataType } from "#src/util/data_type.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import type { ImageInvlerpParameters } from "#src/webgl/shader_ui_controls.js";
+import { activateInvlerpTool, InvlerpWidget } from "#src/widget/invlerp.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
+import { PositionWidget } from "#src/widget/position_widget.js";
+import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 
 export function channelInvlerpLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => {

@@ -29,13 +29,13 @@
  *
  */
 
+import type { mat4 } from "#src/util/geom.js";
 import {
-  mat4,
   transformVectorByMat4Transpose,
   vec3,
   vec3Key,
-} from "#/util/geom";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
+} from "#src/util/geom.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#/datasource/default_provider";
-import { ObjDataSource } from "#/datasource/obj/frontend";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { ObjDataSource } from "#src/datasource/obj/frontend.js";
 
 registerProvider("obj", () => new ObjDataSource());

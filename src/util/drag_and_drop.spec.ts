@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   encodeParametersAsDragType,
   decodeParametersFromDragType,
-} from "#/util/drag_and_drop";
+} from "#src/util/drag_and_drop.js";
 
 describe("drag_and_drop", () => {
   const prefix = "my-prefix\0";

@@ -14,26 +14,28 @@
  * limitations under the License.
  */
 
-import { decodeBlosc } from "#/async_computation/decode_blosc_request";
-import { decodeZstd } from "#/async_computation/decode_zstd_request";
-import { decodeGzip } from "#/async_computation/decode_gzip_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { WithParameters } from "#/chunk_manager/backend";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
+import { decodeBlosc } from "#src/async_computation/decode_blosc_request.js";
+import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
+import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import {
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/n5/base";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { Endianness } from "#/util/endian";
-import { isNotFoundError, responseArrayBuffer } from "#/util/http_request";
+} from "#src/datasource/n5/base.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { Endianness } from "#src/util/endian.js";
 import {
-  cancellableFetchSpecialOk,
-  SpecialProtocolCredentials,
-} from "#/util/special_protocol_request";
-import { registerSharedObject } from "#/worker_rpc";
+  isNotFoundError,
+  responseArrayBuffer,
+} from "#src/util/http_request.js";
+import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 async function decodeChunk(
   chunk: VolumeChunk,

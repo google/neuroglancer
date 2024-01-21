@@ -14,47 +14,48 @@
  * limitations under the License.
  */
 
+import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import {
   Chunk,
-  ChunkManager,
   ChunkSource,
   withChunkManager,
   WithParameters,
-} from "#/chunk_manager/backend";
-import { ChunkPriorityTier } from "#/chunk_manager/base";
-import { PriorityGetter } from "#/chunk_manager/generic_file_source";
-import {
-  SharedCredentialsProviderCounterpart,
-  WithSharedCredentialsProviderCounterpart,
-} from "#/credentials_provider/shared_counterpart";
-import { computeVertexNormals } from "#/mesh/backend";
+} from "#src/chunk_manager/backend.js";
+import { ChunkPriorityTier } from "#src/chunk_manager/base.js";
+import type { PriorityGetter } from "#src/chunk_manager/generic_file_source.js";
+import type { SharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import { computeVertexNormals } from "#src/mesh/backend.js";
+import type {
+  SingleMeshData,
+  SingleMeshInfo,
+  SingleMeshSourceParameters,
+  VertexAttributeInfo,
+} from "#src/single_mesh/base.js";
 import {
   GET_SINGLE_MESH_INFO_RPC_ID,
   SINGLE_MESH_CHUNK_KEY,
   SINGLE_MESH_LAYER_RPC_ID,
-  SingleMeshData,
-  SingleMeshInfo,
-  SingleMeshSourceParameters,
   SingleMeshSourceParametersWithInfo,
-  VertexAttributeInfo,
-} from "#/single_mesh/base";
-import { TypedArray } from "#/util/array";
-import { CancellationToken } from "#/util/cancellation";
-import { stableStringify } from "#/util/json";
-import { SpecialProtocolCredentials } from "#/util/special_protocol_request";
-import { SpecialProtocolCredentialsProvider } from "#/util/special_protocol_request";
+} from "#src/single_mesh/base.js";
+import type { TypedArray } from "#src/util/array.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { stableStringify } from "#src/util/json.js";
+import type {
+  SpecialProtocolCredentials,
+  SpecialProtocolCredentialsProvider,
+} from "#src/util/special_protocol_request.js";
 import {
   getBasePriority,
   getPriorityTier,
   withSharedVisibility,
-} from "#/visibility_priority/backend";
+} from "#src/visibility_priority/backend.js";
+import type { RPC, RPCPromise } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,
   registerSharedObject,
-  RPC,
-  RPCPromise,
   SharedObjectCounterpart,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 const SINGLE_MESH_CHUNK_PRIORITY = 50;
 

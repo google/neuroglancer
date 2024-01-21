@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#/util/uint64";
+import type { Uint64 } from "#src/util/uint64.js";
 
 /**
  * This is a very simple string hash function.  It isn't secure, but

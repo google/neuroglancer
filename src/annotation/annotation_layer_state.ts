@@ -14,42 +14,44 @@
  * limitations under the License.
  */
 
-import {
+import type { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
+import type {
   AnnotationPropertySpec,
   AnnotationSource,
-  propertyTypeDataType,
-} from "#/annotation";
-import { MultiscaleAnnotationSource } from "#/annotation/frontend_source";
-import { LayerDataSource } from "#/layer_data_source";
-import {
+} from "#src/annotation/index.js";
+import { propertyTypeDataType } from "#src/annotation/index.js";
+import type { LayerDataSource } from "#src/layer/layer_data_source.js";
+import type {
   ChunkTransformParameters,
-  getChunkTransformParameters,
   RenderLayerTransformOrError,
-} from "#/render_coordinate_transform";
-import { RenderLayerRole } from "#/renderlayer";
-import { SegmentationDisplayState } from "#/segmentation_display_state/frontend";
-import { TrackableBoolean } from "#/trackable_boolean";
+} from "#src/render_coordinate_transform.js";
+import { getChunkTransformParameters } from "#src/render_coordinate_transform.js";
+import { RenderLayerRole } from "#src/renderlayer.js";
+import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedLazyDerivedWatchableValue,
   registerNested,
   WatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { TrackableRGB } from "#/util/color";
-import { Owned, RefCounted } from "#/util/disposable";
-import { makeValueOrError, ValueOrError, valueOrThrow } from "#/util/error";
-import { vec3 } from "#/util/geom";
-import { WatchableMap } from "#/util/watchable_map";
+} from "#src/trackable_value.js";
+import { TrackableRGB } from "#src/util/color.js";
+import type { DataType } from "#src/util/data_type.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { ValueOrError } from "#src/util/error.js";
+import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
+import { vec3 } from "#src/util/geom.js";
+import { WatchableMap } from "#src/util/watchable_map.js";
 import {
   makeTrackableFragmentMain,
   makeWatchableShaderError,
-} from "#/webgl/dynamic_shader";
+} from "#src/webgl/dynamic_shader.js";
 import {
   getFallbackBuilderState,
   parseShaderUiControls,
   ShaderControlState,
-} from "#/webgl/shader_ui_controls";
-import { DataType } from "../util/data_type";
+} from "#src/webgl/shader_ui_controls.js";
 
 export class AnnotationHoverState extends WatchableValue<
   | {

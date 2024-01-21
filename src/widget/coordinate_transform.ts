@@ -18,14 +18,17 @@
  * @file Coordinate space transform editor widget.
  */
 
-import "./coordinate_transform.css";
+import "#src/widget/coordinate_transform.css";
 
-import svg_updateArrow from "ikonate/icons/arrow-up.svg";
-import svg_plus from "ikonate/icons/plus.svg";
-import {
+import svg_updateArrow from "ikonate/icons/arrow-up.svg?raw";
+import svg_plus from "ikonate/icons/plus.svg?raw";
+import type {
   CoordinateSpace,
   CoordinateSpaceCombiner,
   CoordinateSpaceTransform,
+  WatchableCoordinateSpaceTransform,
+} from "#src/coordinate_transform.js";
+import {
   coordinateSpaceTransformsEquivalent,
   extendTransformedBoundingBoxUpToRank,
   getDefaultInputScale,
@@ -38,26 +41,25 @@ import {
   newDimensionId,
   permuteCoordinateSpace,
   validateDimensionNames,
-  WatchableCoordinateSpaceTransform,
-} from "#/coordinate_transform";
-import { WatchableValueInterface } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { arraysEqual } from "#/util/array";
-import { RefCounted } from "#/util/disposable";
-import { removeChildren, removeFromParent } from "#/util/dom";
+} from "#src/coordinate_transform.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { arraysEqual } from "#src/util/array.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren, removeFromParent } from "#src/util/dom.js";
+import type { ActionEvent } from "#src/util/keyboard_bindings.js";
 import {
-  ActionEvent,
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
+} from "#src/util/keyboard_bindings.js";
 import {
   createIdentity,
   extendHomogeneousTransform,
   isIdentity,
-} from "#/util/matrix";
-import { EventActionMap, MouseEventBinder } from "#/util/mouse_bindings";
-import { formatScaleWithUnitAsString, parseScale } from "#/util/si_units";
-import { makeIcon } from "#/widget/icon";
+} from "#src/util/matrix.js";
+import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 function updateInputFieldWidth(
   element: HTMLInputElement,

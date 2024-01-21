@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#/datasource/default_provider";
-import { VtkDataSource } from "#/datasource/vtk/frontend";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { VtkDataSource } from "#src/datasource/vtk/frontend.js";
 
 registerProvider("vtk", () => new VtkDataSource());

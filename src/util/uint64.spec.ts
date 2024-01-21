@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#/util/uint64";
+import { describe, it, expect } from "vitest";
+import { Uint64 } from "#src/util/uint64.js";
 
 describe("uint64", () => {
   it("less", () => {
@@ -80,16 +81,15 @@ describe("uint64", () => {
     expect(temp.tryParseString("1")).toBe(true);
   });
 
-  it("parseString toString round trip", () => {
+  describe("parseString toString round trip", () => {
     function check(s: string, base: number) {
       const x = Uint64.parseString(s, base);
-      expect(x.valid()).toBe(
-        true,
-        `low=${x.low}, high=${x.high}, toString(${base}) = ${x.toString(
-          base,
-        )}, s=${s}`,
-      );
-      expect(x.toString(base)).toEqual(s);
+      it(`low=${x.low}, high=${x.high}, toString(${base}) = ${x.toString(
+        base,
+      )}, s=${s}`, () => {
+        expect(x.valid()).toBe(true);
+        expect(x.toString(base)).toEqual(s);
+      });
     }
     check("0", 10);
     check("1", 10);
@@ -98,18 +98,13 @@ describe("uint64", () => {
     check("3w5e11264sgsf", 36);
   });
 
-  it("toString parseString round trip", () => {
+  describe("toString parseString round trip", () => {
     function check(x: Uint64, base: number) {
       const s = x.toString(base);
       const y = Uint64.parseString(s, base);
-      expect(y.low).toBe(
-        x.low,
-        `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`,
-      );
-      expect(y.high).toBe(
-        x.high,
-        `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`,
-      );
+      it(`s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`, () => {
+        expect([y.low, y.high]).toEqual([x.low, x.high]);
+      });
     }
     const count = 100;
     {

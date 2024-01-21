@@ -40,6 +40,7 @@ export class Signal<Callable extends Function = () => void> {
     this.dispatch = <Callable>(<Function>function (this: any) {
       ++obj.count;
       obj.handlers.forEach((handler) => {
+        // eslint-disable-next-line prefer-rest-params
         handler.apply(this, arguments);
       });
     });

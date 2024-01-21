@@ -17,18 +17,23 @@
 import {
   CredentialsProvider,
   makeCredentialsGetter,
-} from "#/credentials_provider";
-import { StatusMessage } from "#/status";
+} from "#src/credentials_provider/index.js";
+import { StatusMessage } from "#src/status.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 import {
   CANCELED,
-  CancellationToken,
   CancellationTokenSource,
   uncancelableToken,
-} from "#/util/cancellation";
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
-import { verifyObject, verifyObjectProperty, verifyString } from "#/util/json";
-import { getRandomHexString } from "#/util/random";
+} from "#src/util/cancellation.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
+import redirectUrl from "#src/util/google_oauth2_redirect.html?url";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
+import { getRandomHexString } from "#src/util/random.js";
 
 export const EMAIL_SCOPE = "email";
 export const OPENID_SCOPE = "openid";
@@ -128,10 +133,11 @@ function makeAuthRequestUrl(options: {
   immediate?: boolean;
 }) {
   let url = `${AUTH_SERVER}?client_id=${encodeURIComponent(options.clientId)}`;
-  const redirectUri = new URL(
-    "google_oauth2_redirect.html",
-    window.location.href,
-  ).href;
+  const redirectUri = new URL(redirectUrl, import.meta.url).href.replace(
+    /\?.*$/,
+    "",
+  );
+
   url += `&redirect_uri=${redirectUri}`;
   let responseType = "token";
   const { scopes } = options;
@@ -218,7 +224,9 @@ export async function authenticateGoogleOAuth2(
       cleanup = () => {
         try {
           newWindow.close();
-        } catch {}
+        } catch {
+          // Ignore error closing window.
+        }
       };
     }
   }

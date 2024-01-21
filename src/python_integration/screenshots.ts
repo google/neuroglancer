@@ -14,22 +14,21 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import throttle from "lodash/throttle";
-import { numChunkStatistics } from "#/chunk_manager/base";
-import { TrackableValue } from "#/trackable_value";
+import { debounce, throttle } from "lodash-es";
+import { numChunkStatistics } from "#src/chunk_manager/base.js";
+import { TrackableValue } from "#src/trackable_value.js";
 import {
   columnSpecifications,
   getChunkSourceIdentifier,
   getFormattedNames,
-} from "#/ui/statistics";
-import { toBase64 } from "#/util/base64";
-import { RefCounted } from "#/util/disposable";
-import { convertEndian32, Endianness } from "#/util/endian";
-import { verifyOptionalString } from "#/util/json";
-import { Signal } from "#/util/signal";
-import { getCachedJson } from "#/util/trackable";
-import { Viewer } from "#/viewer";
+} from "#src/ui/statistics.js";
+import { toBase64 } from "#src/util/base64.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { convertEndian32, Endianness } from "#src/util/endian.js";
+import { verifyOptionalString } from "#src/util/json.js";
+import { Signal } from "#src/util/signal.js";
+import { getCachedJson } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 export class ScreenshotHandler extends RefCounted {
   sendScreenshotRequested = new Signal<(state: any) => void>();
@@ -115,20 +114,6 @@ export class ScreenshotHandler extends RefCounted {
     );
   }
 
-  private isReady() {
-    const { viewer } = this;
-    viewer.chunkQueueManager.flushPendingChunkUpdates();
-    if (!viewer.display.isReady()) {
-      return false;
-    }
-    for (const layer of viewer.layerManager.managedLayers) {
-      if (!layer.isReady()) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   private async maybeSendScreenshot() {
     const requestState = this.requestState.value;
     const { previousRequest } = this;
@@ -139,7 +124,7 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    if (!this.isReady()) {
+    if (!viewer.isReady()) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;

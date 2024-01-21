@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { CancellationToken } from "#/util/cancellation";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 export interface ByteRange {
   offset: number;

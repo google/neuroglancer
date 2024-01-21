@@ -15,76 +15,81 @@
  */
 
 import {
-  AnnotationType,
-  makeDataBoundsBoundingBoxAnnotationSet,
-} from "#/annotation";
-import {
   AnnotationGeometryChunkSource,
   MultiscaleAnnotationSource,
-} from "#/annotation/frontend_source";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
+} from "#src/annotation/frontend_source.js";
 import {
+  AnnotationType,
+  makeDataBoundsBoundingBoxAnnotationSet,
+} from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
+import type {
   BoundingBox,
   CoordinateSpace,
+} from "#src/coordinate_transform.js";
+import {
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import { CredentialsProvider } from "#/credentials_provider";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
-import {
-  CompleteUrlOptions,
-  DataSource,
-  DataSourceProvider,
-  GetDataSourceOptions,
-} from "#/datasource";
-import {
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type {
   BrainmapsCredentialsProvider,
   BrainmapsInstance,
-  makeRequest,
   OAuth2Credentials,
-} from "#/datasource/brainmaps/api";
+} from "#src/datasource/brainmaps/api.js";
+import { makeRequest } from "#src/datasource/brainmaps/api.js";
+import type {
+  ChangeSpec,
+  MultiscaleMeshInfo,
+  SingleMeshInfo,
+} from "#src/datasource/brainmaps/base.js";
 import {
   AnnotationSourceParameters,
   AnnotationSpatialIndexSourceParameters,
-  ChangeSpec,
   MeshSourceParameters,
-  MultiscaleMeshInfo,
   MultiscaleMeshSourceParameters,
-  SingleMeshInfo,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeSourceParameters,
-} from "#/datasource/brainmaps/base";
-import { VertexPositionFormat } from "#/mesh/base";
-import { MeshSource, MultiscaleMeshSource } from "#/mesh/frontend";
-import { SkeletonSource } from "#/skeleton/frontend";
+} from "#src/datasource/brainmaps/base.js";
+import type {
+  CompleteUrlOptions,
+  DataSource,
+  GetDataSourceOptions,
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
+import { VertexPositionFormat } from "#src/mesh/base.js";
+import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
+import { SkeletonSource } from "#src/skeleton/frontend.js";
 import {
   ChunkLayoutPreference,
   makeSliceViewChunkSpecification,
-} from "#/sliceview/base";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/sliceview/base.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   DataType,
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { StatusMessage } from "#/status";
-import { transposeNestedArrays } from "#/util/array";
+} from "#src/sliceview/volume/frontend.js";
+import { StatusMessage } from "#src/status.js";
+import { transposeNestedArrays } from "#src/util/array.js";
+import type { CompletionWithDescription } from "#src/util/completion.js";
 import {
   applyCompletionOffset,
   completeQueryStringParametersFromTable,
-  CompletionWithDescription,
   getPrefixMatches,
   getPrefixMatchesWithDescriptions,
-} from "#/util/completion";
-import { Borrowed, Owned } from "#/util/disposable";
-import { mat4, vec3 } from "#/util/geom";
+} from "#src/util/completion.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 import {
   parseArray,
   parseQueryStringParameters,
@@ -100,9 +105,9 @@ import {
   verifyOptionalString,
   verifyPositiveInt,
   verifyString,
-} from "#/util/json";
-import { getObjectId } from "#/util/object_id";
-import { defaultStringCompare } from "#/util/string";
+} from "#src/util/json.js";
+import { getObjectId } from "#src/util/object_id.js";
+import { defaultStringCompare } from "#src/util/string.js";
 
 class BrainmapsVolumeChunkSource extends WithParameters(
   WithCredentialsProvider<OAuth2Credentials>()(VolumeChunkSource),
@@ -561,7 +566,7 @@ export function parseVolumeKey(key: string): {
   parameters: any;
 } {
   const match = key.match(
-    /^([^:?\/]+:[^:?\/]+:[^:?\/]+)(?::([^:?\/]+))?(?:\/([^?]+))?(?:\?(.*))?$/,
+    /^([^:?/]+:[^:?/]+:[^:?/]+)(?::([^:?/]+))?(?:\/([^?]+))?(?:\?(.*))?$/,
   );
   if (match === null) {
     throw new Error(`Invalid Brain Maps volume key: ${JSON.stringify(key)}.`);
@@ -1117,7 +1122,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
   async completeUrl(options: CompleteUrlOptions) {
     const { providerUrl } = options;
     const m = providerUrl.match(
-      /^([^:\/?]*)(?::([^:\/?]*)(?::([^:\/?]*)(?::([^:\/?]*))?(?:\/([^?]*))?(?:\?(.*))?)?)?$/,
+      /^([^:/?]*)(?::([^:/?]*)(?::([^:/?]*)(?::([^:/?]*))?(?:\/([^?]*))?(?:\?(.*))?)?)?$/,
     );
     if (m === null) throw null;
     const [, project, dataset, volume, changestack, meshName, query] = m;

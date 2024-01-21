@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import svg_maximize from "ikonate/icons/maximise.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_maximize from "ikonate/icons/maximise.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeMaximizeButton(options: MakeIconOptions = {}) {
   return makeIcon({ svg: svg_maximize, ...options });

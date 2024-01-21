@@ -19,34 +19,36 @@
  * Sets up the Python-integrated neuroglancer viewer.
  */
 
-import debounce from "lodash/debounce";
-import { CachingCredentialsManager } from "#/credentials_provider";
-import { getDefaultDataSourceProvider } from "#/datasource/default_provider";
-import { PythonDataSource } from "#/datasource/python/frontend";
+import { debounce } from "lodash-es";
+import { CachingCredentialsManager } from "#src/credentials_provider/index.js";
+import { getDefaultDataSourceProvider } from "#src/datasource/default_provider.js";
+import { PythonDataSource } from "#src/datasource/python/frontend.js";
 import {
   Client,
   ClientStateReceiver,
   ClientStateSynchronizer,
-} from "#/python_integration/api";
-import { PythonCredentialsManager } from "#/python_integration/credentials_provider";
-import { TrackableBasedEventActionMap } from "#/python_integration/event_action_map";
-import { PrefetchManager } from "#/python_integration/prefetch";
-import { RemoteActionHandler } from "#/python_integration/remote_actions";
-import { TrackableBasedStatusMessages } from "#/python_integration/remote_status_messages";
-import { ScreenshotHandler } from "#/python_integration/screenshots";
-import { VolumeRequestHandler } from "#/python_integration/volume";
-import { TrackableValue } from "#/trackable_value";
+} from "#src/python_integration/api.js";
+import { PythonCredentialsManager } from "#src/python_integration/credentials_provider.js";
+import { TrackableBasedEventActionMap } from "#src/python_integration/event_action_map.js";
+import { PrefetchManager } from "#src/python_integration/prefetch.js";
+import { RemoteActionHandler } from "#src/python_integration/remote_actions.js";
+import { TrackableBasedStatusMessages } from "#src/python_integration/remote_status_messages.js";
+import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
+import { VolumeRequestHandler } from "#src/python_integration/volume.js";
+import { TrackableValue } from "#src/trackable_value.js";
 import {
   bindDefaultCopyHandler,
   bindDefaultPasteHandler,
-} from "#/ui/default_clipboard_handling";
-import { setDefaultInputEventBindings } from "#/ui/default_input_event_bindings";
-import { makeDefaultViewer } from "#/ui/default_viewer";
-import { bindTitle } from "#/ui/title";
-import { UrlHashBinding } from "#/ui/url_hash_binding";
-import { parseFixedLengthArray, verifyInt } from "#/util/json";
-import { CompoundTrackable, Trackable } from "#/util/trackable";
-import { InputEventBindings, VIEWER_UI_CONFIG_OPTIONS } from "#/viewer";
+} from "#src/ui/default_clipboard_handling.js";
+import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
+import { makeDefaultViewer } from "#src/ui/default_viewer.js";
+import { bindTitle } from "#src/ui/title.js";
+import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
+import { parseFixedLengthArray, verifyInt } from "#src/util/json.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { CompoundTrackable } from "#src/util/trackable.js";
+import type { InputEventBindings } from "#src/viewer.js";
+import { VIEWER_UI_CONFIG_OPTIONS } from "#src/viewer.js";
 
 function makeTrackableBasedEventActionMaps(
   inputEventBindings: InputEventBindings,

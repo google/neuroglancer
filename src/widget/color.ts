@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { parseRGBColorSpecification, serializeColor } from "#/util/color";
-import { hsvToRgb, rgbToHsv } from "#/util/colorspace";
-import { RefCounted } from "#/util/disposable";
-import { vec3 } from "#/util/geom";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { parseRGBColorSpecification, serializeColor } from "#src/util/color.js";
+import { hsvToRgb, rgbToHsv } from "#src/util/colorspace.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { vec3 } from "#src/util/geom.js";
 
 export class ColorWidget<
   Color extends vec3 | undefined = vec3,

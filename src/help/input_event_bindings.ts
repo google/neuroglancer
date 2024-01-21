@@ -14,20 +14,21 @@
  * limitations under the License.
  */
 
-import "./input_event_bindings.css";
-
-import { LayerManager, UserLayer } from "#/layer";
-import { SidePanel, SidePanelManager } from "#/ui/side_panel";
+import "#src/help/input_event_bindings.css";
+import type { LayerManager } from "#src/layer/index.js";
+import { UserLayer } from "#src/layer/index.js";
+import type { SidePanelManager } from "#src/ui/side_panel.js";
+import { SidePanel } from "#src/ui/side_panel.js";
+import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
 import {
   DEFAULT_SIDE_PANEL_LOCATION,
-  SidePanelLocation,
   TrackableSidePanelLocation,
-} from "#/ui/side_panel_location";
-import { GlobalToolBinder } from "#/ui/tool";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { removeChildren } from "#/util/dom";
-import { EventActionMap } from "#/util/event_action_map";
-import { emptyToUndefined } from "#/util/json";
+} from "#src/ui/side_panel_location.js";
+import type { GlobalToolBinder } from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { removeChildren } from "#src/util/dom.js";
+import type { EventActionMap } from "#src/util/event_action_map.js";
+import { emptyToUndefined } from "#src/util/json.js";
 
 declare let NEUROGLANCER_BUILD_INFO:
   | { tag: string; url?: string; timestamp?: string }

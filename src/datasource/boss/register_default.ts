@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { BossDataSource } from "#/datasource/boss/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+import { BossDataSource } from "#src/datasource/boss/frontend.js";
+import { registerProvider } from "#src/datasource/default_provider.js";
 
 registerProvider(
   "boss",

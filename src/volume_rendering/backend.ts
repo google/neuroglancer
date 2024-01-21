@@ -14,33 +14,34 @@
  * limitations under the License.
  */
 
-import { withChunkManager } from "#/chunk_manager/backend";
-import { ChunkState } from "#/chunk_manager/base";
-import { DisplayDimensionRenderInfo } from "#/navigation_state";
-import {
+import { withChunkManager } from "#src/chunk_manager/backend.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import type {
   RenderedViewBackend,
-  RenderLayerBackend,
   RenderLayerBackendAttachment,
-} from "#/render_layer_backend";
-import { SharedWatchableValue } from "#/shared_watchable_value";
+} from "#src/render_layer_backend.js";
+import { RenderLayerBackend } from "#src/render_layer_backend.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import {
   BASE_PRIORITY,
   deserializeTransformedSources,
   SCALE_PRIORITY_MULTIPLIER,
-} from "#/sliceview/backend";
-import { TransformedSource } from "#/sliceview/base";
-import { VolumeChunkSource } from "#/sliceview/volume/backend";
-import { vec3 } from "#/util/geom";
+} from "#src/sliceview/backend.js";
+import type { TransformedSource } from "#src/sliceview/base.js";
+import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { vec3 } from "#src/util/geom.js";
 import {
   getBasePriority,
   getPriorityTier,
-} from "#/visibility_priority/backend";
+} from "#src/visibility_priority/backend.js";
 import {
   forEachVisibleVolumeRenderingChunk,
   VOLUME_RENDERING_RENDER_LAYER_RPC_ID,
   VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
-} from "#/volume_rendering/base";
-import { registerRPC, registerSharedObject, RPC } from "#/worker_rpc";
+} from "#src/volume_rendering/base.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { registerRPC, registerSharedObject } from "#src/worker_rpc.js";
 
 interface VolumeRenderingRenderLayerAttachmentState {
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;
@@ -148,7 +149,6 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager(
         transformedSources[0],
         (tsource, scaleIndex) => {
           const { chunkLayout } = tsource;
-          for (let i = 0; i < 3; ++i) {}
           chunkLayout.globalToLocalSpatial(localCenter, centerDataPosition);
           const { size, finiteRank } = chunkLayout;
           vec3.copy(chunkSize, size);

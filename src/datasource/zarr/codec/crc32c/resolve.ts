@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { CodecKind } from "#/datasource/zarr/codec";
-import { registerCodec } from "#/datasource/zarr/codec/resolve";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import { registerCodec } from "#src/datasource/zarr/codec/resolve.js";
 
-export type Configuration = {};
+export type Configuration = object;
 
 registerCodec({
   name: "crc32c",

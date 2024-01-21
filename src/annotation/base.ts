@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
-import { ProjectionParameters } from "#/projection_parameters";
-import {
-  forEachVisibleVolumetricChunk,
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import type {
   MultiscaleVolumetricDataRenderLayer,
   SliceViewChunkSource,
   SliceViewChunkSpecification,
   TransformedSource,
-} from "#/sliceview/base";
-import { getViewFrustrumVolume, mat3, mat3FromMat4, prod3 } from "#/util/geom";
+} from "#src/sliceview/base.js";
+import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
+import {
+  getViewFrustrumVolume,
+  mat3,
+  mat3FromMat4,
+  prod3,
+} from "#src/util/geom.js";
 
 export const ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID =
   "annotation.MetadataChunkSource";

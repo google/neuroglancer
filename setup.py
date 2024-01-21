@@ -5,9 +5,9 @@
 # distutils.
 import atexit
 import os
+import pathlib
 import platform
 import shutil
-import subprocess
 import tempfile
 
 import setuptools
@@ -25,19 +25,6 @@ src_dir = os.path.join(python_dir, "ext", "src")
 openmesh_dir = os.path.join(
     python_dir, "ext", "third_party", "openmesh", "OpenMesh", "src"
 )
-
-CLIENT_FILES = [
-    "index.html",
-    "main.bundle.js",
-    "main.bundle.css",
-    "main.bundle.js.map",
-    "main.bundle.css.map",
-    "chunk_worker.bundle.js",
-    "chunk_worker.bundle.js.map",
-    "async_computation.bundle.js",
-    "async_computation.bundle.js.map",
-]
-
 
 _SETUP_REQUIRES = [
     "setuptools_scm>=4.1.2",
@@ -150,7 +137,7 @@ class BundleClientCommand(
         (
             "skip-rebuild",
             None,
-            "Skip rebuilding if the `python/neuroglancer/static/index.html` file already exists.",
+            "Skip rebuilding if the `python/neuroglancer/static/client/index.html` file already exists.",
         ),
     ]
 
@@ -178,17 +165,28 @@ class BundleClientCommand(
         if self.skip_rebuild is None:
             self.skip_rebuild = self.build_bundle_inplace
 
-    def get_outputs(self):
-        if self.editable_mode or self.build_bundle_inplace:
-            return []
-        build_lib = self.build_lib
-        return [f"{build_lib}/{f}" for f in self._get_bundle_files()]
+    def _get_inplace_client_dir(self):
+        return os.path.join(python_dir, "neuroglancer", "static", "client")
 
-    def _get_bundle_files(self):
-        return [f"neuroglancer/static/{f}" for f in CLIENT_FILES]
+    def _get_client_output_dir(self):
+        if self.build_bundle_inplace:
+            output_base_dir = python_dir
+        else:
+            output_base_dir = self.build_lib
+
+        return os.path.join(output_base_dir, "neuroglancer", "static", "client")
+
+    def get_outputs(self):
+        return [str(p) for p in pathlib.Path(self._get_client_output_dir()).rglob("*")]
 
     def get_source_files(self):
-        return []
+        if not self.build_bundle_inplace:
+            return []
+        source_files = [
+            str(p.relative_to(root_dir))
+            for p in pathlib.Path(self._get_inplace_client_dir()).rglob("*")
+        ]
+        return source_files
 
     def get_output_mapping(self):
         return {}
@@ -203,17 +201,13 @@ class BundleClientCommand(
         # bundled files will.
         if not _PACKAGE_JSON_EXISTS:
             print("Skipping build of client bundle because package.json does not exist")
-            for dest, source in self.get_output_mapping().items():
-                if dest != source:
-                    shutil.copyfile(source, dest)
+            if not self.build_bundle_inplace:
+                shutil.copytree(
+                    self._get_inplace_client_dir(), self._get_client_output_dir()
+                )
             return
 
-        if inplace:
-            output_base_dir = python_dir
-        else:
-            output_base_dir = self.build_lib
-
-        output_dir = os.path.join(output_base_dir, "neuroglancer", "static")
+        output_dir = self._get_client_output_dir()
 
         if self.skip_rebuild and inplace:
             html_path = os.path.join(output_dir, "index.html")
@@ -227,26 +221,17 @@ class BundleClientCommand(
 
         target = {"min": "build-python-min", "dev": "build-python-dev"}
 
-        try:
-            t = target[self.client_bundle_type]
-            node_modules_path = os.path.join(root_dir, "node_modules")
-            if self.skip_npm_reinstall and os.path.exists(node_modules_path):
-                print(
-                    f"Skipping `npm install` since {node_modules_path} already exists"
-                )
-            else:
-                subprocess.call("npm i", shell=True, cwd=root_dir)
-            res = subprocess.call(
-                f"npm run {t} -- --output={output_dir}", shell=True, cwd=root_dir
-            )
-        except Exception:
-            raise RuntimeError(
-                "Could not run 'npm run %s'. Make sure node.js >= v12 is installed and in your path."
-                % t
-            )
+        t = target[self.client_bundle_type]
+        node_modules_path = os.path.join(root_dir, "node_modules")
+        if self.skip_npm_reinstall and os.path.exists(node_modules_path):
+            print(f"Skipping `npm install` since {node_modules_path} already exists")
+        else:
+            import nodejs
 
-        if res != 0:
-            raise RuntimeError("failed to bundle neuroglancer node.js project")
+            nodejs.npm.run(["install"], cwd=root_dir, check=True)
+        nodejs.npm.run(
+            ["run", t, "--", f"--output={output_dir}"], cwd=root_dir, check=True
+        )
 
 
 local_sources = [
@@ -309,9 +294,6 @@ setuptools.setup(
     package_dir={
         "": "python",
     },
-    package_data={
-        "neuroglancer.static": ["*.html", "*.css", "*.js", "*.js.map"],
-    },
     setup_requires=_SETUP_REQUIRES,
     install_requires=[
         "Pillow>=3.2.0",
@@ -322,16 +304,6 @@ setuptools.setup(
         "google-auth",
         "atomicwrites",
     ],
-    extras_require={
-        "test": [
-            "pytest>=6.1.2",
-            "pytest-rerunfailures>=9.1.1",
-            "pytest-timeout>=1.4.2",
-        ],
-        "test-browser": [
-            "selenium>=4",
-        ],
-    },
     ext_modules=[
         setuptools.Extension(
             "neuroglancer._neuroglancer",

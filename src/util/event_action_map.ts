@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-import { registerEventListener } from "#/util/disposable";
-import {
-  HierarchicalMap,
-  HierarchicalMapInterface,
-} from "#/util/hierarchical_map";
+import { registerEventListener } from "#src/util/disposable.js";
+import type { HierarchicalMapInterface } from "#src/util/hierarchical_map.js";
+import { HierarchicalMap } from "#src/util/hierarchical_map.js";
 
 /**
  * @file Facilities for dispatching user-defined actions in response to input events.

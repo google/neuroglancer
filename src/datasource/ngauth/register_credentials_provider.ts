@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { CredentialsManager } from "#/credentials_provider";
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import type { CredentialsManager } from "#src/credentials_provider/index.js";
 import {
   NgauthCredentialsProvider,
   NgauthGcsCredentialsProvider,
-} from "#/datasource/ngauth/credentials_provider";
+} from "#src/datasource/ngauth/credentials_provider.js";
 
 defaultCredentialsManager.register(
   "ngauth",

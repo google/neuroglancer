@@ -1,4 +1,4 @@
-/node_modules/
+node_modules
 /dist/
 /trans
 /build/
@@ -18,3 +18,5 @@ tsconfig.tsbuildinfo
 .nox
 .pytest_cache
 /ngauth_server/secrets/
+.eslintcache
+/lib

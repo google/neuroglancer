@@ -14,21 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  Annotation,
-  AnnotationId,
-  AnnotationPropertySerializer,
-  AnnotationPropertySpec,
-  AnnotationReference,
-  AnnotationSourceSignals,
-  AnnotationType,
-  annotationTypeHandlers,
-  annotationTypes,
-  fixAnnotationAfterStructuredCloning,
-  makeAnnotationId,
-  makeAnnotationPropertySerializers,
-  SerializedAnnotations,
-} from "#/annotation";
+import type { AnnotationGeometryChunkSpecification } from "#src/annotation/base.js";
 import {
   ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID,
   ANNOTATION_COMMIT_UPDATE_RPC_ID,
@@ -37,32 +23,52 @@ import {
   ANNOTATION_REFERENCE_ADD_RPC_ID,
   ANNOTATION_REFERENCE_DELETE_RPC_ID,
   ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID,
-  AnnotationGeometryChunkSpecification,
-} from "#/annotation/base";
-import { getAnnotationTypeRenderHandler } from "#/annotation/type_handler";
-import { Chunk, ChunkManager, ChunkSource } from "#/chunk_manager/frontend";
-import { getObjectKey } from "#/segmentation_display_state/base";
-import { SliceViewSourceOptions } from "#/sliceview/base";
+} from "#src/annotation/base.js";
+import type {
+  Annotation,
+  AnnotationId,
+  AnnotationPropertySerializer,
+  AnnotationPropertySpec,
+  AnnotationSourceSignals,
+  SerializedAnnotations,
+} from "#src/annotation/index.js";
 import {
+  AnnotationReference,
+  AnnotationType,
+  annotationTypeHandlers,
+  annotationTypes,
+  fixAnnotationAfterStructuredCloning,
+  makeAnnotationId,
+  makeAnnotationPropertySerializers,
+} from "#src/annotation/index.js";
+import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
+import { getObjectKey } from "#src/segmentation_display_state/base.js";
+import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
+import type {
   MultiscaleSliceViewChunkSource,
-  SliceViewChunk,
-  SliceViewChunkSource,
   SliceViewChunkSourceOptions,
   SliceViewSingleResolutionSource,
-} from "#/sliceview/frontend";
-import { StatusMessage } from "#/status";
-import { Borrowed, Owned } from "#/util/disposable";
-import { ENDIANNESS, Endianness } from "#/util/endian";
-import * as matrix from "#/util/matrix";
-import { NullarySignal, Signal } from "#/util/signal";
-import { Buffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
+} from "#src/sliceview/frontend.js";
+import {
+  SliceViewChunk,
+  SliceViewChunkSource,
+} from "#src/sliceview/frontend.js";
+import { StatusMessage } from "#src/status.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { ENDIANNESS, Endianness } from "#src/util/endian.js";
+import * as matrix from "#src/util/matrix.js";
+import type { Signal } from "#src/util/signal.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Buffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObjectOwner,
-  RPC,
   SharedObject,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 export interface AnnotationGeometryChunkSourceOptions
   extends SliceViewChunkSourceOptions {
@@ -502,7 +508,7 @@ export class MultiscaleAnnotationSource
     MultiscaleSliceViewChunkSource<AnnotationGeometryChunkSource>,
     AnnotationSourceSignals
 {
-  OPTIONS: {};
+  OPTIONS: object;
   key: any;
   metadataChunkSource = this.registerDisposer(
     new AnnotationMetadataChunkSource(this.chunkManager, this),
@@ -858,7 +864,7 @@ export class MultiscaleAnnotationSource
     }
   }
 
-  static encodeOptions(_options: {}): { [key: string]: any } {
+  static encodeOptions(_options: object): { [key: string]: any } {
     return {};
   }
 

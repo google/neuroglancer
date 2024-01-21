@@ -18,42 +18,42 @@
  * @file Support for rendering bounding box annotations.
  */
 
-import { AnnotationType, AxisAlignedBoundingBox } from "#/annotation";
-import {
+import type { AxisAlignedBoundingBox } from "#src/annotation/index.js";
+import { AnnotationType } from "#src/annotation/index.js";
+import type {
   AnnotationRenderContext,
-  AnnotationRenderHelper,
   AnnotationShaderGetter,
+} from "#src/annotation/type_handler.js";
+import {
+  AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
-} from "#/annotation/type_handler";
+} from "#src/annotation/type_handler.js";
 import {
   defineBoundingBoxCrossSectionShader,
   setBoundingBoxCrossSectionShaderViewportPlane,
   vertexBasePositions,
-} from "#/sliceview/bounding_box_shader_helper";
-import { SliceViewPanelRenderContext } from "#/sliceview/renderlayer";
-import { tile2dArray } from "#/util/array";
-import { getViewFrustrumWorldBounds, mat4 } from "#/util/geom";
-import { CORNERS_PER_BOX, EDGES_PER_BOX } from "#/webgl/bounding_box";
-import { Buffer } from "#/webgl/buffer";
+} from "#src/sliceview/bounding_box_shader_helper.js";
+import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
+import { tile2dArray } from "#src/util/array.js";
+import { getViewFrustrumWorldBounds, mat4 } from "#src/util/geom.js";
+import { CORNERS_PER_BOX, EDGES_PER_BOX } from "#src/webgl/bounding_box.js";
+import { Buffer } from "#src/webgl/buffer.js";
 import {
   defineCircleShader,
   drawCircles,
   initializeCircleShader,
   VERTICES_PER_CIRCLE,
-} from "#/webgl/circles";
+} from "#src/webgl/circles.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
   VERTICES_PER_LINE,
-} from "#/webgl/lines";
-import {
-  drawArraysInstanced,
-  ShaderBuilder,
-  ShaderProgram,
-} from "#/webgl/shader";
-import { defineVectorArrayVertexShaderInput } from "#/webgl/shader_lib";
-import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
+} from "#src/webgl/lines.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { drawArraysInstanced } from "#src/webgl/shader.js";
+import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
+import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const CORNERS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;

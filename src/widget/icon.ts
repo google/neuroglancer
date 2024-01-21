@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "./icon.css";
+import "#src/widget/icon.css";
 
 export interface MakeIconOptions {
   text?: string;

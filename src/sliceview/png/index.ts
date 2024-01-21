@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import { DecodedImage } from "#/async_computation/decode_png_request";
-import pngWasmDataUrl from "./libpng.wasm";
+import type { DecodedImage } from "#src/async_computation/decode_png_request.js";
 
 const libraryEnv = {
   emscripten_notify_memory_growth: () => {},
@@ -25,13 +24,16 @@ const libraryEnv = {
 };
 
 const pngModulePromise = (async () => {
-  const response = await fetch(pngWasmDataUrl);
-  const wasmCode = await response.arrayBuffer();
-  const m = await WebAssembly.instantiate(wasmCode, {
-    env: libraryEnv,
-    wasi_snapshot_preview1: libraryEnv,
-  });
-  (m.instance.exports._initialize as Function)();
+  const m = (
+    await WebAssembly.instantiateStreaming(
+      fetch(new URL("./libpng.wasm", import.meta.url)),
+      {
+        env: libraryEnv,
+        wasi_snapshot_preview1: libraryEnv,
+      },
+    )
+  ).instance;
+  (m.exports._initialize as Function)();
   return m;
 })();
 
@@ -199,14 +201,12 @@ export async function decompressPng(
 
   // heap must be referenced after creating bufPtr and imagePtr because
   // memory growth can detatch the buffer.
-  const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
-  const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
-  const heap = new Uint8Array(
-    (m.instance.exports.memory as WebAssembly.Memory).buffer,
-  );
+  const bufPtr = (m.exports.malloc as Function)(buffer.byteLength);
+  const imagePtr = (m.exports.malloc as Function)(nbytes);
+  const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, bufPtr);
 
-  const code = (m.instance.exports.png_decompress as Function)(
+  const code = (m.exports.png_decompress as Function)(
     bufPtr,
     buffer.byteLength,
     imagePtr,
@@ -223,7 +223,7 @@ export async function decompressPng(
     // because memory growth during decompress could have detached
     // the buffer.
     const image = new Uint8Array(
-      (m.instance.exports.memory as WebAssembly.Memory).buffer,
+      (m.exports.memory as WebAssembly.Memory).buffer,
       imagePtr,
       nbytes,
     );
@@ -236,7 +236,7 @@ export async function decompressPng(
       uint8Array: image.slice(0),
     };
   } finally {
-    (m.instance.exports.free as Function)(bufPtr);
-    (m.instance.exports.free as Function)(imagePtr);
+    (m.exports.free as Function)(bufPtr);
+    (m.exports.free as Function)(imagePtr);
   }
 }

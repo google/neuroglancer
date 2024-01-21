@@ -18,22 +18,27 @@
  * @file Support for defining user-selectable tools.
  */
 
-import "./tool.css";
+import "#src/ui/tool.css";
 
-import debounce from "lodash/debounce";
-import { MouseSelectionState, UserLayer } from "#/layer";
-import { StatusMessage } from "#/status";
-import { TrackableValueInterface } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { Borrowed, Owned, RefCounted } from "#/util/disposable";
-import {
+import { debounce } from "lodash-es";
+import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
+import { StatusMessage } from "#src/status.js";
+import type { TrackableValueInterface } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type {
   ActionEvent,
   EventActionMap,
-  registerActionListener,
-} from "#/util/event_action_map";
-import { verifyObject, verifyObjectProperty, verifyString } from "#/util/json";
-import { AnyConstructor } from "#/util/mixin";
-import { Signal } from "#/util/signal";
+} from "#src/util/event_action_map.js";
+import { registerActionListener } from "#src/util/event_action_map.js";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
+import type { AnyConstructor } from "#src/util/mixin.js";
+import { Signal } from "#src/util/signal.js";
 
 const TOOL_KEY_PATTERN = /^[A-Z]$/;
 
@@ -66,7 +71,7 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
   }
 }
 
-export abstract class Tool<Context extends Object = Object> extends RefCounted {
+export abstract class Tool<Context extends object = object> extends RefCounted {
   changed = new Signal();
   keyBinding: string | undefined = undefined;
 
@@ -134,7 +139,7 @@ export abstract class LegacyTool<
   }
 }
 
-export function restoreTool<Context extends Object>(
+export function restoreTool<Context extends object>(
   context: Context,
   obj: unknown,
 ) {
@@ -176,7 +181,7 @@ export function restoreLegacyTool(layer: UserLayer, obj: any) {
   return getter(layer, obj);
 }
 
-export type ToolGetter<Context extends Object = Object> = (
+export type ToolGetter<Context extends object = object> = (
   context: Context,
   options: any,
 ) => Owned<Tool> | undefined;
@@ -187,13 +192,13 @@ export type LegacyToolGetter<LayerType extends UserLayer = UserLayer> = (
 ) => Owned<LegacyTool> | undefined;
 
 const legacyTools = new Map<string, LegacyToolGetter>();
-const toolsForPrototype = new Map<Object, Map<string, ToolGetter>>();
+const toolsForPrototype = new Map<object, Map<string, ToolGetter>>();
 
 export function registerLegacyTool(type: string, getter: LegacyToolGetter) {
   legacyTools.set(type, getter);
 }
 
-export function registerTool<Context extends Object>(
+export function registerTool<Context extends object>(
   contextType: AnyConstructor<Context>,
   type: string,
   getter: ToolGetter<Context>,
@@ -403,7 +408,7 @@ export class GlobalToolBinder extends RefCounted {
 }
 
 export class LocalToolBinder<
-  Context extends Object = Object,
+  Context extends object = object,
 > extends RefCounted {
   // Maps the the tool key (i.e. "A", "B", ...) to the bound tool.
   bindings = new Map<string, Owned<Tool>>();
@@ -486,7 +491,7 @@ export class LocalToolBinder<
   }
 }
 
-export class ToolBindingWidget<Context extends Object> extends RefCounted {
+export class ToolBindingWidget<Context extends object> extends RefCounted {
   element = document.createElement("div");
   private toolJsonString = JSON.stringify(this.toolJson);
   constructor(

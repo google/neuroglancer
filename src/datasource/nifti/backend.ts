@@ -14,53 +14,43 @@
  * limitations under the License.
  */
 
-import { decodeGzip } from "#/async_computation/decode_gzip_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { ChunkManager, WithParameters } from "#/chunk_manager/backend";
-import { ChunkPriorityTier } from "#/chunk_manager/base";
-import {
-  GenericSharedDataSource,
-  PriorityGetter,
-} from "#/chunk_manager/generic_file_source";
-import {
-  SharedCredentialsProviderCounterpart,
-  WithSharedCredentialsProviderCounterpart,
-} from "#/credentials_provider/shared_counterpart";
+import type { NIFTI2 } from "nifti-reader-js";
+import { isCompressed, NIFTI1, readHeader, readImage } from "nifti-reader-js";
+import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import type { ChunkManager } from "#src/chunk_manager/backend.js";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import { ChunkPriorityTier } from "#src/chunk_manager/base.js";
+import type { PriorityGetter } from "#src/chunk_manager/generic_file_source.js";
+import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
+import type { SharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type { NiftiVolumeInfo } from "#src/datasource/nifti/base.js";
 import {
   GET_NIFTI_VOLUME_INFO_RPC_ID,
-  NiftiVolumeInfo,
   VolumeSourceParameters,
-} from "#/datasource/nifti/base";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { DataType } from "#/sliceview/volume/base";
-import { CancellationToken } from "#/util/cancellation";
-import { Borrowed } from "#/util/disposable";
-import { Endianness } from "#/util/endian";
+} from "#src/datasource/nifti/base.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { DataType } from "#src/sliceview/volume/base.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { Endianness } from "#src/util/endian.js";
 import {
   kOneVec,
   mat4,
   quat,
   translationRotationScaleZReflectionToMat4,
   vec3,
-} from "#/util/geom";
-import * as matrix from "#/util/matrix";
-import {
+} from "#src/util/geom.js";
+import * as matrix from "#src/util/matrix.js";
+import type {
   SpecialProtocolCredentials,
   SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
-import {
-  registerPromiseRPC,
-  registerSharedObject,
-  RPCPromise,
-} from "#/worker_rpc";
-import {
-  isCompressed,
-  NIFTI1,
-  NIFTI2,
-  readHeader,
-  readImage,
-} from "nifti-reader-js";
+} from "#src/util/special_protocol_request.js";
+import type { RPCPromise } from "#src/worker_rpc.js";
+import { registerPromiseRPC, registerSharedObject } from "#src/worker_rpc.js";
 
 export class NiftiFileData {
   uncompressedData: ArrayBuffer;

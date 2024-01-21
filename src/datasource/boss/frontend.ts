@@ -19,52 +19,54 @@
  * Support for The Boss (https://github.com/jhuapl-boss) web services.
  */
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import {
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
+import type {
   CredentialsManager,
   CredentialsProvider,
-} from "#/credentials_provider";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
+} from "#src/credentials_provider/index.js";
+import type { BossToken } from "#src/datasource/boss/api.js";
 import {
-  CompleteUrlOptions,
-  CompletionResult,
-  DataSource,
-  DataSourceProvider,
-  GetDataSourceOptions,
-} from "#/datasource";
-import {
-  BossToken,
   credentialsKey,
   fetchWithBossCredentials,
-} from "#/datasource/boss/api";
+} from "#src/datasource/boss/api.js";
 import {
   MeshSourceParameters,
   VolumeChunkSourceParameters,
-} from "#/datasource/boss/base";
-import { MeshSource } from "#/mesh/frontend";
+} from "#src/datasource/boss/base.js";
+import type {
+  CompleteUrlOptions,
+  CompletionResult,
+  DataSource,
+  GetDataSourceOptions,
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
+import { MeshSource } from "#src/mesh/frontend.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   DataType,
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
 import {
   applyCompletionOffset,
   getPrefixMatchesWithDescriptions,
-} from "#/util/completion";
-import { vec2, vec3 } from "#/util/geom";
-import { responseJson } from "#/util/http_request";
+} from "#src/util/completion.js";
+import { vec2, vec3 } from "#src/util/geom.js";
+import { responseJson } from "#src/util/http_request.js";
 import {
   parseArray,
   parseQueryStringParameters,
@@ -79,8 +81,7 @@ import {
   verifyObjectProperty,
   verifyOptionalString,
   verifyString,
-} from "#/util/json";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/util/json.js";
 
 class BossVolumeChunkSource extends WithParameters(
   WithCredentialsProvider<BossToken>()(VolumeChunkSource),
@@ -492,7 +493,7 @@ export class BossMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
   }
 }
 
-const pathPattern = /^([^\/?]+)\/([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
+const pathPattern = /^([^/?]+)\/([^/?]+)(?:\/([^/?]+))?(?:\?(.*))?$/;
 
 export function getExperimentInfo(
   chunkManager: ChunkManager,
@@ -732,7 +733,7 @@ export function getDataSource(
   );
 }
 
-const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
+const urlPattern = /^((?:http|https):\/\/[^/?]+)\/(.*)$/;
 
 export function getCollections(
   chunkManager: ChunkManager,
@@ -810,7 +811,7 @@ export function collectionExperimentChannelCompleter(
   path: string,
 ): Promise<CompletionResult> {
   const channelMatch = path.match(
-    /^(?:([^\/]+)(?:\/?([^\/]*)(?:\/?([^\/]*)(?:\/?([^\/]*)?))?)?)?$/,
+    /^(?:([^/]+)(?:\/?([^/]*)(?:\/?([^/]*)(?:\/?([^/]*)?))?)?)?$/,
   );
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -879,7 +880,7 @@ export function collectionExperimentChannelCompleter(
 }
 
 function getAuthServer(endpoint: string): string {
-  const baseHostName = endpoint.match(/^(?:https:\/\/[^.]+([^\/]+))/);
+  const baseHostName = endpoint.match(/^(?:https:\/\/[^.]+([^/]+))/);
   if (baseHostName === null) {
     throw new Error(
       `Unable to construct auth server hostname from base hostname ${endpoint}.`,

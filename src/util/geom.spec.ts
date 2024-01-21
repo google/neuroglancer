@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { getFrustrumPlanes, isAABBVisible, mat4 } from "#/util/geom";
+import { describe, it, expect } from "vitest";
+import { getFrustrumPlanes, isAABBVisible, mat4 } from "#src/util/geom.js";
 
 describe("getFrustrumPlanes", () => {
   it("works for simple example", () => {
@@ -32,7 +33,7 @@ describe("getFrustrumPlanes", () => {
       // near
       0, 0, -1, -7,
       // far
-      0, 0, 0.13207542896270752, 14.924528121948242,
+      0, 0, 1, 113,
     ];
     planes.every((x, i) => expect(x).toBeCloseTo(expectedPlanes[i]));
   });

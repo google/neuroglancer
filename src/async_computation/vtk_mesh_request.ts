@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { asyncComputation } from "#/async_computation";
-import { TriangularMesh } from "#/datasource/vtk/parse";
+import { asyncComputation } from "#src/async_computation/index.js";
+import type { TriangularMesh } from "#src/datasource/vtk/parse.js";
 
 export const parseVTKFromArrayBuffer = asyncComputation<
   (buffer: ArrayBuffer) => {

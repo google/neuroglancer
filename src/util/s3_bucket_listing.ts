@@ -19,10 +19,10 @@
  * and GCS).
  */
 
-import { fetchWithOAuth2Credentials } from "#/credentials_provider/oauth2";
-import { CancellationToken } from "#/util/cancellation";
-import { BasicCompletionResult } from "#/util/completion";
-import { SpecialProtocolCredentialsProvider } from "#/util/special_protocol_request";
+import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { BasicCompletionResult } from "#src/util/completion.js";
+import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
 
 export async function getS3BucketListing(
   credentialsProvider: SpecialProtocolCredentialsProvider,

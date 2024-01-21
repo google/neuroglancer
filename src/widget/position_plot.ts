@@ -14,20 +14,22 @@
  * limitations under the License.
  */
 
-import "./position_plot.css";
+import "#src/widget/position_plot.css";
 
-import {
-  computeCombinedLowerUpperBound,
+import type {
   CoordinateSpace,
   DimensionId,
+} from "#src/coordinate_transform.js";
+import {
+  computeCombinedLowerUpperBound,
   getDisplayLowerUpperBounds,
-} from "#/coordinate_transform";
-import { Position } from "#/navigation_state";
-import { WatchableValue } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { filterArrayInplace } from "#/util/array";
-import { RefCounted } from "#/util/disposable";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
+} from "#src/coordinate_transform.js";
+import type { Position } from "#src/navigation_state.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { filterArrayInplace } from "#src/util/array.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 
 interface NormalizedDimensionBounds {
   lowerBound: number;

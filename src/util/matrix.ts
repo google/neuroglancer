@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { TypedArray } from "#/util/array";
+import type { TypedArray } from "#src/util/array.js";
 
 /**
  * Sets the `m * k` matrix `c` to the product of `m * n` matrix `a` and `n * k` matrix `b`.

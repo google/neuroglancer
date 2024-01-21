@@ -14,18 +14,22 @@
  * limitations under the License.
  */
 
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/frontend";
-import { ChunkFormat } from "#/sliceview/volume/frontend";
-import { TypedArray } from "#/util/array";
-import { DataType } from "#/util/data_type";
-import { Disposable, RefCounted } from "#/util/disposable";
-import { GL } from "#/webgl/context";
-import {
+import type {
+  VolumeChunkSource,
+  ChunkFormat,
+} from "#src/sliceview/volume/frontend.js";
+import { VolumeChunk } from "#src/sliceview/volume/frontend.js";
+import type { TypedArray } from "#src/util/array.js";
+import type { DataType } from "#src/util/data_type.js";
+import type { Disposable } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ShaderBuilder,
   ShaderProgram,
   ShaderSamplerType,
-  textureTargetForSamplerType,
-} from "#/webgl/shader";
+} from "#src/webgl/shader.js";
+import { textureTargetForSamplerType } from "#src/webgl/shader.js";
 
 const textureUnitSymbol = Symbol("SingleTextureVolumeChunk.textureUnit");
 const textureLayoutSymbol = Symbol("SingleTextureVolumeChunk.textureLayout");

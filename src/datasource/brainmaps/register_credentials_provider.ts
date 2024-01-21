@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
-import { credentialsKey } from "#/datasource/brainmaps/api";
-import { BrainmapsCredentialsProvider } from "#/datasource/brainmaps/credentials_provider";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { credentialsKey } from "#src/datasource/brainmaps/api.js";
+import { BrainmapsCredentialsProvider } from "#src/datasource/brainmaps/credentials_provider.js";
 
-declare let BRAINMAPS_CLIENT_ID: string;
+// Specifies the Google Brainmaps API oauth2 client id to use.
+declare const NEUROGLANCER_BRAINMAPS_CLIENT_ID: string | undefined;
 
-defaultCredentialsManager.register(
-  credentialsKey,
-  () => new BrainmapsCredentialsProvider(BRAINMAPS_CLIENT_ID),
-);
+if (typeof NEUROGLANCER_BRAINMAPS_CLIENT_ID !== "undefined") {
+  defaultCredentialsManager.register(
+    credentialsKey,
+    () => new BrainmapsCredentialsProvider(NEUROGLANCER_BRAINMAPS_CLIENT_ID!),
+  );
+}

@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {
+import type {
   LayerManager,
   MouseSelectionState,
   SelectedLayerState,
   TrackableDataSelectionState,
-} from "#/layer";
-import { NavigationState } from "#/navigation_state";
-import { RenderLayerRole } from "#/renderlayer";
-import { TrackableBoolean } from "#/trackable_boolean";
-import { WatchableSet } from "#/trackable_value";
-import { VisibilityPrioritySpecification } from "#/visibility_priority/frontend";
+} from "#src/layer/index.js";
+import type { NavigationState } from "#src/navigation_state.js";
+import type { RenderLayerRole } from "#src/renderlayer.js";
+import type { TrackableBoolean } from "#src/trackable_boolean.js";
+import type { WatchableSet } from "#src/trackable_value.js";
+import { VisibilityPrioritySpecification } from "#src/visibility_priority/frontend.js";
 
 export { VisibilityPrioritySpecification };
 

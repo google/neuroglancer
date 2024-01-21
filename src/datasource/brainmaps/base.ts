@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { BrainmapsInstance } from "#/datasource/brainmaps/api";
-import { vec3 } from "#/util/geom";
+import type { BrainmapsInstance } from "#src/datasource/brainmaps/api.js";
+import type { vec3 } from "#src/util/geom.js";
 
 export enum VolumeChunkEncoding {
   RAW = 0,

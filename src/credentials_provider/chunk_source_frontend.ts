@@ -18,15 +18,15 @@
  * @file Facilities to simplify defining subclasses of ChunkSource that use a CredentialsProvider.
  */
 
-import {
+import type {
   ChunkManager,
   ChunkSourceConstructor,
   GettableChunkSource,
-} from "#/chunk_manager/frontend";
-import { MaybeOptionalCredentialsProvider } from "#/credentials_provider";
-import { SharedCredentialsProvider } from "#/credentials_provider/shared";
-import { getObjectId } from "#/util/object_id";
-import { RPC } from "#/worker_rpc";
+} from "#src/chunk_manager/frontend.js";
+import type { MaybeOptionalCredentialsProvider } from "#src/credentials_provider/index.js";
+import { SharedCredentialsProvider } from "#src/credentials_provider/shared.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type { RPC } from "#src/worker_rpc.js";
 
 /**
  * Returns a counterpart ref to be sent to the backend to retrieve a

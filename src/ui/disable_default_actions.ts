@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { registerEventListener } from "#/util/disposable";
+import { registerEventListener } from "#src/util/disposable.js";
 
 /**
  * Prevent context menu on right click, as this interferes with other event handlers for right mouse

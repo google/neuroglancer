@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { Endianness, ENDIANNESS } from "#/util/endian";
+import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 
 const denormMin = 2 ** -1074;
 

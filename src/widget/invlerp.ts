@@ -14,63 +14,63 @@
  * limitations under the License.
  */
 
-import "./invlerp.css";
+import "#src/widget/invlerp.css";
 
-import svg_arrowLeft from "ikonate/icons/arrow-left.svg";
-import svg_arrowRight from "ikonate/icons/arrow-right.svg";
-import { DisplayContext, IndirectRenderedPanel } from "#/display_context";
-import { WatchableValueInterface } from "#/trackable_value";
-import { ToolActivation } from "#/ui/tool";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { DataType } from "#/util/data_type";
-import { Owned, RefCounted } from "#/util/disposable";
-import { removeChildren, updateInputFieldWidth } from "#/util/dom";
+import svg_arrowLeft from "ikonate/icons/arrow-left.svg?raw";
+import svg_arrowRight from "ikonate/icons/arrow-right.svg?raw";
+import type { DisplayContext } from "#src/display_context.js";
+import { IndirectRenderedPanel } from "#src/display_context.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { ToolActivation } from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { DataType } from "#src/util/data_type.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
 import {
   EventActionMap,
   registerActionListener,
-} from "#/util/event_action_map";
+} from "#src/util/event_action_map.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
   computeLerp,
   dataTypeCompare,
-  DataTypeInterval,
   dataTypeIntervalEqual,
   getClampedInterval,
   getClosestEndpoint,
   getIntervalBoundsEffectiveFraction,
   getIntervalBoundsEffectiveOffset,
   parseDataTypeValue,
-} from "#/util/lerp";
-import { MouseEventBinder } from "#/util/mouse_bindings";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
-import { Uint64 } from "#/util/uint64";
-import { getWheelZoomAmount } from "#/util/wheel_zoom";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import { getMemoizedBuffer } from "#/webgl/buffer";
-import {
-  ParameterizedEmitterDependentShaderGetter,
-  parameterizedEmitterDependentShaderGetter,
-} from "#/webgl/dynamic_shader";
-import { HistogramSpecifications } from "#/webgl/empirical_cdf";
+} from "#src/util/lerp.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { Uint64 } from "#src/util/uint64.js";
+import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
+import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
+import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   defineLerpShaderFunction,
   enableLerpShaderFunction,
-} from "#/webgl/lerp";
+} from "#src/webgl/lerp.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
   VERTICES_PER_LINE,
-} from "#/webgl/lines";
-import { ShaderBuilder } from "#/webgl/shader";
-import { getShaderType } from "#/webgl/shader_lib";
-import { InvlerpParameters } from "#/webgl/shader_ui_controls";
-import { getSquareCornersBuffer } from "#/webgl/square_corners_buffer";
-import { setRawTextureParameters } from "#/webgl/texture";
-import { makeIcon } from "#/widget/icon";
-import { LayerControlTool } from "#/widget/layer_control";
-import { LegendShaderOptions } from "#/widget/shader_controls";
-import { Tab } from "#/widget/tab_view";
+} from "#src/webgl/lines.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
+import { getShaderType } from "#src/webgl/shader_lib.js";
+import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
+import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
+import { setRawTextureParameters } from "#src/webgl/texture.js";
+import { makeIcon } from "#src/widget/icon.js";
+import type { LayerControlTool } from "#src/widget/layer_control.js";
+import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },

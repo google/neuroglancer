@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-import {
-  clampAndRoundCoordinateToVoxelCenter,
+import type {
   CoordinateSpace,
   DimensionId,
+} from "#src/coordinate_transform.js";
+import {
+  clampAndRoundCoordinateToVoxelCenter,
   dimensionNamesFromJson,
   emptyInvalidCoordinateSpace,
   getBoundingBoxCenter,
   getCenterBound,
-} from "#/coordinate_transform";
-import { WatchableValueInterface } from "#/trackable_value";
-import { arraysEqual } from "#/util/array";
-import { Borrowed, Owned, RefCounted } from "#/util/disposable";
-import { mat3, mat4, quat, vec3 } from "#/util/geom";
+} from "#src/coordinate_transform.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { arraysEqual } from "#src/util/array.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { mat3, mat4, quat, vec3 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFiniteVec,
@@ -37,11 +40,12 @@ import {
   verifyObject,
   verifyObjectProperty,
   verifyOptionalObjectProperty,
-} from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { optionallyRestoreFromJsonMember, Trackable } from "#/util/trackable";
-import { TrackableEnum } from "#/util/trackable_enum";
-import * as vector from "#/util/vector";
+} from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { optionallyRestoreFromJsonMember } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
+import * as vector from "#src/util/vector.js";
 
 export enum NavigationLinkType {
   LINKED = 0,

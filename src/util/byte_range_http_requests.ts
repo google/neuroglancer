@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import { CancellationToken } from "#/util/cancellation";
-import { getByteRangeHeader, responseArrayBuffer } from "#/util/http_request";
+import type { CancellationToken } from "#src/util/cancellation.js";
 import {
-  cancellableFetchSpecialOk,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
-import { Uint64 } from "#/util/uint64";
+  getByteRangeHeader,
+  responseArrayBuffer,
+} from "#src/util/http_request.js";
+import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import type { Uint64 } from "#src/util/uint64.js";
 
 /**
  * On Chromium, multiple concurrent byte range requests to the same URL are serialized unless the

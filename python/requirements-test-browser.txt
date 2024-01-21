@@ -1,0 +1,2 @@
+selenium>=4
+nodejs-bin[cmd]

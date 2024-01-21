@@ -20,19 +20,20 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
+import type { TypedArray } from "#src/util/array.js";
+import type { DataType } from "#src/util/data_type.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
   DATA_TYPE_BYTES,
   DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT,
-  DataType,
-} from "#/util/data_type";
-import { convertEndian } from "#/util/endian";
-import { pythonLiteralParse } from "#/util/json";
-import { parseNumpyDtype } from "#/util/numpy_dtype";
+} from "#src/util/data_type.js";
+import { convertEndian } from "#src/util/endian.js";
+import { pythonLiteralParse } from "#src/util/json.js";
+import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
 
 export class NumpyArray {
   constructor(
-    public data: ArrayBufferView,
+    public data: TypedArray,
     public shape: number[],
     public dataType: DataType,
     public fortranOrder: boolean,

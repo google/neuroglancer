@@ -14,25 +14,26 @@
  * limitations under the License.
  */
 
-import "./selection_details.css";
+import "#src/ui/selection_details.css";
 
-import svg_arrowLeft from "ikonate/icons/arrow-left.svg";
-import svg_arrowRight from "ikonate/icons/arrow-right.svg";
-import {
+import svg_arrowLeft from "ikonate/icons/arrow-left.svg?raw";
+import svg_arrowRight from "ikonate/icons/arrow-right.svg?raw";
+import type {
   SelectedLayerState,
   TopLevelLayerListSpecification,
   TrackableDataSelectionState,
-} from "#/layer";
-import { getDefaultSelectBindings } from "#/ui/default_input_event_bindings";
-import { SidePanel, SidePanelManager } from "#/ui/side_panel";
-import { setClipboard } from "#/util/clipboard";
-import { Borrowed } from "#/util/disposable";
-import { MouseEventBinder } from "#/util/mouse_bindings";
-import { CheckboxIcon } from "#/widget/checkbox_icon";
-import { makeCopyButton } from "#/widget/copy_button";
-import { DependentViewWidget } from "#/widget/dependent_view_widget";
-import { makeIcon } from "#/widget/icon";
-import { makeMoveToButton } from "#/widget/move_to_button";
+} from "#src/layer/index.js";
+import { getDefaultSelectBindings } from "#src/ui/default_input_event_bindings.js";
+import type { SidePanelManager } from "#src/ui/side_panel.js";
+import { SidePanel } from "#src/ui/side_panel.js";
+import { setClipboard } from "#src/util/clipboard.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { makeIcon } from "#src/widget/icon.js";
+import { makeMoveToButton } from "#src/widget/move_to_button.js";
 
 export function isWithinSelectionPanel(element: HTMLElement) {
   return element.closest(".neuroglancer-selection-details");

@@ -14,34 +14,34 @@
  * limitations under the License.
  */
 
-import "#/widget/render_scale_widget.css";
+import "#src/widget/render_scale_widget.css";
 
-import debounce from "lodash/debounce";
-import throttle from "lodash/throttle";
-import { UserLayer } from "#/layer";
+import { debounce, throttle } from "lodash-es";
+import type { UserLayer } from "#src/layer/index.js";
+import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import {
   getRenderScaleFromHistogramOffset,
   getRenderScaleHistogramOffset,
   numRenderScaleHistogramBins,
-  RenderScaleHistogram,
   renderScaleHistogramBinSize,
   renderScaleHistogramOrigin,
-} from "#/render_scale_statistics";
-import { TrackableValueInterface, WatchableValue } from "#/trackable_value";
-import { serializeColor } from "#/util/color";
-import { hsvToRgb } from "#/util/colorspace";
-import { RefCounted } from "#/util/disposable";
+} from "#src/render_scale_statistics.js";
+import type { TrackableValueInterface } from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { serializeColor } from "#src/util/color.js";
+import { hsvToRgb } from "#src/util/colorspace.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
 import {
-  ActionEvent,
   EventActionMap,
   registerActionListener,
-} from "#/util/event_action_map";
-import { vec3 } from "#/util/geom";
-import { MouseEventBinder } from "#/util/mouse_bindings";
-import { numberToStringFixed } from "#/util/number_to_string";
-import { formatScaleWithUnitAsString } from "#/util/si_units";
-import { LayerControlFactory } from "#/widget/layer_control";
-import { clampToInterval } from "#/util/lerp";
+} from "#src/util/event_action_map.js";
+import { vec3 } from "#src/util/geom.js";
+import { clampToInterval } from "#src/util/lerp.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
 
 const updateInterval = 200;
 

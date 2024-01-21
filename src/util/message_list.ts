@@ -18,7 +18,7 @@
  * @file Message list framework for messages to be displayed in the UI.
  */
 
-import { NullarySignal } from "#/util/signal";
+import { NullarySignal } from "#src/util/signal.js";
 
 export enum MessageSeverity {
   info = 0,

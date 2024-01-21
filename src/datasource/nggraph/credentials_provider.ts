@@ -17,9 +17,9 @@
 import {
   CredentialsProvider,
   makeCredentialsGetter,
-} from "#/credentials_provider";
-import { StatusMessage } from "#/status";
-import { HttpError } from "#/util/http_request";
+} from "#src/credentials_provider/index.js";
+import { StatusMessage } from "#src/status.js";
+import { HttpError } from "#src/util/http_request.js";
 
 function makeOriginError(serverUrl: string): Error {
   return new Error(

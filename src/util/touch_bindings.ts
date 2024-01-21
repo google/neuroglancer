@@ -18,15 +18,17 @@
  * @file Facility for triggering named actions in response to touch events.
  */
 
-import throttle from "lodash/throttle";
-import { RefCounted } from "#/util/disposable";
-import {
+import { throttle } from "lodash-es";
+import { RefCounted } from "#src/util/disposable.js";
+import type {
   ActionEvent,
+  EventActionMapInterface,
+} from "#src/util/event_action_map.js";
+import {
   dispatchEvent,
   EventActionMap,
-  EventActionMapInterface,
   registerActionListener,
-} from "#/util/event_action_map";
+} from "#src/util/event_action_map.js";
 
 export interface TouchTapInfo {
   event: TouchEvent;

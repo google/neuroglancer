@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   constantWatchableValue,
   WatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { TrackableValue } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { stableStringify, verifyString } from "#/util/json";
-import { getObjectId } from "#/util/object_id";
-import { GL } from "#/webgl/context";
-import {
-  ShaderBuilder,
+  TrackableValue,
+} from "#src/trackable_value.js";
+import type { RefCounted } from "#src/util/disposable.js";
+import { stableStringify, verifyString } from "#src/util/json.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ShaderCompilationError,
   ShaderLinkError,
   ShaderModule,
   ShaderProgram,
-} from "#/webgl/shader";
+} from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
 
 /**
  * undefined means shader has not been compiled.  null means shader was compiled successfully.
@@ -200,7 +200,9 @@ export function parameterizedContextDependentShaderGetter<
           );
           entry.parameters = fallbackParametersValue;
           entry.fallback = true;
-        } catch {}
+        } catch {
+          // Ignore error creating fallback shader.
+        }
       }
     }
     if (oldShader !== null) {

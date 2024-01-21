@@ -1,0 +1,4 @@
+overrides:
+  - files: ".parcelrc"
+    options:
+      parser: "json5"

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { Signal } from "#/util/signal";
+import type { Signal } from "#src/util/signal.js";
 
 export function removeSignalBinding<T extends Function>(
   signal: Signal<T>,

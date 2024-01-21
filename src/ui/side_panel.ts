@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import "./side_panel.css";
+import "#src/ui/side_panel.css";
 
-import { DisplayContext } from "#/display_context";
-import { popDragStatus, pushDragStatus } from "#/ui/drag_and_drop";
-import { Side, TrackableSidePanelLocation } from "#/ui/side_panel_location";
-import { RefCounted } from "#/util/disposable";
-import { updateChildren } from "#/util/dom";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
-import { Signal } from "#/util/signal";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import { makeCloseButton } from "#/widget/close_button";
+import type { DisplayContext } from "#src/display_context.js";
+import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
+import type { Side } from "#src/ui/side_panel_location.js";
+import { TrackableSidePanelLocation } from "#src/ui/side_panel_location.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { updateChildren } from "#src/util/dom.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { Signal } from "#src/util/signal.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import { makeCloseButton } from "#src/widget/close_button.js";
 
 export const DRAG_OVER_CLASSNAME = "neuroglancer-drag-over";
 

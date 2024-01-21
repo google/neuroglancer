@@ -19,8 +19,8 @@ import {
   transformVectorByMat4,
   transformVectorByMat4Transpose,
   vec3,
-} from "#/util/geom";
-import * as matrix from "#/util/matrix";
+} from "#src/util/geom.js";
+import * as matrix from "#src/util/matrix.js";
 
 export class ChunkLayout {
   /**

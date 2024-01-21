@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { GrapheneDataSource } from "#/datasource/graphene/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { GrapheneDataSource } from "#src/datasource/graphene/frontend.js";
 
 registerProvider("graphene", () => new GrapheneDataSource());

@@ -24,20 +24,20 @@
  * rendering point primitives.
  */
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { DataTypeInterval } from "#/util/lerp";
-import { VisibilityPriorityAggregator } from "#/visibility_priority/frontend";
-import { getMemoizedBuffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
+import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import type { TextureBuffer } from "#src/webgl/offscreen.js";
 import {
   FramebufferConfiguration,
   makeTextureBuffers,
-  TextureBuffer,
-} from "#/webgl/offscreen";
-import { ShaderBuilder } from "#/webgl/shader";
-import { glsl_simpleFloatHash } from "#/webgl/shader_lib";
-import { setRawTextureParameters } from "#/webgl/texture";
+} from "#src/webgl/offscreen.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
+import { glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
+import { setRawTextureParameters } from "#src/webgl/texture.js";
 
 const DEBUG_HISTOGRAMS = false;
 

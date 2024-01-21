@@ -15,25 +15,28 @@
  */
 
 // Import to register the shared object types.
-import "#/shared_disjoint_sets";
-import "#/uint64_set";
-import "#/uint64_map";
+import "#src/shared_disjoint_sets.js";
+import "#src/uint64_map.js";
+import "#src/uint64_set.js";
 
-import { ChunkRequester, ChunkSource } from "#/chunk_manager/backend";
-import { RenderLayerTransformOrError } from "#/render_coordinate_transform";
-import {
+import type { ChunkRequester } from "#src/chunk_manager/backend.js";
+import { ChunkSource } from "#src/chunk_manager/backend.js";
+import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
+import type {
   IndexedSegmentProperty,
+  VisibleSegmentsState,
+} from "#src/segmentation_display_state/base.js";
+import {
   onTemporaryVisibleSegmentsStateChanged,
   onVisibleSegmentsStateChanged,
-  VisibleSegmentsState,
   VISIBLE_SEGMENTS_STATE_PROPERTIES,
-} from "#/segmentation_display_state/base";
-import { SharedDisjointUint64Sets } from "#/shared_disjoint_sets";
-import { SharedWatchableValue } from "#/shared_watchable_value";
-import { Uint64Set } from "#/uint64_set";
-import { AnyConstructor } from "#/util/mixin";
-import { RPC } from "#/worker_rpc";
-import { Uint64OrderedSet } from "#/uint64_ordered_set";
+} from "#src/segmentation_display_state/base.js";
+import type { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
+import type { Uint64Set } from "#src/uint64_set.js";
+import type { AnyConstructor } from "#src/util/mixin.js";
+import type { RPC } from "#src/worker_rpc.js";
 
 export function receiveVisibleSegmentsState(
   rpc: RPC,

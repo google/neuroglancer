@@ -1,13 +1,13 @@
-import { RefCounted } from "#/util/disposable";
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
-import { StatusMessage } from "#/status";
-import { responseJson } from "#/util/http_request";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { StatusMessage } from "#src/status.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { responseJson } from "#src/util/http_request.js";
 import {
   cancellableFetchSpecialOk,
   parseSpecialUrl,
-} from "#/util/special_protocol_request";
-import { Viewer } from "#/viewer";
-import { makeIcon } from "#/widget/icon";
+} from "#src/util/special_protocol_request.js";
+import type { Viewer } from "#src/viewer.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 type StateServer = {
   url: string;

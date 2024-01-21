@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { numberToStringFixed } from "#/util/number_to_string";
+import { describe, it, expect } from "vitest";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
 
 describe("numberToStringFixed", () => {
   it("works for simple cases", () => {
