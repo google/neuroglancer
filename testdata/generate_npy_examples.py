@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # This file generates npy_test.*.{npy,json} files for use by
-# src/neuroglancer/util/npy.spec.ts.
+# src/util/npy.spec.ts.
 #
 # This should be run from within the testdata/ directory.
 

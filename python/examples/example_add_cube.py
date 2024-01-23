@@ -17,7 +17,6 @@ if __name__ == "__main__":
         with viewer.txn() as state:
             scale = state.dimensions.scales
             center_point = s.mouse_voxel_coordinates * scale / 1e-9
-            point_a = center_point
             layer = state.layers["annotations"]
             layer.annotations.append(
                 neuroglancer.AxisAlignedBoundingBoxAnnotation(

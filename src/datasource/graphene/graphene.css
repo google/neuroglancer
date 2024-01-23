@@ -1,0 +1,80 @@
+.neuroglancer-graphene-tab .neuroglancer-annotation-toolbox {
+  display: none;
+}
+
+.neuroglancer-graphene-tab
+  div[data-color="#ff0000"]
+  > .neuroglancer-annotation-position {
+  color: red;
+}
+
+.neuroglancer-graphene-tab
+  div[data-color="#0000ff"]
+  > .neuroglancer-annotation-position {
+  color: #4444ff;
+}
+
+.graphene-multicut-status {
+  display: flex;
+  flex-direction: row;
+}
+
+.graphene-multicut-status > .activeGroupIndicator {
+  padding: 2px;
+  margin: auto 0;
+  background-color: red;
+  font: 12px sans-serif;
+  font-weight: 900;
+}
+
+.graphene-multicut-status > .activeGroupIndicator.blueGroup {
+  background-color: blue;
+}
+
+.graphene-multicut-status > .activeGroupIndicator::after {
+  content: "Red";
+}
+
+.graphene-multicut-status > .activeGroupIndicator.blueGroup::after {
+  content: "Blue";
+}
+
+.graphene-merge-segments-merges {
+  display: flex;
+  flex-direction: column;
+}
+
+.graphene-merge-segments-submission {
+  display: flex;
+  gap: 10px;
+}
+
+.graphene-merge-segments-status {
+  display: flex;
+  gap: 10px;
+}
+
+.graphene-merge-segments-status .neuroglancer-icon,
+.graphene-multicut-status .neuroglancer-icon {
+  height: 100%;
+}
+
+.graphene-merge-segments-status label {
+  display: grid;
+  grid-template-columns: min-content min-content;
+  white-space: nowrap;
+  justify-content: center;
+  align-content: center;
+}
+
+.graphene-merge-segments-point {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.graphene-merge-segments-point
+  .neuroglancer-segment-list-entry-visible-checkbox,
+.graphene-merge-segments-point .neuroglancer-segment-list-entry-copy-container {
+  display: none;
+}

@@ -18,17 +18,21 @@
  * Basic typings for jpgjs package.
  */
 
-declare module 'jpgjs' {
+declare module "jpgjs" {
   interface JpegDecoder {
     width: number;
     height: number;
     numComponents: number;
     parse(data: Uint8Array): void;
-    getData(width: number, height: number, forceRGBOutput?: boolean): Uint8Array;
+    getData(
+      width: number,
+      height: number,
+      forceRGBOutput?: boolean,
+    ): Uint8Array;
   }
 
   interface JpegDecoderConstructor {
-    new(): JpegDecoder;
+    new (): JpegDecoder;
   }
 
   const JpegDecoder: JpegDecoderConstructor;

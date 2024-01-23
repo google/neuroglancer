@@ -17,7 +17,7 @@ import math
 
 def hash_function(state, value):
     """Python implementation of hashCombine() function
-    in src/neuroglancer/gpu_hash/hash_function.ts,
+    in src/gpu_hash/hash_function.ts,
     a modified murmur hash
     """
     k1 = 0xCC9E2D51
@@ -34,7 +34,7 @@ def hash_function(state, value):
 
 def hsv_to_rgb(h, s, v):
     """Convert H,S,V values to RGB values.
-    Python implementation of hsvToRgb in src/neuroglancer/util/colorspace.ts"""
+    Python implementation of hsvToRgb in src/util/colorspace.ts"""
     h *= 6
     hue_index = math.floor(h)
     remainder = h - hue_index
@@ -59,7 +59,7 @@ def hsv_to_rgb(h, s, v):
 def pack_color(rgb_vec):
     """Returns an integer formed
     by concatenating the channels of the input color vector.
-    Python implementation of packColor in src/neuroglancer/util/color.ts
+    Python implementation of packColor in src/util/color.ts
     """
     result = 0
     for i in range(len(rgb_vec)):

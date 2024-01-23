@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests that shader control parameters can be specified from Python."""
+"""Tests the zarr datasource."""
 
 import pathlib
 
@@ -59,6 +59,43 @@ TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
                         "name": "sharding_indexed",
                         "configuration": {
                             "chunk_shape": [2, 3, 4],
+                            "index_codecs": [
+                                {
+                                    "name": "transpose",
+                                    "configuration": {"order": [3, 1, 0, 2]},
+                                },
+                                {
+                                    "name": "bytes",
+                                    "configuration": {"endian": "little"},
+                                },
+                            ],
+                            "codecs": [
+                                {
+                                    "name": "transpose",
+                                    "configuration": {"order": [2, 1, 0]},
+                                },
+                                {
+                                    "name": "bytes",
+                                    "configuration": {"endian": "little"},
+                                },
+                                {"name": "gzip"},
+                            ],
+                        },
+                    },
+                ]
+            },
+        },
+        {
+            "driver": "zarr3",
+            "schema": {"chunk_layout": {"write_chunk": {"shape": [6, 12, 24]}}},
+            "metadata": {
+                "codecs": [
+                    {"name": "transpose", "configuration": {"order": [0, 2, 1]}},
+                    {
+                        "name": "sharding_indexed",
+                        "configuration": {
+                            "chunk_shape": [2, 3, 4],
+                            "index_location": "start",
                             "index_codecs": [
                                 {
                                     "name": "transpose",

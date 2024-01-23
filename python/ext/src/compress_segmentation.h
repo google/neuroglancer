@@ -15,7 +15,7 @@
  */
 
 // Implements encoding into the compressed segmentation format described at
-// https://github.com/google/neuroglancer/tree/master/src/neuroglancer/sliceview/compressed_segmentation.
+// https://github.com/google/neuroglancer/tree/master/src/sliceview/compressed_segmentation.
 //
 // Only uint32 and uint64 volumes are supported.
 

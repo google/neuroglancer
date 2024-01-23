@@ -1,0 +1,237 @@
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-position-widget {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* In Firefox, disabled input elements block all pointer events, even on parent elements, and that
+interferes with our click handling.  Setting `pointer-events: none;` avoids that problem. */
+.neuroglancer-position-widget input:disabled {
+  pointer-events: none;
+}
+
+.neuroglancer-position-widget .neuroglancer-copy-button:first-child {
+  display: none;
+}
+
+.neuroglancer-position-dimension-coordinate,
+.neuroglancer-position-dimension-name,
+.neuroglancer-position-dimension-scale {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border: 0;
+  margin: 0;
+  font-family: monospace;
+  font-size: medium;
+}
+
+.neuroglancer-position-dimension[data-coordinate-array="valid"]
+  .neuroglancer-position-dimension-scale {
+  display: none;
+}
+
+.neuroglancer-position-dimension[data-coordinate-array="invalid"]
+  .neuroglancer-position-dimension-scale {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: red;
+}
+
+.neuroglancer-position-dimension-coordinate {
+  color: white;
+  text-align: right;
+}
+
+.neuroglancer-position-widget input:invalid,
+.neuroglancer-position-widget input::placeholder,
+.neuroglancer-position-widget input[data-is-valid="false"] {
+  text-decoration: solid underline red;
+}
+
+.neuroglancer-position-widget *:focus {
+  outline: 0px;
+}
+
+.neuroglancer-position-dimension + .neuroglancer-position-dimension {
+  margin-left: 1ch;
+}
+
+.neuroglancer-position-dimension[data-dropdown-visible="true"]::after {
+  content: "";
+  display: block;
+  left: 0px;
+  right: 0px;
+  bottom: -1px;
+  position: absolute;
+  border-bottom: 1px solid black;
+  z-index: 100;
+  height: 0px;
+}
+
+.neuroglancer-position-dimension-dropdown,
+.neuroglancer-position-dimension-coordinate-dropdown {
+  position: absolute;
+  min-width: calc(100% + 2px);
+  border: 1px solid #aaa;
+  box-sizing: border-box;
+  padding: 2px;
+  left: -1px;
+  z-index: 100;
+  background-color: black;
+}
+
+.neuroglancer-position-dimension-coordinate-dropdown {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.neuroglancer-dimension-dropdown-coordinate-entry {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.neuroglancer-dimension-dropdown-coordinate-entry:hover {
+  background-color: #333;
+}
+
+.neuroglancer-dimension-dropdown-coordinate-label {
+  width: var(--neuroglancer-coordinate-label-width);
+  color: #0ff;
+}
+
+.neuroglancer-position-dimension-dropdown:focus,
+.neuroglancer-position-dimension-coordinate-dropdown:focus {
+  outline: 0px;
+}
+
+.neuroglancer-position-dimension:focus-within,
+.neuroglancer-position-dimension[data-dropdown-visible="true"] {
+  border: 1px solid #aaa;
+  background-color: black;
+}
+
+.neuroglancer-position-dimension {
+  border: 1px solid transparent;
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.neuroglancer-position-dimension-name {
+  color: #ff6;
+  padding-left: 2px;
+}
+
+.neuroglancer-position-dimension-scale-container[data-is-empty="false"]::before {
+  content: "(";
+  color: #aaa;
+}
+
+.neuroglancer-position-dimension-scale-container[data-is-empty="false"]::after {
+  content: ")";
+  color: #aaa;
+}
+
+.neuroglancer-position-dimension-scale-container[data-is-empty="false"] {
+  margin-right: 5px;
+}
+
+.neuroglancer-position-dimension-scale {
+  color: #bbb;
+}
+
+.neuroglancer-position-dimension-scale-container {
+  margin-right: 2px;
+  margin-left: 4px;
+}
+
+.neuroglancer-mouse-position-widget {
+  margin-left: 1ch;
+  vertical-align: center;
+  font-family: monospace;
+  font-size: medium;
+  color: orange;
+  white-space: pre;
+}
+
+.neuroglancer-position-dimension-coordinate-label {
+  display: inline-block;
+  color: #0ff;
+}
+
+.neuroglancer-position-dimension-coordinate-label:not(:empty)::before {
+  content: "[";
+  color: #aaa;
+}
+
+.neuroglancer-position-dimension-coordinate-label:not(:empty)::after {
+  content: "]";
+  color: #aaa;
+}
+
+.neuroglancer-position-dimension-playback {
+  font-family: sans-serif;
+  font-size: 10pt;
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-position-dimension-playback .neuroglancer-number-input {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.neuroglancer-position-dimension-playback input[type="text"] {
+  background-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  border: 0px;
+  font-family: monospace;
+  width: 8ch;
+  text-align: right;
+}
+
+.neuroglancer-position-dimension-playback select {
+  align-self: center;
+}
+
+.neuroglancer-position-dimension > .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+  position: relative;
+  top: 1px;
+}
+
+.neuroglancer-position-dimension > .neuroglancer-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.neuroglancer-position-tool {
+  background-color: #474747;
+}
+
+.neuroglancer-position-dimension-playback-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}

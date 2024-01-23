@@ -14,3 +14,7 @@ tsconfig.tsbuildinfo
 /.log
 *.so
 *.egg-info
+.mypy_cache
+.nox
+.pytest_cache
+/ngauth_server/secrets/

@@ -599,10 +599,10 @@ class StarredSegments(collections.abc.MutableMapping[int, bool]):
 
     def __init__(self, json_data=None, _readonly=False):
         self._readonly = _readonly
-        if json_data is None:
-            return
         self._data = {}
         self._visible = {}
+        if json_data is None:
+            return
         self._update(json_data)
 
     def _update(self, other):
@@ -719,7 +719,7 @@ class StarredSegments(collections.abc.MutableMapping[int, bool]):
         self._visible.clear()
 
     def __repr__(self):
-        return f"StarredSegments({self._data}!r)"
+        return f"StarredSegments({self._data!r})"
 
     def update(self, other):
         if self._readonly:

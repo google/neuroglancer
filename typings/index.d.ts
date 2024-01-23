@@ -9,4 +9,4 @@
 /// <reference path="../node_modules/@types/webpack-env/index.d.ts" />
 
 // Defined when running via the Python integration.
-declare const NEUROGLANCER_PYTHON_INTEGRATION: boolean|undefined;
+declare const NEUROGLANCER_PYTHON_INTEGRATION: boolean | undefined;

@@ -16,15 +16,15 @@
 
 // esbuild equivalent of webpack's svg-inline-loader
 
-const fs = require('fs');
+const fs = require("fs");
 
-module.exports = function(options) {
-  const getExtractedSVG = require('svg-inline-loader').getExtractedSVG;
+module.exports = (options) => {
+  const getExtractedSVG = require("svg-inline-loader").getExtractedSVG;
   return {
-    name: 'svg-inline-loader',
+    name: "svg-inline-loader",
     setup(build) {
-      build.onLoad({filter: /.*\.svg$/, namespace: 'file'}, async (args) => {
-        const text = await fs.promises.readFile(args.path, 'utf8');
+      build.onLoad({ filter: /.*\.svg$/, namespace: "file" }, async (args) => {
+        const text = await fs.promises.readFile(args.path, "utf8");
         const converted = getExtractedSVG(text, options);
         return {
           contents: `export default ${JSON.stringify(converted)};`,

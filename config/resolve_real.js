@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-'use strict';
+"use strict";
 
-const path = require('path');
-const fs = require('fs');
+const path = require("path");
+const fs = require("fs");
 
 /**
  * Resolve a path to an absolute path, expanding all symbolic links.  This is
