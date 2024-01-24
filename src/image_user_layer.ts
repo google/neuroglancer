@@ -247,14 +247,14 @@ export class ImageUserLayer extends Base {
             shaderError: this.shaderError,
             transform: loadedSubsource.getRenderLayerTransform(
               this.channelCoordinateSpace,
-              ),
-              renderScaleTarget: this.sliceViewRenderScaleTarget,
-              renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-              localPosition: this.localPosition,
-              channelCoordinateSpace: this.channelCoordinateSpace,
-            }),
-            );
-            const volumeRenderLayer = context.registerDisposer(
+            ),
+            renderScaleTarget: this.sliceViewRenderScaleTarget,
+            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+            localPosition: this.localPosition,
+            channelCoordinateSpace: this.channelCoordinateSpace,
+          }),
+        );
+        const volumeRenderLayer = context.registerDisposer(
           new VolumeRenderingRenderLayer({
             gain: this.gain,
             multiscaleSource: volume,
