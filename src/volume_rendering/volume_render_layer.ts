@@ -234,7 +234,9 @@ gl_Position.z = 0.0;
 `);
           builder.addFragmentCode(`
 vec3 curChunkPosition;
+float depthAtRayPosition;
 vec4 outputColor;
+float revealage;
 void userMain();
 `);
           defineChunkDataShaderAccess(
@@ -245,17 +247,24 @@ void userMain();
           );
           builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
-  float alpha = rgba.a * uBrightnessFactor * uGain;
-  outputColor += vec4(rgba.rgb * alpha, alpha);
+  float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
+  float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
+  outputColor += vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+  revealage *= 1.0 - correctedAlpha;
 }
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
-  emitRGB(vec3(value, value, value));
+  emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
+}
+float computeDepthAtRayPosition(vec3 rayPosition) {
+  vec4 clipSpacePosition = uModelViewProjectionMatrix * vec4(rayPosition, 1.0);
+  float NDCDepthCoord = clipSpacePosition.z / clipSpacePosition.w;
+  return (NDCDepthCoord + 1.0) * 0.5;
 }
 `);
           builder.setFragmentMainFunction(`
@@ -295,12 +304,14 @@ void main() {
   int startStep = int(floor((intersectStart - uNearLimitFraction) / stepSize));
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
+  revealage = 1.0;
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
+    depthAtRayPosition = computeDepthAtRayPosition(position);
     curChunkPosition = position - uTranslation;
     userMain();
   }
-  emit(outputColor, 0u);
+  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
