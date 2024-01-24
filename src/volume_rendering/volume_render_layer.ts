@@ -83,6 +83,8 @@ export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
 
+const depthSamplerTextureUnit = Symbol("depthSamplerTextureUnit");
+
 export const glsl_emitRGBAVolumeRendering = `
 void emitRGBA(vec4 rgba) {
   float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
@@ -233,6 +235,11 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           builder.addUniform("highp float", "uBrightnessFactor");
           builder.addUniform("highp float", "uGain");
           builder.addVarying("highp vec4", "vNormalizedPosition");
+          builder.addTextureSampler(
+            "sampler2D",
+            "uDepthSampler",
+            depthSamplerTextureUnit,
+          );
           builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
           builder.setVertexMain(`
@@ -266,10 +273,13 @@ void emitGrayscale(float value) {
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
-float computeDepthAtRayPosition(vec3 rayPosition) {
-  vec4 clipSpacePosition = uModelViewProjectionMatrix * vec4(rayPosition, 1.0);
+float computeDepthFromClipSpace(vec4 clipSpacePosition) {
   float NDCDepthCoord = clipSpacePosition.z / clipSpacePosition.w;
   return (NDCDepthCoord + 1.0) * 0.5;
+}
+vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
+  vec2 NDCPosition = clipSpacePosition.xy / clipSpacePosition.w;
+  return (NDCPosition + 1.0) * 0.5;
 }
 `,
           ]);
@@ -313,9 +323,15 @@ void main() {
   revealage = 1.0;
   for (int step = startStep; step < endStep; ++step) {
     vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
-    depthAtRayPosition = computeDepthAtRayPosition(position);
-    curChunkPosition = position - uTranslation;
-    userMain();
+    vec4 clipSpacePosition = uModelViewProjectionMatrix * vec4(position, 1.0);
+    depthAtRayPosition = computeDepthFromClipSpace(clipSpacePosition);
+    vec2 uv = computeUVFromClipSpace(clipSpacePosition);
+    float depthInBuffer = texture(uDepthSampler, uv).r;
+    bool positionInFrontOfOpaqueObjects = (1.0 - depthAtRayPosition) > depthInBuffer;
+    if (positionInFrontOfOpaqueObjects) {
+      curChunkPosition = position - uTranslation;
+      userMain();
+    }
   }
   emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 }
@@ -456,6 +472,9 @@ void main() {
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
       }
+      const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit);
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthTextureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
       if (presentCount !== 0 || notPresentCount !== 0) {
         let index = curHistogramInformation.spatialScales.size - 1;
         const alreadyStoredSamples = new Set<number>([
@@ -550,6 +569,25 @@ void main() {
                 this.shaderControlState,
                 shaderResult.parameters.parseResult.controls,
               );
+              if (
+                renderContext.depthBufferTextureID !== undefined &&
+                renderContext.depthBufferTextureID !== null
+              ) {
+                const depthTextureUnit = shader.textureUnit(
+                  depthSamplerTextureUnit,
+                );
+                gl.activeTexture(
+                  WebGL2RenderingContext.TEXTURE0 + depthTextureUnit,
+                );
+                gl.bindTexture(
+                  WebGL2RenderingContext.TEXTURE_2D,
+                  renderContext.depthBufferTextureID,
+                );
+              } else {
+                throw new Error(
+                  "Depth buffer texture ID for volume rendering is undefined or null",
+                );
+              }
               chunkFormat.beginDrawing(gl, shader);
               chunkFormat.beginSource(gl, shader);
             }
