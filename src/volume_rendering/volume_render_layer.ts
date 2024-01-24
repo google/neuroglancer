@@ -93,6 +93,7 @@ interface VolumeRenderingAttachmentState {
 }
 
 export interface VolumeRenderingRenderLayerOptions {
+  gain: WatchableValueInterface<number>;
   multiscaleSource: MultiscaleVolumeChunkSource;
   transform: WatchableValueInterface<RenderLayerTransformOrError>;
   shaderError: WatchableShaderError;
@@ -128,6 +129,7 @@ function clampAndRoundResolutionTargetValue(value: number) {
 }
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
+  gain: WatchableValueInterface<number>;
   multiscaleSource: MultiscaleVolumeChunkSource;
   transform: WatchableValueInterface<RenderLayerTransformOrError>;
   channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
@@ -158,6 +160,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
+    this.gain = options.gain;
     this.multiscaleSource = options.multiscaleSource;
     this.transform = options.transform;
     this.channelCoordinateSpace = options.channelCoordinateSpace;
@@ -219,6 +222,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           builder.addUniform("highp vec3", "uUpperClipBound");
 
           builder.addUniform("highp float", "uBrightnessFactor");
+          builder.addUniform("highp float", "uGain");
           builder.addVarying("highp vec4", "vNormalizedPosition");
           builder.addVertexCode(glsl_getBoxFaceVertexPosition);
 
@@ -241,7 +245,7 @@ void userMain();
           );
           builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
-  float alpha = rgba.a * uBrightnessFactor;
+  float alpha = rgba.a * uBrightnessFactor * uGain;
   outputColor += vec4(rgba.rgb * alpha, alpha);
 }
 void emitRGB(vec3 rgb) {
@@ -313,6 +317,9 @@ void main() {
 
     this.registerDisposer(
       this.depthSamplesTarget.changed.add(this.redrawNeeded.dispatch),
+    );
+    this.registerDisposer(
+      this.gain.changed.add(this.redrawNeeded.dispatch),
     );
     this.registerDisposer(
       this.shaderControlState.changed.add(this.redrawNeeded.dispatch),
@@ -572,6 +579,7 @@ void main() {
         const farLimitFraction = (adjustedFar - near) / (far - near);
         gl.uniform1f(shader.uniform("uNearLimitFraction"), nearLimitFraction);
         gl.uniform1f(shader.uniform("uFarLimitFraction"), farLimitFraction);
+        gl.uniform1f(shader.uniform("uGain"), this.gain.value);
         gl.uniform1i(
           shader.uniform("uMaxSteps"),
           this.depthSamplesTarget.value,

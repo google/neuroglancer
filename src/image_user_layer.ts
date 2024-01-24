@@ -98,8 +98,10 @@ import {
   ShaderControls,
 } from "#/widget/shader_controls";
 import { Tab } from "#/widget/tab_view";
+import { trackableFiniteFloat } from "#/trackable_finite_float";
 
 const OPACITY_JSON_KEY = "opacity";
+const GAIN_JSON_KEY = "gain";
 const BLEND_JSON_KEY = "blend";
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
@@ -119,6 +121,7 @@ const [
 ] = getVolumeRenderingDepthSamplesBoundsLogScale();
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
+  gain = trackableFiniteFloat(1);
   blendMode = trackableBlendModeValue();
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
@@ -199,6 +202,7 @@ export class ImageUserLayer extends Base {
       isLocalDimension;
     this.blendMode.changed.add(this.specificationChanged.dispatch);
     this.opacity.changed.add(this.specificationChanged.dispatch);
+    this.gain.changed.add(this.specificationChanged.dispatch);
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(
@@ -243,15 +247,16 @@ export class ImageUserLayer extends Base {
             shaderError: this.shaderError,
             transform: loadedSubsource.getRenderLayerTransform(
               this.channelCoordinateSpace,
-            ),
-            renderScaleTarget: this.sliceViewRenderScaleTarget,
-            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-            localPosition: this.localPosition,
-            channelCoordinateSpace: this.channelCoordinateSpace,
-          }),
-        );
-        const volumeRenderLayer = context.registerDisposer(
+              ),
+              renderScaleTarget: this.sliceViewRenderScaleTarget,
+              renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+              localPosition: this.localPosition,
+              channelCoordinateSpace: this.channelCoordinateSpace,
+            }),
+            );
+            const volumeRenderLayer = context.registerDisposer(
           new VolumeRenderingRenderLayer({
+            gain: this.gain,
             multiscaleSource: volume,
             shaderControlState: this.shaderControlState,
             shaderError: this.shaderError,
@@ -285,6 +290,7 @@ export class ImageUserLayer extends Base {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
+    this.gain.restoreState(specification[GAIN_JSON_KEY]);
     verifyOptionalObjectProperty(specification, BLEND_JSON_KEY, (blendValue) =>
       this.blendMode.restoreState(blendValue),
     );
@@ -306,6 +312,7 @@ export class ImageUserLayer extends Base {
   toJSON() {
     const x = super.toJSON();
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
+    x[GAIN_JSON_KEY] = this.gain.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
@@ -450,6 +457,15 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     label: "Volume rendering (experimental)",
     toolJson: VOLUME_RENDERING_JSON_KEY,
     ...checkboxLayerControl((layer) => layer.volumeRendering),
+  },
+  {
+    label: "Gain (3D)",
+    toolJson: GAIN_JSON_KEY,
+    isValid: (layer) => layer.volumeRendering,
+    ...rangeLayerControl((layer) => ({
+      value: layer.gain,
+      options: { min: 0.01, max: 16.0, step: 0.01 },
+    })),
   },
   {
     label: "Resolution (3D)",
