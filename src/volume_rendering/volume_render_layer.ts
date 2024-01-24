@@ -83,6 +83,15 @@ export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
 
+export const glsl_emitRGBAVolumeRendering = `
+void emitRGBA(vec4 rgba) {
+  float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
+  float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
+  outputColor += vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+  revealage *= 1.0 - correctedAlpha;
+}
+`;
+
 type TransformedVolumeSource = FrontendTransformedSource<
   SliceViewRenderLayer,
   VolumeChunkSource
@@ -245,13 +254,9 @@ void userMain();
             numChannelDimensions,
             "curChunkPosition",
           );
-          builder.addFragmentCode(`
-void emitRGBA(vec4 rgba) {
-  float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
-  float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
-  outputColor += vec4(rgba.rgb * weightedAlpha, weightedAlpha);
-  revealage *= 1.0 - correctedAlpha;
-}
+          builder.addFragmentCode([
+            glsl_emitRGBAVolumeRendering,
+            `
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
@@ -266,7 +271,8 @@ float computeDepthAtRayPosition(vec3 rayPosition) {
   float NDCDepthCoord = clipSpacePosition.z / clipSpacePosition.w;
   return (NDCDepthCoord + 1.0) * 0.5;
 }
-`);
+`,
+          ]);
           builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
@@ -329,9 +335,7 @@ void main() {
     this.registerDisposer(
       this.depthSamplesTarget.changed.add(this.redrawNeeded.dispatch),
     );
-    this.registerDisposer(
-      this.gain.changed.add(this.redrawNeeded.dispatch),
-    );
+    this.registerDisposer(this.gain.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
       this.shaderControlState.changed.add(this.redrawNeeded.dispatch),
     );
@@ -582,9 +586,9 @@ void main() {
             transformedSource.lowerClipDisplayBound,
             transformedSource.upperClipDisplayBound,
           );
-        const step =
-          (adjustedFar - adjustedNear) / (this.depthSamplesTarget.value - 1);
-        const brightnessFactor = step / (far - near);
+        const optimalSampleRate = optimalSamples;
+        const actualSampleRate = this.depthSamplesTarget.value;
+        const brightnessFactor = optimalSampleRate / actualSampleRate;
         gl.uniform1f(shader.uniform("uBrightnessFactor"), brightnessFactor);
         const nearLimitFraction = (adjustedNear - near) / (far - near);
         const farLimitFraction = (adjustedFar - near) / (far - near);
