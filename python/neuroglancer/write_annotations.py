@@ -14,6 +14,7 @@ amount of annotation data:
   least one file written per annotation.
 """
 
+from collections import defaultdict
 import json
 import numbers
 import os
@@ -21,11 +22,22 @@ import pathlib
 import struct
 from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, Union, cast
+from cloudvolume.datasource.precomputed.sharding import ShardingSpecification, synthesize_shard_files
 
 import numpy as np
 
 from . import coordinate_space, viewer_state
 
+class NumpyEncoder(json.JSONEncoder):
+  def default(self, obj):
+    if isinstance(obj, np.ndarray):
+      return obj.tolist()
+    if isinstance(obj, np.integer):
+      return int(obj)
+    if isinstance(obj, np.floating):
+      return float(obj)
+    return json.JSONEncoder.default(self, obj)
+  
 
 class Annotation(NamedTuple):
     id: int
@@ -87,26 +99,34 @@ class AnnotationWriter:
         self,
         coordinate_space: coordinate_space.CoordinateSpace,
         annotation_type: AnnotationType,
+        lower_bound: Sequence,
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
+        chunk_size: Sequence[int] = [256, 256, 256],
+        id_sharding_spec: ShardingSpecification = None
     ):
+        self.chunk_size = np.array(chunk_size)
         self.coordinate_space = coordinate_space
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
         self.properties = list(properties)
+        self.annotations_by_chunk = defaultdict(list)
         self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
         self.annotations = []
         self.rank = coordinate_space.rank
         self.dtype = _get_dtype_for_geometry(
             annotation_type, coordinate_space.rank
         ) + _get_dtype_for_properties(self.properties)
-        self.lower_bound = np.full(
-            shape=(self.rank,), fill_value=float("inf"), dtype=np.float32
-        )
+        self.lower_bound = np.array(lower_bound, dtype=np.float32)
+        assert(len(self.lower_bound) == self.rank)
         self.upper_bound = np.full(
             shape=(self.rank,), fill_value=float("-inf"), dtype=np.float32
         )
         self.related_annotations = [{} for _ in self.relationships]
+        self.id_sharding_spec = id_sharding_spec
+
+    def get_chunk_index(self, coords):
+        return tuple(((coords-self.lower_bound) // self.chunk_size).astype(np.int32))
 
     def add_point(self, point: Sequence[float], id: Optional[int] = None, **kwargs):
         if self.annotation_type != "point":
@@ -118,7 +138,7 @@ class AnnotationWriter:
                 f"Expected point to have length {self.coordinate_space.rank}, but received: {len(point)}"
             )
 
-        self.lower_bound = np.minimum(self.lower_bound, point)
+        #self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
         self._add_obj(point, id, **kwargs)
 
@@ -165,7 +185,7 @@ class AnnotationWriter:
                 f"Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_b)}"
             )
 
-        self.lower_bound = np.minimum(self.lower_bound, point_a)
+        #self.lower_bound = np.minimum(self.lower_bound, point_a)
         self.upper_bound = np.maximum(self.upper_bound, point_b)
         coords = np.concatenate((point_a, point_b))
         self._add_obj(cast(Sequence[float], coords), id, **kwargs)
@@ -197,14 +217,22 @@ class AnnotationWriter:
             id=id, encoded=encoded.tobytes(), relationships=related_ids
         )
 
+        chunk_index = self.get_chunk_index(np.array(coords[:self.rank]))
+        self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
-
         for i, segment_ids in enumerate(related_ids):
             for segment_id in segment_ids:
                 rel_index = self.related_annotations[i]
                 rel_index_list = rel_index.setdefault(segment_id, [])
                 rel_index_list.append(annotation)
 
+    def _serialize_annotations_sharded(self, path, annotations: list[Annotation], shard_spec: ShardingSpecification):
+        ann_dict_encoding = {a.id: a.encoded for a in annotations}
+        shard_files = synthesize_shard_files(shard_spec, ann_dict_encoding)
+        for shard_id, shard_file in shard_files.items():
+            with open(os.path.join(path, f"{shard_id}"), "wb") as f:
+                f.write(shard_file)
+    
     def _serialize_annotations(self, f, annotations: list[Annotation]):
         f.write(struct.pack("<Q", len(annotations)))
         for annotation in annotations:
@@ -232,19 +260,26 @@ class AnnotationWriter:
                 for relationship in self.relationships
             ],
             "by_id": {
-                "key": "by_id",
-            },
-            "spatial": [
-                {
-                    "key": "spatial0",
-                    "grid_shape": [1] * self.rank,
-                    "chunk_size": [
-                        max(1, float(x)) for x in self.upper_bound - self.lower_bound
-                    ],
-                    "limit": len(self.annotations),
-                },
-            ],
+                "key": "by_id"
+            }
         }
+        if self.id_sharding_spec is not None:
+            metadata["by_id"]["sharding"] = self.id_sharding_spec.to_dict()
+        
+        # calculate the number of chunks in each dimension
+        num_chunks = np.ceil((self.upper_bound - self.lower_bound) / self.chunk_size).astype(int)
+
+        # find the maximum number of annotations in any chunk
+        max_annotations = min(len(annotations) for annotations in self.annotations_by_chunk.values())
+
+        metadata['spatial'] = [
+            {
+                "key": f"spatial0",
+                "grid_shape": num_chunks.tolist(),
+                "chunk_size": [int(x) for x in self.chunk_size],
+                "limit": max_annotations
+            }
+        ]
 
         os.makedirs(path, exist_ok=True)
         for relationship in self.relationships:
@@ -253,22 +288,26 @@ class AnnotationWriter:
         os.makedirs(os.path.join(path, "spatial0"), exist_ok=True)
 
         with open(os.path.join(path, "info"), "w") as f:
-            f.write(json.dumps(metadata))
 
-        with open(
-            os.path.join(path, "spatial0", "_".join("0" for _ in range(self.rank))),
-            "wb",
-        ) as f:
-            self._serialize_annotations(f, self.annotations)
+            f.write(json.dumps(metadata, cls=NumpyEncoder))
 
-        for annotation in self.annotations:
-            with open(os.path.join(path, "by_id", str(annotation.id)), "wb") as f:
-                self._serialize_annotation(f, annotation)
+        for chunk_index, annotations in self.annotations_by_chunk.items():
+            with open(
+                os.path.join(path, "spatial0", "_".join([str(c) for c in chunk_index])),
+                "wb",
+            ) as f:
+                self._serialize_annotations(f, annotations)
+
+        if self.id_sharding_spec is not None:
+            self._serialize_annotations_sharded(os.path.join(path, "by_id"), self.annotations, self.id_sharding_spec)
+        else:
+            for annotation in self.annotations:
+                with open(os.path.join(path, "by_id", str(annotation.id)), "wb") as f:
+                    self._serialize_annotation(f, annotation)
 
         for i, relationship in enumerate(self.relationships):
             rel_index = self.related_annotations[i]
             for segment_id, annotations in rel_index.items():
-                with open(
-                    os.path.join(path, f"rel_{relationship}", str(segment_id)), "wb"
-                ) as f:
+                filepath = os.path.join(path, f"rel_{relationship}", str(segment_id))
+                with open(filepath, "wb") as f:
                     self._serialize_annotations(f, annotations)
