@@ -327,11 +327,12 @@ void main() {
     depthAtRayPosition = computeDepthFromClipSpace(clipSpacePosition);
     vec2 uv = computeUVFromClipSpace(clipSpacePosition);
     float depthInBuffer = texture(uDepthSampler, uv).r;
-    bool positionInFrontOfOpaqueObjects = (1.0 - depthAtRayPosition) > depthInBuffer;
-    if (positionInFrontOfOpaqueObjects) {
-      curChunkPosition = position - uTranslation;
-      userMain();
+    bool rayPositionBehindOpaqueObject = (1.0 - depthAtRayPosition) < depthInBuffer;
+    if (rayPositionBehindOpaqueObject) {
+      break;
     }
+    curChunkPosition = position - uTranslation;
+    userMain();
   }
   emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 }
