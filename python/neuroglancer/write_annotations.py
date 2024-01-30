@@ -22,7 +22,21 @@ import pathlib
 import struct
 from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, Union, cast
-from cloudvolume.datasource.precomputed.sharding import ShardingSpecification, synthesize_shard_files
+from logging import warning
+try:
+    from cloudvolume.datasource.precomputed.sharding import (
+        ShardingSpecification, synthesize_shard_files
+    )
+except ImportError:
+    class ShardingSpecification:
+        def __init__(self, *args, **kwargs):
+            raise NotImplementedError("cloudvolume is not installed")
+        
+    def synthesize_shard_files(*args, **kwargs):
+        raise NotImplementedError("cloudvolume is not installed")
+
+    warning("cloudvolume is not installed, so sharding is not supported."
+            "pip install cloud-volume to install")
 
 import numpy as np
 
@@ -125,6 +139,7 @@ class AnnotationWriter:
         self.related_annotations = [{} for _ in self.relationships]
         self.id_sharding_spec = id_sharding_spec
 
+
     def get_chunk_index(self, coords):
         return tuple(((coords-self.lower_bound) // self.chunk_size).astype(np.int32))
 
@@ -140,6 +155,7 @@ class AnnotationWriter:
 
         #self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
+        self.kdtree.add(point)
         self._add_obj(point, id, **kwargs)
 
     def add_axis_aligned_bounding_box(
