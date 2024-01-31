@@ -67,14 +67,14 @@ SHARD_TARGET_SIZE = 50000000
 
 
 def choose_output_spec(total_count, total_bytes,
-                       hash: ShardHashType = "murmurhash3_x86_128",
+                       hashtype: ShardHashType = "murmurhash3_x86_128",
                        gzip_compress=True): 
     if total_count ==1:
         return None
     
     options = {
         '@type': 'neuroglancer_uint64_sharded_v1',
-        'hash': hash,
+        'hash': hashtype,
     }
 
     total_minishard_bits = 0
@@ -99,10 +99,8 @@ def choose_output_spec(total_count, total_bytes,
         options['data_encoding'] = 'raw'
         options['minishard_index_encoding'] = 'raw'
 
-    # options.setdefault('minishard_index_compression', {}).setdefault('gzip_compression', {})['level'] = minishard_index_compression
-    # options.setdefault('data_compression', {}).setdefault('gzip_compression', {})['level'] = data_compression
-
     return options
+
 
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
     geometry_size = rank if annotation_type == "point" else 2 * rank
@@ -141,7 +139,7 @@ class AnnotationWriter:
         self,
         coordinate_space: coordinate_space.CoordinateSpace,
         annotation_type: AnnotationType,
-        lower_bound: Sequence,
+        lower_bound: Sequence = (0, 0, 0),
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
         chunk_size: Sequence[int] = [256, 256, 256]
