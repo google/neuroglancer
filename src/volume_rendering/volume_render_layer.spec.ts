@@ -63,11 +63,6 @@ outputValue4 = outputColor.a;
           expect(color[1]).toBeCloseTo(0.3, 5);
           expect(color[2]).toBeCloseTo(0.5, 5);
           revealages[i] = revealage;
-          console.log(
-            `steps=${inputSteps}, revealage=${revealage}, color=${vec3.str(
-              color,
-            )}`,
-          );
         }
         for (let i = 1; i < revealages.length; ++i) {
           expect(revealages[i]).toBeCloseTo(revealages[i - 1], 2);
