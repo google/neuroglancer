@@ -152,7 +152,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-    { emitter: ShaderModule; chunkFormat: ChunkFormat },
+    { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
     ShaderControlsBuilderState,
     number
   >;
@@ -194,13 +194,13 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       {
         memoizeKey: "VolumeRenderingRenderLayer",
         parameters: options.shaderControlState.builderState,
-        getContextKey: ({ emitter, chunkFormat }) =>
-          `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
+        getContextKey: ({ emitter, chunkFormat, wireFrame }) =>
+          `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
         shaderError: options.shaderError,
         extraParameters: numChannelDimensions,
         defineShader: (
           builder,
-          { emitter, chunkFormat },
+          { emitter, chunkFormat, wireFrame },
           shaderBuilderState,
           numChannelDimensions,
         ) => {
@@ -228,6 +228,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 
           // Chunk size in voxels.
           builder.addUniform("highp vec3", "uChunkDataSize");
+          builder.addUniform("highp float", "uChunkNumber");
 
           builder.addUniform("highp vec3", "uLowerClipBound");
           builder.addUniform("highp vec3", "uUpperClipBound");
@@ -283,7 +284,15 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 }
 `,
           ]);
-          builder.setFragmentMainFunction(`
+          if (wireFrame) {
+            builder.setFragmentMainFunction(`
+void main() {
+  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+  emit(outputColor, 0u);
+}
+`);
+          } else {
+            builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
   vec4 nearPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, -1.0, 1.0);
@@ -337,6 +346,7 @@ void main() {
   emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 }
 `);
+          }
           builder.addFragmentCode(glsl_COLORMAPS);
           addControlsToBuilder(shaderBuilderState, builder);
           builder.addFragmentCode(
@@ -517,6 +527,7 @@ void main() {
     let presentCount = 0;
     let notPresentCount = 0;
     let chunkDataSize: Uint32Array | undefined;
+    let chunkNumber = 1;
 
     const chunkRank = this.multiscaleSource.rank;
     const chunkPosition = vec3.create();
@@ -559,6 +570,7 @@ void main() {
           shaderResult = this.shaderGetter({
             emitter: renderContext.emitter,
             chunkFormat: chunkFormat!,
+            wireFrame: renderContext.wireFrame,
           });
           shader = shaderResult.shader;
           if (shader !== null) {
@@ -659,6 +671,11 @@ void main() {
             fixedPositionWithinChunk,
             chunkTransform: { channelToChunkDimensionIndices },
           } = transformedSource;
+          if (renderContext.wireFrame) {
+            const normChunkNumber = chunkNumber / chunks.size;
+            gl.uniform1f(shader.uniform("uChunkNumber"), normChunkNumber);
+            ++chunkNumber;
+          }
           if (newChunkDataSize !== chunkDataSize) {
             chunkDataSize = newChunkDataSize;
 
