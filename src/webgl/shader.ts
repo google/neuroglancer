@@ -16,6 +16,10 @@
 
 import { RefCounted } from "#/util/disposable";
 import { GL } from "#/webgl/context";
+import {
+  ControlPoint,
+  TransferFunctionTexture,
+} from "#/widget/transfer_function";
 
 const DEBUG_SHADER = false;
 
@@ -162,6 +166,10 @@ export class ShaderProgram extends RefCounted {
   textureUnits: Map<any, number>;
   vertexShaderInputBinders: { [name: string]: VertexShaderInputBinder } = {};
   vertexDebugOutputs?: VertexDebugOutput[];
+  transferFunctionTextures: Map<any, TransferFunctionTexture> = new Map<
+    any,
+    TransferFunctionTexture
+  >();
 
   constructor(
     public gl: GL,
@@ -235,13 +243,41 @@ export class ShaderProgram extends RefCounted {
     return this.attributes.get(name)!;
   }
 
-  textureUnit(symbol: symbol): number {
+  textureUnit(symbol: symbol | string): number {
     return this.textureUnits.get(symbol)!;
   }
 
   bind() {
     curShader = this;
     this.gl.useProgram(this.program);
+  }
+
+  bindAndUpdateTransferFunctionTexture(
+    symbol: Symbol | string,
+    controlPoints: ControlPoint[],
+  ) {
+    const textureUnit = this.textureUnits.get(symbol);
+    if (textureUnit === undefined) {
+      throw new Error(`Invalid texture unit symbol: ${symbol.toString()}`);
+    }
+    const texture = this.transferFunctionTextures.get(symbol);
+    if (texture === undefined) {
+      throw new Error(
+        `Invalid transfer function texture symbol: ${symbol.toString()}`,
+      );
+    }
+    texture.updateAndActivate({ textureUnit, controlPoints });
+  }
+
+  unbindTransferFunctionTextures() {
+    const gl = this.gl;
+    for (let key of this.transferFunctionTextures.keys()) {
+      const value = this.textureUnits.get(key);
+      if (value !== undefined) {
+        this.gl.activeTexture(gl.TEXTURE0 + value);
+        this.gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+    }
   }
 
   disposed() {
@@ -255,6 +291,7 @@ export class ShaderProgram extends RefCounted {
     this.gl = <any>undefined;
     this.attributes = <any>undefined;
     this.uniforms = <any>undefined;
+    this.transferFunctionTextures = <any>undefined;
   }
 }
 
@@ -446,7 +483,7 @@ export class ShaderBuilder {
   private uniforms = new Array<string>();
   private attributes = new Array<string>();
   private initializers: Array<ShaderInitializer> = [];
-  private textureUnits = new Map<symbol, number>();
+  private textureUnits = new Map<symbol | string, number>();
   private vertexDebugOutputs: VertexDebugOutput[] = [];
   constructor(public gl: GL) {}
 
@@ -459,7 +496,7 @@ export class ShaderBuilder {
     this.vertexDebugOutputs.push({ typeName, name });
   }
 
-  allocateTextureUnit(symbol: symbol, count = 1) {
+  allocateTextureUnit(symbol: symbol | string, count = 1) {
     if (this.textureUnits.has(symbol)) {
       throw new Error("Duplicate texture unit symbol: " + symbol.toString());
     }
@@ -472,7 +509,7 @@ export class ShaderBuilder {
   addTextureSampler(
     samplerType: ShaderSamplerType,
     name: string,
-    symbol: symbol,
+    symbol: symbol | string,
     extent?: number,
   ) {
     const textureUnit = this.allocateTextureUnit(symbol, extent);

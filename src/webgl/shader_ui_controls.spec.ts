@@ -15,11 +15,13 @@
  */
 
 import { DataType } from "#/util/data_type";
-import { vec3 } from "#/util/geom";
+import { vec3, vec4 } from "#/util/geom";
 import {
   parseShaderUiControls,
   stripComments,
 } from "#/webgl/shader_ui_controls";
+import { TRANSFER_FUNCTION_LENGTH } from "#/widget/transfer_function";
+import { defaultDataTypeRange } from "#/util/lerp";
 
 describe("stripComments", () => {
   it("handles code without comments", () => {
@@ -555,6 +557,316 @@ void main() {
               window: [1, 10],
               dataType: DataType.FLOAT32,
               property: "p2",
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control without channel", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT8, channelRank: 0 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT8,
+            default: {
+              controlPoints: [],
+              channel: [],
+              color: vec3.fromValues(1, 1, 1),
+              range: [0, 255],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control without channel (rank 1)", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT8, channelRank: 1 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT8,
+            default: {
+              controlPoints: [],
+              channel: [0],
+              color: vec3.fromValues(1, 1, 1),
+              range: [0, 255],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control with channel (rank 0)", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[], channel=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT8, channelRank: 0 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT8,
+            default: {
+              controlPoints: [],
+              channel: [],
+              color: vec3.fromValues(1, 1, 1),
+              range: [0, 255],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control with non-array channel (rank 1)", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[], channel=1)
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT8, channelRank: 1 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT8,
+            default: {
+              controlPoints: [],
+              channel: [1],
+              color: vec3.fromValues(1, 1, 1),
+              range: [0, 255],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control with array channel (rank 1)", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[], channel=[1])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT8, channelRank: 1 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT8,
+            default: {
+              controlPoints: [],
+              channel: [1],
+              color: vec3.fromValues(1, 1, 1),
+              range: [0, 255],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control with array channel (rank 2)", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[], channel=[1,2])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.FLOAT32, channelRank: 2 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.FLOAT32,
+            default: {
+              controlPoints: [],
+              channel: [1, 2],
+              color: vec3.fromValues(1, 1, 1),
+              range: [0, 1],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control with all properties non uint64 data", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[[200, "#00ff00", 0.1], [100, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", range=[0, 200], channel=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT32, channelRank: 0 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT32,
+            default: {
+              controlPoints: [
+                { position: 0, color: vec4.fromValues(0, 0, 0, 0) },
+                {
+                  position: Math.ceil(maxTransferFunctionPoints / 2),
+                  color: vec4.fromValues(255, 0, 0, 128),
+                },
+                {
+                  position: maxTransferFunctionPoints,
+                  color: vec4.fromValues(0, 255, 0, 26),
+                },
+              ],
+              channel: [],
+              color: vec3.fromValues(0, 0, 1),
+              range: [0, 200],
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("handles transfer function control with all properties uint64 data", () => {
+    const code = `
+#uicontrol transferFunction colormap(points=[["18446744073709551615", "#00ff00", 0.1], ["9223372111111111111", "#ff0000", 0.5], ["0", "#000000", 0.0]], color="#0000ff", channel=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT64, channelRank: 0 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT64,
+            default: {
+              controlPoints: [
+                { position: 0, color: vec4.fromValues(0, 0, 0, 0) },
+                {
+                  position: Math.ceil(maxTransferFunctionPoints / 2),
+                  color: vec4.fromValues(255, 0, 0, 128),
+                },
+                {
+                  position: maxTransferFunctionPoints,
+                  color: vec4.fromValues(0, 255, 0, 26),
+                },
+              ],
+              channel: [],
+              color: vec3.fromValues(0, 0, 1),
+              range: defaultDataTypeRange[DataType.UINT64],
             },
           },
         ],
