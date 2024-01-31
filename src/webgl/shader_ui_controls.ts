@@ -595,7 +595,7 @@ function parseTransferFunctionDirective(
   const imageData = dataContext.imageData;
   const dataType = imageData?.dataType;
   const channelRank = imageData?.channelRank;
-  let errors = [];
+  const errors = [];
   let channel = new Array(channelRank).fill(0);
   let color = vec3.fromValues(1.0, 1.0, 1.0);
   let range: DataTypeInterval | undefined;
@@ -610,7 +610,7 @@ function parseTransferFunctionDirective(
   } else {
     range = defaultDataTypeRange[dataType];
   }
-  for (let [key, value] of parameters) {
+  for (const [key, value] of parameters) {
     try {
       switch (key) {
         case "channel": {
@@ -1103,7 +1103,7 @@ function convertTransferFunctionControlPoints(
 
     // Validate values
     let position: number | Uint64;
-    if (dataType != DataType.UINT64) {
+    if (dataType !== DataType.UINT64) {
       const defaultRange = defaultDataTypeRange[dataType] as [number, number];
       position = verifyFiniteFloat(x[0]);
       if (position < defaultRange[0] || position > defaultRange[1]) {
@@ -1328,7 +1328,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     const controlPointsJson = arraysEqualWithPredicate(
       defaultValue.controlPoints,
       controlPoints,
-      (a, b) => arraysEqual(a.color, b.color) && a.position == b.position,
+      (a, b) => arraysEqual(a.color, b.color) && a.position === b.position,
     )
       ? undefined
       : this.controlPointsToJson(this.value.controlPoints, range, dataType);

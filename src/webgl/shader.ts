@@ -271,7 +271,7 @@ export class ShaderProgram extends RefCounted {
 
   unbindTransferFunctionTextures() {
     const gl = this.gl;
-    for (let key of this.transferFunctionTextures.keys()) {
+    for (const key of this.transferFunctionTextures.keys()) {
       const value = this.textureUnits.get(key);
       if (value !== undefined) {
         this.gl.activeTexture(gl.TEXTURE0 + value);

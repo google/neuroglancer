@@ -712,9 +712,8 @@ class ControlPointsLookupTable extends RefCounted {
       Math.abs(nearestPosition - desiredPosition) < CONTROL_POINT_GRAB_DISTANCE
     ) {
       return nearestIndex;
-    } else {
-      return -1;
     }
+    return -1;
   }
   addPoint(position: number, opacity: number, color: vec3) {
     const colorAsUint8 = vec3.fromValues(
@@ -926,19 +925,18 @@ class TransferFunctionController extends RefCounted {
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
       return undefined;
-    } else {
-      const { normalizedX, normalizedY } = this.getControlPointPosition(
-        event,
-      ) as CanvasPosition;
-      this.controlPointsLookupTable.addPoint(normalizedX, normalizedY, color);
-      this.currentGrabbedControlPointIndex =
-        this.findNearestControlPointIndex(event);
-      return {
-        ...this.getModel(),
-        controlPoints:
-          this.controlPointsLookupTable.trackable.value.controlPoints,
-      };
     }
+    const { normalizedX, normalizedY } = this.getControlPointPosition(
+      event,
+    ) as CanvasPosition;
+    this.controlPointsLookupTable.addPoint(normalizedX, normalizedY, color);
+    this.currentGrabbedControlPointIndex =
+      this.findNearestControlPointIndex(event);
+    return {
+      ...this.getModel(),
+      controlPoints:
+        this.controlPointsLookupTable.trackable.value.controlPoints,
+    };
   }
   moveControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
     if (this.currentGrabbedControlPointIndex !== -1) {
@@ -1055,7 +1053,7 @@ export function defineTransferFunctionShader(
   dataType: DataType,
   channel: number[],
 ) {
-  builder.addUniform(`highp float`, `uTransferFunctionEnd_${name}`);
+  builder.addUniform("highp float", `uTransferFunctionEnd_${name}`);
   builder.addTextureSampler(
     "sampler2D",
     `uTransferFunctionSampler_${name}`,

@@ -23,10 +23,10 @@ import { VERTICES_PER_QUAD } from "#/webgl/quad";
  */
 export function createGriddedRectangleArray(
   numGrids: number,
-  startX: number = -1,
-  endX: number = 1,
-  startY: number = 1,
-  endY: number = -1,
+  startX = -1,
+  endX = 1,
+  startY = 1,
+  endY = -1,
 ): Float32Array {
   const result = new Float32Array(numGrids * VERTICES_PER_QUAD * 2);
   const step = (endX - startX) / numGrids;
@@ -61,10 +61,10 @@ export function createGriddedRectangleArray(
 export function getGriddedRectangleBuffer(
   gl: GL,
   numGrids: number,
-  startX: number = -1,
-  endX: number = 1,
-  startY: number = 1,
-  endY: number = -1,
+  startX = -1,
+  endX = 1,
+  startY = 1,
+  endY = -1,
 ) {
   return getMemoizedBuffer(
     gl,
