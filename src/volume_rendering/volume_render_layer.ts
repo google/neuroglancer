@@ -78,6 +78,10 @@ import {
 } from "#/webgl/shader_ui_controls";
 import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
 import { clampToInterval } from "#/util/lerp";
+import {
+  TrackableVolumeRenderingModeValue,
+  VOLUME_RENDERING_MODES,
+} from "#/volume_rendering/trackable_volume_rendering_mode";
 
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
@@ -101,6 +105,12 @@ export interface VolumeRenderingRenderLayerOptions {
   localPosition: WatchableValueInterface<Float32Array>;
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
+  mode: TrackableVolumeRenderingModeValue;
+}
+
+interface VolumeRenderingShaderParameters {
+  numChannelDimensions: number;
+  mode: VOLUME_RENDERING_MODES;
 }
 
 const tempMat4 = mat4.create();
@@ -135,13 +145,14 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
+  mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat },
     ShaderControlsBuilderState,
-    number
+    VolumeRenderingShaderParameters
   >;
 
   get gl() {
@@ -165,13 +176,17 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.localPosition = options.localPosition;
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
+    this.mode = options.mode;
     this.registerDisposer(
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
-    const numChannelDimensions = this.registerDisposer(
+    const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (space) => space.rank,
-        [this.channelCoordinateSpace],
+        (space: CoordinateSpace, mode: VOLUME_RENDERING_MODES) => ({
+          numChannelDimensions: space.rank,
+          mode,
+        }),
+        [this.channelCoordinateSpace, this.mode],
       ),
     );
     this.shaderGetter = parameterizedContextDependentShaderGetter(
@@ -183,12 +198,12 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         getContextKey: ({ emitter, chunkFormat }) =>
           `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
         shaderError: options.shaderError,
-        extraParameters: numChannelDimensions,
+        extraParameters: extraParameters,
         defineShader: (
           builder,
           { emitter, chunkFormat },
           shaderBuilderState,
-          numChannelDimensions,
+          shaderParametersState,
         ) => {
           if (shaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
@@ -199,6 +214,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 `);
 
           emitter(builder);
+          console.log(shaderParametersState.mode);
           // Near limit in [0, 1] as fraction of full limit.
           builder.addUniform("highp float", "uNearLimitFraction");
           // Far limit in [0, 1] as fraction of full limit.
@@ -236,7 +252,7 @@ void userMain();
           defineChunkDataShaderAccess(
             builder,
             chunkFormat,
-            numChannelDimensions,
+            shaderParametersState.numChannelDimensions,
             "curChunkPosition",
           );
           builder.addFragmentCode(`
@@ -323,6 +339,7 @@ void main() {
     this.registerDisposer(
       this.transform.changed.add(this.redrawNeeded.dispatch),
     );
+    this.registerDisposer(this.mode.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
       this.shaderControlState.fragmentMain.changed.add(
         this.redrawNeeded.dispatch,
@@ -416,7 +433,7 @@ void main() {
     let prevChunkFormat: ChunkFormat | undefined | null;
     let shaderResult: ParameterizedShaderGetterResult<
       ShaderControlsBuilderState,
-      number
+      VolumeRenderingShaderParameters
     >;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
