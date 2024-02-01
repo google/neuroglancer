@@ -214,7 +214,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 `);
 
           emitter(builder);
-          console.log(shaderParametersState.mode);
           // Near limit in [0, 1] as fraction of full limit.
           builder.addUniform("highp float", "uNearLimitFraction");
           // Far limit in [0, 1] as fraction of full limit.
