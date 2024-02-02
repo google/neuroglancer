@@ -20,7 +20,12 @@ import pathlib
 import struct
 from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, Union, cast
-import tensorstore as ts
+import logging
+try:
+    import tensorstore as ts
+except ImportError:
+    logging.warning('Sharded write support requires tensorstore, Install with pip install tensorstore')
+    ts = None
 import numpy as np
 
 from . import coordinate_space, viewer_state
@@ -92,6 +97,8 @@ def choose_output_spec(total_count, total_bytes,
                        hashtype: str = "murmurhash3_x86_128",
                        gzip_compress=True):
     if total_count == 1:
+        return None
+    if ts is None:
         return None
 
     # test if hashtype is valid
