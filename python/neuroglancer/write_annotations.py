@@ -6,7 +6,7 @@ up to a few million of annotations, and not beyond that.
 
 - All annotations are buffered in memory.
 
-- Only a single spatial index  of a fixed grid size is generated.  
+- Only a single spatial index  of a fixed grid size is generated.
   No downsampling is performed. Consequently, Neuroglancer will be forced
   to download all annotations to render them in 3 dimensions.
 
@@ -22,20 +22,25 @@ from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, Union, cast
 import tensorstore as ts
 import numpy as np
-import math 
 
 from . import coordinate_space, viewer_state
 
+
 class NumpyEncoder(json.JSONEncoder):
-  def default(self, obj):
-    if isinstance(obj, np.ndarray):
-      return obj.tolist()
-    if isinstance(obj, np.integer):
-      return int(obj)
-    if isinstance(obj, np.floating):
-      return float(obj)
-    return json.JSONEncoder.default(self, obj)
-  
+    """Special json encoder for numpy types.
+
+    Args:
+        json (dict): A dictionary to be encoded.
+    """
+    def default(self, o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, np.integer):
+            return int(o)
+        if isinstance(o, np.floating):
+            return float(o)
+        return json.JSONEncoder.default(self, o)
+
 
 class Annotation(NamedTuple):
     id: int
@@ -58,18 +63,23 @@ _PROPERTY_DTYPES: dict[
 }
 
 AnnotationType = Literal["point", "line", "axis_aligned_bounding_box", "ellipsoid"]
-ShardHashType = Literal["murmurhash3_x86_128", "identity_hash"]
 
 MINISHARD_TARGET_COUNT = 1000
 SHARD_TARGET_SIZE = 50000000
 
 
 def choose_output_spec(total_count, total_bytes,
-                       hashtype: ShardHashType = "murmurhash3_x86_128",
-                       gzip_compress=True): 
-    if total_count ==1:
+                       hashtype: str = "murmurhash3_x86_128",
+                       gzip_compress=True):
+    if total_count == 1:
         return None
-    
+
+    # test if hashtype is valid
+    if hashtype not in ["murmurhash3_x86_128", "identity_hash"]:
+        raise ValueError(f"Invalid hashtype {hashtype}."
+                         "Must be one of 'murmurhash3_x86_128' "
+                         "or 'identity_hash'")
+
     options = {
         '@type': 'neuroglancer_uint64_sharded_v1',
         'hash': hashtype,
@@ -100,53 +110,30 @@ def choose_output_spec(total_count, total_bytes,
     return options
 
 
-def compressed_morton_code(gridpt, grid_size):
-    # from cloudvolume
-    if hasattr(gridpt, "__len__") and len(gridpt) == 0: # generators don't have len
-        return np.zeros((0,), dtype=np.uint32)
+def compressed_morton_code(position: Sequence[int], shape: Sequence[int]):
+    """Converts a position in a grid to a compressed Morton code.
 
-    gridpt = np.asarray(gridpt, dtype=np.uint32)
-    single_input = False
-    if gridpt.ndim == 1:
-        gridpt = np.atleast_2d(gridpt)
-        single_input = True
+    Args:
+        position: A sequence of integers representing the position in the grid.
+        shape: A sequence of integers representing the shape of the grid.
 
-    code = np.zeros((gridpt.shape[0],), dtype=np.uint64)
-    num_bits = [ math.ceil(math.log2(size)) for size in grid_size ]
-    j = np.uint64(0)
-    one = np.uint64(1)
+    Returns:
+        int: The compressed Morton code.
+    """
+    output_bit = 0
+    rank = len(position)
+    output_num = 0
+    for bit in range(32):
+        for dim in range(rank-1, -1, -1):
+            if (shape[dim] - 1) >> bit:
+                output_num |= ((position[dim] >> bit) & 1) << output_bit
+                output_bit += 1
+                if output_bit == 64:
+                    # In Python, we don't have the 32-bit limitation, so we don't need to split into high and low.
+                    # But you can add code here to handle or signal overflow if needed.
+                    pass
+    return output_num
 
-    if sum(num_bits) > 64:
-        raise ValueError(f"Unable to represent grids that require more than 64 bits. Grid size {grid_size} requires {num_bits} bits.")
-
-    max_coords = np.max(gridpt, axis=0)
-    if np.any(max_coords >= grid_size):
-        raise ValueError(f"Unable to represent grid points larger than the grid. Grid size: {grid_size} Grid points: {gridpt}")
-
-    for i in range(max(num_bits)):
-        for dim in range(3):
-            if 2 ** i < grid_size[dim]:
-                bit = (((np.uint64(gridpt[:, dim]) >> np.uint64(i)) & one) << j)
-                code |= bit
-                j += one
-    if single_input:
-        return code[0]
-    return code
-
-# def compressed_morton_code(position, shape):
-#     output_bit = 0
-#     rank = len(position)
-#     output_num = 0
-#     for bit in range(32):
-#         for dim in range(rank-1, -1, -1):
-#             if (shape[dim] - 1) >> bit:
-#                 output_num |= ((position[dim] >> bit) & 1) << output_bit
-#                 output_bit += 1
-#                 if output_bit == 64:
-#                     # In Python, we don't have the 32-bit limitation, so we don't need to split into high and low.
-#                     # But you can add code here to handle or signal overflow if needed.
-#                     pass
-#     return output_num
 
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
     geometry_size = rank if annotation_type == "point" else 2 * rank
@@ -225,12 +212,11 @@ class AnnotationWriter:
             annotation_type, coordinate_space.rank
         ) + _get_dtype_for_properties(self.properties)
         self.lower_bound = np.array(lower_bound, dtype=np.float32)
-        assert(len(self.lower_bound) == self.rank)
+        assert (len(self.lower_bound) == self.rank)
         self.upper_bound = np.full(
             shape=(self.rank,), fill_value=float("-inf"), dtype=np.float32
         )
         self.related_annotations = [{} for _ in self.relationships]
-        
 
     def get_chunk_index(self, coords):
         return tuple(((coords-self.lower_bound) // self.chunk_size).astype(np.int32))
@@ -245,7 +231,7 @@ class AnnotationWriter:
                 f"Expected point to have length {self.coordinate_space.rank}, but received: {len(point)}"
             )
 
-        #self.lower_bound = np.minimum(self.lower_bound, point)
+        # self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
         self._add_obj(point, id, **kwargs)
 
@@ -292,7 +278,7 @@ class AnnotationWriter:
                 f"Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_b)}"
             )
 
-        #self.lower_bound = np.minimum(self.lower_bound, point_a)
+        # self.lower_bound = np.minimum(self.lower_bound, point_a)
         self.upper_bound = np.maximum(self.upper_bound, point_b)
         coords = np.concatenate((point_a, point_b))
         self._add_obj(cast(Sequence[float], coords), id, **kwargs)
@@ -332,7 +318,7 @@ class AnnotationWriter:
                 rel_index = self.related_annotations[i]
                 rel_index_list = rel_index.setdefault(segment_id, [])
                 rel_index_list.append(annotation)
-         
+
     def _serialize_annotations_sharded(self, path, annotations, shard_spec):
         spec = {
                 'driver': 'neuroglancer_uint64_sharded',
@@ -344,12 +330,12 @@ class AnnotationWriter:
         for ann in annotations:
             # convert the ann.id to a binary representation of a uint64
             key = ann.id.to_bytes(8, 'little')
-            dataset.with_transaction(txn)[key]=ann.encoded
+            dataset.with_transaction(txn)[key] = ann.encoded
         txn.commit_async().result()
-    
+
     def _serialize_annotations(self, f, annotations: list[Annotation]):
         f.write(self._encode_multiple_annotations(annotations))
-       
+
     def _serialize_annotation(self, f, annotation: Annotation):
         f.write(annotation.encoded)
         for related_ids in annotation.relationships:
@@ -374,7 +360,7 @@ class AnnotationWriter:
         for annotation in annotations:
             binary_components.append(struct.pack("<Q", annotation.id))
         return b"".join(binary_components)
-    
+
     def _serialize_annotations_by_related_id(self, path, related_id_dict, shard_spec):
         spec = {
                 'driver': 'neuroglancer_uint64_sharded',
@@ -387,7 +373,7 @@ class AnnotationWriter:
             # convert the ann.id to a binary representation of a uint64
             key = related_id.to_bytes(8, 'little')
             value = self._encode_multiple_annotations(annotations)
-            dataset.with_transaction(txn)[key]=value
+            dataset.with_transaction(txn)[key] = value
         txn.commit_async().result()
 
     def _serialize_annotation_chunk_sharded(self, path, annotations_by_chunk, shard_spec, max_sizes):
@@ -454,9 +440,9 @@ class AnnotationWriter:
         # write annotations by spatial chunk
         if spatial_sharding_spec is not None:
             self._serialize_annotation_chunk_sharded(os.path.join(path, "spatial0"),
-                                                    self.annotations_by_chunk,
-                                                    spatial_sharding_spec,
-                                                    num_chunks.tolist())
+                                                     self.annotations_by_chunk,
+                                                     spatial_sharding_spec,
+                                                     num_chunks.tolist())
             metadata['spatial'][0]['sharding'] = spatial_sharding_spec
         else:
             for chunk_index, annotations in self.annotations_by_chunk.items():
@@ -489,9 +475,9 @@ class AnnotationWriter:
                     filepath = os.path.join(path, f"rel_{relationship}", str(segment_id))
                     with open(filepath, "wb") as f:
                         self._serialize_annotations(f, annotations)
-            
+
             metadata["relationships"].append(rel_md)
-        
+
         # write metadata info file
         with open(os.path.join(path, "info"), "w") as f:
             f.write(json.dumps(metadata, cls=NumpyEncoder))
