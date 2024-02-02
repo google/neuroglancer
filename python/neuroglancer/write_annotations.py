@@ -1,17 +1,15 @@
 """Writes annotations in the Precomputed annotation format.
 
 This provides a simple way to write annotations in the precomputed format, but
-has a number of limitations that makes it suitable only for a relatively small
-amount of annotation data:
+has a number of limitations that makes it suitable only for writing
+up to a few million of annotations, and not beyond that.
 
 - All annotations are buffered in memory.
 
-- Only a trivial spatial index consisting of a single grid cell at a single
-  level is generated.  Consequently, Neuroglancer will be forced to download all
-  annotations at once.
+- Only a single spatial index  of a fixed grid size is generated.  
+  No downsampling is performed. Consequently, Neuroglancer will be forced
+  to download all annotations to render them in 3 dimensions.
 
-- All indices are written in the unsharded format.  Consequently, there is at
-  least one file written per annotation.
 """
 
 from collections import defaultdict
@@ -131,7 +129,6 @@ def compressed_morton_code(gridpt, grid_size):
                 bit = (((np.uint64(gridpt[:, dim]) >> np.uint64(i)) & one) << j)
                 code |= bit
                 j += one
-    print(gridpt, grid_size, code)
     if single_input:
         return code[0]
     return code
@@ -404,9 +401,9 @@ class AnnotationWriter:
         for chunk_index, annotations in annotations_by_chunk.items():
             # calculate the compressed morton code for the chunk index
             key = compressed_morton_code(chunk_index, max_sizes)
-            print(key, type(key))
-            key = key.astype('<u8').tobytes()
-            print(key, type(key))
+            # convert the np.uint64 to a binary representation of a uint64
+            # using big endian representation
+            key = np.ascontiguousarray(key, dtype='>u8').tobytes()
             value = self._encode_multiple_annotations(annotations)
             dataset.with_transaction(txn)[key] = value
 
