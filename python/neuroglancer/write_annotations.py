@@ -23,11 +23,14 @@ from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, Union, cast
 
 import numpy as np
+
 try:
     import tensorstore as ts
 except ImportError:
-    logging.warning("Sharded write support requires tensorstore."
-                    "Install with pip install tensorstore")
+    logging.warning(
+        "Sharded write support requires tensorstore."
+        "Install with pip install tensorstore"
+    )
     ts = None
 
 from . import coordinate_space, viewer_state
@@ -39,6 +42,7 @@ class NumpyEncoder(json.JSONEncoder):
     Args:
         json (dict): A dictionary to be encoded.
     """
+
     def default(self, o):
         if isinstance(o, np.ndarray):
             return o.tolist()
@@ -85,19 +89,22 @@ class ShardSpec(NamedTuple):
 
     def to_json(self):
         return {
-            '@type': self.type,
-            'hash': self.hash,
-            'preshift_bits': self.preshift_bits,
-            'shard_bits': self.shard_bits,
-            'minishard_bits': self.minishard_bits,
-            'data_encoding': str(self.data_encoding),
-            'minishard_index_encoding': str(self.minishard_index_encoding)
+            "@type": self.type,
+            "hash": self.hash,
+            "preshift_bits": self.preshift_bits,
+            "shard_bits": self.shard_bits,
+            "minishard_bits": self.minishard_bits,
+            "data_encoding": str(self.data_encoding),
+            "minishard_index_encoding": str(self.minishard_index_encoding),
         }
 
 
-def choose_output_spec(total_count, total_bytes,
-                       hashtype: Literal["murmurhash3_x86_128", "identity_hash"] = "murmurhash3_x86_128",
-                       gzip_compress=True):
+def choose_output_spec(
+    total_count,
+    total_bytes,
+    hashtype: Literal["murmurhash3_x86_128", "identity_hash"] = "murmurhash3_x86_128",
+    gzip_compress=True,
+):
     if total_count == 1:
         return None
     if ts is None:
@@ -105,9 +112,11 @@ def choose_output_spec(total_count, total_bytes,
 
     # test if hashtype is valid
     if hashtype not in ["murmurhash3_x86_128", "identity_hash"]:
-        raise ValueError(f"Invalid hashtype {hashtype}."
-                         "Must be one of 'murmurhash3_x86_128' "
-                         "or 'identity_hash'")
+        raise ValueError(
+            f"Invalid hashtype {hashtype}."
+            "Must be one of 'murmurhash3_x86_128' "
+            "or 'identity_hash'"
+        )
 
     total_minishard_bits = 0
     while (total_count >> total_minishard_bits) > MINISHARD_TARGET_COUNT:
@@ -122,20 +131,22 @@ def choose_output_spec(total_count, total_bytes,
         preshift_bits += 1
 
     minishard_bits = total_minishard_bits - min(total_minishard_bits, shard_bits)
-    data_encoding: Literal["raw", "gzip"] = 'raw'
-    minishard_index_encoding: Literal["raw", "gzip"] = 'raw'
+    data_encoding: Literal["raw", "gzip"] = "raw"
+    minishard_index_encoding: Literal["raw", "gzip"] = "raw"
 
     if gzip_compress:
-        data_encoding = 'gzip'
-        minishard_index_encoding = 'gzip'
+        data_encoding = "gzip"
+        minishard_index_encoding = "gzip"
 
-    return ShardSpec(type='neuroglancer_uint64_sharded_v1',
-                     hash=hashtype,
-                     preshift_bits=preshift_bits,
-                     shard_bits=shard_bits,
-                     minishard_bits=minishard_bits,
-                     data_encoding=data_encoding,
-                     minishard_index_encoding=minishard_index_encoding)
+    return ShardSpec(
+        type="neuroglancer_uint64_sharded_v1",
+        hash=hashtype,
+        preshift_bits=preshift_bits,
+        shard_bits=shard_bits,
+        minishard_bits=minishard_bits,
+        data_encoding=data_encoding,
+        minishard_index_encoding=minishard_index_encoding,
+    )
 
 
 def compressed_morton_code(position: Sequence[int], shape: Sequence[int]):
@@ -152,7 +163,7 @@ def compressed_morton_code(position: Sequence[int], shape: Sequence[int]):
     rank = len(position)
     output_num = 0
     for bit in range(32):
-        for dim in range(rank-1, -1, -1):
+        for dim in range(rank - 1, -1, -1):
             if (shape[dim] - 1) >> bit:
                 output_num |= ((position[dim] >> bit) & 1) << output_bit
                 output_bit += 1
@@ -203,7 +214,7 @@ class AnnotationWriter:
         lower_bound: Sequence = (0, 0, 0),
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
-        chunk_size: Sequence[int] = [256, 256, 256]
+        chunk_size: Sequence[int] = [256, 256, 256],
     ):
         """Initializes an `AnnotationWriter`.
 
@@ -232,7 +243,9 @@ class AnnotationWriter:
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
         self.properties = list(properties)
-        self.annotations_by_chunk: defaultdict[str, list[Annotation]] = defaultdict(list)
+        self.annotations_by_chunk: defaultdict[str, list[Annotation]] = defaultdict(
+            list
+        )
         self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
         self.annotations = []
         self.rank = coordinate_space.rank
@@ -240,14 +253,14 @@ class AnnotationWriter:
             annotation_type, coordinate_space.rank
         ) + _get_dtype_for_properties(self.properties)
         self.lower_bound = np.array(lower_bound, dtype=np.float32)
-        assert (len(self.lower_bound) == self.rank)
+        assert len(self.lower_bound) == self.rank
         self.upper_bound = np.full(
             shape=(self.rank,), fill_value=float("-inf"), dtype=np.float32
         )
         self.related_annotations = [{} for _ in self.relationships]
 
     def get_chunk_index(self, coords):
-        return tuple(((coords-self.lower_bound) // self.chunk_size).astype(np.int32))
+        return tuple(((coords - self.lower_bound) // self.chunk_size).astype(np.int32))
 
     def add_point(self, point: Sequence[float], id: Optional[int] = None, **kwargs):
         if self.annotation_type != "point":
@@ -338,7 +351,7 @@ class AnnotationWriter:
             id=id, encoded=encoded.tobytes(), relationships=related_ids
         )
 
-        chunk_index = self.get_chunk_index(np.array(coords[:self.rank]))
+        chunk_index = self.get_chunk_index(np.array(coords[: self.rank]))
         self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
         for i, segment_ids in enumerate(related_ids):
@@ -349,15 +362,15 @@ class AnnotationWriter:
 
     def _serialize_annotations_sharded(self, path, annotations, shard_spec):
         spec = {
-                'driver': 'neuroglancer_uint64_sharded',
-                'metadata': shard_spec.to_json(),
-                "base": f"file://{path}"
-            }
+            "driver": "neuroglancer_uint64_sharded",
+            "metadata": shard_spec.to_json(),
+            "base": f"file://{path}",
+        }
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
         for ann in annotations:
             # convert the ann.id to a binary representation of a uint64
-            key = ann.id.to_bytes(8, 'little')
+            key = ann.id.to_bytes(8, "little")
             dataset.with_transaction(txn)[key] = ann.encoded
         txn.commit_async().result()
 
@@ -391,25 +404,27 @@ class AnnotationWriter:
 
     def _serialize_annotations_by_related_id(self, path, related_id_dict, shard_spec):
         spec = {
-                'driver': 'neuroglancer_uint64_sharded',
-                'metadata': shard_spec.to_json(),
-                "base": f"file://{path}"
-            }
+            "driver": "neuroglancer_uint64_sharded",
+            "metadata": shard_spec.to_json(),
+            "base": f"file://{path}",
+        }
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
         for related_id, annotations in related_id_dict.items():
             # convert the ann.id to a binary representation of a uint64
-            key = related_id.to_bytes(8, 'little')
+            key = related_id.to_bytes(8, "little")
             value = self._encode_multiple_annotations(annotations)
             dataset.with_transaction(txn)[key] = value
         txn.commit_async().result()
 
-    def _serialize_annotation_chunk_sharded(self, path, annotations_by_chunk, shard_spec, max_sizes):
+    def _serialize_annotation_chunk_sharded(
+        self, path, annotations_by_chunk, shard_spec, max_sizes
+    ):
         spec = {
-                'driver': 'neuroglancer_uint64_sharded',
-                'metadata': shard_spec.to_json(),
-                "base": f"file://{path}"
-            }
+            "driver": "neuroglancer_uint64_sharded",
+            "metadata": shard_spec.to_json(),
+            "base": f"file://{path}",
+        }
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
         for chunk_index, annotations in annotations_by_chunk.items():
@@ -417,7 +432,7 @@ class AnnotationWriter:
             key = compressed_morton_code(chunk_index, max_sizes)
             # convert the np.uint64 to a binary representation of a uint64
             # using big endian representation
-            key = np.ascontiguousarray(key, dtype='>u8').tobytes()
+            key = np.ascontiguousarray(key, dtype=">u8").tobytes()
             value = self._encode_multiple_annotations(annotations)
             dataset.with_transaction(txn)[key] = value
 
@@ -432,19 +447,20 @@ class AnnotationWriter:
             "annotation_type": self.annotation_type,
             "properties": [p.to_json() for p in self.properties],
             "relationships": [],
-            "by_id": {
-                "key": "by_id"
-            }
+            "by_id": {"key": "by_id"},
         }
         total_ann_bytes = sum(len(a.encoded) for a in self.annotations)
-        sharding_spec = choose_output_spec(len(self.annotations),
-                                           total_ann_bytes)
+        sharding_spec = choose_output_spec(len(self.annotations), total_ann_bytes)
 
         # calculate the number of chunks in each dimension
-        num_chunks = np.ceil((self.upper_bound - self.lower_bound) / self.chunk_size).astype(int)
+        num_chunks = np.ceil(
+            (self.upper_bound - self.lower_bound) / self.chunk_size
+        ).astype(int)
 
         # find the maximum number of annotations in any chunk
-        max_annotations = max(len(annotations) for annotations in self.annotations_by_chunk.values())
+        max_annotations = max(
+            len(annotations) for annotations in self.annotations_by_chunk.values()
+        )
 
         # make directories
         os.makedirs(path, exist_ok=True)
@@ -454,34 +470,39 @@ class AnnotationWriter:
         os.makedirs(os.path.join(path, "spatial0"), exist_ok=True)
 
         total_chunks = len(self.annotations_by_chunk)
-        spatial_sharding_spec = choose_output_spec(total_chunks,
-                                                   total_ann_bytes + 8*len(self.annotations)+8*total_chunks)
+        spatial_sharding_spec = choose_output_spec(
+            total_chunks, total_ann_bytes + 8 * len(self.annotations) + 8 * total_chunks
+        )
         # initialize metadata for spatial index
-        metadata['spatial'] = [
+        metadata["spatial"] = [
             {
                 "key": "spatial0",
                 "grid_shape": num_chunks.tolist(),
                 "chunk_size": [int(x) for x in self.chunk_size],
-                "limit": max_annotations
+                "limit": max_annotations,
             }
         ]
         # write annotations by spatial chunk
         if spatial_sharding_spec is not None:
-            self._serialize_annotation_chunk_sharded(os.path.join(path, "spatial0"),
-                                                     self.annotations_by_chunk,
-                                                     spatial_sharding_spec,
-                                                     num_chunks.tolist())
-            metadata['spatial'][0]['sharding'] = spatial_sharding_spec.to_json()
+            self._serialize_annotation_chunk_sharded(
+                os.path.join(path, "spatial0"),
+                self.annotations_by_chunk,
+                spatial_sharding_spec,
+                num_chunks.tolist(),
+            )
+            metadata["spatial"][0]["sharding"] = spatial_sharding_spec.to_json()
         else:
             for chunk_index, annotations in self.annotations_by_chunk.items():
                 chunk_name = "_".join([str(c) for c in chunk_index])
                 filepath = os.path.join(path, "spatial0", chunk_name)
-                with open(filepath, 'wb') as f:
+                with open(filepath, "wb") as f:
                     self._serialize_annotations(f, annotations)
 
         # write annotations by id
         if sharding_spec is not None:
-            self._serialize_annotations_sharded(os.path.join(path, "by_id"), self.annotations, sharding_spec)
+            self._serialize_annotations_sharded(
+                os.path.join(path, "by_id"), self.annotations, sharding_spec
+            )
             metadata["by_id"]["sharding"] = sharding_spec.to_json()
         else:
             for annotation in self.annotations:
@@ -491,16 +512,23 @@ class AnnotationWriter:
         # write relationships
         for i, relationship in enumerate(self.relationships):
             rel_index = self.related_annotations[i]
-            relationship_sharding_spec = choose_output_spec(len(rel_index),
-                                                            total_ann_bytes + 8*len(self.annotations)+8*total_chunks)
-            rel_md = {"id": relationship,
-                      "key": f"rel_{relationship}"}
+            relationship_sharding_spec = choose_output_spec(
+                len(rel_index),
+                total_ann_bytes + 8 * len(self.annotations) + 8 * total_chunks,
+            )
+            rel_md = {"id": relationship, "key": f"rel_{relationship}"}
             if relationship_sharding_spec is not None:
                 rel_md["sharding"] = relationship_sharding_spec.to_json()
-                self._serialize_annotations_by_related_id(os.path.join(path, f"rel_{relationship}"), rel_index, relationship_sharding_spec)
+                self._serialize_annotations_by_related_id(
+                    os.path.join(path, f"rel_{relationship}"),
+                    rel_index,
+                    relationship_sharding_spec,
+                )
             else:
                 for segment_id, annotations in rel_index.items():
-                    filepath = os.path.join(path, f"rel_{relationship}", str(segment_id))
+                    filepath = os.path.join(
+                        path, f"rel_{relationship}", str(segment_id)
+                    )
                     with open(filepath, "wb") as f:
                         self._serialize_annotations(f, annotations)
 
