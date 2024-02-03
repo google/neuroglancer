@@ -94,7 +94,7 @@ class ShardSpec(NamedTuple):
 
 
 def choose_output_spec(total_count, total_bytes,
-                       hashtype: str = "murmurhash3_x86_128",
+                       hashtype: Literal["murmurhash3_x86_128", "identity_hash"] = "murmurhash3_x86_128",
                        gzip_compress=True):
     if total_count == 1:
         return None
@@ -121,11 +121,11 @@ def choose_output_spec(total_count, total_bytes,
 
     minishard_bits = total_minishard_bits - min(total_minishard_bits, shard_bits)
     if gzip_compress:
-        data_encoding = 'gzip'
-        minishard_index_encoding = 'gzip'
+        data_encoding: Literal["raw", "gzip"] = 'gzip'
+        minishard_index_encoding: Literal["raw", "gzip"] = 'gzip'
     else:
-        data_encoding = 'raw'
-        minishard_index_encoding = 'raw'
+        data_encoding: Literal["raw", "gzip"] = 'raw'
+        minishard_index_encoding: Literal["raw", "gzip"] = 'raw'
 
     return ShardSpec(type='neuroglancer_uint64_sharded_v1',
                      hash=hashtype,
@@ -507,3 +507,6 @@ class AnnotationWriter:
         # write metadata info file
         with open(os.path.join(path, "info"), "w") as f:
             f.write(json.dumps(metadata, cls=NumpyEncoder))
+
+
+        
