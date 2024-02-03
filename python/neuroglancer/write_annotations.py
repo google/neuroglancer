@@ -128,7 +128,6 @@ def choose_output_spec(total_count, total_bytes,
         data_encoding = 'gzip'
         minishard_index_encoding = 'gzip'
 
-
     return ShardSpec(type='neuroglancer_uint64_sharded_v1',
                      hash=hashtype,
                      preshift_bits=preshift_bits,
