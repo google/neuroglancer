@@ -12,22 +12,23 @@ up to a few million of annotations, and not beyond that.
 
 """
 
-from collections import defaultdict
-from collections.abc import Sequence
 import json
+import logging
 import numbers
 import os
 import pathlib
 import struct
+from collections import defaultdict
+from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, Union, cast
-import logging
+
+import numpy as np
 try:
     import tensorstore as ts
 except ImportError:
     logging.warning("Sharded write support requires tensorstore."
                     "Install with pip install tensorstore")
     ts = None
-import numpy as np
 
 from . import coordinate_space, viewer_state
 
