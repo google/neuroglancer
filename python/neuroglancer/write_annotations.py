@@ -19,7 +19,7 @@ import os
 import pathlib
 import struct
 from collections.abc import Sequence
-from typing import Literal, NamedTuple, Optional, Union, cast
+from typing import Literal, NamedTuple, Optional, Union, cast, List, DefaultDict
 import logging
 try:
     import tensorstore as ts
@@ -120,12 +120,13 @@ def choose_output_spec(total_count, total_bytes,
         preshift_bits += 1
 
     minishard_bits = total_minishard_bits - min(total_minishard_bits, shard_bits)
+    data_encoding: Literal["raw", "gzip"] = 'raw'
+    minishard_index_encoding: Literal["raw", "gzip"] = 'raw'
+
     if gzip_compress:
-        data_encoding: Literal["raw", "gzip"] = 'gzip'
-        minishard_index_encoding: Literal["raw", "gzip"] = 'gzip'
-    else:
-        data_encoding: Literal["raw", "gzip"] = 'raw'
-        minishard_index_encoding: Literal["raw", "gzip"] = 'raw'
+        data_encoding = 'gzip'
+        minishard_index_encoding = 'gzip'
+
 
     return ShardSpec(type='neuroglancer_uint64_sharded_v1',
                      hash=hashtype,
@@ -230,7 +231,7 @@ class AnnotationWriter:
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
         self.properties = list(properties)
-        self.annotations_by_chunk = defaultdict(list)
+        self.annotations_by_chunk: DefaultDict[str, List[Annotation]] = defaultdict(list)
         self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
         self.annotations = []
         self.rank = coordinate_space.rank
