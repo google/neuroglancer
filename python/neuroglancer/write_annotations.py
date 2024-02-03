@@ -13,18 +13,19 @@ up to a few million of annotations, and not beyond that.
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 import json
 import numbers
 import os
 import pathlib
 import struct
-from collections.abc import Sequence
-from typing import Literal, NamedTuple, Optional, Union, cast, List, DefaultDict
+from typing import Literal, NamedTuple, Optional, Union, cast
 import logging
 try:
     import tensorstore as ts
 except ImportError:
-    logging.warning('Sharded write support requires tensorstore, Install with pip install tensorstore')
+    logging.warning("Sharded write support requires tensorstore."
+                    "Install with pip install tensorstore")
     ts = None
 import numpy as np
 
@@ -231,7 +232,7 @@ class AnnotationWriter:
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
         self.properties = list(properties)
-        self.annotations_by_chunk: DefaultDict[str, List[Annotation]] = defaultdict(list)
+        self.annotations_by_chunk: defaultdict[str, list[Annotation]] = defaultdict(list)
         self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
         self.annotations = []
         self.rank = coordinate_space.rank
@@ -506,8 +507,5 @@ class AnnotationWriter:
             metadata["relationships"].append(rel_md)
 
         # write metadata info file
-        with open(os.path.join(path, "info"), "w") as f:
+        with open(os.path.join(path, "info"), "w", encoding="utf-8") as f:
             f.write(json.dumps(metadata, cls=NumpyEncoder))
-
-
-        
