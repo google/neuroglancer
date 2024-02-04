@@ -462,11 +462,6 @@ class AnnotationWriter:
             (self.upper_bound - self.lower_bound) / self.chunk_size
         ).astype(int)
 
-        # find the maximum number of annotations in any chunk
-        max_annotations = max(
-            len(annotations) for annotations in self.annotations_by_chunk.values()
-        )
-
         # make directories
         os.makedirs(path, exist_ok=True)
         for relationship in self.relationships:
