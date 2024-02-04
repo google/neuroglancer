@@ -262,7 +262,7 @@ class AnnotationWriter:
             chunk_size = cast(Sequence[int], chunk_size)
             if len(chunk_size) != self.rank:
                 raise ValueError(
-                    f"Expected chunk_size to have length {self.rank}, but received: {len(chunk_size)}"
+                    f"Expected chunk_size to have length {self.rank}, but received: {chunk_size}"
                 )
             self.chunk_size = np.array(chunk_size)
 
