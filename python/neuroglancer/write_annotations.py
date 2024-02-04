@@ -213,7 +213,7 @@ class AnnotationWriter:
         annotation_type: AnnotationType,
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
-        chunk_size: Sequence[int] = [256, 256, 256],
+        chunk_size: Union[int, Sequence[int]] = 256,
     ):
         """Initializes an `AnnotationWriter`.
 
@@ -231,8 +231,9 @@ class AnnotationWriter:
                 is a dictionary with keys `"parent"` and `"child"`.
             properties: The properties of each annotation.  Each property is a
                 `AnnotationPropertySpec` object.
-            chunk_size: The size of each chunk in the spatial index.  Must have the
-                same length as `coordinate_space.rank`.
+            chunk_size: The size of each chunk in the spatial index.
+                If an integer then all dimensions will be the same chunk size.
+                If a sequence, then must have the same length as `coordinate_space.rank`.
             write_id_sharded: If True, the annotations will be sharded by id.
             id_sharding_spec: The sharding specification for the id sharding.  If
                 not specified spec will be automatically configured
@@ -251,6 +252,19 @@ class AnnotationWriter:
         self.dtype = _get_dtype_for_geometry(
             annotation_type, coordinate_space.rank
         ) + _get_dtype_for_properties(self.properties)
+
+        # if chunk_size is an integer, then make it a sequence
+        if isinstance(chunk_size, numbers.Integral):
+            self.chunk_size = np.full(
+                shape=(self.rank,), fill_value=chunk_size, dtype=np.int32
+            )
+        else:
+            if len(chunk_size) != self.rank:
+                raise ValueError(
+                    f"Expected chunk_size to have length {self.rank}, but received: {len(chunk_size)}"
+                )
+            self.chunk_size = np.array(chunk_size)
+
         self.lower_bound = np.full(
             shape=(self.rank,), fill_value=float("inf"), dtype=np.float32
         )
