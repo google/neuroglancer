@@ -259,6 +259,7 @@ class AnnotationWriter:
                 shape=(self.rank,), fill_value=chunk_size, dtype=np.int32
             )
         else:
+            chunk_size = cast(Sequence[int], chunk_size)
             if len(chunk_size) != self.rank:
                 raise ValueError(
                     f"Expected chunk_size to have length {self.rank}, but received: {len(chunk_size)}"
