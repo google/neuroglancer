@@ -211,7 +211,6 @@ class AnnotationWriter:
         self,
         coordinate_space: coordinate_space.CoordinateSpace,
         annotation_type: AnnotationType,
-        lower_bound: Sequence = (0, 0, 0),
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
         chunk_size: Sequence[int] = [256, 256, 256],
@@ -252,15 +251,16 @@ class AnnotationWriter:
         self.dtype = _get_dtype_for_geometry(
             annotation_type, coordinate_space.rank
         ) + _get_dtype_for_properties(self.properties)
-        self.lower_bound = np.array(lower_bound, dtype=np.float32)
-        assert len(self.lower_bound) == self.rank
+        self.lower_bound = np.full(
+            shape=(self.rank,), fill_value=float("inf"), dtype=np.float32
+        )
         self.upper_bound = np.full(
             shape=(self.rank,), fill_value=float("-inf"), dtype=np.float32
         )
         self.related_annotations = [{} for _ in self.relationships]
 
     def get_chunk_index(self, coords):
-        return tuple(((coords - self.lower_bound) // self.chunk_size).astype(np.int32))
+        return tuple((coords // self.chunk_size).astype(np.int32))
 
     def add_point(self, point: Sequence[float], id: Optional[int] = None, **kwargs):
         if self.annotation_type != "point":
@@ -272,7 +272,7 @@ class AnnotationWriter:
                 f"Expected point to have length {self.coordinate_space.rank}, but received: {len(point)}"
             )
 
-        # self.lower_bound = np.minimum(self.lower_bound, point)
+        self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
         self._add_obj(point, id, **kwargs)
 
@@ -318,9 +318,11 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_b)}"
             )
+        min_vals = np.minimum(point_a, point_b)
+        max_vals = np.maximum(point_a, point_b)
+        self.lower_bound = np.minimum(self.lower_bound, min_vals)
+        self.upper_bound = np.maximum(self.upper_bound, max_vals)
 
-        # self.lower_bound = np.minimum(self.lower_bound, point_a)
-        self.upper_bound = np.maximum(self.upper_bound, point_b)
         coords = np.concatenate((point_a, point_b))
         self._add_obj(cast(Sequence[float], coords), id, **kwargs)
 
@@ -427,7 +429,10 @@ class AnnotationWriter:
         }
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
+        lower_chunk_index = self.get_chunk_index(self.lower_bound)
+
         for chunk_index, annotations in annotations_by_chunk.items():
+            chunk_index = np.array(chunk_index) - np.array(lower_chunk_index)
             # calculate the compressed morton code for the chunk index
             key = compressed_morton_code(chunk_index, max_sizes)
             # convert the np.uint64 to a binary representation of a uint64
@@ -479,7 +484,7 @@ class AnnotationWriter:
                 "key": "spatial0",
                 "grid_shape": num_chunks.tolist(),
                 "chunk_size": [int(x) for x in self.chunk_size],
-                "limit": max_annotations,
+                "limit": len(self.annotations),
             }
         ]
         # write annotations by spatial chunk
