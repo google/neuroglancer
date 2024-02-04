@@ -193,7 +193,9 @@ class LocalVolume(trackable_state.ChangeNotifier):
             or np.prod(downsample_factor) > self.max_downsampling
         ):
             raise ValueError("Invalid downsampling factor.")
-        downsampled_shape = np.asarray(np.ceil(self.shape / downsample_factor, dtype=np.int64))
+        downsampled_shape = np.asarray(
+            np.ceil(self.shape / downsample_factor, dtype=np.int64)
+        )
         if np.any(end < start) or np.any(start < 0) or np.any(end > downsampled_shape):
             raise ValueError("Out of bounds data request.")
 

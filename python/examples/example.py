@@ -16,7 +16,7 @@ def add_example_layers(state):
 
     b = np.asarray(
         np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10),
-        dtype=np.uint32
+        dtype=np.uint32,
     )
     b = np.pad(b, 1, "constant")
     dimensions = neuroglancer.CoordinateSpace(

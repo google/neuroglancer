@@ -16,7 +16,7 @@ if __name__ == "__main__":
     )
     data = np.asarray(
         np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10),
-        dtype=np.uint32
+        dtype=np.uint32,
     )
     data = np.pad(data, 1, "constant")
     dimensions = neuroglancer.CoordinateSpace(
