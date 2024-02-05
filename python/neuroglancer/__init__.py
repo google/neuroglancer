@@ -49,7 +49,7 @@ from .viewer_state import (
     BlendTool,  # noqa: F401
     OpacityTool,  # noqa: F401
     VolumeRenderingTool,  # noqa: F401
-    GainTool,  # noqa: F401
+    VolumeRenderingGainTool,  # noqa: F401
     VolumeRenderingDepthSamplesTool,  # noqa: F401
     CrossSectionRenderScaleTool,  # noqa: F401
     SelectedAlphaTool,  # noqa: F401
