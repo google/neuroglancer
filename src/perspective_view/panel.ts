@@ -850,7 +850,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       renderContext.emitPickID = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
-          renderContext.depthBufferTextureID =
+          renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
           renderLayer.draw(renderContext, attachment);
         }

@@ -583,8 +583,8 @@ void main() {
                 shaderResult.parameters.parseResult.controls,
               );
               if (
-                renderContext.depthBufferTextureID !== undefined &&
-                renderContext.depthBufferTextureID !== null
+                renderContext.depthBufferTexture !== undefined &&
+                renderContext.depthBufferTexture !== null
               ) {
                 const depthTextureUnit = shader.textureUnit(
                   depthSamplerTextureUnit,
@@ -594,7 +594,7 @@ void main() {
                 );
                 gl.bindTexture(
                   WebGL2RenderingContext.TEXTURE_2D,
-                  renderContext.depthBufferTextureID,
+                  renderContext.depthBufferTexture,
                 );
               } else {
                 throw new Error(
