@@ -15,6 +15,7 @@
  */
 
 import "#src/datasource/graphene/graphene.css";
+import { debounce } from "lodash-es";
 import {
   AnnotationDisplayState,
   AnnotationLayerState,
@@ -2196,7 +2197,6 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       displayState.baseSegmentHighlighting.value = priorBaseSegmentHighlighting;
       displayState.highlightColor.value = priorHighlightColor;
     });
-
     const resetMulticutDisplay = () => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
       displayState.useTempSegmentStatedColors2d.value = false;
@@ -2204,31 +2204,25 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       displayState.tempSegmentDefaultColor2d.value = undefined;
       displayState.highlightColor.value = undefined;
     };
-
     const updateMulticutDisplay = () => {
       resetMulticutDisplay();
       activeGroupIndicator.classList.toggle(
         "blueGroup",
         multicutState.blueGroup.value,
       );
-
       const focusSegment = multicutState.focusSegment.value;
       if (focusSegment === undefined) return;
-
       displayState.baseSegmentHighlighting.value = true;
       displayState.highlightColor.value = multicutState.blueGroup.value
         ? BLUE_COLOR_HIGHTLIGHT
         : RED_COLOR_HIGHLIGHT;
       segmentsState.useTemporaryVisibleSegments.value = true;
       segmentsState.useTemporarySegmentEquivalences.value = true;
-
-      // add to focus segments and temporary sets
+      // add focus segment and red/blue segments
       segmentsState.temporaryVisibleSegments.add(focusSegment);
-
       for (const segment of multicutState.segments) {
         segmentsState.temporaryVisibleSegments.add(segment);
       }
-
       // all other segments are added to the focus segment equivalences
       for (const equivalence of segmentsState.segmentEquivalences.setElements(
         focusSegment,
@@ -2240,14 +2234,12 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
           );
         }
       }
-
       // set colors
       displayState.tempSegmentDefaultColor2d.value = MULTICUT_OFF_COLOR;
       displayState.tempSegmentStatedColors2d.value.set(
         focusSegment,
         TRANSPARENT_COLOR_PACKED,
       );
-
       for (const segment of multicutState.redSegments) {
         displayState.tempSegmentStatedColors2d.value.set(
           segment,
@@ -2263,18 +2255,19 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
 
       displayState.useTempSegmentStatedColors2d.value = true;
     };
-
     updateMulticutDisplay();
-
     activation.registerDisposer(
       multicutState.changed.add(updateMulticutDisplay),
     );
-
+    activation.registerDisposer(
+      segmentationGroupState.segmentEquivalences.changed.add(
+        debounce(() => updateMulticutDisplay(), 0),
+      ),
+    );
     activation.bindAction("swap-group", (event) => {
       event.stopPropagation();
       multicutState.swapGroup();
     });
-
     activation.bindAction("set-anchor", (event) => {
       event.stopPropagation();
       const currentSegmentSelection = maybeGetSelection(
@@ -2308,7 +2301,6 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       }
       multicutState.activeGroup.add(currentSegmentSelection);
     });
-
     activation.bindAction("submit", (event) => {
       event.stopPropagation();
       submitAction();
