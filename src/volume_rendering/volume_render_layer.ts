@@ -645,7 +645,7 @@ void main() {
         const farLimitFraction = (adjustedFar - near) / (far - near);
         gl.uniform1f(shader.uniform("uNearLimitFraction"), nearLimitFraction);
         gl.uniform1f(shader.uniform("uFarLimitFraction"), farLimitFraction);
-        gl.uniform1f(shader.uniform("uGain"), this.gain.value);
+        gl.uniform1f(shader.uniform("uGain"), Math.exp(this.gain.value));
         gl.uniform1i(
           shader.uniform("uMaxSteps"),
           this.depthSamplesTarget.value,

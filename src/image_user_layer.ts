@@ -466,7 +466,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: (layer) => layer.volumeRendering,
     ...rangeLayerControl((layer) => ({
       value: layer.volumeRenderingGain,
-      options: { min: 0.01, max: 16.0, step: 0.01 },
+      options: { min: -10.0, max: 10.0, step: 0.1 },
     })),
   },
   {
