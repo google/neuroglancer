@@ -127,7 +127,7 @@ export class ImageUserLayer extends Base {
   dataType = new WatchableValue<DataType | undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  volumeRenderingGain = trackableFiniteFloat(1);
+  volumeRenderingGain = trackableFiniteFloat(0);
   volumeRenderingChunkResolutionHistogram = new RenderScaleHistogram(
     volumeRenderingDepthSamplesOriginLogScale,
   );
