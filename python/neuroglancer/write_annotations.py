@@ -213,7 +213,7 @@ class AnnotationWriter:
         annotation_type: AnnotationType,
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
-        chunk_size: Union[int, Sequence[int]] = 256,
+        chunk_size: Union[float, Sequence[float]] = 256,
     ):
         """Initializes an `AnnotationWriter`.
 
