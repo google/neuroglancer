@@ -213,7 +213,7 @@ class AnnotationWriter:
         annotation_type: AnnotationType,
         relationships: Sequence[str] = (),
         properties: Sequence[viewer_state.AnnotationPropertySpec] = (),
-        chunk_size: Union[float, Sequence[float]] = 256,
+        experimental_chunk_size: Union[float, Sequence[float]] = 256,
     ):
         """Initializes an `AnnotationWriter`.
 
@@ -231,11 +231,14 @@ class AnnotationWriter:
                 is a dictionary with keys `"parent"` and `"child"`.
             properties: The properties of each annotation.  Each property is a
                 `AnnotationPropertySpec` object.
-            chunk_size: The size of each chunk in the spatial index.
+            experimental_chunk_size: The size of each chunk in the spatial index.
                 If an integer then all dimensions will be the same chunk size.
                 If a sequence, then must have the same length as `coordinate_space.rank`.
+                NOTE: it is anticipated that in the future downsampling will be added which
+                will start at a single top level chunk and move down, at which time this parameter
+                will be removed in favor of parameters that control downsampling.
         """
-        self.chunk_size = np.array(chunk_size)
+
         self.coordinate_space = coordinate_space
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
@@ -251,15 +254,15 @@ class AnnotationWriter:
         ) + _get_dtype_for_properties(self.properties)
 
         # if chunk_size is an integer, then make it a sequence
-        if isinstance(chunk_size, numbers.Integral):
+        if isinstance(experimental_chunk_size, numbers.Integral):
             self.chunk_size = np.full(
-                shape=(self.rank,), fill_value=chunk_size, dtype=np.int32
+                shape=(self.rank,), fill_value=experimental_chunk_size, dtype=np.int32
             )
         else:
-            chunk_size = cast(Sequence[int], chunk_size)
+            chunk_size = cast(Sequence[int], experimental_chunk_size)
             if len(chunk_size) != self.rank:
                 raise ValueError(
-                    f"Expected chunk_size to have length {self.rank}, but received: {chunk_size}"
+                    f"Expected experimental_chunk_size to have length {self.rank}, but received: {chunk_size}"
                 )
             self.chunk_size = np.array(chunk_size)
 
