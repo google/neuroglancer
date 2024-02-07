@@ -50,6 +50,11 @@ export interface PerspectiveViewRenderContext
    * Specifies whether there was a previous pick ID pass.
    */
   alreadyEmittedPickID: boolean;
+
+  /**
+   * Specifies the ID of the depth frame buffer texture to query during rendering.
+   */
+  depthBufferTexture?: WebGLTexture | null;
 }
 
 export class PerspectiveViewRenderLayer<

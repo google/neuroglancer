@@ -109,22 +109,26 @@ void emit(vec4 color, highp uint pickId) {
  * http://casual-effects.blogspot.com/2015/03/implemented-weighted-blended-order.html
  */
 export const glsl_computeOITWeight = `
-float computeOITWeight(float alpha) {
+float computeOITWeight(float alpha, float depth) {
   float a = min(1.0, alpha) * 8.0 + 0.01;
-  float b = -gl_FragCoord.z * 0.95 + 1.0;
+  float b = -depth * 0.95 + 1.0;
   return a * a * a * b * b * b;
 }
 `;
 
 // Color must be premultiplied by alpha.
+// Can use emitAccumAndRevealage() to emit a pre-weighted OIT result.
 export const glsl_perspectivePanelEmitOIT = [
   glsl_computeOITWeight,
   `
-void emit(vec4 color, highp uint pickId) {
-  float weight = computeOITWeight(color.a);
-  vec4 accum = color * weight;
-  v4f_fragData0 = vec4(accum.rgb, color.a);
+void emitAccumAndRevealage(vec4 accum, float revealage, highp uint pickId) {
+  v4f_fragData0 = vec4(accum.rgb, revealage);
   v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  float weight = computeOITWeight(color.a, gl_FragCoord.z);
+  vec4 accum = color * weight;
+  emitAccumAndRevealage(accum, color.a, pickId);
 }
 `,
 ];
@@ -846,6 +850,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       renderContext.emitPickID = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
+          renderContext.depthBufferTexture =
+            this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
           renderLayer.draw(renderContext, attachment);
         }
       }

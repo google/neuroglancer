@@ -48,6 +48,8 @@ from .viewer_state import (
     PlaceEllipsoidTool,  # noqa: F401
     BlendTool,  # noqa: F401
     OpacityTool,  # noqa: F401
+    VolumeRenderingTool,  # noqa: F401
+    VolumeRenderingGainTool,  # noqa: F401
     VolumeRenderingDepthSamplesTool,  # noqa: F401
     CrossSectionRenderScaleTool,  # noqa: F401
     SelectedAlphaTool,  # noqa: F401
