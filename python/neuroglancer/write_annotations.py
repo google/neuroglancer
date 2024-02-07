@@ -234,9 +234,6 @@ class AnnotationWriter:
             chunk_size: The size of each chunk in the spatial index.
                 If an integer then all dimensions will be the same chunk size.
                 If a sequence, then must have the same length as `coordinate_space.rank`.
-            write_id_sharded: If True, the annotations will be sharded by id.
-            id_sharding_spec: The sharding specification for the id sharding.  If
-                not specified spec will be automatically configured
         """
         self.chunk_size = np.array(chunk_size)
         self.coordinate_space = coordinate_space
