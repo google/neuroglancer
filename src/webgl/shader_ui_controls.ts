@@ -1090,7 +1090,7 @@ function convertTransferFunctionControlPoints(
     // Validate input length and types
     if (
       x.length !== 3 ||
-      (typeof x[0] !== "number" && typeof x[0] !== "string") ||
+      typeof x[0] !== "number" ||
       typeof x[1] !== "string" ||
       typeof x[2] !== "number"
     ) {
@@ -1115,12 +1115,7 @@ function convertTransferFunctionControlPoints(
       }
     } else {
       const defaultRange = defaultDataTypeRange[dataType] as [Uint64, Uint64];
-      if (typeof x[0] !== "string") {
-        throw new Error(
-          `Expected string for Uint64, but received: ${JSON.stringify(x[0])}`,
-        );
-      }
-      position = Uint64.parseString(x[0]);
+      position = Uint64.fromNumber(x[0]);
       if (
         Uint64.less(position, defaultRange[0]) ||
         Uint64.less(defaultRange[1], position)
@@ -1163,11 +1158,11 @@ function parseTransferFunctionControlPoints(
   range: DataTypeInterval,
   dataType: DataType,
 ) {
-  function parsePosition(position: number | string): number {
+  function parsePosition(position: number): number {
     const toConvert =
       dataType === DataType.UINT64
-        ? Uint64.parseString(position as string)
-        : (position as number);
+        ? Uint64.fromNumber(position)
+        : position;
     const normalizedPosition = computeInvlerp(range, toConvert);
     const positionInRange = computeLerp(
       [0, TRANSFER_FUNCTION_LENGTH - 1],
@@ -1188,9 +1183,9 @@ function parseTransferFunctionControlPoints(
         )}`,
       );
     }
-    if (typeof x.position !== "number" && typeof x.position !== "string") {
+    if (typeof x.position !== "number") {
       throw new Error(
-        `Expected number or Uint64 string, but received: ${JSON.stringify(
+        `Expected position as number but received: ${JSON.stringify(
           x.position,
         )}`,
       );
@@ -1198,7 +1193,7 @@ function parseTransferFunctionControlPoints(
     const color = parseRGBColorSpecification(x.color);
     if (typeof x.opacity !== "number") {
       throw new Error(
-        `Expected number but received: ${JSON.stringify(x.opacity)}`,
+        `Expected opacity as number but received: ${JSON.stringify(x.opacity)}`,
       );
     }
     const opacity = floatToUint8(Math.max(0, Math.min(1, x.opacity)));
@@ -1262,7 +1257,7 @@ function copyTransferFunctionParameters(
     })),
     channel: defaultValue.channel,
     color: vec3.clone(defaultValue.color),
-    range: [defaultValue.range[0], defaultValue.range[1]] as [number, number],
+    range: [defaultValue.range[0], defaultValue.range[1]] as DataTypeInterval,
   };
 }
 
@@ -1271,6 +1266,9 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     public dataType: DataType,
     public defaultValue: TransferFunctionParameters,
   ) {
+    // Make a copy of the default value so that we can modify it without affecting the original.
+    // This is necessary because the default value is compared with the current value to determine
+    // whether the value has changed -> which is necessary for the changed signal to be emitted.
     const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
     super(defaultValueCopy, (obj) =>
       parseTransferFunctionParameters(obj, dataType, defaultValue),
@@ -1293,7 +1291,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
         normalizedPosition,
       );
       if (dataType === DataType.UINT64) {
-        return positionInOriginalRange.toString();
+        return (positionInOriginalRange as Uint64).toNumber();
       }
       return positionInOriginalRange;
     }

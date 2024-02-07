@@ -828,7 +828,7 @@ void main() {
   });
   it("handles transfer function control with all properties uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[["18446744073709551615", "#00ff00", 0.1], ["9223372111111111111", "#ff0000", 0.5], ["0", "#000000", 0.0]], color="#0000ff", channel=[])
+#uicontrol transferFunction colormap(points=[[18446744073709551615, "#00ff00", 0.1], [9223372111111111111, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", channel=[])
 void main() {
 }
 `;
