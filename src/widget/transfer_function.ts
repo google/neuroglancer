@@ -99,6 +99,13 @@ export interface ParsedControlPoint {
   color: vec4;
 }
 
+/**
+ * Used to update the transfer function texture
+ * If lookupTable is defined, it will be used to update the texture directly
+ * Otherwise, controlPoints will be used to generate a lookup table as a first step
+ * textureUnit is the texture unit to use for the transfer function texture
+ * A lookup table is a series of color values (0 - 255) between control points
+ */
 export interface TransferFunctionTextureOptions {
   lookupTable?: Uint8Array;
   controlPoints?: ControlPoint[];
@@ -118,8 +125,8 @@ interface CanvasPosition {
  * @param controlPoints The control points to interpolate between
  */
 export function lerpBetweenControlPoints(
-  out: Int32Array | Uint8Array,
-  controlPoints: Array<ControlPoint>,
+  out: Uint8Array,
+  controlPoints: ControlPoint[],
 ) {
   function addLookupValue(index: number, color: vec4) {
     out[index] = color[0];
@@ -250,19 +257,19 @@ export class TransferFunctionTexture extends RefCounted {
     }
     let { texture } = this;
 
-    function bindAndActivateTexture() {
+    function bindAndActivateTexture(gl: GL) {
       if (options.textureUnit === undefined) {
         throw new Error(
           "Texture unit must be defined for transfer function texture",
         );
       }
-      gl!.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
-      gl!.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + options.textureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     }
 
     // If the texture is already up to date, just bind and activate it
     if (texture !== null && this.optionsEqual(this.priorOptions, options)) {
-      bindAndActivateTexture();
+      bindAndActivateTexture(gl);
       return;
     }
     // If the texture has not been created yet, create it
@@ -270,7 +277,7 @@ export class TransferFunctionTexture extends RefCounted {
       texture = this.texture = gl.createTexture();
     }
     // Update the texture
-    bindAndActivateTexture();
+    bindAndActivateTexture(gl);
     setRawTextureParameters(gl);
     let lookupTable = options.lookupTable;
     if (lookupTable === undefined) {
