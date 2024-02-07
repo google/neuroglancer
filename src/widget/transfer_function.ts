@@ -1042,7 +1042,6 @@ class TransferFunctionWidget extends Tab {
     this.updateView();
   }
 }
-// TODO (skm) may need to follow the VariableDataTypeInvlerpWidget pattern
 
 /**
  * Create a shader function for the transfer function to grab the nearest lookup table value
@@ -1080,7 +1079,6 @@ vec4 ${name}() {
   return ${name}(getInterpolatedDataValue(${channel.join(",")}));
 }
 `;
-  // TODO (SKM) add back in max projection at a later date
   if (dataType !== DataType.UINT64 && dataType !== DataType.FLOAT32) {
     const scalarType = DATA_TYPE_SIGNED[dataType] ? "int" : "uint";
     code += `

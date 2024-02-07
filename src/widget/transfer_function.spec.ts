@@ -121,18 +121,12 @@ describe("compute transfer function on GPU", () => {
   for (const dataType of Object.values(DataType)) {
     if (typeof dataType === "string") continue;
     it(`computes transfer function on GPU for ${DataType[dataType]}`, () => {
-      console.log("Testing " + DataType[dataType]);
       const shaderType = getShaderType(dataType);
       fragmentShaderTest(
         { inputValue: dataType },
         { val1: "float", val2: "float", val3: "float", val4: "float" },
         (tester) => {
           const { builder } = tester;
-          // TODO (SKM) might need this for max projection
-          //                     builder.addFragmentCode(`
-          // #define MAX_PROJECTION false
-          // float maxIntensity = 0.0;
-          // `);
           builder.addFragmentCode(`
 ${shaderType} getInterpolatedDataValue() {
     return inputValue;

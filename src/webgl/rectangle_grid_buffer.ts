@@ -20,6 +20,7 @@ import { VERTICES_PER_QUAD } from "#/webgl/quad";
 
 /**
  * Create a Float32Array of vertices gridded in a rectangle
+ * Only grids along the x-axis are created, the y-axis is assumed to be the same for all grids
  */
 export function createGriddedRectangleArray(
   numGrids: number,

@@ -651,6 +651,7 @@ function parseTransferFunctionDirective(
     if (dataType !== undefined) range = defaultDataTypeRange[dataType];
     else range = [0, 1] as [number, number];
   }
+  // Set a simple black to white transfer function if no control points are specified.
   if (controlPoints.length === 0 && !specifedPoints) {
     const transferFunctionRange = [0, TRANSFER_FUNCTION_LENGTH - 1] as [
       number,
@@ -675,6 +676,7 @@ function parseTransferFunctionDirective(
       color: vec4.fromValues(255, 255, 255, 255),
     });
   } else {
+    // Parse control points from the shader code and sort them
     for (const controlPoint of parsedControlPoints) {
       const normalizedPosition = computeInvlerp(range, controlPoint.position);
       const position = computeLerp(
@@ -1160,9 +1162,7 @@ function parseTransferFunctionControlPoints(
 ) {
   function parsePosition(position: number): number {
     const toConvert =
-      dataType === DataType.UINT64
-        ? Uint64.fromNumber(position)
-        : position;
+      dataType === DataType.UINT64 ? Uint64.fromNumber(position) : position;
     const normalizedPosition = computeInvlerp(range, toConvert);
     const positionInRange = computeLerp(
       [0, TRANSFER_FUNCTION_LENGTH - 1],
