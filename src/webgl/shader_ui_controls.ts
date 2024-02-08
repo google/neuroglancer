@@ -1227,7 +1227,10 @@ function parseTransferFunctionParameters(
     obj,
     "controlPoints",
     (x) => parseTransferFunctionControlPoints(x, range, dataType),
-    defaultValue.controlPoints,
+    defaultValue.controlPoints.map((x) => ({
+      position: x.position,
+      color: x.color,
+    })),
   );
   return {
     controlPoints: controlPoints,
@@ -1253,11 +1256,11 @@ function copyTransferFunctionParameters(
   return {
     controlPoints: defaultValue.controlPoints.map((x) => ({
       position: x.position,
-      color: vec4.clone(x.color),
+      color: x.color,
     })),
     channel: defaultValue.channel,
-    color: vec3.clone(defaultValue.color),
-    range: [defaultValue.range[0], defaultValue.range[1]] as DataTypeInterval,
+    color: defaultValue.color,
+    range: defaultValue.range,
   };
 }
 
