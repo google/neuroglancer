@@ -304,6 +304,35 @@ class AnnotationWriter:
             )
         self._add_two_point_obj(point_a, point_b, id, 2, **kwargs)
 
+    def add_ellipsoid(
+        self,
+        center: Sequence[float],
+        radii: Sequence[float],
+        id: Optional[int] = None,
+        **kwargs,
+    ):
+        if self.annotation_type != "ellipsoid":
+            raise ValueError(
+                f"Expected annotation type ellipsoid, but received: {self.annotation_type}"
+            )
+        if len(center) != self.coordinate_space.rank:
+            raise ValueError(
+                f"Expected center to have length {self.coordinate_space.rank}, but received: {len(center)}"
+            )
+
+        if len(radii) != self.coordinate_space.rank:
+            raise ValueError(
+                f"Expected radii to have length {self.coordinate_space.rank}, but received: {len(radii)}"
+            )
+
+        min_vals = np.minimum(center - radii, center + radii)
+        max_vals = np.maximum(center - radii, center + radii)
+        self.lower_bound = np.minimum(self.lower_bound, min_vals)
+        self.upper_bound = np.maximum(self.upper_bound, max_vals)
+
+        coords = np.concatenate((center, radii))
+        self._add_obj(cast(Sequence[float], coords), id, 1, **kwargs)
+
     def add_line(
         self,
         point_a: Sequence[float],
