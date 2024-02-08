@@ -409,7 +409,7 @@ class AnnotationWriter:
 
         for i in range(int(n_spatial_coords)):
             chunk_index = self.get_chunk_index(
-                np.array(coords[i * self.rank: (i + 1) * self.rank])
+                np.array(coords[i * self.rank : (i + 1) * self.rank])
             )
             self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
