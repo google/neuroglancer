@@ -289,7 +289,7 @@ class AnnotationWriter:
 
         self.lower_bound = np.minimum(self.lower_bound, point)
         self.upper_bound = np.maximum(self.upper_bound, point)
-        self._add_obj(point, id, **kwargs)
+        self._add_obj(point, id, 1, **kwargs)
 
     def add_axis_aligned_bounding_box(
         self,
@@ -302,7 +302,7 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected annotation type axis_aligned_bounding_box, but received: {self.annotation_type}"
             )
-        self._add_two_point_obj(point_a, point_b, id, **kwargs)
+        self._add_two_point_obj(point_a, point_b, id, 2, **kwargs)
 
     def add_line(
         self,
@@ -315,13 +315,14 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected annotation type line, but received: {self.annotation_type}"
             )
-        self._add_two_point_obj(point_a, point_b, id, **kwargs)
+        self._add_two_point_obj(point_a, point_b, id, 2, **kwargs)
 
     def _add_two_point_obj(
         self,
         point_a: Sequence[float],
         point_b: Sequence[float],
         id: Optional[int] = None,
+        n_spatial_coords: Optional[int] = 2,
         **kwargs,
     ):
         if len(point_a) != self.coordinate_space.rank:
@@ -339,9 +340,15 @@ class AnnotationWriter:
         self.upper_bound = np.maximum(self.upper_bound, max_vals)
 
         coords = np.concatenate((point_a, point_b))
-        self._add_obj(cast(Sequence[float], coords), id, **kwargs)
+        self._add_obj(cast(Sequence[float], coords), id, n_spatial_coords, **kwargs)
 
-    def _add_obj(self, coords: Sequence[float], id: Optional[int], **kwargs):
+    def _add_obj(
+        self,
+        coords: Sequence[float],
+        id: Optional[int],
+        n_spatial_coords: Optional[int] = 1,
+        **kwargs,
+    ):
         encoded = np.zeros(shape=(), dtype=self.dtype)
         encoded[()]["geometry"] = coords
 
@@ -368,8 +375,11 @@ class AnnotationWriter:
             id=id, encoded=encoded.tobytes(), relationships=related_ids
         )
 
-        chunk_index = self.get_chunk_index(np.array(coords[: self.rank]))
-        self.annotations_by_chunk[chunk_index].append(annotation)
+        for i in range(n_spatial_coords):
+            chunk_index = self.get_chunk_index(
+                np.array(coords[i * self.rank: (i + 1) * self.rank])
+            )
+            self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
         for i, segment_ids in enumerate(related_ids):
             for segment_id in segment_ids:
