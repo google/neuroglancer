@@ -325,13 +325,9 @@ class AnnotationWriter:
                 f"Expected radii to have length {self.coordinate_space.rank}, but received: {len(radii)}"
             )
 
-        min_vals = np.minimum(center - radii, center + radii)
-        max_vals = np.maximum(center - radii, center + radii)
-        self.lower_bound = np.minimum(self.lower_bound, min_vals)
-        self.upper_bound = np.maximum(self.upper_bound, max_vals)
-
-        coords = np.concatenate((center, radii))
-        self._add_obj(cast(Sequence[float], coords), id, 1, **kwargs)
+        self.lower_bound = np.minimum(center, self.lower_bound)
+        self.upper_bound = np.maximum(center, self.upper_bound)
+        self._add_two_point_obj(center, radii, id, 1, **kwargs)
 
     def add_line(
         self,
@@ -363,8 +359,15 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_b)}"
             )
-        min_vals = np.minimum(point_a, point_b)
-        max_vals = np.maximum(point_a, point_b)
+        if n_spatial_coords == 2:
+            min_vals = np.minimum(point_a, point_b)
+            max_vals = np.maximum(point_a, point_b)
+        elif n_spatial_coords == 1:
+            min_vals = point_a
+            max_vals = point_a
+        else:
+            raise ValueError(f"Unexpected n_spatial_coords {n_spatial_coords}")
+
         self.lower_bound = np.minimum(self.lower_bound, min_vals)
         self.upper_bound = np.maximum(self.upper_bound, max_vals)
 
@@ -406,7 +409,7 @@ class AnnotationWriter:
 
         for i in range(n_spatial_coords):
             chunk_index = self.get_chunk_index(
-                np.array(coords[i * self.rank: (i + 1) * self.rank])
+                np.array(coords[i * self.rank : (i + 1) * self.rank])
             )
             self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
