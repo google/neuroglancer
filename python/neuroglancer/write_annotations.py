@@ -20,7 +20,7 @@ import pathlib
 import struct
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Literal, NamedTuple, Optional, Union, cast
+from typing import Literal, NamedTuple, Optional, SupportsInt, Union, cast
 
 import numpy as np
 
@@ -363,8 +363,8 @@ class AnnotationWriter:
             min_vals = np.minimum(point_a, point_b)
             max_vals = np.maximum(point_a, point_b)
         elif n_spatial_coords == 1:
-            min_vals = point_a
-            max_vals = point_a
+            min_vals = np.array(point_a)
+            max_vals = np.array(point_a)
         else:
             raise ValueError(f"Unexpected n_spatial_coords {n_spatial_coords}")
 
@@ -378,7 +378,7 @@ class AnnotationWriter:
         self,
         coords: Sequence[float],
         id: Optional[int],
-        n_spatial_coords: Optional[int] = 1,
+        n_spatial_coords: SupportsInt = 1,
         **kwargs,
     ):
         encoded = np.zeros(shape=(), dtype=self.dtype)
@@ -407,9 +407,9 @@ class AnnotationWriter:
             id=id, encoded=encoded.tobytes(), relationships=related_ids
         )
 
-        for i in range(n_spatial_coords):
+        for i in range(int(n_spatial_coords)):
             chunk_index = self.get_chunk_index(
-                np.array(coords[i * self.rank : (i + 1) * self.rank])
+                np.array(coords[i * self.rank: (i + 1) * self.rank])
             )
             self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
