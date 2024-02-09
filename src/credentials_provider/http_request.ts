@@ -41,7 +41,10 @@ export async function fetchWithCredentials<Credentials, T>(
     credentials: Credentials,
     requestInit: RequestInit,
   ) => RequestInit,
-  errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
+  errorHandler: (
+    httpError: HttpError,
+    credentials: Credentials,
+  ) => "refresh" | Promise<"refresh">,
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
@@ -65,7 +68,9 @@ export async function fetchWithCredentials<Credentials, T>(
       );
     } catch (error) {
       if (error instanceof HttpError) {
-        if (errorHandler(error, credentials.credentials) === "refresh") {
+        if (
+          (await errorHandler(error, credentials.credentials)) === "refresh"
+        ) {
           if (++credentialsAttempt === maxCredentialsAttempts) throw error;
           continue;
         }
