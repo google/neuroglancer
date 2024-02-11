@@ -470,8 +470,8 @@ class AnnotationWriter:
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
         for related_id, annotations in related_id_dict.items():
-            # convert the ann.id to a binary representation of a uint64
-            key = related_id.to_bytes(8, "little")
+            # convert the related_id to a binary representation of a uint64
+            key = np.ascontiguousarray(related_id, dtype=">u8").tobytes()
             value = self._encode_multiple_annotations(annotations)
             dataset.with_transaction(txn)[key] = value
         txn.commit_async().result()
