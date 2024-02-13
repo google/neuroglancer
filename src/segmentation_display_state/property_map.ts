@@ -806,6 +806,7 @@ export interface TagCount {
   tag: string;
   tagIndex: number;
   count: number;
+  desc: string;
 }
 
 export interface PropertyHistogram {
@@ -860,7 +861,10 @@ export function executeSegmentQuery(
   }
   const properties = inlineProperties?.properties;
   const totalIds = inlineProperties.ids.length / 2;
+  const totalTags = db?.tags?.tags?.length || 0;
   let indices = makeIndicesArray(totalIds, totalIds);
+  let showTags = makeIndicesArray(totalTags, totalTags);
+  showTags.fill(1);
   for (let i = 0; i < totalIds; ++i) {
     indices[i] = i;
   }
@@ -877,6 +881,23 @@ export function executeSegmentQuery(
     }
     indices = indices.subarray(0, outIndex);
   };
+  const filterByTagDescriptions = (regexp: RegExp) => {
+    const tagDescriptions = db!.tags!.tagDescriptions!;
+    const tags = db!.tags!.tags!;
+    const matchingTagDescriptions = tagDescriptions
+      .map((desc, index) => ({ desc, index }))
+      .filter(({ desc }) => desc.match(regexp) !== null)
+      .map(({ index }) => index);
+    const matchingTags = tags
+      .map((tag, index) => ({ tag, index }))
+      .filter(({ tag }) => tag.match(regexp) !== null)
+      .map(({ index }) => index);
+
+    // set showTags based on matchingTags
+    showTags.fill(0);
+    matchingTagDescriptions.forEach((index) => (showTags[index] = 1));
+    matchingTags.forEach((index) => (showTags[index] = 1));
+  };
 
   // Filter by label
   if (query.regexp !== undefined || query.prefix !== undefined) {
@@ -885,10 +906,24 @@ export function executeSegmentQuery(
     if (regexp !== undefined) {
       filterIndices((index) => values[index].match(regexp) !== null);
     }
+    // if the regular expression returns nothing
+    // then assume the user wants to search through the tags
+    // and/or tag descriptions
+    if (indices.length == 0 && regexp !== undefined) {
+      indices = makeIndicesArray(totalIds, totalIds);
+      for (let i = 0; i < totalIds; ++i) {
+        indices[i] = i;
+      }
+      filterByTagDescriptions(regexp);
+      // reset regexp to none so that it doesn't get applied again
+      query.regexp = undefined;
+    }
     if (prefix !== undefined) {
+      console.log("prefix", prefix);
       filterIndices((index) => values[index].startsWith(prefix));
     }
   }
+
 
   // Filter by tags
   const { includeTags, excludeTags } = query;
@@ -924,7 +959,6 @@ export function executeSegmentQuery(
     const regexp = new RegExp(pattern);
     filterIndices((index) => values[index].match(regexp) !== null);
   }
-
   let intermediateIndicesMask: IndicesArray | undefined;
   let intermediateIndices: IndicesArray | undefined;
 
@@ -970,7 +1004,7 @@ export function executeSegmentQuery(
   let tagStatistics: TagCount[] = [];
   if (tagsProperty !== undefined) {
     const tagStatisticsInQuery: TagCount[] = [];
-    const { tags, values } = tagsProperty;
+    const { tags, values, tagDescriptions } = tagsProperty;
     const tagCounts = new Uint32Array(tags.length);
     for (let i = 0, n = indices.length; i < n; ++i) {
       const value = values[indices[i]];
@@ -983,9 +1017,11 @@ export function executeSegmentQuery(
       tagIndex < numTags;
       ++tagIndex
     ) {
+      if (showTags[tagIndex] === 0) continue;
       const count = tagCounts[tagIndex];
       const tag = tags[tagIndex];
-      const tagCount = { tag, tagIndex, count: tagCounts[tagIndex] };
+      const tagDesc = tagDescriptions[tagIndex];
+      const tagCount = { tag, tagIndex, count: tagCounts[tagIndex], desc: tagDesc };
       if (query.includeTags.includes(tag) || query.excludeTags.includes(tag)) {
         tagStatisticsInQuery.push(tagCount);
       } else if (count > 0) {
@@ -1079,7 +1115,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-            0
+          0
         ];
       }
     }
@@ -1097,7 +1133,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-              0
+            0
           ];
         }
       }
