@@ -897,7 +897,7 @@ function createRangeBoundInputs(
 
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "add-or-drag-point" },
-  "shift?+dblclick0": { action: "remove-point" },
+  "shift+dblclick0": { action: "remove-point" },
   "shift?+mousedown2": { action: "change-point-color" },
 });
 
