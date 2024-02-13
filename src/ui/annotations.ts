@@ -1850,6 +1850,23 @@ export function UserLayerWithAnnotationsMixin<
 
                 const { relationships, properties } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
+                
+                // Add the ID to the annotation details.
+                const label = document.createElement("label");
+                label.classList.add("neuroglancer-annotation-property");
+                const idElement = document.createElement("span");
+                idElement.classList.add(
+                  "neuroglancer-annotation-property-label",
+                );
+                idElement.textContent = "ID";
+                label.appendChild(idElement);
+                const valueElement = document.createElement("span");
+                valueElement.classList.add(
+                  "neuroglancer-annotation-property-value",
+                );
+                valueElement.textContent = reference.id;
+                label.appendChild(valueElement);
+                parent.appendChild(label);
 
                 for (let i = 0, count = properties.length; i < count; ++i) {
                   const property = properties[i];
