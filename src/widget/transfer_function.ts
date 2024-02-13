@@ -710,7 +710,7 @@ class ControlPointsLookupTable extends RefCounted {
     }
     return positionAsIndex;
   }
-  opacityToIndex(opacity: number) {
+  opacityToUint8(opacity: number) {
     let opacityAsUint8 = floatToUint8(opacity);
     if (opacityAsUint8 <= TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacityAsUint8 = 0;
@@ -726,21 +726,46 @@ class ControlPointsLookupTable extends RefCounted {
       (a, b) => a - b,
     );
   }
-  grabControlPoint(position: number) {
+  grabControlPoint(position: number, opacity: number) {
+    const desiredPosition = this.positionToIndex(position);
+    const desiredOpacity = this.opacityToUint8(opacity);
     const nearestIndex = this.findNearestControlPointIndex(position);
     if (nearestIndex === -1) {
       return -1;
     }
-    const nearestPosition =
-      this.trackable.value.controlPoints[nearestIndex].position;
-    const desiredPosition = this.positionToIndex(position);
+    const controlPoints = this.trackable.value.controlPoints;
+    const nearestPosition = controlPoints[nearestIndex].position;
     if (
-      Math.abs(nearestPosition - desiredPosition) <
+      Math.abs(nearestPosition - desiredPosition) >
       CONTROL_POINT_X_GRAB_DISTANCE
     ) {
-      return nearestIndex;
+      return -1;
     }
-    return -1;
+
+    // If points are nearby in X space, use Y space to break ties
+    const nextPosition = controlPoints[nearestIndex + 1]?.position;
+    const nextDistance = nextPosition !== undefined ? Math.abs(nextPosition - desiredPosition) : CONTROL_POINT_X_GRAB_DISTANCE + 1;
+    const previousPosition = controlPoints[nearestIndex - 1]?.position;
+    const previousDistance = previousPosition !== undefined ? Math.abs(previousPosition - desiredPosition) : CONTROL_POINT_X_GRAB_DISTANCE + 1;
+    const possibleValues: [number, number][] = [];
+    if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
+      possibleValues.push([
+        nearestIndex + 1,
+        Math.abs(controlPoints[nearestIndex + 1].color[3] - desiredOpacity),
+      ]);
+    }
+    if (previousDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
+      possibleValues.push([
+        nearestIndex - 1,
+        Math.abs(controlPoints[nearestIndex - 1].color[3] - desiredOpacity),
+      ]);
+    }
+    possibleValues.push([
+      nearestIndex,
+      Math.abs(controlPoints[nearestIndex].color[3] - desiredOpacity),
+    ]);
+    possibleValues.sort((a, b) => a[1] - b[1]);
+    return possibleValues[0][0];
   }
   addPoint(position: number, opacity: number, color: vec3) {
     const colorAsUint8 = vec3.fromValues(
@@ -748,7 +773,7 @@ class ControlPointsLookupTable extends RefCounted {
       floatToUint8(color[1]),
       floatToUint8(color[2]),
     );
-    const opacityAsUint8 = this.opacityToIndex(opacity);
+    const opacityAsUint8 = this.opacityToUint8(opacity);
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
     const existingIndex = controlPoints.findIndex(
@@ -776,7 +801,7 @@ class ControlPointsLookupTable extends RefCounted {
   updatePoint(index: number, position: number, opacity: number) {
     const { controlPoints } = this.trackable.value;
     let positionAsIndex = this.positionToIndex(position);
-    const opacityAsUint8 = this.opacityToIndex(opacity);
+    const opacityAsUint8 = this.opacityToUint8(opacity);
     const color = controlPoints[index].color;
     controlPoints[index] = {
       position: positionAsIndex,
@@ -786,13 +811,12 @@ class ControlPointsLookupTable extends RefCounted {
     let positionToFind = positionAsIndex;
     for (const point of controlPoints) {
       if (exsitingPositions.has(point.position)) {
-        positionToFind = (positionToFind === 0) ? 1 : positionToFind - 1;
+        positionToFind = positionToFind === 0 ? 1 : positionToFind - 1;
         controlPoints[index].position = positionToFind;
         break;
       }
       exsitingPositions.add(point.position);
     }
-    console.log(positionToFind, opacityAsUint8);
     controlPoints.sort((a, b) => a.position - b.position);
     const newControlPointIndex = controlPoints.findIndex(
       (point) => point.position === positionToFind,
@@ -945,10 +969,13 @@ class TransferFunctionController extends RefCounted {
     this.setModel(value);
   }
   findNearestControlPointIndex(event: MouseEvent) {
-    const { normalizedX } = this.getControlPointPosition(
+    const { normalizedX, normalizedY } = this.getControlPointPosition(
       event,
     ) as CanvasPosition;
-    return this.controlPointsLookupTable.grabControlPoint(normalizedX);
+    return this.controlPointsLookupTable.grabControlPoint(
+      normalizedX,
+      normalizedY,
+    );
   }
   addControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
     const color = this.controlPointsLookupTable.trackable.value.color;
