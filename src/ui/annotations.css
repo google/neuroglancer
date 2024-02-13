@@ -250,6 +250,7 @@ div.neuroglancer-annotation-details-description {
   flex-direction: row;
   font-family: sans-serif;
   font-size: small;
+  user-select: text;
 }
 
 .neuroglancer-annotation-property-label {
