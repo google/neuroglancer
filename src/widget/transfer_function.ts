@@ -74,7 +74,7 @@ export const TRANSFER_FUNCTION_LENGTH = 1024;
 export const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
 const CONTROL_POINT_X_GRAB_DISTANCE = TRANSFER_FUNCTION_LENGTH / 40;
-const TRANSFER_FUNCTION_Y_BORDER_WIDTH = 255 / 20;
+const TRANSFER_FUNCTION_BORDER_WIDTH = 10;
 
 const transferFunctionSamplerTextureUnit = Symbol(
   "transferFunctionSamplerTexture",
@@ -698,13 +698,23 @@ class ControlPointsLookupTable extends RefCounted {
     ).fill(0);
   }
   positionToIndex(position: number) {
-    return Math.floor(position * (TRANSFER_FUNCTION_LENGTH - 1));
+    let positionAsIndex = Math.floor(position * (TRANSFER_FUNCTION_LENGTH - 1));
+    if (positionAsIndex < TRANSFER_FUNCTION_BORDER_WIDTH) {
+      positionAsIndex = 0;
+    }
+    if (
+      TRANSFER_FUNCTION_LENGTH - 1 - positionAsIndex <
+      TRANSFER_FUNCTION_BORDER_WIDTH
+    ) {
+      positionAsIndex = TRANSFER_FUNCTION_LENGTH - 1;
+    }
+    return positionAsIndex;
   }
   opacityToIndex(opacity: number) {
     let opacityAsUint8 = floatToUint8(opacity);
-    if (opacityAsUint8 <= TRANSFER_FUNCTION_Y_BORDER_WIDTH) {
+    if (opacityAsUint8 <= TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacityAsUint8 = 0;
-    } else if (opacityAsUint8 >= 255 - TRANSFER_FUNCTION_Y_BORDER_WIDTH) {
+    } else if (opacityAsUint8 >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       opacityAsUint8 = 255;
     }
     return opacityAsUint8;
@@ -725,7 +735,8 @@ class ControlPointsLookupTable extends RefCounted {
       this.trackable.value.controlPoints[nearestIndex].position;
     const desiredPosition = this.positionToIndex(position);
     if (
-      Math.abs(nearestPosition - desiredPosition) < CONTROL_POINT_X_GRAB_DISTANCE
+      Math.abs(nearestPosition - desiredPosition) <
+      CONTROL_POINT_X_GRAB_DISTANCE
     ) {
       return nearestIndex;
     }
@@ -764,23 +775,27 @@ class ControlPointsLookupTable extends RefCounted {
   }
   updatePoint(index: number, position: number, opacity: number) {
     const { controlPoints } = this.trackable.value;
-    const positionAsIndex = this.positionToIndex(position);
+    let positionAsIndex = this.positionToIndex(position);
     const opacityAsUint8 = this.opacityToIndex(opacity);
     const color = controlPoints[index].color;
     controlPoints[index] = {
       position: positionAsIndex,
       color: vec4.fromValues(color[0], color[1], color[2], opacityAsUint8),
     };
-    controlPoints.sort((a, b) => a.position - b.position);
     const exsitingPositions = new Set<number>();
+    let positionToFind = positionAsIndex;
     for (const point of controlPoints) {
       if (exsitingPositions.has(point.position)) {
-        return index;
+        positionToFind = (positionToFind === 0) ? 1 : positionToFind - 1;
+        controlPoints[index].position = positionToFind;
+        break;
       }
       exsitingPositions.add(point.position);
     }
+    console.log(positionToFind, opacityAsUint8);
+    controlPoints.sort((a, b) => a.position - b.position);
     const newControlPointIndex = controlPoints.findIndex(
-      (point) => point.position === positionAsIndex,
+      (point) => point.position === positionToFind,
     );
     return newControlPointIndex;
   }

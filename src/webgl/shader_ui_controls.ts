@@ -629,7 +629,7 @@ function parseTransferFunctionDirective(
           }
           break;
         }
-        case "points": {
+        case "controlPoints": {
           specifedPoints = true;
           if (dataType !== undefined) {
             parsedControlPoints.push(
@@ -1164,14 +1164,14 @@ function parseTransferFunctionControlPoints(
     const toConvert =
       dataType === DataType.UINT64 ? Uint64.fromNumber(position) : position;
     const normalizedPosition = computeInvlerp(range, toConvert);
-    const positionInRange = computeLerp(
+    const positionInTransferFunction = computeLerp(
       [0, TRANSFER_FUNCTION_LENGTH - 1],
       DataType.UINT16,
       normalizedPosition,
     ) as number;
-    return positionInRange;
+    return positionInTransferFunction;
   }
-  return parseArray(value, (x) => {
+  const parsedPoints = parseArray(value, (x) => {
     if (
       x.position === undefined ||
       x.color === undefined ||
@@ -1208,6 +1208,17 @@ function parseTransferFunctionControlPoints(
       color: rgbaColor,
     };
   });
+  // Check all points are in separate bins
+  const encounteredBins: number[] = [];
+  for (const point of parsedPoints) {
+    if (encounteredBins.includes(point.position)) {
+      throw new Error(
+        `Transfer function control points fall in the same bin. Increase the distance between the points, or reduce the range of the input space`,
+      );
+    }
+    encounteredBins.push(point.position);
+  }
+  return parsedPoints;
 }
 
 function parseTransferFunctionParameters(

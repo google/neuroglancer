@@ -565,7 +565,7 @@ void main() {
   });
   it("handles transfer function control without channel", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[])
+#uicontrol transferFunction colormap(controlPoints=[])
 void main() {
 }
 `;
@@ -601,7 +601,7 @@ void main() {
   });
   it("handles transfer function control without channel (rank 1)", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[])
+#uicontrol transferFunction colormap(controlPoints=[])
 void main() {
 }
 `;
@@ -637,7 +637,7 @@ void main() {
   });
   it("handles transfer function control with channel (rank 0)", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[], channel=[])
+#uicontrol transferFunction colormap(controlPoints=[], channel=[])
 void main() {
 }
 `;
@@ -673,7 +673,7 @@ void main() {
   });
   it("handles transfer function control with non-array channel (rank 1)", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[], channel=1)
+#uicontrol transferFunction colormap(controlPoints=[], channel=1)
 void main() {
 }
 `;
@@ -709,7 +709,7 @@ void main() {
   });
   it("handles transfer function control with array channel (rank 1)", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[], channel=[1])
+#uicontrol transferFunction colormap(controlPoints=[], channel=[1])
 void main() {
 }
 `;
@@ -745,7 +745,7 @@ void main() {
   });
   it("handles transfer function control with array channel (rank 2)", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[], channel=[1,2])
+#uicontrol transferFunction colormap(controlPoints=[], channel=[1,2])
 void main() {
 }
 `;
@@ -781,7 +781,7 @@ void main() {
   });
   it("handles transfer function control with all properties non uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[[200, "#00ff00", 0.1], [100, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", range=[0, 200], channel=[])
+#uicontrol transferFunction colormap(controlPoints=[[200, "#00ff00", 0.1], [100, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", range=[0, 200], channel=[])
 void main() {
 }
 `;
@@ -828,7 +828,7 @@ void main() {
   });
   it("handles transfer function control with all properties uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(points=[[18446744073709551615, "#00ff00", 0.1], [9223372111111111111, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", channel=[])
+#uicontrol transferFunction colormap(controlPoints=[[18446744073709551615, "#00ff00", 0.1], [9223372111111111111, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", channel=[])
 void main() {
 }
 `;
