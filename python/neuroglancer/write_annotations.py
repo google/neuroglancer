@@ -254,12 +254,12 @@ class AnnotationWriter:
         ) + _get_dtype_for_properties(self.properties)
 
         # if chunk_size is an integer, then make it a sequence
-        if isinstance(experimental_chunk_size, numbers.Integral):
+        if isinstance(experimental_chunk_size, numbers.Real):
             self.chunk_size = np.full(
-                shape=(self.rank,), fill_value=experimental_chunk_size, dtype=np.int32
+                shape=(self.rank,), fill_value=experimental_chunk_size, dtype=np.float64
             )
         else:
-            chunk_size = cast(Sequence[int], experimental_chunk_size)
+            chunk_size = cast(Sequence[float], experimental_chunk_size)
             if len(chunk_size) != self.rank:
                 raise ValueError(
                     f"Expected experimental_chunk_size to have length {self.rank}, but received: {chunk_size}"
