@@ -419,7 +419,7 @@ class AnnotationWriter:
                 rel_index_list = rel_index.setdefault(segment_id, [])
                 rel_index_list.append(annotation)
 
-    def _serialize_annotations_sharded(self, path, annotations, shard_specs):
+    def _serialize_annotations_sharded(self, path, annotations, shard_spec):
         spec = {
             "driver": "neuroglancer_uint64_sharded",
             "metadata": shard_spec.to_json(),
