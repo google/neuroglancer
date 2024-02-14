@@ -419,7 +419,7 @@ class AnnotationWriter:
                 rel_index_list = rel_index.setdefault(segment_id, [])
                 rel_index_list.append(annotation)
 
-    def _serialize_annotations_sharded(self, path, annotations, shard_spec):
+    def _serialize_annotations_sharded(self, path, annotations, shard_specs):
         spec = {
             "driver": "neuroglancer_uint64_sharded",
             "metadata": shard_spec.to_json(),
@@ -430,7 +430,12 @@ class AnnotationWriter:
         for ann in annotations:
             # convert the ann.id to a binary representation of a uint64
             key = ann.id.to_bytes(8, "little")
-            dataset.with_transaction(txn)[key] = ann.encoded
+            value = ann.encoded
+            for related_ids in ann.relationships:
+                value += struct.pack("<I", len(related_ids))
+                for related_id in related_ids:
+                    value += related_id.to_bytes(8, "little")
+            dataset.with_transaction(txn)[key] = value
         txn.commit_async().result()
 
     def _serialize_annotations(self, f, annotations: list[Annotation]):
