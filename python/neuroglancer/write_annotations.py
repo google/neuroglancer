@@ -429,12 +429,13 @@ class AnnotationWriter:
         txn = ts.Transaction()
         for ann in annotations:
             # convert the ann.id to a binary representation of a uint64
-            key = ann.id.to_bytes(8, "little")
+            # key = ann.id.to_bytes(8, "little")
+            key = np.ascontiguousarray(ann.id, dtype=">u8").tobytes()
             value = ann.encoded
             for related_ids in ann.relationships:
                 value += struct.pack("<I", len(related_ids))
                 for related_id in related_ids:
-                    value += related_id.to_bytes(8, "little")
+                    value += struct.pack("<Q", related_id)
             dataset.with_transaction(txn)[key] = value
         txn.commit_async().result()
 
