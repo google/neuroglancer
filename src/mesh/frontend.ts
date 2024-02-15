@@ -582,6 +582,76 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     );
     return ready;
   }
+
+  getObjectPosition(
+    id: Uint64,
+    nearestTo: Float32Array,
+  ): Float32Array | undefined {
+    const transform = this.displayState.transform.value;
+    if (transform.error !== undefined) return undefined;
+    const chunk = this.source.chunks.get(getObjectKey(id));
+    if (chunk === undefined) return undefined;
+    const { rank } = transform;
+    const inverseModelToRenderLayerTransform = new Float32Array(
+      transform.modelToRenderLayerTransform.length,
+    );
+    matrix.inverse(
+      inverseModelToRenderLayerTransform,
+      rank + 1,
+      transform.modelToRenderLayerTransform,
+      rank + 1,
+      rank + 1,
+    );
+    const nearestPositionInModal = new Float32Array(rank);
+    matrix.transformPoint(
+      nearestPositionInModal,
+      inverseModelToRenderLayerTransform,
+      rank + 1,
+      nearestTo,
+      rank,
+    );
+    const { fragmentIds } = chunk;
+    const closestVertex = new Float32Array(rank);
+    let closestDistanceSq = Number.POSITIVE_INFINITY;
+    for (const fragmentId of fragmentIds) {
+      const fragmentChunk = this.source.fragmentSource.chunks.get(fragmentId);
+      if (fragmentChunk === undefined) continue;
+      const { state, meshData } = fragmentChunk;
+      if (
+        state !== ChunkState.SYSTEM_MEMORY &&
+        state !== ChunkState.GPU_MEMORY
+      ) {
+        continue;
+      }
+      const { vertexPositions } = meshData;
+      if (vertexPositions.length < rank) continue;
+      for (let i = 0; i < vertexPositions.length; i += rank) {
+        let distanceSq = 0;
+        for (let j = 0; j < rank; j++) {
+          distanceSq += Math.pow(
+            vertexPositions[i + j] - nearestPositionInModal[j],
+            2,
+          );
+        }
+        if (distanceSq < closestDistanceSq) {
+          closestDistanceSq = distanceSq;
+          for (let j = 0; j < rank; j++) {
+            closestVertex[j] = vertexPositions[i + j];
+          }
+        }
+      }
+    }
+    if (closestDistanceSq === Number.POSITIVE_INFINITY) return undefined;
+    const layerCenter = new Float32Array(rank);
+    matrix.transformPoint(
+      layerCenter,
+      transform.modelToRenderLayerTransform,
+      rank + 1,
+      closestVertex,
+      rank,
+    );
+    return layerCenter;
+  }
 }
 
 export class ManifestChunk extends Chunk {
