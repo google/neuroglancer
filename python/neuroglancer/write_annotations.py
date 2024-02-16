@@ -521,9 +521,12 @@ class AnnotationWriter:
         sharding_spec = choose_output_spec(len(self.annotations), total_ann_bytes)
 
         # calculate the number of chunks in each dimension
-        num_chunks = np.ceil(
-            (self.upper_bound - self.lower_bound) / self.chunk_size
-        ).astype(int)
+        num_chunks = np.max(
+            np.full(self.upper_bound.shape, 1, dtype=int),
+            np.ceil((self.upper_bound - self.lower_bound) / self.chunk_size).astype(
+                int
+            ),
+        )
 
         # make directories
         os.makedirs(path, exist_ok=True)
