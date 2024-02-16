@@ -88,6 +88,7 @@ from .viewer_state import (
     LayerDataSource,  # noqa: F401
     LayerDataSources,  # noqa: F401
     InvlerpParameters,  # noqa: F401
+    TransferFunctionParameters,  # noqa: F401
     ImageLayer,  # noqa: F401
     SkeletonRenderingOptions,  # noqa: F401
     StarredSegments,  # noqa: F401

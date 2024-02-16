@@ -518,6 +518,23 @@ class InvlerpParameters(JsonObjectWrapper):
     channel = wrapped_property("channel", optional(typed_list(int)))
 
 
+@export
+class ControlPointsSpec(JsonObjectWrapper):
+    input = wrapped_property("input", optional(numbers.Number))
+    color = wrapped_property("color", optional(str))
+    opacity = wrapped_property("opacity", optional(float))
+
+
+@export
+class TransferFunctionParameters(JsonObjectWrapper):
+    range = wrapped_property("range", optional(array_wrapper(numbers.Number, 2)))
+    channel = wrapped_property("channel", optional(typed_list(int)))
+    controlPoints = wrapped_property(
+        "controlPoints", optional(typed_list(ControlPointsSpec))
+    )
+    color = wrapped_property("color", optional(str))
+
+
 _UINT64_STR_PATTERN = re.compile("[0-9]+")
 
 
@@ -530,8 +547,12 @@ def _shader_control_parameters(v, _readonly=False):
     if isinstance(v, numbers.Number):
         return v
     if isinstance(v, dict):
+        if "controlPoints" in v:
+            return TransferFunctionParameters(v, _readonly=_readonly)
         return InvlerpParameters(v, _readonly=_readonly)
     if isinstance(v, InvlerpParameters):
+        return v
+    if isinstance(v, TransferFunctionParameters):
         return v
     raise TypeError(f"Unexpected shader control parameters type: {type(v)}")
 
