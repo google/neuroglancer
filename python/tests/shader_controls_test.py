@@ -37,6 +37,7 @@ def test_invlerp(webdriver):
                     "range": [0, 42],
                 },
             },
+            opacity=1.0
         )
         s.layout = "xy"
         s.cross_section_scale = 1e-6
@@ -58,6 +59,74 @@ def test_invlerp(webdriver):
     with webdriver.viewer.txn() as s:
         s.layers["image"].shader_controls = {
             "normalized": neuroglancer.InvlerpParameters(range=[42, 100]),
+        }
+    expect_color([0, 0, 0, 255])
+
+
+def test_transfer_function(webdriver):
+    shader = """
+#uicontrol transferFunction colormap
+void main() {
+    emitRGBA(colormap());
+}
+"""
+    shaderControls = {
+        "colormap": {
+            "controlPoints": [
+                {"input": 0, "color": "#000000", "opacity": 0.0},
+                {"input": 84, "color": "#ffffff", "opacity": 1.0},
+            ],
+            "range": [0, 100],
+            "channel": [],
+            "color": "#ff00ff",
+        }
+    }
+    with webdriver.viewer.txn() as s:
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y"], units="nm", scales=[1, 1]
+        )
+        s.position = [0.5, 0.5]
+        s.layers.append(
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(
+                    dimensions=s.dimensions,
+                    data=np.full(shape=(1, 1), dtype=np.uint32, fill_value=42),
+                ),
+            ),
+            visible=True,
+            shader=shader,
+            shader_controls=shaderControls,
+            opacity=1.0,
+            blend="additive"
+        )
+        s.layout = "xy"
+        s.cross_section_scale = 1e-6
+        s.show_axis_lines = False
+    control = webdriver.viewer.state.layers["image"].shader_controls["colormap"]
+    assert isinstance(control, neuroglancer.TransferFunctionParameters)
+    np.testing.assert_equal(control.range, [0, 100])
+
+    def expect_color(color):
+        webdriver.sync()
+        screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+        np.testing.assert_array_equal(
+            screenshot.image_pixels,
+            np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)),
+        )
+
+    expect_color([64, 64, 64, 255])
+    with webdriver.viewer.txn() as s:
+        s.layers["image"].shader_controls = {
+            "colormap": neuroglancer.TransferFunctionParameters(
+                controlPoints=[
+                    {"input": 0, "color": "#000000", "opacity": 1.0},
+                    {"input": 84, "color": "#ffffff", "opacity": 1.0},
+                ],
+                range=[50, 90],
+                channel=[],
+                color="#ff00ff",
+            )
         }
     expect_color([0, 0, 0, 255])
 
