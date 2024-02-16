@@ -525,7 +525,7 @@ class AnnotationWriter:
             (self.upper_bound - self.lower_bound) / self.chunk_size
         ).astype(int)
 
-        np.maximum(num_chunks, np.full(num_chunks.shape, 1, dtype=int))
+        num_chunks = np.maximum(num_chunks, np.full(num_chunks.shape, 1, dtype=int))
 
         # make directories
         os.makedirs(path, exist_ok=True)
