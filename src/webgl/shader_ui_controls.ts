@@ -678,7 +678,8 @@ function parseTransferFunctionDirective(
   } else {
     // Parse control points from the shader code and sort them
     for (const controlPoint of parsedControlPoints) {
-      const normalizedPosition = computeInvlerp(range, controlPoint.position);
+      let normalizedPosition = computeInvlerp(range, controlPoint.position);
+      normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1)
       const position = computeLerp(
         [0, TRANSFER_FUNCTION_LENGTH - 1],
         DataType.UINT16,
@@ -1163,7 +1164,8 @@ function parseTransferFunctionControlPoints(
   function parsePosition(position: number): number {
     const toConvert =
       dataType === DataType.UINT64 ? Uint64.fromNumber(position) : position;
-    const normalizedPosition = computeInvlerp(range, toConvert);
+    let normalizedPosition = computeInvlerp(range, toConvert);
+    normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1);
     const positionInTransferFunction = computeLerp(
       [0, TRANSFER_FUNCTION_LENGTH - 1],
       DataType.UINT16,
@@ -1295,10 +1297,11 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     dataType: DataType,
   ) {
     function positionToJson(position: number) {
-      const normalizedPosition = computeInvlerp(
+      let normalizedPosition = computeInvlerp(
         [0, TRANSFER_FUNCTION_LENGTH - 1],
         position,
       );
+      normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1)
       const positionInOriginalRange = computeLerp(
         range,
         dataType,
