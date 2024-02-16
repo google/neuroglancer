@@ -1173,7 +1173,7 @@ function parseTransferFunctionControlPoints(
   }
   const parsedPoints = parseArray(value, (x) => {
     if (
-      x.position === undefined ||
+      x.input === undefined ||
       x.color === undefined ||
       x.opacity === undefined
     ) {
@@ -1183,10 +1183,10 @@ function parseTransferFunctionControlPoints(
         )}`,
       );
     }
-    if (typeof x.position !== "number") {
+    if (typeof x.input !== "number") {
       throw new Error(
         `Expected position as number but received: ${JSON.stringify(
-          x.position,
+          x.input,
         )}`,
       );
     }
@@ -1204,7 +1204,7 @@ function parseTransferFunctionControlPoints(
       opacity,
     );
     return {
-      position: parsePosition(x.position),
+      position: parsePosition(x.input),
       color: rgbaColor,
     };
   });
@@ -1311,7 +1311,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     }
 
     return controlPoints.map((x) => ({
-      position: positionToJson(x.position),
+      input: positionToJson(x.position),
       color: serializeColor(
         vec3.fromValues(x.color[0] / 255, x.color[1] / 255, x.color[2] / 255),
       ),
