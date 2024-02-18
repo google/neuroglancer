@@ -57,6 +57,7 @@ class Annotation(NamedTuple):
     id: int
     encoded: bytes
     relationships: Sequence[Sequence[int]]
+    geometry: Sequence[float]
 
 
 _PROPERTY_DTYPES: dict[
@@ -404,14 +405,14 @@ class AnnotationWriter:
             id = len(self.annotations)
 
         annotation = Annotation(
-            id=id, encoded=encoded.tobytes(), relationships=related_ids
+            id=id, encoded=encoded.tobytes(), relationships=related_ids, geometry=coords
         )
 
-        for i in range(int(n_spatial_coords)):
-            chunk_index = self.get_chunk_index(
-                np.array(coords[i * self.rank : (i + 1) * self.rank])
-            )
-            self.annotations_by_chunk[chunk_index].append(annotation)
+        # for i in range(int(n_spatial_coords)):
+        #     chunk_index = self.get_chunk_index(
+        #         np.array(coords[i * self.rank : (i + 1) * self.rank])
+        #     )
+        #     self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
         for i, segment_ids in enumerate(related_ids):
             for segment_id in segment_ids:
@@ -492,10 +493,10 @@ class AnnotationWriter:
         }
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
-        lower_chunk_index = self.get_chunk_index(self.lower_bound)
+        # lower_chunk_index = self.get_chunk_index(self.lower_bound)
 
         for chunk_index, annotations in annotations_by_chunk.items():
-            chunk_index = np.array(chunk_index) - np.array(lower_chunk_index)
+            # chunk_index = np.array(chunk_index) - np.array(lower_chunk_index)
             # calculate the compressed morton code for the chunk index
             key = compressed_morton_code(chunk_index, max_sizes)
             # convert the np.uint64 to a binary representation of a uint64
@@ -527,12 +528,18 @@ class AnnotationWriter:
 
         num_chunks = np.maximum(num_chunks, np.full(num_chunks.shape, 1, dtype=int))
 
+        metadata["upper_bound"] = self.lower_bound + (num_chunks * self.chunk_size)
         # make directories
         os.makedirs(path, exist_ok=True)
         for relationship in self.relationships:
             os.makedirs(os.path.join(path, f"rel_{relationship}"), exist_ok=True)
         os.makedirs(os.path.join(path, "by_id"), exist_ok=True)
         os.makedirs(os.path.join(path, "spatial0"), exist_ok=True)
+        for ann in self.annotations:
+            if self.annotation_type == "point":
+                # get the first self.rank elements of the geometry array
+                chunk_index = self.get_chunk_index(ann.geometry - self.lower_bound)
+                self.annotations_by_chunk[chunk_index].append(ann)
 
         total_chunks = len(self.annotations_by_chunk)
         spatial_sharding_spec = choose_output_spec(
@@ -547,6 +554,7 @@ class AnnotationWriter:
                 "limit": len(self.annotations),
             }
         ]
+        spatial_sharding_spec = None
         # write annotations by spatial chunk
         if spatial_sharding_spec is not None:
             self._serialize_annotation_chunk_sharded(
@@ -557,7 +565,9 @@ class AnnotationWriter:
             )
             metadata["spatial"][0]["sharding"] = spatial_sharding_spec.to_json()
         else:
+            # lower_chunk_index = self.get_chunk_index(self.lower_bound)
             for chunk_index, annotations in self.annotations_by_chunk.items():
+                # chunk_index = np.array(chunk_index) - np.array(lower_chunk_index)
                 chunk_name = "_".join([str(c) for c in chunk_index])
                 filepath = os.path.join(path, "spatial0", chunk_name)
                 with open(filepath, "wb") as f:
