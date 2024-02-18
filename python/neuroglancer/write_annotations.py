@@ -21,7 +21,7 @@ import struct
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import Literal, NamedTuple, Optional, SupportsInt, Union, cast
-
+import math
 import numpy as np
 
 try:
@@ -150,29 +150,44 @@ def choose_output_spec(
     )
 
 
-def compressed_morton_code(position: Sequence[int], shape: Sequence[int]):
-    """Converts a position in a grid to a compressed Morton code.
+def compressed_morton_code(gridpt, grid_size):
+    """Converts a grid point to a compressed morton code.
+    from cloud-volume"""
+    if hasattr(gridpt, "__len__") and len(gridpt) == 0:  # generators don't have len
+        return np.zeros((0,), dtype=np.uint32)
 
-    Args:
-        position: A sequence of integers representing the position in the grid.
-        shape: A sequence of integers representing the shape of the grid.
+    gridpt = np.asarray(gridpt, dtype=np.uint32)
+    single_input = False
+    if gridpt.ndim == 1:
+        gridpt = np.atleast_2d(gridpt)
+        single_input = True
 
-    Returns:
-        int: The compressed Morton code.
-    """
-    output_bit = 0
-    rank = len(position)
-    output_num = 0
-    for bit in range(32):
-        for dim in range(rank - 1, -1, -1):
-            if (shape[dim] - 1) >> bit:
-                output_num |= ((position[dim] >> bit) & 1) << output_bit
-                output_bit += 1
-                if output_bit == 64:
-                    # In Python, we don't have the 32-bit limitation, so we don't need to split into high and low.
-                    # But you can add code here to handle or signal overflow if needed.
-                    pass
-    return output_num
+    code = np.zeros((gridpt.shape[0],), dtype=np.uint64)
+    num_bits = [math.ceil(math.log2(size)) for size in grid_size]
+    j = np.uint64(0)
+    one = np.uint64(1)
+
+    if sum(num_bits) > 64:
+        raise ValueError(
+            f"Unable to represent grids that require more than 64 bits. Grid size {grid_size} requires {num_bits} bits."
+        )
+
+    max_coords = np.max(gridpt, axis=0)
+    if np.any(max_coords >= grid_size):
+        raise ValueError(
+            f"Unable to represent grid points larger than the grid. Grid size: {grid_size} Grid points: {gridpt}"
+        )
+
+    for i in range(max(num_bits)):
+        for dim in range(3):
+            if 2**i < grid_size[dim]:
+                bit = ((np.uint64(gridpt[:, dim]) >> np.uint64(i)) & one) << j
+                code |= bit
+                j += one
+
+    if single_input:
+        return code[0]
+    return code
 
 
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
@@ -554,7 +569,7 @@ class AnnotationWriter:
                 "limit": len(self.annotations),
             }
         ]
-        spatial_sharding_spec = None
+        # spatial_sharding_spec = None
         # write annotations by spatial chunk
         if spatial_sharding_spec is not None:
             self._serialize_annotation_chunk_sharded(
