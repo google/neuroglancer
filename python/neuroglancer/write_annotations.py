@@ -14,6 +14,7 @@ up to a few million of annotations, and not beyond that.
 
 import json
 import logging
+import math
 import numbers
 import os
 import pathlib
@@ -21,10 +22,10 @@ import struct
 from collections import defaultdict
 from collections.abc import Sequence
 from itertools import product
-from typing import Literal, NamedTuple, Optional, SupportsInt, Union, cast
-import math
+from typing import Literal, NamedTuple, Optional, Union, cast
+
 import numpy as np
-import rtree
+import rtree  # type: ignore
 
 try:
     import tensorstore as ts
@@ -307,9 +308,7 @@ class AnnotationWriter:
                 f"Expected point to have length {self.coordinate_space.rank}, but received: {len(point)}"
             )
 
-        self.lower_bound = np.minimum(self.lower_bound, point)
-        self.upper_bound = np.maximum(self.upper_bound, point)
-        self._add_obj(point, id, 1, **kwargs)
+        self._add_obj(point, id, np.array(point), np.array(point), **kwargs)
 
     def add_axis_aligned_bounding_box(
         self,
@@ -322,7 +321,11 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected annotation type axis_aligned_bounding_box, but received: {self.annotation_type}"
             )
-        self._add_two_point_obj(point_a, point_b, id, 2, **kwargs)
+        lower_bound = np.minimum(point_a, point_b)
+        upper_bound = np.maximum(point_a, point_b)
+        self._add_two_point_obj(
+            point_a, point_b, lower_bound, upper_bound, id, **kwargs
+        )
 
     def add_ellipsoid(
         self,
@@ -345,9 +348,9 @@ class AnnotationWriter:
                 f"Expected radii to have length {self.coordinate_space.rank}, but received: {len(radii)}"
             )
 
-        self.lower_bound = np.minimum(center, self.lower_bound)
-        self.upper_bound = np.maximum(center, self.upper_bound)
-        self._add_two_point_obj(center, radii, id, 1, **kwargs)
+        lower_bound = np.array(center) - np.array(radii)
+        upper_bound = np.array(center) + np.array(radii)
+        self._add_two_point_obj(center, radii, lower_bound, upper_bound, id, **kwargs)
 
     def add_line(
         self,
@@ -360,14 +363,20 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected annotation type line, but received: {self.annotation_type}"
             )
-        self._add_two_point_obj(point_a, point_b, id, 2, **kwargs)
+        lower_bound = np.minimum(point_a, point_b)
+        upper_bound = np.maximum(point_a, point_b)
+
+        self._add_two_point_obj(
+            point_a, point_b, lower_bound, upper_bound, id, **kwargs
+        )
 
     def _add_two_point_obj(
         self,
         point_a: Sequence[float],
         point_b: Sequence[float],
+        lower_bound: np.ndarray,
+        upper_bound: np.ndarray,
         id: Optional[int] = None,
-        n_spatial_coords: Optional[int] = 2,
         **kwargs,
     ):
         if len(point_a) != self.coordinate_space.rank:
@@ -379,28 +388,27 @@ class AnnotationWriter:
             raise ValueError(
                 f"Expected coordinates to have length {self.coordinate_space.rank}, but received: {len(point_b)}"
             )
-        if n_spatial_coords == 2:
-            min_vals = np.minimum(point_a, point_b)
-            max_vals = np.maximum(point_a, point_b)
-        elif n_spatial_coords == 1:
-            min_vals = np.array(point_a)
-            max_vals = np.array(point_a)
-        else:
-            raise ValueError(f"Unexpected n_spatial_coords {n_spatial_coords}")
-
-        self.lower_bound = np.minimum(self.lower_bound, min_vals)
-        self.upper_bound = np.maximum(self.upper_bound, max_vals)
 
         coords = np.concatenate((point_a, point_b))
-        self._add_obj(cast(Sequence[float], coords), id, n_spatial_coords, **kwargs)
+        self._add_obj(
+            cast(Sequence[float], coords),
+            id,
+            lower_bound=upper_bound,
+            upper_bound=upper_bound,
+            **kwargs,
+        )
 
     def _add_obj(
         self,
         coords: Sequence[float],
         id: Optional[int],
-        n_spatial_coords: SupportsInt = 1,
+        lower_bound: np.ndarray,
+        upper_bound: np.ndarray,
         **kwargs,
     ):
+        self.lower_bound = np.minimum(self.lower_bound, lower_bound)
+        self.upper_bound = np.maximum(self.upper_bound, upper_bound)
+
         encoded = np.zeros(shape=(), dtype=self.dtype)
         encoded[()]["geometry"] = coords
 
@@ -427,17 +435,14 @@ class AnnotationWriter:
             id=id, encoded=encoded.tobytes(), relationships=related_ids
         )
 
-        spatial_points = coords[: n_spatial_coords * self.rank]
-        spatial_points = np.reshape(spatial_points, (self.rank, n_spatial_coords))
-        lower_bound = np.min(spatial_points, axis=1)
-        upper_bound = np.max(spatial_points, axis=1)
+        # spatial_points = np.array(coords[: n_spatial_coords * self.rank])
+        # spatial_points = np.reshape(
+        #     spatial_points, [self.rank, cast(SupportsIndex, n_spatial_coords)]
+        # )
+        # lower_bound = np.min(spatial_points, axis=1)
+        # upper_bound = np.max(spatial_points, axis=1)
         self.rtree.insert(id, tuple(lower_bound) + tuple(upper_bound), obj=annotation)
 
-        # for i in range(int(n_spatial_coords)):
-        #     chunk_index = self.get_chunk_index(
-        #         np.array(coords[i * self.rank : (i + 1) * self.rank])
-        #     )
-        #     self.annotations_by_chunk[chunk_index].append(annotation)
         self.annotations.append(annotation)
         for i, segment_ids in enumerate(related_ids):
             for segment_id in segment_ids:
@@ -508,9 +513,7 @@ class AnnotationWriter:
             dataset.with_transaction(txn)[key] = value
         txn.commit_async().result()
 
-    def _serialize_annotation_chunk_sharded(
-        self, path, annotations_by_chunk, shard_spec, max_sizes
-    ):
+    def _serialize_annotation_chunk_sharded(self, path, shard_spec, max_sizes):
         spec = {
             "driver": "neuroglancer_uint64_sharded",
             "metadata": shard_spec.to_json(),
@@ -518,16 +521,22 @@ class AnnotationWriter:
         }
         dataset = ts.KvStore.open(spec).result()
         txn = ts.Transaction()
-        # lower_chunk_index = self.get_chunk_index(self.lower_bound)
 
-        for chunk_index, annotations in annotations_by_chunk.items():
-            # chunk_index = np.array(chunk_index) - np.array(lower_chunk_index)
-            # calculate the compressed morton code for the chunk index
-            key = compressed_morton_code(chunk_index, max_sizes)
+        # Generate all combinations of coordinates
+        coordinates = product(*(range(n) for n in max_sizes))
+
+        # Iterate over the grid
+        for cell in coordinates:
+            # Query the rtree index for annotations in the current chunk
+            lower_bound = self.lower_bound + np.array(cell) * self.chunk_size
+            upper_bound = lower_bound + self.chunk_size
+            coords = np.concatenate((lower_bound, upper_bound))
+            chunk_annotations = self.rtree.intersection(tuple(coords), objects="raw")
+            key = compressed_morton_code(cell, max_sizes)
             # convert the np.uint64 to a binary representation of a uint64
             # using big endian representation
             key = np.ascontiguousarray(key, dtype=">u8").tobytes()
-            value = self._encode_multiple_annotations(annotations)
+            value = self._encode_multiple_annotations(chunk_annotations)
             dataset.with_transaction(txn)[key] = value
 
         txn.commit_async().result()
@@ -561,18 +570,6 @@ class AnnotationWriter:
         os.makedirs(os.path.join(path, "by_id"), exist_ok=True)
         os.makedirs(os.path.join(path, "spatial0"), exist_ok=True)
 
-        # Generate all combinations of coordinates
-        coordinates = product(*(range(n) for n in num_chunks))
-
-        # Iterate over the grid
-        for cell in coordinates:
-            # Query the rtree index for annotations in the current chunk
-            lower_bound = self.lower_bound + np.array(cell) * self.chunk_size
-            upper_bound = lower_bound + self.chunk_size
-            coords = np.concatenate((lower_bound, upper_bound))
-            chunk_annotations = self.rtree.intersection(tuple(coords), objects="raw")
-            self.annotations_by_chunk[cell] = list(chunk_annotations)
-
         # for ann in self.annotations:
         #     if self.annotation_type == "point":
         #         # get the first self.rank elements of the geometry array
@@ -597,19 +594,27 @@ class AnnotationWriter:
         if spatial_sharding_spec is not None:
             self._serialize_annotation_chunk_sharded(
                 os.path.join(path, "spatial0"),
-                self.annotations_by_chunk,
                 spatial_sharding_spec,
                 num_chunks.tolist(),
             )
             metadata["spatial"][0]["sharding"] = spatial_sharding_spec.to_json()
         else:
-            # lower_chunk_index = self.get_chunk_index(self.lower_bound)
-            for chunk_index, annotations in self.annotations_by_chunk.items():
-                # chunk_index = np.array(chunk_index) - np.array(lower_chunk_index)
-                chunk_name = "_".join([str(c) for c in chunk_index])
+            # Generate all combinations of coordinates
+            coordinates = product(*(range(n) for n in num_chunks))
+
+            # Iterate over the grid
+            for cell in coordinates:
+                # Query the rtree index for annotations in the current chunk
+                lower_bound = self.lower_bound + np.array(cell) * self.chunk_size
+                upper_bound = lower_bound + self.chunk_size
+                coords = np.concatenate((lower_bound, upper_bound))
+                chunk_annotations = self.rtree.intersection(
+                    tuple(coords), objects="raw"
+                )
+                chunk_name = "_".join([str(c) for c in cell])
                 filepath = os.path.join(path, "spatial0", chunk_name)
                 with open(filepath, "wb") as f:
-                    self._serialize_annotations(f, annotations)
+                    self._serialize_annotations(f, chunk_annotations)
 
         # write annotations by id
         if sharding_spec is not None:
