@@ -165,6 +165,18 @@ class OpacityTool(Tool):
 
 
 @export_tool
+class VolumeRenderingTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = "volumeRendering"
+
+
+@export_tool
+class VolumeRenderingGainTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = "volumeRenderingGain"
+
+
+@export_tool
 class VolumeRenderingDepthSamplesTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "volumeRenderingDepthSamples"
@@ -543,6 +555,12 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     )
     opacity = wrapped_property("opacity", optional(float, 0.5))
     blend = wrapped_property("blend", optional(str))
+    volume_rendering = volumeRendering = wrapped_property(
+        "volumeRendering", optional(bool, False)
+    )
+    volume_rendering_gain = volumeRenderingGain = wrapped_property(
+        "volumeRenderingGain", optional(float, 1)
+    )
     volume_rendering_depth_samples = volumeRenderingDepthSamples = wrapped_property(
         "volumeRenderingDepthSamples", optional(float, 64)
     )
