@@ -435,12 +435,6 @@ class AnnotationWriter:
             id=id, encoded=encoded.tobytes(), relationships=related_ids
         )
 
-        # spatial_points = np.array(coords[: n_spatial_coords * self.rank])
-        # spatial_points = np.reshape(
-        #     spatial_points, [self.rank, cast(SupportsIndex, n_spatial_coords)]
-        # )
-        # lower_bound = np.min(spatial_points, axis=1)
-        # upper_bound = np.max(spatial_points, axis=1)
         self.rtree.insert(id, tuple(lower_bound) + tuple(upper_bound), obj=annotation)
 
         self.annotations.append(annotation)
@@ -460,7 +454,6 @@ class AnnotationWriter:
         txn = ts.Transaction()
         for ann in annotations:
             # convert the ann.id to a binary representation of a uint64
-            # key = ann.id.to_bytes(8, "little")
             key = np.ascontiguousarray(ann.id, dtype=">u8").tobytes()
             value = ann.encoded
             for related_ids in ann.relationships:
@@ -531,7 +524,9 @@ class AnnotationWriter:
             lower_bound = self.lower_bound + np.array(cell) * self.chunk_size
             upper_bound = lower_bound + self.chunk_size
             coords = np.concatenate((lower_bound, upper_bound))
-            chunk_annotations = self.rtree.intersection(tuple(coords), objects="raw")
+            chunk_annotations = list(
+                self.rtree.intersection(tuple(coords), objects="raw")
+            )
             key = compressed_morton_code(cell, max_sizes)
             # convert the np.uint64 to a binary representation of a uint64
             # using big endian representation
@@ -541,7 +536,7 @@ class AnnotationWriter:
 
         txn.commit_async().result()
 
-    def write(self, path: Union[str, pathlib.Path]):
+    def write(self, path: Union[str, pathlib.Path], write_sharded: bool = False):
         metadata = {
             "@type": "neuroglancer_annotations_v1",
             "dimensions": self.coordinate_space.to_json(),
@@ -570,12 +565,6 @@ class AnnotationWriter:
         os.makedirs(os.path.join(path, "by_id"), exist_ok=True)
         os.makedirs(os.path.join(path, "spatial0"), exist_ok=True)
 
-        # for ann in self.annotations:
-        #     if self.annotation_type == "point":
-        #         # get the first self.rank elements of the geometry array
-        #         chunk_index = self.get_chunk_index(ann.geometry - self.lower_bound)
-        #         self.annotations_by_chunk[chunk_index].append(ann)
-
         total_chunks = len(self.annotations_by_chunk)
         spatial_sharding_spec = choose_output_spec(
             total_chunks, total_ann_bytes + 8 * len(self.annotations) + 8 * total_chunks
@@ -589,9 +578,8 @@ class AnnotationWriter:
                 "limit": len(self.annotations),
             }
         ]
-        # spatial_sharding_spec = None
         # write annotations by spatial chunk
-        if spatial_sharding_spec is not None:
+        if (spatial_sharding_spec is not None) and write_sharded:
             self._serialize_annotation_chunk_sharded(
                 os.path.join(path, "spatial0"),
                 spatial_sharding_spec,
@@ -608,8 +596,8 @@ class AnnotationWriter:
                 lower_bound = self.lower_bound + np.array(cell) * self.chunk_size
                 upper_bound = lower_bound + self.chunk_size
                 coords = np.concatenate((lower_bound, upper_bound))
-                chunk_annotations = self.rtree.intersection(
-                    tuple(coords), objects="raw"
+                chunk_annotations = list(
+                    self.rtree.intersection(tuple(coords), objects="raw")
                 )
                 chunk_name = "_".join([str(c) for c in cell])
                 filepath = os.path.join(path, "spatial0", chunk_name)
@@ -617,7 +605,7 @@ class AnnotationWriter:
                     self._serialize_annotations(f, chunk_annotations)
 
         # write annotations by id
-        if sharding_spec is not None:
+        if (sharding_spec is not None) and write_sharded:
             self._serialize_annotations_sharded(
                 os.path.join(path, "by_id"), self.annotations, sharding_spec
             )
@@ -635,7 +623,7 @@ class AnnotationWriter:
                 total_ann_bytes + 8 * len(self.annotations) + 8 * total_chunks,
             )
             rel_md = {"id": relationship, "key": f"rel_{relationship}"}
-            if relationship_sharding_spec is not None:
+            if (relationship_sharding_spec is not None) and write_sharded:
                 rel_md["sharding"] = relationship_sharding_spec.to_json()
                 self._serialize_annotations_by_related_id(
                     os.path.join(path, f"rel_{relationship}"),
