@@ -321,6 +321,7 @@ setuptools.setup(
         "google-apitools",
         "google-auth",
         "atomicwrites",
+        "rtree",
     ],
     extras_require={
         "test": [
