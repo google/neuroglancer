@@ -536,7 +536,7 @@ class AnnotationWriter:
 
         txn.commit_async().result()
 
-    def write(self, path: Union[str, pathlib.Path], write_sharded: bool = False):
+    def write(self, path: Union[str, pathlib.Path], write_sharded: bool = True):
         metadata = {
             "@type": "neuroglancer_annotations_v1",
             "dimensions": self.coordinate_space.to_json(),
