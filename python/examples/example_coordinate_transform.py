@@ -14,8 +14,9 @@ if __name__ == "__main__":
     ix, iy, iz = np.meshgrid(
         *[np.linspace(0, 1, n) for n in [100, 100, 100]], indexing="ij"
     )
-    data = np.cast[np.uint32](
-        np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10)
+    data = np.asarray(
+        np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10),
+        dtype=np.uint32,
     )
     data = np.pad(data, 1, "constant")
     dimensions = neuroglancer.CoordinateSpace(
