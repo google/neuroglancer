@@ -324,6 +324,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
             builder.setFragmentMainFunction(`
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
+  emitIntensity(uChunkNumber);
   emit(outputColor, 0u);
 }
 `);
