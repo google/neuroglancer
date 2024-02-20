@@ -59,6 +59,9 @@
       "correctness": {
         "useYield": "off",
         "noUnsafeFinally": "off"
+      },
+      "performance": {
+        "noDelete": "off"
       }
     }
   }

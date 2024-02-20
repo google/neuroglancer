@@ -280,7 +280,7 @@ export class SidePanelManager extends RefCounted {
   }
 
   endDrag() {
-    this.element.dataset.neuroglancerSidePanelDrag = undefined;
+    delete this.element.dataset.neuroglancerSidePanelDrag;
     this.dragSource = undefined;
   }
 
