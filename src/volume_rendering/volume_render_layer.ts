@@ -226,7 +226,25 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           builder.addFragmentCode(`
 #define VOLUME_RENDERING true
 `);
-
+          let glsl_rgbaEmit = glsl_emitRGBAVolumeRendering;
+          let glsl_finalEmit = `
+  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
+`;
+          let glsl_continualEmit = ``;
+          if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
+            glsl_rgbaEmit = `
+void emitRGBA(vec4 rgba) {
+  float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
+  float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
+  outputColor = vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+  revealage = 1.0 - correctedAlpha;
+}
+`;
+            glsl_finalEmit = ``;
+            glsl_continualEmit = `
+  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
+`;
+          }
           emitter(builder);
           // Near limit in [0, 1] as fraction of full limit.
           builder.addUniform("highp float", "uNearLimitFraction");
@@ -278,7 +296,7 @@ void userMain();
             "curChunkPosition",
           );
           builder.addFragmentCode([
-            glsl_emitRGBAVolumeRendering,
+            glsl_rgbaEmit,
             `
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
@@ -288,6 +306,9 @@ void emitGrayscale(float value) {
 }
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
+}
+void emitIntensity(float value) {
+  gl_FragDepth = value;
 }
 float computeDepthFromClipSpace(vec4 clipSpacePosition) {
   float NDCDepthCoord = clipSpacePosition.z / clipSpacePosition.w;
@@ -357,8 +378,9 @@ void main() {
     }
     curChunkPosition = position - uTranslation;
     userMain();
+    ${glsl_continualEmit}
   }
-  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
+  ${glsl_finalEmit}
 }
 `);
           }
