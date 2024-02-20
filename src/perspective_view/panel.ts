@@ -167,13 +167,9 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 function defineMaxProjectionCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
-  builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
   builder.setFragmentMain(`
-vec4 v0 = getValue0();
-vec4 v1 = getValue1();
-
-v4f_fragData0 = v0;
-v4f_fragData1 = v1;
+v4f_fragData0 = getValue0();
+v4f_fragData1 = getValue1();
 `);
 }
 
@@ -907,6 +903,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
             // Set state for max projection mode and draw
             gl.clearDepth(0.0);
+            gl.clearColor(0.0, 0.0, 0.0, 0.0);
             gl.depthMask(true);
             gl.depthFunc(WebGL2RenderingContext.GREATER);
             gl.disable(WebGL2RenderingContext.BLEND);
