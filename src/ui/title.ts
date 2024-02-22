@@ -21,9 +21,9 @@ export function bindTitle(title: WatchableValueInterface<string | undefined>) {
   const debouncedSetTitle = animationFrameDebounce(() => {
     const value = title.value?.trim();
     if (value) {
-      document.title = `${value} - neuroglancer`;
+      document.title = `${value} - neuroglancer xyz`;
     } else {
-      document.title = "neuroglancer";
+      document.title = "neuroglancer xyz";
     }
   });
   const unregisterSignalHandler = title.changed.add(debouncedSetTitle);
