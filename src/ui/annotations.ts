@@ -1850,7 +1850,7 @@ export function UserLayerWithAnnotationsMixin<
 
                 const { relationships, properties } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
-                
+
                 // Add the ID to the annotation details.
                 const label = document.createElement("label");
                 label.classList.add("neuroglancer-annotation-property");
