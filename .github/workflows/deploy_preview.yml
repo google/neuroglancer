@@ -38,31 +38,16 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueNumber = ${{ steps.pr-id.outputs.pr-id }};
-            const expires = new Date("${{ github.event.workflow_run.head_commit.id }}");
-            const MESSAGE_START = "\n\n<!-- Firebase hosting preview start -->\n";
-            const MESSAGE_END = "\n<!-- Firebase hosting preview end -->\n";
-            const message = `----
-            🔥 Preview 🔥: ${{ steps.deploy.outputs.details_url }}
-            Updated at ${new Date()} for commit ${{ github.event.workflow_run.head_commit.id }}
-            Expires: ${expires}
-            `;
-            const { data: pull } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: issueNumber,
-            });
-            let body = "";
-            if (pull.body && pull.body.includes(MESSAGE_START)) {
-              body = pull.body.slice(0, pull.body.indexOf(MESSAGE_START));
-              body = body + MESSAGE_START + message + MESSAGE_END;
-              body = body + pull.body.slice(pull.body.indexOf(MESSAGE_END) + MESSAGE_END.length);
-            } else {
-              body = MESSAGE_START + message + MESSAGE_END;
-            }
-            github.rest.pulls.update({
+            const expires = new Date("${{ steps.deploy.outputs.expires }}");
+            const commitId = "${{ github.event.workflow_run.head_commit.id }}";
+            await github.rest.checks.create({
+                name: "client-preview",
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: issueNumber,
-                body: body,
+                head_sha: commitId,
+                status: "completed",
+                completed_at: `${new Date()}`,
+                details_url: "${{ steps.deploy.outputs.details_url }}",
+                conclusion: "success",
+                title: `🔥 Preview created, expires at: ${expires}`,
             });
