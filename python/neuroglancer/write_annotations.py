@@ -527,12 +527,13 @@ class AnnotationWriter:
             chunk_annotations = list(
                 self.rtree.intersection(tuple(coords), objects="raw")
             )
-            key = compressed_morton_code(cell, max_sizes)
-            # convert the np.uint64 to a binary representation of a uint64
-            # using big endian representation
-            key = np.ascontiguousarray(key, dtype=">u8").tobytes()
-            value = self._encode_multiple_annotations(chunk_annotations)
-            dataset.with_transaction(txn)[key] = value
+            if len(chunk_annotations) > 0:
+                key = compressed_morton_code(cell, max_sizes)
+                # convert the np.uint64 to a binary representation of a uint64
+                # using big endian representation
+                key = np.ascontiguousarray(key, dtype=">u8").tobytes()
+                value = self._encode_multiple_annotations(chunk_annotations)
+                dataset.with_transaction(txn)[key] = value
 
         txn.commit_async().result()
 
@@ -578,6 +579,7 @@ class AnnotationWriter:
                 "limit": len(self.annotations),
             }
         ]
+        spatial_sharding_spec = None
         # write annotations by spatial chunk
         if (spatial_sharding_spec is not None) and write_sharded:
             self._serialize_annotation_chunk_sharded(
@@ -599,10 +601,11 @@ class AnnotationWriter:
                 chunk_annotations = list(
                     self.rtree.intersection(tuple(coords), objects="raw")
                 )
-                chunk_name = "_".join([str(c) for c in cell])
-                filepath = os.path.join(path, "spatial0", chunk_name)
-                with open(filepath, "wb") as f:
-                    self._serialize_annotations(f, chunk_annotations)
+                if len(chunk_annotations) > 0:
+                    chunk_name = "_".join([str(c) for c in cell])
+                    filepath = os.path.join(path, "spatial0", chunk_name)
+                    with open(filepath, "wb") as f:
+                        self._serialize_annotations(f, chunk_annotations)
 
         # write annotations by id
         if (sharding_spec is not None) and write_sharded:
