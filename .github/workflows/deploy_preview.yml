@@ -39,12 +39,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issueNumber = ${{ steps.pr-id.outputs.pr-id }};
+            const expires = new Date("${{ github.event.workflow_run.head_commit.id }}");
             const MESSAGE_START = "\n\n<!-- Firebase hosting preview start -->\n";
             const MESSAGE_END = "\n<!-- Firebase hosting preview end -->\n";
             const message = `----
             🔥 Preview 🔥: ${{ steps.deploy.outputs.details_url }}
-            Updated at ${Date.now()} for commit ${{ github.event.workflow_run.head_commit.id }}
-            Expires: ${{ steps.deploy.outputs.expire_time }}
+            Updated at ${new Date()} for commit ${{ github.event.workflow_run.head_commit.id }}
+            Expires: ${expires}
             `;
             const { data: pull } = await github.rest.pulls.get({
               owner: context.repo.owner,
