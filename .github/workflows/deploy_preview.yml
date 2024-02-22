@@ -1,0 +1,65 @@
+name: Deploy preview
+
+on:
+  workflow_run:
+    worflows: ["Build preview"]
+    types: [completed]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: client
+          path: dist/min
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          run-id: "${{ context.payload.workflow_run.id }}"
+      - name: Get PR ID
+        # https://github.com/orgs/community/discussions/25220#discussioncomment-7532132
+        id: pr-id
+        run: |
+          PR_ID=$(gh run view -R ${{ github.repository }} ${{ github.event.workflow_run.id }} | grep -oP '#[0-9]+ . ${{ github.event.workflow_run.id }}' | grep -oP '#[0-9]+' | cut -c 2-)
+          echo "pr-id=${PR_ID}" >> $GITHUB_OUTPUT
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        id: deploy
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
+          expires: 30d
+          channel: "pr${{ steps.pr-id.outputs.pr-id }}"
+          projectId: neuroglancer-demo
+      - name: "Comment on PR"
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = ${{ steps.pr-id.outputs.pr-id }};
+            const MESSAGE_START = "\n\n<!-- Firebase hosting preview start -->\n";
+            const MESSAGE_END = "\n<!-- Firebase hosting preview end -->\n";
+            const message = `----
+            🔥 Preview 🔥: ${{ steps.deploy.outputs.details_url }}
+            Updated at ${Date.now()} for commit ${{ github.event.workflow_run.head_commit.id }}
+            Expires: ${{ steps.deploy.outputs.expire_time }}
+            `;
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: issueNumber,
+            });
+            let body = "";
+            if (pull.body && pull.body.includes(MESSAGE_SEPARATOR_START)) {
+              body = pull.body.slice(0, pull.body.indexOf(MESSAGE_SEPARATOR_START));
+              body = body + MESSAGE_SEPARATOR_START + message + MESSAGE_SEPARATOR_END;
+              body = body + pull.body.slice(pull.body.indexOf(MESSAGE_SEPARATOR_END) + MESSAGE_SEPARATOR_END.length);
+            } else {
+              body = MESSAGE_SEPARATOR_START + message + MESSAGE_SEPARATOR_END;
+            }
+            github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                body: body,
+            });

@@ -20,3 +20,4 @@ tsconfig.tsbuildinfo
 /ngauth_server/secrets/
 .eslintcache
 /lib
+/.firebase
