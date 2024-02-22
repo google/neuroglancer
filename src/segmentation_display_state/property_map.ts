@@ -924,7 +924,6 @@ export function executeSegmentQuery(
     }
   }
 
-
   // Filter by tags
   const { includeTags, excludeTags } = query;
   const tagsProperty = db!.tags;
@@ -1021,7 +1020,12 @@ export function executeSegmentQuery(
       const count = tagCounts[tagIndex];
       const tag = tags[tagIndex];
       const tagDesc = tagDescriptions[tagIndex];
-      const tagCount = { tag, tagIndex, count: tagCounts[tagIndex], desc: tagDesc };
+      const tagCount = {
+        tag,
+        tagIndex,
+        count: tagCounts[tagIndex],
+        desc: tagDesc,
+      };
       if (query.includeTags.includes(tag) || query.excludeTags.includes(tag)) {
         tagStatisticsInQuery.push(tagCount);
       } else if (count > 0) {
@@ -1115,7 +1119,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-          0
+            0
         ];
       }
     }
@@ -1133,7 +1137,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-            0
+              0
           ];
         }
       }
