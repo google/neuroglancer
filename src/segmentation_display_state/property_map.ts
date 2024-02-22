@@ -863,7 +863,7 @@ export function executeSegmentQuery(
   const totalIds = inlineProperties.ids.length / 2;
   const totalTags = db?.tags?.tags?.length || 0;
   let indices = makeIndicesArray(totalIds, totalIds);
-  let showTags = makeIndicesArray(totalTags, totalTags);
+  const showTags = makeIndicesArray(totalTags, totalTags);
   showTags.fill(1);
   for (let i = 0; i < totalIds; ++i) {
     indices[i] = i;
@@ -1119,7 +1119,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-            0
+          0
         ];
       }
     }
@@ -1137,7 +1137,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-              0
+            0
           ];
         }
       }
