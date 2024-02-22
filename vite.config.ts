@@ -42,7 +42,15 @@ export default defineConfig(
     // Prevent *.html redirecting to `index.html` on dev server, to avoid confusion.
     appType: "mpa",
     optimizeDeps: {
-      include: ["nifti-reader-js", "pako", "numcodecs/blosc", "numcodecs/zstd"],
+      // Manually specify entries to avoid including `examples/`, `python/`,
+      // etc.
+      entries: [
+        "./index.html",
+        // Manually specify bundle entrypoints since the Vite dependency scanner
+        // uses esbuild and does not detect the `new URL` references to the
+        // worker bundles.
+        "./src/*.bundle.js",
+      ],
     },
     plugins: [
       devServerPathMapPlugin({

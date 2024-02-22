@@ -29,7 +29,9 @@ root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
 examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")
 
 
-def capture_screenshot_from_dev_server(webdriver, example_dir, test_fragment):
+def capture_screenshot_from_dev_server(
+    webdriver, example_dir, test_fragment, extra_args=None
+):
     import nodejs
 
     if sys.platform == "win32":
@@ -42,7 +44,7 @@ def capture_screenshot_from_dev_server(webdriver, example_dir, test_fragment):
         # new session.
         process_group_args = dict(start_new_session=True)
     p = nodejs.npm.Popen(
-        ["run", "dev-server"],
+        ["run", "dev-server"] + (extra_args or []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -94,11 +96,15 @@ def capture_screenshot_from_dev_server(webdriver, example_dir, test_fragment):
 
 
 def capture_screenshot_from_build(
-    webdriver, example_dir, test_fragment, output_dir=None
+    webdriver,
+    example_dir,
+    test_fragment,
+    output_dir=None,
+    extra_args=None,
 ):
     import nodejs
 
-    nodejs.npm.run(["run", "build"], cwd=example_dir, check=True)
+    nodejs.npm.run(["run", "build"] + (extra_args or []), cwd=example_dir, check=True)
     if output_dir is None:
         output_dir = os.path.join(example_dir, "dist")
 
@@ -145,6 +151,7 @@ def expected_screenshot(request, webdriver_generic):
             webdriver=webdriver_generic,
             example_dir=root_dir,
             test_fragment=TEST_FRAGMENT,
+            extra_args=["--no-typecheck", "--no-lint"],
         ),
         request,
     )
@@ -264,6 +271,7 @@ def compare_screenshot(screenshot, expected_screenshot, extras, threshold=20):
 
 # Flaky due to https://github.com/parcel-bundler/parcel/issues/9476
 @pytest.mark.flaky(reruns=5)
+@pytest.mark.timeout(timeout=60, func_only=True)
 def test_dev_server(
     request,
     webdriver_generic,
@@ -285,6 +293,7 @@ def test_dev_server(
 
 # Flaky due to https://github.com/parcel-bundler/parcel/issues/9476
 @pytest.mark.flaky(reruns=5)
+@pytest.mark.timeout(timeout=60, func_only=True)
 def test_build(
     request,
     webdriver_generic,
@@ -304,6 +313,7 @@ def test_build(
     )
 
 
+@pytest.mark.timeout(timeout=60, func_only=True)
 def test_root_build(
     request,
     webdriver_generic,
@@ -314,6 +324,7 @@ def test_root_build(
         example_dir=root_dir,
         output_dir=os.path.join(root_dir, "dist", "min"),
         test_fragment=TEST_FRAGMENT,
+        extra_args=["--no-typecheck", "--no-lint"],
     )
 
     compare_screenshot(

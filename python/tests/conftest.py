@@ -123,7 +123,19 @@ def pytest_runtest_makereport(item, call):
     setattr(item, "rep_" + rep.when, rep)
 
 
-@pytest.fixture(params=[pytest.param(None, marks=pytest.mark.flaky(reruns=5))])
+# browser-based tests are flaky and can hang, so set a 30 second timeout and retry up to 5 times.
+# Use `func_only=true` to work around https://github.com/pytest-dev/pytest-rerunfailures/issues/99
+@pytest.fixture(
+    params=[
+        pytest.param(
+            None,
+            marks=[
+                pytest.mark.flaky(reruns=5),
+                pytest.mark.timeout(timeout=30, func_only=True),
+            ],
+        )
+    ]
+)
 def webdriver(_webdriver_internal, request):
     viewer = _webdriver_internal.viewer
     viewer.set_state({})
