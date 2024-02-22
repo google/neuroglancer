@@ -1119,7 +1119,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-          0
+            0
         ];
       }
     }
@@ -1137,7 +1137,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-            0
+              0
           ];
         }
       }
