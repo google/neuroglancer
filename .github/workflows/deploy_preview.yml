@@ -23,6 +23,8 @@ jobs:
         run: |
           PR_ID=$(gh run view -R ${{ github.repository }} ${{ github.event.workflow_run.id }} | grep -oP '#[0-9]+ . ${{ github.event.workflow_run.id }}' | grep -oP '#[0-9]+' | cut -c 2-)
           echo "pr-id=${PR_ID}" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
       - uses: FirebaseExtended/action-hosting-deploy@v0
         id: deploy
         with:
