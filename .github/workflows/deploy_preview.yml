@@ -38,7 +38,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const expires = new Date("${{ steps.deploy.outputs.expires }}");
+            const expires = new Date("${{ steps.deploy.outputs.expire_time }}");
             const commitId = "${{ github.event.workflow_run.head_commit.id }}";
             await github.rest.checks.create({
                 name: "client-preview",
@@ -46,7 +46,6 @@ jobs:
                 repo: context.repo.repo,
                 head_sha: commitId,
                 status: "completed",
-                completed_at: `${(new Date()).toISOString()}`,
                 details_url: "${{ steps.deploy.outputs.details_url }}",
                 conclusion: "success",
                 title: `🔥 Preview created, expires at: ${expires.toISOString()}`,
