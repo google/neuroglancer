@@ -52,12 +52,12 @@ jobs:
               pull_number: issueNumber,
             });
             let body = "";
-            if (pull.body && pull.body.includes(MESSAGE_SEPARATOR_START)) {
-              body = pull.body.slice(0, pull.body.indexOf(MESSAGE_SEPARATOR_START));
-              body = body + MESSAGE_SEPARATOR_START + message + MESSAGE_SEPARATOR_END;
-              body = body + pull.body.slice(pull.body.indexOf(MESSAGE_SEPARATOR_END) + MESSAGE_SEPARATOR_END.length);
+            if (pull.body && pull.body.includes(MESSAGE_START)) {
+              body = pull.body.slice(0, pull.body.indexOf(MESSAGE_START));
+              body = body + MESSAGE_START + message + MESSAGE_END;
+              body = body + pull.body.slice(pull.body.indexOf(MESSAGE_END) + MESSAGE_END.length);
             } else {
-              body = MESSAGE_SEPARATOR_START + message + MESSAGE_SEPARATOR_END;
+              body = MESSAGE_START + message + MESSAGE_END;
             }
             github.rest.pulls.update({
                 owner: context.repo.owner,
