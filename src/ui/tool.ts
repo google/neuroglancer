@@ -395,15 +395,15 @@ export class GlobalToolBinder extends RefCounted {
     this.changed.dispatch();
   }
 
-  activate(key: string): Borrowed<Tool> | undefined {
-    const tool = this.get(key);
+  activate(key: string, tool?: Tool<object>): Borrowed<Tool> | undefined {
+    tool = tool || this.get(key);
     if (tool === undefined) {
       this.deactivate_();
       return;
     }
     this.debounceDeactivate.cancel();
     const activeTool = this.activeTool_;
-    if (tool === activeTool?.tool) {
+    if (tool.toJSON() === activeTool?.tool.toJSON()) {
       if (tool.toggle) {
         this.deactivate_();
       }
