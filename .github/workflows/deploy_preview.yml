@@ -46,8 +46,8 @@ jobs:
                 repo: context.repo.repo,
                 head_sha: commitId,
                 status: "completed",
-                completed_at: `${new Date()}`,
+                completed_at: `${(new Date()).toISOString()}`,
                 details_url: "${{ steps.deploy.outputs.details_url }}",
                 conclusion: "success",
-                title: `🔥 Preview created, expires at: ${expires}`,
+                title: `🔥 Preview created, expires at: ${expires.toISOString()}`,
             });
