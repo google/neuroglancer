@@ -29,7 +29,7 @@ jobs:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
           firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
           expires: 30d
-          channel: "pr${{ steps.pr-id.outputs.pr-id }}"
+          channelId: "pr${{ steps.pr-id.outputs.pr-id }}"
           projectId: neuroglancer-demo
       - name: "Comment on PR"
         uses: actions/github-script@v7
