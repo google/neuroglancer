@@ -22,7 +22,7 @@ jobs:
                 repo: context.repo.repo,
                 sha: commitId,
                 state: "pending",
-                description: `🔥 Creating preview`,
+                description: `Creating preview`,
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
       - uses: actions/checkout@v4
@@ -62,5 +62,5 @@ jobs:
                 sha: commitId,
                 state: "success",
                 target_url: "${{ steps.deploy.outputs.details_url }}",
-                description: `🔥 Preview created, expires at: ${expires.toISOString()}`,
+                description: `Preview created, expires at: ${expires.toISOString()}`,
             });
