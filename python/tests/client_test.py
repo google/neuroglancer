@@ -32,8 +32,6 @@ examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")
 def capture_screenshot_from_dev_server(
     webdriver, example_dir, test_fragment, extra_args=None
 ):
-    import nodejs
-
     if sys.platform == "win32":
         process_group_args = dict(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     else:
@@ -43,8 +41,8 @@ def capture_screenshot_from_dev_server(
         # causes this test to hang when using a new process group rather than a
         # new session.
         process_group_args = dict(start_new_session=True)
-    p = nodejs.npm.Popen(
-        ["run", "dev-server"] + (extra_args or []),
+    p = subprocess.Popen(
+        ["npm", "run", "dev-server"] + (extra_args or []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -102,9 +100,9 @@ def capture_screenshot_from_build(
     output_dir=None,
     extra_args=None,
 ):
-    import nodejs
-
-    nodejs.npm.run(["run", "build"] + (extra_args or []), cwd=example_dir, check=True)
+    subprocess.run(
+        ["npm", "run", "build"] + (extra_args or []), cwd=example_dir, check=True
+    )
     if output_dir is None:
         output_dir = os.path.join(example_dir, "dist")
 
@@ -195,10 +193,10 @@ def example_dir(request):
 @pytest.fixture(scope="session")
 def built_package(request):
     def do_build():
-        import nodejs
-
-        nodejs.npm.run(["install", "--no-fund", "--no-audit"], cwd=root_dir, check=True)
-        nodejs.npm.run(["run", "build-package"], cwd=root_dir, check=True)
+        subprocess.run(
+            ["npm", "install", "--no-fund", "--no-audit"], cwd=root_dir, check=True
+        )
+        subprocess.run(["npm", "run", "build-package"], cwd=root_dir, check=True)
 
     get_xdist_session_value(
         do_build,
@@ -209,10 +207,8 @@ def built_package(request):
 @pytest.fixture(scope="session")
 def installed_example_dir(request, example_dir):
     def do_install():
-        import nodejs
-
-        nodejs.npm.run(
-            ["install", "--no-fund", "--no-audit"],
+        subprocess.run(
+            ["npm", "install", "--no-fund", "--no-audit"],
             cwd=os.path.join(root_dir, example_dir),
             check=True,
         )

@@ -11,4 +11,3 @@ pytest-html
 requests
 filelock
 argcomplete
-nodejs-bin
