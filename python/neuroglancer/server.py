@@ -519,12 +519,11 @@ def set_static_content_source(*args, **kwargs):
 
 
 def set_dev_server_content_source():
-    import nodejs
-
     static_content_url = None
     root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
-    build_process = nodejs.npm.Popen(
+    build_process = subprocess.Popen(
         [
+            "npm",
             "run",
             "dev-server-python",
             "--",

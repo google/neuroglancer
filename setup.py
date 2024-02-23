@@ -8,6 +8,7 @@ import os
 import pathlib
 import platform
 import shutil
+import subprocess
 import tempfile
 
 import setuptools
@@ -26,6 +27,11 @@ openmesh_dir = os.path.join(
     python_dir, "ext", "third_party", "openmesh", "OpenMesh", "src"
 )
 
+
+def _read_requirements(path: str) -> list[str]:
+    return pathlib.Path(path).read_text(encoding="utf-8").splitlines()
+
+
 _SETUP_REQUIRES = [
     "setuptools_scm>=4.1.2",
     "numpy>=1.11.0",
@@ -35,7 +41,9 @@ _SETUP_REQUIRES = [
 _PACKAGE_JSON_EXISTS = os.path.exists(os.path.join(root_dir, "package.json"))
 
 if _PACKAGE_JSON_EXISTS:
-    _SETUP_REQUIRES.append("nodejs-bin[cmd]")
+    _SETUP_REQUIRES.extend(
+        _read_requirements(os.path.join(python_dir, "requirements-nodejs.txt"))
+    )
 
 
 with open(os.path.join(python_dir, "README.md"), encoding="utf-8") as f:
@@ -226,11 +234,19 @@ class BundleClientCommand(
         if self.skip_npm_reinstall and os.path.exists(node_modules_path):
             print(f"Skipping `npm install` since {node_modules_path} already exists")
         else:
-            import nodejs
-
-            nodejs.npm.run(["install"], cwd=root_dir, check=True)
-        nodejs.npm.run(
-            ["run", t, "--", f"--output={output_dir}"], cwd=root_dir, check=True
+            subprocess.run(["npm", "install"], cwd=root_dir, check=True)
+        subprocess.run(
+            [
+                "npm",
+                "run",
+                t,
+                "--",
+                "--no-typecheck",
+                "--no-lint",
+                f"--output={output_dir}",
+            ],
+            cwd=root_dir,
+            check=True,
         )
 
 
@@ -295,15 +311,12 @@ setuptools.setup(
         "": "python",
     },
     setup_requires=_SETUP_REQUIRES,
-    install_requires=[
-        "Pillow>=3.2.0",
-        "numpy>=1.11.0",
-        "requests",
-        "tornado",
-        "google-apitools",
-        "google-auth",
-        "atomicwrites",
-    ],
+    install_requires=_read_requirements(os.path.join(python_dir, "requirements.txt")),
+    extras_require={
+        "webdriver": _read_requirements(
+            os.path.join(python_dir, "requirements-webdriver.txt")
+        ),
+    },
     ext_modules=[
         setuptools.Extension(
             "neuroglancer._neuroglancer",
