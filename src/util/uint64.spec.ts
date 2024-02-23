@@ -81,15 +81,14 @@ describe("uint64", () => {
     expect(temp.tryParseString("1")).toBe(true);
   });
 
-  describe("parseString toString round trip", () => {
+  it("parseString toString round trip", () => {
     function check(s: string, base: number) {
       const x = Uint64.parseString(s, base);
-      it(`low=${x.low}, high=${x.high}, toString(${base}) = ${x.toString(
+      const message = `low=${x.low}, high=${x.high}, toString(${base}) = ${x.toString(
         base,
-      )}, s=${s}`, () => {
-        expect(x.valid()).toBe(true);
-        expect(x.toString(base)).toEqual(s);
-      });
+      )}, s=${s}`;
+      expect(x.valid(), message).toBe(true);
+      expect(x.toString(base), message).toEqual(s);
     }
     check("0", 10);
     check("1", 10);
@@ -98,13 +97,12 @@ describe("uint64", () => {
     check("3w5e11264sgsf", 36);
   });
 
-  describe("toString parseString round trip", () => {
+  it("toString parseString round trip", () => {
     function check(x: Uint64, base: number) {
       const s = x.toString(base);
       const y = Uint64.parseString(s, base);
-      it(`s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`, () => {
-        expect([y.low, y.high]).toEqual([x.low, x.high]);
-      });
+      const message = `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`;
+      expect([y.low, y.high], message).toEqual([x.low, x.high]);
     }
     const count = 100;
     {

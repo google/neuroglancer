@@ -11,6 +11,7 @@ export default defineWorkspace([
     ...baseConfig,
     test: {
       environment: "node",
+      setupFiles: ["./build_tools/vitest/setup-crypto.ts"],
       include: ["src/**/*.spec.ts"],
       benchmark: {
         include: ["src/**/*.benchmark.ts"],
