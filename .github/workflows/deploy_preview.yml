@@ -10,6 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: "Create commit status"
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commitId = "${{ github.event.workflow_run.head_commit.id }}";
+            await github.rest.repos.createCommitStatus({
+                context: "client-preview",
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: commitId,
+                state: "pending",
+                description: `🔥 Creating preview`,
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
@@ -33,20 +48,19 @@ jobs:
           expires: 30d
           channelId: "pr${{ steps.pr-id.outputs.pr-id }}"
           projectId: neuroglancer-demo
-      - name: "Comment on PR"
+      - name: "Update commit status"
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const expires = new Date("${{ steps.deploy.outputs.expire_time }}");
             const commitId = "${{ github.event.workflow_run.head_commit.id }}";
-            await github.rest.checks.create({
-                name: "client-preview",
+            await github.rest.repos.createCommitStatus({
+                context: "client-preview",
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                head_sha: commitId,
-                status: "completed",
-                details_url: "${{ steps.deploy.outputs.details_url }}",
-                conclusion: "success",
-                title: `🔥 Preview created, expires at: ${expires.toISOString()}`,
+                sha: commitId,
+                state: "success",
+                target_url: "${{ steps.deploy.outputs.details_url }}",
+                description: `🔥 Preview created, expires at: ${expires.toISOString()}`,
             });
