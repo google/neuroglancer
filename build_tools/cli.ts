@@ -17,33 +17,11 @@
 // Command-line interface for building Neuroglancer.
 
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import path from "path";
 import * as vite from "vite";
 import checkerPlugin from "vite-plugin-checker";
 import yargs from "yargs";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// yargs strips quotes from string values in config objects
-// (https://github.com/yargs/yargs-parser/issues/385).  As a workaround, we add
-// in extra quotes.
-// function mungeConfig(config) {
-//   if (Array.isArray(config)) {
-//     return config.map(mungeConfig);
-//   }
-//   if (typeof config === "object") {
-//     const result = {};
-//     for (const key of Object.keys(config)) {
-//       result[key] = mungeConfig(config[key]);
-//     }
-//     return result;
-//   }
-//   if (typeof config !== "string") {
-//     return config;
-//   }
-//   return `"${config}"`;
-// }
 
 function parseDefines(
   definesArg:
@@ -101,7 +79,7 @@ async function getViteConfig(argv: Argv): Promise<vite.UserConfig> {
     (argv.output as string | undefined) ??
     (argv.python
       ? path.resolve(
-          __dirname,
+          import.meta.dirname,
           "..",
           "python",
           "neuroglancer",
@@ -110,7 +88,7 @@ async function getViteConfig(argv: Argv): Promise<vite.UserConfig> {
         )
       : undefined);
   const inlineConfig = {
-    root: path.resolve(__dirname, ".."),
+    root: path.resolve(import.meta.dirname, ".."),
     base: argv.base,
     define: argv.define,
     ...(argv.mode !== undefined ? { mode: argv.mode } : {}),
@@ -261,6 +239,6 @@ function parseArgs() {
 async function parseArgsAndRunMain() {
   parseArgs();
 }
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === import.meta.filename) {
   parseArgsAndRunMain();
 }
