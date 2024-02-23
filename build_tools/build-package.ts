@@ -12,13 +12,11 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import esbuild from "esbuild";
 import { glob } from "glob";
 import yargs from "yargs";
 
-const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
-const rootDir = path.resolve(__dirname, "..");
+const rootDir = path.resolve(import.meta.dirname, "..");
 
 async function buildPackage(options: { inplace?: boolean }) {
   const { inplace = false } = options;
@@ -165,6 +163,6 @@ async function parseArgsAndRunMain() {
   buildPackage({ inplace: argv.inplace });
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === import.meta.filename) {
   parseArgsAndRunMain();
 }
