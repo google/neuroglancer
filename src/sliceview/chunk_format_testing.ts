@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import type { SingleTextureChunkFormat } from "#src/sliceview/single_texture_chunk_format.js";
 import { defineChunkDataShaderAccess } from "#src/sliceview/volume/frontend.js";
 import type { TypedArray } from "#src/util/array.js";
@@ -43,7 +43,7 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
   for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
     outputs[`output${channelIndex}`] = dataType;
   }
-  describe(
+  it(
     `volumeSize = ${volumeSize.join()}, numChannels = ${volumeSize[3]}, ` +
       `dataType = ${DataType[dataType]}`,
     () => {
@@ -116,28 +116,25 @@ output${channel} = getDataValue(${channel});
           const values = tester.values;
           for (let channel = 0; channel < numChannels; ++channel) {
             const curOffset = offset + channel * strides[3];
-            it(
+            const msg =
               `volumeSize = ${vec3Key(volumeSize)}, ` +
-                `positionInChunk = ${vec3Key(positionInChunk)}, ` +
-                `channel = ${channel}, offset = ${curOffset}`,
-              () => {
-                switch (dataType) {
-                  case DataType.UINT64: {
-                    const result = values[`output${channel}`] as Uint64;
-                    expect([result.low, result.high]).toEqual([
-                      rawData[curOffset * 2],
-                      rawData[curOffset * 2 + 1],
-                    ]);
-                    break;
-                  }
-                  default: {
-                    const result = values[`output${channel}`];
-                    expect(result).toBe(rawData[curOffset]);
-                    break;
-                  }
-                }
-              },
-            );
+              `positionInChunk = ${vec3Key(positionInChunk)}, ` +
+              `channel = ${channel}, offset = ${curOffset}`;
+            switch (dataType) {
+              case DataType.UINT64: {
+                const result = values[`output${channel}`] as Uint64;
+                expect([result.low, result.high], msg).toEqual([
+                  rawData[curOffset * 2],
+                  rawData[curOffset * 2 + 1],
+                ]);
+                break;
+              }
+              default: {
+                const result = values[`output${channel}`];
+                expect(result, msg).toBe(rawData[curOffset]);
+                break;
+              }
+            }
           }
         }
         checkPosition(vec3.fromValues(0, 0, 0));
