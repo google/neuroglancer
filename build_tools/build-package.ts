@@ -86,7 +86,7 @@ async function buildPackage(options: { inplace?: boolean }) {
     packageJson["scripts"] = { postpack };
   } else {
     delete packageJson["private"];
-    delete packageJson["scripts"];
+    packageJson["scripts"] = {};
     delete packageJson["files"];
   }
 
