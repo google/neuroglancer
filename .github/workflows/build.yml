@@ -12,23 +12,20 @@ jobs:
   client:
     strategy:
       matrix:
-        node-version:
-          - "20.x"
         os:
           - "ubuntu-latest"
           - "windows-latest"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-      # - uses: actions/cache@v2
-      #   with:
-      #     path: "**/node_modules"
-      #     key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+          node-version: 20.x
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            examples/**/package-lock.json
       - run: npm install
       - run: npm run format:fix
       - name: Check for dirty working directory
@@ -57,38 +54,23 @@ jobs:
         python-version:
           - "3.9"
           - "3.12"
-        node-version:
-          - "20.x"
         os:
           - "ubuntu-latest"
           - "windows-latest"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20.x
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # - uses: actions/cache@v2
-      #   with:
-      #     path: "**/node_modules"
-      #     key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
-      # - name: Get pip cache dir
-      #   id: pip-cache
-      #   run: |
-      #     echo "::set-output name=dir::$(pip cache dir)"
-      # - uses: actions/cache@v2
-      #   with:
-      #     path: ${{ steps.pip-cache.outputs.dir }}
-      #     key: ${{ runner.os }}-${{ matrix.python-version }}-pip-${{ hashFiles('setup.py') }}
       # Uncomment the action below for an interactive shell
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
@@ -114,45 +96,33 @@ jobs:
           - os: "ubuntu-latest"
             cibw_build: "*"
             wheel_identifier: "linux"
-            node-version: "20.x"
           - os: "windows-latest"
             cibw_build: "*"
             wheel_identifier: "windows"
-            node-version: "20.x"
           - os: "macos-latest"
             cibw_build: "*_x86_64"
             wheel_identifier: "macos_x86_64"
-            node-version: "20.x"
           - os: "macos-latest"
             cibw_build: "*_arm64"
             wheel_identifier: "macos_arm64"
-            node-version: "20.x"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - name: Use Node.js
-        uses: actions/setup-node@v1
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20.x
+          cache: "npm"
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
-      # - uses: actions/cache@v2
-      #   with:
-      #     path: "**/node_modules"
-      #     key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
       - name: Get pip cache dir
         id: pip-cache
         run: |
-          echo "::set-output name=dir::$(pip cache dir)"
-      # - uses: actions/cache@v2
-      #   with:
-      #     path: ${{ steps.pip-cache.outputs.dir }}
-      #     key: ${{ runner.os }}-buildwheel-${{ hashFiles('setup.py') }}
+          echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
       - run: npm install
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
@@ -175,7 +145,7 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.pip-cache.outputs.dir }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: python-wheels-${{ matrix.wheel_identifier }}
           path: |
@@ -189,22 +159,11 @@ jobs:
     needs:
       - "python-build-package"
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: python-wheels-linux
+          pattern: python-wheels-*
           path: dist
-      - uses: actions/download-artifact@v2
-        with:
-          name: python-wheels-macos_x86_64
-          path: dist
-      - uses: actions/download-artifact@v2
-        with:
-          name: python-wheels-macos_arm64
-          path: dist
-      - uses: actions/download-artifact@v2
-        with:
-          name: python-wheels-windows
-          path: dist
+          merge-multiple: true
       # - name: Publish to PyPI (test server)
       #   uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
       #   with:
@@ -239,7 +198,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: ./src/mesh/draco/build.sh
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh
