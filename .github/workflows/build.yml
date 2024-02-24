@@ -219,20 +219,16 @@ jobs:
   ngauth:
     strategy:
       matrix:
-        go-version: ["1.19"]
         os:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup go ${{ matrix.go-version }}
-        uses: actions/setup-go@v1
+      - uses: actions/checkout@v4
+      - name: Setup go
+        uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-      - uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
+          go-version-file: ngauth_server/go.mod
+          cache-dependency-path: ngauth_server/go.sum
       - run: go build .
         working-directory: ngauth_server
   wasm:
