@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export CIBW_BUILD_FRONTEND="build"
 export CIBW_ARCHS_MACOS="x86_64 arm64"
 export CIBW_SKIP="cp27-* cp36-* cp37-* cp38-* pp* *_i686 *-win32 *-musllinux*"
 export CIBW_TEST_REQUIRES="-r python/requirements-test.txt"

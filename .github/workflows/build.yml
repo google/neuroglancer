@@ -99,10 +99,10 @@ jobs:
           - os: "windows-latest"
             cibw_build: "*"
             wheel_identifier: "windows"
-          - os: "macos-latest"
+          - os: "macos-14"
             cibw_build: "*_x86_64"
             wheel_identifier: "macos_x86_64"
-          - os: "macos-latest"
+          - os: "macos-14"
             cibw_build: "*_arm64"
             wheel_identifier: "macos_arm64"
     runs-on: ${{ matrix.os }}
