@@ -148,14 +148,6 @@ https://github.com/creationix/nvm
 
    `npm test`
 
-   To run only tests in files matching a given glob pattern:
-
-   `npm test -- --pattern='<pattern>'`
-
-   For example,
-
-   `npm test -- --pattern='src/util/uint64*'`
-
 6. See [package.json](package.json) for other commands available.
 
 # Discussion Group
