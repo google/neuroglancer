@@ -325,9 +325,12 @@ setuptools.setup(
             include_dirs=[openmesh_dir],
             define_macros=[
                 ("_USE_MATH_DEFINES", None),  # Needed by OpenMesh when used with MSVC
+                ("Py_LIMITED_API", "0x03090000"),
+                ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
             ],
             extra_compile_args=extra_compile_args,
             extra_link_args=openmp_flags,
+            py_limited_api=True,
         ),
     ],
     cmdclass={
@@ -337,4 +340,5 @@ setuptools.setup(
         "install": InstallCommand,
         "develop": DevelopCommand,
     },
+    options={"bdist_wheel": {"py_limited_api": "cp39"}},
 )
