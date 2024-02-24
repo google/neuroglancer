@@ -39,7 +39,8 @@
     "lint:fix": "eslint . --fix",
     "format:check": "prettier --cache . -c",
     "format:fix": "prettier --cache -w -l .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version": "tsx ./build_tools/after-version-change.ts"
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.1.0",
