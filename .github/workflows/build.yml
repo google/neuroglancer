@@ -194,11 +194,13 @@ jobs:
           user: __token__
           password: ${{ secrets.pypi_token }}
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-      - name: Publish to NPM registry
-        run: npm publish
-        working-directory: npm-package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Disabling publishing to NPM
+      # - name: Publish to NPM registry
+      #   if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      #   run: npm publish
+      #   working-directory: npm-package
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
   ngauth:
     strategy:
       matrix:
