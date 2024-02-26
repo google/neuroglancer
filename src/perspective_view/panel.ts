@@ -937,7 +937,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
 
-    if (DEBUG_MAX_PROJECTION && temp_rendered) {
+    if (DEBUG_MAX_PROJECTION && temp_rendered && renderContext.wireFrame) {
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       transparentConfiguration.unbind();
       this.setGLClippedViewport();

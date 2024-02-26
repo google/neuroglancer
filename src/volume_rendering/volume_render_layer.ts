@@ -82,6 +82,7 @@ import {
   TrackableVolumeRenderingModeValue,
   VOLUME_RENDERING_MODES,
 } from "#/volume_rendering/trackable_volume_rendering_mode";
+import { DEBUG_MAX_PROJECTION } from "#/perspective_view/panel";
 
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
@@ -225,7 +226,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           defineVertexId(builder);
           builder.addFragmentCode(`
 #define VOLUME_RENDERING true
-bool debugMax = true;
 `);
           let glsl_rgbaEmit = glsl_emitRGBAVolumeRendering;
           let glsl_finalEmit = `
@@ -236,16 +236,19 @@ void emitIntensity(float value) {
 }`;
           let glsl_continualEmit = ``;
           if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
+            let glsl_outputColor = `
+    outputColor = vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+`;
+            if (wireFrame && DEBUG_MAX_PROJECTION) {
+              glsl_outputColor = `
+    outputColor = vec4(rgba.rgb, 1.0);
+`;
+            }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
   float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
   float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
-  if (debugMax) {
-    outputColor = vec4(rgba.rgb, 1.0);
-  }
-  else {
-    outputColor = vec4(rgba.rgb * weightedAlpha, weightedAlpha);
-  }
+  ${glsl_outputColor}
   revealage = 1.0 - correctedAlpha;
 }
 `;
@@ -331,7 +334,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 }
 `,
           ]);
-          if (wireFrame) {
+          if (wireFrame && !DEBUG_MAX_PROJECTION) {
             builder.setFragmentMainFunction(`
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
