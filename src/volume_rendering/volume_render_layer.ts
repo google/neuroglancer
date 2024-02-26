@@ -230,6 +230,9 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           let glsl_finalEmit = `
   emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 `;
+          let glsl_emitIntensity = `
+void emitIntensity(float value) {
+}`;
           let glsl_continualEmit = ``;
           if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
             glsl_rgbaEmit = `
@@ -244,6 +247,10 @@ void emitRGBA(vec4 rgba) {
             glsl_continualEmit = `
   emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 `;
+            glsl_emitIntensity = `
+void emitIntensity(float value) {
+  gl_FragDepth = value;
+}`;
           }
           emitter(builder);
           // Near limit in [0, 1] as fraction of full limit.
@@ -297,6 +304,7 @@ void userMain();
           );
           builder.addFragmentCode([
             glsl_rgbaEmit,
+            glsl_emitIntensity,
             `
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
@@ -306,9 +314,6 @@ void emitGrayscale(float value) {
 }
 void emitTransparent() {
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
-}
-void emitIntensity(float value) {
-  gl_FragDepth = value;
 }
 float computeDepthFromClipSpace(vec4 clipSpacePosition) {
   float NDCDepthCoord = clipSpacePosition.z / clipSpacePosition.w;
