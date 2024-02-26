@@ -225,6 +225,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           defineVertexId(builder);
           builder.addFragmentCode(`
 #define VOLUME_RENDERING true
+bool debugMax = true;
 `);
           let glsl_rgbaEmit = glsl_emitRGBAVolumeRendering;
           let glsl_finalEmit = `
@@ -239,7 +240,12 @@ void emitIntensity(float value) {
 void emitRGBA(vec4 rgba) {
   float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
   float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
-  outputColor = vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+  if (debugMax) {
+    outputColor = vec4(rgba.rgb, 1.0);
+  }
+  else {
+    outputColor = vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+  }
   revealage = 1.0 - correctedAlpha;
 }
 `;
