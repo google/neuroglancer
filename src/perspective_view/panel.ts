@@ -907,6 +907,9 @@ export class PerspectivePanel extends RenderedDataPanel {
             // Set state for max projection mode and draw
             gl.clearDepth(0.0);
             gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            if (DEBUG_MAX_PROJECTION && renderContext.wireFrame) {
+              gl.clearColor(1.0, 0.0, 0.0, 1.0);
+            }
             gl.depthMask(true);
             gl.depthFunc(WebGL2RenderingContext.GEQUAL);
             gl.disable(WebGL2RenderingContext.BLEND);
@@ -914,6 +917,9 @@ export class PerspectivePanel extends RenderedDataPanel {
               WebGL2RenderingContext.COLOR_BUFFER_BIT |
                 WebGL2RenderingContext.DEPTH_BUFFER_BIT,
             );
+            // This should not be need (depth test on) TEMP
+            // It is set previously
+            gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             renderLayer.draw(renderContext, attachment);
 
             // Set state for copy to transparent buffer
