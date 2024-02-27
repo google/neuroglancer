@@ -677,7 +677,7 @@ export function parseSegmentQuery(
         });
         continue;
       }
-      if (labels === undefined) {
+      if (labels === undefined && tagNames.length == 0) {
         errors.push({
           begin: startIndex,
           end: endIndex,
@@ -778,7 +778,7 @@ export function parseSegmentQuery(
       });
       continue;
     }
-    if (labels === undefined) {
+    if (labels === undefined && tagNames.length == 0) {
       errors.push({
         begin: startIndex,
         end: endIndex,
@@ -901,15 +901,24 @@ export function executeSegmentQuery(
 
   // Filter by label
   if (query.regexp !== undefined || query.prefix !== undefined) {
-    const values = db!.labels!.values;
     const { regexp, prefix } = query;
-    if (regexp !== undefined) {
-      filterIndices((index) => values[index].match(regexp) !== null);
+    if (db!.labels !== undefined) {
+      console.log('test')
+      const values = db!.labels!.values;
+      if (regexp !== undefined) {
+        filterIndices((index) => values[index].match(regexp) !== null);
+      }
+      if (prefix !== undefined) {
+        console.log("prefix", prefix);
+        filterIndices((index) => values[index].startsWith(prefix));
+      }
     }
+    console.log(indices.length)
     // if the regular expression returns nothing
-    // then assume the user wants to search through the tags
+    // then assudme the user wants to search through the tags
     // and/or tag descriptions
-    if (indices.length == 0 && regexp !== undefined) {
+    if ((indices.length == 0 && regexp !== undefined) || (db!.labels == undefined && regexp != undefined)) {
+      console.log('test3')
       indices = makeIndicesArray(totalIds, totalIds);
       for (let i = 0; i < totalIds; ++i) {
         indices[i] = i;
@@ -917,10 +926,6 @@ export function executeSegmentQuery(
       filterByTagDescriptions(regexp);
       // reset regexp to none so that it doesn't get applied again
       query.regexp = undefined;
-    }
-    if (prefix !== undefined) {
-      console.log("prefix", prefix);
-      filterIndices((index) => values[index].startsWith(prefix));
     }
   }
 
@@ -1119,7 +1124,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-            0
+          0
         ];
       }
     }
@@ -1137,7 +1142,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-              0
+            0
           ];
         }
       }
