@@ -80,6 +80,14 @@ const transferFunctionSamplerTextureUnit = Symbol(
   "transferFunctionSamplerTexture",
 );
 
+/**
+ * Transfer functions are controlled via a set of control points
+ * with an input value and an output RGBA color.
+ * These control points are interpolated between to form a lookup table
+ * which maps an input data value to an RGBA color.
+ * Such a lookup table is used to form a texture, which can be sampled
+ * from during rendering.
+ */
 export interface ControlPoint {
   /** The bin that the point's x value lies in - int between 0 and TRANSFER_FUNCTION_LENGTH - 1 */
   position: number;
