@@ -334,7 +334,11 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 }
 `,
           ]);
-          if (wireFrame && !DEBUG_MAX_PROJECTION) {
+          if (
+            wireFrame &&
+            (!DEBUG_MAX_PROJECTION ||
+              shaderParametersState.mode === VOLUME_RENDERING_MODES.ON)
+          ) {
             builder.setFragmentMainFunction(`
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
