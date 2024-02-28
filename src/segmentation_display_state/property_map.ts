@@ -903,17 +903,14 @@ export function executeSegmentQuery(
   if (query.regexp !== undefined || query.prefix !== undefined) {
     const { regexp, prefix } = query;
     if (db!.labels !== undefined) {
-      console.log("test");
       const values = db!.labels!.values;
       if (regexp !== undefined) {
         filterIndices((index) => values[index].match(regexp) !== null);
       }
       if (prefix !== undefined) {
-        console.log("prefix", prefix);
         filterIndices((index) => values[index].startsWith(prefix));
       }
     }
-    console.log(indices.length);
     // if the regular expression returns nothing
     // then assudme the user wants to search through the tags
     // and/or tag descriptions
@@ -921,7 +918,6 @@ export function executeSegmentQuery(
       (indices.length == 0 && regexp !== undefined) ||
       (db!.labels == undefined && regexp != undefined)
     ) {
-      console.log("test3");
       indices = makeIndicesArray(totalIds, totalIds);
       for (let i = 0; i < totalIds; ++i) {
         indices[i] = i;
@@ -1127,7 +1123,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-            0
+          0
         ];
       }
     }
@@ -1145,7 +1141,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-              0
+            0
           ];
         }
       }
