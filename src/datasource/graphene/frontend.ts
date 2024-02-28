@@ -936,7 +936,7 @@ class MergeState extends RefCounted implements Trackable {
         ERROR_JSON_KEY,
         verifyString,
       );
-      const locked = verifyObjectProperty(obj, LOCKED_JSON_KEY, verifyBoolean);
+      const locked = false; // TODO(chrisj) verifyObjectProperty(obj, LOCKED_JSON_KEY, verifyBoolean);
       const sink = restoreSegmentSelection(obj[SINK_JSON_KEY]);
       const source = restoreSegmentSelection(obj[SOURCE_JSON_KEY]);
       return {
