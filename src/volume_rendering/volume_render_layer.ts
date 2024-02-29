@@ -248,17 +248,22 @@ void emitIntensity(float value) {
 void emitRGBA(vec4 rgba) {
   float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
   float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
-  ${glsl_outputColor}
-  revealage = 1.0 - correctedAlpha;
+  if (oldIntensity < maxIntensity) {
+    ${glsl_outputColor}
+    revealage = 1.0 - correctedAlpha;
+    oldIntensity = maxIntensity;
+  }
 }
 `;
-            glsl_finalEmit = ``;
+            glsl_finalEmit = `
+  gl_FragDepth = maxIntensity;
+`;
             glsl_continualEmit = `
   emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
 `;
             glsl_emitIntensity = `
 void emitIntensity(float value) {
-  gl_FragDepth = value;
+  maxIntensity = max(value, maxIntensity);
 }`;
           }
           emitter(builder);
@@ -304,6 +309,8 @@ float depthAtRayPosition;
 vec4 outputColor;
 float revealage;
 void userMain();
+float maxIntensity = -10000.0;
+float oldIntensity = -10000.0;
 `);
           defineChunkDataShaderAccess(
             builder,
