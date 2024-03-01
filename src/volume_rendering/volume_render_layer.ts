@@ -237,22 +237,22 @@ void emitIntensity(float value) {
           let glsl_continualEmit = ``;
           if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
             let glsl_outputColor = `
-    outputColor = vec4(rgba.rgb * weightedAlpha, weightedAlpha);
+    outputColor = mix(outputColor, vec4(rgba.rgb * weightedAlpha, weightedAlpha), intensityIncreased);
 `;
             if (wireFrame && DEBUG_MAX_PROJECTION) {
               glsl_outputColor = `
-    outputColor = vec4(rgba.rgb, 1.0);
+    outputColor = mix(outputColor, vec4(rgba.rgb * clamp(rgba.a, 0.0, 1.0), clamp(rgba.a, 0.0, 1.0)), intensityIncreased);
 `;
             }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
   float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
   float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
-  if (oldIntensity < maxIntensity) {
-    ${glsl_outputColor}
-    revealage = 1.0 - correctedAlpha;
-    oldIntensity = maxIntensity;
-  }
+  // Make this function changable
+  float intensityIncreased = step(maxIntensity, newIntensity);
+  ${glsl_outputColor}
+  revealage = mix(revealage, 1.0 - correctedAlpha, intensityIncreased);
+  maxIntensity = mix(maxIntensity, newIntensity, intensityIncreased); 
 }
 `;
             glsl_finalEmit = `
@@ -263,7 +263,7 @@ void emitRGBA(vec4 rgba) {
 `;
             glsl_emitIntensity = `
 void emitIntensity(float value) {
-  maxIntensity = max(value, maxIntensity);
+  newIntensity = value;
 }`;
           }
           emitter(builder);
@@ -310,7 +310,7 @@ vec4 outputColor;
 float revealage;
 void userMain();
 float maxIntensity = -10000.0;
-float oldIntensity = -10000.0;
+float newIntensity = 0.0;
 `);
           defineChunkDataShaderAccess(
             builder,
