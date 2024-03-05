@@ -157,6 +157,15 @@ class CoordinateArray:
 class DimensionScale(
     collections.namedtuple("DimensionScale", ["scale", "unit", "coordinate_array"])
 ):
+    """
+    Attributes
+    ----------
+    scale : float
+        Voxel spacing along the dimension.
+    unit : str
+        Units of `scale`.
+    coordinate_array : neuroglancer.CoordinateArray
+    """
     __slots__ = ()
 
     def __new__(cls, scale=1, unit="", coordinate_array=None):
@@ -186,6 +195,17 @@ class CoordinateSpace:
     def __init__(
         self, json=None, names=None, scales=None, units=None, coordinate_arrays=None
     ):
+        """
+        Parameters
+        ----------
+        names : Iterable[str]
+            Dimension names (e.g., ['x', 'y', 'z']).
+        scales : float, Iterable[float]
+            Voxel spacing along each dimension.
+        units : str, Iterable[str]
+            Units of the values in `scales`.
+        coordinate_arrays : Iterable[neuroglancer.CoordinateArray]
+        """
         if json is None:
             if names is not None:
                 self.names = tuple(names)
