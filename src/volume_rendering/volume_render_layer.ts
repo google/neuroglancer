@@ -237,12 +237,13 @@ void emitIntensity(float value) {
           if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
-  float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
-  float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
+  //float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
+  //float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
   // Make this function changable
   float intensityIncreased = step(maxIntensity, newIntensity);
+  float weightedAlpha = rgba.a;
   outputColor = mix(outputColor, vec4(rgba.rgb * weightedAlpha, weightedAlpha), intensityIncreased);
-  revealage = mix(revealage, 1.0 - correctedAlpha, intensityIncreased);
+  //revealage = mix(revealage, 1.0 - correctedAlpha, intensityIncreased);
   maxIntensity = mix(maxIntensity, newIntensity, intensityIncreased); 
 }
 `;
@@ -250,7 +251,7 @@ void emitRGBA(vec4 rgba) {
   gl_FragDepth = maxIntensity;
 `;
             glsl_continualEmit = `
-  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
+  emit(outputColor, 0u);
 `;
             glsl_emitIntensity = `
 void emitIntensity(float value) {

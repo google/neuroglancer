@@ -148,6 +148,14 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
 }
 
+export function maxProjectionEmit(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragColor", 0);
+  builder.addFragmentCode(`
+void emit(vec4 color, highp uint pickId) {
+  v4f_fragColor = color;
+}`);
+}
+
 const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
@@ -165,11 +173,9 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 }
 
 function defineMaxProjectionCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addOutputBuffer("vec4", "v4f_fragColor", 0);
   builder.setFragmentMain(`
-v4f_fragData0 = getValue0();
-v4f_fragData1 = getValue1();
+v4f_fragColor = getValue0();
 `);
 }
 
@@ -668,7 +674,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           new FramebufferConfiguration(this.gl, {
             colorBuffers: makeTextureBuffers(
               this.gl,
-              2,
+              1,
               this.gl.RGBA32F,
               this.gl.RGBA,
               this.gl.FLOAT,
@@ -866,7 +872,20 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
 
     if (hasTransparent) {
-      // Draw transparent objects.
+      //Draw transparent objects.
+      const { maxProjectionConfiguration } = this;
+      renderContext.bindMaxProjectionBuffer = () => {
+        maxProjectionConfiguration.bind(width, height);
+      };
+      gl.depthMask(true);
+      renderContext.bindMaxProjectionBuffer();
+      gl.clearDepth(0.0);
+      gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      gl.clear(
+        WebGL2RenderingContext.COLOR_BUFFER_BIT |
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+      );
+
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
 
@@ -876,6 +895,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         transparentConfiguration.bind(width, height);
       };
       renderContext.bindFramebuffer();
+      gl.clearDepth(1.0);
       gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
@@ -886,58 +906,36 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let clearedMaxProjection = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
+          }
           if (
             "mode" in renderLayer &&
             (renderLayer as VolumeRenderingRenderLayer).mode.value ===
               VOLUME_RENDERING_MODES.MAX
           ) {
-            const { maxProjectionConfiguration } = this;
-            renderContext.bindMaxProjectionBuffer = () => {
-              maxProjectionConfiguration.bind(width, height);
-            };
-            renderContext.bindMaxProjectionBuffer();
-
-            // Clear the max projection buffer on the first pass
-            gl.depthMask(true);
-            if (!clearedMaxProjection) {
-              gl.clearDepth(0.0);
-              gl.clearColor(0.0, 0.0, 0.0, 0.0);
-              gl.clear(
-                WebGL2RenderingContext.COLOR_BUFFER_BIT |
-                  WebGL2RenderingContext.DEPTH_BUFFER_BIT,
-              );
-              clearedMaxProjection = true;
-            }
-
             // Set state for max projection mode and draw
             gl.depthFunc(WebGL2RenderingContext.GEQUAL);
             gl.disable(WebGL2RenderingContext.BLEND);
+            renderContext.bindMaxProjectionBuffer();
+            renderContext.emitter = maxProjectionEmit;
             renderLayer.draw(renderContext, attachment);
-
-            // Set state for copy to transparent buffer
-            gl.depthMask(false);
-            gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-            gl.enable(WebGL2RenderingContext.BLEND);
-            renderContext.bindFramebuffer();
-            this.maxProjectionCopyHelper.draw(
-              maxProjectionConfiguration.colorBuffers[0].texture,
-              maxProjectionConfiguration.colorBuffers[1].texture,
-            );
 
             // Set back to normal (non-max projection) state
             gl.clearDepth(1.0);
+            gl.depthMask(false);
+            gl.enable(WebGL2RenderingContext.BLEND);
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             gl.depthFunc(WebGL2RenderingContext.LESS);
+            renderContext.bindFramebuffer();
+            renderContext.emitter = perspectivePanelEmitOIT;
           } else {
             renderLayer.draw(renderContext, attachment);
           }
+          renderLayer.draw(renderContext, attachment);
         }
-      }
 
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
@@ -950,6 +948,15 @@ export class PerspectivePanel extends RenderedDataPanel {
         transparentConfiguration.colorBuffers[0].texture,
         transparentConfiguration.colorBuffers[1].texture,
       );
+
+      gl.blendFunc(
+        WebGL2RenderingContext.ONE,
+        WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+      );
+      this.maxProjectionCopyHelper.draw(
+        maxProjectionConfiguration.colorBuffers[0].texture,
+      );
+
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
