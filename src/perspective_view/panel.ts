@@ -917,6 +917,7 @@ export class PerspectivePanel extends RenderedDataPanel {
               VOLUME_RENDERING_MODES.MAX
           ) {
             // Set state for max projection mode and draw
+            gl.depthMask(true);
             gl.depthFunc(WebGL2RenderingContext.GEQUAL);
             gl.disable(WebGL2RenderingContext.BLEND);
             renderContext.bindMaxProjectionBuffer();
