@@ -326,9 +326,11 @@ void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
+  emitIntensity(value);
   emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
+  emitIntensity(0.0);
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 float computeDepthFromClipSpace(vec4 clipSpacePosition) {
