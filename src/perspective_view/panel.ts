@@ -886,6 +886,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
+      let clearedMaxProjection = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -901,25 +902,27 @@ export class PerspectivePanel extends RenderedDataPanel {
             };
             renderContext.bindMaxProjectionBuffer();
 
-            // Set state for max projection mode and draw
-            gl.clearDepth(0.0);
-            gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            // Clear the max projection buffer on the first pass
             gl.depthMask(true);
+            if (!clearedMaxProjection) {
+              gl.clearDepth(0.0);
+              gl.clearColor(0.0, 0.0, 0.0, 0.0);
+              gl.clear(
+                WebGL2RenderingContext.COLOR_BUFFER_BIT |
+                  WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+              );
+              clearedMaxProjection = true;
+            }
+
+            // Set state for max projection mode and draw
             gl.depthFunc(WebGL2RenderingContext.GEQUAL);
             gl.disable(WebGL2RenderingContext.BLEND);
-            gl.clear(
-              WebGL2RenderingContext.COLOR_BUFFER_BIT |
-                WebGL2RenderingContext.DEPTH_BUFFER_BIT,
-            );
-            // This should not be need (depth test on) TEMP
-            // It is set previously
-            gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             renderLayer.draw(renderContext, attachment);
 
             // Set state for copy to transparent buffer
             gl.depthMask(false);
-            gl.enable(WebGL2RenderingContext.BLEND);
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+            gl.enable(WebGL2RenderingContext.BLEND);
             renderContext.bindFramebuffer();
             this.maxProjectionCopyHelper.draw(
               maxProjectionConfiguration.colorBuffers[0].texture,
