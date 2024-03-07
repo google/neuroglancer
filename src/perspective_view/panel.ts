@@ -77,8 +77,6 @@ import { PerspectiveViewAnnotationLayer } from "#/annotation/renderlayer";
 import { VolumeRenderingRenderLayer } from "src/volume_rendering/volume_render_layer";
 import { VOLUME_RENDERING_MODES } from "src/volume_rendering/trackable_volume_rendering_mode";
 
-export const DEBUG_MAX_PROJECTION = true;
-
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
@@ -888,7 +886,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let temp_rendered = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -907,9 +904,6 @@ export class PerspectivePanel extends RenderedDataPanel {
             // Set state for max projection mode and draw
             gl.clearDepth(0.0);
             gl.clearColor(0.0, 0.0, 0.0, 0.0);
-            if (DEBUG_MAX_PROJECTION && renderContext.wireFrame) {
-              gl.clearColor(1.0, 0.0, 0.0, 1.0);
-            }
             gl.depthMask(true);
             gl.depthFunc(WebGL2RenderingContext.GEQUAL);
             gl.disable(WebGL2RenderingContext.BLEND);
@@ -936,31 +930,11 @@ export class PerspectivePanel extends RenderedDataPanel {
             gl.clearDepth(1.0);
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             gl.depthFunc(WebGL2RenderingContext.LESS);
-            temp_rendered = true;
           } else {
             renderLayer.draw(renderContext, attachment);
           }
         }
       }
-
-    if (DEBUG_MAX_PROJECTION && temp_rendered && renderContext.wireFrame) {
-      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-      transparentConfiguration.unbind();
-      this.setGLClippedViewport();
-      // gl.blendFunc(
-      //   WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-      //   WebGL2RenderingContext.SRC_ALPHA,
-      //   );
-      //   this.transparencyCopyHelper.draw(
-      //     this.maxProjectionConfiguration.colorBuffers[0].texture,
-      //     this.maxProjectionConfiguration.colorBuffers[1].texture,
-      //     );
-      gl.disable(WebGL2RenderingContext.BLEND);
-      this.offscreenCopyHelper.draw(
-        this.maxProjectionConfiguration.colorBuffers[0].texture,
-      );
-      return true;
-    }
 
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);

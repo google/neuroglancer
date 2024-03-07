@@ -119,7 +119,7 @@ export class ViewerSettingsPanel extends SidePanel {
       "Show chunk statistics",
       viewer.statisticsDisplayState.location.watchableVisible,
     );
-    addCheckbox("Debug max projection", viewer.wireFrame);
+    addCheckbox("Wire frame rendering", viewer.wireFrame);
     addCheckbox("Enable prefetching", viewer.chunkQueueManager.enablePrefetch);
 
     const addColor = (label: string, value: WatchableValueInterface<vec3>) => {

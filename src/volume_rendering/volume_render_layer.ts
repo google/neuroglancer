@@ -82,7 +82,6 @@ import {
   TrackableVolumeRenderingModeValue,
   VOLUME_RENDERING_MODES,
 } from "#/volume_rendering/trackable_volume_rendering_mode";
-import { DEBUG_MAX_PROJECTION } from "#/perspective_view/panel";
 
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
@@ -236,21 +235,13 @@ void emitIntensity(float value) {
 }`;
           let glsl_continualEmit = ``;
           if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
-            let glsl_outputColor = `
-    outputColor = mix(outputColor, vec4(rgba.rgb * weightedAlpha, weightedAlpha), intensityIncreased);
-`;
-            if (wireFrame && DEBUG_MAX_PROJECTION) {
-              glsl_outputColor = `
-    outputColor = mix(outputColor, vec4(rgba.rgb * clamp(rgba.a, 0.0, 1.0), clamp(rgba.a, 0.0, 1.0)), intensityIncreased);
-`;
-            }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
   float correctedAlpha = clamp(rgba.a * uBrightnessFactor * uGain, 0.0, 1.0);
   float weightedAlpha = correctedAlpha * computeOITWeight(correctedAlpha, depthAtRayPosition);
   // Make this function changable
   float intensityIncreased = step(maxIntensity, newIntensity);
-  ${glsl_outputColor}
+  outputColor = mix(outputColor, vec4(rgba.rgb * weightedAlpha, weightedAlpha), intensityIncreased);
   revealage = mix(revealage, 1.0 - correctedAlpha, intensityIncreased);
   maxIntensity = mix(maxIntensity, newIntensity, intensityIncreased); 
 }
@@ -343,11 +334,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 }
 `,
           ]);
-          if (
-            wireFrame &&
-            (!DEBUG_MAX_PROJECTION ||
-              shaderParametersState.mode === VOLUME_RENDERING_MODES.ON)
-          ) {
+          if (wireFrame) {
             builder.setFragmentMainFunction(`
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
