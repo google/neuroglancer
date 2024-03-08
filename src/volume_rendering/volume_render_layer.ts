@@ -245,12 +245,12 @@ float intensityChanged = step(newIntensity, savedIntensity);
 `;
               builder.addFragmentCode(`
 float savedIntensity = 3.402823466e+38;
-float newIntensity;
+float newIntensity = 0.0;
 `);
             } else {
               builder.addFragmentCode(`
 float savedIntensity = 1.175494351e-38;
-float newIntensity;
+float newIntensity = 0.0;
 `);
             }
             glsl_rgbaEmit = `
