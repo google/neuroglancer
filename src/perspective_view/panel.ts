@@ -75,7 +75,10 @@ import { MultipleScaleBarTextures, ScaleBarOptions } from "#/widget/scale_bar";
 import { RPC, SharedObject } from "#/worker_rpc";
 import { PerspectiveViewAnnotationLayer } from "#/annotation/renderlayer";
 import { VolumeRenderingRenderLayer } from "src/volume_rendering/volume_render_layer";
-import { VOLUME_RENDERING_MODES } from "src/volume_rendering/trackable_volume_rendering_mode";
+import {
+  VOLUME_RENDERING_MODES,
+  isProjection,
+} from "src/volume_rendering/trackable_volume_rendering_mode";
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -910,33 +913,37 @@ export class PerspectivePanel extends RenderedDataPanel {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
-          }
-          if (
-            "mode" in renderLayer &&
-            (renderLayer as VolumeRenderingRenderLayer).mode.value ===
-              VOLUME_RENDERING_MODES.MAX
-          ) {
-            // Set state for max projection mode and draw
-            gl.depthMask(true);
-            gl.depthFunc(WebGL2RenderingContext.GEQUAL);
-            gl.disable(WebGL2RenderingContext.BLEND);
-            renderContext.bindMaxProjectionBuffer();
-            renderContext.emitter = maxProjectionEmit;
-            renderLayer.draw(renderContext, attachment);
-
-            // Set back to normal (non-max projection) state
-            gl.clearDepth(1.0);
-            gl.depthMask(false);
-            gl.enable(WebGL2RenderingContext.BLEND);
-            gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-            gl.depthFunc(WebGL2RenderingContext.LESS);
-            renderContext.bindFramebuffer();
-            renderContext.emitter = perspectivePanelEmitOIT;
+        }
+        if (
+          "mode" in renderLayer &&
+          isProjection((renderLayer as VolumeRenderingRenderLayer).mode.value)
+        ) {
+          // Set state for max projection mode and draw
+          gl.depthMask(true);
+          const mode = (renderLayer as VolumeRenderingRenderLayer).mode.value;
+          if (mode === VOLUME_RENDERING_MODES.MAX) {
+            gl.depthFunc(WebGL2RenderingContext.GREATER);
           } else {
-            renderLayer.draw(renderContext, attachment);
+            gl.depthFunc(WebGL2RenderingContext.LESS);
           }
+          gl.disable(WebGL2RenderingContext.BLEND);
+          renderContext.bindMaxProjectionBuffer();
+          renderContext.emitter = maxProjectionEmit;
+          renderLayer.draw(renderContext, attachment);
+
+          // Set back to normal (non-max projection) state
+          gl.clearDepth(1.0);
+          gl.depthMask(false);
+          gl.enable(WebGL2RenderingContext.BLEND);
+          gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+          gl.depthFunc(WebGL2RenderingContext.LESS);
+          renderContext.bindFramebuffer();
+          renderContext.emitter = perspectivePanelEmitOIT;
+        } else {
           renderLayer.draw(renderContext, attachment);
         }
+        renderLayer.draw(renderContext, attachment);
+      }
 
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);

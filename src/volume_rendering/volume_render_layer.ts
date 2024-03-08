@@ -81,6 +81,7 @@ import { clampToInterval } from "#/util/lerp";
 import {
   TrackableVolumeRenderingModeValue,
   VOLUME_RENDERING_MODES,
+  isProjection,
 } from "#/volume_rendering/trackable_volume_rendering_mode";
 
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
@@ -234,18 +235,34 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 void emitIntensity(float value) {
 }`;
           let glsl_continualEmit = ``;
-          if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MAX) {
+          if (isProjection(shaderParametersState.mode)) {
+            let glsl_change_intensity = `
+float intensityChanged = step(savedIntensity, newIntensity);
+`;
+            if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MIN) {
+              glsl_change_intensity = `
+float intensityChanged = step(newIntensity, savedIntensity);
+`;
+              builder.addFragmentCode(`
+float savedIntensity = 3.402823466e+38;
+float newIntensity;
+`);
+            } else {
+              builder.addFragmentCode(`
+float savedIntensity = 1.175494351e-38;
+float newIntensity;
+`);
+            }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
-  // Make this function changable
-  float intensityIncreased = step(maxIntensity, newIntensity);
-  float alpha = rgba.a * uGain;
-  outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityIncreased);
-  maxIntensity = mix(maxIntensity, newIntensity, intensityIncreased); 
+  ${glsl_change_intensity}
+  float alpha = clamp(rgba.a * uGain, 0.0, 1.0);
+  outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
+  savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
 }
 `;
             glsl_finalEmit = `
-  gl_FragDepth = maxIntensity;
+  gl_FragDepth = savedIntensity;
 `;
             glsl_continualEmit = `
   emit(outputColor, 0u);
@@ -298,8 +315,6 @@ float depthAtRayPosition;
 vec4 outputColor;
 float revealage;
 void userMain();
-float maxIntensity = -10000.0;
-float newIntensity = 0.0;
 `);
           defineChunkDataShaderAccess(
             builder,
