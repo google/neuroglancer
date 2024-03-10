@@ -23,7 +23,6 @@ import {
   CredentialsProvider,
   makeCredentialsGetter,
 } from "#src/credentials_provider/index.js";
-import redirectUrl from "#src/datasource/boss/bossauth.html?url";
 import { StatusMessage } from "#src/status.js";
 import {
   CANCELED,
@@ -128,10 +127,7 @@ export function authenticateKeycloakOIDC(
   const url = handler.makeAuthRequestUrl({
     state: state,
     clientId: options.clientId,
-    redirect_uri: new URL(redirectUrl, import.meta.url).href.replace(
-      /\?.*$/,
-      "",
-    ),
+    redirect_uri: new URL("./bossauth.html", import.meta.url).href,
     authServer: options.authServer,
     nonce: nonce,
   });
