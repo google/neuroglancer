@@ -884,19 +884,19 @@ export function executeSegmentQuery(
   const filterByTagDescriptions = (regexp: RegExp) => {
     const tagDescriptions = db!.tags!.tagDescriptions!;
     const tags = db!.tags!.tags!;
-    const matchingTagDescriptions = tagDescriptions
-      .map((desc, index) => ({ desc, index }))
-      .filter(({ desc }) => desc.match(regexp) !== null)
-      .map(({ index }) => index);
-    const matchingTags = tags
-      .map((tag, index) => ({ tag, index }))
-      .filter(({ tag }) => tag.match(regexp) !== null)
-      .map(({ index }) => index);
 
-    // set showTags based on matchingTags
+    // reset showTags
     showTags.fill(0);
-    matchingTagDescriptions.forEach((index) => (showTags[index] = 1));
-    matchingTags.forEach((index) => (showTags[index] = 1));
+
+    // iterate over tagDescriptions with a for loop
+    for (let i = 0; i < tagDescriptions.length; i++) {
+      if (tagDescriptions[i].match(regexp) !== null) {
+        showTags[i] = 1;
+      }
+      if (tags[i].match(regexp) !== null) {
+        showTags[i] = 1;
+      }
+    }
   };
 
   // Filter by label
@@ -1123,7 +1123,7 @@ function updatePropertyHistogram(
         ++histogram[
           (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
             1) >>>
-            0
+          0
         ];
       }
     }
@@ -1141,7 +1141,7 @@ function updatePropertyHistogram(
           ++histogram[
             (Math.min(numBins - 1, Math.max(-1, (value - min) * multiplier)) +
               1) >>>
-              0
+            0
           ];
         }
       }
