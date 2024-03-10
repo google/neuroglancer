@@ -14,24 +14,11 @@
  * limitations under the License.
  */
 
+import fs from "node:fs/promises";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { parseNpy } from "#src/util/npy.js";
-
-import float32be_npy from "#testdata/npy_test.float32-be.npy?binary";
-import float32le_npy from "#testdata/npy_test.float32-le.npy?binary";
-import float32_example from "#testdata/npy_test.float32.json";
-import uint16be_npy from "#testdata/npy_test.uint16-be.npy?binary";
-import uint16le_npy from "#testdata/npy_test.uint16-le.npy?binary";
-import uint16_example from "#testdata/npy_test.uint16.json";
-import uint32be_npy from "#testdata/npy_test.uint32-be.npy?binary";
-import uint32le_npy from "#testdata/npy_test.uint32-le.npy?binary";
-import uint32_example from "#testdata/npy_test.uint32.json";
-import uint64be_npy from "#testdata/npy_test.uint64-be.npy?binary";
-import uint64le_npy from "#testdata/npy_test.uint64-le.npy?binary";
-import uint64_example from "#testdata/npy_test.uint64.json";
-import uint8_example from "#testdata/npy_test.uint8.json";
-import uint8_npy from "#testdata/npy_test.uint8.npy?binary";
 
 interface ExampleSpec {
   dataType: string;
@@ -47,35 +34,29 @@ async function checkNpy(spec: ExampleSpec, encoded: Uint8Array) {
 }
 
 describe("parseNpy", () => {
-  it("uint8", async () => {
-    await checkNpy(uint8_example, uint8_npy);
-  });
-
-  it("uint16-le", async () => {
-    checkNpy(uint16_example, uint16le_npy);
-  });
-  it("uint16-be", async () => {
-    checkNpy(uint16_example, uint16be_npy);
-  });
-
-  it("uint32-le", async () => {
-    checkNpy(uint32_example, uint32le_npy);
-  });
-  it("uint32-be", async () => {
-    checkNpy(uint32_example, uint32be_npy);
-  });
-
-  it("uint64-le", async () => {
-    checkNpy(uint64_example, uint64le_npy);
-  });
-  it("uint64-be", async () => {
-    checkNpy(uint64_example, uint64be_npy);
-  });
-
-  it("float32-le", async () => {
-    checkNpy(float32_example, float32le_npy);
-  });
-  it("float32-be", async () => {
-    checkNpy(float32_example, float32be_npy);
-  });
+  for (const { json, npys } of [
+    { json: "uint8", npys: ["uint8"] },
+    ...["uint16", "uint32", "uint64", "float32"].map((x) => ({
+      json: x,
+      npys: [`${x}-le`, `${x}-be`],
+    })),
+  ]) {
+    for (const npyName of npys) {
+      it(npyName, async () => {
+        const testDataDir = path.resolve(
+          import.meta.dirname,
+          "..",
+          "..",
+          "testdata",
+        );
+        const example = JSON.parse(
+          await fs.readFile(`${testDataDir}/npy_test.${json}.json`, {
+            encoding: "utf-8",
+          }),
+        ) as ExampleSpec;
+        const npy = await fs.readFile(`${testDataDir}/npy_test.${npyName}.npy`);
+        checkNpy(example, new Uint8Array(npy));
+      });
+    }
+  }
 });
