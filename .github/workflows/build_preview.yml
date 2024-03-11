@@ -26,4 +26,4 @@ jobs:
         with:
           name: client
           path: |
-            dist/min/*
+            dist/client/*

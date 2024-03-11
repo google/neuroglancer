@@ -42,7 +42,7 @@ def capture_screenshot_from_dev_server(
         # new session.
         process_group_args = dict(start_new_session=True)
     p = subprocess.Popen(
-        ["npm", "run", "dev-server"] + (extra_args or []),
+        ["npm", "run", "dev-server", "--"] + (extra_args or []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -59,7 +59,7 @@ def capture_screenshot_from_dev_server(
             for line in f:
                 print(f"[dev-server] {line.rstrip()}")
                 if url is None:
-                    m = re.search(r"http://[^\s]+", line)
+                    m = re.search(r"http://[^,\s]+", line)
                     if m is not None:
                         url = m.group(0)
                         future.set_result(url)
@@ -101,7 +101,7 @@ def capture_screenshot_from_build(
     extra_args=None,
 ):
     subprocess.run(
-        ["npm", "run", "build"] + (extra_args or []), cwd=example_dir, check=True
+        ["npm", "run", "build", "--"] + (extra_args or []), cwd=example_dir, check=True
     )
     if output_dir is None:
         output_dir = os.path.join(example_dir, "dist")
@@ -318,7 +318,7 @@ def test_root_build(
     screenshot = capture_screenshot_from_build(
         webdriver=webdriver_generic,
         example_dir=root_dir,
-        output_dir=os.path.join(root_dir, "dist", "min"),
+        output_dir=os.path.join(root_dir, "dist", "client"),
         test_fragment=TEST_FRAGMENT,
         extra_args=["--no-typecheck", "--no-lint"],
     )

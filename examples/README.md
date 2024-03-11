@@ -30,8 +30,8 @@ Neuroglancer can be used as a dependency in two ways:
 
 The following bundlers are known to be compatible:
 
-- [vite](./vite/)
+- [webpack](./webpack/) (recommended)
 - [parcel](./parcel/)
-- [webpack](./webpack/)
+- [vite](./vite/)
 
 esbuild is not compatible due to https://github.com/evanw/esbuild/issues/795

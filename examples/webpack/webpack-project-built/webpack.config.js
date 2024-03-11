@@ -14,12 +14,11 @@ export default {
         resourceQuery: /raw/,
         type: "asset/source",
       },
-      // Needed for .html?url imports used for auth redirect pages for the
-      // brainmaps and bossDB data sources.  Can be skipped if those data
-      // sources are excluded.
+      // Needed for .html assets used for auth redirect pages for the brainmaps
+      // and bossDB data sources.  Can be skipped if those data sources are
+      // excluded.
       {
         test: /\.html$/,
-        resourceQuery: /url/,
         type: "asset/resource",
         generator: {
           // Filename must be preserved since exact redirect URLs must be allowlisted.
