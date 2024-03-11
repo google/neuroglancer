@@ -882,13 +882,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       };
       gl.depthMask(true);
       renderContext.bindMaxProjectionBuffer();
-      gl.clearDepth(0.0);
       gl.clearColor(0.0, 0.0, 0.0, 0.0);
-      gl.clear(
-        WebGL2RenderingContext.COLOR_BUFFER_BIT |
-          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
-      );
-
+      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
 
@@ -909,6 +904,9 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
+      let renderedMax = false;
+      let renderedMin = false;
+      let clearedMaxProjectionDepth = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -922,16 +920,34 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.depthMask(true);
           const mode = (renderLayer as VolumeRenderingRenderLayer).mode.value;
           if (mode === VOLUME_RENDERING_MODES.MAX) {
+            if (renderedMin) {
+              throw new Error(
+                "Max projection and min projection cannot be mixed",
+              );
+            }
+            renderedMax = true;
             gl.depthFunc(WebGL2RenderingContext.GREATER);
+            gl.clearDepth(0.0);
           } else {
+            if (renderedMax) {
+              throw new Error(
+                "Max projection and min projection cannot be mixed",
+              );
+            }
+            renderedMin = true;
+            gl.clearDepth(1.0);
             gl.depthFunc(WebGL2RenderingContext.LESS);
           }
-          gl.disable(WebGL2RenderingContext.BLEND);
           renderContext.bindMaxProjectionBuffer();
+          if (!clearedMaxProjectionDepth) {
+            gl.clear(WebGL2RenderingContext.DEPTH_BUFFER_BIT);
+            clearedMaxProjectionDepth = true;
+          }
+          gl.disable(WebGL2RenderingContext.BLEND);
           renderContext.emitter = maxProjectionEmit;
           renderLayer.draw(renderContext, attachment);
 
-          // Set back to normal (non-max projection) state
+          // Set back to non-max projection state
           gl.clearDepth(1.0);
           gl.depthMask(false);
           gl.enable(WebGL2RenderingContext.BLEND);
