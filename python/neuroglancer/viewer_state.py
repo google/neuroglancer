@@ -1138,9 +1138,9 @@ class ManagedLayer(JsonObjectWrapper):
             return setattr(self.layer, key, value)
 
     def __repr__(self):
-        return "ManagedLayer({},{})".format(
-            encode_json_for_repr(self.name),
-            encode_json_for_repr(self.to_json()),
+        return (
+            f"ManagedLayer({encode_json_for_repr(self.name)},"
+            f"{encode_json_for_repr(self.to_json())})"
         )
 
     def to_json(self):
