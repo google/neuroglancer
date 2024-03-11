@@ -54,6 +54,7 @@ function launchWorker() {
   // must be used with `new URL`, which means a Node.js subpath import like
   // "#src/async_computation.bundle.js" cannot be used.
   const worker = new Worker(
+    /* webpackChunkName: "neuroglancer_async_computation" */
     new URL("../async_computation.bundle.js", import.meta.url),
     { type: "module" },
   );
