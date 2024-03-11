@@ -239,18 +239,20 @@ void emitIntensity(float value) {
             let glsl_change_intensity = `
 float intensityChanged = step(savedIntensity, newIntensity);
 `;
+            builder.addFragmentCode(`
+float newIntensity = 0.0;
+float savedDepth = 0.0;
+`);
             if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MIN) {
               glsl_change_intensity = `
 float intensityChanged = step(newIntensity, savedIntensity);
 `;
               builder.addFragmentCode(`
 float savedIntensity = 3.402823466e+38;
-float newIntensity = 0.0;
 `);
             } else {
               builder.addFragmentCode(`
 float savedIntensity = 1.175494351e-38;
-float newIntensity = 0.0;
 `);
             }
             glsl_rgbaEmit = `
@@ -259,13 +261,14 @@ void emitRGBA(vec4 rgba) {
   float alpha = clamp(rgba.a * uGain, 0.0, 1.0);
   outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
   savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
+  savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
 }
 `;
             glsl_finalEmit = `
   gl_FragDepth = savedIntensity;
 `;
             glsl_continualEmit = `
-  emit(outputColor, 0u);
+  emit(outputColor, savedDepth, savedIntensity);
 `;
             glsl_emitIntensity = `
 void emitIntensity(float value) {
@@ -352,7 +355,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
   emitIntensity(uChunkNumber);
-  emit(outputColor, 0u);
+  emit(outputColor, 0.0, uChunkNumber);
 }
 `);
           } else {
