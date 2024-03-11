@@ -51,7 +51,6 @@ class Skeleton:
                 ):
                     raise ValueError(
                         f"Expected attribute {name!r} to have shape {expected_shape!r}, but was: {attribute.shape!r}"
-                        )
                     )
                 result.write(attribute.tobytes())
         return result.getvalue()
