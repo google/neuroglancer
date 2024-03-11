@@ -969,8 +969,8 @@ export class PerspectivePanel extends RenderedDataPanel {
               );
             }
             renderedMin = true;
-            gl.clearDepth(1.0);
             gl.depthFunc(WebGL2RenderingContext.LESS);
+            gl.clearDepth(1.0);
           }
           renderContext.bindMaxProjectionBuffer();
           if (!clearedMaxProjectionDepth) {
