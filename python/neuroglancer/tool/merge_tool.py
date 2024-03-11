@@ -224,17 +224,17 @@ class Annotator:
             s.input_event_bindings.data_view["pageup"] = "anno-prev-state"
             s.input_event_bindings.data_view["pagedown"] = "anno-next-state"
             s.input_event_bindings.data_view["bracketleft"] = "anno-decrease-block-size"
-            s.input_event_bindings.data_view[
-                "bracketright"
-            ] = "anno-increase-block-size"
+            s.input_event_bindings.data_view["bracketright"] = (
+                "anno-increase-block-size"
+            )
             s.input_event_bindings.data_view["control+keys"] = "anno-save"
             s.input_event_bindings.data_view["control+keya"] = "anno-show-all"
-            s.input_event_bindings.data_view[
-                "control+mousedown0"
-            ] = "anno-mark-false-merge"
-            s.input_event_bindings.data_view[
-                "control+shift+mousedown0"
-            ] = "anno-unmark-false-merge"
+            s.input_event_bindings.data_view["control+mousedown0"] = (
+                "anno-mark-false-merge"
+            )
+            s.input_event_bindings.data_view["control+shift+mousedown0"] = (
+                "anno-unmark-false-merge"
+            )
 
         viewer.shared_state.add_changed_callback(self.on_state_changed)
         self.cur_message = None

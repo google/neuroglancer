@@ -58,7 +58,6 @@ be rendered in several ways:
   - the width and height are based on the browser size.
 """
 
-
 import argparse
 import bisect
 import copy

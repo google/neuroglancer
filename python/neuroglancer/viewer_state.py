@@ -13,7 +13,6 @@
 # limitations under the License.
 """Wrappers for representing the Neuroglancer viewer state."""
 
-
 import collections
 import collections.abc
 import copy
@@ -1648,9 +1647,9 @@ class ViewerState(JsonObjectWrapper):
     projection_depth = projectionDepth = wrapped_property(
         "projectionDepth", optional(float)
     )
-    projection_orientation = (
-        projectionOrientation
-    ) = perspectiveOrientation = perspective_orientation = wrapped_property(
+    projection_orientation = projectionOrientation = perspectiveOrientation = (
+        perspective_orientation
+    ) = wrapped_property(
         "projectionOrientation", optional(array_wrapper(np.float32, 4))
     )
     show_slices = showSlices = wrapped_property("showSlices", optional(bool, True))

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests WebGL context lose/restore handling."""
 
-
 import neuroglancer
 import numpy as np
 
