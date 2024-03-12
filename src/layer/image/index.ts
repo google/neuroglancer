@@ -318,8 +318,11 @@ export class ImageUserLayer extends Base {
       (volumeRenderingGain) =>
         this.volumeRenderingGain.restoreState(volumeRenderingGain),
     );
-    this.volumeRenderingDepthSamplesTarget.restoreState(
-      specification[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY],
+    verifyOptionalObjectProperty(
+      specification,
+      VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
+      (volumeRenderingDepthSamplesTarget) =>
+        this.volumeRenderingGain.restoreState(volumeRenderingDepthSamplesTarget),
     );
   }
   toJSON() {
