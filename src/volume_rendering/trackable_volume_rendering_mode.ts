@@ -16,8 +16,8 @@ export function trackableShaderModeValue(
   return new TrackableEnum(VOLUME_RENDERING_MODES, initialValue);
 }
 
-export function isProjection(
-  mode: VOLUME_RENDERING_MODES,
-): boolean {
-  return mode === VOLUME_RENDERING_MODES.MAX || mode === VOLUME_RENDERING_MODES.MIN;
+export function isProjection(mode: VOLUME_RENDERING_MODES): boolean {
+  return (
+    mode === VOLUME_RENDERING_MODES.MAX || mode === VOLUME_RENDERING_MODES.MIN
+  );
 }
