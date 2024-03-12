@@ -96,8 +96,6 @@ export enum OffscreenTextures {
   NUM_TEXTURES = 3,
 }
 
-const TEMP_DEBUG_BUFFER_TO_SHOW = OffscreenTextures.COLOR;
-
 export const glsl_perspectivePanelEmit = `
 void emit(vec4 color, highp uint pickId) {
   out_color = color;
@@ -191,9 +189,18 @@ function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "v4f_fragData2", 2);
   builder.setFragmentMain(`
 v4f_fragData0 = vec4(0.0);
-vec4 depth = getValue0();
-v4f_fragData1 = vec4(depth.r, 0.0, 0.0, 0.0);
+v4f_fragData1 = getValue0();
 v4f_fragData2 = getValue1();
+`);
+}
+
+function defineMaxProjectionToPickCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("highp vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
+  builder.setFragmentMain(`
+v4f_fragData0 = getValue0();
+v4f_fragData1 = getValue1();
+gl_FragDepth = v4f_fragData1.r;
 `);
 }
 
@@ -284,6 +291,14 @@ export class PerspectivePanel extends RenderedDataPanel {
     | FramebufferConfiguration<TextureBuffer>
     | undefined;
 
+  protected maxProjectionPickConfiguration_:
+    | FramebufferConfiguration<TextureBuffer>
+    | undefined;
+
+  protected maxProjectionColorOnlyConfiguration_:
+    | FramebufferConfiguration<TextureBuffer>
+    | undefined;
+
   protected offscreenCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl),
   );
@@ -295,6 +310,9 @@ export class PerspectivePanel extends RenderedDataPanel {
   );
   protected maxProjectionPickCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionPickCopyShader, 2),
+  );
+  protected maxProjectionToPickCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(this.gl, defineMaxProjectionToPickCopyShader, 2),
   );
 
   private sharedObject: PerspectiveViewState;
@@ -720,6 +738,48 @@ export class PerspectivePanel extends RenderedDataPanel {
     return maxProjectionConfiguration;
   }
 
+  private get maxProjectionColorOnlyConfiguration() {
+    let maxProjectionColorOnlyConfiguration =
+      this.maxProjectionColorOnlyConfiguration_;
+    if (maxProjectionColorOnlyConfiguration === undefined) {
+      maxProjectionColorOnlyConfiguration =
+        this.maxProjectionColorOnlyConfiguration_ = this.registerDisposer(
+          new FramebufferConfiguration(this.gl, {
+            colorBuffers: [
+              new TextureBuffer(
+                this.gl,
+                WebGL2RenderingContext.RGBA32F,
+                WebGL2RenderingContext.RGBA,
+                WebGL2RenderingContext.FLOAT,
+              ),
+            ],
+            depthBuffer: new DepthStencilRenderbuffer(this.gl),
+          }),
+        );
+    }
+    return maxProjectionColorOnlyConfiguration;
+  }
+
+  private get maxProjectionPickConfiguration() {
+    let maxProjectionPickConfiguration = this.maxProjectionPickConfiguration_;
+    if (maxProjectionPickConfiguration === undefined) {
+      maxProjectionPickConfiguration = this.maxProjectionPickConfiguration_ =
+        this.registerDisposer(
+          new FramebufferConfiguration(this.gl, {
+            colorBuffers: makeTextureBuffers(
+              this.gl,
+              2,
+              WebGL2RenderingContext.R32F,
+              WebGL2RenderingContext.RED,
+              WebGL2RenderingContext.FLOAT,
+            ),
+            depthBuffer: new DepthStencilRenderbuffer(this.gl),
+          }),
+        );
+    }
+    return maxProjectionPickConfiguration;
+  }
+
   drawWithPicking(pickingData: FramePickingData): boolean {
     if (!this.navigationState.valid) {
       return false;
@@ -908,17 +968,34 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (hasTransparent) {
       //Draw transparent objects.
       const { maxProjectionConfiguration } = this;
-      renderContext.bindMaxProjectionBuffer = () => {
+      const bindMaxProjectionBuffer = () => {
         maxProjectionConfiguration.bind(width, height);
       };
       gl.depthMask(true);
-      renderContext.bindMaxProjectionBuffer();
+      bindMaxProjectionBuffer();
       gl.clearColor(0.0, 0.0, 0.0, 0.0);
       gl.clearDepth(0.0);
       gl.clear(
         WebGL2RenderingContext.COLOR_BUFFER_BIT |
           WebGL2RenderingContext.DEPTH_BUFFER_BIT,
       );
+
+      const { maxProjectionPickConfiguration } = this;
+      const bindMaxProjectionPickingBuffer = () => {
+        maxProjectionPickConfiguration.bind(width, height);
+      };
+      bindMaxProjectionPickingBuffer();
+      gl.clear(
+        WebGL2RenderingContext.COLOR_BUFFER_BIT |
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+      );
+
+      const { maxProjectionColorOnlyConfiguration } = this;
+      const bindMaxProjectionColorOnlyBuffer = () => {
+        maxProjectionColorOnlyConfiguration.bind(width, height);
+      };
+      bindMaxProjectionColorOnlyBuffer();
+      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT | WebGL2RenderingContext.DEPTH_BUFFER_BIT);
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
 
@@ -953,17 +1030,56 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.disable(WebGL2RenderingContext.BLEND);
           gl.depthFunc(WebGL2RenderingContext.GREATER);
           renderContext.emitter = maxProjectionEmit;
-          renderContext.bindMaxProjectionBuffer();
+          bindMaxProjectionBuffer();
           renderLayer.draw(renderContext, attachment);
 
-          // Set back to non-max projection state
+          // Copy max projection result to picking buffer then reset max buffer
+          // This has depth testing on to combine max layers into one pick
+          bindMaxProjectionPickingBuffer();
+          this.maxProjectionToPickCopyHelper.draw(
+            maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
+            maxProjectionConfiguration.colorBuffers[2 /*picking*/].texture,
+          );
+          
+          // Copy max projection result to color only buffer
+          // This has depth testing off to combine max layers into one color
+          bindMaxProjectionColorOnlyBuffer();
           gl.depthMask(false);
+          gl.disable(WebGL2RenderingContext.DEPTH_TEST);
           gl.enable(WebGL2RenderingContext.BLEND);
+          gl.blendFunc(
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+          );
+          this.maxProjectionCopyHelper.draw(
+            maxProjectionConfiguration.colorBuffers[0].texture,
+          );
+          gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+          
+          // Reset the max projection buffer
+          bindMaxProjectionBuffer();
+          gl.depthMask(true);
+          gl.clearColor(0.0, 0.0, 0.0, 0.0);
+          gl.clearDepth(0.0);
+          gl.clear(
+            WebGL2RenderingContext.COLOR_BUFFER_BIT |
+              WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+          );
+
+          // Set back to non-max projection state
+          gl.clearDepth(1.0);
+          gl.clearColor(0.0, 0.0, 0.0, 1.0);
+          gl.depthMask(false);
+          gl.blendFuncSeparate(
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ZERO,
+            WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+          );
           gl.depthFunc(WebGL2RenderingContext.LESS);
           renderContext.emitter = perspectivePanelEmitOIT;
           renderContext.bindFramebuffer();
-        } else {
-          renderLayer.draw(renderContext, attachment);
+          continue;
         }
         renderLayer.draw(renderContext, attachment);
       }
@@ -986,7 +1102,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       this.maxProjectionCopyHelper.draw(
-        maxProjectionConfiguration.colorBuffers[0].texture,
+        maxProjectionColorOnlyConfiguration.colorBuffers[0].texture,
       );
 
       gl.depthMask(true);
@@ -1030,10 +1146,8 @@ export class PerspectivePanel extends RenderedDataPanel {
             isProjection((renderLayer as VolumeRenderingRenderLayer).mode.value)
           ) {
             this.maxProjectionPickCopyHelper.draw(
-              maxProjectionConfiguration.colorBuffers[OffscreenTextures.Z]
-                .texture,
-              maxProjectionConfiguration.colorBuffers[OffscreenTextures.PICK]
-                .texture,
+              maxProjectionPickConfiguration.colorBuffers[0].texture,
+              maxProjectionPickConfiguration.colorBuffers[1].texture,
             );
           }
           // regular volume rendering layers have no picking
@@ -1097,7 +1211,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     // Draw the texture over the whole viewport.
     this.setGLClippedViewport();
     this.offscreenCopyHelper.draw(
-      this.offscreenFramebuffer.colorBuffers[TEMP_DEBUG_BUFFER_TO_SHOW].texture,
+      this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
     return true;
   }
