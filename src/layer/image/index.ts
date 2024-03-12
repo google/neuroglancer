@@ -63,6 +63,10 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { makeValueOrError } from "#src/util/error.js";
 import { verifyOptionalObjectProperty } from "#src/util/json.js";
 import {
+  trackableShaderModeValue,
+  VOLUME_RENDERING_MODES,
+} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
+import {
   getVolumeRenderingDepthSamplesBoundsLogScale,
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
   VolumeRenderingRenderLayer,
@@ -96,10 +100,6 @@ import {
   registerLayerShaderControlsTool,
   ShaderControls,
 } from "#src/widget/shader_controls.js";
-import {
-  trackableShaderModeValue,
-  VOLUME_RENDERING_MODES,
-} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 const OPACITY_JSON_KEY = "opacity";

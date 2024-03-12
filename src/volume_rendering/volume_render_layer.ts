@@ -63,6 +63,11 @@ import {
   VOLUME_RENDERING_RENDER_LAYER_RPC_ID,
   VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/volume_rendering/base.js";
+import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
+import {
+  VOLUME_RENDERING_MODES,
+  isProjection,
+} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   drawBoxes,
   glsl_getBoxFaceVertexPosition,
@@ -86,11 +91,6 @@ import {
   addControlsToBuilder,
   setControlsInShader,
 } from "#src/webgl/shader_ui_controls.js";
-import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
-import {
-  VOLUME_RENDERING_MODES,
-  isProjection,
-} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
@@ -245,7 +245,7 @@ void emitIntensity(float value) {
 }`;
           let glsl_continualEmit = ``;
           if (isProjection(shaderParametersState.mode)) {
-            let glsl_change_intensity = `
+            const glsl_change_intensity = `
 float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
 `;
             builder.addFragmentCode(`

@@ -66,6 +66,8 @@ import type {
 } from "#src/util/touch_bindings.js";
 import { WatchableMap } from "#src/util/watchable_map.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import { isProjection } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
+import type { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 import {
   DepthStencilRenderbuffer,
   FramebufferConfiguration,
@@ -73,8 +75,6 @@ import {
   OffscreenCopyHelper,
   TextureBuffer,
 } from "#src/webgl/offscreen.js";
-import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
-import { isProjection } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import type { ShaderBuilder } from "#src/webgl/shader.js";
 import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
 import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
