@@ -310,10 +310,13 @@ export class ImageUserLayer extends Base {
       specification,
       VOLUME_RENDERING_MODE_JSON_KEY,
       (volumeRenderingMode) =>
-        this.volumeRenderingMode.restoreState(volumeRenderingMode)
+        this.volumeRenderingMode.restoreState(volumeRenderingMode),
     );
-    this.volumeRenderingGain.restoreState(
-      specification[VOLUME_RENDERING_GAIN_JSON_KEY],
+    verifyOptionalObjectProperty(
+      specification,
+      VOLUME_RENDERING_GAIN_JSON_KEY,
+      (volumeRenderingGain) =>
+        this.volumeRenderingGain.restoreState(volumeRenderingGain),
     );
     this.volumeRenderingDepthSamplesTarget.restoreState(
       specification[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY],
@@ -474,7 +477,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
-          volumeRenderingMode !== VOLUME_RENDERING_MODES.OFF,
+          volumeRenderingMode === VOLUME_RENDERING_MODES.ON,
         [layer.volumeRenderingMode],
       ),
     ...rangeLayerControl((layer) => ({

@@ -257,7 +257,7 @@ void emitIntensity(float value) {
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
   ${glsl_change_intensity}
-  float alpha = clamp(rgba.a * uGain, 0.0, 1.0);
+  float alpha = clamp(rgba.a, 0.0, 1.0);
   outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
   savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
   savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
