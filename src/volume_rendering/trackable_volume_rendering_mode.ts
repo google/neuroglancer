@@ -1,4 +1,4 @@
-import { TrackableEnum } from "#/util/trackable_enum";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export enum VOLUME_RENDERING_MODES {
   OFF = 0,

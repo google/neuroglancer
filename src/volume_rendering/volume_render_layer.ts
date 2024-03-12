@@ -86,7 +86,7 @@ import {
   addControlsToBuilder,
   setControlsInShader,
 } from "#src/webgl/shader_ui_controls.js";
-import type {TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js",
+import type {TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   VOLUME_RENDERING_MODES,
   isProjection,
