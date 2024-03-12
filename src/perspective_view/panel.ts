@@ -954,8 +954,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.disable(WebGL2RenderingContext.BLEND);
     }
 
-    
-
     // Disable stencil operations.
     gl.stencilOp(
       /*sfail=*/ WebGL2RenderingContext.KEEP,
@@ -993,7 +991,10 @@ export class PerspectivePanel extends RenderedDataPanel {
         maxProjectionColorOnlyConfiguration.bind(width, height);
       };
       bindMaxProjectionColorOnlyBuffer();
-      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT | WebGL2RenderingContext.DEPTH_BUFFER_BIT);
+      gl.clear(
+        WebGL2RenderingContext.COLOR_BUFFER_BIT |
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+      );
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
 
@@ -1038,7 +1039,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
             maxProjectionConfiguration.colorBuffers[2 /*picking*/].texture,
           );
-          
+
           // Copy max projection result to color only buffer
           // This has depth testing off to combine max layers into one color
           bindMaxProjectionColorOnlyBuffer();
@@ -1053,7 +1054,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             maxProjectionConfiguration.colorBuffers[0].texture,
           );
           gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-          
+
           // Reset the max projection buffer
           bindMaxProjectionBuffer();
           gl.depthMask(true);

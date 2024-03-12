@@ -55,7 +55,6 @@ export interface PerspectiveViewRenderContext
    * Specifies the ID of the depth frame buffer texture to query during rendering.
    */
   depthBufferTexture?: WebGLTexture | null;
-  bindMaxProjectionBuffer?: () => void;
 }
 
 export class PerspectiveViewRenderLayer<
