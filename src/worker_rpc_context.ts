@@ -16,5 +16,6 @@
 
 import { RPC } from "#src/worker_rpc.js";
 
-export const rpc = new RPC(self);
-(<any>self).rpc = rpc;
+export const rpc = new RPC(self, /*waitUntilReady=*/ false);
+rpc.sendReady();
+(globalThis as any).rpc = rpc;

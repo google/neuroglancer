@@ -18,6 +18,7 @@ import type { AsyncComputationSpec } from "#src/async_computation/index.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
 import { CANCELED } from "#src/util/cancellation.js";
 
+let numWorkers = 0;
 const freeWorkers: Worker[] = [];
 const pendingTasks = new Map<
   number,
@@ -47,21 +48,29 @@ function returnWorker(worker: Worker) {
   freeWorkers.push(worker);
 }
 
-function getNewWorker(): Worker {
+function launchWorker() {
+  ++numWorkers;
   // Note: For compatibility with multiple bundlers, a browser-compatible URL
   // must be used with `new URL`, which means a Node.js subpath import like
   // "#src/async_computation.bundle.js" cannot be used.
-  const port = new Worker(
+  const worker = new Worker(
     new URL("../async_computation.bundle.js", import.meta.url),
     { type: "module" },
   );
-  port.onmessage = (msg) => {
+  let ready = false;
+  worker.onmessage = (msg) => {
+    // First message indicates worker is ready.
+    if (!ready) {
+      ready = true;
+      returnWorker(worker);
+      return;
+    }
     const { id, value, error } = msg.data as {
       id: number;
       value?: any;
       error?: string;
     };
-    returnWorker(port);
+    returnWorker(worker);
     const callbacks = tasks.get(id)!;
     tasks.delete(id);
     if (callbacks === undefined) return;
@@ -72,7 +81,6 @@ function getNewWorker(): Worker {
       callbacks.resolve(value);
     }
   };
-  return port;
 }
 
 export function requestAsyncComputation<
@@ -95,10 +103,11 @@ export function requestAsyncComputation<
   });
   if (freeWorkers.length !== 0) {
     freeWorkers.pop()!.postMessage(msg, transfer as Transferable[]);
-  } else if (tasks.size < maxWorkers) {
-    getNewWorker().postMessage(msg, transfer as Transferable[]);
   } else {
     pendingTasks.set(id, { msg, transfer });
+    if (tasks.size > numWorkers && numWorkers < maxWorkers) {
+      launchWorker();
+    }
   }
   return promise;
 }

@@ -173,7 +173,7 @@ export class DataManagementContext extends RefCounted {
     );
     this.chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(
-        new RPC(this.worker),
+        new RPC(this.worker, /*waitUntilReady=*/ true),
         this.gl,
         this.frameNumberCounter,
         {
