@@ -237,23 +237,22 @@ void emitIntensity(float value) {
           let glsl_continualEmit = ``;
           if (isProjection(shaderParametersState.mode)) {
             let glsl_change_intensity = `
-float intensityChanged = step(savedIntensity, newIntensity);
+float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
 `;
             builder.addFragmentCode(`
 float newIntensity = 0.0;
 float savedDepth = 0.0;
+float savedIntensity = 0.0;
 `);
+            glsl_emitIntensity = `
+void emitIntensity(float value) {
+  newIntensity = clamp(value, 0.0, 1.0);
+}`;
             if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MIN) {
-              glsl_change_intensity = `
-float intensityChanged = step(newIntensity, savedIntensity);
-`;
-              builder.addFragmentCode(`
-float savedIntensity = 3.402823466e+38;
-`);
-            } else {
-              builder.addFragmentCode(`
-float savedIntensity = 1.175494351e-38;
-`);
+              glsl_emitIntensity = `
+void emitIntensity(float value) {
+  newIntensity = clamp(1.0 - value, 0.0, 1.0);
+}`;
             }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
@@ -270,10 +269,6 @@ void emitRGBA(vec4 rgba) {
             glsl_continualEmit = `
   emit(outputColor, savedDepth, savedIntensity);
 `;
-            glsl_emitIntensity = `
-void emitIntensity(float value) {
-  newIntensity = value;
-}`;
           }
           emitter(builder);
           // Near limit in [0, 1] as fraction of full limit.

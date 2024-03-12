@@ -75,10 +75,7 @@ import { MultipleScaleBarTextures, ScaleBarOptions } from "#/widget/scale_bar";
 import { RPC, SharedObject } from "#/worker_rpc";
 import { PerspectiveViewAnnotationLayer } from "#/annotation/renderlayer";
 import { VolumeRenderingRenderLayer } from "src/volume_rendering/volume_render_layer";
-import {
-  VOLUME_RENDERING_MODES,
-  isProjection,
-} from "src/volume_rendering/trackable_volume_rendering_mode";
+import { isProjection } from "src/volume_rendering/trackable_volume_rendering_mode";
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -160,8 +157,8 @@ export function maxProjectionEmit(builder: ShaderBuilder) {
   builder.addFragmentCode(`
 void emit(vec4 color, float depth, float pick) {
   v4f_fragData0 = color;
-  v4f_fragData1 = vec4(depth, 0.0, 0.0, 0.0);
-  v4f_fragData2 = vec4(pick, 0.0, 0.0, 0.0);
+  v4f_fragData1 = vec4(1.0 - depth, 1.0 - depth, 1.0 - depth, 1.0);
+  v4f_fragData2 = vec4(pick, pick, pick, 1.0);
 }`);
 }
 
@@ -195,7 +192,7 @@ function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.setFragmentMain(`
 v4f_fragData0 = vec4(0.0);
 vec4 depth = getValue0();
-v4f_fragData1 = vec4(1.0 - depth.r, 0.0, 0.0, 0.0);
+v4f_fragData1 = vec4(depth.r, 0.0, 0.0, 0.0);
 v4f_fragData2 = getValue1();
 `);
 }
@@ -917,7 +914,11 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.depthMask(true);
       renderContext.bindMaxProjectionBuffer();
       gl.clearColor(0.0, 0.0, 0.0, 0.0);
-      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+      gl.clearDepth(0.0);
+      gl.clear(
+        WebGL2RenderingContext.COLOR_BUFFER_BIT |
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+      );
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
 
@@ -938,9 +939,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let renderedMax = false;
-      let renderedMin = false;
-      let clearedMaxProjectionDepth = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -952,43 +950,18 @@ export class PerspectivePanel extends RenderedDataPanel {
         ) {
           // Set state for max projection mode and draw
           gl.depthMask(true);
-          const mode = (renderLayer as VolumeRenderingRenderLayer).mode.value;
-          if (mode === VOLUME_RENDERING_MODES.MAX) {
-            if (renderedMin) {
-              throw new Error(
-                "Max projection and min projection cannot be mixed",
-              );
-            }
-            renderedMax = true;
-            gl.depthFunc(WebGL2RenderingContext.GREATER);
-            gl.clearDepth(0.0);
-          } else {
-            if (renderedMax) {
-              throw new Error(
-                "Max projection and min projection cannot be mixed",
-              );
-            }
-            renderedMin = true;
-            gl.depthFunc(WebGL2RenderingContext.LESS);
-            gl.clearDepth(1.0);
-          }
-          renderContext.bindMaxProjectionBuffer();
-          if (!clearedMaxProjectionDepth) {
-            gl.clear(WebGL2RenderingContext.DEPTH_BUFFER_BIT);
-            clearedMaxProjectionDepth = true;
-          }
           gl.disable(WebGL2RenderingContext.BLEND);
+          gl.depthFunc(WebGL2RenderingContext.GREATER);
           renderContext.emitter = maxProjectionEmit;
+          renderContext.bindMaxProjectionBuffer();
           renderLayer.draw(renderContext, attachment);
 
           // Set back to non-max projection state
-          gl.clearDepth(1.0);
           gl.depthMask(false);
           gl.enable(WebGL2RenderingContext.BLEND);
-          gl.enable(WebGL2RenderingContext.DEPTH_TEST);
           gl.depthFunc(WebGL2RenderingContext.LESS);
-          renderContext.bindFramebuffer();
           renderContext.emitter = perspectivePanelEmitOIT;
+          renderContext.bindFramebuffer();
         } else {
           renderLayer.draw(renderContext, attachment);
         }
