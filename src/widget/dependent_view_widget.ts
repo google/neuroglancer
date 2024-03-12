@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { RefCounted } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 
 export class DependentViewContext extends RefCounted {
   constructor(public redraw: () => void) {

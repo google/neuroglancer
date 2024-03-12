@@ -14,62 +14,67 @@
  * limitations under the License.
  */
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
-import {
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
+import type {
   BoundingBox,
   CoordinateSpace,
+} from "#src/coordinate_transform.js";
+import {
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
-import {
-  CompleteUrlOptions,
-  ConvertLegacyUrlOptions,
-  DataSource,
-  DataSourceProvider,
-  DataSubsourceEntry,
-  GetDataSourceOptions,
-  NormalizeUrlOptions,
-} from "#/datasource";
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import {
   ImageTileEncoding,
   ImageTileSourceParameters,
-} from "#/datasource/deepzoom/base";
-import { responseText } from "#/datasource/dvid/api";
+} from "#src/datasource/deepzoom/base.js";
+import { responseText } from "#src/datasource/dvid/api.js";
+import type {
+  CompleteUrlOptions,
+  ConvertLegacyUrlOptions,
+  DataSource,
+  DataSubsourceEntry,
+  GetDataSourceOptions,
+  NormalizeUrlOptions,
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
 import {
   parseProviderUrl,
   resolvePath,
   unparseProviderUrl,
-} from "#/datasource/precomputed/frontend";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/datasource/precomputed/frontend.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
-import { DataType } from "#/util/data_type";
-import { completeHttpPath } from "#/util/http_path_completion";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
+import { DataType } from "#src/util/data_type.js";
+import { completeHttpPath } from "#src/util/http_path_completion.js";
 import {
   verifyEnumString,
   verifyInt,
   verifyObject,
   verifyPositiveInt,
   verifyString,
-} from "#/util/json";
-import { getObjectId } from "#/util/object_id";
+} from "#src/util/json.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type {
+  SpecialProtocolCredentials,
+  SpecialProtocolCredentialsProvider,
+} from "#src/util/special_protocol_request.js";
 import {
   cancellableFetchSpecialOk,
   parseSpecialUrl,
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
+} from "#src/util/special_protocol_request.js";
 
 /*export*/ class DeepzoomImageTileSource extends WithParameters(
   WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),

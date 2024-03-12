@@ -29,18 +29,22 @@
  * understand.
  */
 
-import { RenderViewport } from "#/display_context";
-import {
+import type { RenderViewport } from "#src/display_context.js";
+import type {
   DisplayDimensionRenderInfo,
   RelativeDisplayScales,
-} from "#/navigation_state";
-import { TrackableValue } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { verifyFloat, verifyObjectProperty, verifyString } from "#/util/json";
-import { pickSiPrefix } from "#/util/si_units";
-import { GL } from "#/webgl/context";
-import { OffscreenCopyHelper } from "#/webgl/offscreen";
-import { setTextureFromCanvas } from "#/webgl/texture";
+} from "#src/navigation_state.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import {
+  verifyFloat,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
+import { pickSiPrefix } from "#src/util/si_units.js";
+import type { GL } from "#src/webgl/context.js";
+import { OffscreenCopyHelper } from "#src/webgl/offscreen.js";
+import { setTextureFromCanvas } from "#src/webgl/texture.js";
 
 /**
  * Default set of allowed significand values.  1 is implicitly part of the set.

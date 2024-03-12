@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { Signal } from "#src/util/signal.js";
+import type { Uint64 } from "#src/util/uint64.js";
 
 export class Uint64OrderedSet
   implements WatchableValueInterface<Uint64OrderedSet>

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { DisjointUint64Sets } from "#/util/disjoint_sets";
-import { Uint64 } from "#/util/uint64";
+import { describe, it, expect } from "vitest";
+import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 function getSortedElementStrings(disjointSets: DisjointUint64Sets, x: Uint64) {
   const members = Array.from(disjointSets.setElements(x));

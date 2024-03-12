@@ -14,26 +14,30 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CoordinateSpace,
   CoordinateSpaceTransform,
+} from "#src/coordinate_transform.js";
+import {
   emptyValidCoordinateSpace,
   homogeneousTransformSubmatrix,
-} from "#/coordinate_transform";
-import { DisplayDimensionRenderInfo } from "#/navigation_state";
-import {
+} from "#src/coordinate_transform.js";
+import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import type {
   CachedWatchableValue,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
+import {
   constantWatchableValue,
   makeCachedDerivedWatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { arraysEqual, scatterUpdate } from "#/util/array";
-import { ValueOrError } from "#/util/error";
-import { mat4, vec3 } from "#/util/geom";
-import { getDependentTransformInputDimensions } from "#/util/geom";
-import * as matrix from "#/util/matrix";
-import * as vector from "#/util/vector";
-import { prod } from "#/util/vector";
+} from "#src/trackable_value.js";
+import { arraysEqual, scatterUpdate } from "#src/util/array.js";
+import type { ValueOrError } from "#src/util/error.js";
+import type { vec3 } from "#src/util/geom.js";
+import { mat4, getDependentTransformInputDimensions } from "#src/util/geom.js";
+import * as matrix from "#src/util/matrix.js";
+import * as vector from "#src/util/vector.js";
+import { prod } from "#src/util/vector.js";
 
 /**
  * Specifies coordinate transform information for a RenderLayer.

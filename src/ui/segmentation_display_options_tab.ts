@@ -14,20 +14,18 @@
  * limitations under the License.
  */
 
-import { Overlay } from "#/overlay";
-import {
-  LAYER_CONTROLS,
-  SegmentationUserLayer,
-  SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
-} from "#/segmentation_user_layer";
-import { DependentViewWidget } from "#/widget/dependent_view_widget";
-import { makeHelpButton } from "#/widget/help_button";
-import { addLayerControlToOptionsTab } from "#/widget/layer_control";
-import { LinkedLayerGroupWidget } from "#/widget/linked_layer";
-import { makeMaximizeButton } from "#/widget/maximize_button";
-import { ShaderCodeWidget } from "#/widget/shader_code_widget";
-import { ShaderControls } from "#/widget/shader_controls";
-import { Tab } from "#/widget/tab_view";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
+import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
+import { Overlay } from "#src/overlay.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { makeHelpButton } from "#src/widget/help_button.js";
+import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
+import { LinkedLayerGroupWidget } from "#src/widget/linked_layer.js";
+import { makeMaximizeButton } from "#src/widget/maximize_button.js";
+import { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
+import { ShaderControls } from "#src/widget/shader_controls.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({

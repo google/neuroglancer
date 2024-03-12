@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import { decodeBlosc } from "#/async_computation/decode_blosc_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
+import { decodeBlosc } from "#src/async_computation/decode_blosc_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
 
 registerAsyncComputation(decodeBlosc, async (data: Uint8Array) => {
-  const { default: Blosc } = await import(
-    /*webpackChunkName: "blosc" */ "numcodecs/blosc"
-  );
+  const { default: Blosc } = await import("numcodecs/blosc");
   const codec = Blosc.fromConfig({ id: "blosc" });
   const result = await codec.decode(data);
   return { value: result, transfer: [result.buffer] };

@@ -1,0 +1,9 @@
+{
+  extends: "@parcel/config-default",
+  // Needed to ensure stable names for auth redirect .html files.
+  namers: ["parcel-namer-rewrite"],
+  // Needed for embedded svg icons.
+  transformers: {
+    "*.svg": ["...", "@parcel/transformer-inline-string"],
+  },
+}

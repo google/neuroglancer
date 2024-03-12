@@ -14,33 +14,41 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { ChunkState } from "#/chunk_manager/base";
-import {
-  Chunk,
+import { debounce } from "lodash-es";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type {
   ChunkManager,
   ChunkRequesterState,
-  ChunkSource,
-} from "#/chunk_manager/frontend";
-import { applyRenderViewportToProjectionMatrix } from "#/display_context";
-import { LayerManager } from "#/layer";
-import {
+} from "#src/chunk_manager/frontend.js";
+import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
+import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
+import type { LayerManager } from "#src/layer/index.js";
+import type {
   DisplayDimensionRenderInfo,
   NavigationState,
-} from "#/navigation_state";
-import { updateProjectionParametersFromInverseViewAndProjection } from "#/projection_parameters";
-import {
+} from "#src/navigation_state.js";
+import { updateProjectionParametersFromInverseViewAndProjection } from "#src/projection_parameters.js";
+import type {
   ChunkDisplayTransformParameters,
   ChunkTransformParameters,
+  RenderLayerTransformOrError,
+} from "#src/render_coordinate_transform.js";
+import {
   getChunkDisplayTransformParameters,
   getChunkTransformParameters,
   getLayerDisplayDimensionMapping,
-  RenderLayerTransformOrError,
-} from "#/render_coordinate_transform";
+} from "#src/render_coordinate_transform.js";
 import {
   DerivedProjectionParameters,
   SharedProjectionParameters,
-} from "#/renderlayer";
+} from "#src/renderlayer.js";
+import type {
+  SliceViewChunkSource as SliceViewChunkSourceInterface,
+  SliceViewChunkSpecification,
+  SliceViewSourceOptions,
+  TransformedSource,
+  VisibleLayerSources,
+} from "#src/sliceview/base.js";
 import {
   forEachPlaneIntersectingVolumetricChunk,
   getNormalizedChunkLayout,
@@ -49,43 +57,35 @@ import {
   SLICEVIEW_REQUEST_CHUNK_RPC_ID,
   SLICEVIEW_RPC_ID,
   SliceViewBase,
-  SliceViewChunkSource as SliceViewChunkSourceInterface,
-  SliceViewChunkSpecification,
   SliceViewProjectionParameters,
-  SliceViewSourceOptions,
-  TransformedSource,
-  VisibleLayerSources,
-} from "#/sliceview/base";
-import { ChunkLayout } from "#/sliceview/chunk_layout";
-import { SliceViewRenderLayer } from "#/sliceview/renderlayer";
-import { WatchableValueInterface } from "#/trackable_value";
-import { CancellationToken, uncancelableToken } from "#/util/cancellation";
-import {
-  Borrowed,
-  Disposer,
-  invokeDisposers,
-  Owned,
-  RefCounted,
-} from "#/util/disposable";
-import { kOneVec, kZeroVec4, mat4, vec3, vec4 } from "#/util/geom";
-import { MessageList, MessageSeverity } from "#/util/message_list";
-import { getObjectId } from "#/util/object_id";
-import { NullarySignal } from "#/util/signal";
-import { withSharedVisibility } from "#/visibility_priority/frontend";
-import { GL } from "#/webgl/context";
-import {
-  HistogramSpecifications,
-  TextureHistogramGenerator,
-} from "#/webgl/empirical_cdf";
+} from "#src/sliceview/base.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";
+import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
+import type { vec4 } from "#src/util/geom.js";
+import { kOneVec, kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
+import { MessageList, MessageSeverity } from "#src/util/message_list.js";
+import { getObjectId } from "#src/util/object_id.js";
+import { NullarySignal } from "#src/util/signal.js";
+import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import type { GL } from "#src/webgl/context.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import { TextureHistogramGenerator } from "#src/webgl/empirical_cdf.js";
+import type { TextureBuffer } from "#src/webgl/offscreen.js";
 import {
   DepthTextureBuffer,
   FramebufferConfiguration,
   makeTextureBuffers,
-  TextureBuffer,
-} from "#/webgl/offscreen";
-import { ShaderBuilder, ShaderModule, ShaderProgram } from "#/webgl/shader";
-import { getSquareCornersBuffer } from "#/webgl/square_corners_buffer";
-import { registerSharedObjectOwner, RPC } from "#/worker_rpc";
+} from "#src/webgl/offscreen.js";
+import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
+import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 export type GenericChunkKey = string;
 
@@ -596,6 +596,7 @@ export interface SliceViewChunkSourceOptions<
   spec: Spec;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export abstract class SliceViewChunkSource<
     Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
     ChunkType extends SliceViewChunk = SliceViewChunk,
@@ -690,6 +691,7 @@ export abstract class SliceViewChunkSource<
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export interface SliceViewChunkSource {
   // TODO(jbms): Move this declaration to the class definition above and declare abstract once
   // TypeScript supports mixins with abstact classes.

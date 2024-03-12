@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CodecArrayInfo,
   CodecArrayLayoutInfo,
-  CodecKind,
-} from "#/datasource/zarr/codec";
-import { registerCodec } from "#/datasource/zarr/codec/resolve";
+} from "#src/datasource/zarr/codec/index.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import { registerCodec } from "#src/datasource/zarr/codec/resolve.js";
 import {
   parseFixedLengthArray,
   verifyObject,
   verifyObjectProperty,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 export interface Configuration {
   encodedToDecoded: number[];

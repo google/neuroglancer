@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { CodecKind } from "#/datasource/zarr/codec";
-import type { Configuration } from "#/datasource/zarr/codec/crc32c/resolve";
-import { registerCodec } from "#/datasource/zarr/codec/decode";
-import { CancellationToken } from "#/util/cancellation";
+import type { Configuration } from "#src/datasource/zarr/codec/crc32c/resolve.js";
+import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 const checksumSize = 4;
 

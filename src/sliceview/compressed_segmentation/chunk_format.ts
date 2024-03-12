@@ -14,40 +14,41 @@
  * limitations under the License.
  */
 
-import { readSingleChannelValue as readSingleChannelValueUint32 } from "#/sliceview/compressed_segmentation/decode_uint32";
-import { readSingleChannelValue as readSingleChannelValueUint64 } from "#/sliceview/compressed_segmentation/decode_uint64";
+import { readSingleChannelValue as readSingleChannelValueUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
+import { readSingleChannelValue as readSingleChannelValueUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
 import {
   SingleTextureChunkFormat,
   SingleTextureVolumeChunk,
-} from "#/sliceview/single_texture_chunk_format";
-import { DataType, VolumeChunkSpecification } from "#/sliceview/volume/base";
-import {
+} from "#src/sliceview/single_texture_chunk_format.js";
+import type { VolumeChunkSpecification } from "#src/sliceview/volume/base.js";
+import { DataType } from "#src/sliceview/volume/base.js";
+import type {
   ChunkFormatHandler,
-  registerChunkFormatHandler,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { RefCounted } from "#/util/disposable";
-import { vec3, vec3Key } from "#/util/geom";
-import { Uint64 } from "#/util/uint64";
-import { GL } from "#/webgl/context";
-import {
+} from "#src/sliceview/volume/frontend.js";
+import { registerChunkFormatHandler } from "#src/sliceview/volume/frontend.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { vec3, vec3Key } from "#src/util/geom.js";
+import { Uint64 } from "#src/util/uint64.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ShaderBuilder,
   ShaderProgram,
   ShaderSamplerType,
-  textureTargetForSamplerType,
-} from "#/webgl/shader";
+} from "#src/webgl/shader.js";
+import { textureTargetForSamplerType } from "#src/webgl/shader.js";
 import {
   getShaderType,
   glsl_getFortranOrderIndex,
   glsl_uint32,
   glsl_uint64,
-} from "#/webgl/shader_lib";
+} from "#src/webgl/shader_lib.js";
 import {
   computeTextureFormat,
   OneDimensionalTextureAccessHelper,
   setOneDimensionalTextureData,
   TextureFormat,
-} from "#/webgl/texture_access";
+} from "#src/webgl/texture_access.js";
 
 class TextureLayout extends RefCounted {
   subchunkGridSize: vec3;

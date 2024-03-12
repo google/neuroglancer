@@ -14,25 +14,29 @@
  * limitations under the License.
  */
 
+import type {
+  AnnotationGeometryChunk,
+  AnnotationMetadataChunk,
+  AnnotationSubsetGeometryChunk,
+} from "#src/annotation/backend.js";
 import {
-  Annotation,
+  AnnotationGeometryData,
+  AnnotationSource,
+  AnnotationGeometryChunkSourceBackend,
+} from "#src/annotation/backend.js";
+import type { Annotation } from "#src/annotation/index.js";
+import {
   AnnotationPropertySerializer,
   annotationTypeHandlers,
   annotationTypes,
-} from "#/annotation";
-import {
-  AnnotationGeometryChunk,
-  AnnotationGeometryData,
-  AnnotationMetadataChunk,
-  AnnotationSource,
-  AnnotationSubsetGeometryChunk,
-} from "#/annotation/backend";
-import { AnnotationGeometryChunkSourceBackend } from "#/annotation/backend";
-import { decodeGzip } from "#/async_computation/decode_gzip_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { Chunk, ChunkManager, WithParameters } from "#/chunk_manager/backend";
-import { GenericSharedDataSource } from "#/chunk_manager/generic_file_source";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
+} from "#src/annotation/index.js";
+import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import type { Chunk, ChunkManager } from "#src/chunk_manager/backend.js";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type { ShardingParameters } from "#src/datasource/precomputed/base.js";
 import {
   AnnotationSourceParameters,
   AnnotationSpatialIndexSourceParameters,
@@ -41,60 +45,64 @@ import {
   MeshSourceParameters,
   MultiscaleMeshSourceParameters,
   ShardingHashFunction,
-  ShardingParameters,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/precomputed/base";
+} from "#src/datasource/precomputed/base.js";
+import type {
+  FragmentChunk,
+  ManifestChunk,
+  MultiscaleFragmentChunk,
+  MultiscaleManifestChunk,
+} from "#src/mesh/backend.js";
 import {
   assignMeshFragmentData,
   assignMultiscaleMeshFragmentData,
   computeOctreeChildOffsets,
   decodeJsonManifestChunk,
   decodeTriangleVertexPositionsAndIndices,
-  FragmentChunk,
   generateHigherOctreeLevel,
-  ManifestChunk,
   MeshSource,
-  MultiscaleFragmentChunk,
-  MultiscaleManifestChunk,
   MultiscaleMeshSource,
-} from "#/mesh/backend";
-import { IndexedSegmentPropertySourceBackend } from "#/segmentation_display_state/backend";
-import { SkeletonChunk, SkeletonSource } from "#/skeleton/backend";
-import { decodeSkeletonChunk } from "#/skeleton/decode_precomputed_skeleton";
-import { ChunkDecoder } from "#/sliceview/backend_chunk_decoders";
-import { decodeCompressedSegmentationChunk } from "#/sliceview/backend_chunk_decoders/compressed_segmentation";
-import { decodeCompressoChunk } from "#/sliceview/backend_chunk_decoders/compresso";
-import { decodeJpegChunk } from "#/sliceview/backend_chunk_decoders/jpeg";
-import { decodePngChunk } from "#/sliceview/backend_chunk_decoders/png";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { fetchSpecialHttpByteRange } from "#/util/byte_range_http_requests";
-import { CancellationToken } from "#/util/cancellation";
-import { Borrowed } from "#/util/disposable";
-import { convertEndian32, Endianness } from "#/util/endian";
-import { vec3 } from "#/util/geom";
-import { murmurHash3_x86_128Hash64Bits } from "#/util/hash";
+} from "#src/mesh/backend.js";
+import { decodeDracoPartitioned } from "#src/mesh/draco/index.js";
+import { IndexedSegmentPropertySourceBackend } from "#src/segmentation_display_state/backend.js";
+import type { SkeletonChunk } from "#src/skeleton/backend.js";
+import { SkeletonSource } from "#src/skeleton/backend.js";
+import { decodeSkeletonChunk } from "#src/skeleton/decode_precomputed_skeleton.js";
+import { decodeCompressedSegmentationChunk } from "#src/sliceview/backend_chunk_decoders/compressed_segmentation.js";
+import { decodeCompressoChunk } from "#src/sliceview/backend_chunk_decoders/compresso.js";
+import type { ChunkDecoder } from "#src/sliceview/backend_chunk_decoders/index.js";
+import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
+import { decodePngChunk } from "#src/sliceview/backend_chunk_decoders/png.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { fetchSpecialHttpByteRange } from "#src/util/byte_range_http_requests.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { convertEndian32, Endianness } from "#src/util/endian.js";
+import { vec3 } from "#src/util/geom.js";
+import { murmurHash3_x86_128Hash64Bits } from "#src/util/hash.js";
 import {
   isNotFoundError,
   responseArrayBuffer,
   responseJson,
-} from "#/util/http_request";
-import { stableStringify } from "#/util/json";
-import { getObjectId } from "#/util/object_id";
-import {
-  cancellableFetchSpecialOk,
+} from "#src/util/http_request.js";
+import { stableStringify } from "#src/util/json.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type {
   SpecialProtocolCredentials,
   SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
-import { Uint64 } from "#/util/uint64";
+} from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { Uint64 } from "#src/util/uint64.js";
 import {
   encodeZIndexCompressed,
   encodeZIndexCompressed3d,
   zorder3LessThan,
-} from "#/util/zorder";
-import { registerSharedObject } from "#/worker_rpc";
+} from "#src/util/zorder.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 // Set to true to validate the multiscale index.
 const DEBUG_MULTISCALE_INDEX = false;
@@ -750,8 +758,7 @@ async function decodeMultiscaleFragmentChunk(
   const { lod } = chunk;
   const source = chunk.manifestChunk!
     .source! as PrecomputedMultiscaleMeshSource;
-  const m = await import(/* webpackChunkName: "draco" */ "#/mesh/draco");
-  const rawMesh = await m.decodeDracoPartitioned(
+  const rawMesh = await decodeDracoPartitioned(
     new Uint8Array(response),
     source.parameters.metadata.vertexQuantizationBits,
     lod !== 0,

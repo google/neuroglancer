@@ -19,19 +19,24 @@
  * Python-initiated prefetch support.
  */
 
-import debounce from "lodash/debounce";
-import { DataSourceProviderRegistry } from "#/datasource";
-import { DisplayContext } from "#/display_context";
-import { Borrowed, Owned, RefCounted } from "#/util/disposable";
+import { debounce } from "lodash-es";
+import type { DataSourceProviderRegistry } from "#src/datasource/index.js";
+import type { DisplayContext } from "#src/display_context.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
   parseArray,
   verifyInt,
   verifyObject,
   verifyObjectProperty,
-} from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { DataManagementContext, Viewer, ViewerUIConfiguration } from "#/viewer";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
+} from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type {
+  DataManagementContext,
+  ViewerUIConfiguration,
+} from "#src/viewer.js";
+import { Viewer } from "#src/viewer.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 
 export class PrefetchManager extends RefCounted {
   prefetchStates = new Map<string, Viewer>();

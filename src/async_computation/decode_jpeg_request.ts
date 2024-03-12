@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { asyncComputation } from "#/async_computation";
-import { DecodedImage } from "./decode_png_request";
+import type { DecodedImage } from "#src/async_computation/decode_png_request.js";
+import { asyncComputation } from "#src/async_computation/index.js";
 
 export const decodeJpeg =
   asyncComputation<

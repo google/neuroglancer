@@ -18,9 +18,9 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
-import { credentialsKey } from "#/datasource/dvid/api";
-import { DVIDCredentialsProvider } from "#/datasource/dvid/credentials_provider";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { credentialsKey } from "#src/datasource/dvid/api.js";
+import { DVIDCredentialsProvider } from "#src/datasource/dvid/credentials_provider.js";
 
 defaultCredentialsManager.register(
   credentialsKey,

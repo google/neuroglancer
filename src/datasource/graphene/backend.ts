@@ -14,73 +14,69 @@
  * limitations under the License.
  */
 
-import { WithParameters } from "#/chunk_manager/backend";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
+import { debounce } from "lodash-es";
 import {
-  assignMeshFragmentData,
-  FragmentChunk,
-  ManifestChunk,
-  MeshSource,
-} from "#/mesh/backend";
+  WithParameters,
+  withChunkManager,
+  Chunk,
+  ChunkSource,
+} from "#src/chunk_manager/backend.js";
+import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type { ChunkedGraphChunkSpecification } from "#src/datasource/graphene/base.js";
 import {
   getGrapheneFragmentKey,
   GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
   responseIdentity,
-} from "#/datasource/graphene/base";
-import { CancellationToken } from "#/util/cancellation";
-import { responseArrayBuffer, responseJson } from "#/util/http_request";
-import {
-  cancellableFetchSpecialOk,
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
-import { Uint64 } from "#/util/uint64";
-import { registerSharedObject } from "#/worker_rpc";
-import {
   ChunkedGraphSourceParameters,
   MeshSourceParameters,
-} from "#/datasource/graphene/base";
-import { decodeManifestChunk } from "#/datasource/precomputed/backend";
-import { fetchSpecialHttpByteRange } from "#/util/byte_range_http_requests";
-import debounce from "lodash/debounce";
-import { withChunkManager, Chunk, ChunkSource } from "#/chunk_manager/backend";
-import { ChunkPriorityTier, ChunkState } from "#/chunk_manager/base";
-import {
-  TransformedSource,
-  forEachPlaneIntersectingVolumetricChunk,
-  getNormalizedChunkLayout,
-  SliceViewProjectionParameters,
-} from "#/sliceview/base";
-import {
   CHUNKED_GRAPH_LAYER_RPC_ID,
-  ChunkedGraphChunkSpecification,
   CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   RENDER_RATIO_LIMIT,
-} from "#/datasource/graphene/base";
-import { Uint64Set } from "#/uint64_set";
-import { vec3, vec3Key } from "#/util/geom";
-import { registerRPC, RPC } from "#/worker_rpc";
-
+  isBaseSegmentId,
+} from "#src/datasource/graphene/base.js";
+import { decodeManifestChunk } from "#src/datasource/precomputed/backend.js";
+import type { FragmentChunk, ManifestChunk } from "#src/mesh/backend.js";
+import { assignMeshFragmentData, MeshSource } from "#src/mesh/backend.js";
+import { decodeDraco } from "#src/mesh/draco/index.js";
+import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import type {
+  RenderedViewBackend,
+  RenderLayerBackendAttachment,
+} from "#src/render_layer_backend.js";
+import { RenderLayerBackend } from "#src/render_layer_backend.js";
+import { withSegmentationLayerBackendState } from "#src/segmentation_display_state/backend.js";
+import { forEachVisibleSegment } from "#src/segmentation_display_state/base.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { SliceViewChunkSourceBackend } from "#src/sliceview/backend.js";
+import { deserializeTransformedSources } from "#src/sliceview/backend.js";
+import type {
+  TransformedSource,
+  SliceViewProjectionParameters,
+} from "#src/sliceview/base.js";
 import {
-  deserializeTransformedSources,
-  SliceViewChunkSourceBackend,
-} from "#/sliceview/backend";
+  forEachPlaneIntersectingVolumetricChunk,
+  getNormalizedChunkLayout,
+} from "#src/sliceview/base.js";
+import { computeChunkBounds } from "#src/sliceview/volume/backend.js";
+import { Uint64Set } from "#src/uint64_set.js";
+import { fetchSpecialHttpByteRange } from "#src/util/byte_range_http_requests.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { vec3, vec3Key } from "#src/util/geom.js";
+import { responseArrayBuffer, responseJson } from "#src/util/http_request.js";
+import type {
+  SpecialProtocolCredentials,
+  SpecialProtocolCredentialsProvider,
+} from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { Uint64 } from "#src/util/uint64.js";
 import {
   getBasePriority,
   getPriorityTier,
   withSharedVisibility,
-} from "#/visibility_priority/backend";
-import { isBaseSegmentId } from "#/datasource/graphene/base";
-import { withSegmentationLayerBackendState } from "#/segmentation_display_state/backend";
-import {
-  RenderedViewBackend,
-  RenderLayerBackend,
-  RenderLayerBackendAttachment,
-} from "#/render_layer_backend";
-import { SharedWatchableValue } from "#/shared_watchable_value";
-import { DisplayDimensionRenderInfo } from "#/navigation_state";
-import { forEachVisibleSegment } from "#/segmentation_display_state/base";
-import { computeChunkBounds } from "#/sliceview/volume/backend";
+} from "#src/visibility_priority/backend.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { registerSharedObject, registerRPC } from "#src/worker_rpc.js";
 
 function getVerifiedFragmentPromise(
   credentialsProvider: SpecialProtocolCredentialsProvider,
@@ -139,8 +135,7 @@ async function decodeDracoFragmentChunk(
   chunk: FragmentChunk,
   response: ArrayBuffer,
 ) {
-  const m = await import(/* webpackChunkName: "draco" */ "#/mesh/draco");
-  const rawMesh = await m.decodeDraco(new Uint8Array(response));
+  const rawMesh = await decodeDraco(new Uint8Array(response));
   assignMeshFragmentData(chunk, rawMesh);
 }
 

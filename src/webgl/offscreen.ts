@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import { RefCounted } from "#/util/disposable";
-import { identityMat4 } from "#/util/geom";
-import { getObjectId } from "#/util/object_id";
-import { GL } from "#/webgl/context";
-import { ShaderModule, ShaderProgram } from "#/webgl/shader";
-import { getSquareCornersBuffer } from "#/webgl/square_corners_buffer";
-import { resizeTexture } from "#/webgl/texture";
+import { RefCounted } from "#src/util/disposable.js";
+import { identityMat4 } from "#src/util/geom.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
+import { resizeTexture } from "#src/webgl/texture.js";
 import {
   defineCopyFragmentShader,
   elementWiseTextureShader,
-} from "#/webgl/trivial_shaders";
+} from "#src/webgl/trivial_shaders.js";
 
 export abstract class SizeManaged extends RefCounted {
   width = Number.NaN;

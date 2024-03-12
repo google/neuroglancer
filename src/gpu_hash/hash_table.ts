@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { hashCombine } from "#/gpu_hash/hash_function";
-import { getRandomValues } from "#/util/random";
-import { Uint64 } from "#/util/uint64";
+import { hashCombine } from "#src/gpu_hash/hash_function.js";
+import { getRandomValues } from "#src/util/random.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export const NUM_ALTERNATIVES = 3;
 

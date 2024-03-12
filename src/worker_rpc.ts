@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
+import type { CancellationToken } from "#src/util/cancellation.js";
 import {
   CANCELED,
-  CancellationToken,
   CancellationTokenSource,
   makeCancelablePromise,
   uncancelableToken,
-} from "#/util/cancellation";
-import { RefCounted } from "#/util/disposable";
+} from "#src/util/cancellation.js";
+import { RefCounted } from "#src/util/disposable.js";
 
 export type RPCHandler = (this: RPC, x: any) => void;
 
@@ -313,19 +313,6 @@ registerRPC("SharedObject.dispose", function (x) {
   this.delete(obj.rpcId!);
   obj.rpcId = null;
   obj.rpc = null;
-});
-
-// RPC ID used to request the other thread to create a worker.
-//
-// On Safari, workers cannot themselves create additional workers.  As a workaround, workers can
-// send the main thread a worker URL and a `MessagePort` and the main thread will create the worker
-// and send it the message port.
-export const WORKER_RPC_ID = "Worker";
-
-registerRPC(WORKER_RPC_ID, (x) => {
-  const { port, path } = x;
-  const worker = new Worker(path);
-  worker.postMessage({ port }, [port]);
 });
 
 registerRPC("SharedObject.refCountReachedZero", function (x) {

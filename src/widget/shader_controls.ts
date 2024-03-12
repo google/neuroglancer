@@ -14,32 +14,35 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { DisplayContext } from "#/display_context";
-import { UserLayer, UserLayerConstructor } from "#/layer";
-import { registerTool, ToolActivation } from "#/ui/tool";
-import { RefCounted } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
-import { verifyObjectProperty, verifyString } from "#/util/json";
-import { AnyConstructor } from "#/util/mixin";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import {
+import { debounce } from "lodash-es";
+import type { DisplayContext } from "#src/display_context.js";
+import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
+import type { ToolActivation } from "#src/ui/tool.js";
+import { registerTool } from "#src/ui/tool.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import { verifyObjectProperty, verifyString } from "#src/util/json.js";
+import type { AnyConstructor } from "#src/util/mixin.js";
+import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import type {
   ParameterizedEmitterDependentShaderOptions,
   ParameterizedShaderGetterResult,
-} from "#/webgl/dynamic_shader";
-import { ShaderControlState } from "#/webgl/shader_ui_controls";
-import {
-  addLayerControlToOptionsTab,
+} from "#src/webgl/dynamic_shader.js";
+import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import type {
   LayerControlDefinition,
   LayerControlFactory,
+} from "#src/widget/layer_control.js";
+import {
+  addLayerControlToOptionsTab,
   LayerControlTool,
-} from "#/widget/layer_control";
-import { channelInvlerpLayerControl } from "#/widget/layer_control_channel_invlerp";
-import { checkboxLayerControl } from "#/widget/layer_control_checkbox";
-import { colorLayerControl } from "#/widget/layer_control_color";
-import { propertyInvlerpLayerControl } from "#/widget/layer_control_property_invlerp";
-import { rangeLayerControl } from "#/widget/layer_control_range";
-import { Tab } from "#/widget/tab_view";
+} from "#src/widget/layer_control.js";
+import { channelInvlerpLayerControl } from "#src/widget/layer_control_channel_invlerp.js";
+import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
+import { colorLayerControl } from "#src/widget/layer_control_color.js";
+import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
+import { rangeLayerControl } from "#src/widget/layer_control_range.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 export interface LegendShaderOptions
   extends ParameterizedEmitterDependentShaderOptions {

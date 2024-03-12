@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   estimateSliceAreaPerChunk,
   getNearIsotropicBlockSize,
-} from "#/sliceview/base";
-import { ChunkLayout } from "#/sliceview/chunk_layout";
-import { mat4, vec3 } from "#/util/geom";
+} from "#src/sliceview/base.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 
 describe("sliceview/base", () => {
   it("getNearIsotropicBlockSize", () => {

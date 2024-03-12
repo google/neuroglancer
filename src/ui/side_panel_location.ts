@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   verifyBoolean,
   verifyFiniteFloat,
   verifyObject,
   verifyOptionalObjectProperty,
   verifyPositiveInt,
-} from "#/util/json";
-import { Signal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
-import { WatchableValueInterface } from "../trackable_value";
+} from "#src/util/json.js";
+import { Signal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
 
 export type Side = "left" | "right" | "top" | "bottom";
 

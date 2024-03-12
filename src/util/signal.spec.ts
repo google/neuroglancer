@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { NullarySignal, Signal } from "#/util/signal";
+import { describe, it, expect } from "vitest";
+import { NullarySignal, Signal } from "#src/util/signal.js";
 
 describe("signal", () => {
   it("should invoke the handler when dispatched", () => {
@@ -24,6 +25,7 @@ describe("signal", () => {
       "use strict";
       // TODO(jbms): remove this "use strict" when karma/esbuild config issues
       // is resolved.
+      // eslint-disable-next-line prefer-rest-params
       results.push([this, ...arguments]);
     });
     expect(signal.count).toEqual(0);

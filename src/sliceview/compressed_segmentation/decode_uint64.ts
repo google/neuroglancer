@@ -21,9 +21,9 @@
  * Support for decompressing uint64 segment label chunks.
  */
 
-import { decodeValueOffset } from "#/sliceview/compressed_segmentation/decode_common";
+import { decodeValueOffset } from "#src/sliceview/compressed_segmentation/decode_common.js";
 
-import { Uint64 } from "#/util/uint64";
+import type { Uint64 } from "#src/util/uint64.js";
 
 /**
  * Reads the single value at the specified dataPosition in a single-channel compressed segmentation.

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { TrackableEnum } from "#/util/trackable_enum";
-import { RefCounted } from "#/util/disposable";
+import { RefCounted } from "#src/util/disposable.js";
+import type { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export class EnumSelectWidget<T extends number> extends RefCounted {
   element = document.createElement("select");

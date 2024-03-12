@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import svg_filter from "ikonate/icons/filter.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_filter from "ikonate/icons/filter.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeFilterButton(options: MakeIconOptions = {}) {
   return makeIcon({ svg: svg_filter, ...options });

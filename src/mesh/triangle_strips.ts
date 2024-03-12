@@ -20,8 +20,8 @@
  * http://www.codercorner.com/Strips.htm
  */
 
-import { hashCombine } from "#/gpu_hash/hash_function";
-import { MeshVertexIndices } from "#/mesh/base";
+import { hashCombine } from "#src/gpu_hash/hash_function.js";
+import type { MeshVertexIndices } from "#src/mesh/base.js";
 
 const DEBUG_TIMING = false;
 

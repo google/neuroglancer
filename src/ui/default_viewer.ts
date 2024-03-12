@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-import "./default_viewer.css";
+import "#src/ui/default_viewer.css";
+import {
+  disableContextMenu,
+  disableWheel,
+} from "#src/ui/disable_default_actions.js";
+import type { MinimalViewerOptions } from "#src/ui/minimal_viewer.js";
+import { makeMinimalViewer } from "#src/ui/minimal_viewer.js";
 
-import { ViewerOptions } from "#/viewer";
-import { disableContextMenu, disableWheel } from "#/ui/disable_default_actions";
-import { makeMinimalViewer } from "./minimal_viewer";
-
-export function makeDefaultViewer(options?: Partial<ViewerOptions>) {
+export function makeDefaultViewer(options?: Partial<MinimalViewerOptions>) {
   disableContextMenu();
   disableWheel();
   return makeMinimalViewer(options);

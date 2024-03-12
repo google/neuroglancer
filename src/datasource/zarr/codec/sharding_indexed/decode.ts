@@ -14,23 +14,26 @@
  * limitations under the License.
  */
 
-import { ChunkManager } from "#/chunk_manager/backend";
-import { SimpleAsyncCache } from "#/chunk_manager/generic_file_source";
-import { CodecKind } from "#/datasource/zarr/codec";
-import { decodeArray, registerCodec } from "#/datasource/zarr/codec/decode";
+import type { ChunkManager } from "#src/chunk_manager/backend.js";
+import { SimpleAsyncCache } from "#src/chunk_manager/generic_file_source.js";
 import {
-  Configuration,
-  ShardIndexLocation,
-} from "#/datasource/zarr/codec/sharding_indexed/resolve";
-import {
+  decodeArray,
+  registerCodec,
+} from "#src/datasource/zarr/codec/decode.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import type { Configuration } from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
+import { ShardIndexLocation } from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
+import type {
   ByteRangeRequest,
-  composeByteRangeRequest,
   ReadableKvStore,
   ReadOptions,
   ReadResponse,
-} from "#/kvstore";
-import { CancellationToken, uncancelableToken } from "#/util/cancellation";
-import { Owned, RefCounted } from "#/util/disposable";
+} from "#src/kvstore/index.js";
+import { composeByteRangeRequest } from "#src/kvstore/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
 
 type ShardIndex = BigUint64Array | undefined;
 

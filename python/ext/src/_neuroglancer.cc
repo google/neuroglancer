@@ -4,8 +4,6 @@
 #define DLL_PUBLIC __attribute__((visibility("default")))
 #endif
 
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include "on_demand_object_mesh_generator.h"
@@ -21,7 +19,7 @@ struct Obj {
 static PyObject* tp_new(PyTypeObject* type, PyObject* args, PyObject* kwds) {
   Obj* self;
 
-  self = reinterpret_cast<Obj*>(type->tp_alloc(type, 0));
+  self = reinterpret_cast<Obj*>(PyType_GenericAlloc(type, 0));
   if (self) {
     new (&self->impl) meshing::OnDemandObjectMeshGenerator();
   }
@@ -42,29 +40,25 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
                                   "lock_boundary_vertices",
                                   nullptr};
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "O(fff)(fff)|ddi:__init__", const_cast<char**>(kw_list),
-          &array_argument, voxel_size, voxel_size + 1, voxel_size + 2, offset,
-          offset + 1, offset + 2, &simplify_options.max_quadrics_error,
-          &simplify_options.max_normal_angle_deviation,
+          args, kwds, "O(fff)(fff)|ddi:__init__", const_cast<char**>(kw_list), &array_argument,
+          voxel_size, voxel_size + 1, voxel_size + 2, offset, offset + 1, offset + 2,
+          &simplify_options.max_quadrics_error, &simplify_options.max_normal_angle_deviation,
           &lock_boundary_vertices)) {
     return -1;
   }
-  simplify_options.lock_boundary_vertices =
-      static_cast<bool>(lock_boundary_vertices);
-  PyArrayObject* array = reinterpret_cast<PyArrayObject*>(PyArray_CheckFromAny(
-      array_argument, /*dtype=*/nullptr, /*min_depth=*/3, /*max_depth=*/3,
-      /*requirements=*/NPY_ARRAY_ALIGNED | NPY_ARRAY_NOTSWAPPED,
-      /*context=*/nullptr));
+  simplify_options.lock_boundary_vertices = static_cast<bool>(lock_boundary_vertices);
+  PyArrayObject* array = reinterpret_cast<PyArrayObject*>(
+      PyArray_CheckFromAny(array_argument, /*dtype=*/nullptr, /*min_depth=*/3, /*max_depth=*/3,
+                           /*requirements=*/NPY_ARRAY_ALIGNED | NPY_ARRAY_NOTSWAPPED,
+                           /*context=*/nullptr));
   if (!array) {
     return -1;
   }
   auto* descr = PyArray_DESCR(array);
   if ((descr->kind != 'i' && descr->kind != 'u') ||
-      (descr->elsize != 1 && descr->elsize != 2 && descr->elsize != 4 &&
-       descr->elsize != 8)) {
+      (descr->elsize != 1 && descr->elsize != 2 && descr->elsize != 4 && descr->elsize != 8)) {
     Py_DECREF(array);
-    PyErr_SetString(PyExc_ValueError,
-                    "ndarray must have 8-, 16-, 32-, or 64-bit integer type");
+    PyErr_SetString(PyExc_ValueError, "ndarray must have 8-, 16-, 32-, or 64-bit integer type");
     return -1;
   }
 
@@ -81,24 +75,24 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
 
   switch (descr->elsize) {
     case 1:
-      impl = meshing::OnDemandObjectMeshGenerator(
-          static_cast<const uint8_t*>(PyArray_DATA(array)), size_int64,
-          strides_in_elements, voxel_size, offset, simplify_options);
+      impl = meshing::OnDemandObjectMeshGenerator(static_cast<const uint8_t*>(PyArray_DATA(array)),
+                                                  size_int64, strides_in_elements, voxel_size,
+                                                  offset, simplify_options);
       break;
     case 2:
-      impl = meshing::OnDemandObjectMeshGenerator(
-          static_cast<const uint16_t*>(PyArray_DATA(array)), size_int64,
-          strides_in_elements, voxel_size, offset, simplify_options);
+      impl = meshing::OnDemandObjectMeshGenerator(static_cast<const uint16_t*>(PyArray_DATA(array)),
+                                                  size_int64, strides_in_elements, voxel_size,
+                                                  offset, simplify_options);
       break;
     case 4:
-      impl = meshing::OnDemandObjectMeshGenerator(
-          static_cast<const uint32_t*>(PyArray_DATA(array)), size_int64,
-          strides_in_elements, voxel_size, offset, simplify_options);
+      impl = meshing::OnDemandObjectMeshGenerator(static_cast<const uint32_t*>(PyArray_DATA(array)),
+                                                  size_int64, strides_in_elements, voxel_size,
+                                                  offset, simplify_options);
       break;
     case 8:
-      impl = meshing::OnDemandObjectMeshGenerator(
-          static_cast<const uint64_t*>(PyArray_DATA(array)), size_int64,
-          strides_in_elements, voxel_size, offset, simplify_options);
+      impl = meshing::OnDemandObjectMeshGenerator(static_cast<const uint64_t*>(PyArray_DATA(array)),
+                                                  size_int64, strides_in_elements, voxel_size,
+                                                  offset, simplify_options);
       break;
   }
 
@@ -110,7 +104,12 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
   return 0;
 }
 
-static void tp_dealloc(Obj* obj) { obj->impl.~OnDemandObjectMeshGenerator(); }
+static void tp_dealloc(PyObject* self) {
+  reinterpret_cast<Obj*>(self)->impl.~OnDemandObjectMeshGenerator();
+  PyTypeObject* tp = Py_TYPE(self);
+  PyObject_Free(self);
+  Py_DECREF(tp);
+}
 
 static PyObject* get_mesh(Obj* self, PyObject* args) {
   auto impl = self->impl;
@@ -144,64 +143,57 @@ static PyMethodDef methods[] = {
 };
 
 static void register_type(PyObject* module) {
-  static PyTypeObject t = {
-      PyVarObject_HEAD_INIT(NULL, 0)             /*ob_size*/
-      MODULE_NAME ".OnDemandObjectMeshGenerator", /*tp_name*/
-      sizeof(Obj),                                /*tp_basicsize*/
+  PyType_Spec spec = {};
+  spec.name = MODULE_NAME ".OnDemandObjectMeshGenerator";
+  spec.basicsize = sizeof(Obj);
+  spec.flags = Py_TPFLAGS_DEFAULT;
+  static PyType_Slot slots[] = {
+      {Py_tp_new, reinterpret_cast<void*>(&tp_new)},
+      {Py_tp_init, reinterpret_cast<void*>(&tp_init)},
+      {Py_tp_methods, reinterpret_cast<void*>(methods)},
+      {Py_tp_dealloc, reinterpret_cast<void*>(&tp_dealloc)},
+      {},
   };
-  t.tp_flags = Py_TPFLAGS_DEFAULT;
-  t.tp_init = reinterpret_cast<initproc>(&tp_init);
-  t.tp_new = tp_new;
-  t.tp_dealloc = reinterpret_cast<void (*)(PyObject*)>(&tp_dealloc);
-  t.tp_doc = "OnDemandObjectMeshGenerator";
-  t.tp_methods = methods;
-  if (PyType_Ready(&t) < 0) return;
-  Py_INCREF(&t);
-  PyModule_AddObject(module, "OnDemandObjectMeshGenerator",
-                     reinterpret_cast<PyObject*>(&t));
+  spec.slots = slots;
+  PyObject* t = PyType_FromSpec(&spec);
+  if (!t) return;
+  PyModule_AddObject(module, "OnDemandObjectMeshGenerator", t);
 }
 }  // namespace pywrap_on_demand_object_mesh_generator
-
 
 // The following Python2/3 compatibility code was derived from py3c.
 // Copyright (c) 2015, Red Hat, Inc. and/or its affiliates
 // Licensed under the MIT license.
 #if PY_MAJOR_VERSION >= 3
-#define MODULE_INIT_FUNC(name) \
-  extern "C" DLL_PUBLIC PyObject * PyInit_ ## name(void)
+#define MODULE_INIT_FUNC(name) extern "C" DLL_PUBLIC PyObject* PyInit_##name(void)
 #else
 #define PyModuleDef_HEAD_INIT 0
 
 typedef struct PyModuleDef {
-    int m_base;
-    const char* m_name;
-    const char* m_doc;
-    Py_ssize_t m_size;
-    PyMethodDef *m_methods;
+  int m_base;
+  const char* m_name;
+  const char* m_doc;
+  Py_ssize_t m_size;
+  PyMethodDef* m_methods;
 } PyModuleDef;
 
-#define PyModule_Create(def) \
-    Py_InitModule3((def)->m_name, (def)->m_methods, (def)->m_doc)
+#define PyModule_Create(def) Py_InitModule3((def)->m_name, (def)->m_methods, (def)->m_doc)
 
-#define MODULE_INIT_FUNC(name) \
-    static PyObject *PyInit_ ## name(void); \
-    extern "C" DLL_PUBLIC void init ## name(void) { PyInit_ ## name(); } \
-    static PyObject *PyInit_ ## name(void)
+#define MODULE_INIT_FUNC(name)                                     \
+  static PyObject* PyInit_##name(void);                            \
+  extern "C" DLL_PUBLIC void init##name(void) { PyInit_##name(); } \
+  static PyObject* PyInit_##name(void)
 
 #endif
-
 
 MODULE_INIT_FUNC(_neuroglancer) {
   static PyMethodDef module_methods[] = {
       {NULL} /* Sentinel */
   };
-  static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT,
-    "_neuroglancer", /* m_name */
-    "Neuroglancer C extension module.", /* m_doc */
-    -1, /* m_size */
-    module_methods
-  };
+  static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT, "_neuroglancer", /* m_name */
+                                         "Neuroglancer C extension module.",     /* m_doc */
+                                         -1,                                     /* m_size */
+                                         module_methods};
   import_array1(nullptr);
   PyObject* m = PyModule_Create(&moduledef);
   pywrap_on_demand_object_mesh_generator::register_type(m);

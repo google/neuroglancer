@@ -18,11 +18,11 @@
  * @file Facility for displaying remote status messages.
  */
 
-import debounce from "lodash/debounce";
-import { StatusMessage } from "#/status";
-import { NullarySignal } from "#/util/signal";
-import { RefCounted } from "#/util/disposable";
-import { verifyObject, verifyString } from "#/util/json";
+import { debounce } from "lodash-es";
+import { StatusMessage } from "#src/status.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { verifyObject, verifyString } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 export class TrackableBasedStatusMessages extends RefCounted {
   existingMessages = new Map<string, StatusMessage>();

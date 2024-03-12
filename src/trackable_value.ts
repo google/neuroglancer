@@ -14,21 +14,12 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import {
-  Borrowed,
-  Disposable,
-  invokeDisposers,
-  Owned,
-  RefCounted,
-} from "#/util/disposable";
-import {
-  neverSignal,
-  NullaryReadonlySignal,
-  NullarySignal,
-  Signal,
-} from "#/util/signal";
-import { Trackable } from "#/util/trackable";
+import { debounce } from "lodash-es";
+import type { Borrowed, Disposable, Owned } from "#src/util/disposable.js";
+import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
+import type { NullaryReadonlySignal } from "#src/util/signal.js";
+import { neverSignal, NullarySignal, Signal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
 
 export interface WatchableValueInterface<T> {
   value: T;
@@ -78,7 +69,9 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
       try {
         this.value = validator(x);
         return;
-      } catch (ignoredError) {}
+      } catch {
+        // Ignore invalid values in JSON representation.
+      }
     }
     this.value = this.defaultValue;
   }

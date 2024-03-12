@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-import "#/shared_watchable_value";
-
-import { ChunkRequester } from "#/chunk_manager/backend";
+import type { ChunkRequester } from "#src/chunk_manager/backend.js";
 import {
   ChunkPriorityTier,
   PREFETCH_PRIORITY_MULTIPLIER,
-} from "#/chunk_manager/base";
-import { SharedWatchableValue } from "#/shared_watchable_value";
-import { RPC } from "#/worker_rpc";
+} from "#src/chunk_manager/base.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { RPC } from "#src/worker_rpc.js";
 
 /**
  * Mixin for adding a visibility shared property to a ChunkRequester.  Calls

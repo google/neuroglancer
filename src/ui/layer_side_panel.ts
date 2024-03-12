@@ -18,40 +18,39 @@
  * @file Side panel for displaying/editing layer details.
  */
 
-import "#/ui/layer_side_panel.css";
+import "#src/ui/layer_side_panel.css";
 
-import svg_cursor from "ikonate/icons/cursor.svg";
+import svg_cursor from "ikonate/icons/cursor.svg?raw";
+import type {
+  ManagedUserLayer,
+  SelectedLayerState,
+  UserLayer,
+} from "#src/layer/index.js";
 import {
   changeLayerName,
   changeLayerType,
   deleteLayer,
   layerTypes,
-  ManagedUserLayer,
-  SelectedLayerState,
-  UserLayer,
-} from "#/layer";
-import { ElementVisibilityFromTrackableBoolean } from "#/trackable_boolean";
-import { CachedWatchableValue, observeWatchable } from "#/trackable_value";
+} from "#src/layer/index.js";
+import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
 import {
-  LAYER_SIDE_PANEL_DEFAULT_LOCATION,
-  UserLayerSidePanelState,
-} from "#/ui//layer_side_panel_state";
-import { popDragStatus, pushDragStatus } from "#/ui/drag_and_drop";
-import {
-  DRAG_OVER_CLASSNAME,
-  DragSource,
-  SidePanel,
-  SidePanelManager,
-} from "#/ui/side_panel";
-import { RefCounted } from "#/util/disposable";
+  CachedWatchableValue,
+  observeWatchable,
+} from "#src/trackable_value.js";
+import type { UserLayerSidePanelState } from "#src/ui//layer_side_panel_state.js";
+import { LAYER_SIDE_PANEL_DEFAULT_LOCATION } from "#src/ui//layer_side_panel_state.js";
+import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
+import type { DragSource, SidePanelManager } from "#src/ui/side_panel.js";
+import { DRAG_OVER_CLASSNAME, SidePanel } from "#src/ui/side_panel.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import { EventActionMap } from "#/util/mouse_bindings";
-import { CheckboxIcon } from "#/widget/checkbox_icon";
-import { makeDeleteButton } from "#/widget/delete_button";
-import { TabView } from "#/widget/tab_view";
+} from "#src/util/keyboard_bindings.js";
+import { EventActionMap } from "#src/util/mouse_bindings.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeDeleteButton } from "#src/widget/delete_button.js";
+import { TabView } from "#src/widget/tab_view.js";
 
 const layerNameInputEventMap = EventActionMap.fromObject({
   escape: { action: "cancel" },

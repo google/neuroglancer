@@ -14,28 +14,28 @@
  * limitations under the License.
  */
 
-import "#/noselect.css";
-import "./layer_bar.css";
-
-import svg_plus from "ikonate/icons/plus.svg";
-import { addNewLayer, deleteLayer, makeLayer, ManagedUserLayer } from "#/layer";
-import { LayerGroupViewer } from "#/layer_group_viewer";
-import { NavigationLinkType } from "#/navigation_state";
-import { WatchableValueInterface } from "#/trackable_value";
+import "#src/noselect.css";
+import "#src/ui/layer_bar.css";
+import svg_plus from "ikonate/icons/plus.svg?raw";
+import type { ManagedUserLayer } from "#src/layer/index.js";
+import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
+import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
+import { NavigationLinkType } from "#src/navigation_state.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
-  DropLayers,
   registerLayerBarDragLeaveHandler,
   registerLayerBarDropHandlers,
   registerLayerDragHandlers,
-} from "#/ui/layer_drag_and_drop";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
-import { preventDrag } from "#/util/drag_and_drop";
-import { makeCloseButton } from "#/widget/close_button";
-import { makeDeleteButton } from "#/widget/delete_button";
-import { makeIcon } from "#/widget/icon";
-import { PositionWidget } from "#/widget/position_widget";
+} from "#src/ui/layer_drag_and_drop.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
+import { preventDrag } from "#src/util/drag_and_drop.js";
+import { makeCloseButton } from "#src/widget/close_button.js";
+import { makeDeleteButton } from "#src/widget/delete_button.js";
+import { makeIcon } from "#src/widget/icon.js";
+import { PositionWidget } from "#src/widget/position_widget.js";
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");

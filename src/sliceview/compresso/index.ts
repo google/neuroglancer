@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import compressoWasmDataUrl from "./compresso.wasm";
-
 const libraryEnv = {
   emscripten_notify_memory_growth: () => {},
   proc_exit: (code: number) => {
@@ -24,13 +22,16 @@ const libraryEnv = {
 };
 
 const compressoModulePromise = (async () => {
-  const response = await fetch(compressoWasmDataUrl);
-  const wasmCode = await response.arrayBuffer();
-  const m = await WebAssembly.instantiate(wasmCode, {
-    env: libraryEnv,
-    wasi_snapshot_preview1: libraryEnv,
-  });
-  (m.instance.exports._initialize as Function)();
+  const m = (
+    await WebAssembly.instantiateStreaming(
+      fetch(new URL("./compresso.wasm", import.meta.url)),
+      {
+        env: libraryEnv,
+        wasi_snapshot_preview1: libraryEnv,
+      },
+    )
+  ).instance;
+  (m.exports._initialize as Function)();
   return m;
 })();
 
@@ -80,14 +81,12 @@ export async function decompressCompresso(
 
   // heap must be referenced after creating bufPtr because
   // memory growth can detatch the buffer.
-  const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
-  const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
-  const heap = new Uint8Array(
-    (m.instance.exports.memory as WebAssembly.Memory).buffer,
-  );
+  const imagePtr = (m.exports.malloc as Function)(nbytes);
+  const bufPtr = (m.exports.malloc as Function)(buffer.byteLength);
+  const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, bufPtr);
 
-  const code = (m.instance.exports.compresso_decompress as Function)(
+  const code = (m.exports.compresso_decompress as Function)(
     bufPtr,
     buffer.byteLength,
     imagePtr,
@@ -104,7 +103,7 @@ export async function decompressCompresso(
     // because memory growth during decompress could have detached
     // the buffer.
     const image = new Uint8Array(
-      (m.instance.exports.memory as WebAssembly.Memory).buffer,
+      (m.exports.memory as WebAssembly.Memory).buffer,
       imagePtr,
       voxels * dataWidth,
     );
@@ -112,7 +111,7 @@ export async function decompressCompresso(
     // and we can free the emscripten buffer
     return image.slice(0);
   } finally {
-    (m.instance.exports.free as Function)(bufPtr);
-    (m.instance.exports.free as Function)(imagePtr);
+    (m.exports.free as Function)(bufPtr);
+    (m.exports.free as Function)(imagePtr);
   }
 }

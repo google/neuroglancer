@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#/util/uint64";
-import { decodeZIndexCompressed, zorder3LessThan } from "#/util/zorder";
+import { describe, it, expect } from "vitest";
+import { Uint64 } from "#src/util/uint64.js";
+import { decodeZIndexCompressed, zorder3LessThan } from "#src/util/zorder.js";
 
 describe("decodeZIndexCompressed", () => {
   it("works for repetitive pattern 21,21,21", () => {

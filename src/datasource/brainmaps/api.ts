@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import { CredentialsProvider } from "#/credentials_provider";
-import {
-  fetchWithOAuth2Credentials,
-  OAuth2Credentials,
-} from "#/credentials_provider/oauth2";
-import { CancellationToken, uncancelableToken } from "#/util/cancellation";
-import { responseArrayBuffer, responseJson } from "#/util/http_request";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import { responseArrayBuffer, responseJson } from "#src/util/http_request.js";
 
 export type { OAuth2Credentials };
 

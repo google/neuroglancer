@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import { TrackableValue, WatchableValue } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
+import type { WatchableValue } from "#src/trackable_value.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
 
 export class NumberInputWidget extends RefCounted {
   element = document.createElement("label");

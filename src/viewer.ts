@@ -14,34 +14,35 @@
  * limitations under the License.
  */
 
-import "./viewer.css";
-import "#/noselect.css";
-
-import svg_controls_alt from "ikonate/icons/controls-alt.svg";
-import svg_layers from "ikonate/icons/layers.svg";
-import svg_list from "ikonate/icons/list.svg";
-import svg_settings from "ikonate/icons/settings.svg";
-import debounce from "lodash/debounce";
+import "#src/viewer.css";
+import "#src/ui/layer_data_sources_tab.js";
+import "#src/noselect.css";
+import svg_controls_alt from "ikonate/icons/controls-alt.svg?raw";
+import svg_layers from "ikonate/icons/layers.svg?raw";
+import svg_list from "ikonate/icons/list.svg?raw";
+import svg_settings from "ikonate/icons/settings.svg?raw";
+import { debounce } from "lodash-es";
+import type { FrameNumberCounter } from "#src/chunk_manager/frontend.js";
 import {
   CapacitySpecification,
   ChunkManager,
   ChunkQueueManager,
-  FrameNumberCounter,
-} from "#/chunk_manager/frontend";
+} from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
   TrackableCoordinateSpace,
-} from "#/coordinate_transform";
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
-import { InputEventBindings as DataPanelInputEventBindings } from "#/data_panel_layout";
-import { DataSourceProviderRegistry } from "#/datasource";
-import { getDefaultDataSourceProvider } from "#/datasource/default_provider";
-import { StateShare, stateShareEnabled } from "#/datasource/state_share";
-import { DisplayContext, TrackableWindowedViewport } from "#/display_context";
+} from "#src/coordinate_transform.js";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { InputEventBindings as DataPanelInputEventBindings } from "#src/data_panel_layout.js";
+import { getDefaultDataSourceProvider } from "#src/datasource/default_provider.js";
+import type { DataSourceProviderRegistry } from "#src/datasource/index.js";
+import { StateShare, stateShareEnabled } from "#src/datasource/state_share.js";
+import type { DisplayContext } from "#src/display_context.js";
+import { TrackableWindowedViewport } from "#src/display_context.js";
 import {
   HelpPanelState,
   InputEventBindingHelpDialog,
-} from "#/help/input_event_bindings";
+} from "#src/help/input_event_bindings.js";
 import {
   addNewLayer,
   LayerManager,
@@ -50,8 +51,10 @@ import {
   SelectedLayerState,
   TopLevelLayerListSpecification,
   TrackableDataSelectionState,
-} from "#/layer";
-import { RootLayoutContainer } from "#/layer_groups_layout";
+  UserLayer,
+} from "#src/layer/index.js";
+import { LayerGroupViewer } from "#src/layer_group_viewer.js";
+import { RootLayoutContainer } from "#src/layer_groups_layout.js";
 import {
   CoordinateSpacePlaybackVelocity,
   DisplayPose,
@@ -65,64 +68,78 @@ import {
   TrackableProjectionZoom,
   TrackableRelativeDisplayScales,
   WatchableDisplayDimensionRenderInfo,
-} from "#/navigation_state";
-import { overlaysOpen } from "#/overlay";
-import { allRenderLayerRoles, RenderLayerRole } from "#/renderlayer";
-import { StatusMessage } from "#/status";
+} from "#src/navigation_state.js";
+import { overlaysOpen } from "#src/overlay.js";
+import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
+import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
   TrackableBoolean,
-} from "#/trackable_boolean";
+} from "#src/trackable_boolean.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeDerivedWatchableValue,
   observeWatchable,
   TrackableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
+} from "#src/trackable_value.js";
 import {
   LayerArchiveCountWidget,
   LayerListPanel,
   LayerListPanelState,
-} from "#/ui/layer_list_panel";
-import { LayerSidePanelManager } from "#/ui/layer_side_panel";
-import { setupPositionDropHandlers } from "#/ui/position_drag_and_drop";
-import { SelectionDetailsPanel } from "#/ui/selection_details";
-import { SidePanelManager } from "#/ui/side_panel";
-import { StateEditorDialog } from "#/ui/state_editor";
-import { StatisticsDisplayState, StatisticsPanel } from "#/ui/statistics";
-import { GlobalToolBinder, LocalToolBinder } from "#/ui/tool";
+} from "#src/ui/layer_list_panel.js";
+import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
+import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
+import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
+import { SidePanelManager } from "#src/ui/side_panel.js";
+import { StateEditorDialog } from "#src/ui/state_editor.js";
+import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
+import { GlobalToolBinder, LocalToolBinder } from "#src/ui/tool.js";
 import {
   ViewerSettingsPanel,
   ViewerSettingsPanelState,
-} from "#/ui/viewer_settings";
-import { AutomaticallyFocusedElement } from "#/util/automatic_focus";
-import { TrackableRGB } from "#/util/color";
-import { Borrowed, Owned, RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
-import { ActionEvent, registerActionListener } from "#/util/event_action_map";
-import { vec3 } from "#/util/geom";
+} from "#src/ui/viewer_settings.js";
+import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
+import { TrackableRGB } from "#src/util/color.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { registerActionListener } from "#src/util/event_action_map.js";
+import { vec3 } from "#src/util/geom.js";
 import {
   parseFixedLengthArray,
   verifyFinitePositiveFloat,
   verifyObject,
   verifyOptionalObjectProperty,
   verifyString,
-} from "#/util/json";
-import { EventActionMap, KeyboardEventBinder } from "#/util/keyboard_bindings";
-import { NullarySignal } from "#/util/signal";
+} from "#src/util/json.js";
+import {
+  EventActionMap,
+  KeyboardEventBinder,
+} from "#src/util/keyboard_bindings.js";
+import { NullarySignal } from "#src/util/signal.js";
 import {
   CompoundTrackable,
   optionallyRestoreFromJsonMember,
-} from "#/util/trackable";
-import { ViewerState, VisibilityPrioritySpecification } from "#/viewer_state";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import { GL } from "#/webgl/context";
-import { AnnotationToolStatusWidget } from "#/widget/annotation_tool_status";
-import { CheckboxIcon } from "#/widget/checkbox_icon";
-import { makeIcon } from "#/widget/icon";
-import { MousePositionWidget, PositionWidget } from "#/widget/position_widget";
-import { TrackableScaleBarOptions } from "#/widget/scale_bar";
-import { RPC } from "#/worker_rpc";
+} from "#src/util/trackable.js";
+import type {
+  ViewerState,
+  VisibilityPrioritySpecification,
+} from "#src/viewer_state.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import type { GL } from "#src/webgl/context.js";
+import { AnnotationToolStatusWidget } from "#src/widget/annotation_tool_status.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeIcon } from "#src/widget/icon.js";
+import {
+  MousePositionWidget,
+  PositionWidget,
+  registerDimensionToolForLayerGroupViewer,
+  registerDimensionToolForUserLayer,
+  registerDimensionToolForViewer,
+} from "#src/widget/position_widget.js";
+import { TrackableScaleBarOptions } from "#src/widget/scale_bar.js";
+import { RPC } from "#src/worker_rpc.js";
 
 declare let NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any;
 
@@ -145,11 +162,15 @@ export class DataManagementContext extends RefCounted {
   constructor(
     public gl: GL,
     public frameNumberCounter: FrameNumberCounter,
-    bundleRoot = "",
   ) {
     super();
-    const chunk_worker_url = bundleRoot + "chunk_worker.bundle.js";
-    this.worker = new Worker(chunk_worker_url);
+    // Note: For compatibility with multiple bundlers, a browser-compatible URL
+    // must be used with `new URL`, which means a Node.js subpath import like
+    // "#src/chunk_worker.bundle.js" cannot be used.
+    this.worker = new Worker(
+      new URL("./chunk_worker.bundle.js", import.meta.url),
+      { type: "module" },
+    );
     this.chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(
         new RPC(this.worker),
@@ -245,7 +266,6 @@ export interface ViewerOptions
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
-  bundleRoot: string;
 }
 
 const defaultViewerOptions =
@@ -516,11 +536,7 @@ export class Viewer extends RefCounted implements ViewerState {
     super();
 
     const {
-      dataContext = new DataManagementContext(
-        display.gl,
-        display,
-        options.bundleRoot,
-      ),
+      dataContext = new DataManagementContext(display.gl, display),
       visibility = new WatchableVisibilityPriority(
         WatchableVisibilityPriority.VISIBLE,
       ),
@@ -1141,4 +1157,21 @@ export class Viewer extends RefCounted implements ViewerState {
       }
     }
   }
+
+  isReady() {
+    this.chunkQueueManager.flushPendingChunkUpdates();
+    if (!this.display.isReady()) {
+      return false;
+    }
+    for (const layer of this.layerManager.managedLayers) {
+      if (!layer.isReady()) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
+
+registerDimensionToolForViewer(Viewer);
+registerDimensionToolForLayerGroupViewer(LayerGroupViewer);
+registerDimensionToolForUserLayer(UserLayer);

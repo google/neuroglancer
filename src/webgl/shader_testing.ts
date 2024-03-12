@@ -14,15 +14,22 @@
  * limitations under the License.
  */
 
-import { DataType } from "#/util/data_type";
-import { RefCounted } from "#/util/disposable";
-import { Uint64 } from "#/util/uint64";
-import { GL } from "#/webgl/context";
-import { FramebufferConfiguration, TextureBuffer } from "#/webgl/offscreen";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { dataTypeShaderDefinition, getShaderType } from "#/webgl/shader_lib";
-import { getSquareCornersBuffer } from "#/webgl/square_corners_buffer";
-import { webglTest } from "#/webgl/testing";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { Uint64 } from "#src/util/uint64.js";
+import type { GL } from "#src/webgl/context.js";
+import {
+  FramebufferConfiguration,
+  TextureBuffer,
+} from "#src/webgl/offscreen.js";
+import type { ShaderProgram } from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
+import {
+  dataTypeShaderDefinition,
+  getShaderType,
+} from "#src/webgl/shader_lib.js";
+import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
+import { webglTest } from "#src/webgl/testing.js";
 
 export type ShaderIoType = "int" | "uint" | "float" | "bool" | DataType;
 

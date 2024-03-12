@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
-import { credentialsKey } from "#/datasource/boss/api";
-import { BossCredentialsProvider } from "#/datasource/boss/credentials_provider";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { credentialsKey } from "#src/datasource/boss/api.js";
+import { BossCredentialsProvider } from "#src/datasource/boss/credentials_provider.js";
 
 defaultCredentialsManager.register(
   credentialsKey,

@@ -10,8 +10,9 @@ def add_example_layer(state):
         *[np.linspace(0, 1, n) for n in [100, 100, 100]], indexing="ij"
     )
     b = (
-        np.cast[np.int32](
-            np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10)
+        np.asarray(
+            np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10),
+            dtype=np.int32,
         )
         - 2
     )

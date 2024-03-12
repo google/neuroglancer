@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-import "./layer_control.css";
+import "#src/widget/layer_control.css";
 
-import { DisplayContext } from "#/display_context";
-import { UserLayer, UserLayerConstructor } from "#/layer";
-import { WatchableValueInterface } from "#/trackable_value";
+import type { DisplayContext } from "#src/display_context.js";
+import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
   makeToolActivationStatusMessageWithHeader,
   registerTool,
-  ToolActivation,
   ToolBindingWidget,
-} from "#/ui/tool";
-import { RefCounted } from "#/util/disposable";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import { DependentViewWidget } from "#/widget/dependent_view_widget";
+} from "#src/ui/tool.js";
+import type { RefCounted } from "#src/util/disposable.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 
 export interface LayerControlLabelOptions<
   LayerType extends UserLayer = UserLayer,

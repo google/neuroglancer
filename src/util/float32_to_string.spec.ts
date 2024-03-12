@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { float32ToString } from "#/util/float32_to_string";
+import { describe, it, expect } from "vitest";
+import { float32ToString } from "#src/util/float32_to_string.js";
 
 describe("float32_to_minimal_string", () => {
   it("valid_float_to_minimal_string", () => {

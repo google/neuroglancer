@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { RefCounted } from "#/util/disposable";
-import { isInputTextTarget } from "#/util/dom";
-import LinkedListOperations from "#/util/linked_list.0";
+import { debounce } from "lodash-es";
+import { RefCounted } from "#src/util/disposable.js";
+import { isInputTextTarget } from "#src/util/dom.js";
+import LinkedListOperations from "#src/util/linked_list.0.js";
 
 class AutomaticFocusList {
   next0: AutomaticallyFocusedElement | null;

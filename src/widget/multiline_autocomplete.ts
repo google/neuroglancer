@@ -14,31 +14,32 @@
  * limitations under the License.
  */
 
-import "./multiline_autocomplete.css";
+import "#src/widget/multiline_autocomplete.css";
 
-import debounce from "lodash/debounce";
-import {
-  CancellationToken,
-  CancellationTokenSource,
-} from "#/util/cancellation";
-import {
+import { debounce } from "lodash-es";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { CancellationTokenSource } from "#src/util/cancellation.js";
+import type {
   BasicCompletionResult,
   Completion,
   CompletionWithDescription,
-} from "#/util/completion";
-import { RefCounted } from "#/util/disposable";
-import { removeChildren, removeFromParent } from "#/util/dom";
-import { positionDropdown } from "#/util/dropdown";
+} from "#src/util/completion.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren, removeFromParent } from "#src/util/dom.js";
+import { positionDropdown } from "#src/util/dropdown.js";
 import {
   EventActionMap,
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import { longestCommonPrefix } from "#/util/longest_common_prefix";
-import { Signal } from "#/util/signal";
-import { VirtualList } from "#/widget/virtual_list";
+} from "#src/util/keyboard_bindings.js";
+import { longestCommonPrefix } from "#src/util/longest_common_prefix.js";
+import { Signal } from "#src/util/signal.js";
+import { VirtualList } from "#src/widget/virtual_list.js";
 
-export type { Completion, CompletionWithDescription } from "#/util/completion";
+export type {
+  Completion,
+  CompletionWithDescription,
+} from "#src/util/completion.js";
 
 const ACTIVE_COMPLETION_CLASS_NAME =
   "neuroglancer-multiline-autocomplete-completion-active";

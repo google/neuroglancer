@@ -96,8 +96,8 @@ void main() {
         boundary_mask[:-1, :, :] |= gt_data[:-1, :, :] != gt_data[1:, :, :]
         boundary_mask[1:, :, :] |= gt_data[:-1, :, :] != gt_data[1:, :, :]
         dist_transform = scipy.ndimage.morphology.distance_transform_edt(~boundary_mask)
-        self.inf_results[slice_expr] = 1 + np.cast[np.uint8](
-            np.minimum(dist_transform, 5) / 5.0 * 254
+        self.inf_results[slice_expr] = 1 + np.asarray(
+            np.minimum(dist_transform, 5) / 5.0 * 254, dtype=np.uint8
         )
         self.inf_volume.invalidate()
 

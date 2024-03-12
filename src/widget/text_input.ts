@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { TrackableValueInterface } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
+import type { TrackableValueInterface } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
 
 export class TextInputWidget<T> extends RefCounted {
   element = document.createElement("input");
@@ -40,7 +40,9 @@ export class TextInputWidget<T> extends RefCounted {
   private updateModel() {
     try {
       this.model.restoreState(this.element.value);
-    } catch {}
+    } catch {
+      // Ignore invalid input.
+    }
     this.updateView();
   }
 }

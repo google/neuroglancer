@@ -1,28 +1,31 @@
 name: Build
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v**
+  pull_request:
 
 jobs:
   client:
     strategy:
       matrix:
-        node-version:
-          - "20.x"
         os:
           - "ubuntu-latest"
           - "windows-latest"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-      - uses: actions/cache@v2
-        with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+          node-version: 20.x
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            examples/**/package-lock.json
       - run: npm install
       - run: npm run format:fix
       - name: Check for dirty working directory
@@ -31,25 +34,23 @@ jobs:
       - name: Typecheck with TypeScript
         run: npm run typecheck
       - name: Build client bundles
-        run: npm run build -- --no-typecheck
-      - name: Build JavaScript module
-        run: npm run build-module -- --no-typecheck
+        run: npm run build -- --no-typecheck --no-lint
       - name: Build Python client bundles
-        run: npm run build-python -- --no-typecheck
+        run: npm run build-python -- --no-typecheck --no-lint
+      - run: npm run build-package
+      - run: npm publish --dry-run
+        working-directory: dist/package
       - uses: ./.github/actions/setup-firefox
       - name: Run JavaScript tests (including WebGL)
-        # Swiftshader, used by Chrome headless, crashes when running Neuroglancer
-        # tests.
-        #
-        # The only reliable headless configuration is Firefox on Linux under
-        # xvfb-run, which uses Mesa software rendering.
-        if: startsWith(runner.os, 'Linux')
-        run: xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' npm run test -- --browsers Firefox
-      - name: Run JavaScript tests (excluding WebGL)
-        if: ${{ !startsWith(runner.os, 'Linux') }}
-        run: npm run test -- --browsers ChromeHeadless --define=NEUROGLANCER_SKIP_WEBGL_TESTS
+        run: npm test
       - name: Run JavaScript benchmarks
         run: npm run benchmark
+      - name: Upload NPM package as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: dist/package
+        if: ${{ runner.os == 'Linux' }}
 
   # Builds Python package and runs Python tests
   #
@@ -61,45 +62,29 @@ jobs:
       matrix:
         python-version:
           - "3.9"
-          - "3.10"
-          - "3.11"
-        node-version:
-          - "20.x"
+          - "3.12"
         os:
           - "ubuntu-latest"
           - "windows-latest"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20.x
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v2
-        with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
-      - name: Get pip cache dir
-        id: pip-cache
-        run: |
-          echo "::set-output name=dir::$(pip cache dir)"
-      - uses: actions/cache@v2
-        with:
-          path: ${{ steps.pip-cache.outputs.dir }}
-          key: ${{ runner.os }}-${{ matrix.python-version }}-pip-${{ hashFiles('setup.py') }}
       # Uncomment the action below for an interactive shell
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
       - name: Install Python packaging/test tools
-        run: python -m pip install --upgrade pip tox nox wheel numpy pytest
+        run: python -m pip install --upgrade pip tox nox wheel numpy -r python/requirements-test.txt
       - uses: ./.github/actions/setup-firefox
       - run: nox -s lint format mypy
       - name: Check for dirty working directory
@@ -120,49 +105,37 @@ jobs:
           - os: "ubuntu-latest"
             cibw_build: "*"
             wheel_identifier: "linux"
-            node-version: "20.x"
           - os: "windows-latest"
             cibw_build: "*"
             wheel_identifier: "windows"
-            node-version: "20.x"
-          - os: "macos-latest"
+          - os: "macos-14"
             cibw_build: "*_x86_64"
             wheel_identifier: "macos_x86_64"
-            node-version: "20.x"
-          - os: "macos-latest"
+          - os: "macos-14"
             cibw_build: "*_arm64"
             wheel_identifier: "macos_arm64"
-            node-version: "20.x"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - name: Use Node.js
-        uses: actions/setup-node@v1
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20.x
+          cache: "npm"
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
-      - uses: actions/cache@v2
-        with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
       - name: Get pip cache dir
         id: pip-cache
         run: |
-          echo "::set-output name=dir::$(pip cache dir)"
-      - uses: actions/cache@v2
-        with:
-          path: ${{ steps.pip-cache.outputs.dir }}
-          key: ${{ runner.os }}-buildwheel-${{ hashFiles('setup.py') }}
+          echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
       - run: npm install
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
-          npm run build-python -- --no-typecheck --define NEUROGLANCER_BUILD_INFO="${build_info}"
+          npm run build-python -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"
         shell: bash
       - name: Check for dirty working directory
         run: git diff --exit-code
@@ -181,36 +154,35 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.pip-cache.outputs.dir }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: python-wheels-${{ matrix.wheel_identifier }}
           path: |
             dist/*.whl
             dist/*.tar.gz
 
-  python-publish-package:
+  publish-package:
     # Only publish package on push to tag or default branch.
     if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') }}
     runs-on: ubuntu-latest
     needs:
+      - "client"
       - "python-build-package"
     steps:
-      - uses: actions/download-artifact@v2
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          name: python-wheels-linux
-          path: dist
-      - uses: actions/download-artifact@v2
+          node-version: 20.x
+          registry-url: "https://registry.npmjs.org"
+      - uses: actions/download-artifact@v4
         with:
-          name: python-wheels-macos_x86_64
+          pattern: python-wheels-*
           path: dist
-      - uses: actions/download-artifact@v2
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
         with:
-          name: python-wheels-macos_arm64
-          path: dist
-      - uses: actions/download-artifact@v2
-        with:
-          name: python-wheels-windows
-          path: dist
+          name: npm-package
+          path: npm-package
       # - name: Publish to PyPI (test server)
       #   uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
       #   with:
@@ -222,23 +194,26 @@ jobs:
           user: __token__
           password: ${{ secrets.pypi_token }}
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      # Disabling publishing to NPM
+      # - name: Publish to NPM registry
+      #   if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      #   run: npm publish
+      #   working-directory: npm-package
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
   ngauth:
     strategy:
       matrix:
-        go-version: ["1.19"]
         os:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup go ${{ matrix.go-version }}
-        uses: actions/setup-go@v1
+      - uses: actions/checkout@v4
+      - name: Setup go
+        uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-      - uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
+          go-version-file: ngauth_server/go.mod
+          cache-dependency-path: ngauth_server/go.sum
       - run: go build .
         working-directory: ngauth_server
   wasm:
@@ -249,7 +224,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: ./src/mesh/draco/build.sh
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh

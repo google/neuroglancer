@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { WatchableValueInterface } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { NullarySignal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
+import { debounce } from "lodash-es";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
 
 export class TrackableBoolean implements Trackable {
   get value() {

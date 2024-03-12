@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { RenderViewport, renderViewportsEqual } from "#/display_context";
-import { DisplayDimensionRenderInfo } from "#/navigation_state";
-import { arraysEqual } from "#/util/array";
-import { mat4 } from "#/util/geom";
-import { kEmptyFloat32Vec } from "#/util/vector";
+import { RenderViewport, renderViewportsEqual } from "#src/display_context.js";
+import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import { arraysEqual } from "#src/util/array.js";
+import { mat4 } from "#src/util/geom.js";
+import { kEmptyFloat32Vec } from "#src/util/vector.js";
 
 export class ProjectionParameters extends RenderViewport {
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;

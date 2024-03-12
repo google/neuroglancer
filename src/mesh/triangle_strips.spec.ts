@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   computeTriangleStrips,
   getBaseIndex,
@@ -22,7 +23,7 @@ import {
   vertexAIndex,
   vertexBIndex,
   vertexCIndex,
-} from "#/mesh/triangle_strips";
+} from "#src/mesh/triangle_strips.js";
 
 describe("triangle_strips", () => {
   describe("getBaseIndex", () => {

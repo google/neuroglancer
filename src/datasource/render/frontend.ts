@@ -19,39 +19,40 @@
  * Support for Render (https://github.com/saalfeldlab/render) servers.
  */
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import {
+} from "#src/coordinate_transform.js";
+import type {
   CompleteUrlOptions,
   CompletionResult,
   DataSource,
-  DataSourceProvider,
   GetDataSourceOptions,
-} from "#/datasource";
-import { TileChunkSourceParameters } from "#/datasource/render/base";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
+import { TileChunkSourceParameters } from "#src/datasource/render/base.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   DataType,
   makeVolumeChunkSpecification,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
 import {
   applyCompletionOffset,
   getPrefixMatchesWithDescriptions,
-} from "#/util/completion";
-import { mat4, vec3 } from "#/util/geom";
-import { fetchOk } from "#/util/http_request";
+} from "#src/util/completion.js";
+import { mat4, vec3 } from "#src/util/geom.js";
+import { fetchOk } from "#src/util/http_request.js";
 import {
   parseArray,
   parseQueryStringParameters,
@@ -62,7 +63,7 @@ import {
   verifyOptionalInt,
   verifyOptionalString,
   verifyString,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 const VALID_ENCODINGS = new Set<string>(["jpg", "raw16"]);
 
@@ -515,8 +516,8 @@ export function getOwnerInfo(
 }
 
 const pathPattern =
-  /^([^\/?]+)(?:\/([^\/?]+))?(?:\/([^\/?]+))(?:\/([^\/?]*))?(?:\?(.*))?$/;
-const urlPattern = /^((?:(?:(?:http|https):\/\/[^,\/]+)[^\/?]))\/(.*)$/;
+  /^([^/?]+)(?:\/([^/?]+))?(?:\/([^/?]+))(?:\/([^/?]*))?(?:\?(.*))?$/;
+const urlPattern = /^((?:(?:(?:http|https):\/\/[^,/]+)[^/?]))\/(.*)$/;
 
 function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
   let hostname: string;
@@ -600,7 +601,7 @@ export async function stackAndProjectCompleter(
   path: string,
 ): Promise<CompletionResult> {
   const stackMatch = path.match(
-    /^(?:([^\/]+)(?:\/([^\/]*))?(?:\/([^\/]*))?(\/.*?)?)?$/,
+    /^(?:([^/]+)(?:\/([^/]*))?(?:\/([^/]*))?(\/.*?)?)?$/,
   );
   if (stackMatch === null) {
     // URL has incorrect format, don't return any results.

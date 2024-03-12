@@ -14,119 +14,130 @@
  * limitations under the License.
  */
 
-import "#/annotation/bounding_box";
-import "#/annotation/line";
-import "#/annotation/point";
-import "#/annotation/ellipsoid";
+import "#src/annotation/bounding_box.js";
+import "#src/annotation/line.js";
+import "#src/annotation/point.js";
+import "#src/annotation/ellipsoid.js";
 
-import {
-  AnnotationBase,
-  AnnotationSerializer,
-  AnnotationSource,
-  annotationTypes,
-  formatAnnotationPropertyValue,
-  SerializedAnnotations,
-} from "#/annotation";
-import {
+import type {
   AnnotationLayerState,
   OptionalSegmentationDisplayState,
-} from "#/annotation/annotation_layer_state";
+} from "#src/annotation/annotation_layer_state.js";
 import {
   ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   ANNOTATION_RENDER_LAYER_RPC_ID,
   ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID,
   ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID,
   forEachVisibleAnnotationChunk,
-} from "#/annotation/base";
-import {
+} from "#src/annotation/base.js";
+import type {
   AnnotationGeometryChunkSource,
   AnnotationGeometryData,
+} from "#src/annotation/frontend_source.js";
+import {
   computeNumPickIds,
   MultiscaleAnnotationSource,
-} from "#/annotation/frontend_source";
+} from "#src/annotation/frontend_source.js";
+import type {
+  AnnotationBase,
+  SerializedAnnotations,
+} from "#src/annotation/index.js";
 import {
+  AnnotationSerializer,
+  AnnotationSource,
+  annotationTypes,
+  formatAnnotationPropertyValue,
+} from "#src/annotation/index.js";
+import type {
   AnnotationRenderContext,
   AnnotationRenderHelper,
-  getAnnotationTypeRenderHandler,
-} from "#/annotation/type_handler";
-import { ChunkState, LayerChunkProgressInfo } from "#/chunk_manager/base";
-import {
-  ChunkManager,
-  ChunkRenderLayerFrontend,
-} from "#/chunk_manager/frontend";
-import {
+} from "#src/annotation/type_handler.js";
+import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js";
+import { ChunkState, LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
+import type {
   LayerView,
   MouseSelectionState,
   PickState,
   VisibleLayerInfo,
-} from "#/layer";
-import { DisplayDimensionRenderInfo } from "#/navigation_state";
-import { PerspectivePanel } from "#/perspective_view/panel";
-import {
+} from "#src/layer/index.js";
+import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import type {
   PerspectiveViewReadyRenderContext,
   PerspectiveViewRenderContext,
-  PerspectiveViewRenderLayer,
-} from "#/perspective_view/render_layer";
-import {
+} from "#src/perspective_view/render_layer.js";
+import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
+import type {
   ChunkDisplayTransformParameters,
   ChunkTransformParameters,
+  RenderLayerTransformOrError,
+} from "#src/render_coordinate_transform.js";
+import {
   getChunkDisplayTransformParameters,
   getChunkPositionFromCombinedGlobalLocalPositions,
   getLayerDisplayDimensionMapping,
-  RenderLayerTransformOrError,
-} from "#/render_coordinate_transform";
-import { RenderScaleHistogram } from "#/render_scale_statistics";
-import {
+} from "#src/render_coordinate_transform.js";
+import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
+import type {
   ThreeDimensionalReadyRenderContext,
   VisibilityTrackedRenderLayer,
-} from "#/renderlayer";
+} from "#src/renderlayer.js";
 import {
   forEachVisibleSegment,
   getObjectKey,
-} from "#/segmentation_display_state/base";
-import { sendVisibleSegmentsState } from "#/segmentation_display_state/frontend";
-import { SharedWatchableValue } from "#/shared_watchable_value";
-import { SliceViewProjectionParameters } from "#/sliceview/base";
+} from "#src/segmentation_display_state/base.js";
+import { sendVisibleSegmentsState } from "#src/segmentation_display_state/frontend.js";
+import { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { SliceViewProjectionParameters } from "#src/sliceview/base.js";
+import type { FrontendTransformedSource } from "#src/sliceview/frontend.js";
 import {
-  FrontendTransformedSource,
   getVolumetricTransformedSources,
   serializeAllTransformedSources,
-} from "#/sliceview/frontend";
-import {
+} from "#src/sliceview/frontend.js";
+import type {
   SliceViewPanelReadyRenderContext,
   SliceViewPanelRenderContext,
-  SliceViewPanelRenderLayer,
   SliceViewRenderLayer,
-} from "#/sliceview/renderlayer";
+} from "#src/sliceview/renderlayer.js";
+import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
 import {
   crossSectionBoxWireFrameShader,
   projectionViewBoxWireFrameShader,
-} from "#/sliceview/wire_frame";
+} from "#src/sliceview/wire_frame.js";
+import type {
+  NestedStateManager,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
 import {
   constantWatchableValue,
   makeCachedDerivedWatchableValue,
-  NestedStateManager,
   registerNested,
   registerNestedSync,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { arraysEqual } from "#/util/array";
-import { Borrowed, Owned, RefCounted } from "#/util/disposable";
-import { Endianness, ENDIANNESS } from "#/util/endian";
-import { ValueOrError } from "#/util/error";
-import { mat4 } from "#/util/geom";
-import { MessageList, MessageSeverity } from "#/util/message_list";
-import { AnyConstructor, MixinConstructor } from "#/util/mixin";
-import { NullarySignal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
-import { withSharedVisibility } from "#/visibility_priority/frontend";
-import { Buffer } from "#/webgl/buffer";
-import {
-  ParameterizedContextDependentShaderGetter,
-  parameterizedEmitterDependentShaderGetter,
-} from "#/webgl/dynamic_shader";
-import { ShaderBuilder, ShaderModule, ShaderProgram } from "#/webgl/shader";
-import { registerSharedObjectOwner, SharedObject } from "#/worker_rpc";
+} from "#src/trackable_value.js";
+import { arraysEqual } from "#src/util/array.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { Endianness, ENDIANNESS } from "#src/util/endian.js";
+import type { ValueOrError } from "#src/util/error.js";
+import { mat4 } from "#src/util/geom.js";
+import type { MessageList } from "#src/util/message_list.js";
+import { MessageSeverity } from "#src/util/message_list.js";
+import type { AnyConstructor, MixinConstructor } from "#src/util/mixin.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Uint64 } from "#src/util/uint64.js";
+import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import { Buffer } from "#src/webgl/buffer.js";
+import type { ParameterizedContextDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
+import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
+import type {
+  ShaderBuilder,
+  ShaderModule,
+  ShaderProgram,
+} from "#src/webgl/shader.js";
+import type { SharedObject } from "#src/worker_rpc.js";
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 const tempMat = mat4.create();
 

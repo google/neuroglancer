@@ -51,6 +51,12 @@ def pytest_addoption(parser):
         "--static-content-url", default=None, help="URL to Neuroglancer Python client"
     )
     parser.addoption(
+        "--build-client",
+        action="store_true",
+        default=False,
+        help="Test using a client built from source automatically.",
+    )
+    parser.addoption(
         "--browser",
         choices=["chrome", "firefox"],
         default="chrome",
@@ -72,9 +78,12 @@ def pytest_addoption(parser):
 def _webdriver_internal(request):
     if request.config.getoption("--skip-browser-tests"):
         pytest.skip("--skip-browser-tests")
-    static_content_url = request.config.getoption("--static-content-url")
-    if static_content_url is not None:
-        neuroglancer.set_static_content_source(url=static_content_url)
+    if request.config.getoption("--build-client"):
+        neuroglancer.set_dev_server_content_source()
+    else:
+        static_content_url = request.config.getoption("--static-content-url")
+        if static_content_url is not None:
+            neuroglancer.set_static_content_source(url=static_content_url)
     webdriver = neuroglancer.webdriver.Webdriver(
         headless=request.config.getoption("--headless"),
         docker=request.config.getoption("--webdriver-docker"),
@@ -83,6 +92,20 @@ def _webdriver_internal(request):
     )
     if request.config.getoption("--neuroglancer-server-debug"):
         neuroglancer.server.debug = True
+    atexit.register(webdriver.driver.close)
+    return webdriver
+
+
+@pytest.fixture(scope="session")
+def webdriver_generic(request):
+    if request.config.getoption("--skip-browser-tests"):
+        pytest.skip("--skip-browser-tests")
+    webdriver = neuroglancer.webdriver.WebdriverBase(
+        headless=request.config.getoption("--headless"),
+        docker=request.config.getoption("--webdriver-docker"),
+        debug=request.config.getoption("--debug-webdriver"),
+        browser=request.config.getoption("--browser"),
+    )
     atexit.register(webdriver.driver.close)
     return webdriver
 
@@ -100,7 +123,19 @@ def pytest_runtest_makereport(item, call):
     setattr(item, "rep_" + rep.when, rep)
 
 
-@pytest.fixture
+# browser-based tests are flaky and can hang, so set a 30 second timeout and retry up to 5 times.
+# Use `func_only=true` to work around https://github.com/pytest-dev/pytest-rerunfailures/issues/99
+@pytest.fixture(
+    params=[
+        pytest.param(
+            None,
+            marks=[
+                pytest.mark.flaky(reruns=5),
+                pytest.mark.timeout(timeout=30, func_only=True),
+            ],
+        )
+    ]
+)
 def webdriver(_webdriver_internal, request):
     viewer = _webdriver_internal.viewer
     viewer.set_state({})

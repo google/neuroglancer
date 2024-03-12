@@ -14,75 +14,79 @@
  * limitations under the License.
  */
 
-import "#/datasource/zarr/codec/blosc/resolve";
-import "#/datasource/zarr/codec/zstd/resolve";
-import "#/datasource/zarr/codec/bytes/resolve";
-import "#/datasource/zarr/codec/crc32c/resolve";
-import "#/datasource/zarr/codec/gzip/resolve";
-import "#/datasource/zarr/codec/sharding_indexed/resolve";
-import "#/datasource/zarr/codec/transpose/resolve";
+import "#src/datasource/zarr/codec/blosc/resolve.js";
+import "#src/datasource/zarr/codec/zstd/resolve.js";
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
-  CoordinateSpace,
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
-import {
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
+import type {
   CompleteUrlOptions,
   DataSource,
-  DataSourceProvider,
   GetDataSourceOptions,
-} from "#/datasource";
-import { VolumeChunkSourceParameters } from "#/datasource/zarr/base";
-import {
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
+import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
+import "#src/datasource/zarr/codec/bytes/resolve.js";
+import "#src/datasource/zarr/codec/crc32c/resolve.js";
+import "#src/datasource/zarr/codec/gzip/resolve.js";
+import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
+import "#src/datasource/zarr/codec/transpose/resolve.js";
+import type {
   ArrayMetadata,
   DimensionSeparator,
   Metadata,
   NodeType,
-} from "#/datasource/zarr/metadata";
+} from "#src/datasource/zarr/metadata/index.js";
 import {
   parseDimensionSeparator,
   parseDimensionUnit,
   parseV2Metadata,
   parseV3Metadata,
-} from "#/datasource/zarr/metadata/parse";
-import { OmeMultiscaleMetadata, parseOmeMetadata } from "#/datasource/zarr/ome";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/datasource/zarr/metadata/parse.js";
+import type { OmeMultiscaleMetadata } from "#src/datasource/zarr/ome.js";
+import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   DataType,
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
 import {
   applyCompletionOffset,
   completeQueryStringParametersFromTable,
-} from "#/util/completion";
-import { Borrowed } from "#/util/disposable";
-import { completeHttpPath } from "#/util/http_path_completion";
-import { isNotFoundError, responseJson } from "#/util/http_request";
+} from "#src/util/completion.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { completeHttpPath } from "#src/util/http_path_completion.js";
+import { isNotFoundError, responseJson } from "#src/util/http_request.js";
 import {
   parseQueryStringParameters,
   verifyObject,
   verifyOptionalObjectProperty,
-} from "#/util/json";
-import * as matrix from "#/util/matrix";
-import { getObjectId } from "#/util/object_id";
+} from "#src/util/json.js";
+import * as matrix from "#src/util/matrix.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type {
+  SpecialProtocolCredentials,
+  SpecialProtocolCredentialsProvider,
+} from "#src/util/special_protocol_request.js";
 import {
   cancellableFetchSpecialOk,
   parseSpecialUrl,
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
+} from "#src/util/special_protocol_request.js";
 
 class ZarrVolumeChunkSource extends WithParameters(
   WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),

@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import "./range.css";
+import "#src/widget/range.css";
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
 
 export interface RangeWidgetOptions {
   min?: number;

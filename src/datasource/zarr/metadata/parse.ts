@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import { parseCodecChainSpec } from "#/datasource/zarr/codec/resolve";
-import {
+import { parseCodecChainSpec } from "#src/datasource/zarr/codec/resolve.js";
+import type {
   ArrayMetadata,
-  ChunkKeyEncoding,
   DimensionSeparator,
   Metadata,
   NodeType,
-} from "#/datasource/zarr/metadata";
-import { DATA_TYPE_BYTES, DataType } from "#/util/data_type";
-import { Endianness } from "#/util/endian";
+} from "#src/datasource/zarr/metadata/index.js";
+import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
+import { parseNameAndConfiguration } from "#src/datasource/zarr/metadata/parse_util.js";
+import { DATA_TYPE_BYTES, DataType } from "#src/util/data_type.js";
+import { Endianness } from "#src/util/endian.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -35,9 +36,9 @@ import {
   verifyOptionalFixedLengthArrayOfStringOrNull,
   verifyOptionalObjectProperty,
   verifyString,
-} from "#/util/json";
-import { parseNumpyDtype } from "#/util/numpy_dtype";
-import { allSiPrefixes } from "#/util/si_units";
+} from "#src/util/json.js";
+import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
+import { allSiPrefixes } from "#src/util/si_units.js";
 
 function parseShape(obj: unknown): number[] {
   return parseArray(obj, (x) => {
@@ -76,6 +77,7 @@ const UNITS = new Map<string, { unit: string; scale: number }>([
   ["foot", { unit: "m", scale: 0.3048 }],
   ["inch", { unit: "m", scale: 0.0254 }],
   ["mile", { unit: "m", scale: 1609.34 }],
+  // eslint-disable-next-line @typescript-eslint/no-loss-of-precision
   ["parsec", { unit: "m", scale: 3.0856775814913673e16 }],
   ["yard", { unit: "m", scale: 0.9144 }],
   ["minute", { unit: "s", scale: 60 }],
@@ -163,26 +165,6 @@ function parseFillValue(dataType: DataType, value: unknown) {
         )}`,
       );
   }
-}
-
-export function parseNameAndConfiguration<Name, Configuration>(
-  obj: unknown,
-  parseName: (name: string) => Name,
-  parseConfiguration: (configuration: unknown, name: Name) => Configuration,
-): { name: Name; configuration: Configuration } {
-  verifyObject(obj);
-  const name = verifyObjectProperty(obj, "name", (value) =>
-    parseName(verifyString(value)),
-  );
-  const configuration = verifyObjectProperty(obj, "configuration", (value) => {
-    if (value === undefined) {
-      value = {};
-    } else {
-      verifyObject(value);
-    }
-    return parseConfiguration(value, name);
-  });
-  return { name, configuration };
 }
 
 export function parseV3Metadata(

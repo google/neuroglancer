@@ -14,52 +14,51 @@
  * limitations under the License.
  */
 
-import { LayerChunkProgressInfo } from "#/chunk_manager/base";
-import {
-  ChunkManager,
-  ChunkRenderLayerFrontend,
-} from "#/chunk_manager/frontend";
-import { LayerSelectedValues } from "#/layer";
-import { PickIDManager } from "#/object_picking";
-import { WatchableRenderLayerTransform } from "#/render_coordinate_transform";
-import { RenderScaleHistogram } from "#/render_scale_statistics";
-import { RenderLayer } from "#/renderlayer";
-import { getCssColor, SegmentColorHash } from "#/segment_color";
+import type { LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
+import type { LayerSelectedValues } from "#src/layer/index.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import type { PickIDManager } from "#src/object_picking.js";
+import type { WatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
+import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
+import type { RenderLayer } from "#src/renderlayer.js";
+import type { SegmentColorHash } from "#src/segment_color.js";
+import { getCssColor } from "#src/segment_color.js";
+import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import {
   forEachVisibleSegment,
   onTemporaryVisibleSegmentsStateChanged,
   onVisibleSegmentsStateChanged,
   VISIBLE_SEGMENTS_STATE_PROPERTIES,
-  VisibleSegmentsState,
-} from "#/segmentation_display_state/base";
-import {
+} from "#src/segmentation_display_state/base.js";
+import type {
   InlineSegmentNumericalProperty,
   InlineSegmentProperty,
   PreprocessedSegmentPropertyMap,
-} from "#/segmentation_display_state/property_map";
-import { SegmentationUserLayer } from "#/segmentation_user_layer";
-import { SharedWatchableValue } from "#/shared_watchable_value";
-import { TrackableAlphaValue } from "#/trackable_alpha";
-import {
-  observeWatchable,
-  registerNestedSync,
+} from "#src/segmentation_display_state/property_map.js";
+import { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
+import type {
   TrackableValue,
   WatchableValueInterface,
-} from "#/trackable_value";
-import { isWithinSelectionPanel } from "#/ui/selection_details";
-import { Uint64Map } from "#/uint64_map";
-import { setClipboard } from "#/util/clipboard";
-import { useWhiteBackground } from "#/util/color";
-import { RefCounted } from "#/util/disposable";
-import { measureElementClone } from "#/util/dom";
-import { kOneVec, vec3, vec4 } from "#/util/geom";
-import { NullarySignal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
-import { withSharedVisibility } from "#/visibility_priority/frontend";
-import { makeCopyButton } from "#/widget/copy_button";
-import { makeEyeButton } from "#/widget/eye_button";
-import { makeFilterButton } from "#/widget/filter_button";
-import { makeStarButton } from "#/widget/star_button";
+} from "#src/trackable_value.js";
+import { observeWatchable, registerNestedSync } from "#src/trackable_value.js";
+import { isWithinSelectionPanel } from "#src/ui/selection_details.js";
+import type { Uint64Map } from "#src/uint64_map.js";
+import { setClipboard } from "#src/util/clipboard.js";
+import { useWhiteBackground } from "#src/util/color.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { measureElementClone } from "#src/util/dom.js";
+import type { vec3 } from "#src/util/geom.js";
+import { kOneVec, vec4 } from "#src/util/geom.js";
+import { NullarySignal } from "#src/util/signal.js";
+import { Uint64 } from "#src/util/uint64.js";
+import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { makeEyeButton } from "#src/widget/eye_button.js";
+import { makeFilterButton } from "#src/widget/filter_button.js";
+import { makeStarButton } from "#src/widget/star_button.js";
 
 export class Uint64MapEntry {
   constructor(

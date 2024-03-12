@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import { getObjectId } from "#/util/object_id";
-import { GL } from "#/webgl/context";
-import { ShaderBuilder, ShaderModule, ShaderProgram } from "#/webgl/shader";
+import { getObjectId } from "#src/util/object_id.js";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
 
 export function defineCopyFragmentShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);

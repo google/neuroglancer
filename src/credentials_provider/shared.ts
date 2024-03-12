@@ -18,23 +18,22 @@
  * @file Permits a CredentialsProvider to be shared with another thread.
  */
 
+import type {
+  CredentialsProvider,
+  CredentialsWithGeneration,
+} from "#src/credentials_provider/index.js";
 import {
   CREDENTIALS_PROVIDER_RPC_ID,
   CREDENTIALS_PROVIDER_GET_RPC_ID,
-} from "#/credentials_provider/shared_common";
-import {
-  CredentialsProvider,
-  CredentialsWithGeneration,
-} from "#/credentials_provider";
-import { CancellationToken } from "#/util/cancellation";
-import { Owned } from "#/util/disposable";
+} from "#src/credentials_provider/shared_common.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { Owned } from "#src/util/disposable.js";
+import type { RPC, RPCPromise } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,
   registerSharedObjectOwner,
-  RPC,
-  RPCPromise,
   SharedObject,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 @registerSharedObjectOwner(CREDENTIALS_PROVIDER_RPC_ID)
 export class SharedCredentialsProvider<Credentials>

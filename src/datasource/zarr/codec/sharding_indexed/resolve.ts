@@ -14,24 +14,24 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CodecArrayInfo,
   CodecArrayLayoutInfo,
   CodecChainSpec,
-  CodecKind,
-} from "#/datasource/zarr/codec";
+} from "#src/datasource/zarr/codec/index.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import {
   parseCodecChainSpec,
   registerCodec,
-} from "#/datasource/zarr/codec/resolve";
-import { parseChunkShape } from "#/datasource/zarr/metadata/parse";
-import { DataType } from "#/util/data_type";
+} from "#src/datasource/zarr/codec/resolve.js";
+import { parseChunkShape } from "#src/datasource/zarr/metadata/parse.js";
+import { DataType } from "#src/util/data_type.js";
 import {
   verifyEnumString,
   verifyObject,
   verifyObjectProperty,
   verifyOptionalObjectProperty,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 export enum ShardIndexLocation {
   START,

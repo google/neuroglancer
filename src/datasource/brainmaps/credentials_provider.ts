@@ -22,7 +22,7 @@ import {
   GoogleOAuth2CredentialsProvider,
   OPENID_SCOPE,
   EMAIL_SCOPE,
-} from "#/util/google_oauth2";
+} from "#src/util/google_oauth2.js";
 
 const BRAINMAPS_SCOPE = "https://www.googleapis.com/auth/brainmaps";
 

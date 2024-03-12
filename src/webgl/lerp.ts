@@ -18,10 +18,14 @@
  * @file Defines lerp/invlerp functionality for all supported data types.
  */
 
-import { DataType, DATA_TYPE_SIGNED } from "#/util/data_type";
-import { DataTypeInterval } from "#/util/lerp";
-import { Uint64 } from "#/util/uint64";
-import { ShaderBuilder, ShaderCodePart, ShaderProgram } from "#/webgl/shader";
+import { DataType, DATA_TYPE_SIGNED } from "#src/util/data_type.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
+import { Uint64 } from "#src/util/uint64.js";
+import type {
+  ShaderBuilder,
+  ShaderCodePart,
+  ShaderProgram,
+} from "#src/webgl/shader.js";
 import {
   dataTypeShaderDefinition,
   getShaderType,
@@ -38,7 +42,7 @@ import {
   glsl_subtractSaturateUint64,
   glsl_subtractUint64,
   glsl_uint64,
-} from "#/webgl/shader_lib";
+} from "#src/webgl/shader_lib.js";
 
 export const dataTypeShaderLerpParametersType: Record<DataType, string> = {
   [DataType.UINT8]: "vec2",
@@ -253,6 +257,7 @@ function defineLerpUniforms(
     case DataType.INT16:
     case DataType.UINT16:
     // {uint,int}{8,16} can be converted with float32 without any loss of precision
+    // fallthrough
     case DataType.FLOAT32:
       builder.addUniform("vec2", pName);
       break;

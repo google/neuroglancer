@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CredentialsProvider,
   CredentialsWithGeneration,
-} from "#/credentials_provider";
-import {
-  CancellationToken,
-  throwIfCanceled,
-  uncancelableToken,
-} from "#/util/cancellation";
+} from "#src/credentials_provider/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { throwIfCanceled, uncancelableToken } from "#src/util/cancellation.js";
+import type { ResponseTransform } from "#src/util/http_request.js";
 import {
   cancellableFetchOk,
   HttpError,
   pickDelay,
-  ResponseTransform,
-} from "#/util/http_request";
+} from "#src/util/http_request.js";
 
 const maxCredentialsAttempts = 3;
 

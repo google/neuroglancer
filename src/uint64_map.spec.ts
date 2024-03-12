@@ -18,8 +18,9 @@
  * limitations under the License.
  */
 
-import { Uint64Map } from "#/uint64_map";
-import { Uint64 } from "#/util/uint64";
+import { describe, it, expect } from "vitest";
+import { Uint64Map } from "#src/uint64_map.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 describe("Uint64Map", () => {
   it("basic", () => {

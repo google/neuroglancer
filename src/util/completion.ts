@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { defaultStringCompare } from "#/util/string";
+import { defaultStringCompare } from "#src/util/string.js";
 
 export interface Completion {
   value: string;

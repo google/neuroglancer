@@ -17,15 +17,15 @@
 import {
   makeCoordinateSpace,
   makeIdentityTransform,
-} from "#/coordinate_transform";
-import {
+} from "#src/coordinate_transform.js";
+import type {
   CompleteUrlOptions,
   DataSource,
-  DataSourceProvider,
   GetDataSourceOptions,
-} from "#/datasource";
-import { getSingleMeshSource } from "#/single_mesh/frontend";
-import { completeHttpPath } from "#/util/http_path_completion";
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
+import { getSingleMeshSource } from "#src/single_mesh/frontend.js";
+import { completeHttpPath } from "#src/util/http_path_completion.js";
 
 export class ObjDataSource extends DataSourceProvider {
   get description() {

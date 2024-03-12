@@ -14,41 +14,42 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { LayerChunkProgressInfo } from "#/chunk_manager/base";
-import { RenderViewport, renderViewportsEqual } from "#/display_context";
-import {
+import { debounce } from "lodash-es";
+import { LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
+import { RenderViewport, renderViewportsEqual } from "#src/display_context.js";
+import type {
   LayerView,
   MouseSelectionState,
   PickState,
   UserLayer,
   VisibleLayerInfo,
-} from "#/layer";
-import {
+} from "#src/layer/index.js";
+import type {
   DisplayDimensionRenderInfo,
   NavigationState,
-} from "#/navigation_state";
-import { PickIDManager } from "#/object_picking";
+} from "#src/navigation_state.js";
+import type { PickIDManager } from "#src/object_picking.js";
 import {
   ProjectionParameters,
   projectionParametersEqual,
-} from "#/projection_parameters";
-import {
-  get3dModelToDisplaySpaceMatrix,
-  RenderLayerTransformOrError,
-} from "#/render_coordinate_transform";
+} from "#src/projection_parameters.js";
+import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
+import { get3dModelToDisplaySpaceMatrix } from "#src/render_coordinate_transform.js";
 import {
   PROJECTION_PARAMETERS_CHANGED_RPC_METHOD_ID,
   PROJECTION_PARAMETERS_RPC_ID,
-} from "#/render_layer_common";
-import { WatchableSet, WatchableValueChangeInterface } from "#/trackable_value";
-import { Borrowed, RefCounted } from "#/util/disposable";
-import { mat4 } from "#/util/geom";
-import { MessageList, MessageSeverity } from "#/util/message_list";
-import { NullarySignal, Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
-import { VisibilityPriorityAggregator } from "#/visibility_priority/frontend";
-import { registerSharedObjectOwner, RPC, SharedObject } from "#/worker_rpc";
+} from "#src/render_layer_common.js";
+import type { WatchableValueChangeInterface } from "#src/trackable_value.js";
+import { WatchableSet } from "#src/trackable_value.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { mat4 } from "#src/util/geom.js";
+import { MessageList, MessageSeverity } from "#src/util/message_list.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
+import type { Uint64 } from "#src/util/uint64.js";
+import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { registerSharedObjectOwner, SharedObject } from "#src/worker_rpc.js";
 
 export enum RenderLayerRole {
   DATA = 0,

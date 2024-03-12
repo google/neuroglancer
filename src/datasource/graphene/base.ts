@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-import { mat4 } from "#/util/geom";
-import { ShardingParameters } from "#/datasource/precomputed/base";
-import {
+import type { ShardingParameters } from "#src/datasource/precomputed/base.js";
+import type {
   ChunkLayoutOptions,
-  makeSliceViewChunkSpecification,
   SliceViewChunkSource,
   SliceViewChunkSpecification,
   SliceViewChunkSpecificationBaseOptions,
   SliceViewChunkSpecificationOptions,
-} from "#/sliceview/base";
-import { DataType } from "#/sliceview/base";
+  DataType,
+} from "#src/sliceview/base.js";
+import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
+import type { mat4 } from "#src/util/geom.js";
+
+import { Uint64 } from "#src/util/uint64.js";
 
 export const PYCG_APP_VERSION = 1;
 export const GRAPHENE_MESH_NEW_SEGMENT_RPC_ID = "GrapheneMeshSource:NewSegment";
@@ -65,8 +67,6 @@ export class MultiscaleMeshMetadata {
   vertexQuantizationBits: number;
   sharding: Array<ShardingParameters> | undefined;
 }
-
-import { Uint64 } from "#/util/uint64";
 
 export const responseIdentity = async (x: any) => x;
 

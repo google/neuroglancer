@@ -14,19 +14,23 @@
  * limitations under the License.
  */
 
-import { decodeJpeg } from "#/async_computation/decode_jpeg_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { WithParameters } from "#/chunk_manager/backend";
-import { TileChunkSourceParameters } from "#/datasource/render/base";
-import { ChunkDecoder } from "#/sliceview/backend_chunk_decoders";
-import { postProcessRawData } from "#/sliceview/backend_chunk_decoders/postprocess";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { Endianness } from "#/util/endian";
-import { vec3 } from "#/util/geom";
-import { cancellableFetchOk, responseArrayBuffer } from "#/util/http_request";
-import { registerSharedObject } from "#/worker_rpc";
+import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import { TileChunkSourceParameters } from "#src/datasource/render/base.js";
+import type { ChunkDecoder } from "#src/sliceview/backend_chunk_decoders/index.js";
+import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { Endianness } from "#src/util/endian.js";
+import { vec3 } from "#src/util/geom.js";
+import {
+  cancellableFetchOk,
+  responseArrayBuffer,
+} from "#src/util/http_request.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 const chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set(

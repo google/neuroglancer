@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { DATA_TYPE_BYTES } from "#/util/data_type";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { decodePng } from "#/async_computation/decode_png_request";
-import { requestAsyncComputation } from "#/async_computation/request";
+import { decodePng } from "#src/async_computation/decode_png_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 
 export async function decodePngChunk(
   chunk: VolumeChunk,

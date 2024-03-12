@@ -14,36 +14,38 @@
  * limitations under the License.
  */
 
-import { WithParameters } from "#/chunk_manager/backend";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import type { ChunkSourceParametersConstructor } from "#src/chunk_manager/base.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type { DVIDToken } from "#src/datasource/dvid/api.js";
+import {
+  DVIDInstance,
+  makeRequestWithCredentials,
+  appendQueryStringForDvid,
+} from "#src/datasource/dvid/api.js";
 import {
   MeshSourceParameters,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/dvid/base";
+} from "#src/datasource/dvid/base.js";
+import type { FragmentChunk, ManifestChunk } from "#src/mesh/backend.js";
 import {
   assignMeshFragmentData,
   decodeTriangleVertexPositionsAndIndices,
-  FragmentChunk,
-  ManifestChunk,
   MeshSource,
-} from "#/mesh/backend";
-import { SkeletonChunk, SkeletonSource } from "#/skeleton/backend";
-import { decodeSwcSkeletonChunk } from "#/skeleton/decode_swc_skeleton";
-import { decodeCompressedSegmentationChunk } from "#/sliceview/backend_chunk_decoders/compressed_segmentation";
-import { decodeJpegChunk } from "#/sliceview/backend_chunk_decoders/jpeg";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { Endianness } from "#/util/endian";
-import { registerSharedObject, SharedObject } from "#/worker_rpc";
-import { ChunkSourceParametersConstructor } from "#/chunk_manager/base";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
-import {
-  DVIDInstance,
-  DVIDToken,
-  makeRequestWithCredentials,
-  appendQueryStringForDvid,
-} from "#/datasource/dvid/api";
+} from "#src/mesh/backend.js";
+import type { SkeletonChunk } from "#src/skeleton/backend.js";
+import { SkeletonSource } from "#src/skeleton/backend.js";
+import { decodeSwcSkeletonChunk } from "#src/skeleton/decode_swc_skeleton.js";
+import { decodeCompressedSegmentationChunk } from "#src/sliceview/backend_chunk_decoders/compressed_segmentation.js";
+import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { Endianness } from "#src/util/endian.js";
+import type { SharedObject } from "#src/worker_rpc.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 function DVIDSource<
   Parameters,

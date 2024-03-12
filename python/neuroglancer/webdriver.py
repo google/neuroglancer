@@ -30,10 +30,9 @@ class LogMessage(NamedTuple):
 LogListener = Callable[[LogMessage], None]
 
 
-class Webdriver:
+class WebdriverBase:
     def __init__(
         self,
-        viewer=None,
         headless=True,
         browser="chrome",
         window_size=(1920, 1080),
@@ -42,11 +41,6 @@ class Webdriver:
         print_logs=True,
         extra_command_line_args: Optional[Sequence[str]] = None,
     ):
-        if viewer is None:
-            from .viewer import Viewer
-
-            viewer = Viewer()
-        self.viewer = viewer
         self.headless = headless
         self.browser = browser
         self.window_size = window_size
@@ -56,7 +50,6 @@ class Webdriver:
             list(extra_command_line_args) if extra_command_line_args else []
         )
         self.debug = debug
-        self._init_driver()
         self._log_listeners_lock = threading.Lock()
         self._log_listeners: dict[LogListener, None] = {}
 
@@ -68,13 +61,14 @@ class Webdriver:
             )
 
         self._closed = False
+        self._init_driver()
 
     def _init_chrome(self):
         import selenium.webdriver
 
         chrome_options = selenium.webdriver.ChromeOptions()
         if self.headless:
-            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--headless=new")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         if self.docker:
             # https://www.intricatecloud.io/2019/05/running-webdriverio-tests-using-headless-chrome-inside-a-container/
@@ -93,6 +87,8 @@ class Webdriver:
         import selenium.webdriver
 
         options = selenium.webdriver.FirefoxOptions()
+        if self.headless:
+            options.add_argument("--headless")
         options.arguments.extend(self.extra_command_line_args)
         self.driver = selenium.webdriver.Firefox(
             options=options,
@@ -118,15 +114,30 @@ class Webdriver:
                         for listener in self._log_listeners:
                             listener(message)
 
+            async def start_listening_for_exceptions(listener):
+                async for event in listener:
+                    message = LogMessage(
+                        message=event.exception_details.text, level="exception"
+                    )
+                    with self._log_listeners_lock:
+                        for listener in self._log_listeners:
+                            listener(message)
+
             async def run():
                 async with self.driver.bidi_connection() as connection:
                     session, devtools = connection.session, connection.devtools
                     await session.execute(devtools.page.enable())
                     await session.execute(devtools.runtime.enable())
                     listener = session.listen(devtools.runtime.ConsoleAPICalled)
+                    exception_listener = session.listen(
+                        devtools.runtime.ExceptionThrown
+                    )
                     with trio.CancelScope() as cancel_scope:
                         async with trio.open_nursery() as nursery:
                             nursery.start_soon(start_listening, listener)
+                            nursery.start_soon(
+                                start_listening_for_exceptions, exception_listener
+                            )
                             while True:
                                 await trio.sleep(2)
                                 if not driver.service.is_connectable():
@@ -137,8 +148,6 @@ class Webdriver:
         t = threading.Thread(target=log_handler, args=(self.driver,))
         t.daemon = True
         t.start()
-
-        self.driver.get(self.viewer.get_viewer_url())
 
     def __enter__(self):
         return self
@@ -178,16 +187,6 @@ class Webdriver:
             if not event.wait(timeout):
                 raise TimeoutError
 
-    def sync(self):
-        """Wait until client is ready."""
-        while True:
-            new_state = self.viewer.screenshot().viewer_state
-            # Ensure self.viewer.state has also been updated to the new state.
-            # The state sent in the screenshot reply can be newer.
-            if new_state == self.viewer.state:
-                return new_state
-            time.sleep(0.1)
-
     def reload_browser(self):
         """Reloads the browser (useful if it crashes/becomes unresponsive)."""
         try:
@@ -204,3 +203,27 @@ class Webdriver:
         import selenium.webdriver
 
         return selenium.webdriver.common.action_chains.ActionChains(self.driver)
+
+
+class Webdriver(WebdriverBase):
+    def __init__(self, viewer=None, **kwargs):
+        if viewer is None:
+            from .viewer import Viewer
+
+            viewer = Viewer()
+        self.viewer = viewer
+        super().__init__(**kwargs)
+
+    def _init_driver(self):
+        super()._init_driver()
+        self.driver.get(self.viewer.get_viewer_url())
+
+    def sync(self):
+        """Wait until client is ready."""
+        while True:
+            new_state = self.viewer.screenshot().viewer_state
+            # Ensure self.viewer.state has also been updated to the new state.
+            # The state sent in the screenshot reply can be newer.
+            if new_state == self.viewer.state:
+                return new_state
+            time.sleep(0.1)

@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-import {
+import pythonIntegration from "#python_integration_build";
+import type {
   CredentialsManager,
   MaybeOptionalCredentialsProvider,
-} from "#/credentials_provider";
-import { fetchWithOAuth2Credentials } from "#/credentials_provider/oauth2";
-import { CancellationToken, uncancelableToken } from "#/util/cancellation";
-import { parseUrl, ResponseTransform } from "#/util/http_request";
-import { getRandomHexString } from "#/util/random";
-import { cancellableFetchS3Ok } from "#/util/s3";
+} from "#src/credentials_provider/index.js";
+import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import type { ResponseTransform } from "#src/util/http_request.js";
+import { parseUrl } from "#src/util/http_request.js";
+import { getRandomHexString } from "#src/util/random.js";
+import { cancellableFetchS3Ok } from "#src/util/s3.js";
 
 export type SpecialProtocolCredentials = any;
 export type SpecialProtocolCredentialsProvider =
@@ -43,10 +46,10 @@ function getNgauthCredentialsProvider(
   serverUrl: string,
   path: string,
 ): SpecialProtocolCredentialsProvider {
-  const bucketPattern = /^\/([^\/]+)/;
+  const bucketPattern = /^\/([^/]+)/;
   const m = path.match(bucketPattern);
   if (m === null) return undefined;
-  return typeof NEUROGLANCER_PYTHON_INTEGRATION !== "undefined"
+  return pythonIntegration
     ? credentialsManager.getCredentialsProvider("gcs", { bucket: m[1] })
     : credentialsManager.getCredentialsProvider("ngauth_gcs", {
         authServer: serverUrl,
@@ -63,12 +66,11 @@ export function parseSpecialUrl(
     case "gs":
     case "gs+xml":
       return {
-        credentialsProvider:
-          typeof NEUROGLANCER_PYTHON_INTEGRATION !== "undefined"
-            ? credentialsManager.getCredentialsProvider("gcs", {
-                bucket: u.host,
-              })
-            : undefined,
+        credentialsProvider: pythonIntegration
+          ? credentialsManager.getCredentialsProvider("gcs", {
+              bucket: u.host,
+            })
+          : undefined,
         url,
       };
     case "gs+ngauth+http":

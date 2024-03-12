@@ -14,8 +14,9 @@ def add_example_layers(state):
     a[1, :, :, :] = np.abs(np.sin(4 * (iy + iz))) * 255
     a[2, :, :, :] = np.abs(np.sin(4 * (ix + iz))) * 255
 
-    b = np.cast[np.uint32](
-        np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10)
+    b = np.asarray(
+        np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10),
+        dtype=np.uint32,
     )
     b = np.pad(b, 1, "constant")
     dimensions = neuroglancer.CoordinateSpace(

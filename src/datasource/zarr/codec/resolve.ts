@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CodecArrayInfo,
   CodecArrayLayoutInfo,
   CodecChainSpec,
-  CodecKind,
   CodecSpec,
   ShardingInfo,
-} from "#/datasource/zarr/codec";
-import { parseNameAndConfiguration } from "#/datasource/zarr/metadata/parse";
-import { parseArray } from "#/util/json";
+} from "#src/datasource/zarr/codec/index.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import { parseNameAndConfiguration } from "#src/datasource/zarr/metadata/parse_util.js";
+import { parseArray } from "#src/util/json.js";
 
 function getCodecResolver(obj: unknown): {
   resolver: CodecResolver;

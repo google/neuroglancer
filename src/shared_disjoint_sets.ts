@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import { VisibleSegmentEquivalencePolicy } from "#/segmentation_graph/segment_id";
-import { WatchableValueInterface } from "#/trackable_value";
-import { DisjointUint64Sets } from "#/util/disjoint_sets";
-import { parseArray } from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
+import type { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import { parseArray } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import { Uint64 } from "#src/util/uint64.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObject,
-  RPC,
   SharedObjectCounterpart,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 const RPC_TYPE_ID = "DisjointUint64Sets";
 const ADD_METHOD_ID = "DisjointUint64Sets.add";

@@ -19,19 +19,19 @@
  */
 
 import "codemirror/lib/codemirror.css";
-import "codemirror/mode/javascript/javascript";
-import "codemirror/addon/fold/foldcode";
-import "codemirror/addon/fold/foldgutter";
-import "codemirror/addon/fold/brace-fold";
+import "codemirror/mode/javascript/javascript.js";
+import "codemirror/addon/fold/foldcode.js";
+import "codemirror/addon/fold/foldgutter.js";
+import "codemirror/addon/fold/brace-fold.js";
 import "codemirror/addon/fold/foldgutter.css";
 import "codemirror/addon/lint/lint.css";
-import "./state_editor.css";
-
 import CodeMirror from "codemirror";
-import debounce from "lodash/debounce";
-import { Overlay } from "#/overlay";
-import { getCachedJson } from "#/util/trackable";
-import { Viewer } from "#/viewer";
+import { debounce } from "lodash-es";
+import { Overlay } from "#src/overlay.js";
+import "#src/ui/state_editor.css";
+
+import { getCachedJson } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 const valueUpdateDelay = 100;
 

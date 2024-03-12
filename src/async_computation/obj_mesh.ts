@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { registerAsyncComputation } from "#/async_computation/handler";
-import { parseOBJFromArrayBuffer } from "#/async_computation/obj_mesh_request";
-import { Float32ArrayBuilder } from "#/util/float32array_builder";
-import { maybeDecompressGzip } from "#/util/gzip";
-import { Uint32ArrayBuilder } from "#/util/uint32array_builder";
-import { SingleMesh } from "#/single_mesh/backend";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { parseOBJFromArrayBuffer } from "#src/async_computation/obj_mesh_request.js";
+import type { SingleMesh } from "#src/single_mesh/backend.js";
+import { Float32ArrayBuilder } from "#src/util/float32array_builder.js";
+import { maybeDecompressGzip } from "#src/util/gzip.js";
+import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 registerAsyncComputation(
   parseOBJFromArrayBuffer,
@@ -33,7 +33,7 @@ registerAsyncComputation(
 
     // Find vertices
     for (const match of text.matchAll(
-      /^v\s+([\-0-9\.eE]+)\s+([\-0-9\.eE]+)\s+([\-0-9\.eE]+)\s*$/gm,
+      /^v\s+([-0-9.eE]+)\s+([-0-9.eE]+)\s+([-0-9.eE]+)\s*$/gm,
     )) {
       vertexPositions.appendArray([
         parseFloat(match[1]),

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { AsyncComputationSpec } from "#/async_computation";
+import type { AsyncComputationSpec } from "#src/async_computation/index.js";
 
 const handlers = new Map<
   string,

@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-import { UserLayer } from "#/layer";
-import { WatchableValueInterface } from "#/trackable_value";
-import { ActionEvent, EventActionMap } from "#/util/event_action_map";
-import { LayerControlFactory } from "#/widget/layer_control";
-import { RangeWidget, RangeWidgetOptions } from "#/widget/range";
+import type { UserLayer } from "#src/layer/index.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
+import type { RangeWidgetOptions } from "#src/widget/range.js";
+import { RangeWidget } from "#src/widget/range.js";
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift+wheel": { action: "adjust-via-wheel" },

@@ -18,7 +18,8 @@
  * @file Ellipse-related shader functions.
  */
 
-import { mat3, vec2, vec3 } from "#/util/geom";
+import type { mat3, vec3 } from "#src/util/geom.js";
+import { vec2 } from "#src/util/geom.js";
 
 /**
  * Specifies the parameters of an ellipse in quadratic form.

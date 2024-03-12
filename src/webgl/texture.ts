@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { GL } from "#/webgl/context";
+import type { GL } from "#src/webgl/context.js";
 
 /**
  * Sets parameters to make a texture suitable for use as a raw array: NEAREST
