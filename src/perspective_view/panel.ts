@@ -954,9 +954,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.disable(WebGL2RenderingContext.BLEND);
     }
 
-    if (this.viewer.showAxisLines.value) {
-      this.drawAxisLines();
-    }
+    
 
     // Disable stencil operations.
     gl.stencilOp(
@@ -1105,6 +1103,10 @@ export class PerspectivePanel extends RenderedDataPanel {
         maxProjectionColorOnlyConfiguration.colorBuffers[0].texture,
       );
 
+      if (this.viewer.showAxisLines.value) {
+        this.drawAxisLines();
+      }
+
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
@@ -1206,6 +1208,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       );
       gl.disable(WebGL2RenderingContext.BLEND);
     }
+    // if (this.viewer.showAxisLines.value) {
+    //   this.drawAxisLines();
+    // }
     this.offscreenFramebuffer.unbind();
 
     // Draw the texture over the whole viewport.
