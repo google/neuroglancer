@@ -245,9 +245,6 @@ void emitIntensity(float value) {
 }`;
           let glsl_continualEmit = ``;
           if (isProjection(shaderParametersState.mode)) {
-            const glsl_change_intensity = `
-float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
-`;
             builder.addFragmentCode(`
 float newIntensity = 0.0;
 float savedDepth = 0.0;
@@ -265,7 +262,7 @@ void emitIntensity(float value) {
             }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
-  ${glsl_change_intensity}
+  float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
   float alpha = clamp(rgba.a, 0.0, 1.0);
   outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
   savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
@@ -355,11 +352,19 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 `,
           ]);
           if (wireFrame) {
+            let glsl_emitWireframe = `
+  emit(outputColor, 0u);
+`;
+            if (isProjection(shaderParametersState.mode)) {
+              glsl_emitWireframe = `
+  emit(outputColor, 1.0, uChunkNumber);
+            `;
+            }
             builder.setFragmentMainFunction(`
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
   emitIntensity(uChunkNumber);
-  emit(outputColor, 0.0, uChunkNumber);
+  ${glsl_emitWireframe}
 }
 `);
           } else {
