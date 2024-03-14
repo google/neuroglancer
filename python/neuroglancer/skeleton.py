@@ -50,9 +50,7 @@ class Skeleton:
                     expected_shape
                 ):
                     raise ValueError(
-                        "Expected attribute {!r} to have shape {!r}, but was: {!r}".format(
-                            name, expected_shape, attribute.shape
-                        )
+                        f"Expected attribute {name!r} to have shape {expected_shape!r}, but was: {attribute.shape!r}"
                     )
                 result.write(attribute.tobytes())
         return result.getvalue()
