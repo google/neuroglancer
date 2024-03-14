@@ -988,8 +988,9 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
         }
+        const isVolumeRenderingLayer = "mode" in renderLayer;
         if (
-          "mode" in renderLayer &&
+          isVolumeRenderingLayer &&
           isProjection((renderLayer as VolumeRenderingRenderLayer).mode.value)
         ) {
           // Set state for max projection mode and draw
@@ -1101,8 +1102,9 @@ export class PerspectivePanel extends RenderedDataPanel {
         if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
           continue;
         }
+        const isVolumeRenderingLayer = "mode" in renderLayer;
         // For max projection layers, can copy over the pick buffer directly.
-        if ("mode" in renderLayer) {
+        if (isVolumeRenderingLayer) {
           if (
             isProjection((renderLayer as VolumeRenderingRenderLayer).mode.value)
           ) {
