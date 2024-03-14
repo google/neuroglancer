@@ -1,7 +1,6 @@
 #!/usr/bin/env python2
 """Tool for extending via equivalences a set of segments."""
 
-
 import argparse
 import copy
 import os
@@ -182,9 +181,9 @@ class Annotator:
         segments = self.get_state_segment_ids(state)
         segments.clear()
         segments[segment_id] = True
-        state.layers[
-            self.point_annotation_layer_name
-        ] = neuroglancer.PointAnnotationLayer()
+        state.layers[self.point_annotation_layer_name] = (
+            neuroglancer.PointAnnotationLayer()
+        )
 
         return state
 
