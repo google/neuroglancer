@@ -559,7 +559,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
         "volumeRenderingMode", optional(str)
     )
     volume_rendering_gain = volumeRenderingGain = wrapped_property(
-        "volumeRenderingGain", optional(float, 1)
+        "volumeRenderingGain", optional(float, 0)
     )
     volume_rendering_depth_samples = volumeRenderingDepthSamples = wrapped_property(
         "volumeRenderingDepthSamples", optional(float, 64)
