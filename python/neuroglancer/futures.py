@@ -14,7 +14,6 @@
 
 """Various extensions to the concurrent.futures module."""
 
-
 import concurrent.futures
 import threading
 

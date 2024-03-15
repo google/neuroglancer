@@ -20,7 +20,7 @@ Neuroglancer client if Python data sources are used.
 
 It is recommended that you activate a suitable Python virtual environment before installing.
 
-Python 3.5 or later is required.
+Python 3.9 or later is required.
 
 You can install the latest published package from [PyPI](https://pypi.org/project/neuroglancer)
 with:
@@ -77,12 +77,12 @@ extension module.
 For normal installation, run the following from the root of the repository:
 
 ```shell
-python setup.py install
+pip install .
 ```
 
-That will automatically build the Neuroglancer client using Node.js if it has not already been built
-(i.e. if `neuroglancer/static/index.html` does not exist).  To rebuild the Neuroglancer client
-explicitly, you can use:
+That will automatically build the Neuroglancer client using Node.js if it has
+not already been built (i.e. if `neuroglancer/static/client/index.html` does not
+exist).  To rebuild the Neuroglancer client explicitly, you can use:
 
 ```shell
 python setup.py bundle_client
@@ -93,10 +93,6 @@ or
 ```shell
 npm run build-python
 ```
-
-Note: Installing from a local checkout using `pip install .` also works, but it may be slower
-because it makes a full copy of the local directory (https://github.com/pypa/pip/pull/7882),
-including the possibly-large `.git` and `node_modules` directories.
 
 #### Editable installation (for development purposes)
 
@@ -110,7 +106,7 @@ pip install -e .
 Any changes you make to the .py source files take effect the next time the package is imported,
 without the need to reinstall.  If you make changes to the Neuroglancer client, you still need to
 rebuild it with `npm run build-python`.  You can also keep the Neuroglancer client continuously
-up-to-date by running `npm run dev-server-python`.
+up-to-date by running `npm run build-python:watch`.
 
 ## Examples
 
