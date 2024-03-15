@@ -50,17 +50,19 @@ if __name__ == "__main__":
             position[face_dim] += (
                 (face_dir * 2 - 1) * cube_size / 2 / state.dimensions[face_dim].scale
             )
-            state.layout.cross_sections[
-                "%d_%d" % (face_dim, face_dir)
-            ] = neuroglancer.CrossSection(
-                width=cube_size / canonical_scale,
-                height=cube_size / canonical_scale,
-                position=neuroglancer.LinkedPosition(link="relative", value=position),
-                orientation=neuroglancer.LinkedOrientationState(
-                    link="unlinked",
-                    value=orientations[face_dim],
-                ),
-                scale=neuroglancer.LinkedZoomFactor(link="unlinked", value=1),
+            state.layout.cross_sections["%d_%d" % (face_dim, face_dir)] = (
+                neuroglancer.CrossSection(
+                    width=cube_size / canonical_scale,
+                    height=cube_size / canonical_scale,
+                    position=neuroglancer.LinkedPosition(
+                        link="relative", value=position
+                    ),
+                    orientation=neuroglancer.LinkedOrientationState(
+                        link="unlinked",
+                        value=orientations[face_dim],
+                    ),
+                    scale=neuroglancer.LinkedZoomFactor(link="unlinked", value=1),
+                )
             )
 
     print(neuroglancer.to_url(state))

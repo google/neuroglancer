@@ -223,9 +223,7 @@ class BundleClientCommand(
             html_path = os.path.join(output_dir, "index.html")
             if os.path.exists(html_path):
                 print(
-                    "Skipping rebuild of client bundle since {} already exists".format(
-                        html_path
-                    )
+                    f"Skipping rebuild of client bundle since {html_path} already exists"
                 )
                 return
 

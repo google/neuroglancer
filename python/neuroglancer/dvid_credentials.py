@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """Module implements function for authentication of layers based on DVID.
-    Here tokens are fetched from local locations like env vars etc."""
-
+Here tokens are fetched from local locations like env vars etc."""
 
 import logging
 import os
