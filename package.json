@@ -96,8 +96,8 @@
   "type": "module",
   "exports": {
     ".": "./src/main_module.ts",
-    "./*.js": "./src/*.ts",
-    "./*": "./src/*"
+    "./unstable/*.js": "./src/*.ts",
+    "./unstable/*": "./src/*"
   },
   "imports": {
     "#src/third_party/jpgjs/jpg.js": "./src/third_party/jpgjs/jpg.js",
