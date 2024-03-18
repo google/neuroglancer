@@ -166,6 +166,7 @@ class DimensionScale(
         Units of `scale`.
     coordinate_array : neuroglancer.CoordinateArray
     """
+
     __slots__ = ()
 
     def __new__(cls, scale=1, unit="", coordinate_array=None):
