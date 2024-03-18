@@ -582,6 +582,88 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     );
     return ready;
   }
+
+  getObjectPosition(
+    id: Uint64,
+    nearestTo: Float32Array,
+  ): Float32Array | undefined {
+    const transform = this.displayState.transform.value;
+    if (transform.error !== undefined) return undefined;
+    const key = getObjectKey(id);
+    const chunk = this.source.chunks.get(key);
+    if (chunk === undefined) return undefined;
+    const { rank } = transform;
+    const inverseModelToRenderLayerTransform = new Float32Array(
+      transform.modelToRenderLayerTransform.length,
+    );
+    matrix.inverse(
+      inverseModelToRenderLayerTransform,
+      rank + 1,
+      transform.modelToRenderLayerTransform,
+      rank + 1,
+      rank + 1,
+    );
+    const nearestPositionInModal = new Float32Array(rank);
+    matrix.transformPoint(
+      nearestPositionInModal,
+      inverseModelToRenderLayerTransform,
+      rank + 1,
+      nearestTo,
+      rank,
+    );
+    const { fragmentIds } = chunk;
+    let vertexCount = 0;
+    const fragmentChunks: FragmentChunk[] = [];
+    for (const fragmentId of fragmentIds) {
+      const { key: fragmentKey } = this.source.getFragmentKey(key, fragmentId);
+      const fragmentChunk = this.source.fragmentSource.chunks.get(fragmentKey);
+      if (fragmentChunk === undefined) continue;
+      const { state, meshData } = fragmentChunk;
+      if (
+        state !== ChunkState.SYSTEM_MEMORY &&
+        state !== ChunkState.GPU_MEMORY
+      ) {
+        continue;
+      }
+      vertexCount += meshData.vertexPositions.length / rank;
+      fragmentChunks.push(fragmentChunk);
+    }
+    // Only check up to ~100,000 vertices.
+    // Not exact because it restarts the interval for each fragment chunk.
+    const TARGET_VERTEX_COUNT = 100 * 1000;
+    const sampleRate = TARGET_VERTEX_COUNT / vertexCount;
+    const sampleInterval = Math.max(1, Math.floor(1 / sampleRate));
+    const closestVertex = new Float32Array(rank);
+    let closestDistanceSq = Number.POSITIVE_INFINITY;
+    for (const fragmentChunk of fragmentChunks) {
+      const { meshData } = fragmentChunk;
+      const { vertexPositions } = meshData;
+      if (vertexPositions.length < rank) continue;
+      for (let i = 0; i < vertexPositions.length; i += rank * sampleInterval) {
+        let distanceSq = 0;
+        for (let j = 0; j < rank; j++) {
+          distanceSq +=
+            (vertexPositions[i + j] - nearestPositionInModal[j]) ** 2;
+        }
+        if (distanceSq < closestDistanceSq) {
+          closestDistanceSq = distanceSq;
+          for (let j = 0; j < rank; j++) {
+            closestVertex[j] = vertexPositions[i + j];
+          }
+        }
+      }
+    }
+    if (closestDistanceSq === Number.POSITIVE_INFINITY) return undefined;
+    const layerCenter = new Float32Array(rank);
+    matrix.transformPoint(
+      layerCenter,
+      transform.modelToRenderLayerTransform,
+      rank + 1,
+      closestVertex,
+      rank,
+    );
+    return layerCenter;
+  }
 }
 
 export class ManifestChunk extends Chunk {
