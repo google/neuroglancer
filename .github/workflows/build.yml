@@ -19,6 +19,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need full history to determine version number.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -34,7 +37,10 @@ jobs:
       - name: Typecheck with TypeScript
         run: npm run typecheck
       - name: Build client bundles
-        run: npm run build -- --no-typecheck --no-lint
+        run: |
+          build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
+          npm run build -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"
+        shell: bash
       - name: Build Python client bundles
         run: npm run build-python -- --no-typecheck --no-lint
       - run: npm run build-package
@@ -50,6 +56,12 @@ jobs:
         with:
           name: npm-package
           path: dist/package
+        if: ${{ runner.os == 'Linux' }}
+      - name: Upload client as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client
+          path: dist/client
         if: ${{ runner.os == 'Linux' }}
 
   # Builds Python package and runs Python tests
@@ -194,13 +206,25 @@ jobs:
           user: __token__
           password: ${{ secrets.pypi_token }}
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-      # Disabling publishing to NPM
-      # - name: Publish to NPM registry
-      #   if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-      #   run: npm publish
-      #   working-directory: npm-package
-      #   env:
-      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to NPM registry
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: npm publish
+        working-directory: npm-package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Download dist/client after publishing to PyPI, because PyPI publish
+      # action fails if dist/client directory is present.
+      - uses: actions/download-artifact@v4
+        with:
+          name: client
+          path: dist/client
+      - name: Publish to Firebase hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
+          projectId: neuroglancer-demo
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
   ngauth:
     strategy:
       matrix:

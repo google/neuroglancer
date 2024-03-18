@@ -168,12 +168,13 @@ export class DataManagementContext extends RefCounted {
     // must be used with `new URL`, which means a Node.js subpath import like
     // "#src/chunk_worker.bundle.js" cannot be used.
     this.worker = new Worker(
+      /* webpackChunkName: "neuroglancer_chunk_worker" */
       new URL("./chunk_worker.bundle.js", import.meta.url),
       { type: "module" },
     );
     this.chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(
-        new RPC(this.worker),
+        new RPC(this.worker, /*waitUntilReady=*/ true),
         this.gl,
         this.frameNumberCounter,
         {

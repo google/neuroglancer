@@ -527,8 +527,6 @@ def set_dev_server_content_source():
             "run",
             "dev-server-python",
             "--",
-            "--base",
-            f"/v/{_get_server_token()}/",
             "--port=0",
         ],
         cwd=root_dir,
@@ -546,7 +544,7 @@ def set_dev_server_content_source():
             for line in f:
                 print(f"[dev-server] {line.rstrip()}")
                 if url is None:
-                    m = re.search(r"http://[^\s]+", line)
+                    m = re.search(r"http://[^\s,]+", line)
                     if m is not None:
                         url = m.group(0)
                         future.set_result(url)
