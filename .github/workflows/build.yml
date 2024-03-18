@@ -224,6 +224,7 @@ jobs:
         with:
           firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
           projectId: neuroglancer-demo
+          channelId: live
 
   ngauth:
     strategy:
