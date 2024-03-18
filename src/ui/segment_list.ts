@@ -990,12 +990,18 @@ function renderTagSummary(
   const filterQuery = queryResult.query as FilterQuery;
   const tagList = document.createElement("div");
   tagList.classList.add("neuroglancer-segment-query-result-tag-list");
-  for (const { tag, count } of tags) {
+  for (const { tag, count, desc } of tags) {
     const tagElement = document.createElement("div");
     tagElement.classList.add("neuroglancer-segment-query-result-tag");
     const tagName = document.createElement("span");
     tagName.classList.add("neuroglancer-segment-query-result-tag-name");
-    tagName.textContent = tag;
+    // if the tag is different than desc, show both
+    if (tag !== desc && desc !== undefined && desc !== "") {
+      tagName.textContent = tag + " (" + desc + ")";
+    } else {
+      tagName.textContent = tag;
+    }
+
     tagList.appendChild(tagElement);
     const included = filterQuery.includeTags.includes(tag);
     const excluded = filterQuery.excludeTags.includes(tag);
