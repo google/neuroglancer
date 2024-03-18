@@ -93,7 +93,7 @@ async function getWebpackConfig(
     webpackEnv = { ...webpackEnv, NEUROGLANCER_CLI: true };
     const conditions = argv.conditions;
     if (argv.python) conditions.push("neuroglancer/python");
-    const outDir =
+    let outDir =
       (argv.output as string | undefined) ??
       (argv.python
         ? path.resolve(
@@ -105,6 +105,9 @@ async function getWebpackConfig(
             "client",
           )
         : undefined);
+    if (outDir !== undefined) {
+      outDir = path.resolve(outDir);
+    }
     const plugins = [];
     if (argv.typecheck || argv.lint) {
       plugins.push(
