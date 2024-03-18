@@ -195,10 +195,6 @@ jobs:
         with:
           name: npm-package
           path: npm-package
-      - uses: actions/download-artifact@v4
-        with:
-          name: client
-          path: dist/client
       # - name: Publish to PyPI (test server)
       #   uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
       #   with:
@@ -216,6 +212,12 @@ jobs:
         working-directory: npm-package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Download dist/client after publishing to PyPI, because PyPI publish
+      # action fails if dist/client directory is present.
+      - uses: actions/download-artifact@v4
+        with:
+          name: client
+          path: dist/client
       - name: Publish to Firebase hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
