@@ -136,6 +136,11 @@ class BundleClientCommand(
             None,
             'The nodejs bundle type. "production" (default) creates condensed static files for production, "development" creates human-readable files.',
         ),
+        (
+            "prebuilt-bundle",
+            None,
+            "Assume the client bundle already exists within the source tree, and don't build it again.",
+        ),
         ("build-bundle-inplace", None, "Build the client bundle inplace."),
         (
             "skip-npm-reinstall",
@@ -154,7 +159,8 @@ class BundleClientCommand(
         self.client_bundle_type = "production"
         self.skip_npm_reinstall = None
         self.skip_rebuild = None
-        self.build_bundle_inplace = None
+        self.build_bundle_inplace = False
+        self.prebuilt_bundle = None
 
     def finalize_options(self):
         self.set_undefined_options("build_py", ("build_lib", "build_lib"))
@@ -167,10 +173,8 @@ class BundleClientCommand(
         if self.skip_npm_reinstall is None:
             self.skip_npm_reinstall = False
 
-        if self.build_bundle_inplace is None:
-            self.build_bundle_inplace = (
-                os.getenv("NEUROGLANCER_BUILD_BUNDLE_INPLACE") == "1"
-            )
+        if self.prebuilt_bundle is None:
+            self.prebuilt_bundle = os.getenv("NEUROGLANCER_PREBUILT_CLIENT") == "1"
 
         if self.skip_rebuild is None:
             self.skip_rebuild = self.build_bundle_inplace
@@ -209,8 +213,12 @@ class BundleClientCommand(
 
         # If building from an sdist, `package.json` won't be present but the
         # bundled files will.
-        if not _PACKAGE_JSON_EXISTS:
-            print("Skipping build of client bundle because package.json does not exist")
+        if not _PACKAGE_JSON_EXISTS or self.prebuilt_bundle:
+            if not _PACKAGE_JSON_EXISTS:
+                reason = "package.json does not exist"
+            else:
+                reason = "it was prebuilt"
+            print(f"Skipping build of client bundle because {reason}")
             if not self.build_bundle_inplace:
                 shutil.copytree(
                     self._get_inplace_client_dir(), self._get_client_output_dir()

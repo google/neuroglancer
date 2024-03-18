@@ -1,6 +1,6 @@
 {
   "hosting": {
     "target": "app",
-    "public": "dist/min"
+    "public": "dist/client"
   }
 }
