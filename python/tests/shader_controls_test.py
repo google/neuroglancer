@@ -37,7 +37,7 @@ def test_invlerp(webdriver):
                     "range": [0, 42],
                 },
             },
-            opacity=1.0
+            opacity=1.0,
         )
         s.layout = "xy"
         s.cross_section_scale = 1e-6
@@ -98,7 +98,7 @@ void main() {
             shader=shader,
             shader_controls=shaderControls,
             opacity=1.0,
-            blend="additive"
+            blend="additive",
         )
         s.layout = "xy"
         s.cross_section_scale = 1e-6
