@@ -1113,8 +1113,10 @@ export class PerspectivePanel extends RenderedDataPanel {
               maxProjectionPickConfiguration.colorBuffers[1].texture,
             );
           }
-          // regular volume rendering layers have no picking
+          // Draw picking for non min/max volume rendering layers
           else {
+            // Currently volume rendering layers have no picking support
+            // Outside of min/max mode
             continue;
           }
           // other transparent layers are drawn as usual
