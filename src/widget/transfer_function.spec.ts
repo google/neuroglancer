@@ -39,14 +39,14 @@ describe("lerpBetweenControlPoints", () => {
   });
   it("returns transparent black up to the first control point, and the last control point value after", () => {
     const controlPoints: ControlPoint[] = [
-      { position: 120, color: vec4.fromValues(21, 22, 254, 210) },
+      { inputValue: 120, outputColor: vec4.fromValues(21, 22, 254, 210) },
     ];
     lerpBetweenControlPoints(output, controlPoints);
     expect(
       output.slice(0, NUM_COLOR_CHANNELS * 120).every((value) => value === 0),
     ).toBeTruthy();
     const endPiece = output.slice(NUM_COLOR_CHANNELS * 120);
-    const color = controlPoints[0].color;
+    const color = controlPoints[0].outputColor;
     expect(
       endPiece.every(
         (value, index) => value === color[index % NUM_COLOR_CHANNELS],
@@ -55,9 +55,9 @@ describe("lerpBetweenControlPoints", () => {
   });
   it("correctly interpolates between three control points", () => {
     const controlPoints: ControlPoint[] = [
-      { position: 120, color: vec4.fromValues(21, 22, 254, 210) },
-      { position: 140, color: vec4.fromValues(0, 0, 0, 0) },
-      { position: 200, color: vec4.fromValues(255, 255, 255, 255) },
+      { inputValue: 120, outputColor: vec4.fromValues(21, 22, 254, 210) },
+      { inputValue: 140, outputColor: vec4.fromValues(0, 0, 0, 0) },
+      { inputValue: 200, outputColor: vec4.fromValues(255, 255, 255, 255) },
     ];
     lerpBetweenControlPoints(output, controlPoints);
     expect(
@@ -67,8 +67,8 @@ describe("lerpBetweenControlPoints", () => {
       output.slice(NUM_COLOR_CHANNELS * 200).every((value) => value === 255),
     ).toBeTruthy();
 
-    const firstColor = controlPoints[0].color;
-    const secondColor = controlPoints[1].color;
+    const firstColor = controlPoints[0].outputColor;
+    const secondColor = controlPoints[1].outputColor;
     for (let i = 120 * NUM_COLOR_CHANNELS; i < 140 * NUM_COLOR_CHANNELS; i++) {
       const difference = Math.floor((i - 120 * NUM_COLOR_CHANNELS) / 4);
       const expectedValue =
@@ -88,7 +88,7 @@ describe("lerpBetweenControlPoints", () => {
       }
     }
 
-    const thirdColor = controlPoints[2].color;
+    const thirdColor = controlPoints[2].outputColor;
     for (let i = 140 * NUM_COLOR_CHANNELS; i < 200 * NUM_COLOR_CHANNELS; i++) {
       const difference = Math.floor((i - 140 * NUM_COLOR_CHANNELS) / 4);
       const expectedValue =
@@ -113,10 +113,10 @@ describe("lerpBetweenControlPoints", () => {
 describe("compute transfer function on GPU", () => {
   const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
   const controlPoints: ControlPoint[] = [
-    { position: 0, color: vec4.fromValues(0, 0, 0, 0) },
+    { inputValue: 0, outputColor: vec4.fromValues(0, 0, 0, 0) },
     {
-      position: maxTransferFunctionPoints,
-      color: vec4.fromValues(255, 255, 255, 255),
+      inputValue: maxTransferFunctionPoints,
+      outputColor: vec4.fromValues(255, 255, 255, 255),
     },
   ];
   for (const dataType of Object.values(DataType)) {

@@ -670,36 +670,36 @@ function parseTransferFunctionDirective(
       0.7,
     ) as number;
     controlPoints.push({
-      position: startPoint,
-      color: vec4.fromValues(0, 0, 0, 0),
+      inputValue: startPoint,
+      outputColor: vec4.fromValues(0, 0, 0, 0),
     });
     controlPoints.push({
-      position: endPoint,
-      color: vec4.fromValues(255, 255, 255, 255),
+      inputValue: endPoint,
+      outputColor: vec4.fromValues(255, 255, 255, 255),
     });
   } else {
     // Parse control points from the shader code and sort them
     for (const controlPoint of parsedControlPoints) {
-      let normalizedPosition = computeInvlerp(range, controlPoint.position);
+      let normalizedPosition = computeInvlerp(range, controlPoint.inputValue);
       normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1);
       const position = computeLerp(
         [0, TRANSFER_FUNCTION_LENGTH - 1],
         DataType.UINT16,
         normalizedPosition,
       ) as number;
-      controlPoints.push({ position: position, color: controlPoint.color });
+      controlPoints.push({ inputValue: position, outputColor: controlPoint.outputColor });
     }
     const pointPositions = new Set<number>();
     for (let i = 0; i < controlPoints.length; i++) {
       const controlPoint = controlPoints[i];
-      if (pointPositions.has(controlPoint.position)) {
+      if (pointPositions.has(controlPoint.inputValue)) {
         errors.push(
-          `Duplicate control point position: ${parsedControlPoints[i].position}`,
+          `Duplicate control point position: ${parsedControlPoints[i].inputValue}`,
         );
       }
-      pointPositions.add(controlPoint.position);
+      pointPositions.add(controlPoint.inputValue);
     }
-    controlPoints.sort((a, b) => a.position - b.position);
+    controlPoints.sort((a, b) => a.inputValue - b.inputValue);
   }
   if (errors.length > 0) {
     return { errors };
@@ -1241,8 +1241,8 @@ function parseTransferFunctionParameters(
     "controlPoints",
     (x) => parseTransferFunctionControlPoints(x, range, dataType),
     defaultValue.controlPoints.map((x) => ({
-      position: x.position,
-      color: x.color,
+      position: x.inputValue,
+      color: x.outputColor,
     })),
   );
   return {
@@ -1268,8 +1268,8 @@ function copyTransferFunctionParameters(
 ) {
   return {
     controlPoints: defaultValue.controlPoints.map((x) => ({
-      position: x.position,
-      color: x.color,
+      position: x.inputValue,
+      color: x.outputColor,
     })),
     channel: defaultValue.channel,
     color: defaultValue.color,
@@ -1314,11 +1314,11 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     }
 
     return controlPoints.map((x) => ({
-      input: positionToJson(x.position),
+      input: positionToJson(x.inputValue),
       color: serializeColor(
-        vec3.fromValues(x.color[0] / 255, x.color[1] / 255, x.color[2] / 255),
+        vec3.fromValues(x.outputColor[0] / 255, x.outputColor[1] / 255, x.outputColor[2] / 255),
       ),
-      opacity: x.color[3] / 255,
+      opacity: x.outputColor[3] / 255,
     }));
   }
 
@@ -1343,7 +1343,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
     const controlPointsJson = arraysEqualWithPredicate(
       defaultValue.controlPoints,
       controlPoints,
-      (a, b) => arraysEqual(a.color, b.color) && a.position === b.position,
+      (a, b) => arraysEqual(a.outputColor, b.outputColor) && a.inputValue === b.inputValue,
     )
       ? undefined
       : this.controlPointsToJson(this.value.controlPoints, range, dataType);

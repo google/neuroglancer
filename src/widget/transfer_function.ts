@@ -37,10 +37,14 @@ import {
 } from "#src/util/event_action_map.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
-import { computeLerp, parseDataTypeValue } from "#src/util/lerp.js";
+import {
+  computeInvlerp,
+  computeLerp,
+  parseDataTypeValue,
+} from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
-import type { Uint64 } from "#src/util/uint64.js";
+import { Uint64 } from "#src/util/uint64.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { Buffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
@@ -75,10 +79,10 @@ import type {
 import { PositionWidget } from "#src/widget/position_widget.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-export const TRANSFER_FUNCTION_LENGTH = 1024;
+const TRANSFER_FUNCTION_PANEL_SIZE = 1024;
 export const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
-const CONTROL_POINT_X_GRAB_DISTANCE = TRANSFER_FUNCTION_LENGTH / 40;
+const CONTROL_POINT_X_GRAB_DISTANCE = TRANSFER_FUNCTION_PANEL_SIZE / 40;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 10;
 
 const transferFunctionSamplerTextureUnit = Symbol(
@@ -93,21 +97,82 @@ const transferFunctionSamplerTextureUnit = Symbol(
  * Such a lookup table is used to form a texture, which can be sampled
  * from during rendering.
  */
-export interface ControlPoint {
-  /** The bin that the point's x value lies in - int between 0 and TRANSFER_FUNCTION_LENGTH - 1 */
-  position: number;
+export interface ControlPointa {
+  /** The input data value for this control point */
+  inputValue: number | Uint64;
   /** Color of the point as 4 uint8 values */
-  color: vec4;
+  outputColor: vec4;
 }
+
+export class ControlPoint {
+  constructor(
+    public inputValue: number | Uint64,
+    public outputColor: vec4,
+  ) {}
+
+  /** Convert the input value to a normalized value between 0 and 1 */
+  toNormalizedInputValue(range: DataTypeInterval): number {
+    return computeInvlerp(range, this.inputValue);
+  }
+
+  /** Convert the input value to an integer index into the transfer function lookup texture */
+  toTransferFunctionIndex(
+    dataRange: DataTypeInterval,
+    transferFunctionSize: number,
+  ): number {
+    return Math.floor(
+      this.toNormalizedInputValue(dataRange) * (transferFunctionSize - 1),
+    );
+  }
+
+  static copyFrom(other: ControlPoint) {
+    const inputValue = other.inputValue;
+    const outputColor = vec4.clone(other.outputColor);
+    return new ControlPoint(inputValue, outputColor);
+  }
+}
+
+// export class ControlPointNumber extends ControlPoint {
+//   inputValue: number;
+//   outputColor: vec4;
+//   constructor() {
+//     super();
+//   }
+
+//   isPositive(value: number): boolean {
+//     return value > 0;
+//   }
+
+//   isBefore(controlPoint: ControlPointNumber): boolean {
+//     return this.inputValue < controlPoint.inputValue;
+//   }
+// }
+
+// export class ControlPointUint64 extends ControlPoint {
+//   inputValue: Uint64;
+//   outputColor: vec4;
+//   constructor() {
+//     super();
+//   }
+
+//   isPositive(value: Uint64): boolean {
+//     return Uint64.less(Uint64.ZERO, value);
+//   }
+
+//   isBefore(controlPoint: ControlPointUint64): boolean {
+//     return Uint64.less(this.inputValue(controlPoint.inputValue);
+//   }
+// }
 
 /**
  * A parsed control point could have a position represented as a Uint64
  * This will later be converted to a number between 0 and TRANSFER_FUNCTION_LENGTH - 1
  * And then stored as a control point
+ * TODO(skm) - remove parsed control points
  */
 export interface ParsedControlPoint {
-  position: number | Uint64;
-  color: vec4;
+  inputValue: number | Uint64;
+  outputColor: vec4;
 }
 
 /**
@@ -115,13 +180,15 @@ export interface ParsedControlPoint {
  */
 export interface TransferFunctionTextureOptions {
   /** If lookupTable is defined, it will be used to update the texture directly.
-   * A lookup table is a series of color values (0 - 255) between control points
+   * A lookup table is a series of color values (0 - 255) for each index in the transfer function texture
    */
   lookupTable?: Uint8Array;
   /** If lookupTable is undefined, controlPoints will be used to generate a lookup table as a first step */
   controlPoints?: ControlPoint[];
   /** textureUnit to update with the new transfer function texture data */
   textureUnit: number | undefined;
+  /** range of the input space I, where T: I -> O */
+  inputRange: DataTypeInterval;
 }
 
 interface CanvasPosition {
@@ -140,6 +207,8 @@ interface CanvasPosition {
 export function lerpBetweenControlPoints(
   out: Uint8Array,
   controlPoints: ControlPoint[],
+  dataRange: DataTypeInterval,
+  transferFunctionSize: number,
 ) {
   function addLookupValue(index: number, color: vec4) {
     out[index] = color[0];
@@ -147,18 +216,25 @@ export function lerpBetweenControlPoints(
     out[index + 2] = color[2];
     out[index + 3] = color[3];
   }
+  function toTransferFunctionSpace(controlPoint: ControlPoint) {
+    return controlPoint.toTransferFunctionIndex(
+      dataRange,
+      transferFunctionSize,
+    );
+  }
 
   // Edge case: no control points - all transparent
   if (controlPoints.length === 0) {
     out.fill(0);
     return;
   }
-  const firstPoint = controlPoints[0];
+  const firstInputValue = toTransferFunctionSpace(controlPoints[0]);
 
   // Edge case: first control point is not at 0 - fill in transparent values
-  if (firstPoint.position > 0) {
+  // up to the first point
+  if (firstInputValue > 0) {
     const transparent = vec4.fromValues(0, 0, 0, 0);
-    for (let i = 0; i < firstPoint.position; ++i) {
+    for (let i = 0; i < firstInputValue; ++i) {
       const index = i * NUM_COLOR_CHANNELS;
       addLookupValue(index, transparent);
     }
@@ -166,24 +242,24 @@ export function lerpBetweenControlPoints(
 
   // Interpolate between control points and fill to end with last color
   let controlPointIndex = 0;
-  for (let i = firstPoint.position; i < TRANSFER_FUNCTION_LENGTH; ++i) {
+  for (let i = firstInputValue; i < transferFunctionSize; ++i) {
     const currentPoint = controlPoints[controlPointIndex];
     const nextPoint =
       controlPoints[Math.min(controlPointIndex + 1, controlPoints.length - 1)];
     const lookupIndex = i * NUM_COLOR_CHANNELS;
     if (currentPoint === nextPoint) {
-      addLookupValue(lookupIndex, currentPoint.color);
+      addLookupValue(lookupIndex, currentPoint.outputColor);
     } else {
-      const t =
-        (i - currentPoint.position) /
-        (nextPoint.position - currentPoint.position);
+      const currentInputValue = toTransferFunctionSpace(currentPoint);
+      const nextInputValue = toTransferFunctionSpace(nextPoint);
+      const t = (i - currentInputValue) / (nextInputValue - currentInputValue);
       const lerpedColor = lerpUint8Color(
-        currentPoint.color,
-        nextPoint.color,
+        currentPoint.outputColor,
+        nextPoint.outputColor,
         t,
       );
       addLookupValue(lookupIndex, lerpedColor);
-      if (i === nextPoint.position) {
+      if (i === nextPoint.inputValue) {
         controlPointIndex++;
       }
     }
@@ -214,10 +290,11 @@ function lerpUint8Color(startColor: vec4, endColor: vec4, t: number) {
 
 /**
  * Represent the underlying transfer function lookup table as a texture
+ * TODO(skm) consider if height can be used for more efficiency
  */
 export class TransferFunctionTexture extends RefCounted {
   texture: WebGLTexture | null = null;
-  width: number = TRANSFER_FUNCTION_LENGTH;
+  width: number;
   height = 1;
   private priorOptions: TransferFunctionTextureOptions | undefined = undefined;
 
@@ -248,7 +325,9 @@ export class TransferFunctionTexture extends RefCounted {
       controlPointsEqual = arraysEqualWithPredicate(
         existingOptions.controlPoints,
         newOptions.controlPoints,
-        (a, b) => a.position === b.position && arraysEqual(a.color, b.color),
+        (a, b) =>
+          a.inputValue === b.inputValue &&
+          arraysEqual(a.outputColor, b.outputColor),
       );
     }
     const textureUnitEqual =
@@ -297,9 +376,14 @@ export class TransferFunctionTexture extends RefCounted {
     let lookupTable = options.lookupTable;
     if (lookupTable === undefined) {
       lookupTable = new Uint8Array(
-        TRANSFER_FUNCTION_LENGTH * NUM_COLOR_CHANNELS,
+        this.width * this.height * NUM_COLOR_CHANNELS,
       );
-      lerpBetweenControlPoints(lookupTable, options.controlPoints!);
+      lerpBetweenControlPoints(
+        lookupTable,
+        options.controlPoints!,
+        options.inputRange,
+        this.width * this.height,
+      );
     }
     gl.texImage2D(
       WebGL2RenderingContext.TEXTURE_2D,
@@ -315,13 +399,14 @@ export class TransferFunctionTexture extends RefCounted {
 
     // Update the prior options to the current options for future comparisons
     // Make a copy of the options for the purpose of comparison
+    // TODO(skm) is this copy needed?
     this.priorOptions = {
       textureUnit: options.textureUnit,
       lookupTable: options.lookupTable?.slice(),
-      controlPoints: options.controlPoints?.map((point) => ({
-        position: point.position,
-        color: vec4.clone(point.color),
-      })),
+      controlPoints: options.controlPoints?.map((point) =>
+        ControlPoint.copyFrom(point),
+      ),
+      inputRange: options.inputRange,
     };
   }
 
@@ -363,12 +448,13 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       },
     ),
   );
+  // TODO (skm) - the non-fixed length might be tricky here
   constructor(public parent: TransferFunctionWidget) {
     super(parent.display, document.createElement("div"), parent.visibility);
     const { element } = this;
     element.classList.add("neuroglancer-transfer-function-panel");
     this.textureVertexBufferArray = createGriddedRectangleArray(
-      TRANSFER_FUNCTION_LENGTH,
+      TRANSFER_FUNCTION_PANEL_SIZE,
     );
     this.texture = this.registerDisposer(new TransferFunctionTexture(this.gl));
     this.textureVertexBuffer = this.registerDisposer(
@@ -404,7 +490,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
   updateTransferFunctionPointsAndLines() {
     // Normalize position to [-1, 1] for shader (x axis)
     function normalizePosition(position: number) {
-      return (position / (TRANSFER_FUNCTION_LENGTH - 1)) * 2 - 1;
+      return (position / (TRANSFER_FUNCTION_PANEL_SIZE - 1)) * 2 - 1;
     }
     // Normalize opacity to [-1, 1] for shader (y axis)
     function normalizeOpacity(opacity: number) {
@@ -431,6 +517,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
     const controlPoints =
       this.controlPointsLookupTable.trackable.value.controlPoints;
+    const dataRange = this.controlPointsLookupTable.trackable.value.range;
     let numLines = controlPoints.length === 0 ? 0 : controlPoints.length;
     const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
@@ -440,20 +527,29 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     let lineToRightEdge = null;
 
     if (controlPoints.length > 0) {
+      const firstPoint = controlPoints[0];
+      const firstInputValue = firstPoint.toTransferFunctionIndex(
+        dataRange,
+        TRANSFER_FUNCTION_PANEL_SIZE,
+      );
       // If the start point is above 0, need to draw a line from the left edge
-      if (controlPoints[0].position > 0) {
+      if (firstInputValue > 0) {
         numLines += 1;
-        lineFromLeftEdge = vec4.fromValues(0, 0, controlPoints[0].position, 0);
+        lineFromLeftEdge = vec4.fromValues(0, 0, firstInputValue, 0);
       }
       // If the end point is less than the transfer function length, need to draw a line to the right edge
-      const endPoint = controlPoints[controlPoints.length - 1];
-      if (endPoint.position < TRANSFER_FUNCTION_LENGTH - 1) {
+      const finalPoint = controlPoints[controlPoints.length - 1];
+      const finalInputValue = finalPoint.toTransferFunctionIndex(
+        dataRange,
+        TRANSFER_FUNCTION_PANEL_SIZE,
+      );
+      if (finalInputValue < TRANSFER_FUNCTION_PANEL_SIZE - 1) {
         numLines += 1;
         lineToRightEdge = vec4.fromValues(
-          endPoint.position,
-          endPoint.color[3],
-          TRANSFER_FUNCTION_LENGTH - 1,
-          endPoint.color[3],
+          finalInputValue,
+          finalPoint.outputColor[3],
+          TRANSFER_FUNCTION_PANEL_SIZE - 1,
+          finalPoint.outputColor[3],
         );
       }
     }
@@ -472,12 +568,16 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
     // Draw a vertical line up to the first control point
     if (numLines !== 0) {
-      const startPoint = controlPoints[0];
+      const firstPoint = controlPoints[0];
+      const firstInputValue = firstPoint.toTransferFunctionIndex(
+        dataRange,
+        TRANSFER_FUNCTION_PANEL_SIZE,
+      );
       const lineStartEndPoints = vec4.fromValues(
-        startPoint.position,
+        firstInputValue,
         0,
-        startPoint.position,
-        startPoint.color[3],
+        firstInputValue,
+        firstPoint.outputColor[3],
       );
       positionArrayIndex = addLine(
         linePositionArray,
@@ -489,20 +589,27 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     for (let i = 0; i < controlPoints.length; ++i) {
       const colorIndex = i * colorChannels;
       const positionIndex = i * 2;
-      const { color, position } = controlPoints[i];
-      colorArray[colorIndex] = normalizeColor(color[0]);
-      colorArray[colorIndex + 1] = normalizeColor(color[1]);
-      colorArray[colorIndex + 2] = normalizeColor(color[2]);
-      positionArray[positionIndex] = normalizePosition(position);
-      positionArray[positionIndex + 1] = normalizeOpacity(color[3]);
+      const { outputColor } = controlPoints[i];
+      const inputValue = controlPoints[i].toTransferFunctionIndex(
+        dataRange,
+        TRANSFER_FUNCTION_PANEL_SIZE,
+      );
+      colorArray[colorIndex] = normalizeColor(outputColor[0]);
+      colorArray[colorIndex + 1] = normalizeColor(outputColor[1]);
+      colorArray[colorIndex + 2] = normalizeColor(outputColor[2]);
+      positionArray[positionIndex] = normalizePosition(inputValue);
+      positionArray[positionIndex + 1] = normalizeOpacity(outputColor[3]);
 
       // Don't create a line for the last point
       if (i === controlPoints.length - 1) break;
       const linePosition = vec4.fromValues(
-        position,
-        color[3],
-        controlPoints[i + 1].position,
-        controlPoints[i + 1].color[3],
+        inputValue,
+        outputColor[3],
+        controlPoints[i + 1].toTransferFunctionIndex(
+          dataRange,
+          TRANSFER_FUNCTION_PANEL_SIZE,
+        ),
+        controlPoints[i + 1].outputColor[3],
       );
       positionArrayIndex = addLine(
         linePositionArray,
@@ -734,7 +841,7 @@ class ControlPointsLookupTable extends RefCounted {
   }
   findNearestControlPointIndex(position: number) {
     return findClosestMatchInSortedArray(
-      this.trackable.value.controlPoints.map((point) => point.position),
+      this.trackable.value.controlPoints.map((point) => point.inputValue),
       this.positionToIndex(position),
       (a, b) => a - b,
     );
@@ -747,7 +854,7 @@ class ControlPointsLookupTable extends RefCounted {
       return -1;
     }
     const controlPoints = this.trackable.value.controlPoints;
-    const nearestPosition = controlPoints[nearestIndex].position;
+    const nearestPosition = controlPoints[nearestIndex].inputValue;
     if (
       Math.abs(nearestPosition - desiredPosition) >
       CONTROL_POINT_X_GRAB_DISTANCE
@@ -756,12 +863,12 @@ class ControlPointsLookupTable extends RefCounted {
     }
 
     // If points are nearby in X space, use Y space to break ties
-    const nextPosition = controlPoints[nearestIndex + 1]?.position;
+    const nextPosition = controlPoints[nearestIndex + 1]?.inputValue;
     const nextDistance =
       nextPosition !== undefined
         ? Math.abs(nextPosition - desiredPosition)
         : CONTROL_POINT_X_GRAB_DISTANCE + 1;
-    const previousPosition = controlPoints[nearestIndex - 1]?.position;
+    const previousPosition = controlPoints[nearestIndex - 1]?.inputValue;
     const previousDistance =
       previousPosition !== undefined
         ? Math.abs(previousPosition - desiredPosition)
@@ -770,18 +877,22 @@ class ControlPointsLookupTable extends RefCounted {
     if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
       possibleValues.push([
         nearestIndex + 1,
-        Math.abs(controlPoints[nearestIndex + 1].color[3] - desiredOpacity),
+        Math.abs(
+          controlPoints[nearestIndex + 1].outputColor[3] - desiredOpacity,
+        ),
       ]);
     }
     if (previousDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
       possibleValues.push([
         nearestIndex - 1,
-        Math.abs(controlPoints[nearestIndex - 1].color[3] - desiredOpacity),
+        Math.abs(
+          controlPoints[nearestIndex - 1].outputColor[3] - desiredOpacity,
+        ),
       ]);
     }
     possibleValues.push([
       nearestIndex,
-      Math.abs(controlPoints[nearestIndex].color[3] - desiredOpacity),
+      Math.abs(controlPoints[nearestIndex].outputColor[3] - desiredOpacity),
     ]);
     possibleValues.sort((a, b) => a[1] - b[1]);
     return possibleValues[0][0];
@@ -796,21 +907,21 @@ class ControlPointsLookupTable extends RefCounted {
     const controlPoints = this.trackable.value.controlPoints;
     const positionAsIndex = this.positionToIndex(position);
     const existingIndex = controlPoints.findIndex(
-      (point) => point.position === positionAsIndex,
+      (point) => point.inputValue === positionAsIndex,
     );
     if (existingIndex !== -1) {
       controlPoints.splice(existingIndex, 1);
     }
     controlPoints.push({
-      position: positionAsIndex,
-      color: vec4.fromValues(
+      inputValue: positionAsIndex,
+      outputColor: vec4.fromValues(
         colorAsUint8[0],
         colorAsUint8[1],
         colorAsUint8[2],
         opacityAsUint8,
       ),
     });
-    controlPoints.sort((a, b) => a.position - b.position);
+    controlPoints.sort((a, b) => a.inputValue - b.inputValue);
   }
   lookupTableFromControlPoints() {
     const { lookupTable } = this;
@@ -821,24 +932,29 @@ class ControlPointsLookupTable extends RefCounted {
     const { controlPoints } = this.trackable.value;
     const positionAsIndex = this.positionToIndex(position);
     const opacityAsUint8 = this.opacityToUint8(opacity);
-    const color = controlPoints[index].color;
+    const color = controlPoints[index].outputColor;
     controlPoints[index] = {
-      position: positionAsIndex,
-      color: vec4.fromValues(color[0], color[1], color[2], opacityAsUint8),
+      inputValue: positionAsIndex,
+      outputColor: vec4.fromValues(
+        color[0],
+        color[1],
+        color[2],
+        opacityAsUint8,
+      ),
     };
     const exsitingPositions = new Set<number>();
     let positionToFind = positionAsIndex;
     for (const point of controlPoints) {
-      if (exsitingPositions.has(point.position)) {
+      if (exsitingPositions.has(point.inputValue)) {
         positionToFind = positionToFind === 0 ? 1 : positionToFind - 1;
-        controlPoints[index].position = positionToFind;
+        controlPoints[index].inputValue = positionToFind;
         break;
       }
-      exsitingPositions.add(point.position);
+      exsitingPositions.add(point.inputValue);
     }
-    controlPoints.sort((a, b) => a.position - b.position);
+    controlPoints.sort((a, b) => a.inputValue - b.inputValue);
     const newControlPointIndex = controlPoints.findIndex(
-      (point) => point.position === positionToFind,
+      (point) => point.inputValue === positionToFind,
     );
     return newControlPointIndex;
   }
@@ -849,11 +965,11 @@ class ControlPointsLookupTable extends RefCounted {
       floatToUint8(color[1]),
       floatToUint8(color[2]),
     );
-    controlPoints[index].color = vec4.fromValues(
+    controlPoints[index].outputColor = vec4.fromValues(
       colorAsUint8[0],
       colorAsUint8[1],
       colorAsUint8[2],
-      controlPoints[index].color[3],
+      controlPoints[index].outputColor[3],
     );
   }
 }
