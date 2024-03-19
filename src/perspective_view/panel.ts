@@ -1171,9 +1171,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       );
       gl.disable(WebGL2RenderingContext.BLEND);
     }
-    // if (this.viewer.showAxisLines.value) {
-    //   this.drawAxisLines();
-    // }
     this.offscreenFramebuffer.unbind();
 
     // Draw the texture over the whole viewport.
