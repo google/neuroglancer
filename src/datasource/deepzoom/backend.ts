@@ -14,24 +14,26 @@
  * limitations under the License.
  */
 
-import { WithParameters } from "#/chunk_manager/backend";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
+import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
+import { decodePng } from "#src/async_computation/decode_png_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import {
   ImageTileEncoding,
   ImageTileSourceParameters,
-} from "#/datasource/deepzoom/base";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { isNotFoundError, responseArrayBuffer } from "#/util/http_request";
+} from "#src/datasource/deepzoom/base.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { transposeArray2d } from "#src/util/array.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 import {
-  cancellableFetchSpecialOk,
-  SpecialProtocolCredentials,
-} from "#/util/special_protocol_request";
-import { registerSharedObject } from "#/worker_rpc";
-import { decodeJpeg } from "#/async_computation/decode_jpeg_request";
-import { decodePng } from "#/async_computation/decode_png_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { transposeArray2d } from "#/util/array";
+  isNotFoundError,
+  responseArrayBuffer,
+} from "#src/util/http_request.js";
+import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 /* This is enough if support for these aren't needed:
  * - Firefox before 105 (OffscreenCanvas, 2022-09-20)

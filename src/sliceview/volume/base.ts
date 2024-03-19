@@ -14,22 +14,25 @@
  * limitations under the License.
  */
 
-import {
+import type {
   ChunkLayoutOptions,
-  getChunkDataSizes,
-  getNearIsotropicBlockSize,
-  makeSliceViewChunkSpecification,
   SliceViewChunkSource,
   SliceViewChunkSpecification,
   SliceViewChunkSpecificationBaseOptions,
   SliceViewChunkSpecificationOptions,
   SliceViewSourceOptions,
-} from "#/sliceview/base";
-import { DATA_TYPE_BYTES, DataType } from "#/util/data_type";
-import { getDependentTransformInputDimensions, vec3 } from "#/util/geom";
-import * as matrix from "#/util/matrix";
-import { Uint64 } from "#/util/uint64";
-import * as vector from "#/util/vector";
+} from "#src/sliceview/base.js";
+import {
+  getChunkDataSizes,
+  getNearIsotropicBlockSize,
+  makeSliceViewChunkSpecification,
+} from "#src/sliceview/base.js";
+import { DATA_TYPE_BYTES, DataType } from "#src/util/data_type.js";
+import type { vec3 } from "#src/util/geom.js";
+import { getDependentTransformInputDimensions } from "#src/util/geom.js";
+import * as matrix from "#src/util/matrix.js";
+import { Uint64 } from "#src/util/uint64.js";
+import * as vector from "#src/util/vector.js";
 
 export { DATA_TYPE_BYTES, DataType };
 

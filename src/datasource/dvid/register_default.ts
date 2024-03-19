@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { DVIDDataSource } from "#/datasource/dvid/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { DVIDDataSource } from "#src/datasource/dvid/frontend.js";
 
 registerProvider(
   "dvid",

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import svg_plus from "ikonate/icons/plus.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_plus from "ikonate/icons/plus.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeAddButton(options: MakeIconOptions = {}) {
   return makeIcon({ svg: svg_plus, ...options });

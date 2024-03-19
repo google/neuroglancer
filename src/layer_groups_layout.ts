@@ -18,29 +18,31 @@
  * @file Facilities for laying out multiple LayerGroupViewer instances.
  */
 
-import "./layer_groups_layout.css";
+import "#src/layer_groups_layout.css";
 
-import debounce from "lodash/debounce";
-import { LayerListSpecification, LayerSubsetSpecification } from "#/layer";
+import { debounce } from "lodash-es";
+import type { LayerListSpecification } from "#src/layer/index.js";
+import { LayerSubsetSpecification } from "#src/layer/index.js";
 import {
   getViewerDropEffect,
   hasViewerDrag,
   LayerGroupViewer,
   viewerDragType,
-} from "#/layer_group_viewer";
-import { TrackableValue } from "#/trackable_value";
-import { popDragStatus, pushDragStatus } from "#/ui/drag_and_drop";
+} from "#src/layer_group_viewer.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
+import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
-  DropLayers,
   endLayerDrag,
   getDropLayers,
   getLayerDragInfo,
   updateLayerDropEffect,
-} from "#/ui/layer_drag_and_drop";
-import { SIZE_FOR_DIRECTION } from "#/ui/side_panel";
-import { Borrowed, RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
-import { getDropEffect, setDropEffect } from "#/util/drag_and_drop";
+} from "#src/ui/layer_drag_and_drop.js";
+import { SIZE_FOR_DIRECTION } from "#src/ui/side_panel.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
+import { getDropEffect, setDropEffect } from "#src/util/drag_and_drop.js";
 import {
   parseArray,
   verifyFinitePositiveFloat,
@@ -48,11 +50,11 @@ import {
   verifyObjectProperty,
   verifyOptionalObjectProperty,
   verifyString,
-} from "#/util/json";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
-import { NullarySignal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
-import { Viewer } from "#/viewer";
+} from "#src/util/json.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 interface LayoutComponent extends RefCounted {
   element: HTMLElement;

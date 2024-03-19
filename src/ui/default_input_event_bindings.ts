@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { EventActionMap } from "#/util/event_action_map";
-import { InputEventBindings } from "#/viewer";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import type { InputEventBindings } from "#src/viewer.js";
 
 let defaultGlobalBindings: EventActionMap | undefined;
 

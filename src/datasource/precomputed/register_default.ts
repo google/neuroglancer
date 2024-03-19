@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { PrecomputedDataSource } from "#/datasource/precomputed/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { PrecomputedDataSource } from "#src/datasource/precomputed/frontend.js";
 
 registerProvider("precomputed", () => new PrecomputedDataSource());

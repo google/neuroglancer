@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { NiftiDataSource } from "#/datasource/nifti/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { NiftiDataSource } from "#src/datasource/nifti/frontend.js";
 
 registerProvider("nifti", () => new NiftiDataSource());

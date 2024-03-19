@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
+import type { CancellationToken } from "#src/util/cancellation.js";
 import {
   CANCELED,
-  CancellationToken,
   CancellationTokenSource,
   makeCancelablePromise,
   uncancelableToken,
-} from "#/util/cancellation";
-import { RefCounted } from "#/util/disposable";
+} from "#src/util/cancellation.js";
+import { RefCounted } from "#src/util/disposable.js";
 
 export type RPCHandler = (this: RPC, x: any) => void;
 
@@ -35,6 +35,7 @@ const DEBUG_MESSAGES = false;
 
 const PROMISE_RESPONSE_ID = "rpc.promise.response";
 const PROMISE_CANCEL_ID = "rpc.promise.cancel";
+const READY_ID = "rpc.ready";
 
 const handlers = new Map<string, RPCHandler>();
 
@@ -108,6 +109,11 @@ registerRPC(PROMISE_RESPONSE_ID, function (this: RPC, x: any) {
   }
 });
 
+registerRPC(READY_ID, function (this: RPC, x: any) {
+  x;
+  this.onPeerReady();
+});
+
 interface RPCTarget {
   postMessage(message?: any, ports?: any): void;
   onmessage: ((ev: MessageEvent) => any) | null;
@@ -118,7 +124,14 @@ const INITIAL_RPC_ID = IS_WORKER ? -1 : 0;
 export class RPC {
   private objects = new Map<RpcId, any>();
   private nextId: RpcId = INITIAL_RPC_ID;
-  constructor(public target: RPCTarget) {
+  private queue: { data: any; transfers?: any[] }[] | undefined;
+  constructor(
+    public target: RPCTarget,
+    waitUntilReady: boolean,
+  ) {
+    if (waitUntilReady) {
+      this.queue = [];
+    }
     target.onmessage = (e) => {
       const data = e.data;
       if (DEBUG_MESSAGES) {
@@ -126,6 +139,19 @@ export class RPC {
       }
       handlers.get(data.functionName)!.call(this, data);
     };
+  }
+
+  sendReady() {
+    this.invoke(READY_ID, {});
+  }
+
+  onPeerReady() {
+    const { queue } = this;
+    if (queue === undefined) return;
+    this.queue = undefined;
+    for (const { data, transfers } of queue) {
+      this.target.postMessage(data, transfers);
+    }
   }
 
   get numObjects() {
@@ -166,6 +192,11 @@ export class RPC {
     x.functionName = name;
     if (DEBUG_MESSAGES) {
       console.trace("Sending message", x);
+    }
+    const { queue } = this;
+    if (queue !== undefined) {
+      queue.push({ data: x, transfers });
+      return;
     }
     this.target.postMessage(x, transfers);
   }
@@ -313,19 +344,6 @@ registerRPC("SharedObject.dispose", function (x) {
   this.delete(obj.rpcId!);
   obj.rpcId = null;
   obj.rpc = null;
-});
-
-// RPC ID used to request the other thread to create a worker.
-//
-// On Safari, workers cannot themselves create additional workers.  As a workaround, workers can
-// send the main thread a worker URL and a `MessagePort` and the main thread will create the worker
-// and send it the message port.
-export const WORKER_RPC_ID = "Worker";
-
-registerRPC(WORKER_RPC_ID, (x) => {
-  const { port, path } = x;
-  const worker = new Worker(path);
-  worker.postMessage({ port }, [port]);
 });
 
 registerRPC("SharedObject.refCountReachedZero", function (x) {

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { UserLayer } from "#/layer";
-import { TrackableBooleanCheckbox } from "#/trackable_boolean";
-import { WatchableValueInterface } from "#/trackable_value";
-import { LayerControlFactory } from "#/widget/layer_control";
+import type { UserLayer } from "#src/layer/index.js";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
 
 export function checkboxLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => WatchableValueInterface<boolean>,

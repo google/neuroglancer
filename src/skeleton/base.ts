@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DataType } from "#/util/data_type";
+import type { DataType } from "#src/util/data_type.js";
 
 export const SKELETON_LAYER_RPC_ID = "skeleton/SkeletonLayer";
 

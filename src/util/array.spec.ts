@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   getInsertPermutation,
   getMergeSplices,
@@ -22,7 +23,7 @@ import {
   tile2dArray,
   transposeArray2d,
   findClosestMatchInSortedArray,
-} from "#/util/array";
+} from "#src/util/array.js";
 
 describe("partitionArray", () => {
   it("basic test", () => {

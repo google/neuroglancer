@@ -7,5 +7,7 @@ pandas-stubs
 selenium
 tornado
 pytest
+pytest-html
 requests
+filelock
 argcomplete

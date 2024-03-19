@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { tile2dArray } from "#/util/array";
-import { getMemoizedBuffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
+import { tile2dArray } from "#src/util/array.js";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
 
 export function getSquareCornersArray(
   startX = -1,

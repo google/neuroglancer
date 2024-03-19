@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { SkeletonChunk } from "#/skeleton/backend";
+import type { SkeletonChunk } from "#src/skeleton/backend.js";
 
 export function decodeSwcSkeletonChunk(chunk: SkeletonChunk, swcStr: string) {
   const swcObjects: Array<PointObj> = parseSwc(swcStr);
@@ -71,7 +71,7 @@ export function decodeSwcSkeletonChunk(chunk: SkeletonChunk, swcStr: string) {
  */
 function parseSwc(swcStr: string) {
   const swcInputAr = swcStr.split("\n");
-  const swcObjectsAr: Array<PointObj> = new Array();
+  const swcObjectsAr: Array<PointObj> = [];
   const float = "-?\\d*(?:\\.\\d+)?";
   const pattern = new RegExp(
     "^[ \\t]*(" +

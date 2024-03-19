@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#/credentials_provider/default_manager";
+import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import type { CredentialsManager } from "#src/credentials_provider/index.js";
 import {
   MiddleAuthCredentialsProvider,
   MiddleAuthAppCredentialsProvider,
-} from "#/datasource/middleauth/credentials_provider";
-import { CredentialsManager } from "#/credentials_provider";
+} from "#src/datasource/middleauth/credentials_provider.js";
 
 defaultCredentialsManager.register(
   "middleauth",

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "./status.css";
+import "#src/status.css";
 
 let statusContainer: HTMLElement | null = null;
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DataType } from "#/sliceview/volume/base";
+import type { DataType } from "#src/sliceview/volume/base.js";
 
 export const GET_NIFTI_VOLUME_INFO_RPC_ID = "nifti/getNiftiVolumeInfo";
 

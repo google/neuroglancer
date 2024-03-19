@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import { postProcessRawData } from "#/sliceview/backend_chunk_decoders/postprocess";
-import { VolumeChunk } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { DATA_TYPE_BYTES, makeDataTypeArrayView } from "#/util/data_type";
-import { convertEndian, Endianness, ENDIANNESS } from "#/util/endian";
-import * as vector from "#/util/vector";
+import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { DATA_TYPE_BYTES, makeDataTypeArrayView } from "#src/util/data_type.js";
+import type { Endianness } from "#src/util/endian.js";
+import { convertEndian, ENDIANNESS } from "#src/util/endian.js";
+import * as vector from "#src/util/vector.js";
 
 export async function decodeRawChunk(
   chunk: VolumeChunk,

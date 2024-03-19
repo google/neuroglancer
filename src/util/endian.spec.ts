@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { swapEndian16, swapEndian32 } from "#/util/endian";
+import { describe, it, expect } from "vitest";
+import { swapEndian16, swapEndian32 } from "#src/util/endian.js";
 
 describe("endian", () => {
   it("swapEndian16", () => {

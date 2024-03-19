@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 
 export function bindTitle(title: WatchableValueInterface<string | undefined>) {
   const debouncedSetTitle = animationFrameDebounce(() => {

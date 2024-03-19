@@ -19,24 +19,25 @@ import {
   ChunkRenderLayerBackend,
   ChunkSource,
   withChunkManager,
-} from "#/chunk_manager/backend";
-import { ChunkState } from "#/chunk_manager/base";
-import { decodeVertexPositionsAndIndices } from "#/mesh/backend";
-import { withSegmentationLayerBackendState } from "#/segmentation_display_state/backend";
+} from "#src/chunk_manager/backend.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import { decodeVertexPositionsAndIndices } from "#src/mesh/backend.js";
+import { withSegmentationLayerBackendState } from "#src/segmentation_display_state/backend.js";
 import {
   forEachVisibleSegment,
   getObjectKey,
-} from "#/segmentation_display_state/base";
-import { SKELETON_LAYER_RPC_ID } from "#/skeleton/base";
-import { TypedArray } from "#/util/array";
-import { Endianness } from "#/util/endian";
-import { Uint64 } from "#/util/uint64";
+} from "#src/segmentation_display_state/base.js";
+import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
+import type { TypedArray } from "#src/util/array.js";
+import type { Endianness } from "#src/util/endian.js";
+import { Uint64 } from "#src/util/uint64.js";
 import {
   getBasePriority,
   getPriorityTier,
-} from "#/visibility_priority/backend";
-import { withSharedVisibility } from "#/visibility_priority/backend";
-import { registerSharedObject, RPC } from "#/worker_rpc";
+  withSharedVisibility,
+} from "#src/visibility_priority/backend.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 const SKELETON_CHUNK_PRIORITY = 60;
 

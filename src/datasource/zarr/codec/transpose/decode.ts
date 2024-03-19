@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import { CodecArrayInfo, CodecKind } from "#/datasource/zarr/codec";
-import { registerCodec } from "#/datasource/zarr/codec/decode";
-import type { Configuration } from "#/datasource/zarr/codec/transpose/resolve";
-import { CancellationToken } from "#/util/cancellation";
+import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
+import type { CodecArrayInfo } from "#src/datasource/zarr/codec/index.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import type { Configuration } from "#src/datasource/zarr/codec/transpose/resolve.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 registerCodec({
   name: "transpose",

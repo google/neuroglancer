@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { postProcessRawData } from "#/sliceview/backend_chunk_decoders/postprocess";
-import { VolumeChunk } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { decodeJpeg } from "#/async_computation/decode_jpeg_request";
-import { requestAsyncComputation } from "#/async_computation/request";
+import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function decodeJpegChunk(
   chunk: VolumeChunk,

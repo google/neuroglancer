@@ -19,8 +19,8 @@
  * (opacity) values.
  */
 
-import { TrackableValue } from "#/trackable_value";
-import { verifyFiniteFloat } from "#/util/json";
+import { TrackableValue } from "#src/trackable_value.js";
+import { verifyFiniteFloat } from "#src/util/json.js";
 
 export type TrackableFiniteFloat = TrackableValue<number>;
 

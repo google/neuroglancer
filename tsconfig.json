@@ -8,24 +8,22 @@
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "alwaysStrict": true,
+    "allowJs": true,
     "strictNullChecks": true,
+    "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "sourceMap": true,
     "moduleResolution": "bundler",
     "incremental": true,
+    "resolveJsonModule": true,
     "target": "ES2017",
     "newLine": "LF",
     "baseUrl": ".",
-    "paths": {
-      "*": ["*"],
-      "#/*": ["src/*"],
-      "jpgjs": ["third_party/jpgjs/jpg.js"],
-      "neuroglancer-testdata/*": ["testdata/*"]
-    },
-    "lib": ["dom", "es2020", "dom.iterable"],
+    "lib": ["dom", "webworker", "es2020", "dom.iterable"],
     "typeRoots": [],
-    "module": "ESNext"
+    "module": "ESNext",
   },
   "exclude": [
     "node_modules",
@@ -34,6 +32,7 @@
     "python",
     "testdata",
     "examples",
-    "config"
-  ]
+    "config",
+    "tests",
+  ],
 }

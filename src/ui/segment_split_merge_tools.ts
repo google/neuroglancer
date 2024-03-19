@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import "./segment_split_merge_tools.css";
+import "#src/ui/segment_split_merge_tools.css";
 
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   augmentSegmentId,
   bindSegmentListWidth,
@@ -23,24 +24,23 @@ import {
   registerCallbackWhenSegmentationDisplayStateChanged,
   resetTemporaryVisibleSegmentsState,
   Uint64MapEntry,
-} from "#/segmentation_display_state/frontend";
+} from "#src/segmentation_display_state/frontend.js";
 import {
   isBaseSegmentId,
   VisibleSegmentEquivalencePolicy,
-} from "#/segmentation_graph/segment_id";
-import { SegmentationUserLayer } from "#/segmentation_user_layer";
-import { StatusMessage } from "#/status";
-import { WatchableValue } from "#/trackable_value";
+} from "#src/segmentation_graph/segment_id.js";
+import { StatusMessage } from "#src/status.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
   makeToolActivationStatusMessageWithHeader,
   registerTool,
-  ToolActivation,
-} from "#/ui/tool";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { removeChildren } from "#/util/dom";
-import { EventActionMap } from "#/util/keyboard_bindings";
-import { Uint64 } from "#/util/uint64";
+} from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { removeChildren } from "#src/util/dom.js";
+import { EventActionMap } from "#src/util/keyboard_bindings.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export const ANNOTATE_MERGE_SEGMENTS_TOOL_ID = "mergeSegments";
 export const ANNOTATE_SPLIT_SEGMENTS_TOOL_ID = "splitSegments";
@@ -536,20 +536,14 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
   }
 }
 
-export function registerSegmentSplitMergeTools() {
-  registerTool(
-    SegmentationUserLayer,
-    ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
-    (layer) => {
-      return new MergeSegmentsTool(layer);
-    },
-  );
+export function registerSegmentSplitMergeTools(
+  contextType: typeof SegmentationUserLayer,
+) {
+  registerTool(contextType, ANNOTATE_MERGE_SEGMENTS_TOOL_ID, (layer) => {
+    return new MergeSegmentsTool(layer);
+  });
 
-  registerTool(
-    SegmentationUserLayer,
-    ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
-    (layer) => {
-      return new SplitSegmentsTool(layer);
-    },
-  );
+  registerTool(contextType, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID, (layer) => {
+    return new SplitSegmentsTool(layer);
+  });
 }

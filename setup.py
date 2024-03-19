@@ -5,6 +5,7 @@
 # distutils.
 import atexit
 import os
+import pathlib
 import platform
 import shutil
 import subprocess
@@ -26,17 +27,9 @@ openmesh_dir = os.path.join(
     python_dir, "ext", "third_party", "openmesh", "OpenMesh", "src"
 )
 
-CLIENT_FILES = [
-    "index.html",
-    "main.bundle.js",
-    "main.bundle.css",
-    "main.bundle.js.map",
-    "main.bundle.css.map",
-    "chunk_worker.bundle.js",
-    "chunk_worker.bundle.js.map",
-    "async_computation.bundle.js",
-    "async_computation.bundle.js.map",
-]
+
+def _read_requirements(path: str) -> list[str]:
+    return pathlib.Path(path).read_text(encoding="utf-8").splitlines()
 
 
 _SETUP_REQUIRES = [
@@ -48,7 +41,9 @@ _SETUP_REQUIRES = [
 _PACKAGE_JSON_EXISTS = os.path.exists(os.path.join(root_dir, "package.json"))
 
 if _PACKAGE_JSON_EXISTS:
-    _SETUP_REQUIRES.append("nodejs-bin[cmd]")
+    _SETUP_REQUIRES.extend(
+        _read_requirements(os.path.join(python_dir, "requirements-nodejs.txt"))
+    )
 
 
 with open(os.path.join(python_dir, "README.md"), encoding="utf-8") as f:
@@ -139,7 +134,12 @@ class BundleClientCommand(
         (
             "client-bundle-type=",
             None,
-            'The nodejs bundle type. "min" (default) creates condensed static files for production, "dev" creates human-readable files.',
+            'The nodejs bundle type. "production" (default) creates condensed static files for production, "development" creates human-readable files.',
+        ),
+        (
+            "prebuilt-bundle",
+            None,
+            "Assume the client bundle already exists within the source tree, and don't build it again.",
         ),
         ("build-bundle-inplace", None, "Build the client bundle inplace."),
         (
@@ -150,45 +150,57 @@ class BundleClientCommand(
         (
             "skip-rebuild",
             None,
-            "Skip rebuilding if the `python/neuroglancer/static/index.html` file already exists.",
+            "Skip rebuilding if the `python/neuroglancer/static/client/index.html` file already exists.",
         ),
     ]
 
     def initialize_options(self):
         self.build_lib = None
-        self.client_bundle_type = "min"
+        self.client_bundle_type = "production"
         self.skip_npm_reinstall = None
         self.skip_rebuild = None
-        self.build_bundle_inplace = None
+        self.build_bundle_inplace = False
+        self.prebuilt_bundle = None
 
     def finalize_options(self):
         self.set_undefined_options("build_py", ("build_lib", "build_lib"))
 
-        if self.client_bundle_type not in ["min", "dev"]:
-            raise RuntimeError('client-bundle-type has to be one of "min" or "dev"')
+        if self.client_bundle_type not in ["production", "development"]:
+            raise RuntimeError(
+                'client-bundle-type has to be one of "production" or "development"'
+            )
 
         if self.skip_npm_reinstall is None:
             self.skip_npm_reinstall = False
 
-        if self.build_bundle_inplace is None:
-            self.build_bundle_inplace = (
-                os.getenv("NEUROGLANCER_BUILD_BUNDLE_INPLACE") == "1"
-            )
+        if self.prebuilt_bundle is None:
+            self.prebuilt_bundle = os.getenv("NEUROGLANCER_PREBUILT_CLIENT") == "1"
 
         if self.skip_rebuild is None:
             self.skip_rebuild = self.build_bundle_inplace
 
-    def get_outputs(self):
-        if self.editable_mode or self.build_bundle_inplace:
-            return []
-        build_lib = self.build_lib
-        return [f"{build_lib}/{f}" for f in self._get_bundle_files()]
+    def _get_inplace_client_dir(self):
+        return os.path.join(python_dir, "neuroglancer", "static", "client")
 
-    def _get_bundle_files(self):
-        return [f"neuroglancer/static/{f}" for f in CLIENT_FILES]
+    def _get_client_output_dir(self):
+        if self.build_bundle_inplace:
+            output_base_dir = python_dir
+        else:
+            output_base_dir = self.build_lib
+
+        return os.path.join(output_base_dir, "neuroglancer", "static", "client")
+
+    def get_outputs(self):
+        return [str(p) for p in pathlib.Path(self._get_client_output_dir()).rglob("*")]
 
     def get_source_files(self):
-        return []
+        if not self.build_bundle_inplace:
+            return []
+        source_files = [
+            str(p.relative_to(root_dir))
+            for p in pathlib.Path(self._get_inplace_client_dir()).rglob("*")
+        ]
+        return source_files
 
     def get_output_mapping(self):
         return {}
@@ -201,52 +213,47 @@ class BundleClientCommand(
 
         # If building from an sdist, `package.json` won't be present but the
         # bundled files will.
-        if not _PACKAGE_JSON_EXISTS:
-            print("Skipping build of client bundle because package.json does not exist")
-            for dest, source in self.get_output_mapping().items():
-                if dest != source:
-                    shutil.copyfile(source, dest)
+        if not _PACKAGE_JSON_EXISTS or self.prebuilt_bundle:
+            if not _PACKAGE_JSON_EXISTS:
+                reason = "package.json does not exist"
+            else:
+                reason = "it was prebuilt"
+            print(f"Skipping build of client bundle because {reason}")
+            if not self.build_bundle_inplace:
+                shutil.copytree(
+                    self._get_inplace_client_dir(), self._get_client_output_dir()
+                )
             return
 
-        if inplace:
-            output_base_dir = python_dir
-        else:
-            output_base_dir = self.build_lib
-
-        output_dir = os.path.join(output_base_dir, "neuroglancer", "static")
+        output_dir = self._get_client_output_dir()
 
         if self.skip_rebuild and inplace:
             html_path = os.path.join(output_dir, "index.html")
             if os.path.exists(html_path):
                 print(
-                    "Skipping rebuild of client bundle since {} already exists".format(
-                        html_path
-                    )
+                    f"Skipping rebuild of client bundle since {html_path} already exists"
                 )
                 return
 
-        target = {"min": "build-python-min", "dev": "build-python-dev"}
-
-        try:
-            t = target[self.client_bundle_type]
-            node_modules_path = os.path.join(root_dir, "node_modules")
-            if self.skip_npm_reinstall and os.path.exists(node_modules_path):
-                print(
-                    f"Skipping `npm install` since {node_modules_path} already exists"
-                )
-            else:
-                subprocess.call("npm i", shell=True, cwd=root_dir)
-            res = subprocess.call(
-                f"npm run {t} -- --output={output_dir}", shell=True, cwd=root_dir
-            )
-        except Exception:
-            raise RuntimeError(
-                "Could not run 'npm run %s'. Make sure node.js >= v12 is installed and in your path."
-                % t
-            )
-
-        if res != 0:
-            raise RuntimeError("failed to bundle neuroglancer node.js project")
+        node_modules_path = os.path.join(root_dir, "node_modules")
+        if self.skip_npm_reinstall and os.path.exists(node_modules_path):
+            print(f"Skipping `npm install` since {node_modules_path} already exists")
+        else:
+            subprocess.run(["npm", "install"], cwd=root_dir, check=True)
+        subprocess.run(
+            [
+                "npm",
+                "run",
+                "build-python",
+                "--",
+                f"--mode={self.client_bundle_type}",
+                "--no-typecheck",
+                "--no-lint",
+                f"--output={output_dir}",
+            ],
+            cwd=root_dir,
+            check=True,
+        )
 
 
 local_sources = [
@@ -309,28 +316,12 @@ setuptools.setup(
     package_dir={
         "": "python",
     },
-    package_data={
-        "neuroglancer.static": ["*.html", "*.css", "*.js", "*.js.map"],
-    },
     setup_requires=_SETUP_REQUIRES,
-    install_requires=[
-        "Pillow>=3.2.0",
-        "numpy>=1.11.0",
-        "requests",
-        "tornado",
-        "google-apitools",
-        "google-auth",
-        "atomicwrites",
-    ],
+    install_requires=_read_requirements(os.path.join(python_dir, "requirements.txt")),
     extras_require={
-        "test": [
-            "pytest>=6.1.2",
-            "pytest-rerunfailures>=9.1.1",
-            "pytest-timeout>=1.4.2",
-        ],
-        "test-browser": [
-            "selenium>=4",
-        ],
+        "webdriver": _read_requirements(
+            os.path.join(python_dir, "requirements-webdriver.txt")
+        ),
     },
     ext_modules=[
         setuptools.Extension(
@@ -340,9 +331,12 @@ setuptools.setup(
             include_dirs=[openmesh_dir],
             define_macros=[
                 ("_USE_MATH_DEFINES", None),  # Needed by OpenMesh when used with MSVC
+                ("Py_LIMITED_API", "0x03090000"),
+                ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
             ],
             extra_compile_args=extra_compile_args,
             extra_link_args=openmp_flags,
+            py_limited_api=True,
         ),
     ],
     cmdclass={
@@ -352,4 +346,5 @@ setuptools.setup(
         "install": InstallCommand,
         "develop": DevelopCommand,
     },
+    options={"bdist_wheel": {"py_limited_api": "cp39"}},
 )

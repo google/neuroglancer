@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-import { AnnotationPropertySpec, AnnotationType } from "#/annotation";
-import { VertexAttributeInfo } from "#/skeleton/base";
-import { mat4 } from "#/util/geom";
+import type {
+  AnnotationPropertySpec,
+  AnnotationType,
+} from "#src/annotation/index.js";
+import type { VertexAttributeInfo } from "#src/skeleton/base.js";
+import type { mat4 } from "#src/util/geom.js";
 
 export enum VolumeChunkEncoding {
   RAW = 0,

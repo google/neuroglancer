@@ -14,17 +14,26 @@
  * limitations under the License.
  */
 
-import "#/sliceview/chunk_format_handlers";
+import "#src/sliceview/chunk_format_handlers.js";
 
-import { StatusMessage } from "#/status";
-import { DisplayContext } from "#/display_context";
-import { Viewer, ViewerOptions } from "#/viewer";
+import { DisplayContext } from "#src/display_context.js";
+import { StatusMessage } from "#src/status.js";
+import type { ViewerOptions } from "#src/viewer.js";
+import { Viewer } from "#src/viewer.js";
 
-export function makeMinimalViewer(
-  options?: Partial<ViewerOptions>,
-  target = document.getElementById("neuroglancer-container")!,
-) {
+export interface MinimalViewerOptions extends ViewerOptions {
+  target: HTMLElement;
+}
+
+export function makeMinimalViewer(options: Partial<MinimalViewerOptions> = {}) {
   try {
+    let { target = document.getElementById("neuroglancer-container") } =
+      options;
+    if (target === null) {
+      target = document.createElement("div");
+      target.id = "neuroglancer-container";
+      document.body.appendChild(target);
+    }
     const display = new DisplayContext(target);
     return new Viewer(display, options);
   } catch (error) {

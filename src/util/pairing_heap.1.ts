@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PairingHeapOperations } from "#/util/pairing_heap";
+import type { PairingHeapOperations } from "#src/util/pairing_heap.js";
 
 interface Node<T> {
   child1: T | null;

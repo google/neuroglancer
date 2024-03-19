@@ -23,7 +23,6 @@ data in the directory that is served to any web page running on a machine that
 can connect to the web server.
 """
 
-
 import argparse
 import os
 import sys

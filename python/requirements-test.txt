@@ -1,0 +1,8 @@
+pytest>=6.1.2
+pytest-rerunfailures>=9.1.1
+pytest-timeout>=1.4.2
+pytest-html
+# required by pytest-html
+ansi2html 
+pytest-xdist
+filelock

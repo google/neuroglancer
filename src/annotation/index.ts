@@ -18,12 +18,12 @@
  * @file Basic annotation data structures.
  */
 
-import {
+import type {
   BoundingBox,
   CoordinateSpaceTransform,
   WatchableCoordinateSpaceTransform,
-} from "#/coordinate_transform";
-import { arraysEqual } from "#/util/array";
+} from "#src/coordinate_transform.js";
+import { arraysEqual } from "#src/util/array.js";
 import {
   packColor,
   parseRGBAColorSpecification,
@@ -31,10 +31,11 @@ import {
   serializeColor,
   unpackRGB,
   unpackRGBA,
-} from "#/util/color";
-import { DataType } from "#/util/data_type";
-import { Borrowed, RefCounted } from "#/util/disposable";
-import { Endianness, ENDIANNESS } from "#/util/endian";
+} from "#src/util/color.js";
+import { DataType } from "#src/util/data_type.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import {
   expectArray,
   parseArray,
@@ -49,11 +50,11 @@ import {
   verifyOptionalObjectProperty,
   verifyOptionalString,
   verifyString,
-} from "#/util/json";
-import { parseDataTypeValue } from "#/util/lerp";
-import { getRandomHexString } from "#/util/random";
-import { NullarySignal, Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
+} from "#src/util/json.js";
+import { parseDataTypeValue } from "#src/util/lerp.js";
+import { getRandomHexString } from "#src/util/random.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export type AnnotationId = string;
 

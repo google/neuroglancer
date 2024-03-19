@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import { dimensionNamesFromJson } from "#/coordinate_transform";
-import { Position } from "#/navigation_state";
-import { Borrowed, registerEventListener } from "#/util/disposable";
+import { dimensionNamesFromJson } from "#src/coordinate_transform.js";
+import type { Position } from "#src/navigation_state.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { registerEventListener } from "#src/util/disposable.js";
 import {
   parseArray,
   verifyFiniteFloat,
   verifyObject,
   verifyObjectProperty,
-} from "#/util/json";
-import { positionDragType } from "#/widget/position_widget";
+} from "#src/util/json.js";
+import { positionDragType } from "#src/widget/position_widget.js";
 
 export function setupPositionDropHandlers(
   target: EventTarget,

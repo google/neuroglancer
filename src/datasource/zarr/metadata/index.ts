@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { CodecChainSpec } from "#/datasource/zarr/codec";
-import { DataType } from "#/util/data_type";
-import { Uint64 } from "#/util/uint64";
+import type { CodecChainSpec } from "#src/datasource/zarr/codec/index.js";
+import type { DataType } from "#src/util/data_type.js";
+import type { Uint64 } from "#src/util/uint64.js";
 
 export enum ChunkKeyEncoding {
   DEFAULT = 0,

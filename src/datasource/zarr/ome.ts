@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { CoordinateSpace, makeCoordinateSpace } from "#/coordinate_transform";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -24,9 +25,9 @@ import {
   verifyObjectProperty,
   verifyOptionalObjectProperty,
   verifyString,
-} from "#/util/json";
-import * as matrix from "#/util/matrix";
-import { allSiPrefixes } from "#/util/si_units";
+} from "#src/util/json.js";
+import * as matrix from "#src/util/matrix.js";
+import { allSiPrefixes } from "#src/util/si_units.js";
 
 export interface OmeMultiscaleScale {
   url: string;
@@ -45,6 +46,7 @@ const OME_UNITS = new Map<string, { unit: string; scale: number }>([
   ["foot", { unit: "m", scale: 0.3048 }],
   ["inch", { unit: "m", scale: 0.0254 }],
   ["mile", { unit: "m", scale: 1609.34 }],
+  // eslint-disable-next-line @typescript-eslint/no-loss-of-precision
   ["parsec", { unit: "m", scale: 3.0856775814913673e16 }],
   ["yard", { unit: "m", scale: 0.9144 }],
   ["minute", { unit: "s", scale: 60 }],

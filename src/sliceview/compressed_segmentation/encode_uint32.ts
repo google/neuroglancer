@@ -25,11 +25,11 @@ import {
   encodeChannel as encodeChannelCommon,
   encodeChannels as encodeChannelsCommon,
   writeBlock,
-} from "#/sliceview/compressed_segmentation/encode_common";
-import { getFortranOrderStrides } from "#/util/array";
-import { Uint32ArrayBuilder } from "#/util/uint32array_builder";
+} from "#src/sliceview/compressed_segmentation/encode_common.js";
+import { getFortranOrderStrides } from "#src/util/array.js";
+import type { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
-export { newCache } from "#/sliceview/compressed_segmentation/encode_common";
+export { newCache } from "#src/sliceview/compressed_segmentation/encode_common.js";
 
 let tempEncodingBuffer: Uint32Array;
 let tempValuesBuffer1: Uint32Array;

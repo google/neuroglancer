@@ -14,12 +14,9 @@
  * limitations under the License.
  */
 
-import {
-  CANCELED,
-  CancellationToken,
-  uncancelableToken,
-} from "#/util/cancellation";
-import { Uint64 } from "#/util/uint64";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { CANCELED, uncancelableToken } from "#src/util/cancellation.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export class HttpError extends Error {
   url: string;
@@ -198,7 +195,7 @@ export function parseUrl(url: string): {
   host: string;
   path: string;
 } {
-  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)((?:\/.*)?)$/;
+  const urlProtocolPattern = /^([^:/]+):\/\/([^/]+)((?:\/.*)?)$/;
   const match = url.match(urlProtocolPattern);
   if (match === null) {
     throw new Error(`Invalid URL: ${JSON.stringify(url)}`);

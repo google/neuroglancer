@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { TypedArray } from "#/util/array";
+import type { TypedArray } from "#src/util/array.js";
 
 export function getRandomHexString(numBits = 128) {
   const numValues = Math.ceil(numBits / 32);

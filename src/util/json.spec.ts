@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   normalizeStringLiteral,
   pythonLiteralParse,
@@ -22,7 +23,7 @@ import {
   urlSafeStringify,
   urlSafeStringifyString,
   urlSafeToJSON,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 describe("url safe json", () => {
   it("urlSafeStringifyString", () => {

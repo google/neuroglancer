@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { isInputTextTarget } from "#/util/dom";
-import { getCachedJson } from "#/util/trackable";
-import { Viewer } from "#/viewer";
+import { isInputTextTarget } from "#src/util/dom.js";
+import { getCachedJson } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 export function bindDefaultCopyHandler(viewer: Viewer) {
   viewer.registerEventListener(document, "copy", (event: ClipboardEvent) => {

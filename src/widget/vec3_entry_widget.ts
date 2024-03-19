@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import { TrackableVec3 } from "#/trackable_vec3";
-import { RefCounted } from "#/util/disposable";
-import { vec3 } from "#/util/geom";
-import { verifyFiniteFloat } from "#/util/json";
-import { Signal } from "#/util/signal";
+import type { TrackableVec3 } from "#src/trackable_vec3.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { vec3 } from "#src/util/geom.js";
+import { verifyFiniteFloat } from "#src/util/json.js";
+import { Signal } from "#src/util/signal.js";
 
-import "./vec3.css";
+import "#src/widget/vec3.css";
 
 export class Vec3Widget extends RefCounted {
   promptElement = document.createElement("span");

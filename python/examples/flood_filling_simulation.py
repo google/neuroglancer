@@ -169,8 +169,8 @@ class InteractiveInference:
                 enqueue(tuple(new_pos))
 
             dist_transform = scipy.ndimage.morphology.distance_transform_edt(~mask)
-            inf_results[slice_expr] = 1 + np.cast[np.uint8](
-                np.minimum(dist_transform, 5) / 5.0 * 254
+            inf_results[slice_expr] = 1 + np.asarray(
+                np.minimum(dist_transform, 5) / 5.0 * 254, dtype=np.uint8
             )
 
             self.viewer.defer_callback(update_view)

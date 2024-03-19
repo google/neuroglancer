@@ -14,29 +14,27 @@
  * limitations under the License.
  */
 
-import { UserLayer } from "#/layer";
-import {
-  makeCachedDerivedWatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { DataType } from "#/util/data_type";
+import type { UserLayer } from "#src/layer/index.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import { DataType } from "#src/util/data_type.js";
 import {
   convertDataTypeInterval,
   defaultDataTypeRange,
   normalizeDataTypeInterval,
-} from "#/util/lerp";
-import { HistogramSpecifications } from "#/webgl/empirical_cdf";
-import {
+} from "#src/util/lerp.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import type {
   InvlerpParameters,
   PropertiesSpecification,
   PropertyInvlerpParameters,
-} from "#/webgl/shader_ui_controls";
+} from "#src/webgl/shader_ui_controls.js";
 import {
   activateInvlerpTool,
   VariableDataTypeInvlerpWidget,
-} from "#/widget/invlerp";
-import { LayerControlFactory } from "#/widget/layer_control";
-import { LegendShaderOptions } from "#/widget/shader_controls";
+} from "#src/widget/invlerp.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
+import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 
 export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => {

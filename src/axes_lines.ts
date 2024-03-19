@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import { ProjectionParameters } from "#/projection_parameters";
-import { RefCounted } from "#/util/disposable";
-import { mat4 } from "#/util/geom";
-import { Buffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
-import { ShaderProgram } from "#/webgl/shader";
-import { trivialColorShader } from "#/webgl/trivial_shaders";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { mat4 } from "#src/util/geom.js";
+import { Buffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderProgram } from "#src/webgl/shader.js";
+import { trivialColorShader } from "#src/webgl/trivial_shaders.js";
 
 const tempMat = mat4.create();
 

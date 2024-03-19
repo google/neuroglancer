@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
-import { CodecKind } from "#/datasource/zarr/codec";
-import { registerCodec } from "#/datasource/zarr/codec/resolve";
-import { verifyInt, verifyObject, verifyObjectProperty } from "#/util/json";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import { registerCodec } from "#src/datasource/zarr/codec/resolve.js";
+import {
+  verifyInt,
+  verifyObject,
+  verifyObjectProperty,
+} from "#src/util/json.js";
 
 export interface Configuration {
   level: number;

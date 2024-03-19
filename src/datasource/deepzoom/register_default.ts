@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DeepzoomDataSource } from "#/datasource/deepzoom/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+import { DeepzoomDataSource } from "#src/datasource/deepzoom/frontend.js";
+import { registerProvider } from "#src/datasource/default_provider.js";
 
 registerProvider("deepzoom", () => new DeepzoomDataSource());

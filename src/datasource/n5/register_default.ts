@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#/datasource/default_provider";
-import { N5DataSource } from "#/datasource/n5/frontend";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { N5DataSource } from "#src/datasource/n5/frontend.js";
 
 registerProvider("n5", () => new N5DataSource());

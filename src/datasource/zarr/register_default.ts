@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#/datasource/default_provider";
-import { ZarrDataSource } from "#/datasource/zarr/frontend";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { ZarrDataSource } from "#src/datasource/zarr/frontend.js";
 
 registerProvider("zarr", () => new ZarrDataSource());
 registerProvider("zarr2", () => new ZarrDataSource(2));

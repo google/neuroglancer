@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-import "#/sliceview/uncompressed_chunk_format";
-import "#/sliceview/compressed_segmentation/chunk_format";
+import "#src/sliceview/uncompressed_chunk_format.js";
+import "#src/sliceview/compressed_segmentation/chunk_format.js";

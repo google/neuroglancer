@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   decodeChannel,
   decodeChannels,
-} from "#/sliceview/compressed_segmentation/decode_uint32";
+} from "#src/sliceview/compressed_segmentation/decode_uint32.js";
 import {
   encodeBlock,
   encodeChannel,
   encodeChannels,
   newCache,
-} from "#/sliceview/compressed_segmentation/encode_uint32";
-import { makeRandomUint32Array } from "#/sliceview/compressed_segmentation/test_util";
-import { prod3, prod4, vec3, vec3Key } from "#/util/geom";
-import { Uint32ArrayBuilder } from "#/util/uint32array_builder";
+} from "#src/sliceview/compressed_segmentation/encode_uint32.js";
+import { makeRandomUint32Array } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { prod3, prod4, vec3, vec3Key } from "#src/util/geom.js";
+import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 describe("compressed_segmentation uint32", () => {
   describe("encodeBlock", () => {

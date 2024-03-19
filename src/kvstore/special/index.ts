@@ -14,20 +14,18 @@
  * limitations under the License.
  */
 
-import {
+import type {
   ByteRange,
   ByteRangeRequest,
-  composeByteRangeRequest,
   ReadableKvStore,
   ReadOptions,
   ReadResponse,
-} from "#/kvstore";
-import { uncancelableToken } from "#/util/cancellation";
-import { HttpError, isNotFoundError } from "#/util/http_request";
-import {
-  cancellableFetchSpecialOk,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
+} from "#src/kvstore/index.js";
+import { composeByteRangeRequest } from "#src/kvstore/index.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import { HttpError, isNotFoundError } from "#src/util/http_request.js";
+import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
 
 function getRangeHeader(
   request: ByteRangeRequest | undefined,

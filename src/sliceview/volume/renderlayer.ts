@@ -14,61 +14,64 @@
  * limitations under the License.
  */
 
-import { ChunkState } from "#/chunk_manager/base";
-import {
-  CoordinateSpace,
-  emptyInvalidCoordinateSpace,
-} from "#/coordinate_transform";
-import { ProjectionParameters } from "#/projection_parameters";
-import { getChunkPositionFromCombinedGlobalLocalPositions } from "#/render_coordinate_transform";
-import { getNormalizedChunkLayout } from "#/sliceview/base";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
+import { getNormalizedChunkLayout } from "#src/sliceview/base.js";
 import {
   computeVertexPositionDebug,
   defineBoundingBoxCrossSectionShader,
   setBoundingBoxCrossSectionShaderViewportPlane,
-} from "#/sliceview/bounding_box_shader_helper";
-import { ChunkLayout } from "#/sliceview/chunk_layout";
-import { FrontendTransformedSource, SliceView } from "#/sliceview/frontend";
-import {
+} from "#src/sliceview/bounding_box_shader_helper.js";
+import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import type {
+  FrontendTransformedSource,
+  SliceView,
+} from "#src/sliceview/frontend.js";
+import type {
   SliceViewRenderContext,
-  SliceViewRenderLayer,
   SliceViewRenderLayerOptions,
-} from "#/sliceview/renderlayer";
-import { VolumeSourceOptions } from "#/sliceview/volume/base";
-import {
+} from "#src/sliceview/renderlayer.js";
+import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
+import type {
   ChunkFormat,
-  defineChunkDataShaderAccess,
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
+} from "#src/sliceview/volume/frontend.js";
+import { defineChunkDataShaderAccess } from "#src/sliceview/volume/frontend.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   constantWatchableValue,
   makeCachedDerivedWatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { mat4, vec3 } from "#/util/geom";
-import { getObjectId } from "#/util/object_id";
-import { GL } from "#/webgl/context";
-import {
-  makeWatchableShaderError,
+} from "#src/trackable_value.js";
+import { mat4, vec3 } from "#src/util/geom.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ParameterizedContextDependentShaderGetter,
-  parameterizedContextDependentShaderGetter,
   ParameterizedShaderGetterResult,
   WatchableShaderError,
-} from "#/webgl/dynamic_shader";
-import { HistogramChannelSpecification } from "#/webgl/empirical_cdf";
+} from "#src/webgl/dynamic_shader.js";
+import {
+  makeWatchableShaderError,
+  parameterizedContextDependentShaderGetter,
+} from "#src/webgl/dynamic_shader.js";
+import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
-} from "#/webgl/lerp";
+} from "#src/webgl/lerp.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
   VERTICES_PER_LINE,
-} from "#/webgl/lines";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
+} from "#src/webgl/lines.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const DEBUG_VERTICES = false;
 

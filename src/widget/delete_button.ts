@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import svg_bin from "ikonate/icons/bin.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_bin from "ikonate/icons/bin.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeDeleteButton(options: MakeIconOptions = {}) {
   const icon = makeIcon({ svg: svg_bin, ...options });

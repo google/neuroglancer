@@ -14,26 +14,26 @@
  * limitations under the License.
  */
 
+import type { LayerListSpecification } from "#src/layer/index.js";
 import {
   initializeLayerFromSpecShowErrorStatus,
-  LayerListSpecification,
   ManagedUserLayer,
-} from "#/layer";
-import { popDragStatus, pushDragStatus } from "#/ui/drag_and_drop";
-import { Borrowed, Owned } from "#/util/disposable";
+} from "#src/layer/index.js";
+import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import type { DragInfo } from "#src/util/drag_and_drop.js";
 import {
   decodeParametersFromDragTypeList,
-  DragInfo,
   encodeParametersAsDragType,
   getDropEffect,
   setDropEffect,
-} from "#/util/drag_and_drop";
+} from "#src/util/drag_and_drop.js";
 import {
   parseArray,
   verifyBoolean,
   verifyObjectProperty,
   verifyString,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 const layerDragTypePrefix = "neuroglancer-layer\0";
 
@@ -390,7 +390,9 @@ export function getDropLayers(
       result.dragType = info.dragType;
       result.layers = new Map(layers);
       return result;
-    } catch {}
+    } catch {
+      // Ignore invalid drag info.
+    }
   }
   return undefined;
 }

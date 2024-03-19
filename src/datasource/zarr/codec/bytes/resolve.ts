@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CodecArrayInfo,
   CodecArrayLayoutInfo,
-  CodecKind,
-} from "#/datasource/zarr/codec";
-import { registerCodec } from "#/datasource/zarr/codec/resolve";
-import { DATA_TYPE_BYTES } from "#/util/data_type";
-import { ENDIANNESS, Endianness } from "#/util/endian";
-import { verifyObject, verifyObjectProperty } from "#/util/json";
+} from "#src/datasource/zarr/codec/index.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import { registerCodec } from "#src/datasource/zarr/codec/resolve.js";
+import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
+import { ENDIANNESS, Endianness } from "#src/util/endian.js";
+import { verifyObject, verifyObjectProperty } from "#src/util/json.js";
 
 export interface Configuration {
   endian: Endianness;

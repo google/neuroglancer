@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import { CredentialsManager } from "#/credentials_provider";
-import { CancellationToken } from "#/util/cancellation";
-import {
+import type { CredentialsManager } from "#src/credentials_provider/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type {
   BasicCompletionResult,
   Completion,
   CompletionWithDescription,
-  getPrefixMatchesWithDescriptions,
-} from "#/util/completion";
-import { getGcsPathCompletions } from "#/util/gcs_bucket_listing";
+} from "#src/util/completion.js";
+import { getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
+import { getGcsPathCompletions } from "#src/util/gcs_bucket_listing.js";
+import { parseUrl } from "#src/util/http_request.js";
+import { getS3PathCompletions } from "#src/util/s3.js";
+import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
+import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
 import {
   cancellableFetchSpecialOk,
   parseSpecialUrl,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
-import { parseUrl } from "#/util/http_request";
-import { getS3PathCompletions } from "#/util/s3";
-import { getS3CompatiblePathCompletions } from "#/util/s3_bucket_listing";
+} from "#src/util/special_protocol_request.js";
 
 /**
  * Obtains a directory listing from a server that supports HTML directory listings.
@@ -78,7 +78,7 @@ export async function getHtmlPathCompletions(
   credentialsProvider?: SpecialProtocolCredentialsProvider,
 ): Promise<BasicCompletionResult> {
   console.log("getHtmlPathCompletions");
-  const m = url.match(/^([a-z]+:\/\/.*\/)([^\/?#]*)$/);
+  const m = url.match(/^([a-z]+:\/\/.*\/)([^/?#]*)$/);
   if (m === null) throw null;
   const entries = await getHtmlDirectoryListing(
     m[1],
@@ -172,7 +172,7 @@ export async function completeHttpPath(
       return await getS3PathCompletions(host, path, cancellationToken);
     }
     const s3Match = parsedUrl.match(
-      /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com|[^\/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/,
+      /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^/]+|[^/]+\.storage\.googleapis\.com|[^/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/,
     );
     if (s3Match !== null) {
       return await getS3CompatiblePathCompletions(

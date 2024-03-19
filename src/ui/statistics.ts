@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import "#/ui/statistics.css";
+import "#src/ui/statistics.css";
 
-import debounce from "lodash/debounce";
+import { debounce } from "lodash-es";
 import {
   ChunkDownloadStatistics,
   ChunkMemoryStatistics,
@@ -26,23 +26,21 @@ import {
   getChunkStateStatisticIndex,
   numChunkMemoryStatistics,
   numChunkStates,
-} from "#/chunk_manager/base";
-import {
+} from "#src/chunk_manager/base.js";
+import type {
   ChunkQueueManager,
   ChunkSource,
   ChunkStatistics,
-} from "#/chunk_manager/frontend";
-import { WatchableValueInterface } from "#/trackable_value";
-import {
-  SidePanelLocation,
-  TrackableSidePanelLocation,
-} from "#/ui/side_panel_location";
-import { Borrowed } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
-import { emptyToUndefined } from "#/util/json";
-import { Trackable } from "#/util/trackable";
-
-import { SidePanel, SidePanelManager } from "./side_panel";
+} from "#src/chunk_manager/frontend.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { SidePanelManager } from "#src/ui/side_panel.js";
+import { SidePanel } from "#src/ui/side_panel.js";
+import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
+import { TrackableSidePanelLocation } from "#src/ui/side_panel_location.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import { emptyToUndefined } from "#src/util/json.js";
+import type { Trackable } from "#src/util/trackable.js";
 
 const DEFAULT_STATISTICS_PANEL_LOCATION: SidePanelLocation = {
   side: "bottom",

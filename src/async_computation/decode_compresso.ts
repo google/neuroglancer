@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { decompressCompresso } from "#/sliceview/compresso";
-import { decodeCompresso } from "#/async_computation/decode_compresso_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
+import { decodeCompresso } from "#src/async_computation/decode_compresso_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { decompressCompresso } from "#src/sliceview/compresso/index.js";
 
 registerAsyncComputation(decodeCompresso, async (data: Uint8Array) => {
   const result = await decompressCompresso(data);

@@ -16,7 +16,10 @@ import asyncio
 import concurrent.futures
 import json
 import multiprocessing
+import os
+import re
 import socket
+import subprocess
 import sys
 import threading
 import weakref
@@ -42,7 +45,7 @@ SKELETON_PATH_REGEX = r"^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-
 MESH_PATH_REGEX = r"^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$"
 
 STATIC_PATH_REGEX = (
-    r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$"
+    r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[@a-zA-Z0-9_\-][@a-zA-Z0-9_\-./]*)?)$"
 )
 
 ACTION_PATH_REGEX = r"^/action/(?P<viewer_token>[^/]+)$"
@@ -91,12 +94,14 @@ def _get_colab_server_url(port: int) -> str:
 
 
 class Server(async_util.BackgroundTornadoServer):
-    def __init__(self, bind_address="127.0.0.1", bind_port=0):
+    def __init__(self, bind_address="127.0.0.1", bind_port=0, token=None):
         super().__init__(daemon=True)
         self.viewers = weakref.WeakValueDictionary()
         self._bind_address = bind_address
         self._bind_port = bind_port
-        self.token = make_random_token()
+        if token is None:
+            token = make_random_token()
+        self.token = token
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=multiprocessing.cpu_count()
         )
@@ -137,9 +142,6 @@ class Server(async_util.BackgroundTornadoServer):
                 (CREDENTIALS_PATH_REGEX, CredentialsHandler, dict(server=self)),
             ],
             log_function=log_function,
-            # Set a large maximum message size to accommodate large screenshot
-            # messages.
-            websocket_max_message_size=100 * 1024 * 1024,
         )
         self.http_server = tornado.httpserver.HTTPServer(
             app,
@@ -194,7 +196,10 @@ class StaticPathHandler(BaseRequestHandler):
             self.send_error(404)
             return
         try:
-            data, content_type = global_static_content_source.get(path)
+            query = self.request.query
+            if query:
+                query = f"?{query}"
+            data, content_type = global_static_content_source.get(path, query)
         except ValueError as e:
             self.send_error(404, message=e.args[0])
             return
@@ -499,16 +504,70 @@ global_server = None
 _global_server_lock = threading.Lock()
 
 
+def _get_server_token():
+    with _global_server_lock:
+        if global_server is not None:
+            return global_server.token
+        token = make_random_token()
+        global_server_args.update(token=token)
+        return token
+
+
 def set_static_content_source(*args, **kwargs):
     global global_static_content_source
     global_static_content_source = static.get_static_content_source(*args, **kwargs)
 
 
+def set_dev_server_content_source():
+    static_content_url = None
+    root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+    build_process = subprocess.Popen(
+        [
+            "npm",
+            "run",
+            "dev-server-python",
+            "--",
+            "--port=0",
+        ],
+        cwd=root_dir,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="utf-8",
+    )
+
+    try:
+        future = concurrent.futures.Future()
+
+        def thread_func(f):
+            url = None
+            for line in f:
+                print(f"[dev-server] {line.rstrip()}")
+                if url is None:
+                    m = re.search(r"http://[^\s,]+", line)
+                    if m is not None:
+                        url = m.group(0)
+                        future.set_result(url)
+            if url is None:
+                future.set_result(None)
+
+        thread = threading.Thread(target=thread_func, args=(build_process.stdout,))
+        thread.daemon = True
+        thread.start()
+
+        static_content_url = future.result(timeout=10)
+    except:
+        build_process.terminate()
+        raise
+
+    set_static_content_source(url=static_content_url)
+
+
 def set_server_bind_address(bind_address=None, bind_port=0):
-    global global_server_args
     if bind_address is None:
         bind_address = "127.0.0.1"
-    global_server_args = dict(bind_address=bind_address, bind_port=bind_port)
+    with _global_server_lock:
+        global_server_args.update(bind_address=bind_address, bind_port=bind_port)
 
 
 def is_server_running():

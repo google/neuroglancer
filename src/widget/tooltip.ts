@@ -18,10 +18,10 @@
  * @file Facilities for creating tooltips.
  */
 
-import "./tooltip.css";
+import "#src/widget/tooltip.css";
 
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
 
 export class Tooltip extends RefCounted {
   element = document.createElement("div");

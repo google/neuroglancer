@@ -14,8 +14,16 @@
  * limitations under the License.
  */
 
-import { DATA_TYPE_BYTES, DATA_TYPE_SIGNED, DataType } from "#/util/data_type";
-import { AttributeIndex, ShaderBuilder, ShaderCodePart } from "#/webgl/shader";
+import {
+  DATA_TYPE_BYTES,
+  DATA_TYPE_SIGNED,
+  DataType,
+} from "#src/util/data_type.js";
+import type {
+  AttributeIndex,
+  ShaderBuilder,
+  ShaderCodePart,
+} from "#src/webgl/shader.js";
 
 export const glsl_mixLinear = `
 float mixLinear(float x, float y, float a) { return mix(x, y, a); }

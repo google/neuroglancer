@@ -18,22 +18,24 @@
  * @file Implementation of a CredentialsProvider based on an input and output TrackableValue.
  */
 
+import type {
+  CredentialsManager,
+  CredentialsWithGeneration,
+} from "#src/credentials_provider/index.js";
 import {
   AnonymousFirstCredentialsProvider,
-  CredentialsManager,
   CredentialsProvider,
-  CredentialsWithGeneration,
   makeCachedCredentialsGetter,
-} from "#/credentials_provider";
-import { Client } from "#/python_integration/api";
-import { fetchOk } from "#/util/http_request";
+} from "#src/credentials_provider/index.js";
+import type { Client } from "#src/python_integration/api.js";
+import { fetchOk } from "#src/util/http_request.js";
 import {
   stableStringify,
   verifyInt,
   verifyObject,
   verifyObjectProperty,
-} from "#/util/json";
-import { Memoize } from "#/util/memoize";
+} from "#src/util/json.js";
+import { Memoize } from "#src/util/memoize.js";
 
 class PythonCredentialsProvider<
   Credentials,

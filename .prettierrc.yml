@@ -1,0 +1,7 @@
+overrides:
+  - files: ".parcelrc"
+    options:
+      parser: "json5"
+  - files: "tsconfig.json"
+    options:
+      parser: "jsonc"

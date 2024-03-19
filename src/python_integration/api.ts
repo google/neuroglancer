@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import throttle from "lodash/throttle";
-import { StatusMessage } from "#/status";
-import { RefCounted } from "#/util/disposable";
-import { HttpError } from "#/util/http_request";
-import { getRandomHexString } from "#/util/random";
-import { getCachedJson, Trackable } from "#/util/trackable";
+import { debounce, throttle } from "lodash-es";
+import { StatusMessage } from "#src/status.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { HttpError } from "#src/util/http_request.js";
+import { getRandomHexString } from "#src/util/random.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { getCachedJson } from "#src/util/trackable.js";
 
 const DEBUG = false;
 
 function getServerUrls() {
-  const match = window.location.pathname.match(/^(.*)\/v\/([^\/]+)/);
+  const match = window.location.pathname.match(/^(.*)\/v\/([^/]+)/);
   if (match === null) {
     throw new Error("Failed to determine token from URL.");
   }

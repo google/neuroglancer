@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { vec2 } from "#/util/geom";
+import type { vec2 } from "#src/util/geom.js";
 
 export class BossSourceParameters {
   baseUrl: string;

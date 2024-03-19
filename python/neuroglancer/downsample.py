@@ -31,7 +31,7 @@ def downsample_with_averaging(array, factor):
         indexing_expr = tuple(np.s_[:s] for s in part.shape)
         temp[indexing_expr] += part
         counts[indexing_expr] += 1
-    return np.cast[array.dtype](temp / counts)
+    return np.asarray(temp / counts, dtype=array.dtype)
 
 
 def downsample_with_striding(array, factor):

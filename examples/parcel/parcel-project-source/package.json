@@ -1,0 +1,29 @@
+{
+  "name": "neuroglancer-parcel-project-source",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test of a parcel-bundled project that depends on unbuilt (e.g. linked) Neuroglancer package.",
+  "scripts": {
+    "build": "parcel build --no-cache --public-url .",
+    "dev-server": "parcel serve --no-cache"
+  },
+  "dependencies": {
+    "neuroglancer": "file:../../.."
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@parcel/transformer-inline-string": "^2.11.0",
+    "parcel": "^2.11.0",
+    "parcel-namer-rewrite": "^2.10.3-rc.2"
+  },
+  "type": "module",
+  "@parcel/resolver-default": {
+    "packageExports": true
+  },
+  "parcel-namer-rewrite": {
+    "rules": {
+      "(.*).html": "$1.html"
+    }
+  },
+  "source": "index.html"
+}

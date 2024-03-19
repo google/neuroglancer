@@ -24,14 +24,14 @@ export function withFlex(value: any, handler: Handler) {
     handler(element);
   };
 }
-export function withStyle(style: {}, handler: Handler) {
+export function withStyle(style: object, handler: Handler) {
   return (element: HTMLElement) => {
     Object.assign(element.style, style);
     handler(element);
   };
 }
 
-export function withAttributes(attributes: {}, handler: Handler) {
+export function withAttributes(attributes: object, handler: Handler) {
   return (element: HTMLElement) => {
     Object.assign(element, attributes);
     handler(element);

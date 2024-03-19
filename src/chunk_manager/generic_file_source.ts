@@ -19,22 +19,21 @@
  * Provides a simple way to request a file on the backend with priority integration.
  */
 
-import { Chunk, ChunkManager, ChunkSourceBase } from "#/chunk_manager/backend";
-import { ChunkPriorityTier, ChunkState } from "#/chunk_manager/base";
+import type { ChunkManager } from "#src/chunk_manager/backend.js";
+import { Chunk, ChunkSourceBase } from "#src/chunk_manager/backend.js";
+import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 import {
   CANCELED,
-  CancellationToken,
   makeCancelablePromise,
   MultipleConsumerCancellationTokenSource,
-} from "#/util/cancellation";
-import { Borrowed, Owned } from "#/util/disposable";
-import { responseArrayBuffer } from "#/util/http_request";
-import { stableStringify } from "#/util/json";
-import { getObjectId } from "#/util/object_id";
-import {
-  cancellableFetchSpecialOk,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
+} from "#src/util/cancellation.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { responseArrayBuffer } from "#src/util/http_request.js";
+import { stableStringify } from "#src/util/json.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
+import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
 
 export type PriorityGetter = () => {
   priorityTier: ChunkPriorityTier;

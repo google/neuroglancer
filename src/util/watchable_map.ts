@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { RefCounted } from "#/util/disposable";
-import { NullarySignal } from "#/util/signal";
+import { RefCounted } from "#src/util/disposable.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 export class WatchableMap<K, V> extends RefCounted {
   changed = new NullarySignal();

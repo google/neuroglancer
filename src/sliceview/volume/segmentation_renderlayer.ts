@@ -14,42 +14,38 @@
  * limitations under the License.
  */
 
-import { HashMapUint64 } from "#/gpu_hash/hash_table";
+import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import {
   GPUHashTable,
   HashMapShaderManager,
   HashSetShaderManager,
-} from "#/gpu_hash/shader";
+} from "#src/gpu_hash/shader.js";
 import {
   SegmentColorShaderManager,
   SegmentStatedColorShaderManager,
-} from "#/segment_color";
-import { getVisibleSegments } from "#/segmentation_display_state/base";
-import {
-  registerRedrawWhenSegmentationDisplayStateChanged,
-  SegmentationDisplayState,
-} from "#/segmentation_display_state/frontend";
-import { SliceViewSourceOptions } from "#/sliceview/base";
-import {
+} from "#src/segment_color.js";
+import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
+import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
+import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
+import type {
   SliceView,
   SliceViewSingleResolutionSource,
-} from "#/sliceview/frontend";
-import {
+} from "#src/sliceview/frontend.js";
+import type {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import {
-  RenderLayerBaseOptions,
-  SliceViewVolumeRenderLayer,
-} from "#/sliceview/volume/renderlayer";
+} from "#src/sliceview/volume/frontend.js";
+import type { RenderLayerBaseOptions } from "#src/sliceview/volume/renderlayer.js";
+import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { DisjointUint64Sets } from "#/util/disjoint_sets";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { Uint64Map } from "#/uint64_map";
+} from "#src/trackable_value.js";
+import type { Uint64Map } from "#src/uint64_map.js";
+import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 export class EquivalencesHashMap {
   generation = Number.NaN;

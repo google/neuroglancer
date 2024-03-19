@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { binarySearchLowerBound } from "#/util/array";
+import { binarySearchLowerBound } from "#src/util/array.js";
 
 export interface SiPrefix {
   readonly prefix: string;

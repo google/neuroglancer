@@ -21,11 +21,11 @@
 import {
   encodeCompressedSegmentationUint32,
   encodeCompressedSegmentationUint64,
-} from "#/async_computation/encode_compressed_segmentation_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { DataType } from "#/sliceview/base";
-import { VolumeChunk } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
+} from "#src/async_computation/encode_compressed_segmentation_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { DataType } from "#src/sliceview/base.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function postProcessRawData(
   chunk: VolumeChunk,

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { parsePositionString } from "#/ui/default_clipboard_handling";
+import { describe, it, expect } from "vitest";
+import { parsePositionString } from "#src/ui/default_clipboard_handling.js";
 
 describe("default_clipboard_handling", () => {
   describe("parsePositionString", () => {

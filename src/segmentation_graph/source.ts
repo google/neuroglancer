@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-import { ChunkManager } from "#/chunk_manager/frontend";
-import { RenderLayer } from "#/renderlayer";
-import { VisibleSegmentsState } from "#/segmentation_display_state/base";
-import { SegmentationDisplayState3D } from "#/segmentation_display_state/frontend";
-import { VisibleSegmentEquivalencePolicy } from "#/segmentation_graph/segment_id";
-import { SegmentationUserLayer } from "#/segmentation_user_layer";
-import { WatchableValueInterface } from "#/trackable_value";
-import { Disposer, Owned, RefCounted } from "#/util/disposable";
-import { Uint64 } from "#/util/uint64";
-import {
-  DependentViewContext,
-  DependentViewWidget,
-} from "#/widget/dependent_view_widget";
-import { Tab } from "#/widget/tab_view";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import type { RenderLayer } from "#src/renderlayer.js";
+import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
+import type { SegmentationDisplayState3D } from "#src/segmentation_display_state/frontend.js";
+import type { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { Disposer, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { Uint64 } from "#src/util/uint64.js";
+import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 export class SegmentationGraphSourceTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {

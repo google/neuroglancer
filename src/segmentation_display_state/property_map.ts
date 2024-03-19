@@ -14,30 +14,31 @@
  * limitations under the License.
  */
 
-import { ChunkManager, ChunkSource } from "#/chunk_manager/frontend";
-import { IndexedSegmentProperty } from "#/segmentation_display_state/base";
-import { Uint64OrderedSet } from "#/uint64_ordered_set";
-import { Uint64Set } from "#/uint64_set";
-import {
-  mergeSequences,
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkSource } from "#src/chunk_manager/frontend.js";
+import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
+import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
+import type { Uint64Set } from "#src/uint64_set.js";
+import type {
   TypedArray,
   TypedArrayConstructor,
   WritableArrayLike,
-} from "#/util/array";
-import { DataType } from "#/util/data_type";
-import { Borrowed } from "#/util/disposable";
-import { murmurHash3_x86_32Hash64Bits } from "#/util/hash";
+} from "#src/util/array.js";
+import { mergeSequences } from "#src/util/array.js";
+import { DataType } from "#src/util/data_type.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { murmurHash3_x86_32Hash64Bits } from "#src/util/hash.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   clampToInterval,
   dataTypeCompare,
-  DataTypeInterval,
   dataTypeIntervalEqual,
   dataTypeValueNextAfter,
   parseDataTypeValue,
-} from "#/util/lerp";
-import { getObjectId } from "#/util/object_id";
-import { defaultStringCompare } from "#/util/string";
-import { Uint64 } from "#/util/uint64";
+} from "#src/util/lerp.js";
+import { getObjectId } from "#src/util/object_id.js";
+import { defaultStringCompare } from "#src/util/string.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -1247,7 +1248,7 @@ export function forEachQueryResultSegmentId(
   }
   const { indices } = queryResult;
   if (indices !== undefined) {
-    const { ids } = db?.segmentPropertyMap.inlineProperties!;
+    const { ids } = db!.segmentPropertyMap.inlineProperties!;
     for (let i = 0, count = indices.length; i < count; ++i) {
       const propIndex = indices[i];
       tempUint64.low = ids[propIndex * 2];
@@ -1271,7 +1272,7 @@ export function* forEachQueryResultSegmentIdGenerator(
   }
   const { indices } = queryResult;
   if (indices !== undefined) {
-    const { ids } = db?.segmentPropertyMap.inlineProperties!;
+    const { ids } = db!.segmentPropertyMap.inlineProperties!;
     for (let i = 0, count = indices.length; i < count; ++i) {
       const propIndex = indices[i];
       if (safe) {

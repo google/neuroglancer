@@ -14,70 +14,72 @@
  * limitations under the License.
  */
 
-import "./position_widget.css";
+import "#src/widget/position_widget.css";
 
-import svg_pause from "ikonate/icons/pause.svg";
-import svg_play from "ikonate/icons/play.svg";
-import svg_video from "ikonate/icons/video.svg";
-import {
-  clampAndRoundCoordinateToVoxelCenter,
+import svg_pause from "ikonate/icons/pause.svg?raw";
+import svg_play from "ikonate/icons/play.svg?raw";
+import svg_video from "ikonate/icons/video.svg?raw";
+import type {
   CoordinateArray,
   CoordinateSpace,
   CoordinateSpaceCombiner,
   DimensionId,
+} from "#src/coordinate_transform.js";
+import {
+  clampAndRoundCoordinateToVoxelCenter,
   emptyInvalidCoordinateSpace,
   insertDimensionAt,
   makeCoordinateSpace,
-} from "#/coordinate_transform";
-import { MouseSelectionState, UserLayer } from "#/layer";
-import { LayerGroupViewer } from "#/layer_group_viewer";
-import {
+} from "#src/coordinate_transform.js";
+import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
+import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
+import type {
   CoordinateSpacePlaybackVelocity,
   Position,
-  VelocityBoundaryBehavior,
-} from "#/navigation_state";
-import { StatusMessage } from "#/status";
+} from "#src/navigation_state.js";
+import { VelocityBoundaryBehavior } from "#src/navigation_state.js";
+import { StatusMessage } from "#src/status.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedDerivedWatchableValue,
   WatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
+} from "#src/trackable_value.js";
+import type { LocalToolBinder, ToolActivation } from "#src/ui/tool.js";
 import {
-  LocalToolBinder,
   makeToolActivationStatusMessage,
   makeToolButton,
   registerTool,
   Tool,
-  ToolActivation,
-} from "#/ui/tool";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { arraysEqual, binarySearch } from "#/util/array";
-import { setClipboard } from "#/util/clipboard";
-import { Borrowed, RefCounted } from "#/util/disposable";
+} from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { arraysEqual, binarySearch } from "#src/util/array.js";
+import { setClipboard } from "#src/util/clipboard.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
   removeFromParent,
   updateChildren,
   updateInputFieldWidth,
-} from "#/util/dom";
-import { vec3 } from "#/util/geom";
-import { verifyObjectProperty, verifyString } from "#/util/json";
+} from "#src/util/dom.js";
+import { vec3 } from "#src/util/geom.js";
+import { verifyObjectProperty, verifyString } from "#src/util/json.js";
+import type { ActionEvent } from "#src/util/keyboard_bindings.js";
 import {
-  ActionEvent,
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import { EventActionMap, MouseEventBinder } from "#/util/mouse_bindings";
-import { formatScaleWithUnit, parseScale } from "#/util/si_units";
-import { TrackableEnum } from "#/util/trackable_enum";
-import { getWheelZoomAmount } from "#/util/wheel_zoom";
-import { Viewer } from "#/viewer";
-import { CheckboxIcon } from "#/widget/checkbox_icon";
-import { makeCopyButton } from "#/widget/copy_button";
-import { DependentViewWidget } from "#/widget/dependent_view_widget";
-import { EnumSelectWidget } from "#/widget/enum_widget";
-import { makeIcon } from "#/widget/icon";
-import { NumberInputWidget } from "#/widget/number_input_widget";
-import { PositionPlot } from "#/widget/position_plot";
+} from "#src/util/keyboard_bindings.js";
+import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { formatScaleWithUnit, parseScale } from "#src/util/si_units.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
+import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
+import type { Viewer } from "#src/viewer.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { EnumSelectWidget } from "#src/widget/enum_widget.js";
+import { makeIcon } from "#src/widget/icon.js";
+import { NumberInputWidget } from "#src/widget/number_input_widget.js";
+import { PositionPlot } from "#src/widget/position_plot.js";
 
 export const positionDragType = "neuroglancer-position";
 
@@ -640,7 +642,7 @@ export class PositionWidget extends RefCounted {
         if (selectionStart !== 0 || selectionEnd !== value.length) {
           if (selectionStart == null) selectionStart = 0;
           if (selectionEnd == null) selectionEnd = 0;
-          const invalidMatch = text.match(/[^\-0-9\.]/);
+          const invalidMatch = text.match(/[^\-0-9.]/);
           if (invalidMatch !== null) {
             text = text.substring(0, invalidMatch.index);
           }
@@ -661,7 +663,7 @@ export class PositionWidget extends RefCounted {
         if (selectionStart === null) selectionStart = 0;
         if (selectionEnd === null) selectionEnd = selectionStart;
         let newValue = "";
-        const invalidPattern = /[^\-0-9\.]/g;
+        const invalidPattern = /[^\-0-9.]/g;
         newValue += value
           .substring(0, selectionStart)
           .replace(invalidPattern, "");
@@ -1301,7 +1303,7 @@ export class MousePositionWidget extends RefCounted {
 
 const DIMENSION_TOOL_ID = "dimension";
 
-interface SupportsDimensionTool<ToolContext extends Object = Object> {
+interface SupportsDimensionTool<ToolContext extends object = object> {
   position: Position;
   velocity: CoordinateSpacePlaybackVelocity;
   coordinateSpaceCombiner: CoordinateSpaceCombiner;
@@ -1315,7 +1317,7 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift?+alt?+mousedown0": { action: "toggle-playback" },
 });
 
-class DimensionTool<Viewer extends Object> extends Tool<Viewer> {
+class DimensionTool<Viewer extends object> extends Tool<Viewer> {
   get position() {
     return this.viewer.position;
   }
@@ -1533,40 +1535,50 @@ function makeDimensionTool(viewer: SupportsDimensionTool, obj: unknown) {
   return new DimensionTool(viewer, coordinateSpace.ids[dimensionIndex]);
 }
 
-registerTool(Viewer, DIMENSION_TOOL_ID, (viewer, obj) =>
-  makeDimensionTool(
-    {
-      position: viewer.position,
-      velocity: viewer.velocity,
-      coordinateSpaceCombiner:
-        viewer.layerSpecification.coordinateSpaceCombiner,
-      toolBinder: viewer.toolBinder,
-    },
-    obj,
-  ),
-);
+export function registerDimensionToolForViewer(contextType: typeof Viewer) {
+  registerTool(contextType, DIMENSION_TOOL_ID, (viewer, obj) =>
+    makeDimensionTool(
+      {
+        position: viewer.position,
+        velocity: viewer.velocity,
+        coordinateSpaceCombiner:
+          viewer.layerSpecification.coordinateSpaceCombiner,
+        toolBinder: viewer.toolBinder,
+      },
+      obj,
+    ),
+  );
+}
 
-registerTool(UserLayer, DIMENSION_TOOL_ID, (layer, obj) =>
-  makeDimensionTool(
-    {
-      position: layer.localPosition,
-      velocity: layer.localVelocity,
-      coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
-      toolBinder: layer.toolBinder,
-    },
-    obj,
-  ),
-);
+export function registerDimensionToolForUserLayer(
+  contextType: typeof UserLayer,
+) {
+  registerTool(contextType, DIMENSION_TOOL_ID, (layer, obj) =>
+    makeDimensionTool(
+      {
+        position: layer.localPosition,
+        velocity: layer.localVelocity,
+        coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
+        toolBinder: layer.toolBinder,
+      },
+      obj,
+    ),
+  );
+}
 
-registerTool(LayerGroupViewer, DIMENSION_TOOL_ID, (layerGroupViewer, obj) =>
-  makeDimensionTool(
-    {
-      position: layerGroupViewer.viewerNavigationState.position.value,
-      velocity: layerGroupViewer.viewerNavigationState.velocity.velocity,
-      coordinateSpaceCombiner:
-        layerGroupViewer.layerSpecification.root.coordinateSpaceCombiner,
-      toolBinder: layerGroupViewer.toolBinder,
-    },
-    obj,
-  ),
-);
+export function registerDimensionToolForLayerGroupViewer(
+  contextType: typeof LayerGroupViewer,
+) {
+  registerTool(contextType, DIMENSION_TOOL_ID, (layerGroupViewer, obj) =>
+    makeDimensionTool(
+      {
+        position: layerGroupViewer.viewerNavigationState.position.value,
+        velocity: layerGroupViewer.viewerNavigationState.velocity.velocity,
+        coordinateSpaceCombiner:
+          layerGroupViewer.layerSpecification.root.coordinateSpaceCombiner,
+        toolBinder: layerGroupViewer.toolBinder,
+      },
+      obj,
+    ),
+  );
+}

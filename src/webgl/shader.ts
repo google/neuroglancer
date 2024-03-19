@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { RefCounted } from "#/util/disposable";
-import { GL } from "#/webgl/context";
 import {
   ControlPoint,
   TransferFunctionTexture,
-} from "#/widget/transfer_function";
+} from "#src/widget/transfer_function.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { GL } from "#src/webgl/context.js";
 
 const DEBUG_SHADER = false;
 
@@ -130,7 +130,9 @@ export function getShader(
       if (w !== null) {
         try {
           w.document.write(s);
-        } catch (writeError) {}
+        } catch {
+          // Ignore error writing output, e.g. due to popup blocking.
+        }
       }
     }
 

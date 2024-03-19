@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import {
   mergeSegmentPropertyMaps,
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
-} from "#/segmentation_display_state/property_map";
-import { Uint64 } from "#/util/uint64";
+} from "#src/segmentation_display_state/property_map.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 describe("PreprocessedSegmentPropertyMap", () => {
   it("handles lookups correctly", () => {

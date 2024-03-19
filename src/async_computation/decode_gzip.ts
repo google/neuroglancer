@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { decodeGzip } from "#/async_computation/decode_gzip_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
 import pako from "pako";
+import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
 
 registerAsyncComputation(decodeGzip, async (data: Uint8Array) => {
   const result = pako.inflate(data);

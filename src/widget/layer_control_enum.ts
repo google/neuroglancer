@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-import { UserLayer } from "#/layer";
-import { ActionEvent, EventActionMap } from "#/util/event_action_map";
-import { TrackableEnum } from "#/util/trackable_enum";
-import { EnumSelectWidget } from "#/widget/enum_widget";
-import { LayerControlFactory } from "#/widget/layer_control";
+import type { UserLayer } from "#src/layer/index.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import type { TrackableEnum } from "#src/util/trackable_enum.js";
+import { EnumSelectWidget } from "#src/widget/enum_widget.js";
+import type { LayerControlFactory } from "#src/widget/layer_control.js";
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift+wheel": { action: "adjust-via-wheel" },

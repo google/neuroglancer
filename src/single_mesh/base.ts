@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DataType } from "#/util/data_type";
+import type { DataType } from "#src/util/data_type.js";
 
 export const SINGLE_MESH_LAYER_RPC_ID = "single_mesh/SingleMeshLayer";
 export const GET_SINGLE_MESH_INFO_RPC_ID = "single_mesh/getSingleMeshInfo";

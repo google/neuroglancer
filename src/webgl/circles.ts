@@ -22,8 +22,8 @@ import {
   drawQuads,
   glsl_getQuadVertexPosition,
   VERTICES_PER_QUAD,
-} from "#/webgl/quad";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
+} from "#src/webgl/quad.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 export const VERTICES_PER_CIRCLE = VERTICES_PER_QUAD;
 

@@ -14,18 +14,10 @@
  * limitations under the License.
  */
 
-import { GL, initializeWebGL } from "#/webgl/context";
-
-declare const NEUROGLANCER_SKIP_WEBGL_TESTS: boolean | undefined;
+import type { GL } from "#src/webgl/context.js";
+import { initializeWebGL } from "#src/webgl/context.js";
 
 export function webglTest(f: (gl: GL, canvas: HTMLCanvasElement) => void) {
-  if (
-    typeof NEUROGLANCER_SKIP_WEBGL_TESTS !== "undefined" &&
-    NEUROGLANCER_SKIP_WEBGL_TESTS === true
-  ) {
-    pending("NEUROGLANCER_SKIP_WEBGL_TESTS=true");
-    return;
-  }
   const canvas = document.createElement("canvas");
   document.body.appendChild(canvas);
   let gl: GL | undefined;

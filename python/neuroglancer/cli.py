@@ -30,6 +30,11 @@ def add_server_arguments(ap):
         help="Obtain the Neuroglancer client code from the specified URL.",
     )
     g.add_argument(
+        "--static-content-dev-server",
+        action="store_true",
+        help="Build Neuroglancer client from source using dev server.",
+    )
+    g.add_argument(
         "--debug-server",
         action="store_true",
         help="Log requests to web server used for Neuroglancer Python API",
@@ -74,7 +79,9 @@ def handle_server_arguments(args):
 
     if args.bind_address is not None or args.bind_port is not None:
         server.set_server_bind_address(args.bind_address, args.bind_port)
-    if args.static_content_url:
+    if args.static_content_dev_server:
+        server.set_dev_server_content_source()
+    elif args.static_content_url:
         server.set_static_content_source(url=args.static_content_url)
     if args.debug_server:
         server.debug = True

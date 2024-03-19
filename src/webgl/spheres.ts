@@ -18,10 +18,11 @@
  * @file Facilities for drawing spheres in WebGL
  */
 
-import { RefCounted } from "#/util/disposable";
-import { Buffer, getMemoizedBuffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
+import { RefCounted } from "#src/util/disposable.js";
+import type { Buffer } from "#src/webgl/buffer.js";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 export function getSphereVertexArray(
   latitudeBands: number,

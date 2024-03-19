@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { asyncComputation } from "#/async_computation";
-import { SingleMesh } from "#/single_mesh/backend";
+import { asyncComputation } from "#src/async_computation/index.js";
+import type { SingleMesh } from "#src/single_mesh/backend.js";
 
 export const parseOBJFromArrayBuffer = asyncComputation<
   (buffer: ArrayBuffer) => {

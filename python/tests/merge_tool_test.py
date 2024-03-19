@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests for merge_tool.py"""
 
-
 from neuroglancer.tool import merge_tool
 
 

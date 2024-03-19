@@ -18,14 +18,14 @@
  * @file Facility for remote action handling.
  */
 
-import debounce from "lodash/debounce";
-import { TrackableValue } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { registerActionListener } from "#/util/event_action_map";
-import { verifyStringArray } from "#/util/json";
-import { Signal } from "#/util/signal";
-import { getCachedJson } from "#/util/trackable";
-import { Viewer } from "#/viewer";
+import { debounce } from "lodash-es";
+import { TrackableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { registerActionListener } from "#src/util/event_action_map.js";
+import { verifyStringArray } from "#src/util/json.js";
+import { Signal } from "#src/util/signal.js";
+import { getCachedJson } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 export class RemoteActionHandler extends RefCounted {
   actionSet = new TrackableValue(

@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
-import { DataType } from "#/util/data_type";
-import { parseNpy } from "#/util/npy";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { describe, it, expect } from "vitest";
+import { DataType } from "#src/util/data_type.js";
+import { parseNpy } from "#src/util/npy.js";
 
 interface ExampleSpec {
   dataType: string;
@@ -23,70 +26,37 @@ interface ExampleSpec {
   data: number[];
 }
 
-function checkNpy(spec: ExampleSpec, encoded: Uint8Array) {
+async function checkNpy(spec: ExampleSpec, encoded: Uint8Array) {
   const decoded = parseNpy(encoded);
   expect(decoded.shape).toEqual(spec.shape);
   expect(DataType[decoded.dataType].toLowerCase()).toBe(spec.dataType);
-  expect(Array.from(<any>decoded.data)).toEqual(spec.data);
+  expect(Array.from(decoded.data)).toEqual(spec.data);
 }
 
 describe("parseNpy", () => {
-  it("uint8", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint8.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint8.npy"),
-    );
-  });
-
-  it("uint16-le", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint16.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint16-le.npy"),
-    );
-  });
-  it("uint16-be", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint16.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint16-be.npy"),
-    );
-  });
-
-  it("uint32-le", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint32.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint32-le.npy"),
-    );
-  });
-  it("uint32-be", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint32.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint32-be.npy"),
-    );
-  });
-
-  it("uint64-le", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint64.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint64-le.npy"),
-    );
-  });
-  it("uint64-be", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.uint64.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.uint64-be.npy"),
-    );
-  });
-
-  it("float32-le", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.float32.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.float32-le.npy"),
-    );
-  });
-  it("float32-be", () => {
-    checkNpy(
-      require<ExampleSpec>("neuroglancer-testdata/npy_test.float32.json"),
-      require<Uint8Array>("neuroglancer-testdata/npy_test.float32-be.npy"),
-    );
-  });
+  for (const { json, npys } of [
+    { json: "uint8", npys: ["uint8"] },
+    ...["uint16", "uint32", "uint64", "float32"].map((x) => ({
+      json: x,
+      npys: [`${x}-le`, `${x}-be`],
+    })),
+  ]) {
+    for (const npyName of npys) {
+      it(npyName, async () => {
+        const testDataDir = path.resolve(
+          import.meta.dirname,
+          "..",
+          "..",
+          "testdata",
+        );
+        const example = JSON.parse(
+          await fs.readFile(`${testDataDir}/npy_test.${json}.json`, {
+            encoding: "utf-8",
+          }),
+        ) as ExampleSpec;
+        const npy = await fs.readFile(`${testDataDir}/npy_test.${npyName}.npy`);
+        checkNpy(example, new Uint8Array(npy));
+      });
+    }
+  }
 });
