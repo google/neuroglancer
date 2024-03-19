@@ -14,20 +14,21 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
+import { DataType } from "#src/util/data_type.js";
+import { vec4 } from "#src/util/geom.js";
+import { defaultDataTypeRange } from "#src/util/lerp.js";
+import { Uint64 } from "#src/util/uint64.js";
+import { getShaderType } from "#src/webgl/shader_lib.js";
+import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
+import type { ControlPoint } from "#src/widget/transfer_function.js";
 import {
   lerpBetweenControlPoints,
   TRANSFER_FUNCTION_LENGTH,
   NUM_COLOR_CHANNELS,
-  ControlPoint,
   defineTransferFunctionShader,
   enableTransferFunctionShader,
-} from "#/widget/transfer_function";
-import { vec4 } from "#/util/geom";
-import { DataType } from "#/util/data_type";
-import { fragmentShaderTest } from "#/webgl/shader_testing";
-import { defaultDataTypeRange } from "#/util/lerp";
-import { Uint64 } from "#/util/uint64";
-import { getShaderType } from "#/webgl/shader_lib";
+} from "#src/widget/transfer_function.js";
 
 describe("lerpBetweenControlPoints", () => {
   const output = new Uint8Array(NUM_COLOR_CHANNELS * TRANSFER_FUNCTION_LENGTH);

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { createGriddedRectangleArray } from "#/webgl/rectangle_grid_buffer";
+import { describe, it, expect } from "vitest";
+import { createGriddedRectangleArray } from "#src/webgl/rectangle_grid_buffer.js";
 
 describe("createGriddedRectangleArray", () => {
   it("creates a set of two squares for grid size=2 and rectangle width&height=2", () => {

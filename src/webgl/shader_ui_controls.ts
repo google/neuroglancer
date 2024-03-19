@@ -27,10 +27,14 @@ import {
   TrackableValue,
 } from "#src/trackable_value.js";
 import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
-import { parseRGBColorSpecification, serializeColor, TrackableRGB } from "#src/util/color.js";
-import type { DataType } from "#src/util/data_type.js";
+import {
+  parseRGBColorSpecification,
+  serializeColor,
+  TrackableRGB,
+} from "#src/util/color.js";
+import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import type { vec3, vec4 } from "#src/util/geom.js";
+import { vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -54,6 +58,7 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
+import { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -62,15 +67,16 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import {
+import type {
   ControlPoint,
+  ParsedControlPoint,
+} from "#src/widget/transfer_function.js";
+import {
   defineTransferFunctionShader,
   enableTransferFunctionShader,
   floatToUint8,
-  ParsedControlPoint,
   TRANSFER_FUNCTION_LENGTH,
 } from "#src/widget/transfer_function.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export interface ShaderSliderControl {
   type: "slider";
@@ -675,7 +681,7 @@ function parseTransferFunctionDirective(
     // Parse control points from the shader code and sort them
     for (const controlPoint of parsedControlPoints) {
       let normalizedPosition = computeInvlerp(range, controlPoint.position);
-      normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1)
+      normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1);
       const position = computeLerp(
         [0, TRANSFER_FUNCTION_LENGTH - 1],
         DataType.UINT16,
@@ -1183,9 +1189,7 @@ function parseTransferFunctionControlPoints(
     }
     if (typeof x.input !== "number") {
       throw new Error(
-        `Expected position as number but received: ${JSON.stringify(
-          x.input,
-        )}`,
+        `Expected position as number but received: ${JSON.stringify(x.input)}`,
       );
     }
     const color = parseRGBColorSpecification(x.color);
@@ -1297,7 +1301,7 @@ class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctio
         [0, TRANSFER_FUNCTION_LENGTH - 1],
         position,
       );
-      normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1)
+      normalizedPosition = Math.min(Math.max(0, normalizedPosition), 1);
       const positionInOriginalRange = computeLerp(
         range,
         dataType,

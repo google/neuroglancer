@@ -14,61 +14,66 @@
  * limitations under the License.
  */
 
-import "#/widget/transfer_function.css";
+import "#src/widget/transfer_function.css";
 
-import { CoordinateSpaceCombiner } from "#/coordinate_transform";
-import { DisplayContext, IndirectRenderedPanel } from "#/display_context";
-import { UserLayer } from "#/layer";
-import { Position } from "#/navigation_state";
-import {
-  makeCachedDerivedWatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { ToolActivation } from "#/ui/tool";
+import type { CoordinateSpaceCombiner } from "#src/coordinate_transform.js";
+import type { DisplayContext } from "#src/display_context.js";
+import { IndirectRenderedPanel } from "#src/display_context.js";
+import type { UserLayer } from "#src/layer/index.js";
+import { Position } from "#src/navigation_state.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import type { ToolActivation } from "#src/ui/tool.js";
 import {
   arraysEqual,
   arraysEqualWithPredicate,
   findClosestMatchInSortedArray,
-} from "#/util/array";
-import { DATA_TYPE_SIGNED, DataType } from "#/util/data_type";
-import { RefCounted } from "#/util/disposable";
+} from "#src/util/array.js";
+import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
   EventActionMap,
   registerActionListener,
-} from "#/util/event_action_map";
-import { vec3, vec4 } from "#/util/geom";
-import { computeLerp, DataTypeInterval, parseDataTypeValue } from "#/util/lerp";
-import { MouseEventBinder } from "#/util/mouse_bindings";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import { Buffer, getMemoizedBuffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
+} from "#src/util/event_action_map.js";
+import { vec3, vec4 } from "#src/util/geom.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
+import { computeLerp, parseDataTypeValue } from "#src/util/lerp.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import type { Uint64 } from "#src/util/uint64.js";
+import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import type { Buffer } from "#src/webgl/buffer.js";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
-} from "#/webgl/lerp";
+} from "#src/webgl/lerp.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
   VERTICES_PER_LINE,
-} from "#/webgl/lines";
-import { drawQuads } from "#/webgl/quad";
-import { createGriddedRectangleArray } from "#/webgl/rectangle_grid_buffer";
-import { ShaderBuilder, ShaderCodePart, ShaderProgram } from "#/webgl/shader";
-import { getShaderType } from "#/webgl/shader_lib";
-import { TransferFunctionParameters } from "#/webgl/shader_ui_controls";
-import { setRawTextureParameters } from "#/webgl/texture";
-import { ColorWidget } from "#/widget/color";
+} from "#src/webgl/lines.js";
+import { drawQuads } from "#src/webgl/quad.js";
+import { createGriddedRectangleArray } from "#src/webgl/rectangle_grid_buffer.js";
+import type { ShaderCodePart, ShaderProgram } from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
+import { getShaderType } from "#src/webgl/shader_lib.js";
+import type { TransferFunctionParameters } from "#src/webgl/shader_ui_controls.js";
+import { setRawTextureParameters } from "#src/webgl/texture.js";
+import { ColorWidget } from "#src/widget/color.js";
 import {
   getUpdatedRangeAndWindowParameters,
   updateInputBoundValue,
   updateInputBoundWidth,
-} from "#/widget/invlerp";
-import { LayerControlFactory, LayerControlTool } from "#/widget/layer_control";
-import { PositionWidget } from "#/widget/position_widget";
-import { Tab } from "#/widget/tab_view";
-import { Uint64 } from "#/util/uint64";
+} from "#src/widget/invlerp.js";
+import type {
+  LayerControlFactory,
+  LayerControlTool,
+} from "#src/widget/layer_control.js";
+import { PositionWidget } from "#src/widget/position_widget.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 export const TRANSFER_FUNCTION_LENGTH = 1024;
 export const NUM_COLOR_CHANNELS = 4;
@@ -752,9 +757,15 @@ class ControlPointsLookupTable extends RefCounted {
 
     // If points are nearby in X space, use Y space to break ties
     const nextPosition = controlPoints[nearestIndex + 1]?.position;
-    const nextDistance = nextPosition !== undefined ? Math.abs(nextPosition - desiredPosition) : CONTROL_POINT_X_GRAB_DISTANCE + 1;
+    const nextDistance =
+      nextPosition !== undefined
+        ? Math.abs(nextPosition - desiredPosition)
+        : CONTROL_POINT_X_GRAB_DISTANCE + 1;
     const previousPosition = controlPoints[nearestIndex - 1]?.position;
-    const previousDistance = previousPosition !== undefined ? Math.abs(previousPosition - desiredPosition) : CONTROL_POINT_X_GRAB_DISTANCE + 1;
+    const previousDistance =
+      previousPosition !== undefined
+        ? Math.abs(previousPosition - desiredPosition)
+        : CONTROL_POINT_X_GRAB_DISTANCE + 1;
     const possibleValues: [number, number][] = [];
     if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
       possibleValues.push([
@@ -808,7 +819,7 @@ class ControlPointsLookupTable extends RefCounted {
   }
   updatePoint(index: number, position: number, opacity: number) {
     const { controlPoints } = this.trackable.value;
-    let positionAsIndex = this.positionToIndex(position);
+    const positionAsIndex = this.positionToIndex(position);
     const opacityAsUint8 = this.opacityToUint8(opacity);
     const color = controlPoints[index].color;
     controlPoints[index] = {

@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {
+import { RefCounted } from "#src/util/disposable.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ControlPoint,
   TransferFunctionTexture,
 } from "#src/widget/transfer_function.js";
-import { RefCounted } from "#src/util/disposable.js";
-import type { GL } from "#src/webgl/context.js";
 
 const DEBUG_SHADER = false;
 
@@ -255,7 +255,7 @@ export class ShaderProgram extends RefCounted {
   }
 
   bindAndUpdateTransferFunctionTexture(
-    symbol: Symbol | string,
+    symbol: symbol | string,
     controlPoints: ControlPoint[],
   ) {
     const textureUnit = this.textureUnits.get(symbol);

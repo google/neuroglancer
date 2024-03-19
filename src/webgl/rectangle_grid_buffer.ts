@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { getMemoizedBuffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
-import { VERTICES_PER_QUAD } from "#/webgl/quad";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import { VERTICES_PER_QUAD } from "#src/webgl/quad.js";
 
 /**
  * Create a Float32Array of vertices gridded in a rectangle

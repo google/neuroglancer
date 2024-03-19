@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-
-import { TRANSFER_FUNCTION_LENGTH } from "#src/widget/transfer_function.js";
-import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { expect, describe, it } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
+import { defaultDataTypeRange } from "#src/util/lerp.js";
 import {
   parseShaderUiControls,
   stripComments,
 } from "#src/webgl/shader_ui_controls.js";
+import { TRANSFER_FUNCTION_LENGTH } from "#src/widget/transfer_function.js";
 
 describe("stripComments", () => {
   it("handles code without comments", () => {
