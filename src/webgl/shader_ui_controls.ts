@@ -69,13 +69,11 @@ import {
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import type {
   ControlPoint,
-  ParsedControlPoint,
 } from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,
   enableTransferFunctionShader,
   floatToUint8,
-  TRANSFER_FUNCTION_LENGTH,
 } from "#src/widget/transfer_function.js";
 
 export interface ShaderSliderControl {
@@ -1080,12 +1078,7 @@ class TrackablePropertyInvlerpParameters extends TrackableValue<PropertyInvlerpP
   }
 }
 
-export interface TransferFunctionParameters {
-  controlPoints: ControlPoint[];
-  channel: number[];
-  color: vec3;
-  range: DataTypeInterval;
-}
+
 
 function convertTransferFunctionControlPoints(
   value: unknown,

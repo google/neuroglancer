@@ -26,7 +26,6 @@ import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
   arraysEqual,
-  arraysEqualWithPredicate,
   findClosestMatchInSortedArray,
 } from "#src/util/array.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
@@ -64,7 +63,6 @@ import { createGriddedRectangleArray } from "#src/webgl/rectangle_grid_buffer.js
 import type { ShaderCodePart, ShaderProgram } from "#src/webgl/shader.js";
 import { ShaderBuilder } from "#src/webgl/shader.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
-import type { TransferFunctionParameters } from "#src/webgl/shader_ui_controls.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
 import { ColorWidget } from "#src/widget/color.js";
 import {
@@ -90,7 +88,7 @@ const transferFunctionSamplerTextureUnit = Symbol(
 );
 
 /**
- * Options to update a transfer function texture
+ * Options to update a lookup table texture
  */
 export interface LookupTableTextureOptions {
   /** A lookup table is a series of color values (0 - 255) for each index in the transfer function texture
@@ -102,6 +100,14 @@ export interface LookupTableTextureOptions {
    * transfer function texture generation due to texture size limitations
    */
   inputRange: DataTypeInterval;
+}
+
+export interface TransferFunctionParameters {
+  sortedControlPoints: SortedControlPoints;
+  channel: number[];
+  defaultColor: vec3;
+  range: DataTypeInterval;
+  size: number;
 }
 
 /**
@@ -174,16 +180,15 @@ export class ControlPoint {
   }
 }
 
-// TODO (SKM does this make good sense?)
-class SortedControlPoints {
-  controlPoints: ControlPoint[];
-  constructor(public parent: TransferFunction) {
-    this.controlPoints = parent.trackable.value.controlPoints.map((point) =>
-      ControlPoint.copyFrom(point),
-    );
-  }
-  get range() {
-    return this.parent.trackable.value.range;
+export class SortedControlPoints {
+  // TODO (skm) is the copy needed? Does the constucture make sense?
+  constructor(
+    public controlPoints: ControlPoint[] = [],
+    public range: DataTypeInterval,
+  ) {
+    this.controlPoints = controlPoints;
+    this.range = range;
+    this.sort();
   }
   addPoint(controlPoint: ControlPoint) {
     const { inputValue, outputColor } = controlPoint;
@@ -220,7 +225,7 @@ class SortedControlPoints {
   }
 }
 
-class LookupTable {
+export class LookupTable {
   outputValues: Uint8Array;
   constructor(public lookupTableSize: number) {
     this.outputValues = new Uint8Array(
@@ -241,10 +246,8 @@ class LookupTable {
    * @param controlPoints The control points to interpolate between
    * @param dataRange The range of the input data space
    */
-  updateFromControlPoints(
-    controlPoints: ControlPoint[],
-    dataRange: DataTypeInterval,
-  ) {
+  updateFromControlPoints(sortedControlPoints: SortedControlPoints) {
+    const { controlPoints, range } = sortedControlPoints;
     const out = this.outputValues;
     const size = this.lookupTableSize;
     function addLookupValue(index: number, color: vec4) {
@@ -254,7 +257,7 @@ class LookupTable {
       out[index + 3] = color[3];
     }
     function toTransferFunctionSpace(controlPoint: ControlPoint) {
-      return controlPoint.transferFunctionIndex(dataRange, size);
+      return controlPoint.transferFunctionIndex(range, size);
     }
 
     // If no control points - return all transparent
@@ -306,7 +309,7 @@ class LookupTable {
 /**
  * Handles a linked lookup table and control points for a transfer function.
  */
-class TransferFunction extends RefCounted {
+export class TransferFunction extends RefCounted {
   lookupTable: LookupTable;
   sortedControlPoints: SortedControlPoints;
   constructor(
@@ -314,29 +317,29 @@ class TransferFunction extends RefCounted {
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
   ) {
     super();
-    this.lookupTable = new LookupTable(
-      this.trackable.value.transferFunctionSize,
-    );
-    this.sortedControlPoints = new SortedControlPoints(this);
+    this.lookupTable = new LookupTable(this.trackable.value.size);
+    this.sortedControlPoints = this.trackable.value.sortedControlPoints;
+    this.updateLookupTable();
   }
-  /** Supports negative indexing */
-  toLookupTableIndex(controlPointIndex: number) {
-    let index =
-      controlPointIndex >= 0
-        ? controlPointIndex
-        : this.sortedControlPoints.controlPoints.length + controlPointIndex;
-    return this.sortedControlPoints.controlPoints[index].transferFunctionIndex(
+  /** The index of the vec4 in the lookup table corresponding to the given control point. Supports negative indexing */
+  toLookupTableIndex(
+    controlPointIndex: number,
+    rollIndex: boolean = true,
+  ): number | undefined {
+    let index = controlPointIndex;
+    if (rollIndex && index < 0) {
+      index = this.sortedControlPoints.controlPoints.length + controlPointIndex;
+    }
+    return this.sortedControlPoints.controlPoints[index]?.transferFunctionIndex(
       this.trackable.value.range,
-      this.trackable.value.transferFunctionSize,
+      this.trackable.value.size,
     );
   }
   toNormalizedInput(controlPoint: ControlPoint) {
     return controlPoint.normalizedInput(this.trackable.value.range);
   }
   updateLookupTable() {
-    this.lookupTable.updateFromControlPoints(
-      this.sortedControlPoints.controlPoints,
-    );
+    this.lookupTable.updateFromControlPoints(this.sortedControlPoints);
   }
   addPoint(controlPoint: ControlPoint) {
     this.sortedControlPoints.addPoint(controlPoint);
@@ -358,204 +361,7 @@ class TransferFunction extends RefCounted {
     );
     return this.sortedControlPoints.findNearestControlPointIndex(absoluteValue);
   }
-  /** If a control point has neighbouring control points that are close by, select between them via match on the opacity */
-  // TODO (skm) - complete this, needs check for -1 / +1 exist and distance check
-  matchNeighbouringPointsByOpacity(startingIndex: number) {
-    const controlPoints = this.sortedControlPoints.controlPoints;
-    const startingPoint = controlPoints[startingIndex];
-    const previousPoint = controlPoints[startingIndex - 1]?;
-    const nextPoint = controlPoints[startingIndex + 1];
-    const previousDistance = previousPoint
-      ? Math.abs(previousPoint.outputColor[3] - startingPoint.outputColor[3])
-      : Infinity;
-    const nextDistance = nextPoint
-      ? Math.abs(nextPoint.outputColor[3] - startingPoint.outputColor[3])
-      : Infinity;
-    if (previousDistance < nextDistance) {
-      return startingIndex - 1;
-    } else {
-      return startingIndex + 1;
-    }
-  }
 }
-
-// old tf class
-//   positionToIndex(position: number) {
-//     let positionAsIndex = Math.floor(
-//       position * (TRANSFER_FUNCTION_PANEL_SIZE - 1),
-//     );
-//     if (positionAsIndex < TRANSFER_FUNCTION_BORDER_WIDTH) {
-//       positionAsIndex = 0;
-//     }
-//     if (
-//       TRANSFER_FUNCTION_PANEL_SIZE - 1 - positionAsIndex <
-//       TRANSFER_FUNCTION_BORDER_WIDTH
-//     ) {
-//       positionAsIndex = TRANSFER_FUNCTION_PANEL_SIZE - 1;
-//     }
-//     return positionAsIndex;
-//   }
-//   opacityToUint8(opacity: number) {
-//     let opacityAsUint8 = floatToUint8(opacity);
-//     if (opacityAsUint8 <= TRANSFER_FUNCTION_BORDER_WIDTH) {
-//       opacityAsUint8 = 0;
-//     } else if (opacityAsUint8 >= 255 - TRANSFER_FUNCTION_BORDER_WIDTH) {
-//       opacityAsUint8 = 255;
-//     }
-//     return opacityAsUint8;
-//   }
-//   findNearestControlPointIndex(position: number) {
-//     return findClosestMatchInSortedArray(
-//       this.trackable.value.controlPoints.map((point) =>
-//         point.toTransferFunctionIndex(
-//           this.trackable.value.range,
-//           TRANSFER_FUNCTION_PANEL_SIZE,
-//         ),
-//       ),
-//       this.positionToIndex(position),
-//       (a, b) => a - b,
-//     );
-//   }
-//   grabControlPoint(position: number, opacity: number) {
-//     const desiredPosition = this.positionToIndex(position);
-//     const desiredOpacity = this.opacityToUint8(opacity);
-//     const nearestIndex = this.findNearestControlPointIndex(position);
-//     if (nearestIndex === -1) {
-//       return -1;
-//     }
-//     const controlPoints = this.trackable.value.controlPoints;
-//     const nearestPosition = controlPoints[nearestIndex].toTransferFunctionIndex(
-//       this.trackable.value.range,
-//       TRANSFER_FUNCTION_PANEL_SIZE,
-//     );
-//     if (
-//       Math.abs(nearestPosition - desiredPosition) >
-//       CONTROL_POINT_X_GRAB_DISTANCE
-//     ) {
-//       return -1;
-//     }
-
-//     // If points are nearby in X space, use Y space to break ties
-//     const nextPosition = controlPoints[
-//       nearestIndex + 1
-//     ]?.toTransferFunctionIndex(
-//       this.trackable.value.range,
-//       TRANSFER_FUNCTION_PANEL_SIZE,
-//     );
-//     const nextDistance =
-//       nextPosition !== undefined
-//         ? Math.abs(nextPosition - desiredPosition)
-//         : CONTROL_POINT_X_GRAB_DISTANCE + 1;
-//     const previousPosition = controlPoints[
-//       nearestIndex - 1
-//     ]?.toTransferFunctionIndex(
-//       this.trackable.value.range,
-//       TRANSFER_FUNCTION_PANEL_SIZE,
-//     );
-//     const previousDistance =
-//       previousPosition !== undefined
-//         ? Math.abs(previousPosition - desiredPosition)
-//         : CONTROL_POINT_X_GRAB_DISTANCE + 1;
-//     const possibleValues: [number, number][] = [];
-//     if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
-//       possibleValues.push([
-//         nearestIndex + 1,
-//         Math.abs(
-//           controlPoints[nearestIndex + 1].outputColor[3] - desiredOpacity,
-//         ),
-//       ]);
-//     }
-//     if (previousDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
-//       possibleValues.push([
-//         nearestIndex - 1,
-//         Math.abs(
-//           controlPoints[nearestIndex - 1].outputColor[3] - desiredOpacity,
-//         ),
-//       ]);
-//     }
-//     possibleValues.push([
-//       nearestIndex,
-//       Math.abs(controlPoints[nearestIndex].outputColor[3] - desiredOpacity),
-//     ]);
-//     possibleValues.sort((a, b) => a[1] - b[1]);
-//     return possibleValues[0][0];
-//   }
-//   addPoint(position: number, opacity: number, color: vec3) {
-//     const colorAsUint8 = vec3.fromValues(
-//       floatToUint8(color[0]),
-//       floatToUint8(color[1]),
-//       floatToUint8(color[2]),
-//     );
-//     const opacityAsUint8 = this.opacityToUint8(opacity);
-//     const controlPoints = this.trackable.value.controlPoints;
-//     const positionAsIndex = this.positionToIndex(position);
-//     const existingIndex = controlPoints.findIndex(
-//       (point) => point.inputValue === positionAsIndex,
-//     );
-//     if (existingIndex !== -1) {
-//       controlPoints.splice(existingIndex, 1);
-//     }
-//     controlPoints.push({
-//       inputValue: positionAsIndex,
-//       outputColor: vec4.fromValues(
-//         colorAsUint8[0],
-//         colorAsUint8[1],
-//         colorAsUint8[2],
-//         opacityAsUint8,
-//       ),
-//     });
-//     controlPoints.sort((a, b) => a.inputValue - b.inputValue);
-//   }
-//   lookupTableFromControlPoints() {
-//     const { lookupTable } = this;
-//     const { controlPoints } = this.trackable.value;
-//     lerpBetweenControlPoints(lookupTable, controlPoints);
-//   }
-//   updatePoint(index: number, position: number, opacity: number) {
-//     const { controlPoints } = this.trackable.value;
-//     const positionAsIndex = this.positionToIndex(position);
-//     const opacityAsUint8 = this.opacityToUint8(opacity);
-//     const color = controlPoints[index].outputColor;
-//     controlPoints[index] = {
-//       inputValue: positionAsIndex,
-//       outputColor: vec4.fromValues(
-//         color[0],
-//         color[1],
-//         color[2],
-//         opacityAsUint8,
-//       ),
-//     };
-//     const exsitingPositions = new Set<number>();
-//     let positionToFind = positionAsIndex;
-//     for (const point of controlPoints) {
-//       if (exsitingPositions.has(point.inputValue)) {
-//         positionToFind = positionToFind === 0 ? 1 : positionToFind - 1;
-//         controlPoints[index].inputValue = positionToFind;
-//         break;
-//       }
-//       exsitingPositions.add(point.inputValue);
-//     }
-//     controlPoints.sort((a, b) => a.inputValue - b.inputValue);
-//     const newControlPointIndex = controlPoints.findIndex(
-//       (point) => point.inputValue === positionToFind,
-//     );
-//     return newControlPointIndex;
-//   }
-//   setPointColor(index: number, color: vec3) {
-//     const { controlPoints } = this.trackable.value;
-//     const colorAsUint8 = vec3.fromValues(
-//       floatToUint8(color[0]),
-//       floatToUint8(color[1]),
-//       floatToUint8(color[2]),
-//     );
-//     controlPoints[index].outputColor = vec4.fromValues(
-//       colorAsUint8[0],
-//       colorAsUint8[1],
-//       colorAsUint8[2],
-//       controlPoints[index].outputColor[3],
-//     );
-//   }
-// }
 
 /**
  * Convert a [0, 1] float to a uint8 value between 0 and 255
@@ -784,7 +590,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     }
 
     const { transferFunction } = this;
-    const { controlPoints } = transferFunction.trackable.value;
+    const { controlPoints } = transferFunction.trackable.value.sortedControlPoints;
     let numLines = controlPoints.length;
     const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
@@ -796,14 +602,14 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     // Create start and end lines if there are any control points
     if (controlPoints.length > 0) {
       // If the start point is above 0, need to draw a line from the left edge
-      const firstInputValue = transferFunction.toLookupTableIndex(0);
+      const firstInputValue = transferFunction.toLookupTableIndex(0)!;
       if (firstInputValue > 0) {
         numLines += 1;
         lineFromLeftEdge = vec4.fromValues(0, 0, firstInputValue, 0);
       }
       // If the end point is less than the transfer function length, need to draw a line to the right edge
       const finalPoint = controlPoints[controlPoints.length - 1];
-      const finalInputValue = transferFunction.toLookupTableIndex(-1);
+      const finalInputValue = transferFunction.toLookupTableIndex(-1)!;
       if (finalInputValue < TRANSFER_FUNCTION_PANEL_SIZE - 1) {
         numLines += 1;
         lineToRightEdge = vec4.fromValues(
@@ -833,7 +639,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       const colorIndex = i * colorChannels;
       const positionIndex = i * 2;
       const { outputColor } = controlPoints[i];
-      const inputValue = transferFunction.toLookupTableIndex(i);
+      const inputValue = transferFunction.toLookupTableIndex(i)!;
       colorArray[colorIndex + 1] = normalizeColor(outputColor[1]);
       colorArray[colorIndex + 2] = normalizeColor(outputColor[2]);
       positionArray[positionIndex] = normalizePosition(inputValue);
@@ -844,7 +650,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       const linePosition = vec4.fromValues(
         inputValue,
         outputColor[3],
-        transferFunction.toLookupTableIndex(i + 1),
+        transferFunction.toLookupTableIndex(i + 1)!,
         controlPoints[i + 1].outputColor[3],
       );
       positionArrayIndex = addLine(
@@ -1057,7 +863,54 @@ out_color = tempColor * alpha;
     ) {
       return -1;
     }
-    return transferFunction.matchNeighbouringPointsByOpacity(nearestControlPointIndex);
+    // If points are nearby in X space, use Y space to break ties
+    const possibleMatches: [number, number][] = [
+      [
+        nearestControlPointIndex,
+        Math.abs(
+          transferFunction.sortedControlPoints.controlPoints[
+            nearestControlPointIndex
+          ].outputColor[3] - mouseYPosition,
+        ),
+      ],
+    ];
+    const nextPosition = transferFunction.toLookupTableIndex(
+      nearestControlPointIndex + 1,
+    );
+    const nextDistance =
+      nextPosition !== undefined
+        ? Math.abs(nextPosition - mousePositionTableIndex)
+        : Infinity;
+    if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
+      possibleMatches.push([
+        nearestControlPointIndex + 1,
+        Math.abs(
+          transferFunction.sortedControlPoints.controlPoints[
+            nearestControlPointIndex + 1
+          ].outputColor[3] - mouseYPosition,
+        ),
+      ]);
+    }
+
+    const previousPosition = transferFunction.toLookupTableIndex(
+      nearestControlPointIndex - 1,
+      false,
+    );
+    const previousDistance =
+      previousPosition !== undefined
+        ? Math.abs(previousPosition - mousePositionTableIndex)
+        : Infinity;
+    if (previousDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
+      possibleMatches.push([
+        nearestControlPointIndex - 1,
+        Math.abs(
+          transferFunction.sortedControlPoints.controlPoints[
+            nearestControlPointIndex - 1
+          ].outputColor[3] - mouseYPosition,
+        ),
+      ]);
+    }
+    return possibleMatches.sort((a, b) => a[1] - b[1])[0][0];
   }
   update() {
     this.transferFunction.updateLookupTable();
@@ -1181,7 +1034,7 @@ class TransferFunctionController extends RefCounted {
         const mouseEvent = actionEvent.detail;
         const nearestIndex = this.findNearestControlPointIndex(mouseEvent);
         if (nearestIndex !== -1) {
-          const color = this.transferFunction.trackable.value.color;
+          const color = this.transferFunction.trackable.value.defaultColor;
           this.transferFunction.setPointColor(nearestIndex, color);
           this.updateValue({
             ...this.getModel(),
@@ -1202,7 +1055,7 @@ class TransferFunctionController extends RefCounted {
     return this.transferFunction.grabControlPoint(normalizedX, normalizedY);
   }
   addControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
-    const color = this.transferFunction.trackable.value.color;
+    const color = this.transferFunction.trackable.value.defaultColor;
     const nearestIndex = this.findNearestControlPointIndex(event);
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
@@ -1281,7 +1134,7 @@ class TransferFunctionWidget extends Tab {
     const colorPicker = this.registerDisposer(
       new ColorWidget(
         makeCachedDerivedWatchableValue(
-          (x: TransferFunctionParameters) => x.color,
+          (x: TransferFunctionParameters) => x.defaultColor,
           [trackable],
         ),
         () => vec3.fromValues(1, 1, 1),
@@ -1292,13 +1145,13 @@ class TransferFunctionWidget extends Tab {
     colorPicker.element.addEventListener("change", () => {
       trackable.value = {
         ...this.trackable.value,
-        color: colorPicker.model.value,
+        defaultColor: colorPicker.model.value,
       };
     });
     colorPicker.element.addEventListener("input", () => {
       trackable.value = {
         ...this.trackable.value,
-        color: colorPicker.model.value,
+        defaultColor: colorPicker.model.value,
       };
     });
     colorPickerDiv.appendChild(colorPicker.element);
