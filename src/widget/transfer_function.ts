@@ -85,6 +85,14 @@ const transferFunctionSamplerTextureUnit = Symbol(
 );
 
 /**
+ * Convert a [0, 1] float to a uint8 value between 0 and 255
+ * TODO (SKM) belong here? Maybe utils?
+ */
+export function floatToUint8(float: number) {
+  return Math.min(255, Math.max(Math.round(float * 255), 0));
+}
+
+/**
  * Options to update a lookup table texture
  */
 export interface LookupTableTextureOptions {
@@ -99,6 +107,7 @@ export interface LookupTableTextureOptions {
   inputRange: DataTypeInterval;
 }
 
+// TODO (skm) - window currently doesn't work. Need to update round bound inputs
 export interface TransferFunctionParameters {
   sortedControlPoints: SortedControlPoints;
   range: DataTypeInterval;
@@ -187,6 +196,9 @@ export class SortedControlPoints {
     this.controlPoints = controlPoints;
     this.range = range;
     this.sort();
+  }
+  get length() {
+    return this.controlPoints.length;
   }
   addPoint(controlPoint: ControlPoint) {
     const { inputValue, outputColor } = controlPoint;
@@ -381,14 +393,6 @@ export class TransferFunction extends RefCounted {
     );
     return this.sortedControlPoints.findNearestControlPointIndex(absoluteValue);
   }
-}
-
-/**
- * Convert a [0, 1] float to a uint8 value between 0 and 255
- * TODO (SKM) belong here? Maybe utils?
- */
-export function floatToUint8(float: number) {
-  return Math.min(255, Math.max(Math.round(float * 255), 0));
 }
 
 /**
@@ -1275,7 +1279,7 @@ export function enableTransferFunctionShader(
   shader: ShaderProgram,
   name: string,
   dataType: DataType,
-  controlPoints: ControlPoint[],
+  controlPoints: SortedControlPoints,
   interval: DataTypeInterval,
   lookupTableSize: number,
 ) {
@@ -1291,9 +1295,10 @@ export function enableTransferFunctionShader(
       new LookupTableTexture(gl),
     );
   }
+  // TODO (SKM) probably need to handle the sorted nature
   shader.bindAndUpdateTransferFunctionTexture(
     `TransferFunction.${name}`,
-    controlPoints,
+    controlPoints.controlPoints,
   );
 
   // Bind the length of the lookup table to the shader as a uniform
