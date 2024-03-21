@@ -44,7 +44,7 @@ import {
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
-import { Uint64 } from "#src/util/uint64.js";
+import type { Uint64 } from "#src/util/uint64.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { Buffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
@@ -411,7 +411,9 @@ abstract class BaseTexture extends RefCounted {
   abstract createLookupTable(
     options: LookupTableTextureOptions | ControlPointTextureOptions,
   ): LookupTable;
-  updateAndActivate(options: LookupTableTextureOptions | ControlPointTextureOptions) {
+  updateAndActivate(
+    options: LookupTableTextureOptions | ControlPointTextureOptions,
+  ) {
     const { gl } = this;
     if (gl === null) return;
     let { texture } = this;
@@ -438,7 +440,7 @@ abstract class BaseTexture extends RefCounted {
     // Update the texture
     activateAndBindTexture(gl, options.textureUnit);
     setRawTextureParameters(gl);
-    let lookupTable = this.createLookupTable(options);
+    const lookupTable = this.createLookupTable(options);
 
     gl.texImage2D(
       WebGL2RenderingContext.TEXTURE_2D,
@@ -1315,7 +1317,7 @@ export function enableTransferFunctionShader(
   shader.bindAndUpdateTransferFunctionTexture(
     `TransferFunction.${name}`,
     controlPoints.controlPoints,
-    interval
+    interval,
   );
 
   // Bind the length of the lookup table to the shader as a uniform

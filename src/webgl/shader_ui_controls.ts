@@ -34,7 +34,7 @@ import {
 } from "#src/util/color.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { kOneVec, kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
+import {kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -67,10 +67,11 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type {
+  TransferFunctionParameters} from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,
   enableTransferFunctionShader,
-  TransferFunctionParameters,
   floatToUint8,
   SortedControlPoints,
   ControlPoint,
@@ -1784,7 +1785,7 @@ function setControlInShader(
         control.dataType,
         value.sortedControlPoints,
         value.range,
-        TRANSFER_FUNCTION_LENGTH
+        TRANSFER_FUNCTION_LENGTH,
       );
   }
 }

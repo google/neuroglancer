@@ -20,7 +20,7 @@ import type {
   ControlPoint,
   ControlPointTexture,
 } from "#src/widget/transfer_function.js";
-import { DataTypeInterval } from "src/util/lerp";
+import type { DataTypeInterval } from "src/util/lerp";
 
 const DEBUG_SHADER = false;
 

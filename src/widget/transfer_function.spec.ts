@@ -15,18 +15,19 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { TrackableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
+import type {
+  TransferFunctionParameters} from "#src/widget/transfer_function.js";
 import {
   SortedControlPoints,
   ControlPoint,
   LookupTable,
   TransferFunction,
-  TransferFunctionParameters,
   NUM_COLOR_CHANNELS,
 } from "#src/widget/transfer_function.js";
-import { TrackableValue } from "#src/trackable_value.js";
 
 const TRANSFER_FUNCTION_LENGTH = 512;
 
