@@ -24,7 +24,11 @@ import { Position } from "#src/navigation_state.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
-import { arraysEqual, findClosestMatchInSortedArray } from "#src/util/array.js";
+import {
+  arraysEqual,
+  arraysEqualWithPredicate,
+  findClosestMatchInSortedArray,
+} from "#src/util/array.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {
@@ -101,10 +105,6 @@ export interface LookupTableTextureOptions {
   lookupTable: LookupTable;
   /** textureUnit to update with the new transfer function texture data */
   textureUnit: number | undefined;
-  /** range of the input space I, where T: I -> O. Allows for more precision in the
-   * transfer function texture generation due to texture size limitations
-   */
-  inputRange: DataTypeInterval;
 }
 
 // TODO (skm) - window currently doesn't work. Need to update round bound inputs
@@ -119,15 +119,11 @@ export interface TransferFunctionParameters {
 
 /**
  * Options to update a transfer function texture
- * TODO remove
+ * TODO should this be sorted control points?
  */
-export interface LookupTableTextureOptionsOld {
-  /** If lookupTable is defined, it will be used to update the texture directly.
-   * A lookup table is a series of color values (0 - 255) for each index in the transfer function texture
-   */
-  lookupTable: LookupTable;
-  /** If lookupTable is undefined, controlPoints will be used to generate a lookup table as a first step */
-  controlPoints?: ControlPoint[];
+export interface ControlPointTextureOptions {
+  /** controlPoints will be used to generate a lookup table as a first step */
+  controlPoints: ControlPoint[];
   /** textureUnit to update with the new transfer function texture data */
   textureUnit: number | undefined;
   /** range of the input space I, where T: I -> O. Allows for more precision in the
@@ -395,71 +391,30 @@ export class TransferFunction extends RefCounted {
   }
 }
 
-/**
- * Represent the underlying transfer function lookup table as a texture
- * TODO(skm) consider if height can be used for more efficiency
- */
-export class LookupTableTexture extends RefCounted {
+abstract class BaseTexture extends RefCounted {
   texture: WebGLTexture | null = null;
   width: number;
   height = 1;
-  private priorOptions: LookupTableTextureOptions | undefined = undefined;
-
+  protected priorOptions:
+    | LookupTableTextureOptions
+    | ControlPointTextureOptions
+    | undefined = undefined;
   constructor(public gl: GL | null) {
     super();
   }
-
   /**
    * Compare the existing options to the new options to determine if the texture needs to be updated
    */
-  optionsEqual(
-    existingOptions: LookupTableTextureOptions | undefined,
-    newOptions: LookupTableTextureOptions,
-  ) {
-    if (existingOptions === undefined) return false;
-    let lookupTableEqual = true;
-    if (
-      existingOptions.lookupTable !== undefined &&
-      newOptions.lookupTable !== undefined
-    ) {
-      lookupTableEqual = LookupTable.equal(
-        existingOptions.lookupTable,
-        newOptions.lookupTable,
-      );
-    }
-    // let controlPointsEqual = true;
-    // if (
-    //   existingOptions.controlPoints !== undefined &&
-    //   newOptions.controlPoints !== undefined
-    // ) {
-    //   controlPointsEqual = arraysEqualWithPredicate(
-    //     existingOptions.controlPoints,
-    //     newOptions.controlPoints,
-    //     (a, b) =>
-    //       a.inputValue === b.inputValue &&
-    //       arraysEqual(a.outputColor, b.outputColor),
-    //   );
-    // }
-    const textureUnitEqual =
-      existingOptions.textureUnit === newOptions.textureUnit;
-
-    return lookupTableEqual && textureUnitEqual;
-  }
-
-  updateAndActivate(options: LookupTableTextureOptions) {
+  abstract optionsEqual(
+    newOptions: LookupTableTextureOptions | ControlPointTextureOptions,
+  ): boolean;
+  abstract createLookupTable(
+    options: LookupTableTextureOptions | ControlPointTextureOptions,
+  ): LookupTable;
+  updateAndActivate(options: LookupTableTextureOptions | ControlPointTextureOptions) {
     const { gl } = this;
     if (gl === null) return;
     let { texture } = this;
-
-    // Verify input
-    // if (
-    //   options.lookupTable === undefined &&
-    //   options.controlPoints === undefined
-    // ) {
-    //   throw new Error(
-    //     "Either lookupTable or controlPoints must be defined for transfer function texture",
-    //   );
-    // }
 
     function activateAndBindTexture(gl: GL, textureUnit: number | undefined) {
       if (textureUnit === undefined) {
@@ -472,7 +427,7 @@ export class LookupTableTexture extends RefCounted {
     }
 
     // If the texture is already up to date, just bind and activate it
-    if (texture !== null && this.optionsEqual(this.priorOptions, options)) {
+    if (texture !== null && this.optionsEqual(options)) {
       activateAndBindTexture(gl, options.textureUnit);
       return;
     }
@@ -483,16 +438,8 @@ export class LookupTableTexture extends RefCounted {
     // Update the texture
     activateAndBindTexture(gl, options.textureUnit);
     setRawTextureParameters(gl);
-    let lookupTable = options.lookupTable;
-    // if (lookupTable === undefined) {
-    //   lookupTable = new LookupTable(options.size);
-    //   lerpBetweenControlPoints(
-    //     lookupTable,
-    //     options.controlPoints!,
-    //     options.inputRange,
-    //     this.width * this.height,
-    //   );
-    // }
+    let lookupTable = this.createLookupTable(options);
+
     gl.texImage2D(
       WebGL2RenderingContext.TEXTURE_2D,
       0,
@@ -509,12 +456,6 @@ export class LookupTableTexture extends RefCounted {
     // Make a copy of the options for the purpose of comparison
     // TODO(skm) is this copy needed?
     this.priorOptions = { ...options };
-    // textureUnit: options.textureUnit,
-    // lookupTable: options.lookupTable,
-    // // controlPoints: options.controlPoints?.map((point) =>
-    // //   ControlPoint.copyFrom(point),
-    // // ),
-    // inputRange: options.inputRange,
   }
 
   disposed() {
@@ -526,11 +467,88 @@ export class LookupTableTexture extends RefCounted {
 }
 
 /**
+ * Represent the underlying transfer function lookup table as a texture
+ * TODO(skm) consider if height can be used for more efficiency
+ */
+class DirectLookupTableTexture extends BaseTexture {
+  texture: WebGLTexture | null = null;
+  width: number;
+  height = 1;
+  protected priorOptions: LookupTableTextureOptions | undefined = undefined;
+
+  constructor(public gl: GL | null) {
+    super(gl);
+  }
+  optionsEqual(newOptions: LookupTableTextureOptions) {
+    const existingOptions = this.priorOptions;
+    if (existingOptions === undefined) return false;
+    let lookupTableEqual = true;
+    if (
+      existingOptions.lookupTable !== undefined &&
+      newOptions.lookupTable !== undefined
+    ) {
+      lookupTableEqual = LookupTable.equal(
+        existingOptions.lookupTable,
+        newOptions.lookupTable,
+      );
+    }
+    const textureUnitEqual =
+      existingOptions.textureUnit === newOptions.textureUnit;
+
+    return lookupTableEqual && textureUnitEqual;
+  }
+  createLookupTable(options: LookupTableTextureOptions): LookupTable {
+    return options.lookupTable;
+  }
+}
+
+export class ControlPointTexture extends BaseTexture {
+  protected priorOptions: ControlPointTextureOptions | undefined;
+  constructor(public gl: GL | null) {
+    super(gl);
+  }
+  optionsEqual(newOptions: ControlPointTextureOptions): boolean {
+    const existingOptions = this.priorOptions;
+    if (existingOptions === undefined) return false;
+    let controlPointsEqual = true;
+    if (
+      existingOptions.controlPoints !== undefined &&
+      newOptions.controlPoints !== undefined
+    ) {
+      controlPointsEqual = arraysEqualWithPredicate(
+        existingOptions.controlPoints,
+        newOptions.controlPoints,
+        (a, b) =>
+          a.inputValue === b.inputValue &&
+          arraysEqual(a.outputColor, b.outputColor),
+      );
+    }
+    const textureUnitEqual =
+      existingOptions.textureUnit === newOptions.textureUnit;
+    // TODO (skm) how to handle uint64?
+    // const inputRangeEqual = arraysEqual(
+    //   existingOptions.inputRange,
+    //   newOptions.inputRange,
+    // );
+
+    return controlPointsEqual && textureUnitEqual;
+  }
+  createLookupTable(options: ControlPointTextureOptions): LookupTable {
+    // TODO (SKM) - need variable size?
+    const lookupTable = new LookupTable(this.width * this.height);
+    lookupTable.updateFromControlPoints(
+      new SortedControlPoints(options.controlPoints, options.inputRange),
+    );
+    return lookupTable;
+  }
+}
+
+/**
  * Display the UI canvas for the transfer function widget and
  * handle shader updates for elements of the canvas
  */
 class TransferFunctionPanel extends IndirectRenderedPanel {
-  texture: LookupTableTexture;
+  texture: DirectLookupTableTexture;
   private textureVertexBuffer: Buffer;
   private textureVertexBufferArray: Float32Array;
   private controlPointsVertexBuffer: Buffer;
@@ -563,7 +581,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     this.textureVertexBufferArray = createGriddedRectangleArray(
       TRANSFER_FUNCTION_PANEL_SIZE,
     );
-    this.texture = this.registerDisposer(new LookupTableTexture(gl));
+    this.texture = this.registerDisposer(new DirectLookupTableTexture(gl));
 
     function createBuffer(dataArray: Float32Array) {
       return getMemoizedBuffer(
@@ -807,7 +825,6 @@ out_color = tempColor * alpha;
       this.texture.updateAndActivate({
         lookupTable: this.transferFunction.lookupTable,
         textureUnit,
-        inputRange: this.transferFunction.trackable.value.range,
       });
       drawQuads(this.gl, TRANSFER_FUNCTION_PANEL_SIZE, 1);
       gl.disableVertexAttribArray(aVertexPosition);
@@ -1043,7 +1060,8 @@ class TransferFunctionController extends RefCounted {
       );
       return {
         ...this.getModel(),
-        sortedControlPoints: this.transferFunction.trackable.value.sortedControlPoints,
+        sortedControlPoints:
+          this.transferFunction.trackable.value.sortedControlPoints,
       };
     }
     return undefined;
@@ -1059,18 +1077,16 @@ class TransferFunctionController extends RefCounted {
       normalizedY > 1
     )
       return undefined;
-    
+
     // Near the borders of the transfer function, clamp the control point to the border
     if (normalizedX < TRANSFER_FUNCTION_BORDER_WIDTH) {
       normalizedX = 0.0;
-    }
-    else if (normalizedX > 1 - TRANSFER_FUNCTION_BORDER_WIDTH) {
+    } else if (normalizedX > 1 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       normalizedX = 1.0;
     }
     if (normalizedY < TRANSFER_FUNCTION_BORDER_WIDTH) {
       normalizedY = 0.0;
-    }
-    else if (normalizedY > 1 - TRANSFER_FUNCTION_BORDER_WIDTH) {
+    } else if (normalizedY > 1 - TRANSFER_FUNCTION_BORDER_WIDTH) {
       normalizedY = 1.0;
     }
 
@@ -1292,13 +1308,14 @@ export function enableTransferFunctionShader(
   if (texture === undefined) {
     shader.transferFunctionTextures.set(
       `TransferFunction.${name}`,
-      new LookupTableTexture(gl),
+      new ControlPointTexture(gl),
     );
   }
   // TODO (SKM) probably need to handle the sorted nature
   shader.bindAndUpdateTransferFunctionTexture(
     `TransferFunction.${name}`,
     controlPoints.controlPoints,
+    interval
   );
 
   // Bind the length of the lookup table to the shader as a uniform

@@ -22,7 +22,9 @@ import {
   parseShaderUiControls,
   stripComments,
 } from "#src/webgl/shader_ui_controls.js";
-import { TRANSFER_FUNCTION_LENGTH } from "#src/widget/transfer_function.js";
+
+// TODO (SKM) handle parsing
+const TRANSFER_FUNCTION_LENGTH = 512;
 
 describe("stripComments", () => {
   it("handles code without comments", () => {

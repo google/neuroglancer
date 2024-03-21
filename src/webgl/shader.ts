@@ -18,8 +18,9 @@ import { RefCounted } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ControlPoint,
-  TransferFunctionTexture,
+  ControlPointTexture,
 } from "#src/widget/transfer_function.js";
+import { DataTypeInterval } from "src/util/lerp";
 
 const DEBUG_SHADER = false;
 
@@ -168,9 +169,9 @@ export class ShaderProgram extends RefCounted {
   textureUnits: Map<any, number>;
   vertexShaderInputBinders: { [name: string]: VertexShaderInputBinder } = {};
   vertexDebugOutputs?: VertexDebugOutput[];
-  transferFunctionTextures: Map<any, TransferFunctionTexture> = new Map<
+  transferFunctionTextures: Map<any, ControlPointTexture> = new Map<
     any,
-    TransferFunctionTexture
+    ControlPointTexture
   >();
 
   constructor(
@@ -257,6 +258,7 @@ export class ShaderProgram extends RefCounted {
   bindAndUpdateTransferFunctionTexture(
     symbol: symbol | string,
     controlPoints: ControlPoint[],
+    inputRange: DataTypeInterval,
   ) {
     const textureUnit = this.textureUnits.get(symbol);
     if (textureUnit === undefined) {
@@ -268,7 +270,8 @@ export class ShaderProgram extends RefCounted {
         `Invalid transfer function texture symbol: ${symbol.toString()}`,
       );
     }
-    texture.updateAndActivate({ textureUnit, controlPoints });
+    // TODO (SKM) - how to correctly get the input range?
+    texture.updateAndActivate({ textureUnit, controlPoints, inputRange });
   }
 
   unbindTransferFunctionTextures() {
