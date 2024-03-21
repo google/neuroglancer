@@ -43,9 +43,10 @@ function makeTransferFunction(controlPoints: ControlPoint[]) {
     new TrackableValue<TransferFunctionParameters>(
       {
         sortedControlPoints,
-        channel: [],
-        defaultColor: vec3.fromValues(0.0, 0.0, 0.0),
         range: range,
+        window: range,
+        defaultColor: vec3.fromValues(0, 0, 0),
+        channel: [],
         size: TRANSFER_FUNCTION_LENGTH,
       },
       (x) => x,
