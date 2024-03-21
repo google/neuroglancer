@@ -18,9 +18,6 @@ import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
-import { Uint64 } from "#src/util/uint64.js";
-import { getShaderType } from "#src/webgl/shader_lib.js";
-import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 import {
   SortedControlPoints,
   ControlPoint,
@@ -28,8 +25,6 @@ import {
   TransferFunction,
   TransferFunctionParameters,
   NUM_COLOR_CHANNELS,
-  defineTransferFunctionShader,
-  enableTransferFunctionShader,
 } from "#src/widget/transfer_function.js";
 import { TrackableValue } from "#src/trackable_value.js";
 

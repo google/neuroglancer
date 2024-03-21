@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
-import { vec3, vec4 } from "#src/util/geom.js";
+import { vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { Uint64 } from "#src/util/uint64.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
@@ -24,35 +24,11 @@ import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 import {
   SortedControlPoints,
   ControlPoint,
-  LookupTable,
-  TransferFunction,
-  TransferFunctionParameters,
-  NUM_COLOR_CHANNELS,
   defineTransferFunctionShader,
   enableTransferFunctionShader,
 } from "#src/widget/transfer_function.js";
-import { TrackableValue } from "#src/trackable_value.js";
 
 const TRANSFER_FUNCTION_LENGTH = 512;
-
-function makeTransferFunction(controlPoints: ControlPoint[]) {
-  const range = defaultDataTypeRange[DataType.UINT8];
-  const sortedControlPoints = new SortedControlPoints(controlPoints, range);
-  return new TransferFunction(
-    DataType.UINT8,
-    new TrackableValue<TransferFunctionParameters>(
-      {
-        sortedControlPoints,
-        range: range,
-        window: range,
-        defaultColor: vec3.fromValues(0, 0, 0),
-        channel: [],
-        size: TRANSFER_FUNCTION_LENGTH,
-      },
-      (x) => x,
-    ),
-  );
-}
 
 describe("compute transfer function on GPU", () => {
   const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
