@@ -18,9 +18,7 @@ export function trackableShaderModeValue(
 }
 
 export function isProjectionMode(mode: VolumeRenderingModes): boolean {
-  return (
-    mode === VolumeRenderingModes.MAX || mode === VolumeRenderingModes.MIN
-  );
+  return mode === VolumeRenderingModes.MAX || mode === VolumeRenderingModes.MIN;
 }
 
 export function isProjectionLayer(layer: VolumeRenderingRenderLayer): boolean {
