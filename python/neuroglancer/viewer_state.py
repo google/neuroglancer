@@ -554,6 +554,10 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     )
     opacity = wrapped_property("opacity", optional(float, 0.5))
     blend = wrapped_property("blend", optional(str))
+    # Support old volume rendering key for backward compatibility
+    volume_rendering = volumeRendering = wrapped_property(
+        "volumeRendering", optional(bool, False)
+    )
     volume_rendering_mode = volumeRenderingMode = wrapped_property(
         "volumeRenderingMode", optional(str)
     )
