@@ -65,8 +65,8 @@ import {
 } from "#src/volume_rendering/base.js";
 import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
-  VOLUME_RENDERING_MODES,
-  isProjection,
+  VolumeRenderingModes,
+  isProjectionMode,
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   drawBoxes,
@@ -132,7 +132,7 @@ export interface VolumeRenderingRenderLayerOptions {
 
 interface VolumeRenderingShaderParameters {
   numChannelDimensions: number;
-  mode: VOLUME_RENDERING_MODES;
+  mode: VolumeRenderingModes;
 }
 
 const tempMat4 = mat4.create();
@@ -206,7 +206,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     );
     const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (space: CoordinateSpace, mode: VOLUME_RENDERING_MODES) => ({
+        (space: CoordinateSpace, mode: VolumeRenderingModes) => ({
           numChannelDimensions: space.rank,
           mode,
         }),
@@ -244,7 +244,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 void emitIntensity(float value) {
 }`;
           let glsl_continualEmit = ``;
-          if (isProjection(shaderParametersState.mode)) {
+          if (isProjectionMode(shaderParametersState.mode)) {
             builder.addFragmentCode(`
 float newIntensity = 0.0;
 float savedDepth = 0.0;
@@ -254,7 +254,7 @@ float savedIntensity = 0.0;
 void emitIntensity(float value) {
   newIntensity = clamp(value, 0.0, 1.0);
 }`;
-            if (shaderParametersState.mode === VOLUME_RENDERING_MODES.MIN) {
+            if (shaderParametersState.mode === VolumeRenderingModes.MIN) {
               glsl_emitIntensity = `
 void emitIntensity(float value) {
   newIntensity = clamp(1.0 - value, 0.0, 1.0);
@@ -355,7 +355,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
             let glsl_emitWireframe = `
   emit(outputColor, 0u);
 `;
-            if (isProjection(shaderParametersState.mode)) {
+            if (isProjectionMode(shaderParametersState.mode)) {
               glsl_emitWireframe = `
   emit(outputColor, 1.0, uChunkNumber);
             `;

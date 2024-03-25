@@ -66,8 +66,8 @@ import type {
 } from "#src/util/touch_bindings.js";
 import { WatchableMap } from "#src/util/watchable_map.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
-import { isProjection } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
-import type { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
+import { isProjectionLayer } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
+import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 import {
   DepthStencilRenderbuffer,
   FramebufferConfiguration,
@@ -714,9 +714,9 @@ export class PerspectivePanel extends RenderedDataPanel {
             colorBuffers: [
               new TextureBuffer(
                 this.gl,
-                WebGL2RenderingContext.RGBA32F,
+                WebGL2RenderingContext.RGBA8,
                 WebGL2RenderingContext.RGBA,
-                WebGL2RenderingContext.FLOAT,
+                WebGL2RenderingContext.UNSIGNED_BYTE,
               ),
               new TextureBuffer(
                 this.gl,
@@ -932,6 +932,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.disable(WebGL2RenderingContext.BLEND);
     }
 
+    if (this.viewer.showAxisLines.value) {
+      this.drawAxisLines();
+    }
+
     // Disable stencil operations.
     gl.stencilOp(
       /*sfail=*/ WebGL2RenderingContext.KEEP,
@@ -988,10 +992,9 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
         }
-        const isVolumeRenderingLayer = "mode" in renderLayer;
         if (
-          isVolumeRenderingLayer &&
-          isProjection((renderLayer as VolumeRenderingRenderLayer).mode.value)
+          renderLayer.isVolumeRendering &&
+          isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)
         ) {
           // Set state for max projection mode and draw
           gl.depthMask(true);
@@ -1063,10 +1066,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         transparentConfiguration.colorBuffers[1].texture,
       );
 
-      if (this.viewer.showAxisLines.value) {
-        this.drawAxisLines();
-      }
-
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
@@ -1102,12 +1101,9 @@ export class PerspectivePanel extends RenderedDataPanel {
         if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
           continue;
         }
-        const isVolumeRenderingLayer = "mode" in renderLayer;
         // For max projection layers, can copy over the pick buffer directly.
-        if (isVolumeRenderingLayer) {
-          if (
-            isProjection((renderLayer as VolumeRenderingRenderLayer).mode.value)
-          ) {
+        if (renderLayer.isVolumeRendering) {
+          if (isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)) {
             this.maxProjectionPickCopyHelper.draw(
               maxProjectionPickConfiguration.colorBuffers[0].texture,
               maxProjectionPickConfiguration.colorBuffers[1].texture,

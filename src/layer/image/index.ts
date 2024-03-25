@@ -64,7 +64,7 @@ import { makeValueOrError } from "#src/util/error.js";
 import { verifyOptionalObjectProperty } from "#src/util/json.js";
 import {
   trackableShaderModeValue,
-  VOLUME_RENDERING_MODES,
+  VolumeRenderingModes,
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   getVolumeRenderingDepthSamplesBoundsLogScale,
@@ -278,7 +278,7 @@ export class ImageUserLayer extends Base {
         );
         context.registerDisposer(
           registerNested((context, volumeRenderingMode) => {
-            if (volumeRenderingMode === VOLUME_RENDERING_MODES.OFF) return;
+            if (volumeRenderingMode === VolumeRenderingModes.OFF) return;
             context.registerDisposer(
               this.addRenderLayer(volumeRenderLayer.addRef()),
             );
@@ -482,7 +482,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
-          volumeRenderingMode === VOLUME_RENDERING_MODES.ON,
+          volumeRenderingMode === VolumeRenderingModes.ON,
         [layer.volumeRenderingMode],
       ),
     ...rangeLayerControl((layer) => ({
@@ -496,7 +496,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
-          volumeRenderingMode !== VOLUME_RENDERING_MODES.OFF,
+          volumeRenderingMode !== VolumeRenderingModes.OFF,
         [layer.volumeRenderingMode],
       ),
     ...renderScaleLayerControl(

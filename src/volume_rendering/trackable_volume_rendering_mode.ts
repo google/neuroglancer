@@ -1,6 +1,7 @@
 import { TrackableEnum } from "#src/util/trackable_enum.js";
+import type { VolumeRenderingRenderLayer } from "src/volume_rendering/volume_render_layer";
 
-export enum VOLUME_RENDERING_MODES {
+export enum VolumeRenderingModes {
   OFF = 0,
   ON = 1,
   MAX = 2,
@@ -8,16 +9,20 @@ export enum VOLUME_RENDERING_MODES {
 }
 
 export type TrackableVolumeRenderingModeValue =
-  TrackableEnum<VOLUME_RENDERING_MODES>;
+  TrackableEnum<VolumeRenderingModes>;
 
 export function trackableShaderModeValue(
-  initialValue = VOLUME_RENDERING_MODES.OFF,
+  initialValue = VolumeRenderingModes.OFF,
 ) {
-  return new TrackableEnum(VOLUME_RENDERING_MODES, initialValue);
+  return new TrackableEnum(VolumeRenderingModes, initialValue);
 }
 
-export function isProjection(mode: VOLUME_RENDERING_MODES): boolean {
+export function isProjectionMode(mode: VolumeRenderingModes): boolean {
   return (
-    mode === VOLUME_RENDERING_MODES.MAX || mode === VOLUME_RENDERING_MODES.MIN
+    mode === VolumeRenderingModes.MAX || mode === VolumeRenderingModes.MIN
   );
+}
+
+export function isProjectionLayer(layer: VolumeRenderingRenderLayer): boolean {
+  return isProjectionMode(layer.mode.value);
 }
