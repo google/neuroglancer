@@ -67,7 +67,7 @@ import type {
 import { WatchableMap } from "#src/util/watchable_map.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import { isProjectionLayer } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
-import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
+import type { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 import {
   DepthStencilRenderbuffer,
   FramebufferConfiguration,

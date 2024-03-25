@@ -108,6 +108,8 @@ const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
+// The volume rendering mode key is newer, but we still need to support the old one for backwards compatibility.
+const VOLUME_RENDERING_COMPAT_JSON_KEY = "volumeRendering";
 const VOLUME_RENDERING_MODE_JSON_KEY = "volumeRenderingMode";
 const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
 const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = "volumeRenderingDepthSamples";
@@ -306,6 +308,19 @@ export class ImageUserLayer extends Base {
     this.channelCoordinateSpace.restoreState(
       specification[CHANNEL_DIMENSIONS_JSON_KEY],
     );
+    // Handle old volume rendering mode key for backwards compatibility.
+    verifyOptionalObjectProperty(
+      specification,
+      VOLUME_RENDERING_COMPAT_JSON_KEY,
+      (volumeRenderingBool) => {
+        if (volumeRenderingBool) {
+          this.volumeRenderingMode.value = VolumeRenderingModes.ON;
+        } else {
+          this.volumeRenderingMode.value = VolumeRenderingModes.OFF;
+        }
+      },
+    );
+    // Handle new volume rendering mode key - this will overwrite the old key if both are present.
     verifyOptionalObjectProperty(
       specification,
       VOLUME_RENDERING_MODE_JSON_KEY,
