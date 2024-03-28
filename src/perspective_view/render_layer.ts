@@ -89,4 +89,5 @@ export interface PerspectiveViewRenderLayer<AttachmentState = unknown> {
   isTransparent: boolean | undefined;
   isAnnotation: boolean | undefined;
   backend: SharedObject | undefined;
+  isVolumeRendering: boolean | undefined;
 }

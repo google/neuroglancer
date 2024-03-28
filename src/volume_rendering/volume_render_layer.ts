@@ -63,6 +63,11 @@ import {
   VOLUME_RENDERING_RENDER_LAYER_RPC_ID,
   VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/volume_rendering/base.js";
+import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
+import {
+  VolumeRenderingModes,
+  isProjectionMode,
+} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   drawBoxes,
   glsl_getBoxFaceVertexPosition,
@@ -122,6 +127,12 @@ export interface VolumeRenderingRenderLayerOptions {
   localPosition: WatchableValueInterface<Float32Array>;
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
+  mode: TrackableVolumeRenderingModeValue;
+}
+
+interface VolumeRenderingShaderParameters {
+  numChannelDimensions: number;
+  mode: VolumeRenderingModes;
 }
 
 const tempMat4 = mat4.create();
@@ -157,13 +168,14 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
+  mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
     ShaderControlsBuilderState,
-    number
+    VolumeRenderingShaderParameters
   >;
 
   get gl() {
@@ -188,13 +200,17 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.localPosition = options.localPosition;
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
+    this.mode = options.mode;
     this.registerDisposer(
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
-    const numChannelDimensions = this.registerDisposer(
+    const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (space) => space.rank,
-        [this.channelCoordinateSpace],
+        (space: CoordinateSpace, mode: VolumeRenderingModes) => ({
+          numChannelDimensions: space.rank,
+          mode,
+        }),
+        [this.channelCoordinateSpace, this.mode],
       ),
     );
     this.shaderGetter = parameterizedContextDependentShaderGetter(
@@ -206,12 +222,12 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         getContextKey: ({ emitter, chunkFormat, wireFrame }) =>
           `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
         shaderError: options.shaderError,
-        extraParameters: numChannelDimensions,
+        extraParameters: extraParameters,
         defineShader: (
           builder,
           { emitter, chunkFormat, wireFrame },
           shaderBuilderState,
-          numChannelDimensions,
+          shaderParametersState,
         ) => {
           if (shaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
@@ -220,7 +236,63 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           builder.addFragmentCode(`
 #define VOLUME_RENDERING true
 `);
+          let glsl_rgbaEmit = glsl_emitRGBAVolumeRendering;
+          let glsl_finalEmit = `
+  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
+`;
+          let glsl_emitIntensity = `
+void emitIntensity(float value) {
+}
+`;
 
+          let glsl_continualEmit = ``;
+          if (isProjectionMode(shaderParametersState.mode)) {
+            builder.addFragmentCode(`
+float userIntensity = -1.0;
+float savedDepth = 0.0;
+float savedIntensity = 0.0;
+`);
+            const emitFunctions = `
+void emitIntensity(float value) {
+  userIntensity = value;
+}
+float getIntensity() {
+  float userIntensitySet = step(-0.9, userIntensity);
+  return convertIntensity(mix(defaultMaxProjectionIntensity, userIntensity, userIntensitySet));
+}
+`;
+            glsl_emitIntensity = `
+float convertIntensity(float value) {
+  return clamp(value, 0.0, 1.0);
+}
+${emitFunctions}
+`;
+            if (shaderParametersState.mode === VolumeRenderingModes.MIN) {
+              glsl_emitIntensity = `
+float convertIntensity(float value) {
+  return clamp(1.0 - value, 0.0, 1.0);
+}
+${emitFunctions}
+`;
+            }
+            glsl_rgbaEmit = `
+void emitRGBA(vec4 rgba) {
+  float newIntensity = getIntensity();
+  float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
+  float alpha = clamp(rgba.a, 0.0, 1.0);
+  outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
+  savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
+  savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
+  userIntensity = -1.0;
+}
+`;
+            glsl_finalEmit = `
+  gl_FragDepth = savedIntensity;
+`;
+            glsl_continualEmit = `
+  emit(outputColor, savedDepth, savedIntensity);
+`;
+          }
           emitter(builder);
           // Near limit in [0, 1] as fraction of full limit.
           builder.addUniform("highp float", "uNearLimitFraction");
@@ -268,19 +340,24 @@ void userMain();
           defineChunkDataShaderAccess(
             builder,
             chunkFormat,
-            numChannelDimensions,
+            shaderParametersState.numChannelDimensions,
             "curChunkPosition",
           );
           builder.addFragmentCode([
-            glsl_emitRGBAVolumeRendering,
+            glsl_emitIntensity,
+            glsl_rgbaEmit,
             `
 void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
+  float userIntensitySet = step(-0.9, userIntensity);
+  float intensity = mix(value, userIntensity, userIntensitySet);
+  emitIntensity(intensity);
   emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
+  emitIntensity(0.0);
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 float computeDepthFromClipSpace(vec4 clipSpacePosition) {
@@ -294,10 +371,19 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 `,
           ]);
           if (wireFrame) {
+            let glsl_emitWireframe = `
+  emit(outputColor, 0u);
+`;
+            if (isProjectionMode(shaderParametersState.mode)) {
+              glsl_emitWireframe = `
+  emit(outputColor, 1.0, uChunkNumber);
+            `;
+            }
             builder.setFragmentMainFunction(`
 void main() {
   outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
-  emit(outputColor, 0u);
+  emitIntensity(uChunkNumber);
+  ${glsl_emitWireframe}
 }
 `);
           } else {
@@ -351,8 +437,10 @@ void main() {
     }
     curChunkPosition = position - uTranslation;
     userMain();
+    ${glsl_continualEmit}
+    defaultMaxProjectionIntensity = -1.0;
   }
-  emitAccumAndRevealage(outputColor, 1.0 - revealage, 0u);
+  ${glsl_finalEmit}
 }
 `);
           }
@@ -381,6 +469,7 @@ void main() {
     this.registerDisposer(
       this.transform.changed.add(this.redrawNeeded.dispatch),
     );
+    this.registerDisposer(this.mode.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
       this.shaderControlState.fragmentMain.changed.add(
         this.redrawNeeded.dispatch,
@@ -474,7 +563,7 @@ void main() {
     let prevChunkFormat: ChunkFormat | undefined | null;
     let shaderResult: ParameterizedShaderGetterResult<
       ShaderControlsBuilderState,
-      number
+      VolumeRenderingShaderParameters
     >;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
