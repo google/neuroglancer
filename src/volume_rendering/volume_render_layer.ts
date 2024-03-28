@@ -348,10 +348,10 @@ void userMain();
             glsl_rgbaEmit,
             `
 void emitRGB(vec3 rgb) {
-  float intensity = max(rgb.r, max(rgb.g, rgb.b));
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
+  emitIntensity(value);
   emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
