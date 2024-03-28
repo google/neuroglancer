@@ -243,32 +243,22 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
           let glsl_emitIntensity = `
 void emitIntensity(float value) {
 }
-void setDefaultIntensityIfNotSet(float value) {
-}`;
+`;
 
           let glsl_continualEmit = ``;
           if (isProjectionMode(shaderParametersState.mode)) {
             builder.addFragmentCode(`
 float userIntensity = -1.0;
-float defaultIntensity = -1.0;
 float savedDepth = 0.0;
 float savedIntensity = 0.0;
 `);
             const emitFunctions = `
 void emitIntensity(float value) {
-  userIntensity = convertIntensity(value);
-}
-void setDefaultIntensityIfNotSet(float value) {
-  float intensitySet = step(-0.00001, defaultIntensity);
-  defaultIntensity = mix(convertIntensity(value), defaultIntensity, intensitySet);
+  userIntensity = value;
 }
 float getIntensity() {
-  float userIntensitySet = step(-0.00001, userIntensity);
-  return mix(defaultIntensity, userIntensity, userIntensitySet);
-}
-void resetIntensity() {
-  userIntensity = -1.0;
-  defaultIntensity = -1.0;
+  float userIntensitySet = step(-0.9, userIntensity);
+  return convertIntensity(mix(defaultMaxProjectionIntensity, userIntensity, userIntensitySet));
 }
 `;
             glsl_emitIntensity = `
@@ -287,14 +277,13 @@ ${emitFunctions}
             }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
-  setDefaultIntensityIfNotSet(rgba.a);
   float newIntensity = getIntensity();
   float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
   float alpha = clamp(rgba.a, 0.0, 1.0);
   outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
   savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
   savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
-  resetIntensity();
+  userIntensity = -1.0;
 }
 `;
             glsl_finalEmit = `
@@ -360,15 +349,13 @@ void userMain();
             `
 void emitRGB(vec3 rgb) {
   float intensity = max(rgb.r, max(rgb.g, rgb.b));
-  setDefaultIntensityIfNotSet(intensity);
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
-  setDefaultIntensityIfNotSet(value);
   emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
-  setDefaultIntensityIfNotSet(0.0);
+  emitIntensity(0.0);
   emitRGBA(vec4(0.0, 0.0, 0.0, 0.0));
 }
 float computeDepthFromClipSpace(vec4 clipSpacePosition) {
@@ -449,6 +436,7 @@ void main() {
     curChunkPosition = position - uTranslation;
     userMain();
     ${glsl_continualEmit}
+    defaultMaxProjectionIntensity = -1.0;
   }
   ${glsl_finalEmit}
 }

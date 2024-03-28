@@ -28,6 +28,21 @@ As volume rendering is an option of an image layer, the expected shader paramete
 
 ### Intensity emission
 
+`MAX` and `MIN` projection modes both use an intensity value to determine the max or min value encountered along rays. If the intensity is not set manually, it defaults to the value of the first `invlerp` that is called in the shader. For example:
+
+```glsl
+#uicontrol invlerp normalized_a
+#uicontrol invlerp normalized_b
+
+void main() {
+  // The intensity is set to the value of normalized_b
+  // The first called invlerp, not the first defined
+  emitRGBA(vec4(normalized_b(), 0.0, 0.0, normalized_b()));
+}
+```
+
+The `emitIntensity` function can be used to emit the intensity along a ray and overwrite the defaut heuristic intensity. The intensity must be a float between 0 and 1. Anything outside of this range will be clamped. In `MAX` mode, any pixel with a resulting intensity of 0 will be transparent. In `MIN` mode, any pixel with a resulting intensity of 1 will be transparent
+
 ```glsl
 void emitIntensity(float intensity);
 ```
@@ -35,12 +50,15 @@ void emitIntensity(float intensity);
 For example:
 
 ```glsl
-#uicontrol invlerp normalized
-emitIntensity(normalized());
-emitRGBA(vec4(normalized(), 0.0, 0.0, normalized()));
-```
+#uicontrol invlerp channel_a(clamp=true)
+#uicontrol invlerp channel_b(clamp=true)
 
-The `emitIntensity` function should be used to emit the intensity of the current voxel - which is key if the volume rendering mode is `MAX` or `MIN`. `emitGrayscale` and `emitTransparent` call `emitIntensity` in the background. The intensity must be a float between 0 and 1. Anything outside of this range will be clamped.
+void main() {
+  //Multiply by 0.5 to get the average intensity and stay in the 0-1 range
+  emitIntensity(0.5 * (channel_a() + channel_b()));
+  emitRGBA(vec4(channel_a() + channel_b(), 0.0, 0.0, 0.55));
+}
+```
 
 ### Volume rendering mode switching
 
