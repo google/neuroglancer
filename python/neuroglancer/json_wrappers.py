@@ -486,6 +486,4 @@ def number_or_string(value):
 def bool_or_string(value):
     if not isinstance(value, (bool, str)):
         raise TypeError
-    if isinstance(value, str):
-        return value
-    return bool(value)
+    return value
