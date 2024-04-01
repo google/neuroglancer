@@ -282,7 +282,6 @@ void emitRGBA(vec4 rgba) {
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity);
-  userIntensity = -1.0;
   defaultMaxProjectionIntensity = 0.0;
 `;
           }
