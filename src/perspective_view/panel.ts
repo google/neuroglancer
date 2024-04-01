@@ -887,6 +887,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     const { visibleLayers } = this.visibleLayerTracker;
 
     let hasTransparent = false;
+    let hasMaxProjection = false;
 
     let hasAnnotation = false;
 
@@ -900,6 +901,11 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       } else {
         hasTransparent = true;
+        if (renderLayer.isVolumeRendering) {
+          hasMaxProjection =
+            hasMaxProjection ||
+            isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
+        }
       }
     }
     this.drawSliceViews(renderContext);
@@ -945,28 +951,34 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     if (hasTransparent) {
       //Draw transparent objects.
-      const { maxProjectionConfiguration } = this;
-      const bindMaxProjectionBuffer = () => {
-        maxProjectionConfiguration.bind(width, height);
-      };
-      gl.depthMask(true);
-      bindMaxProjectionBuffer();
-      gl.clearColor(0.0, 0.0, 0.0, 0.0);
-      gl.clearDepth(0.0);
-      gl.clear(
-        WebGL2RenderingContext.COLOR_BUFFER_BIT |
-          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
-      );
 
-      const { maxProjectionPickConfiguration } = this;
-      const bindMaxProjectionPickingBuffer = () => {
-        maxProjectionPickConfiguration.bind(width, height);
-      };
-      bindMaxProjectionPickingBuffer();
-      gl.clear(
-        WebGL2RenderingContext.COLOR_BUFFER_BIT |
-          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
-      );
+      // Create max projection buffer if needed.
+      let bindMaxProjectionBuffer: () => void = () => {};
+      let bindMaxProjectionPickingBuffer: () => void = () => {};
+      if (hasMaxProjection) {
+        const { maxProjectionConfiguration } = this;
+        bindMaxProjectionBuffer = () => {
+          maxProjectionConfiguration.bind(width, height);
+        };
+        gl.depthMask(true);
+        bindMaxProjectionBuffer();
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
+        gl.clearDepth(0.0);
+        gl.clear(
+          WebGL2RenderingContext.COLOR_BUFFER_BIT |
+            WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+        );
+
+        const { maxProjectionPickConfiguration } = this;
+        bindMaxProjectionPickingBuffer = () => {
+          maxProjectionPickConfiguration.bind(width, height);
+        };
+        bindMaxProjectionPickingBuffer();
+        gl.clear(
+          WebGL2RenderingContext.COLOR_BUFFER_BIT |
+            WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+        );
+      }
 
       // Compute accumulate and revealage textures.
       gl.depthMask(false);
@@ -1008,11 +1020,11 @@ export class PerspectivePanel extends RenderedDataPanel {
           // Depth testing on to combine max layers into one pick buffer via depth
           bindMaxProjectionPickingBuffer();
           this.maxProjectionToPickCopyHelper.draw(
-            maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
-            maxProjectionConfiguration.colorBuffers[2 /*picking*/].texture,
+            this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
+            this.maxProjectionConfiguration.colorBuffers[2 /*pick*/].texture,
           );
 
-          // Copy max projection result to color only buffer
+          // Copy max projection color result to color only buffer
           // Depth testing off to combine max layers into one color via blend
           this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
           gl.depthMask(false);
@@ -1023,7 +1035,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
           );
           this.maxProjectionColorCopyHelper.draw(
-            maxProjectionConfiguration.colorBuffers[0].texture,
+            this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
           );
 
           // Reset the max projection buffer
@@ -1105,8 +1117,10 @@ export class PerspectivePanel extends RenderedDataPanel {
         if (renderLayer.isVolumeRendering) {
           if (isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)) {
             this.maxProjectionPickCopyHelper.draw(
-              maxProjectionPickConfiguration.colorBuffers[0].texture,
-              maxProjectionPickConfiguration.colorBuffers[1].texture,
+              this.maxProjectionPickConfiguration.colorBuffers[0]
+                .texture /*depth*/,
+              this.maxProjectionPickConfiguration.colorBuffers[1]
+                .texture /*pick*/,
             );
           }
           // Draw picking for non min/max volume rendering layers
