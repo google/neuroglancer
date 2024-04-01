@@ -583,7 +583,7 @@ precision highp int;
 ${this.uniformsCode}
 ${this.attributesCode}
 ${this.varyingsCodeVS}
-float defaultMaxProjectionIntensity = -1.0;
+float defaultMaxProjectionIntensity = 0.0;
 ${this.vertexCode}
 void main() {
 ${this.vertexMain}
@@ -596,7 +596,7 @@ precision highp int;
 ${this.uniformsCode}
 ${this.varyingsCodeFS}
 ${this.outputBufferCode}
-float defaultMaxProjectionIntensity = -1.0;
+float defaultMaxProjectionIntensity = 0.0;
 ${this.fragmentCode}
 ${this.fragmentMain}
 `;
