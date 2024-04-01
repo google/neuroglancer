@@ -343,6 +343,7 @@ void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
+  emitIntensity(value);
   emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
