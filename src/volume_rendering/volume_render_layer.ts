@@ -246,13 +246,17 @@ void emitIntensity(float value) {
 `;
           let glsl_handleMaxProjectionUpdate = ``;
           if (isProjectionMode(shaderParametersState.mode)) {
+            const glsl_intensityConversion = shaderParametersState.mode === VolumeRenderingModes.MIN? `1.0 - value` : `value`;
             builder.addFragmentCode(`
 float userIntensity = -1.0;
 float savedDepth = 0.0;
 float savedIntensity = 0.0;
 vec4 newColor = vec4(0.0);
 `);
-            const emitFunctions = `
+            glsl_emitIntensity = `
+float convertIntensity(float value) {
+  return clamp(${glsl_intensityConversion}, 0.0, 1.0);
+}
 void emitIntensity(float value) {
   userIntensity = value;
 }
