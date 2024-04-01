@@ -246,7 +246,10 @@ void emitIntensity(float value) {
 `;
           let glsl_handleMaxProjectionUpdate = ``;
           if (isProjectionMode(shaderParametersState.mode)) {
-            const glsl_intensityConversion = shaderParametersState.mode === VolumeRenderingModes.MIN? `1.0 - value` : `value`;
+            const glsl_intensityConversion =
+              shaderParametersState.mode === VolumeRenderingModes.MIN
+                ? `1.0 - value`
+                : `value`;
             builder.addFragmentCode(`
 float userIntensity = -1.0;
 float savedDepth = 0.0;
@@ -261,24 +264,9 @@ void emitIntensity(float value) {
   userIntensity = value;
 }
 float getIntensity() {
-  float userIntensitySet = step(-0.9, userIntensity);
-  return convertIntensity(mix(defaultMaxProjectionIntensity, userIntensity, userIntensitySet));
+  return convertIntensity(userIntensity > -1.0 ? userIntensity : defaultMaxProjectionIntensity);
 }
 `;
-            glsl_emitIntensity = `
-float convertIntensity(float value) {
-  return clamp(value, 0.0, 1.0);
-}
-${emitFunctions}
-`;
-            if (shaderParametersState.mode === VolumeRenderingModes.MIN) {
-              glsl_emitIntensity = `
-float convertIntensity(float value) {
-  return clamp(1.0 - value, 0.0, 1.0);
-}
-${emitFunctions}
-`;
-            }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
   float alpha = clamp(rgba.a, 0.0, 1.0);
@@ -290,13 +278,13 @@ void emitRGBA(vec4 rgba) {
 `;
             glsl_handleMaxProjectionUpdate = `
   float newIntensity = getIntensity();
-  float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
-  savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
-  savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
-  outputColor = mix(outputColor, newColor, intensityChanged);
+  bool intensityChanged = newIntensity > savedIntensity;
+  savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
+  savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
+  outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity);
   userIntensity = -1.0;
-  defaultMaxProjectionIntensity = -1.0;
+  defaultMaxProjectionIntensity = 0.0;
 `;
           }
           emitter(builder);
