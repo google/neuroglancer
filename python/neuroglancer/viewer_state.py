@@ -32,6 +32,7 @@ from .json_wrappers import (
     TypedList,
     TypedStringMap,
     array_wrapper,
+    bool_or_string,
     number_or_string,
     optional,
     text_type,
@@ -554,12 +555,8 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     )
     opacity = wrapped_property("opacity", optional(float, 0.5))
     blend = wrapped_property("blend", optional(str))
-    # Support old volume rendering key for backward compatibility
-    volume_rendering = volumeRendering = wrapped_property(
-        "volumeRendering", optional(bool, False)
-    )
-    volume_rendering_mode = volumeRenderingMode = wrapped_property(
-        "volumeRenderingMode", optional(str)
+    volume_rendering_mode = volumeRenderingMode = VolumeRendering = volume_rendering = (
+        wrapped_property("volumeRendering", optional(bool_or_string, False))
     )
     volume_rendering_gain = volumeRenderingGain = wrapped_property(
         "volumeRenderingGain", optional(float, 0)

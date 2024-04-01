@@ -108,9 +108,7 @@ const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
-// The volume rendering mode key is newer, but we still need to support the old one for backwards compatibility.
-const VOLUME_RENDERING_COMPAT_JSON_KEY = "volumeRendering";
-const VOLUME_RENDERING_MODE_JSON_KEY = "volumeRenderingMode";
+const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
 const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
 const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = "volumeRenderingDepthSamples";
 
@@ -308,24 +306,18 @@ export class ImageUserLayer extends Base {
     this.channelCoordinateSpace.restoreState(
       specification[CHANNEL_DIMENSIONS_JSON_KEY],
     );
-    // Handle old volume rendering mode key for backwards compatibility.
     verifyOptionalObjectProperty(
       specification,
-      VOLUME_RENDERING_COMPAT_JSON_KEY,
-      (volumeRenderingBool) => {
-        if (volumeRenderingBool) {
-          this.volumeRenderingMode.value = VolumeRenderingModes.ON;
+      VOLUME_RENDERING_JSON_KEY,
+      (volumeRenderingMode) => {
+        if (typeof volumeRenderingMode === "boolean") {
+          this.volumeRenderingMode.value = volumeRenderingMode
+            ? VolumeRenderingModes.ON
+            : VolumeRenderingModes.OFF;
         } else {
-          this.volumeRenderingMode.value = VolumeRenderingModes.OFF;
+          this.volumeRenderingMode.restoreState(volumeRenderingMode);
         }
       },
-    );
-    // Handle new volume rendering mode key - this will overwrite the old key if both are present.
-    verifyOptionalObjectProperty(
-      specification,
-      VOLUME_RENDERING_MODE_JSON_KEY,
-      (volumeRenderingMode) =>
-        this.volumeRenderingMode.restoreState(volumeRenderingMode),
     );
     verifyOptionalObjectProperty(
       specification,
@@ -351,7 +343,7 @@ export class ImageUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
-    x[VOLUME_RENDERING_MODE_JSON_KEY] = this.volumeRenderingMode.toJSON();
+    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRenderingMode.toJSON();
     x[VOLUME_RENDERING_GAIN_JSON_KEY] = this.volumeRenderingGain.toJSON();
     x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] =
       this.volumeRenderingDepthSamplesTarget.toJSON();
@@ -488,7 +480,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   },
   {
     label: "Volume rendering (experimental)",
-    toolJson: VOLUME_RENDERING_MODE_JSON_KEY,
+    toolJson: VOLUME_RENDERING_JSON_KEY,
     ...enumLayerControl((layer) => layer.volumeRenderingMode),
   },
   {
