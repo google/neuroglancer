@@ -244,13 +244,13 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 void emitIntensity(float value) {
 }
 `;
-
-          let glsl_continualEmit = ``;
+          let glsl_handleMaxProjectionUpdate = ``;
           if (isProjectionMode(shaderParametersState.mode)) {
             builder.addFragmentCode(`
 float userIntensity = -1.0;
 float savedDepth = 0.0;
 float savedIntensity = 0.0;
+vec4 newColor = vec4(0.0);
 `);
             const emitFunctions = `
 void emitIntensity(float value) {
@@ -277,20 +277,22 @@ ${emitFunctions}
             }
             glsl_rgbaEmit = `
 void emitRGBA(vec4 rgba) {
-  float newIntensity = getIntensity();
-  float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
   float alpha = clamp(rgba.a, 0.0, 1.0);
-  outputColor = mix(outputColor, vec4(rgba.rgb * alpha, alpha), intensityChanged);
-  savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
-  savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
-  userIntensity = -1.0;
+  newColor = vec4(rgba.rgb * alpha, alpha);
 }
 `;
             glsl_finalEmit = `
   gl_FragDepth = savedIntensity;
 `;
-            glsl_continualEmit = `
+            glsl_handleMaxProjectionUpdate = `
+  float newIntensity = getIntensity();
+  float intensityChanged = step(savedIntensity, newIntensity - 0.00001);
+  savedIntensity = mix(savedIntensity, newIntensity, intensityChanged); 
+  savedDepth = mix(savedDepth, depthAtRayPosition, intensityChanged);
+  outputColor = mix(outputColor, newColor, intensityChanged);
   emit(outputColor, savedDepth, savedIntensity);
+  userIntensity = -1.0;
+  defaultMaxProjectionIntensity = -1.0;
 `;
           }
           emitter(builder);
@@ -351,9 +353,6 @@ void emitRGB(vec3 rgb) {
   emitRGBA(vec4(rgb, 1.0));
 }
 void emitGrayscale(float value) {
-  float userIntensitySet = step(-0.9, userIntensity);
-  float intensity = mix(value, userIntensity, userIntensitySet);
-  emitIntensity(intensity);
   emitRGBA(vec4(value, value, value, value));
 }
 void emitTransparent() {
@@ -425,8 +424,8 @@ void main() {
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
   revealage = 1.0;
-  for (int step = startStep; step < endStep; ++step) {
-    vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(step) * stepSize);
+  for (int rayStep = startStep; rayStep < endStep; ++rayStep) {
+    vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(rayStep) * stepSize);
     vec4 clipSpacePosition = uModelViewProjectionMatrix * vec4(position, 1.0);
     depthAtRayPosition = computeDepthFromClipSpace(clipSpacePosition);
     vec2 uv = computeUVFromClipSpace(clipSpacePosition);
@@ -437,8 +436,7 @@ void main() {
     }
     curChunkPosition = position - uTranslation;
     userMain();
-    ${glsl_continualEmit}
-    defaultMaxProjectionIntensity = -1.0;
+    ${glsl_handleMaxProjectionUpdate}
   }
   ${glsl_finalEmit}
 }
