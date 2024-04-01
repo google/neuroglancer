@@ -251,7 +251,6 @@ void emitIntensity(float value) {
                 ? `1.0 - value`
                 : `value`;
             builder.addFragmentCode(`
-float userIntensity = -1.0;
 float savedDepth = 0.0;
 float savedIntensity = 0.0;
 vec4 newColor = vec4(0.0);
@@ -261,10 +260,10 @@ float convertIntensity(float value) {
   return clamp(${glsl_intensityConversion}, 0.0, 1.0);
 }
 void emitIntensity(float value) {
-  userIntensity = value;
+  defaultMaxProjectionIntensity = value;
 }
 float getIntensity() {
-  return convertIntensity(userIntensity > -1.0 ? userIntensity : defaultMaxProjectionIntensity);
+  return convertIntensity(defaultMaxProjectionIntensity);
 }
 `;
             glsl_rgbaEmit = `
