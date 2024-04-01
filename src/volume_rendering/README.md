@@ -28,15 +28,15 @@ As volume rendering is an option of an image layer, the expected shader paramete
 
 ### Intensity emission
 
-`MAX` and `MIN` projection modes both use an intensity value to determine the max or min value encountered along rays. If the intensity is not set manually, it defaults to the value of the first `invlerp` that is called in the shader. For example:
+`MAX` and `MIN` projection modes both use an intensity value to determine the max or min value encountered along rays. If the intensity is not set manually, it defaults to the value of the last `invlerp` that is called in the shader. For example:
 
 ```glsl
 #uicontrol invlerp normalized_a
 #uicontrol invlerp normalized_b
 
 void main() {
-  // The intensity is set to the value of normalized_b
-  // The first called invlerp, not the first defined
+  // Here, the intensity is set to the value of normalized_b
+  // The last called invlerp, not the first defined
   emitRGBA(vec4(normalized_b(), 0.0, 0.0, normalized_b()));
 }
 ```
@@ -55,8 +55,8 @@ For example:
 
 void main() {
   //Multiply by 0.5 to get the average intensity and stay in the 0-1 range
-  emitIntensity(0.5 * (channel_a() + channel_b()));
   emitRGBA(vec4(channel_a() + channel_b(), 0.0, 0.0, 0.55));
+  emitIntensity(0.5 * (channel_a() + channel_b()));
 }
 ```
 
