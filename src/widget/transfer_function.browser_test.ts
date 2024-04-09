@@ -34,7 +34,7 @@ import {
   enableTransferFunctionShader,
 } from "#src/widget/transfer_function.js";
 
-const TRANSFER_FUNCTION_LENGTH = 512;
+const FIXED_TRANSFER_FUNCTION_LENGTH = 1024;
 
 function makeTransferFunction(controlPoints: ControlPoint[]) {
   const range = defaultDataTypeRange[DataType.UINT8];
@@ -48,7 +48,7 @@ function makeTransferFunction(controlPoints: ControlPoint[]) {
         window: range,
         defaultColor: vec3.fromValues(0, 0, 0),
         channel: [],
-        size: TRANSFER_FUNCTION_LENGTH,
+        size: FIXED_TRANSFER_FUNCTION_LENGTH,
       },
       (x) => x,
     ),
@@ -56,12 +56,14 @@ function makeTransferFunction(controlPoints: ControlPoint[]) {
 }
 
 describe("lerpBetweenControlPoints", () => {
-  const output = new Uint8Array(NUM_COLOR_CHANNELS * TRANSFER_FUNCTION_LENGTH);
+  const output = new Uint8Array(
+    NUM_COLOR_CHANNELS * FIXED_TRANSFER_FUNCTION_LENGTH,
+  );
   it("returns transparent black when given no control points for base classes", () => {
     const controlPoints: ControlPoint[] = [];
     const range = defaultDataTypeRange[DataType.UINT8];
     const sortedControlPoints = new SortedControlPoints(controlPoints, range);
-    const lookupTable = new LookupTable(TRANSFER_FUNCTION_LENGTH);
+    const lookupTable = new LookupTable(FIXED_TRANSFER_FUNCTION_LENGTH);
     lookupTable.updateFromControlPoints(sortedControlPoints);
 
     expect(output.every((value) => value === 0)).toBeTruthy();
@@ -104,9 +106,15 @@ describe("lerpBetweenControlPoints", () => {
     const firstPointTransferIndex = transferFunction.toLookupTableIndex(0)!;
     const secondPointTransferIndex = transferFunction.toLookupTableIndex(1)!;
     const thirdPointTransferIndex = transferFunction.toLookupTableIndex(2)!;
-    expect(firstPointTransferIndex).toBe(Math.floor((120 / 255) * 511));
-    expect(secondPointTransferIndex).toBe(Math.floor((140 / 255) * 511));
-    expect(thirdPointTransferIndex).toBe(Math.floor((200 / 255) * 511));
+    expect(firstPointTransferIndex).toBe(
+      Math.floor((120 / 255) * (FIXED_TRANSFER_FUNCTION_LENGTH - 1)),
+    );
+    expect(secondPointTransferIndex).toBe(
+      Math.floor((140 / 255) * (FIXED_TRANSFER_FUNCTION_LENGTH - 1)),
+    );
+    expect(thirdPointTransferIndex).toBe(
+      Math.floor((200 / 255) * (FIXED_TRANSFER_FUNCTION_LENGTH - 1)),
+    );
 
     // Transparent black up to the first control point
     expect(
@@ -182,25 +190,39 @@ describe("lerpBetweenControlPoints", () => {
   });
 });
 
+const textureSizes = {
+  [DataType.UINT8]: 0xff,
+  [DataType.INT8]: 0xff,
+  [DataType.UINT16]: 200,
+  [DataType.INT16]: 8192,
+  [DataType.UINT32]: 0xffff,
+  [DataType.INT32]: 0xffff,
+  [DataType.UINT64]: 0xffff,
+  [DataType.FLOAT32]: 0xffff,
+};
+
 describe("compute transfer function on GPU", () => {
-  const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
-  const controlPoints = new SortedControlPoints(
-    [
-      new ControlPoint(0, vec4.fromValues(0, 0, 0, 0)),
-      new ControlPoint(
-        maxTransferFunctionPoints,
-        vec4.fromValues(255, 255, 255, 255),
-      ),
-    ],
-    defaultDataTypeRange[DataType.UINT8],
-  );
   for (const dataType of Object.values(DataType)) {
     if (typeof dataType === "string") continue;
-    it(`computes transfer function on GPU for ${DataType[dataType]}`, () => {
+    const range = defaultDataTypeRange[dataType];
+    const controlPoints = new SortedControlPoints(
+      [
+        new ControlPoint(range[0], vec4.fromValues(0, 0, 0, 0)),
+        new ControlPoint(range[1], vec4.fromValues(255, 255, 255, 255)),
+      ],
+      range,
+    );
+    it(`computes transfer function between transparent black and opaque white on GPU for ${DataType[dataType]}`, () => {
       const shaderType = getShaderType(dataType);
       fragmentShaderTest(
         { inputValue: dataType },
-        { val1: "float", val2: "float", val3: "float", val4: "float" },
+        {
+          val1: "float",
+          val2: "float",
+          val3: "float",
+          val4: "float",
+          val5: "float",
+        },
         (tester) => {
           const { builder } = tester;
           builder.addFragmentCode(`
@@ -221,6 +243,7 @@ val1 = result.r;
 val2 = result.g;
 val3 = result.b;
 val4 = result.a;
+val5 = uTransferFunctionEnd_doTransferFunction;
 `);
           const { shader } = tester;
           const testShader = (point: any) => {
@@ -230,37 +253,50 @@ val4 = result.a;
               dataType,
               controlPoints,
               defaultDataTypeRange[dataType],
-              TRANSFER_FUNCTION_LENGTH,
+              textureSizes[dataType],
             );
             tester.execute({ inputValue: point });
             const values = tester.values;
-            return vec4.fromValues(
-              values.val1,
-              values.val2,
-              values.val3,
-              values.val4,
-            );
+            return {
+              color: vec4.fromValues(
+                values.val1,
+                values.val2,
+                values.val3,
+                values.val4,
+              ),
+              size: values.val5,
+            };
           };
           const minValue = defaultDataTypeRange[dataType][0];
           const maxValue = defaultDataTypeRange[dataType][1];
-          let color = testShader(minValue);
-          expect(color).toEqual(vec4.fromValues(0, 0, 0, 0));
-          color = testShader(maxValue);
-          expect(color).toEqual(vec4.fromValues(1, 1, 1, 1));
+          const gl = tester.gl;
+          const usedSize = Math.min(
+            textureSizes[dataType],
+            gl.getParameter(gl.MAX_TEXTURE_SIZE),
+          );
+          {
+            const { color, size } = testShader(minValue);
+            expect(size).toBe(usedSize - 1);
+            expect(color).toEqual(vec4.fromValues(0, 0, 0, 0));
+          }
+          {
+            const { color, size } = testShader(maxValue);
+            expect(size).toBe(usedSize - 1);
+            expect(color).toEqual(vec4.fromValues(1, 1, 1, 1));
+          }
+          let position: number | Uint64;
           if (dataType !== DataType.UINT64) {
             const minValueNumber = minValue as number;
             const maxValueNumber = maxValue as number;
-            color = testShader((maxValueNumber + minValueNumber) / 2);
-            for (let i = 0; i < 3; i++) {
-              expect(color[i]).toBeCloseTo(0.5);
-            }
+            position = (maxValueNumber + minValueNumber) / 2;
           } else {
             const value = (maxValue as Uint64).toNumber() / 2;
-            const position = Uint64.fromNumber(value);
-            color = testShader(position);
-            for (let i = 0; i < 3; i++) {
-              expect(color[i]).toBeCloseTo(0.5);
-            }
+            position = Uint64.fromNumber(value);
+          }
+          const { color, size } = testShader(position);
+          expect(size).toBe(usedSize - 1);
+          for (let i = 0; i < 3; i++) {
+            expect(color[i]).toBeCloseTo(0.5);
           }
         },
       );

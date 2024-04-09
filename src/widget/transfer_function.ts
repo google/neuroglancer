@@ -40,6 +40,7 @@ import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
   computeLerp,
+  dataTypeIntervalEqual,
   parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
@@ -107,6 +108,25 @@ export interface LookupTableTextureOptions {
   textureUnit: number | undefined;
 }
 
+/**
+ * Options to update a transfer function texture
+ * TODO should this be sorted control points?
+ */
+export interface ControlPointTextureOptions {
+  /** controlPoints will be used to generate a lookup table as a first step */
+  sortedControlPoints: SortedControlPoints;
+  /** textureUnit to update with the new transfer function texture data */
+  textureUnit: number | undefined;
+  /** range of the input space I, where T: I -> O. Allows for more precision in the
+   * transfer function texture generation due to texture size limitations
+   */
+  inputRange: DataTypeInterval;
+  /** Data type of the control points */
+  dataType: DataType;
+  /** Lookup table number of elements*/
+  lookupTableSize: number;
+}
+
 // TODO (skm) - window currently doesn't work. Need to update round bound inputs
 export interface TransferFunctionParameters {
   sortedControlPoints: SortedControlPoints;
@@ -115,21 +135,6 @@ export interface TransferFunctionParameters {
   size: number;
   channel: number[];
   defaultColor: vec3;
-}
-
-/**
- * Options to update a transfer function texture
- * TODO should this be sorted control points?
- */
-export interface ControlPointTextureOptions {
-  /** controlPoints will be used to generate a lookup table as a first step */
-  controlPoints: ControlPoint[];
-  /** textureUnit to update with the new transfer function texture data */
-  textureUnit: number | undefined;
-  /** range of the input space I, where T: I -> O. Allows for more precision in the
-   * transfer function texture generation due to texture size limitations
-   */
-  inputRange: DataTypeInterval;
 }
 
 interface CanvasPosition {
@@ -247,6 +252,10 @@ export class SortedControlPoints {
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
+  }
+  updateRange(newRange: DataTypeInterval) {
+    this.range = newRange;
+    this.sort();
   }
 }
 
@@ -391,7 +400,7 @@ export class TransferFunction extends RefCounted {
   }
 }
 
-abstract class BaseTexture extends RefCounted {
+abstract class BaseLookupTexture extends RefCounted {
   texture: WebGLTexture | null = null;
   width: number;
   height = 1;
@@ -431,7 +440,7 @@ abstract class BaseTexture extends RefCounted {
     // If the texture is already up to date, just bind and activate it
     if (texture !== null && this.optionsEqual(options)) {
       activateAndBindTexture(gl, options.textureUnit);
-      return;
+      return this.width * this.height;
     }
     // If the texture has not been created yet, create it
     if (texture === null) {
@@ -447,7 +456,7 @@ abstract class BaseTexture extends RefCounted {
       0,
       WebGL2RenderingContext.RGBA,
       this.width,
-      1,
+      this.height,
       0,
       WebGL2RenderingContext.RGBA,
       WebGL2RenderingContext.UNSIGNED_BYTE,
@@ -458,6 +467,8 @@ abstract class BaseTexture extends RefCounted {
     // Make a copy of the options for the purpose of comparison
     // TODO(skm) is this copy needed?
     this.priorOptions = { ...options };
+
+    return this.width * this.height;
   }
 
   disposed() {
@@ -472,10 +483,8 @@ abstract class BaseTexture extends RefCounted {
  * Represent the underlying transfer function lookup table as a texture
  * TODO(skm) consider if height can be used for more efficiency
  */
-class DirectLookupTableTexture extends BaseTexture {
+class DirectLookupTableTexture extends BaseLookupTexture {
   texture: WebGLTexture | null = null;
-  width: number;
-  height = 1;
   protected priorOptions: LookupTableTextureOptions | undefined = undefined;
 
   constructor(public gl: GL | null) {
@@ -504,7 +513,7 @@ class DirectLookupTableTexture extends BaseTexture {
   }
 }
 
-export class ControlPointTexture extends BaseTexture {
+export class ControlPointTexture extends BaseLookupTexture {
   protected priorOptions: ControlPointTextureOptions | undefined;
   constructor(public gl: GL | null) {
     super(gl);
@@ -512,36 +521,44 @@ export class ControlPointTexture extends BaseTexture {
   optionsEqual(newOptions: ControlPointTextureOptions): boolean {
     const existingOptions = this.priorOptions;
     if (existingOptions === undefined) return false;
-    let controlPointsEqual = true;
-    if (
-      existingOptions.controlPoints !== undefined &&
-      newOptions.controlPoints !== undefined
-    ) {
-      controlPointsEqual = arraysEqualWithPredicate(
-        existingOptions.controlPoints,
-        newOptions.controlPoints,
-        (a, b) =>
-          a.inputValue === b.inputValue &&
-          arraysEqual(a.outputColor, b.outputColor),
-      );
-    }
+    const controlPointsEqual = arraysEqualWithPredicate(
+      existingOptions.sortedControlPoints.controlPoints,
+      newOptions.sortedControlPoints.controlPoints,
+      (a, b) =>
+        a.inputValue === b.inputValue &&
+        arraysEqual(a.outputColor, b.outputColor),
+    );
     const textureUnitEqual =
       existingOptions.textureUnit === newOptions.textureUnit;
-    // TODO (skm) how to handle uint64?
-    // const inputRangeEqual = arraysEqual(
-    //   existingOptions.inputRange,
-    //   newOptions.inputRange,
-    // );
-
-    return controlPointsEqual && textureUnitEqual;
+    const dataTypeEqual = existingOptions.dataType === newOptions.dataType;
+    const inputRangeEqual = dataTypeIntervalEqual(
+      newOptions.dataType,
+      newOptions.inputRange,
+      existingOptions.inputRange,
+    );
+    return (
+      controlPointsEqual && textureUnitEqual && dataTypeEqual && inputRangeEqual
+    );
   }
   createLookupTable(options: ControlPointTextureOptions): LookupTable {
-    // TODO (SKM) - need variable size?
-    const lookupTable = new LookupTable(this.width * this.height);
-    lookupTable.updateFromControlPoints(
-      new SortedControlPoints(options.controlPoints, options.inputRange),
-    );
+    const lookupTableSize = this.ensureTextureSize(options.lookupTableSize);
+    if (lookupTableSize === undefined) return new LookupTable(0);
+    this.setTextureWidthAndHeightFromSize(lookupTableSize);
+    const lookupTable = new LookupTable(lookupTableSize);
+    const sortedControlPoints = options.sortedControlPoints;
+    sortedControlPoints.updateRange(options.inputRange);
+    lookupTable.updateFromControlPoints(sortedControlPoints);
     return lookupTable;
+  }
+  setTextureWidthAndHeightFromSize(size: number) {
+    this.width = size;
+  }
+  ensureTextureSize(size: number) {
+    const gl = this.gl;
+    if (gl === null) return;
+    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    const tableTextureSize = Math.min(size, maxTextureSize);
+    return tableTextureSize;
   }
 }
 
@@ -1297,12 +1314,11 @@ export function enableTransferFunctionShader(
   shader: ShaderProgram,
   name: string,
   dataType: DataType,
-  controlPoints: SortedControlPoints,
+  sortedControlPoints: SortedControlPoints,
   interval: DataTypeInterval,
   lookupTableSize: number,
 ) {
   const { gl } = shader;
-
   const texture = shader.transferFunctionTextures.get(
     `TransferFunction.${name}`,
   );
@@ -1313,18 +1329,19 @@ export function enableTransferFunctionShader(
       new ControlPointTexture(gl),
     );
   }
-  // TODO (SKM) probably need to handle the sorted nature
-  shader.bindAndUpdateTransferFunctionTexture(
+  const textureSize = shader.bindAndUpdateTransferFunctionTexture(
     `TransferFunction.${name}`,
-    controlPoints.controlPoints,
+    sortedControlPoints,
     interval,
+    dataType,
+    lookupTableSize,
   );
+  if (textureSize === undefined) {
+    throw new Error("Failed to create transfer function texture");
+  }
 
   // Bind the length of the lookup table to the shader as a uniform
-  gl.uniform1f(
-    shader.uniform(`uTransferFunctionEnd_${name}`),
-    lookupTableSize - 1,
-  );
+  gl.uniform1f(shader.uniform(`uTransferFunctionEnd_${name}`), textureSize - 1);
 
   // Use the lerp shader function to grab an index into the lookup table
   enableLerpShaderFunction(shader, name, dataType, interval);
