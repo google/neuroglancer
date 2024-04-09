@@ -166,7 +166,7 @@ export class ControlPoint {
     );
   }
   interpolateColor(other: ControlPoint, t: number): vec4 {
-    const outputColor = new vec4();
+    const outputColor = vec4.create();
     for (let i = 0; i < 4; ++i) {
       outputColor[i] = computeLerp(
         [this.outputColor[i], other.outputColor[i]],
@@ -218,7 +218,7 @@ export class SortedControlPoints {
     return this.findNearestControlPointIndex(value);
   }
   updatePointColor(index: number, color: vec4 | vec3) {
-    let outputColor = new vec4();
+    let outputColor = vec4.create();
     if (outputColor.length === 3) {
       outputColor = vec4.fromValues(
         color[0],
@@ -281,6 +281,9 @@ export class LookupTable {
       out[index + 2] = color[2];
       out[index + 3] = color[3];
     }
+    /**
+     *  Convert the control point input value to an index in the transfer function lookup table
+     */
     function toTransferFunctionSpace(controlPoint: ControlPoint) {
       return controlPoint.transferFunctionIndex(range, size);
     }
@@ -306,21 +309,18 @@ export class LookupTable {
     let controlPointIndex = 0;
     for (let i = firstInputValue; i < size; ++i) {
       const currentPoint = controlPoints[controlPointIndex];
-      const nextPoint =
-        controlPoints[
-          Math.min(controlPointIndex + 1, controlPoints.length - 1)
-        ];
       const lookupIndex = i * NUM_COLOR_CHANNELS;
-      if (currentPoint === nextPoint) {
+      if (controlPointIndex === controlPoints.length - 1) {
         addLookupValue(lookupIndex, currentPoint.outputColor);
       } else {
-        const currentInputValue = toTransferFunctionSpace(currentPoint);
-        const nextInputValue = toTransferFunctionSpace(nextPoint);
+        const nextPoint = controlPoints[controlPointIndex + 1];
+        const currentPointIndex = toTransferFunctionSpace(currentPoint);
+        const nextPointIndex = toTransferFunctionSpace(nextPoint);
         const t =
-          (i - currentInputValue) / (nextInputValue - currentInputValue);
+          (i - currentPointIndex) / (nextPointIndex - currentPointIndex);
         const lerpedColor = currentPoint.interpolateColor(nextPoint, t);
         addLookupValue(lookupIndex, lerpedColor);
-        if (i === nextPoint.inputValue) {
+        if (i >= nextPointIndex) {
           controlPointIndex++;
         }
       }

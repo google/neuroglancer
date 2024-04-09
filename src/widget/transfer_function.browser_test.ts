@@ -23,17 +23,16 @@ import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { Uint64 } from "#src/util/uint64.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
-import type {
-  TransferFunctionParameters} from "#src/widget/transfer_function.js";
+import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   SortedControlPoints,
   ControlPoint,
   LookupTable,
   TransferFunction,
   NUM_COLOR_CHANNELS,
-
   defineTransferFunctionShader,
-  enableTransferFunctionShader} from "#src/widget/transfer_function.js";
+  enableTransferFunctionShader,
+} from "#src/widget/transfer_function.js";
 
 const TRANSFER_FUNCTION_LENGTH = 512;
 
@@ -57,10 +56,10 @@ function makeTransferFunction(controlPoints: ControlPoint[]) {
 }
 
 describe("lerpBetweenControlPoints", () => {
-  const range = defaultDataTypeRange[DataType.UINT8];
   const output = new Uint8Array(NUM_COLOR_CHANNELS * TRANSFER_FUNCTION_LENGTH);
-  it("returns transparent black when given no control points for raw classes", () => {
+  it("returns transparent black when given no control points for base classes", () => {
     const controlPoints: ControlPoint[] = [];
+    const range = defaultDataTypeRange[DataType.UINT8];
     const sortedControlPoints = new SortedControlPoints(controlPoints, range);
     const lookupTable = new LookupTable(TRANSFER_FUNCTION_LENGTH);
     lookupTable.updateFromControlPoints(sortedControlPoints);
@@ -105,34 +104,44 @@ describe("lerpBetweenControlPoints", () => {
     const firstPointTransferIndex = transferFunction.toLookupTableIndex(0)!;
     const secondPointTransferIndex = transferFunction.toLookupTableIndex(1)!;
     const thirdPointTransferIndex = transferFunction.toLookupTableIndex(2)!;
+    expect(firstPointTransferIndex).toBe(Math.floor((120 / 255) * 511));
+    expect(secondPointTransferIndex).toBe(Math.floor((140 / 255) * 511));
+    expect(thirdPointTransferIndex).toBe(Math.floor((200 / 255) * 511));
 
+    // Transparent black up to the first control point
     expect(
       output
         .slice(0, NUM_COLOR_CHANNELS * firstPointTransferIndex)
         .every((value) => value === 0),
     ).toBeTruthy();
+    // The last control point value after the last control point
     expect(
       output
         .slice(NUM_COLOR_CHANNELS * thirdPointTransferIndex)
         .every((value) => value === 255),
     ).toBeTruthy();
 
-    const firstColor = controlPoints[0].outputColor;
-    const secondColor = controlPoints[1].outputColor;
+    // Performs linear interpolation between the first and second control points
+    const firstColor =
+      transferFunction.sortedControlPoints.controlPoints[0].outputColor;
+    const secondColor =
+      transferFunction.sortedControlPoints.controlPoints[1].outputColor;
+    const firstToSecondDifference =
+      secondPointTransferIndex - firstPointTransferIndex;
     for (
       let i = firstPointTransferIndex * NUM_COLOR_CHANNELS;
       i < secondPointTransferIndex * NUM_COLOR_CHANNELS;
       i++
     ) {
-      const difference = Math.floor((i - 120 * NUM_COLOR_CHANNELS) / 4);
-      const expectedValue =
-        firstColor[i % NUM_COLOR_CHANNELS] +
-        ((secondColor[i % NUM_COLOR_CHANNELS] -
-          firstColor[i % NUM_COLOR_CHANNELS]) *
-          difference) /
-          20;
-      const decimalPart = expectedValue - Math.floor(expectedValue);
+      const t =
+        Math.floor(i / NUM_COLOR_CHANNELS - firstPointTransferIndex) /
+        firstToSecondDifference;
+      const difference =
+        secondColor[i % NUM_COLOR_CHANNELS] -
+        firstColor[i % NUM_COLOR_CHANNELS];
+      const expectedValue = firstColor[i % NUM_COLOR_CHANNELS] + t * difference;
       // If the decimal part is 0.5, it could be rounded up or down depending on precision.
+      const decimalPart = expectedValue - Math.floor(expectedValue);
       if (Math.abs(decimalPart - 0.5) < 0.001) {
         expect([Math.floor(expectedValue), Math.ceil(expectedValue)]).toContain(
           output[i],
@@ -142,21 +151,26 @@ describe("lerpBetweenControlPoints", () => {
       }
     }
 
-    const thirdColor = controlPoints[2].outputColor;
+    // Performs linear interpolation between the second and third control points
+    const thirdColor =
+      transferFunction.sortedControlPoints.controlPoints[2].outputColor;
+    const secondToThirdDifference =
+      thirdPointTransferIndex - secondPointTransferIndex;
     for (
       let i = secondPointTransferIndex * NUM_COLOR_CHANNELS;
       i < thirdPointTransferIndex * NUM_COLOR_CHANNELS;
       i++
     ) {
-      const difference = Math.floor((i - 140 * NUM_COLOR_CHANNELS) / 4);
+      const t =
+        Math.floor(i / NUM_COLOR_CHANNELS - secondPointTransferIndex) /
+        secondToThirdDifference;
+      const difference =
+        thirdColor[i % NUM_COLOR_CHANNELS] -
+        secondColor[i % NUM_COLOR_CHANNELS];
       const expectedValue =
-        secondColor[i % NUM_COLOR_CHANNELS] +
-        ((thirdColor[i % NUM_COLOR_CHANNELS] -
-          secondColor[i % NUM_COLOR_CHANNELS]) *
-          difference) /
-          60;
-      const decimalPart = expectedValue - Math.floor(expectedValue);
+        secondColor[i % NUM_COLOR_CHANNELS] + t * difference;
       // If the decimal part is 0.5, it could be rounded up or down depending on precision.
+      const decimalPart = expectedValue - Math.floor(expectedValue);
       if (Math.abs(decimalPart - 0.5) < 0.001) {
         expect([Math.floor(expectedValue), Math.ceil(expectedValue)]).toContain(
           output[i],
