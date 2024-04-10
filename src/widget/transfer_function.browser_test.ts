@@ -44,11 +44,9 @@ function makeTransferFunction(controlPoints: ControlPoint[]) {
     new TrackableValue<TransferFunctionParameters>(
       {
         sortedControlPoints,
-        range: range,
         window: range,
         defaultColor: vec3.fromValues(0, 0, 0),
         channel: [],
-        size: FIXED_TRANSFER_FUNCTION_LENGTH,
       },
       (x) => x,
     ),
@@ -106,14 +104,16 @@ describe("lerpBetweenControlPoints", () => {
     const firstPointTransferIndex = transferFunction.toLookupTableIndex(0)!;
     const secondPointTransferIndex = transferFunction.toLookupTableIndex(1)!;
     const thirdPointTransferIndex = transferFunction.toLookupTableIndex(2)!;
+    const size = transferFunction.size;
+    const range = transferFunction.range as [number, number];
     expect(firstPointTransferIndex).toBe(
-      Math.floor((120 / 255) * (FIXED_TRANSFER_FUNCTION_LENGTH - 1)),
+      Math.floor(((120 - range[0]) / (range[1] - range[0])) * (size - 1)),
     );
     expect(secondPointTransferIndex).toBe(
-      Math.floor((140 / 255) * (FIXED_TRANSFER_FUNCTION_LENGTH - 1)),
+      Math.floor(((140 - range[0]) / (range[1] - range[0])) * (size - 1)),
     );
     expect(thirdPointTransferIndex).toBe(
-      Math.floor((200 / 255) * (FIXED_TRANSFER_FUNCTION_LENGTH - 1)),
+      Math.floor(((200 - range[0]) / (range[1] - range[0])) * (size - 1)),
     );
 
     // Transparent black up to the first control point

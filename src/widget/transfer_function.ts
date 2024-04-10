@@ -89,6 +89,18 @@ const transferFunctionSamplerTextureUnit = Symbol(
   "transferFunctionSamplerTexture",
 );
 
+// TODO consider increasing these if textures are packed
+const defaultTransferFunctionSizes: Record<DataType, number> = {
+  [DataType.UINT8]: 0xff,
+  [DataType.INT8]: 0xff,
+  [DataType.UINT16]: 8192,
+  [DataType.INT16]: 8192,
+  [DataType.UINT32]: 8192,
+  [DataType.INT32]: 8192,
+  [DataType.UINT64]: 8192,
+  [DataType.FLOAT32]: 8192,
+};
+
 /**
  * Convert a [0, 1] float to a uint8 value between 0 and 255
  * TODO (SKM) belong here? Maybe utils?
@@ -128,11 +140,10 @@ export interface ControlPointTextureOptions {
 }
 
 // TODO (skm) - window currently doesn't work. Need to update round bound inputs
+// TODO (skm) - these params seem a little odd, maybe the some can be computed FROM the trackable instead
 export interface TransferFunctionParameters {
   sortedControlPoints: SortedControlPoints;
-  range: DataTypeInterval;
   window: DataTypeInterval;
-  size: number;
   channel: number[];
   defaultColor: vec3;
 }
@@ -193,10 +204,11 @@ export class SortedControlPoints {
   constructor(
     public controlPoints: ControlPoint[] = [],
     public range: DataTypeInterval,
+    private autoComputeRange: boolean = true,
   ) {
     this.controlPoints = controlPoints;
     this.range = range;
-    this.sort();
+    this.sortAndComputeRange();
   }
   get length() {
     return this.controlPoints.length;
@@ -211,7 +223,7 @@ export class SortedControlPoints {
     }
     const newPoint = new ControlPoint(inputValue, outputColor);
     this.controlPoints.push(newPoint);
-    this.sort();
+    this.sortAndComputeRange();
   }
   removePoint(index: number) {
     this.controlPoints.splice(index, 1);
@@ -219,7 +231,7 @@ export class SortedControlPoints {
   updatePoint(index: number, controlPoint: ControlPoint): number {
     this.controlPoints[index] = controlPoint;
     const value = controlPoint.inputValue;
-    this.sort();
+    this.sortAndComputeRange();
     return this.findNearestControlPointIndex(value);
   }
   updatePointColor(index: number, color: vec4 | vec3) {
@@ -248,14 +260,24 @@ export class SortedControlPoints {
       (a, b) => a - b,
     );
   }
-  sort() {
+  sortAndComputeRange() {
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
+    // TODO (skm) - are the negatives ok here?
+    if (this.autoComputeRange) {
+      if (this.controlPoints.length < 2) {
+        return;
+      }
+      this.range = [
+        this.controlPoints[0].inputValue,
+        this.controlPoints[this.controlPoints.length - 1].inputValue,
+      ] as DataTypeInterval;
+    }
   }
   updateRange(newRange: DataTypeInterval) {
     this.range = newRange;
-    this.sort();
+    this.sortAndComputeRange();
   }
 }
 
@@ -351,7 +373,7 @@ export class TransferFunction extends RefCounted {
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
   ) {
     super();
-    this.lookupTable = new LookupTable(this.trackable.value.size);
+    this.lookupTable = new LookupTable(defaultTransferFunctionSizes[dataType]);
     this.sortedControlPoints = this.trackable.value.sortedControlPoints;
     this.updateLookupTable();
   }
@@ -365,12 +387,9 @@ export class TransferFunction extends RefCounted {
       index = this.sortedControlPoints.controlPoints.length + controlPointIndex;
     }
     return this.sortedControlPoints.controlPoints[index]?.transferFunctionIndex(
-      this.trackable.value.range,
-      this.trackable.value.size,
+      this.sortedControlPoints.range,
+      this.lookupTable.lookupTableSize,
     );
-  }
-  toNormalizedInput(controlPoint: ControlPoint) {
-    return controlPoint.normalizedInput(this.trackable.value.range);
   }
   updateLookupTable() {
     this.lookupTable.updateFromControlPoints(this.sortedControlPoints);
@@ -397,6 +416,12 @@ export class TransferFunction extends RefCounted {
       normalizedInputValue,
     );
     return this.sortedControlPoints.findNearestControlPointIndex(absoluteValue);
+  }
+  get range() {
+    return this.sortedControlPoints.range;
+  }
+  get size() {
+    return this.lookupTable.lookupTableSize;
   }
 }
 
@@ -909,6 +934,7 @@ out_color = tempColor * alpha;
 
 /**
  * Create the bounds on the UI range inputs for the transfer function widget
+ * TODO this should now be window
  */
 function createRangeBoundInputs(
   dataType: DataType,
@@ -938,18 +964,18 @@ function createRangeBoundInputs(
       updateInputBoundWidth(input);
     });
     input.addEventListener("change", () => {
-      const existingBounds = model.value.range;
+      const existingBounds = model.value.window;
       const intervals = { range: existingBounds, window: existingBounds };
       try {
         const value = parseDataTypeValue(dataType, input.value);
-        const range = getUpdatedRangeAndWindowParameters(
+        const window = getUpdatedRangeAndWindowParameters(
           intervals,
           "window",
           endpointIndex,
           value,
           /*fitRangeInWindow=*/ true,
         ).window;
-        model.value = { ...model.value, range };
+        model.value = { ...model.value, window };
       } catch {
         updateInputBoundValue(input, existingBounds[endpointIndex]);
       }
@@ -1113,7 +1139,8 @@ class TransferFunctionController extends RefCounted {
   }
   grabControlPointNearCursor(mouseXPosition: number, mouseYPosition: number) {
     const { transferFunction, dataType } = this;
-    const { range, window } = transferFunction.trackable.value;
+    const { window } = transferFunction.trackable.value;
+    const range = transferFunction.sortedControlPoints.range;
     const nearestControlPointIndex =
       transferFunction.findNearestControlPointIndex(mouseXPosition, window);
     if (nearestControlPointIndex === -1) {
@@ -1192,6 +1219,7 @@ class TransferFunctionWidget extends Tab {
     new TransferFunctionPanel(this),
   );
 
+  // TODO window
   range = createRangeBoundInputs(this.dataType, this.trackable);
   constructor(
     visibility: WatchableVisibilityPriority,
@@ -1243,8 +1271,8 @@ class TransferFunctionWidget extends Tab {
         this.updateControlPointsAndDraw();
       }),
     );
-    updateInputBoundValue(this.range.inputs[0], this.trackable.value.range[0]);
-    updateInputBoundValue(this.range.inputs[1], this.trackable.value.range[1]);
+    updateInputBoundValue(this.range.inputs[0], this.trackable.value.window[0]);
+    updateInputBoundValue(this.range.inputs[1], this.trackable.value.window[1]);
   }
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
@@ -1285,7 +1313,7 @@ vec4 ${name}_(float inputValue) {
 }
 vec4 ${name}(${shaderType} inputValue) {
   float v = computeInvlerp(inputValue, uLerpParams_${name});
-  return ${name}_(clamp(v, 0.0, 1.0));
+  return v < 0.0 ? vec4(0.0, 0.0, 0.0, 0.0) : ${name}_(clamp(v, 0.0, 1.0));
 }
 vec4 ${name}() {
   return ${name}(getInterpolatedDataValue(${channel.join(",")}));
