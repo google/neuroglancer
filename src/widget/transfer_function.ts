@@ -102,14 +102,6 @@ const defaultTransferFunctionSizes: Record<DataType, number> = {
 };
 
 /**
- * Convert a [0, 1] float to a uint8 value between 0 and 255
- * TODO (SKM) belong here? Maybe utils?
- */
-export function floatToUint8(float: number) {
-  return Math.min(255, Math.max(Math.round(float * 255), 0));
-}
-
-/**
  * Options to update a lookup table texture
  */
 export interface LookupTableTextureOptions {
@@ -155,7 +147,7 @@ interface CanvasPosition {
 
 /**
  * Transfer functions are controlled via a set of control points
- * with an input value and an output RGBA color.
+ * with an input value and an output RGBA color (Uint8).
  * These control points are interpolated between to form a lookup table
  * which maps an input data value to an RGBA color.
  * Such a lookup table is used to form a texture, which can be sampled
@@ -213,13 +205,19 @@ export class SortedControlPoints {
   get length() {
     return this.controlPoints.length;
   }
+  updateControlPoints(newControlPoints: ControlPoint[]) {
+    this.controlPoints = newControlPoints.map((point) =>
+      ControlPoint.copyFrom(point),
+    );
+    this.sortAndComputeRange();
+  }
   addPoint(controlPoint: ControlPoint) {
     const { inputValue, outputColor } = controlPoint;
-    const nearestPoint = this.findNearestControlPointIndex(inputValue);
-    if (nearestPoint !== -1) {
-      this.controlPoints[nearestPoint].inputValue = inputValue;
-      this.controlPoints[nearestPoint].outputColor = outputColor;
-      return;
+    const exactMatch = this.controlPoints.findIndex(
+      (point) => point.inputValue === inputValue,
+    );
+    if (exactMatch !== -1) {
+      this.updatePointColor(exactMatch, outputColor);
     }
     const newPoint = new ControlPoint(inputValue, outputColor);
     this.controlPoints.push(newPoint);
@@ -571,6 +569,7 @@ export class ControlPointTexture extends BaseLookupTexture {
     this.setTextureWidthAndHeightFromSize(lookupTableSize);
     const lookupTable = new LookupTable(lookupTableSize);
     const sortedControlPoints = options.sortedControlPoints;
+    // TODO this doesn't make sense as range is computed
     sortedControlPoints.updateRange(options.inputRange);
     lookupTable.updateFromControlPoints(sortedControlPoints);
     return lookupTable;

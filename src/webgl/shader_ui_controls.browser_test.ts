@@ -22,9 +22,11 @@ import {
   parseShaderUiControls,
   stripComments,
 } from "#src/webgl/shader_ui_controls.js";
-
-// TODO (SKM) handle parsing
-const TRANSFER_FUNCTION_LENGTH = 512;
+import {
+  ControlPoint,
+  SortedControlPoints,
+} from "#src/widget/transfer_function.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 describe("stripComments", () => {
   it("handles code without comments", () => {
@@ -577,6 +579,8 @@ void main() {
 void main() {
 }
 `;
+    const range = defaultDataTypeRange[DataType.UINT8];
+    const sortedControlPoints = new SortedControlPoints([], range);
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT8, channelRank: 0 },
@@ -592,10 +596,10 @@ void main() {
             type: "transferFunction",
             dataType: DataType.UINT8,
             default: {
-              controlPoints: [],
+              sortedControlPoints: new SortedControlPoints([], range),
               channel: [],
-              color: vec3.fromValues(1, 1, 1),
-              range: [0, 255],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window: range,
             },
           },
         ],
@@ -613,9 +617,10 @@ void main() {
 void main() {
 }
 `;
+    const range = defaultDataTypeRange[DataType.UINT16];
     expect(
       parseShaderUiControls(code, {
-        imageData: { dataType: DataType.UINT8, channelRank: 1 },
+        imageData: { dataType: DataType.UINT16, channelRank: 1 },
       }),
     ).toEqual({
       source: code,
@@ -626,12 +631,12 @@ void main() {
           "colormap",
           {
             type: "transferFunction",
-            dataType: DataType.UINT8,
+            dataType: DataType.UINT16,
             default: {
-              controlPoints: [],
+              sortedControlPoints: new SortedControlPoints([], range),
               channel: [0],
-              color: vec3.fromValues(1, 1, 1),
-              range: [0, 255],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window: range,
             },
           },
         ],
@@ -649,9 +654,10 @@ void main() {
 void main() {
 }
 `;
+    const range = defaultDataTypeRange[DataType.UINT64];
     expect(
       parseShaderUiControls(code, {
-        imageData: { dataType: DataType.UINT8, channelRank: 0 },
+        imageData: { dataType: DataType.UINT64, channelRank: 0 },
       }),
     ).toEqual({
       source: code,
@@ -662,12 +668,12 @@ void main() {
           "colormap",
           {
             type: "transferFunction",
-            dataType: DataType.UINT8,
+            dataType: DataType.UINT64,
             default: {
-              controlPoints: [],
+              sortedControlPoints: new SortedControlPoints([], range),
               channel: [],
-              color: vec3.fromValues(1, 1, 1),
-              range: [0, 255],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window: range,
             },
           },
         ],
@@ -685,9 +691,10 @@ void main() {
 void main() {
 }
 `;
+    const range = defaultDataTypeRange[DataType.FLOAT32];
     expect(
       parseShaderUiControls(code, {
-        imageData: { dataType: DataType.UINT8, channelRank: 1 },
+        imageData: { dataType: DataType.FLOAT32, channelRank: 1 },
       }),
     ).toEqual({
       source: code,
@@ -698,12 +705,12 @@ void main() {
           "colormap",
           {
             type: "transferFunction",
-            dataType: DataType.UINT8,
+            dataType: DataType.FLOAT32,
             default: {
-              controlPoints: [],
+              sortedControlPoints: new SortedControlPoints([], range),
               channel: [1],
-              color: vec3.fromValues(1, 1, 1),
-              range: [0, 255],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window: range,
             },
           },
         ],
@@ -721,9 +728,10 @@ void main() {
 void main() {
 }
 `;
+    const range = defaultDataTypeRange[DataType.FLOAT32];
     expect(
       parseShaderUiControls(code, {
-        imageData: { dataType: DataType.UINT8, channelRank: 1 },
+        imageData: { dataType: DataType.FLOAT32, channelRank: 1 },
       }),
     ).toEqual({
       source: code,
@@ -734,12 +742,12 @@ void main() {
           "colormap",
           {
             type: "transferFunction",
-            dataType: DataType.UINT8,
+            dataType: DataType.FLOAT32,
             default: {
-              controlPoints: [],
+              sortedControlPoints: new SortedControlPoints([], range),
               channel: [1],
-              color: vec3.fromValues(1, 1, 1),
-              range: [0, 255],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window: range,
             },
           },
         ],
@@ -757,6 +765,7 @@ void main() {
 void main() {
 }
 `;
+    const range = defaultDataTypeRange[DataType.FLOAT32];
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.FLOAT32, channelRank: 2 },
@@ -772,10 +781,10 @@ void main() {
             type: "transferFunction",
             dataType: DataType.FLOAT32,
             default: {
-              controlPoints: [],
+              sortedControlPoints: new SortedControlPoints([], range),
               channel: [1, 2],
-              color: vec3.fromValues(1, 1, 1),
-              range: [0, 1],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window: range,
             },
           },
         ],
@@ -784,7 +793,7 @@ void main() {
   });
   it("handles transfer function control with all properties non uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(controlPoints=[[200, "#00ff00", 0.1], [100, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", range=[0, 200], channel=[])
+#uicontrol transferFunction colormap(controlPoints=[[200, "#00ff00", 0.1], [100, "#ff0000", 0.5], [0, "#000000", 0.0]], defaultColor="#0000ff", window=[0, 1000], channel=[])
 void main() {
 }
 `;
@@ -793,7 +802,13 @@ void main() {
 void main() {
 }
 `;
-    const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
+    const controlPoints = [
+      new ControlPoint(0, vec4.fromValues(0, 0, 0, 0)),
+      new ControlPoint(200, vec4.fromValues(0, 255, 0, 26)),
+      new ControlPoint(100, vec4.fromValues(255, 0, 0, 128)),
+    ];
+    const range = defaultDataTypeRange[DataType.UINT32];
+    const sortedControlPoints = new SortedControlPoints(controlPoints, range);
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT32, channelRank: 0 },
@@ -809,29 +824,20 @@ void main() {
             type: "transferFunction",
             dataType: DataType.UINT32,
             default: {
-              controlPoints: [
-                { position: 0, color: vec4.fromValues(0, 0, 0, 0) },
-                {
-                  position: Math.ceil(maxTransferFunctionPoints / 2),
-                  color: vec4.fromValues(255, 0, 0, 128),
-                },
-                {
-                  position: maxTransferFunctionPoints,
-                  color: vec4.fromValues(0, 255, 0, 26),
-                },
-              ],
+              sortedControlPoints,
               channel: [],
-              color: vec3.fromValues(0, 0, 1),
-              range: [0, 200],
+              defaultColor: vec3.fromValues(0, 0, 1),
+              window: [0, 1000],
             },
           },
         ],
       ]),
     });
+    expect(sortedControlPoints.range).toEqual([0, 200]);
   });
   it("handles transfer function control with all properties uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(controlPoints=[[18446744073709551615, "#00ff00", 0.1], [9223372111111111111, "#ff0000", 0.5], [0, "#000000", 0.0]], color="#0000ff", channel=[])
+#uicontrol transferFunction colormap(controlPoints=[[18446744073709551615, "#00ff00", 0.1], [9223372111111111111, "#ff0000", 0.5], [0, "#000000", 0.0]], defaultColor="#0000ff", channel=[])
 void main() {
 }
 `;
@@ -840,7 +846,20 @@ void main() {
 void main() {
 }
 `;
-    const maxTransferFunctionPoints = TRANSFER_FUNCTION_LENGTH - 1;
+    const range = defaultDataTypeRange[DataType.UINT64];
+    const controlPoints = [
+      new ControlPoint(
+        Uint64.fromNumber(9223372111111111111),
+        vec4.fromValues(255, 0, 0, 128),
+      ),
+      new ControlPoint(Uint64.fromNumber(0), vec4.fromValues(0, 0, 0, 0)),
+      new ControlPoint(
+        Uint64.fromNumber(18446744073709551615),
+        vec4.fromValues(0, 255, 0, 26),
+      ),
+    ];
+    const sortedControlPoints = new SortedControlPoints(controlPoints, range);
+    console.log(sortedControlPoints);
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT64, channelRank: 0 },
@@ -856,20 +875,60 @@ void main() {
             type: "transferFunction",
             dataType: DataType.UINT64,
             default: {
-              controlPoints: [
-                { position: 0, color: vec4.fromValues(0, 0, 0, 0) },
-                {
-                  position: Math.ceil(maxTransferFunctionPoints / 2),
-                  color: vec4.fromValues(255, 0, 0, 128),
-                },
-                {
-                  position: maxTransferFunctionPoints,
-                  color: vec4.fromValues(0, 255, 0, 26),
-                },
-              ],
+              sortedControlPoints: sortedControlPoints,
               channel: [],
-              color: vec3.fromValues(0, 0, 1),
-              range: defaultDataTypeRange[DataType.UINT64],
+              defaultColor: vec3.fromValues(0, 0, 1),
+              window: sortedControlPoints.range,
+            },
+          },
+        ],
+      ]),
+    });
+  });
+  it("creates a default transfer function if no control points are provided", () => {
+    const code = `
+#uicontrol transferFunction colormap(window=[30, 200])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    const window = [30, 200];
+    const firstInput = window[0] + (window[1] - window[0]) * 0.4;
+    const secondInput = window[0] + (window[1] - window[0]) * 0.7;
+    const controlPoints = [
+      new ControlPoint(Math.round(firstInput), vec4.fromValues(0, 0, 0, 0)),
+      new ControlPoint(
+        Math.round(secondInput),
+        vec4.fromValues(255, 255, 255, 255),
+      ),
+    ];
+    const sortedControlPoints = new SortedControlPoints(
+      controlPoints,
+      [0, 255],
+    );
+    expect(
+      parseShaderUiControls(code, {
+        imageData: { dataType: DataType.UINT8, channelRank: 0 },
+      }),
+    ).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "colormap",
+          {
+            type: "transferFunction",
+            dataType: DataType.UINT8,
+            default: {
+              sortedControlPoints: sortedControlPoints,
+              channel: [],
+              defaultColor: vec3.fromValues(1, 1, 1),
+              window,
             },
           },
         ],
