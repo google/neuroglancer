@@ -29,6 +29,7 @@ import type {
   AnnotationId,
   AnnotationPropertySerializer,
   AnnotationPropertySpec,
+  AnnotationSource,
   AnnotationSourceSignals,
   SerializedAnnotations,
 } from "#src/annotation/index.js";
@@ -78,13 +79,16 @@ export interface AnnotationGeometryChunkSourceOptions
 
 export function computeNumPickIds(
   serializedAnnotations: SerializedAnnotations,
+  source: AnnotationSource | MultiscaleAnnotationSource,
 ) {
+  serializedAnnotations;
   let numPickIds = 0;
-  const { typeToIds } = serializedAnnotations;
   for (const annotationType of annotationTypes) {
-    numPickIds +=
-      getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
-      typeToIds[annotationType].length;
+    const idMap = serializedAnnotations.typeToIdMaps[annotationType];
+    const annotations: Annotation[] = [];
+    idMap.forEach((_, id) => annotations.push(source.getReference(id).value!));
+
+    numPickIds += getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance(annotations).reduce((a,b) => a + b, 0);
   }
   return numPickIds;
 }
@@ -101,6 +105,7 @@ export class AnnotationGeometryData {
       typeToIds: x.typeToIds,
       typeToOffset: x.typeToOffset,
       typeToIdMaps: x.typeToIdMaps,
+      typeToPrimitiveCount: x.typeToPrimitiveCount,
     };
   }
   freeGPUMemory(gl: GL) {

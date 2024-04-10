@@ -28,6 +28,7 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
+import type { MouseSelectionState } from "#src/layer/index.js";
 import {
   defineCircleShader,
   drawCircles,
@@ -214,6 +215,7 @@ emitAnnotation(vec4(color.rgb, color.a * ${this.getCrossSectionFadeFactor()}));
 }
 
 registerAnnotationTypeRenderHandler<Point>(AnnotationType.POINT, {
+  bytes: () => 3 * 4,
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   defineShaderNoOpSetters(builder) {
@@ -224,7 +226,12 @@ void setPointMarkerColor(vec4 color) {}
 void setPointMarkerBorderColor(vec4 color) {}
 `);
   },
-  pickIdsPerInstance: 1,
+  staticPickIdsPerInstance: 1,
+  pickIdsPerInstance: (annotations) => Array(annotations.length).fill(1),
+  assignPickingInformation(mouseState:MouseSelectionState, pickIds: number[], pickedOffset:number) {
+    mouseState.pickedAnnotationIndex = Math.floor(pickedOffset / pickIds[0]);
+    mouseState.pickedOffset = pickedOffset % pickIds[0];
+  },
   snapPosition(position, data, offset) {
     position.set(new Float32Array(data, offset, position.length));
   },

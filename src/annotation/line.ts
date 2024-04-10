@@ -28,6 +28,7 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
+import type { MouseSelectionState } from "#src/layer/index.js";
 import { projectPointToLineSegment } from "#src/util/geom.js";
 import {
   defineCircleShader,
@@ -247,13 +248,19 @@ function snapPositionToEndpoint(
 }
 
 registerAnnotationTypeRenderHandler<Line>(AnnotationType.LINE, {
+  bytes: () => 6 * 4,
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   defineShaderNoOpSetters(builder) {
     defineNoOpEndpointMarkerSetters(builder);
     defineNoOpLineSetters(builder);
   },
-  pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
+  staticPickIdsPerInstance: PICK_IDS_PER_INSTANCE,
+  pickIdsPerInstance: (annotations) => Array(annotations.length).fill(PICK_IDS_PER_INSTANCE),
+  assignPickingInformation(mouseState:MouseSelectionState, pickIds: number[], pickedOffset:number) {
+    mouseState.pickedAnnotationIndex = Math.floor(pickedOffset / pickIds[0]);
+    mouseState.pickedOffset = pickedOffset % pickIds[0];
+  },
   snapPosition(position, data, offset, partIndex) {
     const rank = position.length;
     const endpoints = new Float32Array(data, offset, rank * 2);

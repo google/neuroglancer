@@ -25,6 +25,7 @@ import {
   propertyTypeDataType,
 } from "#src/annotation/index.js";
 import type { AnnotationLayer } from "#src/annotation/renderlayer.js";
+import type { MouseSelectionState } from "#src/layer/index.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
 import type { ChunkDisplayTransformParameters } from "#src/render_coordinate_transform.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
@@ -307,7 +308,8 @@ class AnnotationRenderHelperBase extends RefCounted {
 }
 
 export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase {
-  pickIdsPerInstance: number;
+  staticPickIdsPerInstance: number|null;
+  pickIdsPerInstance: (annotations: Annotation[]) => number[];
   targetIsSliceView: boolean;
 
   constructor(
@@ -380,7 +382,7 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
 
         builder.addVertexCode(`
 vec3 defaultColor() { return uColor; }
-highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }
+highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.staticPickIdsPerInstance == null ? 1 : this.staticPickIdsPerInstance}u; }
 `);
 
         builder.addFragmentCode(`
@@ -445,10 +447,18 @@ void ng_discard() {
 void setLineColor(vec4 startColor, vec4 endColor);
 void setLineWidth(float width);
 
+void setLineSegmentColor(vec4 startColor, vec4 endColor);
+void setLineSegmentWidth(float width);
+
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
 void setEndpointMarkerSize(float startSize, float endSize);
 void setEndpointMarkerBorderWidth(float startSize, float endSize);
+
+void setControlPointMarkerColor(vec4 startColor, vec4 endColor);
+void setControlPointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setControlPointMarkerSize(float startSize, float endSize);
+void setControlPointMarkerBorderWidth(float startSize, float endSize);
 
 void setPointMarkerColor(vec4 color);
 void setPointMarkerColor(vec3 color) { setPointMarkerColor(vec4(color, 1.0)); }
@@ -475,13 +485,35 @@ void setEndpointMarkerBorderColor(vec3 color) { setEndpointMarkerBorderColor(col
 void setEndpointMarkerBorderColor(vec4 color) { setEndpointMarkerBorderColor(color, color); }
 void setEndpointMarkerSize(float size) { setEndpointMarkerSize(size, size); }
 void setEndpointMarkerBorderWidth(float size) { setEndpointMarkerBorderWidth(size, size); }
+
+
+void setControlPointMarkerColor(vec3 startColor, vec3 endColor) {
+  setControlPointMarkerColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setControlPointMarkerBorderColor(vec3 startColor, vec3 endColor) {
+  setControlPointMarkerBorderColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setControlPointMarkerColor(vec3 color) { setControlPointMarkerColor(color, color); }
+void setControlPointMarkerColor(vec4 color) { setControlPointMarkerColor(color, color); }
+void setControlPointMarkerBorderColor(vec3 color) { setControlPointMarkerBorderColor(color, color); }
+void setControlPointMarkerBorderColor(vec4 color) { setControlPointMarkerBorderColor(color, color); }
+void setControlPointMarkerSize(float size) { setControlPointMarkerSize(size, size); }
+void setControlPointMarkerBorderWidth(float size) { setControlPointMarkerBorderWidth(size, size); }
+
 void setLineColor(vec4 color) { setLineColor(color, color); }
 void setLineColor(vec3 color) { setLineColor(vec4(color, 1.0)); }
 void setLineColor(vec3 startColor, vec3 endColor) { setLineColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
+
+void setLineSegmentColor(vec4 color) { setLineSegmentColor(color, color); }
+void setLineSegmentColor(vec3 color) { setLineSegmentColor(vec4(color, 1.0)); }
+void setLineSegmentColor(vec3 startColor, vec3 endColor) { setLineSegmentColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
+
 void setColor(vec4 color) {
   setPointMarkerColor(color);
   setLineColor(color);
+  setLineSegmentColor(color);
   setEndpointMarkerColor(color);
+  setControlPointMarkerColor(color);
   setBoundingBoxBorderColor(color);
   setEllipsoidFillColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
 }
@@ -753,7 +785,16 @@ interface AnnotationTypeRenderHandler<T extends Annotation> {
   defineShaderNoOpSetters: (builder: ShaderBuilder) => void;
   perspectiveViewRenderHelper: AnnotationRenderHelperConstructor;
   sliceViewRenderHelper: AnnotationRenderHelperConstructor;
-  pickIdsPerInstance: number;
+  bytes: (annotation: T) => number;
+  pickIdsPerInstance(
+    annotations: Annotation[]
+  ): number[];
+  staticPickIdsPerInstance: null|number;
+  assignPickingInformation(
+    mouseState: MouseSelectionState,
+    pickIds: number[],
+    pickedOffset: number
+  ): void;
   getRepresentativePoint(
     out: Float32Array,
     annotation: T,

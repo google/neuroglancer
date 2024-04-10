@@ -31,6 +31,7 @@ import type {
   AxisAlignedBoundingBox,
   Ellipsoid,
   Line,
+  LineString,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -445,6 +446,16 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(ellipsoidButton);
+
+    const lineStringButton = makeIcon({
+      text: annotationTypeHandlers[AnnotationType.LINE_STRING].icon,
+      title: 'Annotate line string',
+      onClick: () => {
+        this.layer.tool.value = new PlaceLineStringTool(this.layer, {});
+      },
+    });
+    mutableControls.appendChild(lineStringButton);
+
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 
@@ -1026,6 +1037,7 @@ const ANNOTATE_POINT_TOOL_ID = "annotatePoint";
 const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
+const ANNOTATE_LINE_STRING_TOOL_ID = 'annotateLineString';
 
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
@@ -1216,6 +1228,38 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
   }
 }
 
+abstract class PlaceMultiPointAnnotationTool extends TwoStepAnnotationTool {
+  annotationType: AnnotationType.LINE_STRING;
+
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
+    const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
+    return <LineString>{
+      id: '',
+      type: this.annotationType,
+      description: '',
+      points: [point, point],
+      properties: annotationLayer.source.properties.map(x => x.default),
+    };
+  }
+
+  getUpdatedAnnotation(
+      oldAnnotation: LineString, mouseState: MouseSelectionState,
+      annotationLayer: AnnotationLayerState): Annotation {
+    const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
+    const lastPoint = oldAnnotation.points[oldAnnotation.points.length - 1];
+    const newPoints = oldAnnotation.points.slice();
+
+    // Only record the new point if the cursor has moved.
+    if (point !== undefined && (point[0] != lastPoint[0] || point[1] != lastPoint[1] || point[2] != lastPoint[2])) {
+      newPoints.pop();
+      newPoints.push(point, point, point);
+    }
+
+    return {...oldAnnotation, points: newPoints};
+  }
+}
+
 export class PlaceBoundingBoxTool extends PlaceTwoCornerAnnotationTool {
   get description() {
     return "annotate bounding box";
@@ -1355,6 +1399,46 @@ class PlaceEllipsoidTool extends TwoStepAnnotationTool {
   }
 }
 
+export class PlaceLineStringTool extends PlaceMultiPointAnnotationTool {
+  get description() {
+    return `annotate line string`;
+  }
+
+  private initialRelationships: Uint64[][]|undefined;
+
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
+    const result = super.getInitialAnnotation(mouseState, annotationLayer);
+    this.initialRelationships = result.relatedSegments =
+        getSelectedAssociatedSegments(annotationLayer);
+    return result;
+  }
+
+  getUpdatedAnnotation(
+      oldAnnotation: LineString, mouseState: MouseSelectionState,
+      annotationLayer: AnnotationLayerState) {
+    const result = super.getUpdatedAnnotation(oldAnnotation, mouseState, annotationLayer);
+    const initialRelationships = this.initialRelationships;
+    const newRelationships = getSelectedAssociatedSegments(annotationLayer);
+    if (initialRelationships === undefined) {
+      result.relatedSegments = newRelationships;
+    } else {
+      result.relatedSegments = Array.from(newRelationships, (newSegments, i) => {
+        const initialSegments = initialRelationships[i];
+        newSegments =
+            newSegments.filter(x => initialSegments.findIndex(y => Uint64.equal(x, y)) === -1);
+        return [...initialSegments, ...newSegments];
+      });
+    }
+    return result;
+  }
+
+  toJSON() {
+    return ANNOTATE_LINE_STRING_TOOL_ID;
+  }
+}
+PlaceLineStringTool.prototype.annotationType = AnnotationType.LINE_STRING;
+
 registerLegacyTool(
   ANNOTATE_POINT_TOOL_ID,
   (layer, options) =>
@@ -1375,6 +1459,9 @@ registerLegacyTool(
   (layer, options) =>
     new PlaceEllipsoidTool(<UserLayerWithAnnotations>layer, options),
 );
+registerLegacyTool(
+  ANNOTATE_LINE_STRING_TOOL_ID,
+  (layer, options) => new PlaceLineStringTool(<UserLayerWithAnnotations>layer, options));
 
 const newRelatedSegmentKeyMap = EventActionMap.fromObject({
   enter: { action: "commit" },

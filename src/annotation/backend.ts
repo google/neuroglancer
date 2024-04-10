@@ -104,6 +104,7 @@ export class AnnotationGeometryData implements SerializedAnnotations {
   typeToOffset: number[];
   typeToIds: string[][];
   typeToIdMaps: Map<string, number>[];
+  typeToPrimitiveCount: number[];
 
   serialize(msg: any, transfers: any[]) {
     msg.data = this.data;

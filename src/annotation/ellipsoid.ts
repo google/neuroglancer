@@ -28,6 +28,7 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
+import type { MouseSelectionState } from "#src/layer/index.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { mat3, mat4, vec3 } from "#src/util/geom.js";
@@ -338,6 +339,7 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
 }
 
 registerAnnotationTypeRenderHandler<Ellipsoid>(AnnotationType.ELLIPSOID, {
+  bytes: () => 6 * 4,
   sliceViewRenderHelper: SliceViewRenderHelper,
   perspectiveViewRenderHelper: PerspectiveRenderHelper,
   defineShaderNoOpSetters(builder) {
@@ -345,7 +347,12 @@ registerAnnotationTypeRenderHandler<Ellipsoid>(AnnotationType.ELLIPSOID, {
 void setEllipsoidFillColor(vec4 color) {}
 `);
   },
-  pickIdsPerInstance: 1,
+  staticPickIdsPerInstance: 1,
+  pickIdsPerInstance: (annotations) => Array(annotations.length).fill(1),
+  assignPickingInformation(mouseState:MouseSelectionState, pickIds: number[], pickedOffset:number) {
+    mouseState.pickedAnnotationIndex = Math.floor(pickedOffset / pickIds[0]);
+    mouseState.pickedOffset = pickedOffset % pickIds[0];
+  },
   snapPosition: (/*position, annotation, partIndex*/) => {
     // FIXME: snap to nearest point on ellipsoid surface
   },

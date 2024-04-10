@@ -1,62 +1,76 @@
-## Neuroglancer: Web-based volumetric data visualization
+![](docs/NeuroTrALE_logo_with_background.jpg)
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![PyPI](https://img.shields.io/pypi/v/neuroglancer)](https://pypi.org/project/neuroglancer)
-![Build](https://github.com/google/neuroglancer/workflows/Build/badge.svg)
-[![DOI](https://zenodo.org/badge/59798355.svg)](https://zenodo.org/badge/latestdoi/59798355)
+# NeuroTrALE (Neuron Tracing and Active Learning Environment) 
 
-Neuroglancer is a WebGL-based viewer for volumetric data. It is capable of displaying arbitrary (non axis-aligned) cross-sectional views of volumetric data, as well as 3-D meshes and line-segment based models (skeletons).
+[![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
 
-This is not an official Google product.
+NeuroTrALE is a scalable active learning pipeline prototype for large-scale brain mapping that leverages high performance computing power. It enables high-throughput evaluation of algorithm results, which, after human review, are used for iterative machine learning model training.
 
-# Examples
+NeuroTrALE is a derivative work building upon Google's open-source [Neuroglancer project](https://github.com/google/neuroglancer). Neuroglancer is a WebGL-based viewer for volumetric data. It is capable of displaying arbitrary (non axis-aligned) cross-sectional views of volumetric data, as well as 3-D meshes and line-segment based models (skeletons). NeuroTrALE adds features for creating polygon, point-wise, and linestring annotations, and editing algorithm-generated segmentations.
 
-A live demo is hosted at <https://neuroglancer-demo.appspot.com>. (The prior link opens the viewer without any preloaded dataset.) Use the viewer links below to open the viewer preloaded with an example dataset.
+To satisfy the redistribution requirements of the original, APACHE 2.0-licensed Neuroglancer Project, a copy of the source LICENSE file (NeuroglancerLicenseCopy) is included in this repository. In addition, prominent changes and copyright notices have been added to a NOTICES file clearly indicating the files authored by MIT and those modified to support integration of the new functionality.
 
-The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3-D view (with independent orientation) that displays 3-D models (if available) for the selected objects. All four views maintain the same center position. The orientation of the 3 cross-sectional views can also be adjusted, although they maintain a fixed orientation relative to each other. (Try holding the shift key and either dragging with the left mouse button or pressing an arrow key.)
+NeuroTrALE also leverages [Precomputed-tif](https://github.com/chunglabmit/precomputed-tif), a precomputed data source of TIF files along with a simple HTTP server of those files, developed by the Chung Lab at MIT.
 
-- [FlyEM Hemibrain](https://www.janelia.org/project-team/flyem/hemibrain) (8x8x8 cubic nanometer resolution). <a href="https://hemibrain-dot-neuroglancer-demo.appspot.com/#!gs://neuroglancer-janelia-flyem-hemibrain/v1.0/neuroglancer_demo_states/base.json" target="_blank">Open viewer</a>
+# Key functionality
 
-- [FAFB-FFN1 Full Adult Fly Brain Automated Segmentation](https://fafb-ffn1.storage.googleapis.com/landing.html) (4x4x40 cubic nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/fafb.html#!gs://fafb-ffn1/main_ng.json" target="_blank">Open viewer</a>
+NeuroTrALE has been modified and extended in order to ingest, serve, and visualize raw images and algorithm results, as well as save any changes made by users for iterative machine learning model training. Specifically, we added the following capabilities to our web-based tool. These capabilities are typically only available in a desktop-based software:
 
-- Kasthuri et al., 2014. Mouse somatosensory cortex (6x6x30 cubic nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!{'layers':{'original-image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/kasthuri2011/image'_'visible':false}_'corrected-image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/kasthuri2011/image_color_corrected'}_'ground_truth':{'type':'segmentation'_'source':'precomputed://gs://neuroglancer-public-data/kasthuri2011/ground_truth'_'selectedAlpha':0.63_'notSelectedAlpha':0.14_'segments':['3208'_'4901'_'13'_'4965'_'4651'_'2282'_'3189'_'3758'_'15'_'4027'_'3228'_'444'_'3207'_'3224'_'3710']}}_'navigation':{'pose':{'position':{'voxelSize':[6_6_30]_'voxelCoordinates':[5523.99072265625_8538.9384765625_1198.0423583984375]}}_'zoomFactor':22.573112129999547}_'perspectiveOrientation':[-0.004047565162181854_-0.9566211104393005_-0.2268827110528946_-0.1827099621295929]_'perspectiveZoom':340.35867907175077}" target="_blank">Open viewer.</a>
+- Ingest raw image volumes and algorithm outputs, including neuron/glia/centroid/axon detections
+- Enhance visualization of algorithm detections overlaid on the raw imagery (along with existing visualization of imagery)
+- Editing tools for polygons, points, and linestring annotation types
+- Automatic saving of updated annotation data after human review
+- Provide data scalability by breaking up annotation data into blocks and while keeping imagery intact
+- Support JSON, CSV, and HDF5 formats
+- Support serving multiple annotated datasets at once
 
-  This dataset was copied from <https://neurodata.io/data/kasthuri15/> and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/). Paper: <a href="http://dx.doi.org/10.1016/j.cell.2015.06.054" target="_blank">Kasthuri, Narayanan, et al. "Saturated reconstruction of a volume of neocortex." Cell 162.3 (2015): 648-661.</a>
+NeuroTrALE augments the concept of layers in Neuroglancer to display brain microscopy image data from multiple channels (e.g., images from multiple fluorescent stains) and algorithm results in layers, which can be turned on and off dynamically by the user.
 
-- Janelia FlyEM FIB-25. 7-column Drosophila medulla (8x8x8 cubic nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!{'layers':{'image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/flyem_fib-25/image'}_'ground-truth':{'type':'segmentation'_'source':'precomputed://gs://neuroglancer-public-data/flyem_fib-25/ground_truth'_'segments':['21894'_'22060'_'158571'_'24436'_'2515']}}_'navigation':{'pose':{'position':{'voxelSize':[8_8_8]_'voxelCoordinates':[2914.500732421875_3088.243408203125_4045]}}_'zoomFactor':30.09748283999932}_'perspectiveOrientation':[0.3143535554409027_0.8142156600952148_0.4843369424343109_-0.06040262430906296]_'perspectiveZoom':443.63404517712684_'showSlices':false}" target="_blank">Open viewer.</a>
+# Example applications
 
-  This dataset was copied from <https://www.janelia.org/project-team/flyem/data-and-software-release>, and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/). Paper: <a href="http://dx.doi.org/10.1073/pnas.1509820112" target="_blank">Takemura, Shin-ya et al. "Synaptic Circuits and Their Variations within Different Columns in the Visual System of Drosophila." Proceedings of the National Academy of Sciences of the United States of America 112.44 (2015): 13711-13716.</a>
+Hemisphere region editing and navigation:
 
-- Example of viewing 2D microscopy (coronal section of rat brain at 325 nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%7D%2C%22position%22:%5B10387071%2C5347131%5D%2C%22crossSectionScale%22:263.74955563693914%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%7B%22url%22:%22deepzoom://https://data-proxy.ebrains.eu/api/v1/buckets/localizoom/14122_mPPC_BDA_s186.tif/14122_mPPC_BDA_s186.dzi%22%2C%22transform%22:%7B%22outputDimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22inputDimensions%22:%7B%22x%22:%5B3.25e-7%2C%22m%22%5D%2C%22y%22:%5B3.25e-7%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%7D%7D%2C%22tab%22:%22rendering%22%2C%22shader%22:%22void%20main%28%29%7BemitRGB%28vec3%28toNormalized%28getDataValue%280%29%29%2CtoNormalized%28getDataValue%281%29%29%2CtoNormalized%28getDataValue%282%29%29%29%29%3B%7D%22%2C%22channelDimensions%22:%7B%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22name%22:%2214122_mPPC_BDA_s186.dzi%22%7D%5D%2C%22selectedLayer%22:%7B%22layer%22:%2214122_mPPC_BDA_s186.dzi%22%7D%2C%22layout%22:%22xy%22%7D"
-  target="_blank">Open viewer.</a> (Use <kbd>Ctrl</kbd>+<kbd>MouseWheel</kbd> to zoom out)
+![](docs/NeuroTrALE_screenshot_Hemisphere.png)
 
-  This image is part of: Olsen et al., 2020. Anterogradely labeled axonal projections from the posterior parietal cortex in rat [Data set]. EBRAINS. <https://doi.org/10.25493/FKM4-ZCC>
+Nuclei segmentation:
+
+![](docs/NeuroTrALE_screenshot_Nuclei.png)
+
+Axon tracing:
+
+![](docs/NeuroTrALE_screenshot_Axons.png)
+
+# Significance
+
+Despite the success of new technologies, integrated reconstruction of the fine subcellular architectures, molecular details, and intercellular connectivity of diverse cell types in large-scale biological systems such as the human brain remains an unmet goal in biology. The top priority of the Brain Research through Advancing Innovative Neurotechnologies (BRAIN) Initiative sponsored by the National Institutes of Health (NIH) is to map the human brain at different scales with improved speed and accuracy. While deep learning-based approaches have shown effectiveness in neuron segmentation and tracing, one major challenge is the lack of annotated data, which often requires domain knowledge. The manual process is also laborious and time consuming. In addition, there is a lack of tools that allow domain experts to review the algorithm results at scale. In the scenarios where data may be abundant but labels are scarce or expensive to obtain, active learning is a viable solution and has been used in modern machine learning. Active learning is a special case of machine learning in which a learning algorithm can interactively cue a user to label new data points with the desired outputs. Active learning aims to achieve high accuracy using as few manually labeled instances as possible, thereby minimizing the cost of obtaining labeled data. 
+
+# Background reading
+
+- HPEC 2020 paper: <https://ieeexplore.ieee.org/document/9286225>
+- ISBI 2021 paper: <https://ieeexplore.ieee.org/document/9434142>
 
 # Supported data sources
 
-Neuroglancer itself is purely a client-side program, but it depends on data being accessible via HTTP in a suitable format. It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
+Like Neuroglancer, NeuroTrALE depends on data being accessible via HTTP in a suitable format.  It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
 
-- [Neuroglancer precomputed format](src/datasource/precomputed)
-- [N5](src/datasource/n5)
-- [Zarr v2/v3](src/datasource/zarr)
-- [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 - BOSS <https://bossdb.org/>
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
+- [Precomputed chunk/mesh fragments exposed over HTTP](src/neuroglancer/datasource/precomputed)
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
-- [Deep Zoom images](src/datasource/deepzoom)
+- [Python in-memory volumes](python/README.md) (with automatic mesh generation)
+- N5 <https://github.com/saalfeldlab/n5>
 
 # Supported browsers
 
 - Chrome >= 51
 - Firefox >= 46
-- Safari >= 15.0
 
 # Keyboard and mouse bindings
 
 For the complete set of bindings, see
-[src/ui/default_input_event_bindings.ts](src/ui/default_input_event_bindings.ts),
-or within Neuroglancer, press `h` or click on the button labeled `?` in the upper right corner.
+[src/neuroglancer/ui/default_input_event_bindings.ts](src/neuroglancer/default_input_event_bindings.ts),
+or within NeuroTrALE, press `h` or click on the button labeled `?` in the upper right corner.
 
 - Click on a layer name to toggle its visibility.
 
@@ -64,58 +78,56 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
 
 - Hover over a segmentation layer name to see the current list of objects shown and to access the opacity sliders.
 
-- Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/sliceview/image_layer_rendering.md).
-
+- Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/neuroglancer/sliceview/image_layer_rendering.md).
+  
 # Troubleshooting
 
-- Neuroglancer doesn't appear to load properly.
+- NeuroTrALE doesn't appear to load properly.
 
-  Neuroglancer requires WebGL (2.0) and the `EXT_color_buffer_float` extension.
-
-  To troubleshoot, check the developer console, which is accessed by the keyboard shortcut `control-shift-i` in Firefox and Chrome. If there is a message regarding failure to initialize WebGL, you can take the following steps:
-
+  NeuroTrALE requires WebGL (2.0) and the `EXT_color_buffer_float` extension.
+  
+  To troubleshoot, check the developer console, which is accessed by the keyboard shortcut `control-shift-i` in Firefox and Chrome.  If there is a message regarding failure to initialize WebGL, you can take the following steps:
+  
   - Chrome
-
-    Check `chrome://gpu` to see if your GPU is blacklisted. There may be a flag you can enable to make it work.
-
+  
+    Check `chrome://gpu` to see if your GPU is blacklisted.  There may be a flag you can enable to make it work.
+    
   - Firefox
 
-    Check `about:support`. There may be webgl-related properties in `about:config` that you can change to make it work. Possible settings:
-
+    Check `about:support`.  There may be webgl-related properties in `about:config` that you can change to make it work.  Possible settings:
     - `webgl.disable-fail-if-major-performance-caveat = true`
     - `webgl.force-enabled = true`
     - `webgl.msaa-force = true`
-
+    
 - Failure to access a data source.
 
-  As a security measure, browsers will in many prevent a webpage from accessing the true error code associated with a failed HTTP request. It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
+  As a security measure, browsers will in many prevent a webpage from accessing the true error code associated with a failed HTTP request.  It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
 
   There are several likely causes:
-
+  
   - [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
-
-    Neuroglancer relies on cross-origin requests to retrieve data from third-party servers. As a security measure, if an appropriate `Access-Control-Allow-Origin` response header is not sent by the server, browsers prevent webpages from accessing any information about the response from a cross-origin request. In order to make the data accessible to Neuroglancer, you may need to change the cross-origin request sharing (CORS) configuration of the HTTP server.
-
-  - Accessing an `http://` resource from a Neuroglancer client hosted at an `https://` URL
-
-    As a security measure, recent versions of Chrome and Firefox prohibit webpages hosted at `https://` URLs from issuing requests to `http://` URLs. As a workaround, you can use a Neuroglancer client hosted at a `http://` URL, e.g. the demo client running at http://neuroglancer-demo.appspot.com, or one running on localhost. Alternatively, you can start Chrome with the `--disable-web-security` flag, but that should be done only with extreme caution. (Make sure to use a separate profile, and do not access any untrusted webpages when running with that flag enabled.)
-
+  
+    Like Neuroglancer, NeuroTrALE relies on cross-origin requests to retrieve data from third-party servers.  As a security measure, if an appropriate `Access-Control-Allow-Origin` response header is not sent by the server, browsers prevent webpages from accessing any information about the response from a cross-origin request.  In order to make the data accessible to NeuroTrALE, you may need to change the cross-origin request sharing (CORS) configuration of the HTTP server.
+  
+  - Accessing an `http://` resource from a NeuroTrALE client hosted at an `https://` URL
+    
+    As a security measure, recent versions of Chrome and Firefox prohibit webpages hosted at `https://` URLs from issuing requests to `http://` URLs.  As a workaround, you can use a NeuroTrALE client hosted at a `http://` URL, or one running on localhost.  Alternatively, you can start Chrome with the `--disable-web-security` flag, but that should be done only with extreme caution.  (Make sure to use a separate profile, and do not access any untrusted webpages when running with that flag enabled.)
+    
 # Multi-threaded architecture
 
-In order to maintain a responsive UI and data display even during rapid navigation, work is split between the main UI thread (referred to as the "frontend") and a separate WebWorker thread (referred to as the "backend"). This introduces some complexity due to the fact that current browsers:
-
-- do not support any form of _shared_ memory or standard synchronization mechanism (although they do support relatively efficient _transfers_ of typed arrays between threads);
-- require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
+In order to maintain a responsive UI and data display even during rapid navigation, work is split between the main UI thread (referred to as the "frontend") and a separate WebWorker thread (referred to as the "backend").  This introduces some complexity due to the fact that current browsers:
+ - do not support any form of *shared* memory or standard synchronization mechanism (although they do support relatively efficient *transfers* of typed arrays between threads);
+ - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
 The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
 
 # Documentation Index
 
-- [Image Layer Rendering](src/sliceview/image_layer_rendering.md)
-- [Cross-sectional view implementation architecture](src/sliceview/README.md)
-- [Compressed segmentation format](src/sliceview/compressed_segmentation/README.md)
-- [Data chunk management](src/chunk_manager/)
-- [On-GPU hashing](src/gpu_hash/)
+- [Image Layer Rendering](src/neuroglancer/sliceview/image_layer_rendering.md)
+- [Cross-sectional view implementation architecture](src/neuroglancer/sliceview/README.md)
+- [Compressed segmentation format](src/neuroglancer/sliceview/compressed_segmentation/README.md)
+- [Data chunk management](src/neuroglancer/chunk_manager/)
+- [On-GPU hashing](src/neuroglancer/gpu_hash/)
 
 # Building
 
@@ -123,12 +135,12 @@ node.js is required to build the viewer.
 
 1. First install NVM (node version manager) per the instructions here:
 
-https://github.com/creationix/nvm
+  https://github.com/creationix/nvm
 
 2. Install a recent version of Node.js if you haven't already done so:
 
-   `nvm install stable`
-
+    `nvm install stable`
+    
 3. Install the dependencies required by this project:
 
    (From within this directory)
@@ -141,49 +153,22 @@ https://github.com/creationix/nvm
 4. To run a local server for development purposes:
 
    `npm run dev-server`
-
+  
    This will start a server on <http://localhost:8080>.
-
+   
 5. To run the unit test suite on Chrome:
-
+   
    `npm test`
 
 6. See [package.json](package.json) for other commands available.
 
-# Discussion Group
+# Disclaimer
 
-There is a Google Group/mailing list for discussion related to Neuroglancer:
-<https://groups.google.com/forum/#!forum/neuroglancer>.
+DISTRIBUTION STATEMENT A. Approved for public release: distribution unlimited.
+This material is based upon work supported by the Defense Advanced Research Projects Agency and MIT under Air Force Contract No. FA8702-15-D-0001. Any opinions, findings, conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the Defense Advanced Research Projects Agency and MIT.
 
-# Related Projects
+Copyright (C) 2024, MASSACHUSETTS INSTITUTE OF TECHNOLOGY
+    Subject to FAR 52.227-11 – Patent Rights – Ownership by the Contractor (May 2014)
+    SPDX-License-Identifier: BSD-2-Clause
 
-- [TensorStore](https://github.com/google/tensorstore) - C++ and Python library for efficiently
-  reading and writing multi-dimensional arrays in formats supported by Neuroglancer.
-- [4Quant/neuroglancer-docker](https://github.com/4Quant/neuroglancer-docker) - Example setup for
-  Docker deployment of the [Neuroglancer Python integration](python/README.md).
-- [FZJ-INM1-BDA/neuroglancer-scripts](https://github.com/FZJ-INM1-BDA/neuroglancer-scripts) -
-  Scripts for converting the [BigBrain](https://bigbrain.loris.ca) dataset to the
-  Neuroglancer [precomputed data format](src/datasource/precomputed), which may serve
-  as a useful example for converting other datasets.
-- [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
-- [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
-- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
-- [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and managment of large 3d images focusing on Neuroglancer Precomputed format.
-
-# Contributing
-
-Want to contribute? Great! First, read [CONTRIBUTING.md](CONTRIBUTING.md).
-
-# License
-
-Copyright 2016 Google Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this software except in compliance with the License.
-You may obtain a copy of the License at <http://www.apache.org/licenses/LICENSE-2.0>.
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+The software/firmware is provided to you on an As-Is basis

@@ -28,6 +28,7 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
+import type { MouseSelectionState } from "#src/layer/index.js";
 import {
   defineBoundingBoxCrossSectionShader,
   setBoundingBoxCrossSectionShaderViewportPlane,
@@ -620,13 +621,19 @@ function snapPositionToCorner(position: Float32Array, corners: Float32Array) {
 registerAnnotationTypeRenderHandler<AxisAlignedBoundingBox>(
   AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
   {
+    bytes: () => 6 * 4,
     sliceViewRenderHelper: SliceViewRenderHelper,
     perspectiveViewRenderHelper: PerspectiveViewRenderHelper,
     defineShaderNoOpSetters(builder) {
       addFaceNoOpSetters(builder);
       addBorderNoOpSetters(builder);
     },
-    pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
+    staticPickIdsPerInstance: PICK_IDS_PER_INSTANCE,
+    pickIdsPerInstance: (annotations) => Array(annotations.length).fill(PICK_IDS_PER_INSTANCE),
+    assignPickingInformation(mouseState:MouseSelectionState, pickIds:number[], pickedOffset:number) {
+      mouseState.pickedAnnotationIndex = Math.floor(pickedOffset / pickIds[0]);
+      mouseState.pickedOffset = pickedOffset % pickIds[0];
+    },
     snapPosition(position, data, offset, partIndex) {
       const rank = position.length;
       const corners = new Float32Array(data, offset, rank * 2);

@@ -18,6 +18,7 @@ import "#src/annotation/bounding_box.js";
 import "#src/annotation/line.js";
 import "#src/annotation/point.js";
 import "#src/annotation/ellipsoid.js";
+import '#src/annotation/linestring.js';
 
 import type {
   AnnotationLayerState,
@@ -39,6 +40,7 @@ import {
   MultiscaleAnnotationSource,
 } from "#src/annotation/frontend_source.js";
 import type {
+  Annotation,
   AnnotationBase,
   SerializedAnnotations,
 } from "#src/annotation/index.js";
@@ -374,7 +376,7 @@ export class AnnotationLayer extends RefCounted {
             segmentationFilter(this.segmentationStates.value),
           ));
         buffer.setData(this.serializedAnnotations.data);
-        this.numPickIds = computeNumPickIds(serializedAnnotations);
+        this.numPickIds = computeNumPickIds(serializedAnnotations, source);
       }
     }
   }
@@ -499,6 +501,7 @@ function AnnotationRenderLayer<
             displayState.shaderError,
           ));
         helper.pickIdsPerInstance = handler.pickIdsPerInstance;
+        helper.staticPickIdsPerInstance = handler.staticPickIdsPerInstance;
         helper.targetIsSliceView = renderHelperType === "sliceViewRenderHelper";
       }
     }
@@ -610,7 +613,7 @@ function AnnotationRenderLayer<
         }
         const { serializedAnnotations } = chunk;
         buffer.setData(serializedAnnotations.data);
-        chunk.numPickIds = computeNumPickIds(serializedAnnotations);
+        chunk.numPickIds = computeNumPickIds(serializedAnnotations, this.base.source);
         chunk.bufferValid = true;
       }
       this.drawGeometry(
@@ -630,7 +633,7 @@ function AnnotationRenderLayer<
       const { base } = this;
       const { chunkDisplayTransform } = state;
       const { serializedAnnotations } = chunk;
-      const { typeToIdMaps, typeToOffset } = serializedAnnotations;
+      const { typeToIdMaps, typeToOffset, typeToPrimitiveCount } = serializedAnnotations;
       let pickId = 0;
       if (renderContext.emitPickID) {
         pickId = renderContext.pickIDs.register(
@@ -669,16 +672,22 @@ function AnnotationRenderLayer<
           .visibleHistograms > 0;
       for (const annotationType of annotationTypes) {
         const idMap = typeToIdMaps[annotationType];
-        let count = idMap.size;
+        const annotations: Annotation[] = [];
+        idMap.forEach((_, id) => annotations.push(this.base.state.source.getReference(id).value!));
+        let count = typeToPrimitiveCount[annotationType];
         if (count > 0) {
           const handler = getAnnotationTypeRenderHandler(annotationType);
           let selectedIndex = 0xffffffff;
+          const pickIdsPerInstance = handler.pickIdsPerInstance(annotations);
           if (hoverValue !== undefined) {
             const index = idMap.get(hoverValue.id);
             if (index !== undefined) {
-              selectedIndex = index * handler.pickIdsPerInstance;
+              selectedIndex = 0;
+              for (let i = 0; i < index; ++i) {
+                selectedIndex += pickIdsPerInstance[i];
+              }
               // If we wanted to include the partIndex, we would add:
-              // selectedIndex += hoverValue.partIndex;
+              selectedIndex += hoverValue.partIndex;
             }
           }
           count = Math.round(count * drawFraction);
@@ -691,7 +700,7 @@ function AnnotationRenderLayer<
             renderHelper.computeHistograms(context, renderContext.frameNumber);
             renderContext.bindFramebuffer();
           }
-          context.basePickId += count * handler.pickIdsPerInstance;
+          context.basePickId += pickIdsPerInstance.reduce((a, b) => a + b, 0);
         }
       }
     }
@@ -704,27 +713,30 @@ function AnnotationRenderLayer<
     ) {
       const chunk = data as AnnotationGeometryDataInterface;
       const { serializedAnnotations } = chunk;
-      const { typeToIds, typeToOffset } = serializedAnnotations;
+      const { typeToIds } = serializedAnnotations;
       const rank = this.curRank;
       const chunkTransform = this.chunkTransform;
       if (chunkTransform.error !== undefined) return;
       for (const annotationType of annotationTypes) {
         const ids = typeToIds[annotationType];
+        const annotations: Annotation[] = [];
+        ids.forEach((id) => annotations.push(this.base.state.source.getReference(id).value!));
         const renderHandler = getAnnotationTypeRenderHandler(annotationType);
-        const { pickIdsPerInstance } = renderHandler;
-        if (pickedOffset < ids.length * pickIdsPerInstance) {
-          const instanceIndex = Math.floor(pickedOffset / pickIdsPerInstance);
-          const id = ids[instanceIndex];
-          const partIndex = pickedOffset % pickIdsPerInstance;
+        const pickIds = renderHandler.pickIdsPerInstance(annotations);
+        const pickIdCount = pickIds.reduce((a, b) => a + b, 0);
+        if (pickIdCount != 0 && pickedOffset < pickIdCount) {
+          renderHandler.assignPickingInformation(mouseState, pickIds, pickedOffset);
+
+          let bufferOffset = 0;
+          for (let i = 0; i < mouseState.pickedAnnotationIndex!; ++i) {
+            bufferOffset += renderHandler.bytes(this.base.state.source.getReference(ids[i]).value!);
+          }
+          const id = ids[mouseState.pickedAnnotationIndex!];
           mouseState.pickedAnnotationId = id;
           mouseState.pickedAnnotationLayer = this.base.state;
-          mouseState.pickedOffset = partIndex;
           mouseState.pickedAnnotationBuffer = serializedAnnotations.data.buffer;
           mouseState.pickedAnnotationType = annotationType;
-          mouseState.pickedAnnotationBufferBaseOffset =
-            serializedAnnotations.data.byteOffset +
-            typeToOffset[annotationType];
-          mouseState.pickedAnnotationIndex = instanceIndex;
+          mouseState.pickedAnnotationBufferBaseOffset = bufferOffset;
           mouseState.pickedAnnotationCount = ids.length;
           const chunkPosition = this.tempChunkPosition;
           const {
@@ -746,15 +758,12 @@ function AnnotationRenderLayer<
           ) {
             return;
           }
-          const propertySerializer =
-            this.base.source.annotationPropertySerializers[annotationType];
+
           renderHandler.snapPosition(
             chunkPosition,
             mouseState.pickedAnnotationBuffer,
-            mouseState.pickedAnnotationBufferBaseOffset +
-              mouseState.pickedAnnotationIndex *
-                propertySerializer.propertyGroupBytes[0],
-            partIndex,
+            mouseState.pickedAnnotationBufferBaseOffset,
+            mouseState.pickedOffset
           );
           const globalRank = globalToRenderLayerDimensions.length;
           for (let globalDim = 0; globalDim < globalRank; ++globalDim) {
@@ -773,7 +782,7 @@ function AnnotationRenderLayer<
           }
           return;
         }
-        pickedOffset -= ids.length * pickIdsPerInstance;
+        pickedOffset -= pickIdCount;
       }
     }
 
