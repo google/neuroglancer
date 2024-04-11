@@ -543,9 +543,7 @@ export class ControlPointTexture extends BaseLookupTexture {
     const textureUnitEqual =
       existingOptions.textureUnit === newOptions.textureUnit;
     const dataTypeEqual = existingOptions.dataType === newOptions.dataType;
-    return (
-      controlPointsEqual && textureUnitEqual && dataTypeEqual
-    );
+    return controlPointsEqual && textureUnitEqual && dataTypeEqual;
   }
   createLookupTable(options: ControlPointTextureOptions): LookupTable {
     const lookupTableSize = this.ensureTextureSize(options.lookupTableSize);
@@ -631,8 +629,10 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
   updateTransferFunctionPointsAndLines() {
     // Normalize position to [-1, 1] for shader (x axis)
-    function normalizePosition(position: number) {
-      return (position / (TRANSFER_FUNCTION_PANEL_SIZE - 1)) * 2 - 1;
+    const window = this.parent.trackable.value.window;
+    function normalizeInput(input: number | Uint64) {
+      const lerpedInput = computeInvlerp(window, input);
+      return lerpedInput * 2 - 1;
     }
     // Normalize opacity to [-1, 1] for shader (y axis)
     function normalizeOpacity(opacity: number) {
@@ -648,10 +648,10 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       positions: vec4,
     ): number {
       for (let i = 0; i < VERTICES_PER_LINE; ++i) {
-        array[index++] = normalizePosition(positions[0]);
-        array[index++] = normalizeOpacity(positions[1]);
-        array[index++] = normalizePosition(positions[2]);
-        array[index++] = normalizeOpacity(positions[3]);
+        array[index++] = positions[0];
+        array[index++] = positions[1];
+        array[index++] = positions[2];
+        array[index++] = positions[3];
       }
       return index;
     }
@@ -666,68 +666,152 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     let positionArrayIndex = 0;
     let lineFromLeftEdge = null;
     let lineToRightEdge = null;
+    const normalizedControlPoints = controlPoints.map((point) => {
+      const input = normalizeInput(point.inputValue);
+      const output = normalizeOpacity(point.outputColor[3]);
+      return { input, output };
+    });
 
     // Create start and end lines if there are any control points
     if (controlPoints.length > 0) {
-      // If the start point is above 0, need to draw a line from the left edge
-      const firstInputValue = transferFunction.toLookupTableIndex(0)!;
-      if (firstInputValue > 0) {
-        numLines += 1;
-        lineFromLeftEdge = vec4.fromValues(0, 0, firstInputValue, 0);
+      // Map all control points to normalized values for the shader
+      // Try to find the first and last point in the window
+      let firstPointIndexInWindow = null;
+      let lastPointIndexInWindow = null;
+      for (let i = 0; i < controlPoints.length; ++i) {
+        const normalizedInput = normalizedControlPoints[i].input;
+        if (normalizedInput >= -1 && normalizedInput <= 1) {
+          firstPointIndexInWindow = firstPointIndexInWindow ?? i;
+          lastPointIndexInWindow = i;
+        }
       }
-      // If the end point is less than the transfer function length, need to draw a line to the right edge
-      const finalPoint = controlPoints[controlPoints.length - 1];
-      const finalInputValue = transferFunction.toLookupTableIndex(-1)!;
-      if (finalInputValue < TRANSFER_FUNCTION_PANEL_SIZE - 1) {
+      // If there are no points in the window, everything is left or right of the window
+      // Draw a single line from the left edge to the right edge if all points are left of the window
+      if (firstPointIndexInWindow === null) {
+        const allPointsLeftOfWindow = normalizedControlPoints[0].input > 1;
+        const indexOfReferencePoint = allPointsLeftOfWindow
+          ? controlPoints.length - 1
+          : 0;
         numLines += 1;
-        lineToRightEdge = vec4.fromValues(
-          finalInputValue,
-          finalPoint.outputColor[3],
-          TRANSFER_FUNCTION_PANEL_SIZE - 1,
-          finalPoint.outputColor[3],
+        const referenceOpacity =
+          normalizedControlPoints[indexOfReferencePoint].output;
+        lineFromLeftEdge = vec4.fromValues(
+          -1,
+          referenceOpacity,
+          1,
+          referenceOpacity,
         );
+      } else {
+        const firstPointInWindow =
+          normalizedControlPoints[firstPointIndexInWindow];
+        // Need to draw a line from the left edge to the first control point in the window
+        // Unless the first point is at the left edge
+        if (firstPointInWindow.input > -1) {
+          // If there is a value to the left, draw a line from the point outside the window to the first point in the window
+          if (firstPointIndexInWindow > 0) {
+            const pointBeforeWindow =
+              normalizedControlPoints[firstPointIndexInWindow - 1];
+            const interpFactor = computeInvlerp(
+              [pointBeforeWindow.input, firstPointInWindow.input],
+              -1,
+            );
+            const lineStartY = computeLerp(
+              [pointBeforeWindow.output, firstPointInWindow.output],
+              DataType.FLOAT32,
+              interpFactor,
+            ) as number;
+            lineFromLeftEdge = vec4.fromValues(
+              -1,
+              lineStartY,
+              firstPointInWindow.input,
+              firstPointInWindow.output,
+            );
+          }
+          // If the first point in the window is the leftmost point, draw a 0 line up to the point
+          else {
+            lineFromLeftEdge = vec4.fromValues(
+              -1,
+              0,
+              firstPointInWindow.input,
+              0,
+            );
+          }
+          numLines += 1;
+        }
+
+        // Need to draw a line from the last control point in the window to the right edge
+        const lastPointInWindow =
+          normalizedControlPoints[lastPointIndexInWindow!];
+        if (lastPointInWindow.input < 1) {
+          // If there is a value to the right, draw a line from the last point in the window to the point outside the window
+          if (lastPointIndexInWindow! < controlPoints.length - 1) {
+            const pointAfterWindow =
+              normalizedControlPoints[lastPointIndexInWindow! + 1];
+            const interpFactor = computeInvlerp(
+              [lastPointInWindow.input, pointAfterWindow.input],
+              1,
+            );
+            const lineEndY = computeLerp(
+              [lastPointInWindow.output, pointAfterWindow.output],
+              DataType.FLOAT32,
+              interpFactor,
+            ) as number;
+            lineToRightEdge = vec4.fromValues(
+              lastPointInWindow.input,
+              lastPointInWindow.output,
+              1,
+              lineEndY,
+            );
+          }
+          // If the last point in the window is the rightmost point, draw a line from the point to 1
+          else {
+            lineToRightEdge = vec4.fromValues(
+              lastPointInWindow.input,
+              lastPointInWindow.output,
+              1,
+              lastPointInWindow.output,
+            );
+          }
+          numLines += 1;
+        }
       }
     }
 
-    // Create line positions
     const linePositionArray = new Float32Array(
-      numLines * VERTICES_PER_LINE * POSITION_VALUES_PER_LINE,
+      numLines * POSITION_VALUES_PER_LINE * VERTICES_PER_LINE,
     );
-    // Draw a vertical line up to the first control point
+
     if (lineFromLeftEdge !== null) {
-      positionArrayIndex = addLine(
-        linePositionArray,
-        positionArrayIndex,
-        lineFromLeftEdge,
-      );
+      addLine(linePositionArray, positionArrayIndex, lineFromLeftEdge);
     }
 
     // Update points and draw lines between control points
     for (let i = 0; i < controlPoints.length; ++i) {
       const colorIndex = i * colorChannels;
       const positionIndex = i * 2;
+      const inputValue = normalizedControlPoints[i].input;
+      const outputValue = normalizedControlPoints[i].output;
       const { outputColor } = controlPoints[i];
-      const inputValue = transferFunction.toLookupTableIndex(i)!;
+      colorArray[colorIndex] = normalizeColor(outputColor[0]);
       colorArray[colorIndex + 1] = normalizeColor(outputColor[1]);
       colorArray[colorIndex + 2] = normalizeColor(outputColor[2]);
-      positionArray[positionIndex] = normalizePosition(inputValue);
-      positionArray[positionIndex + 1] = normalizeOpacity(outputColor[3]);
+      positionArray[positionIndex] = inputValue;
+      positionArray[positionIndex + 1] = outputValue;
 
       // Don't create a line for the last point
       if (i === controlPoints.length - 1) break;
-      const linePosition = vec4.fromValues(
+      const lineBetweenPoints = vec4.fromValues(
         inputValue,
-        outputColor[3],
-        transferFunction.toLookupTableIndex(i + 1)!,
-        controlPoints[i + 1].outputColor[3],
+        outputValue,
+        normalizedControlPoints[i + 1].input,
+        normalizedControlPoints[i + 1].output,
       );
       positionArrayIndex = addLine(
         linePositionArray,
         positionArrayIndex,
-        linePosition,
+        lineBetweenPoints,
       );
     }
-
     // Draw a horizontal line out from the last point
     if (lineToRightEdge !== null) {
       addLine(linePositionArray, positionArrayIndex, lineToRightEdge);
@@ -1007,7 +1091,7 @@ class TransferFunctionController extends RefCounted {
       "remove-point",
       (actionEvent) => {
         const mouseEvent = actionEvent.detail;
-        const nearestIndex = this.findNearestControlPointIndex(mouseEvent);
+        const nearestIndex = this.findControlPointIfNearCursor(mouseEvent);
         if (nearestIndex !== -1) {
           this.transferFunction.removePoint(nearestIndex);
           this.updateValue({
@@ -1023,7 +1107,7 @@ class TransferFunctionController extends RefCounted {
       "change-point-color",
       (actionEvent) => {
         const mouseEvent = actionEvent.detail;
-        const nearestIndex = this.findNearestControlPointIndex(mouseEvent);
+        const nearestIndex = this.findControlPointIfNearCursor(mouseEvent);
         if (nearestIndex !== -1) {
           const color = this.transferFunction.trackable.value.defaultColor;
           this.transferFunction.updatePointColor(nearestIndex, color);
@@ -1040,15 +1124,9 @@ class TransferFunctionController extends RefCounted {
     if (value === undefined) return;
     this.setModel(value);
   }
-  findNearestControlPointIndex(event: MouseEvent) {
-    const { normalizedX, normalizedY } = this.getControlPointPosition(
-      event,
-    ) as CanvasPosition;
-    return this.grabControlPointNearCursor(normalizedX, normalizedY);
-  }
   addControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
     const color = this.transferFunction.trackable.value.defaultColor;
-    const nearestIndex = this.findNearestControlPointIndex(event);
+    const nearestIndex = this.findControlPointIfNearCursor(event);
     if (nearestIndex !== -1) {
       this.currentGrabbedControlPointIndex = nearestIndex;
       return undefined;
@@ -1063,7 +1141,7 @@ class TransferFunctionController extends RefCounted {
       ),
     );
     this.currentGrabbedControlPointIndex =
-      this.findNearestControlPointIndex(event);
+      this.findControlPointIfNearCursor(event);
     return {
       ...this.getModel(),
       sortedControlPoints:
@@ -1118,14 +1196,23 @@ class TransferFunctionController extends RefCounted {
 
     return { normalizedX, normalizedY };
   }
-  grabControlPointNearCursor(mouseXPosition: number, mouseYPosition: number) {
+  /**
+   * Find the nearest control point to the cursor or -1 if no control point is near the cursor.
+   * If multiple control points are near the cursor in X, the control point with the smallest
+   * distance in the Y direction is returned.
+   */
+  findControlPointIfNearCursor(event: MouseEvent) {
+    const position = this.getControlPointPosition(event);
+    if (position === undefined) return -1;
+    const mouseXPosition = position.normalizedX;
+    const mouseYPosition = position.normalizedY;
     const { transferFunction, dataType } = this;
     const { window } = transferFunction.trackable.value;
     const range = transferFunction.sortedControlPoints.range;
     const nearestControlPointIndex =
       transferFunction.findNearestControlPointIndex(mouseXPosition, window);
     if (nearestControlPointIndex === -1) {
-      return nearestControlPointIndex;
+      return -1;
     }
     const lookupTableIndex = transferFunction.toLookupTableIndex(
       nearestControlPointIndex,
