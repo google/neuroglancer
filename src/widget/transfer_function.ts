@@ -156,7 +156,6 @@ export class ControlPoint {
 
   /** Convert the input value to a normalized value between 0 and 1 */
   normalizedInput(range: DataTypeInterval): number {
-    console.log("normalizedInput", range, this.inputValue);
     return computeInvlerp(range, this.inputValue);
   }
 
