@@ -46,7 +46,6 @@ import {
 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
-  computeInvlerp,
   computeLerp,
   convertDataTypeInterval,
   dataTypeIntervalToJson,
@@ -59,7 +58,7 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import { Uint64 } from "#src/util/uint64.js";
+import type { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -1059,7 +1058,10 @@ function parseTransferFunctionControlPoints(
 ) {
   const parsedPoints = parseArray(controlPointsDefinition, (x) => {
     // Validate input length and types
-    const allowedInput = dataType === DataType.UINT64 ? (typeof x[0] === "string" || typeof x[0] === "number") : typeof x[0] === "number";
+    const allowedInput =
+      dataType === DataType.UINT64
+        ? typeof x[0] === "string" || typeof x[0] === "number"
+        : typeof x[0] === "number";
     if (
       x.length !== 3 ||
       !allowedInput ||
@@ -1169,23 +1171,6 @@ export function parseTransferFunctionParameters(
       defaultValue.defaultColor,
     ),
     window,
-  };
-}
-
-// TODO (skm) still need copy?
-function copyTransferFunctionParameters(
-  defaultValue: TransferFunctionParameters,
-) {
-  return {
-    sortedControlPoints: new SortedControlPoints(
-      defaultValue.sortedControlPoints.controlPoints.map(
-        (x) => new ControlPoint(x.inputValue, x.outputColor),
-      ),
-      defaultValue.sortedControlPoints.range,
-    ),
-    channel: defaultValue.channel,
-    defaultColor: defaultValue.defaultColor,
-    window: defaultValue.window,
   };
 }
 
@@ -1714,7 +1699,6 @@ function setControlInShader(
         uName,
         control.dataType,
         value.sortedControlPoints,
-        value.range,
         TRANSFER_FUNCTION_LENGTH,
       );
   }

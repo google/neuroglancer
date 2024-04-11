@@ -40,7 +40,6 @@ import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
   computeLerp,
-  dataTypeIntervalEqual,
   parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
@@ -121,10 +120,6 @@ export interface ControlPointTextureOptions {
   sortedControlPoints: SortedControlPoints;
   /** textureUnit to update with the new transfer function texture data */
   textureUnit: number | undefined;
-  /** range of the input space I, where T: I -> O. Allows for more precision in the
-   * transfer function texture generation due to texture size limitations
-   */
-  inputRange: DataTypeInterval;
   /** Data type of the control points */
   dataType: DataType;
   /** Lookup table number of elements*/
@@ -161,6 +156,7 @@ export class ControlPoint {
 
   /** Convert the input value to a normalized value between 0 and 1 */
   normalizedInput(range: DataTypeInterval): number {
+    console.log("normalizedInput", range, this.inputValue);
     return computeInvlerp(range, this.inputValue);
   }
 
@@ -548,13 +544,8 @@ export class ControlPointTexture extends BaseLookupTexture {
     const textureUnitEqual =
       existingOptions.textureUnit === newOptions.textureUnit;
     const dataTypeEqual = existingOptions.dataType === newOptions.dataType;
-    const inputRangeEqual = dataTypeIntervalEqual(
-      newOptions.dataType,
-      newOptions.inputRange,
-      existingOptions.inputRange,
-    );
     return (
-      controlPointsEqual && textureUnitEqual && dataTypeEqual && inputRangeEqual
+      controlPointsEqual && textureUnitEqual && dataTypeEqual
     );
   }
   createLookupTable(options: ControlPointTextureOptions): LookupTable {
@@ -563,8 +554,6 @@ export class ControlPointTexture extends BaseLookupTexture {
     this.setTextureWidthAndHeightFromSize(lookupTableSize);
     const lookupTable = new LookupTable(lookupTableSize);
     const sortedControlPoints = options.sortedControlPoints;
-    // TODO this doesn't make sense as range is computed
-    sortedControlPoints.updateRange(options.inputRange);
     lookupTable.updateFromControlPoints(sortedControlPoints);
     return lookupTable;
   }
@@ -1336,7 +1325,6 @@ export function enableTransferFunctionShader(
   name: string,
   dataType: DataType,
   sortedControlPoints: SortedControlPoints,
-  interval: DataTypeInterval,
   lookupTableSize: number,
 ) {
   const { gl } = shader;
@@ -1353,7 +1341,6 @@ export function enableTransferFunctionShader(
   const textureSize = shader.bindAndUpdateTransferFunctionTexture(
     `TransferFunction.${name}`,
     sortedControlPoints,
-    interval,
     dataType,
     lookupTableSize,
   );
@@ -1365,6 +1352,7 @@ export function enableTransferFunctionShader(
   gl.uniform1f(shader.uniform(`uTransferFunctionEnd_${name}`), textureSize - 1);
 
   // Use the lerp shader function to grab an index into the lookup table
+  const interval = sortedControlPoints.range;
   enableLerpShaderFunction(shader, name, dataType, interval);
 }
 

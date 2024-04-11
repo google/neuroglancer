@@ -18,19 +18,18 @@ import { expect, describe, it } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
+import { Uint64 } from "#src/util/uint64.js";
 import {
   TrackableTransferFunctionParameters,
   parseShaderUiControls,
   parseTransferFunctionParameters,
   stripComments,
 } from "#src/webgl/shader_ui_controls.js";
+import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   ControlPoint,
   SortedControlPoints,
-  TransferFunctionParameters,
 } from "#src/widget/transfer_function.js";
-import { Uint64 } from "#src/util/uint64.js";
-import exp from "node:constants";
 
 describe("stripComments", () => {
   it("handles code without comments", () => {
@@ -584,7 +583,6 @@ void main() {
 }
 `;
     const range = defaultDataTypeRange[DataType.UINT8];
-    const sortedControlPoints = new SortedControlPoints([], range);
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT8, channelRank: 0 },
@@ -986,7 +984,8 @@ void main() {
     const parsed_val = parseShaderUiControls(code, {
       imageData: { dataType: DataType.UINT64, channelRank: 0 },
     });
-    const default_val = parsed_val.controls.get("tf")!.default as TransferFunctionParameters;
+    const default_val = parsed_val.controls.get("tf")!
+      .default as TransferFunctionParameters;
     const transferFunctionParameters = new TrackableTransferFunctionParameters(
       DataType.UINT64,
       default_val,
@@ -1053,6 +1052,5 @@ void main() {
       window: undefined,
       controlPoints: undefined,
     });
-
   });
 });

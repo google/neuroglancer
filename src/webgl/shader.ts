@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import { DataType } from "#src/util/data_type.js";
+import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ControlPointTexture,
   SortedControlPoints,
 } from "#src/widget/transfer_function.js";
-import type { DataTypeInterval } from "src/util/lerp";
 
 const DEBUG_SHADER = false;
 
@@ -259,7 +258,6 @@ export class ShaderProgram extends RefCounted {
   bindAndUpdateTransferFunctionTexture(
     symbol: symbol | string,
     sortedControlPoints: SortedControlPoints,
-    inputRange: DataTypeInterval,
     dataType: DataType,
     lookupTableSize: number,
   ) {
@@ -273,11 +271,9 @@ export class ShaderProgram extends RefCounted {
         `Invalid transfer function texture symbol: ${symbol.toString()}`,
       );
     }
-    // TODO (SKM) - how to correctly get the input range?
     return texture.updateAndActivate({
       textureUnit,
       sortedControlPoints,
-      inputRange,
       dataType,
       lookupTableSize,
     });
