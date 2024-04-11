@@ -205,12 +205,6 @@ export class SortedControlPoints {
   get length() {
     return this.controlPoints.length;
   }
-  updateControlPoints(newControlPoints: ControlPoint[]) {
-    this.controlPoints = newControlPoints.map((point) =>
-      ControlPoint.copyFrom(point),
-    );
-    this.sortAndComputeRange();
-  }
   addPoint(controlPoint: ControlPoint) {
     const { inputValue, outputColor } = controlPoint;
     const exactMatch = this.controlPoints.findIndex(

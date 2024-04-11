@@ -19,14 +19,18 @@ import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import {
+  TrackableTransferFunctionParameters,
   parseShaderUiControls,
+  parseTransferFunctionParameters,
   stripComments,
 } from "#src/webgl/shader_ui_controls.js";
 import {
   ControlPoint,
   SortedControlPoints,
+  TransferFunctionParameters,
 } from "#src/widget/transfer_function.js";
 import { Uint64 } from "#src/util/uint64.js";
+import exp from "node:constants";
 
 describe("stripComments", () => {
   it("handles code without comments", () => {
@@ -837,7 +841,7 @@ void main() {
   });
   it("handles transfer function control with all properties uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(controlPoints=[[18446744073709551615, "#00ff00", 0.1], [9223372111111111111, "#ff0000", 0.5], [0, "#000000", 0.0]], defaultColor="#0000ff", channel=[])
+#uicontrol transferFunction colormap(controlPoints=[["18446744073709551615", "#00ff00", 0.1], ["9223372111111111111", "#ff0000", 0.5], [0, "#000000", 0.0]], defaultColor="#0000ff", channel=[])
 void main() {
 }
 `;
@@ -849,17 +853,16 @@ void main() {
     const range = defaultDataTypeRange[DataType.UINT64];
     const controlPoints = [
       new ControlPoint(
-        Uint64.fromNumber(9223372111111111111),
+        Uint64.parseString("9223372111111111111"),
         vec4.fromValues(255, 0, 0, 128),
       ),
       new ControlPoint(Uint64.fromNumber(0), vec4.fromValues(0, 0, 0, 0)),
       new ControlPoint(
-        Uint64.fromNumber(18446744073709551615),
+        Uint64.parseString("18446744073709551615"),
         vec4.fromValues(0, 255, 0, 26),
       ),
     ];
     const sortedControlPoints = new SortedControlPoints(controlPoints, range);
-    console.log(sortedControlPoints);
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT64, channelRank: 0 },
@@ -934,5 +937,122 @@ void main() {
         ],
       ]),
     });
+  });
+});
+
+describe("parseTransferFunctionParameters", () => {
+  it("parses transfer function from JSON", () => {
+    const code = `
+#uicontrol transferFunction tf
+void main() {
+}
+`;
+    const parsed_val = parseShaderUiControls(code, {
+      imageData: { dataType: DataType.UINT8, channelRank: 0 },
+    });
+    const default_val = parsed_val.controls.get("tf")!.default;
+    const json = {
+      controlPoints: [
+        [150, "#ffffff", 1],
+        [0, "#000000", 0],
+      ],
+      defaultColor: "#ff0000",
+      window: [0, 200],
+    };
+    const parsed = parseTransferFunctionParameters(
+      json,
+      DataType.UINT8,
+      default_val as TransferFunctionParameters,
+    );
+    expect(parsed).toEqual({
+      sortedControlPoints: new SortedControlPoints(
+        [
+          new ControlPoint(0, vec4.fromValues(0, 0, 0, 0)),
+          new ControlPoint(150, vec4.fromValues(255, 255, 255, 255)),
+        ],
+        [0, 255],
+      ),
+      channel: [],
+      defaultColor: vec3.fromValues(1, 0, 0),
+      window: [0, 200],
+    });
+  });
+  it("writes transfer function to JSON and detects changes from default", () => {
+    const code = `
+#uicontrol transferFunction tf
+void main() {
+}
+`;
+    const parsed_val = parseShaderUiControls(code, {
+      imageData: { dataType: DataType.UINT64, channelRank: 0 },
+    });
+    const default_val = parsed_val.controls.get("tf")!.default as TransferFunctionParameters;
+    const transferFunctionParameters = new TrackableTransferFunctionParameters(
+      DataType.UINT64,
+      default_val,
+    );
+    expect(transferFunctionParameters.toJSON()).toEqual(undefined);
+
+    // Test setting a new control point
+    const sortedControlPoints = new SortedControlPoints(
+      [
+        new ControlPoint(Uint64.fromNumber(0), vec4.fromValues(0, 0, 0, 10)),
+        new ControlPoint(
+          Uint64.parseString("18446744073709551615"),
+          vec4.fromValues(255, 255, 255, 255),
+        ),
+      ],
+      defaultDataTypeRange[DataType.UINT64],
+    );
+    transferFunctionParameters.value = {
+      ...default_val,
+      sortedControlPoints,
+    };
+    expect(transferFunctionParameters.toJSON()).toEqual({
+      channel: undefined,
+      defaultColor: undefined,
+      window: undefined,
+      controlPoints: [
+        ["0", "#000000", 0.0392156862745098],
+        ["18446744073709551615", "#ffffff", 1],
+      ],
+    });
+
+    // Test setting a new default color
+    transferFunctionParameters.value = {
+      ...default_val,
+      defaultColor: vec3.fromValues(0, 1, 0),
+    };
+    expect(transferFunctionParameters.toJSON()).toEqual({
+      channel: undefined,
+      defaultColor: "#00ff00",
+      window: undefined,
+      controlPoints: undefined,
+    });
+
+    // Test setting a new window
+    transferFunctionParameters.value = {
+      ...default_val,
+      window: [0, 1000],
+    };
+    expect(transferFunctionParameters.toJSON()).toEqual({
+      channel: undefined,
+      defaultColor: undefined,
+      window: ["0", "1000"],
+      controlPoints: undefined,
+    });
+
+    // Test setting a new channel
+    transferFunctionParameters.value = {
+      ...default_val,
+      channel: [1],
+    };
+    expect(transferFunctionParameters.toJSON()).toEqual({
+      channel: [1],
+      defaultColor: undefined,
+      window: undefined,
+      controlPoints: undefined,
+    });
+
   });
 });
