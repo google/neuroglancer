@@ -76,6 +76,8 @@ void emitGrayscale(float value) {
 void emitTransparent() {
   emit(vec4(0.0, 0.0, 0.0, 0.0));
 }
+void emitIntensity(float value) {
+}
 `);
   builder.addFragmentCode(glsl_COLORMAPS);
   addControlsToBuilder(shaderBuilderState, builder);

@@ -297,6 +297,7 @@ export function defineInvlerpShaderFunction(
 float ${name}(${shaderType} inputValue) {
   float v = computeInvlerp(inputValue, uLerpParams_${name});
   ${!clamp ? "" : "v = clamp(v, 0.0, 1.0);"}
+  defaultMaxProjectionIntensity = v;
   return v;
 }
 `;
