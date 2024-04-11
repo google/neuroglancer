@@ -81,7 +81,7 @@ import { Tab } from "#src/widget/tab_view.js";
 const TRANSFER_FUNCTION_PANEL_SIZE = 1024;
 export const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
-const CONTROL_POINT_X_GRAB_DISTANCE = TRANSFER_FUNCTION_PANEL_SIZE / 40;
+const CONTROL_POINT_X_GRAB_DISTANCE = 0.05;
 const TRANSFER_FUNCTION_BORDER_WIDTH = 0.05;
 
 const transferFunctionSamplerTextureUnit = Symbol(
@@ -1202,28 +1202,41 @@ class TransferFunctionController extends RefCounted {
    * distance in the Y direction is returned.
    */
   findControlPointIfNearCursor(event: MouseEvent) {
+    const { transferFunction } = this;
+    const { window } = transferFunction.trackable.value;
+    const numControlPoints = transferFunction.sortedControlPoints.controlPoints.length;
+    function convertControlPointInputToPanelSpace(controlPointIndex: number) {
+      if (controlPointIndex < 0 || controlPointIndex >= numControlPoints) {
+        return null;
+      }
+      return computeInvlerp(
+        window,
+        transferFunction.sortedControlPoints.controlPoints[controlPointIndex]
+          .inputValue,
+      );
+    }
+    function convertControlPointOpacityToPanelSpace(controlPointIndex: number){
+      if (controlPointIndex < 0 || controlPointIndex >= numControlPoints) {
+        return null;
+      }
+      return (
+        transferFunction.sortedControlPoints.controlPoints[controlPointIndex]
+          .outputColor[3] / 255
+      );
+    }
     const position = this.getControlPointPosition(event);
     if (position === undefined) return -1;
     const mouseXPosition = position.normalizedX;
     const mouseYPosition = position.normalizedY;
-    const { transferFunction, dataType } = this;
-    const { window } = transferFunction.trackable.value;
-    const range = transferFunction.sortedControlPoints.range;
     const nearestControlPointIndex =
       transferFunction.findNearestControlPointIndex(mouseXPosition, window);
     if (nearestControlPointIndex === -1) {
       return -1;
     }
-    const lookupTableIndex = transferFunction.toLookupTableIndex(
-      nearestControlPointIndex,
-    )!;
-    const mousePositionTableIndex = Math.floor(
-      computeInvlerp(range, computeLerp(window, dataType, mouseXPosition)) *
-        TRANSFER_FUNCTION_PANEL_SIZE -
-        1,
-    );
+    const nearestControlPointPanelPosition =
+      convertControlPointInputToPanelSpace(nearestControlPointIndex)!;
     if (
-      Math.abs(lookupTableIndex - mousePositionTableIndex) >
+      Math.abs(mouseXPosition - nearestControlPointPanelPosition) >
       CONTROL_POINT_X_GRAB_DISTANCE
     ) {
       return -1;
@@ -1233,49 +1246,48 @@ class TransferFunctionController extends RefCounted {
       [
         nearestControlPointIndex,
         Math.abs(
-          transferFunction.sortedControlPoints.controlPoints[
-            nearestControlPointIndex
-          ].outputColor[3] - mouseYPosition,
+          convertControlPointOpacityToPanelSpace(nearestControlPointIndex)! -
+            mouseYPosition,
         ),
       ],
     ];
-    const nextPosition = transferFunction.toLookupTableIndex(
+    const nextPosition = convertControlPointInputToPanelSpace(
       nearestControlPointIndex + 1,
     );
     const nextDistance =
-      nextPosition !== undefined
-        ? Math.abs(nextPosition - mousePositionTableIndex)
+      nextPosition !== null
+        ? Math.abs(nextPosition - mouseXPosition)
         : Infinity;
     if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
       possibleMatches.push([
         nearestControlPointIndex + 1,
         Math.abs(
-          transferFunction.sortedControlPoints.controlPoints[
-            nearestControlPointIndex + 1
-          ].outputColor[3] - mouseYPosition,
+          convertControlPointOpacityToPanelSpace(
+            nearestControlPointIndex + 1,
+          )! - mouseYPosition,
         ),
       ]);
     }
 
-    const previousPosition = transferFunction.toLookupTableIndex(
+    const previousPosition = convertControlPointInputToPanelSpace(
       nearestControlPointIndex - 1,
-      false,
     );
     const previousDistance =
-      previousPosition !== undefined
-        ? Math.abs(previousPosition - mousePositionTableIndex)
+      previousPosition !== null
+        ? Math.abs(previousPosition - mouseXPosition)
         : Infinity;
     if (previousDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
       possibleMatches.push([
         nearestControlPointIndex - 1,
         Math.abs(
-          transferFunction.sortedControlPoints.controlPoints[
-            nearestControlPointIndex - 1
-          ].outputColor[3] - mouseYPosition,
+          convertControlPointOpacityToPanelSpace(
+            nearestControlPointIndex - 1,
+          )! - mouseYPosition,
         ),
       ]);
     }
-    return possibleMatches.sort((a, b) => a[1] - b[1])[0][0];
+    const bestMatch = possibleMatches.sort((a, b) => a[1] - b[1])[0][0];
+    return bestMatch;
   }
 }
 
