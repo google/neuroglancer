@@ -223,13 +223,9 @@ export class SortedControlPoints {
   }
   updatePointColor(index: number, color: vec4 | vec3) {
     let outputColor = vec4.create();
-    if (outputColor.length === 3) {
-      outputColor = vec4.fromValues(
-        color[0],
-        color[1],
-        color[2],
-        this.controlPoints[index].outputColor[3],
-      );
+    if (color.length === 3) {
+      const opacity = this.controlPoints[index].outputColor[3];
+      outputColor = vec4.fromValues(color[0], color[1], color[2], opacity);
     } else {
       outputColor = vec4.clone(color as vec4);
     }
@@ -730,10 +726,10 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
           // If the first point in the window is the leftmost point, draw a 0 line up to the point
           else {
             lineFromLeftEdge = vec4.fromValues(
-              -1,
-              0,
               firstPointInWindow.input,
-              0,
+              -1,
+              firstPointInWindow.input,
+              firstPointInWindow.output,
             );
           }
           numLines += 1;
@@ -782,7 +778,11 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     );
 
     if (lineFromLeftEdge !== null) {
-      addLine(linePositionArray, positionArrayIndex, lineFromLeftEdge);
+      positionArrayIndex = addLine(
+        linePositionArray,
+        positionArrayIndex,
+        lineFromLeftEdge,
+      );
     }
 
     // Update points and draw lines between control points
@@ -1110,7 +1110,12 @@ class TransferFunctionController extends RefCounted {
         const nearestIndex = this.findControlPointIfNearCursor(mouseEvent);
         if (nearestIndex !== -1) {
           const color = this.transferFunction.trackable.value.defaultColor;
-          this.transferFunction.updatePointColor(nearestIndex, color);
+          const colorInAbsoluteValue =
+            this.convertPanelSpaceColorToAbsoluteValue(color);
+          this.transferFunction.updatePointColor(
+            nearestIndex,
+            colorInAbsoluteValue,
+          );
           this.updateValue({
             ...this.getModel(),
             sortedControlPoints:
@@ -1124,6 +1129,31 @@ class TransferFunctionController extends RefCounted {
     if (value === undefined) return;
     this.setModel(value);
   }
+  convertPanelSpaceInputToAbsoluteValue(inputValue: number) {
+    return computeLerp(
+      this.transferFunction.trackable.value.window,
+      this.dataType,
+      inputValue,
+    );
+  }
+  convertPanelSpaceColorToAbsoluteValue(color: vec3 | vec4) {
+    if (color.length === 3) {
+      // If color is vec3
+      return vec3.fromValues(
+        Math.round(color[0] * 255),
+        Math.round(color[1] * 255),
+        Math.round(color[2] * 255),
+      );
+    } else {
+      // If color is vec4
+      return vec4.fromValues(
+        Math.round(color[0] * 255),
+        Math.round(color[1] * 255),
+        Math.round(color[2] * 255),
+        Math.round(color[3] * 255),
+      );
+    }
+  }
   addControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
     const color = this.transferFunction.trackable.value.defaultColor;
     const nearestIndex = this.findControlPointIfNearCursor(event);
@@ -1134,10 +1164,16 @@ class TransferFunctionController extends RefCounted {
     const { normalizedX, normalizedY } = this.getControlPointPosition(
       event,
     ) as CanvasPosition;
+    const outputColor = vec4.fromValues(
+      color[0],
+      color[1],
+      color[2],
+      normalizedY,
+    );
     this.transferFunction.addPoint(
       new ControlPoint(
-        normalizedX,
-        vec4.fromValues(color[0], color[1], color[2], normalizedY),
+        this.convertPanelSpaceInputToAbsoluteValue(normalizedX),
+        this.convertPanelSpaceColorToAbsoluteValue(outputColor) as vec4,
       ),
     );
     this.currentGrabbedControlPointIndex =
@@ -1157,10 +1193,13 @@ class TransferFunctionController extends RefCounted {
         this.transferFunction.trackable.value.sortedControlPoints.controlPoints[
           this.currentGrabbedControlPointIndex
         ].outputColor;
-      newColor[3] = normalizedY;
+      newColor[3] = Math.round(normalizedY * 255);
       this.currentGrabbedControlPointIndex = this.transferFunction.updatePoint(
         this.currentGrabbedControlPointIndex,
-        new ControlPoint(normalizedX, newColor),
+        new ControlPoint(
+          this.convertPanelSpaceInputToAbsoluteValue(normalizedX),
+          newColor,
+        ),
       );
       return {
         ...this.getModel(),
@@ -1204,7 +1243,8 @@ class TransferFunctionController extends RefCounted {
   findControlPointIfNearCursor(event: MouseEvent) {
     const { transferFunction } = this;
     const { window } = transferFunction.trackable.value;
-    const numControlPoints = transferFunction.sortedControlPoints.controlPoints.length;
+    const numControlPoints =
+      transferFunction.sortedControlPoints.controlPoints.length;
     function convertControlPointInputToPanelSpace(controlPointIndex: number) {
       if (controlPointIndex < 0 || controlPointIndex >= numControlPoints) {
         return null;
@@ -1215,7 +1255,7 @@ class TransferFunctionController extends RefCounted {
           .inputValue,
       );
     }
-    function convertControlPointOpacityToPanelSpace(controlPointIndex: number){
+    function convertControlPointOpacityToPanelSpace(controlPointIndex: number) {
       if (controlPointIndex < 0 || controlPointIndex >= numControlPoints) {
         return null;
       }
