@@ -187,7 +187,6 @@ export class ControlPoint {
 }
 
 export class SortedControlPoints {
-  // TODO (skm) is the copy needed? Does the constucture make sense?
   constructor(
     public controlPoints: ControlPoint[] = [],
     public range: DataTypeInterval,
@@ -247,7 +246,6 @@ export class SortedControlPoints {
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
-    // TODO (skm) - are the negatives ok here?
     if (this.autoComputeRange) {
       if (this.controlPoints.length < 2) {
         return;
@@ -256,6 +254,7 @@ export class SortedControlPoints {
         this.controlPoints[0].inputValue,
         this.controlPoints[this.controlPoints.length - 1].inputValue,
       ] as DataTypeInterval;
+      console.log("range", this.range);
     }
   }
   updateRange(newRange: DataTypeInterval) {
@@ -655,7 +654,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     const { transferFunction } = this;
     const { controlPoints } =
       transferFunction.trackable.value.sortedControlPoints;
-    let numLines = controlPoints.length;
+    let numLines = Math.max(controlPoints.length - 1, 0);
     const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
     const positionArray = new Float32Array(controlPoints.length * 2);
