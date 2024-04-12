@@ -75,7 +75,6 @@ describe("lerpBetweenControlPoints", () => {
       new ControlPoint(120, vec4.fromValues(21, 22, 254, 210)),
     ];
     const transferFunction = makeTransferFunction(controlPoints);
-    console.log(transferFunction);
     const output = transferFunction.lookupTable.outputValues;
     const firstPointTransferIndex =
       transferFunction.sortedControlPoints.controlPoints[0].transferFunctionIndex(
@@ -89,7 +88,6 @@ describe("lerpBetweenControlPoints", () => {
         .every((value) => value === 0),
     ).toBeTruthy();
     const endPiece = output.slice(NUM_COLOR_CHANNELS * firstPointTransferIndex);
-    console.log(firstPointTransferIndex, endPiece);
     const color = controlPoints[0].outputColor;
     expect(
       endPiece.every(
@@ -262,6 +260,7 @@ val5 = uTransferFunctionEnd_doTransferFunction;
               "doTransferFunction",
               dataType,
               controlPoints,
+              textureSizes[dataType],
             );
             tester.execute({ inputValue: point });
             const values = tester.values;
