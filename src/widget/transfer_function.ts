@@ -241,13 +241,14 @@ export class SortedControlPoints {
     );
   }
   sortAndComputeRange() {
+    if (this.controlPoints.length == 0) {
+      return;
+    }
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
     if (this.autoComputeRange) {
-      if (this.controlPoints.length < 2) {
-        return;
-      }
+      // TODO (SKM) fix panel repr for length = 1
       this.range = [
         this.controlPoints[0].inputValue,
         this.controlPoints[this.controlPoints.length - 1].inputValue,
@@ -259,10 +260,11 @@ export class SortedControlPoints {
     this.sortAndComputeRange();
   }
   copy() {
-    const controlPoints = this.controlPoints.map((point) =>
+    const copy = new SortedControlPoints([], this.range, this.autoComputeRange);
+    copy.controlPoints = this.controlPoints.map((point) =>
       ControlPoint.copyFrom(point),
     );
-    return new SortedControlPoints(controlPoints, this.range);
+    return copy;
   }
 }
 
@@ -1177,9 +1179,9 @@ class TransferFunctionController extends RefCounted {
       this.currentGrabbedControlPointIndex = nearestIndex;
       return undefined;
     }
-    const { normalizedX, normalizedY } = this.getControlPointPosition(
-      event,
-    ) as CanvasPosition;
+    const position = this.getControlPointPosition(event);
+    if (position === undefined) return undefined;
+    const { normalizedX, normalizedY } = position;
     const outputColor = vec4.fromValues(
       color[0],
       color[1],

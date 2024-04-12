@@ -1172,16 +1172,23 @@ export function parseTransferFunctionParameters(
   };
 }
 
+function copyTransferFunctionParameters(
+  defaultValue: TransferFunctionParameters,
+) {
+  return {
+    ...defaultValue,
+    sortedControlPoints: defaultValue.sortedControlPoints.copy(),
+  };
+}
+
 export class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
   constructor(
     public dataType: DataType,
     public defaultValue: TransferFunctionParameters,
   ) {
-    // Make a copy of the default value so that we can modify it without affecting the original.
-    // This is necessary because the default value is compared with the current value to determine
-    // whether the value has changed -> which is necessary for the changed signal to be emitted.
-    //const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
-    super(defaultValue, (obj) =>
+    // Create a copy of the default value to avoid modifying it.
+    const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
+    super(defaultValueCopy, (obj) =>
       parseTransferFunctionParameters(obj, dataType, defaultValue),
     );
   }
