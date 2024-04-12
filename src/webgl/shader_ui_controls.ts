@@ -58,7 +58,7 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import type { Uint64 } from "#src/util/uint64.js";
+import { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -600,7 +600,7 @@ function parseTransferFunctionDirective(
   let window: DataTypeInterval | undefined;
   let sortedControlPoints = new SortedControlPoints(
     [],
-    dataType !== undefined ? defaultDataTypeRange[dataType] : [0, 1],
+    dataType !== undefined ? dataType : DataType.FLOAT32,
   );
   let specifedPoints = false;
   if (valueType !== "transferFunction") {
@@ -1097,7 +1097,7 @@ function parseTransferFunctionControlPoints(
       ),
     );
   });
-  return new SortedControlPoints(parsedPoints, defaultDataTypeRange[dataType]);
+  return new SortedControlPoints(parsedPoints, dataType);
 }
 
 export function parseTransferFunctionParameters(

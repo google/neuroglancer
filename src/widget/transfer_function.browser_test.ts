@@ -37,14 +37,13 @@ import {
 const FIXED_TRANSFER_FUNCTION_LENGTH = 1024;
 
 function makeTransferFunction(controlPoints: ControlPoint[]) {
-  const range = defaultDataTypeRange[DataType.UINT8];
-  const sortedControlPoints = new SortedControlPoints(controlPoints, range);
+  const sortedControlPoints = new SortedControlPoints(controlPoints, DataType.UINT8);
   return new TransferFunction(
     DataType.UINT8,
     new TrackableValue<TransferFunctionParameters>(
       {
         sortedControlPoints,
-        window: range,
+        window: defaultDataTypeRange[DataType.UINT8],
         defaultColor: vec3.fromValues(0, 0, 0),
         channel: [],
       },
@@ -59,8 +58,7 @@ describe("lerpBetweenControlPoints", () => {
   );
   it("returns transparent black when given no control points for base classes", () => {
     const controlPoints: ControlPoint[] = [];
-    const range = defaultDataTypeRange[DataType.UINT8];
-    const sortedControlPoints = new SortedControlPoints(controlPoints, range);
+    const sortedControlPoints = new SortedControlPoints(controlPoints, DataType.UINT8);
     const lookupTable = new LookupTable(FIXED_TRANSFER_FUNCTION_LENGTH);
     lookupTable.updateFromControlPoints(sortedControlPoints);
 
@@ -77,8 +75,13 @@ describe("lerpBetweenControlPoints", () => {
       new ControlPoint(120, vec4.fromValues(21, 22, 254, 210)),
     ];
     const transferFunction = makeTransferFunction(controlPoints);
+    console.log(transferFunction);
     const output = transferFunction.lookupTable.outputValues;
-    const firstPointTransferIndex = transferFunction.toLookupTableIndex(0)!;
+    const firstPointTransferIndex =
+      transferFunction.sortedControlPoints.controlPoints[0].transferFunctionIndex(
+        transferFunction.sortedControlPoints.range,
+        transferFunction.size,
+      );
 
     expect(
       output
@@ -86,6 +89,7 @@ describe("lerpBetweenControlPoints", () => {
         .every((value) => value === 0),
     ).toBeTruthy();
     const endPiece = output.slice(NUM_COLOR_CHANNELS * firstPointTransferIndex);
+    console.log(firstPointTransferIndex, endPiece);
     const color = controlPoints[0].outputColor;
     expect(
       endPiece.every(
@@ -94,6 +98,12 @@ describe("lerpBetweenControlPoints", () => {
     ).toBeTruthy();
   });
   it("correctly interpolates between three control points", () => {
+    function toLookupTableIndex(transferFunction: TransferFunction, index: number) {
+      return transferFunction.sortedControlPoints.controlPoints[index].transferFunctionIndex(
+        transferFunction.sortedControlPoints.range,
+        transferFunction.size,
+      );
+    }
     const controlPoints: ControlPoint[] = [
       new ControlPoint(140, vec4.fromValues(0, 0, 0, 0)),
       new ControlPoint(120, vec4.fromValues(21, 22, 254, 210)),
@@ -101,9 +111,9 @@ describe("lerpBetweenControlPoints", () => {
     ];
     const transferFunction = makeTransferFunction(controlPoints);
     const output = transferFunction.lookupTable.outputValues;
-    const firstPointTransferIndex = transferFunction.toLookupTableIndex(0)!;
-    const secondPointTransferIndex = transferFunction.toLookupTableIndex(1)!;
-    const thirdPointTransferIndex = transferFunction.toLookupTableIndex(2)!;
+    const firstPointTransferIndex = toLookupTableIndex(transferFunction, 0);
+    const secondPointTransferIndex = toLookupTableIndex(transferFunction, 1);
+    const thirdPointTransferIndex = toLookupTableIndex(transferFunction, 2);
     const size = transferFunction.size;
     const range = transferFunction.range as [number, number];
     expect(firstPointTransferIndex).toBe(
@@ -210,7 +220,7 @@ describe("compute transfer function on GPU", () => {
         new ControlPoint(range[0], vec4.fromValues(0, 0, 0, 0)),
         new ControlPoint(range[1], vec4.fromValues(255, 255, 255, 255)),
       ],
-      range,
+      dataType,
     );
     it(`computes transfer function between transparent black and opaque white on GPU for ${DataType[dataType]}`, () => {
       const shaderType = getShaderType(dataType);

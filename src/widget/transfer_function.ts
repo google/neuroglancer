@@ -40,6 +40,7 @@ import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
   computeLerp,
+  defaultDataTypeRange,
   parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
@@ -160,6 +161,8 @@ export class ControlPoint {
     dataRange: DataTypeInterval,
     transferFunctionSize: number,
   ): number {
+    if (dataRange[0] === dataRange[1]) {
+    }
     return Math.floor(
       this.normalizedInput(dataRange) * (transferFunctionSize - 1),
     );
@@ -183,13 +186,14 @@ export class ControlPoint {
 }
 
 export class SortedControlPoints {
+  public range: DataTypeInterval;
   constructor(
     public controlPoints: ControlPoint[] = [],
-    public range: DataTypeInterval,
+    public dataType: DataType,
     private autoComputeRange: boolean = true,
   ) {
     this.controlPoints = controlPoints;
-    this.range = range;
+    this.range = defaultDataTypeRange[dataType];
     this.sortAndComputeRange();
   }
   get length() {
@@ -240,17 +244,24 @@ export class SortedControlPoints {
   }
   sortAndComputeRange() {
     if (this.controlPoints.length == 0) {
+      this.range = defaultDataTypeRange[this.dataType];
       return;
     }
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
     if (this.autoComputeRange) {
-      // TODO (SKM) fix panel repr for length = 1
-      this.range = [
-        this.controlPoints[0].inputValue,
-        this.controlPoints[this.controlPoints.length - 1].inputValue,
-      ] as DataTypeInterval;
+      if (this.controlPoints.length === 1) {
+        this.range = [
+          this.controlPoints[0].inputValue,
+          defaultDataTypeRange[this.dataType][1],
+        ] as DataTypeInterval;
+      } else {
+        this.range = [
+          this.controlPoints[0].inputValue,
+          this.controlPoints[this.controlPoints.length - 1].inputValue,
+        ] as DataTypeInterval;
+      }
     }
   }
   updateRange(newRange: DataTypeInterval) {
@@ -258,7 +269,12 @@ export class SortedControlPoints {
     this.sortAndComputeRange();
   }
   copy() {
-    const copy = new SortedControlPoints([], this.range, this.autoComputeRange);
+    const copy = new SortedControlPoints(
+      [],
+      this.dataType,
+      this.autoComputeRange,
+    );
+    copy.range = this.range;
     copy.controlPoints = this.controlPoints.map((point) =>
       ControlPoint.copyFrom(point),
     );
@@ -357,7 +373,6 @@ export class LookupTable {
  */
 export class TransferFunction extends RefCounted {
   lookupTable: LookupTable;
-  sortedControlPoints: SortedControlPoints;
   constructor(
     public dataType: DataType,
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
@@ -365,22 +380,10 @@ export class TransferFunction extends RefCounted {
   ) {
     super();
     this.lookupTable = new LookupTable(size);
-    this.sortedControlPoints = this.trackable.value.sortedControlPoints;
     this.updateLookupTable();
   }
-  /** The index of the vec4 in the lookup table corresponding to the given control point. Supports negative indexing */
-  toLookupTableIndex(
-    controlPointIndex: number,
-    rollIndex: boolean = true,
-  ): number | undefined {
-    let index = controlPointIndex;
-    if (rollIndex && index < 0) {
-      index = this.sortedControlPoints.controlPoints.length + controlPointIndex;
-    }
-    return this.sortedControlPoints.controlPoints[index]?.transferFunctionIndex(
-      this.sortedControlPoints.range,
-      this.lookupTable.lookupTableSize,
-    );
+  get sortedControlPoints() {
+    return this.trackable.value.sortedControlPoints;
   }
   updateLookupTable() {
     this.lookupTable.updateFromControlPoints(this.sortedControlPoints);
@@ -1404,8 +1407,14 @@ class TransferFunctionWidget extends Tab {
         this.updateControlPointsAndDraw();
       }),
     );
-    updateInputBoundValue(this.window.inputs[0], this.trackable.value.window[0]);
-    updateInputBoundValue(this.window.inputs[1], this.trackable.value.window[1]);
+    updateInputBoundValue(
+      this.window.inputs[0],
+      this.trackable.value.window[0],
+    );
+    updateInputBoundValue(
+      this.window.inputs[1],
+      this.trackable.value.window[1],
+    );
   }
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();
