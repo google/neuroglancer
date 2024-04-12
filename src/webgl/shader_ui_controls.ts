@@ -76,8 +76,6 @@ import {
 } from "#src/widget/transfer_function.js";
 
 // TODO (SKM) - remove temp
-const TRANSFER_FUNCTION_LENGTH = 512;
-
 export interface ShaderSliderControl {
   type: "slider";
   valueType: "int" | "uint" | "float";
@@ -1693,13 +1691,11 @@ function setControlInShader(
       // Value is hard-coded in shader.
       break;
     case "transferFunction":
-      // TODO (SKM) - support variable length
       enableTransferFunctionShader(
         shader,
         uName,
         control.dataType,
         value.sortedControlPoints,
-        TRANSFER_FUNCTION_LENGTH,
       );
   }
 }

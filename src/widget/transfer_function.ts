@@ -1479,7 +1479,7 @@ export function enableTransferFunctionShader(
   name: string,
   dataType: DataType,
   sortedControlPoints: SortedControlPoints,
-  lookupTableSize: number,
+  lookupTableSize: number = defaultTransferFunctionSizes[dataType],
 ) {
   const { gl } = shader;
   const texture = shader.transferFunctionTextures.get(

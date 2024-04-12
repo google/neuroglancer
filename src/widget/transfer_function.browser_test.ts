@@ -252,7 +252,6 @@ val5 = uTransferFunctionEnd_doTransferFunction;
               "doTransferFunction",
               dataType,
               controlPoints,
-              textureSizes[dataType],
             );
             tester.execute({ inputValue: point });
             const values = tester.values;
