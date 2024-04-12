@@ -2180,7 +2180,7 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
     body.appendChild(submitIcon);
     const activeGroupIndicator = document.createElement("div");
     activeGroupIndicator.className = "activeGroupIndicator";
-    activeGroupIndicator.innerHTML = "Active Group: ";
+    activeGroupIndicator.innerText = "Active Group: ";
     body.appendChild(activeGroupIndicator);
 
     const { displayState } = this.layer;
