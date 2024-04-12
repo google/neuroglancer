@@ -65,7 +65,7 @@ export class StatusMessage {
     }
   }
   setHTML(text: string, makeVisible?: boolean) {
-    this.element.innerHTML = text;
+    this.element.innerText = text;
     if (makeVisible) {
       this.setVisible(true);
     }
