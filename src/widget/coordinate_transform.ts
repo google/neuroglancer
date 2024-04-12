@@ -116,7 +116,7 @@ function makeScaleElement() {
   cellElement.appendChild(inputElement);
   const suggestionElement = document.createElement("div");
   const suggestionArrow = document.createElement("span");
-  suggestionArrow.innerHTML = svg_updateArrow;
+  suggestionArrow.innerText = svg_updateArrow;
   suggestionElement.appendChild(suggestionArrow);
   const textNode = document.createTextNode("");
   suggestionElement.appendChild(textNode);
