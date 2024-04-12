@@ -215,8 +215,19 @@ export class SortedControlPoints {
   updatePoint(index: number, controlPoint: ControlPoint): number {
     this.controlPoints[index] = controlPoint;
     const value = controlPoint.inputValue;
+    const outputValue = controlPoint.outputColor;
     this.sortAndComputeRange();
-    return this.findNearestControlPointIndex(value);
+    // If two points end up with the same x value, return the index of
+    // the original point after sorting
+    for (let i = 0; i < this.controlPoints.length; ++i) {
+      if (
+        this.controlPoints[i].inputValue === value &&
+        arraysEqual(this.controlPoints[i].outputColor, outputValue)
+      ) {
+        return i;
+      }
+    }
+    return -1;
   }
   updatePointColor(index: number, color: vec4 | vec3) {
     let outputColor = vec4.create();
@@ -260,6 +271,9 @@ export class SortedControlPoints {
           this.controlPoints[this.controlPoints.length - 1].inputValue,
         ] as DataTypeInterval;
       }
+    }
+    if (this.range[0] === this.range[1]) {
+      this.range = defaultDataTypeRange[this.dataType];
     }
   }
   updateRange(newRange: DataTypeInterval) {
