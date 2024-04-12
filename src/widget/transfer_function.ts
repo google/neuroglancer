@@ -126,8 +126,6 @@ export interface ControlPointTextureOptions {
   lookupTableSize: number;
 }
 
-// TODO (skm) - window currently doesn't work. Need to update round bound inputs
-// TODO (skm) - these params seem a little odd, maybe the some can be computed FROM the trackable instead
 export interface TransferFunctionParameters {
   sortedControlPoints: SortedControlPoints;
   window: DataTypeInterval;
@@ -260,6 +258,12 @@ export class SortedControlPoints {
     this.range = newRange;
     this.sortAndComputeRange();
   }
+  copy() {
+    const controlPoints = this.controlPoints.map((point) =>
+      ControlPoint.copyFrom(point),
+    );
+    return new SortedControlPoints(controlPoints, this.range);
+  }
 }
 
 export class LookupTable {
@@ -340,6 +344,11 @@ export class LookupTable {
   }
   static equal(a: LookupTable, b: LookupTable) {
     return arraysEqual(a.outputValues, b.outputValues);
+  }
+  copy() {
+    const copy = new LookupTable(this.lookupTableSize);
+    copy.outputValues.set(this.outputValues);
+    return copy;
   }
 }
 
@@ -427,6 +436,9 @@ abstract class BaseLookupTexture extends RefCounted {
   abstract createLookupTable(
     options: LookupTableTextureOptions | ControlPointTextureOptions,
   ): LookupTable;
+  abstract setOptions(
+    options: LookupTableTextureOptions | ControlPointTextureOptions,
+  ): void;
   updateAndActivate(
     options: LookupTableTextureOptions | ControlPointTextureOptions,
   ) {
@@ -452,10 +464,6 @@ abstract class BaseLookupTexture extends RefCounted {
     if (texture === null) {
       texture = this.texture = gl.createTexture();
     }
-    // TODO (SKM) remove
-    // if (!this.optionsEqual(options)) {
-    //   console.log("update texture");
-    // }
     // Update the texture
     activateAndBindTexture(gl, options.textureUnit);
     setRawTextureParameters(gl);
@@ -474,10 +482,7 @@ abstract class BaseLookupTexture extends RefCounted {
     );
 
     // Update the prior options to the current options for future comparisons
-    // Make a copy of the options for the purpose of comparison
-    // TODO(skm) is this copy needed?
-    this.priorOptions = { ...options };
-
+    this.setOptions(options);
     return this.width * this.height;
   }
   setTextureWidthAndHeightFromSize(size: number) {
@@ -505,24 +510,23 @@ class DirectLookupTableTexture extends BaseLookupTexture {
   optionsEqual(newOptions: LookupTableTextureOptions) {
     const existingOptions = this.priorOptions;
     if (existingOptions === undefined) return false;
-    let lookupTableEqual = true;
-    if (
-      existingOptions.lookupTable !== undefined &&
-      newOptions.lookupTable !== undefined
-    ) {
-      lookupTableEqual = LookupTable.equal(
-        existingOptions.lookupTable,
-        newOptions.lookupTable,
-      );
-    }
+    const lookupTableEqual = LookupTable.equal(
+      existingOptions.lookupTable,
+      newOptions.lookupTable,
+    );
     const textureUnitEqual =
       existingOptions.textureUnit === newOptions.textureUnit;
-
     return lookupTableEqual && textureUnitEqual;
   }
   createLookupTable(options: LookupTableTextureOptions): LookupTable {
     this.setTextureWidthAndHeightFromSize(options.lookupTable.lookupTableSize);
     return options.lookupTable;
+  }
+  setOptions(options: LookupTableTextureOptions) {
+    this.priorOptions = {
+      ...options,
+      lookupTable: options.lookupTable.copy(),
+    };
   }
 }
 
@@ -545,6 +549,12 @@ export class ControlPointTexture extends BaseLookupTexture {
       existingOptions.textureUnit === newOptions.textureUnit;
     const dataTypeEqual = existingOptions.dataType === newOptions.dataType;
     return controlPointsEqual && textureUnitEqual && dataTypeEqual;
+  }
+  setOptions(options: ControlPointTextureOptions) {
+    this.priorOptions = {
+      ...options,
+      sortedControlPoints: options.sortedControlPoints.copy(),
+    };
   }
   createLookupTable(options: ControlPointTextureOptions): LookupTable {
     const lookupTableSize = this.ensureTextureSize(options.lookupTableSize);
