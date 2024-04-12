@@ -88,7 +88,6 @@ const transferFunctionSamplerTextureUnit = Symbol(
   "transferFunctionSamplerTexture",
 );
 
-// TODO consider increasing these if textures are packed
 const defaultTransferFunctionSizes: Record<DataType, number> = {
   [DataType.UINT8]: 0xff,
   [DataType.INT8]: 0xff,
@@ -101,7 +100,7 @@ const defaultTransferFunctionSizes: Record<DataType, number> = {
 };
 
 /**
- * Options to update a lookup table texture
+ * Options to update a lookup table texture with a direct lookup table
  */
 export interface LookupTableTextureOptions {
   /** A lookup table is a series of color values (0 - 255) for each index in the transfer function texture
@@ -112,8 +111,7 @@ export interface LookupTableTextureOptions {
 }
 
 /**
- * Options to update a transfer function texture
- * TODO should this be sorted control points?
+ * Options to update a transfer function texture using control points
  */
 export interface ControlPointTextureOptions {
   /** controlPoints will be used to generate a lookup table as a first step */
@@ -500,7 +498,6 @@ abstract class BaseLookupTexture extends RefCounted {
 
 /**
  * Represent the underlying transfer function lookup table as a texture
- * TODO(skm) consider if height can be used for more efficiency
  */
 class DirectLookupTableTexture extends BaseLookupTexture {
   texture: WebGLTexture | null = null;
@@ -1016,14 +1013,13 @@ out_color = tempColor * alpha;
 }
 
 /**
- * Create the bounds on the UI range inputs for the transfer function widget
- * TODO this should now be window
+ * Create the bounds on the UI window inputs for the transfer function widget
  */
-function createRangeBoundInputs(
+function createWindowBoundInputs(
   dataType: DataType,
   model: WatchableValueInterface<TransferFunctionParameters>,
 ) {
-  function createRangeBoundInput(endpoint: number): HTMLInputElement {
+  function createWindowBoundInput(endpoint: number): HTMLInputElement {
     const e = document.createElement("input");
     e.addEventListener("focus", () => {
       e.select();
@@ -1034,13 +1030,13 @@ function createRangeBoundInputs(
     e.autocomplete = "off";
     e.title = `${
       endpoint === 0 ? "Lower" : "Upper"
-    } bound for transfer function range`;
+    } window for transfer function`;
     return e;
   }
 
   const container = document.createElement("div");
   container.classList.add("neuroglancer-transfer-function-range-bounds");
-  const inputs = [createRangeBoundInput(0), createRangeBoundInput(1)];
+  const inputs = [createWindowBoundInput(0), createWindowBoundInput(1)];
   for (let endpointIndex = 0; endpointIndex < 2; ++endpointIndex) {
     const input = inputs[endpointIndex];
     input.addEventListener("input", () => {
@@ -1357,8 +1353,7 @@ class TransferFunctionWidget extends Tab {
     new TransferFunctionPanel(this),
   );
 
-  // TODO window
-  range = createRangeBoundInputs(this.dataType, this.trackable);
+  window = createWindowBoundInputs(this.dataType, this.trackable);
   constructor(
     visibility: WatchableVisibilityPriority,
     public display: DisplayContext,
@@ -1371,8 +1366,8 @@ class TransferFunctionWidget extends Tab {
     element.appendChild(this.transferFunctionPanel.element);
 
     // Range bounds element
-    element.appendChild(this.range.container);
-    this.range.container.dispatchEvent(new Event("change"));
+    element.appendChild(this.window.container);
+    this.window.container.dispatchEvent(new Event("change"));
 
     // Color picker element
     const colorPickerDiv = document.createElement("div");
@@ -1409,8 +1404,8 @@ class TransferFunctionWidget extends Tab {
         this.updateControlPointsAndDraw();
       }),
     );
-    updateInputBoundValue(this.range.inputs[0], this.trackable.value.window[0]);
-    updateInputBoundValue(this.range.inputs[1], this.trackable.value.window[1]);
+    updateInputBoundValue(this.window.inputs[0], this.trackable.value.window[0]);
+    updateInputBoundValue(this.window.inputs[1], this.trackable.value.window[1]);
   }
   updateView() {
     this.transferFunctionPanel.scheduleRedraw();

@@ -75,7 +75,6 @@ import {
   ControlPoint,
 } from "#src/widget/transfer_function.js";
 
-// TODO (SKM) - remove temp
 export interface ShaderSliderControl {
   type: "slider";
   valueType: "int" | "uint" | "float";
@@ -603,7 +602,6 @@ function parseTransferFunctionDirective(
     [],
     dataType !== undefined ? defaultDataTypeRange[dataType] : [0, 1],
   );
-  // TODO (skm) - support parsing window and size
   let specifedPoints = false;
   if (valueType !== "transferFunction") {
     errors.push("type must be transferFunction");
@@ -668,7 +666,6 @@ function parseTransferFunctionDirective(
   if (errors.length > 0) {
     return { errors };
   }
-  // TODO (skm) - support parsing window and size
   return {
     control: {
       type: "transferFunction",
@@ -1073,38 +1070,6 @@ function parseTransferFunctionControlPoints(
       );
     }
     const inputValue = parseDataTypeValue(dataType, x[0]);
-
-    // TODO skm think above function replaces the below
-    // // Validate values
-    // let inputValue: number | Uint64;
-    // if (dataType !== DataType.UINT64) {
-    //   const defaultRange = defaultDataTypeRange[dataType] as [number, number];
-    //   inputValue = verifyFiniteFloat(x[0]);
-    //   if (inputValue < defaultRange[0] || inputValue > defaultRange[1]) {
-    //     throw new Error(
-    //       `Expected x in range [${defaultRange[0]}, ${
-    //         defaultRange[1]
-    //       }], but received: ${JSON.stringify(x[0])}`,
-    //     );
-    //   }
-    // } else {
-    //   const defaultRange = defaultDataTypeRange[dataType] as [Uint64, Uint64];
-    //   if (typeof x[0] === "string") {
-    //     inputValue = Uint64.parseString(x[0]);
-    //   } else {
-    //     inputValue = Uint64.fromNumber(x[0]);
-    //   }
-    //   if (
-    //     Uint64.less(inputValue, defaultRange[0]) ||
-    //     Uint64.less(defaultRange[1], inputValue)
-    //   ) {
-    //     throw new Error(
-    //       `Expected x in range [${defaultRange[0]}, ${
-    //         defaultRange[1]
-    //       }], but received: ${JSON.stringify(x[0])}`,
-    //     );
-    //   }
-    // }
 
     if (x[1].length !== 7 || x[1][0] !== "#") {
       throw new Error(
