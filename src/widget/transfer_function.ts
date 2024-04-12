@@ -253,10 +253,6 @@ export class SortedControlPoints {
     );
   }
   private sortAndComputeRange() {
-    if (this.controlPoints.length == 0) {
-      this.range = defaultDataTypeRange[this.dataType];
-      return;
-    }
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
@@ -264,7 +260,10 @@ export class SortedControlPoints {
   }
   private computeRange() {
     if (this.autoComputeRange) {
-      if (this.controlPoints.length === 1) {
+      if (this.controlPoints.length == 0) {
+        this.range = defaultDataTypeRange[this.dataType];
+      }
+      else if (this.controlPoints.length === 1) {
         this.range = [
           this.controlPoints[0].inputValue,
           defaultDataTypeRange[this.dataType][1],
