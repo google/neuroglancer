@@ -211,6 +211,7 @@ export class SortedControlPoints {
   }
   removePoint(index: number) {
     this.controlPoints.splice(index, 1);
+    this.computeRange();
   }
   updatePoint(index: number, controlPoint: ControlPoint): number {
     this.controlPoints[index] = controlPoint;
@@ -251,7 +252,7 @@ export class SortedControlPoints {
       (a, b) => a - b,
     );
   }
-  sortAndComputeRange() {
+  private sortAndComputeRange() {
     if (this.controlPoints.length == 0) {
       this.range = defaultDataTypeRange[this.dataType];
       return;
@@ -259,6 +260,9 @@ export class SortedControlPoints {
     this.controlPoints.sort(
       (a, b) => a.normalizedInput(this.range) - b.normalizedInput(this.range),
     );
+    this.computeRange();
+  }
+  private computeRange() {
     if (this.autoComputeRange) {
       if (this.controlPoints.length === 1) {
         this.range = [
