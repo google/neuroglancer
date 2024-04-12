@@ -598,7 +598,7 @@ void main() {
             type: "transferFunction",
             dataType: DataType.UINT8,
             default: {
-              sortedControlPoints: new SortedControlPoints([], range),
+              sortedControlPoints: new SortedControlPoints([], DataType.UINT8),
               channel: [],
               defaultColor: vec3.fromValues(1, 1, 1),
               window: range,
@@ -635,7 +635,7 @@ void main() {
             type: "transferFunction",
             dataType: DataType.UINT16,
             default: {
-              sortedControlPoints: new SortedControlPoints([], range),
+              sortedControlPoints: new SortedControlPoints([], DataType.UINT16),
               channel: [0],
               defaultColor: vec3.fromValues(1, 1, 1),
               window: range,
@@ -672,7 +672,7 @@ void main() {
             type: "transferFunction",
             dataType: DataType.UINT64,
             default: {
-              sortedControlPoints: new SortedControlPoints([], range),
+              sortedControlPoints: new SortedControlPoints([], DataType.UINT64),
               channel: [],
               defaultColor: vec3.fromValues(1, 1, 1),
               window: range,
@@ -709,7 +709,10 @@ void main() {
             type: "transferFunction",
             dataType: DataType.FLOAT32,
             default: {
-              sortedControlPoints: new SortedControlPoints([], range),
+              sortedControlPoints: new SortedControlPoints(
+                [],
+                DataType.FLOAT32,
+              ),
               channel: [1],
               defaultColor: vec3.fromValues(1, 1, 1),
               window: range,
@@ -746,7 +749,10 @@ void main() {
             type: "transferFunction",
             dataType: DataType.FLOAT32,
             default: {
-              sortedControlPoints: new SortedControlPoints([], range),
+              sortedControlPoints: new SortedControlPoints(
+                [],
+                DataType.FLOAT32,
+              ),
               channel: [1],
               defaultColor: vec3.fromValues(1, 1, 1),
               window: range,
@@ -783,7 +789,10 @@ void main() {
             type: "transferFunction",
             dataType: DataType.FLOAT32,
             default: {
-              sortedControlPoints: new SortedControlPoints([], range),
+              sortedControlPoints: new SortedControlPoints(
+                [],
+                DataType.FLOAT32,
+              ),
               channel: [1, 2],
               defaultColor: vec3.fromValues(1, 1, 1),
               window: range,
@@ -809,8 +818,10 @@ void main() {
       new ControlPoint(200, vec4.fromValues(0, 255, 0, 26)),
       new ControlPoint(100, vec4.fromValues(255, 0, 0, 128)),
     ];
-    const range = defaultDataTypeRange[DataType.UINT32];
-    const sortedControlPoints = new SortedControlPoints(controlPoints, range);
+    const sortedControlPoints = new SortedControlPoints(
+      controlPoints,
+      DataType.UINT32,
+    );
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT32, channelRank: 0 },
@@ -848,7 +859,6 @@ void main() {
 void main() {
 }
 `;
-    const range = defaultDataTypeRange[DataType.UINT64];
     const controlPoints = [
       new ControlPoint(
         Uint64.parseString("9223372111111111111"),
@@ -860,7 +870,10 @@ void main() {
         vec4.fromValues(0, 255, 0, 26),
       ),
     ];
-    const sortedControlPoints = new SortedControlPoints(controlPoints, range);
+    const sortedControlPoints = new SortedControlPoints(
+      controlPoints,
+      DataType.UINT64,
+    );
     expect(
       parseShaderUiControls(code, {
         imageData: { dataType: DataType.UINT64, channelRank: 0 },
@@ -909,7 +922,7 @@ void main() {
     ];
     const sortedControlPoints = new SortedControlPoints(
       controlPoints,
-      [0, 255],
+      DataType.UINT8,
     );
     expect(
       parseShaderUiControls(code, {
@@ -968,7 +981,7 @@ void main() {
           new ControlPoint(0, vec4.fromValues(0, 0, 0, 0)),
           new ControlPoint(150, vec4.fromValues(255, 255, 255, 255)),
         ],
-        [0, 255],
+        DataType.UINT8,
       ),
       channel: [],
       defaultColor: vec3.fromValues(1, 0, 0),
@@ -1001,7 +1014,7 @@ void main() {
           vec4.fromValues(255, 255, 255, 255),
         ),
       ],
-      defaultDataTypeRange[DataType.UINT64],
+      DataType.UINT64,
     );
     transferFunctionParameters.value = {
       ...default_val,

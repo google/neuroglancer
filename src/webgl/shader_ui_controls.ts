@@ -58,7 +58,7 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import { Uint64 } from "#src/util/uint64.js";
+import type { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";

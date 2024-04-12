@@ -161,8 +161,6 @@ export class ControlPoint {
     dataRange: DataTypeInterval,
     transferFunctionSize: number,
   ): number {
-    if (dataRange[0] === dataRange[1]) {
-    }
     return Math.floor(
       this.normalizedInput(dataRange) * (transferFunctionSize - 1),
     );
