@@ -78,7 +78,7 @@ import type {
 import { PositionWidget } from "#src/widget/position_widget.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-const TRANSFER_FUNCTION_PANEL_SIZE = 1024;
+const TRANSFER_FUNCTION_PANEL_SIZE = 512;
 export const NUM_COLOR_CHANNELS = 4;
 const POSITION_VALUES_PER_LINE = 4; // x1, y1, x2, y2
 const CONTROL_POINT_X_GRAB_DISTANCE = 0.05;
@@ -254,7 +254,6 @@ export class SortedControlPoints {
         this.controlPoints[0].inputValue,
         this.controlPoints[this.controlPoints.length - 1].inputValue,
       ] as DataTypeInterval;
-      console.log("range", this.range);
     }
   }
   updateRange(newRange: DataTypeInterval) {
@@ -353,9 +352,10 @@ export class TransferFunction extends RefCounted {
   constructor(
     public dataType: DataType,
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
+    size: number = defaultTransferFunctionSizes[dataType],
   ) {
     super();
-    this.lookupTable = new LookupTable(defaultTransferFunctionSizes[dataType]);
+    this.lookupTable = new LookupTable(size);
     this.sortedControlPoints = this.trackable.value.sortedControlPoints;
     this.updateLookupTable();
   }
@@ -409,8 +409,8 @@ export class TransferFunction extends RefCounted {
 
 abstract class BaseLookupTexture extends RefCounted {
   texture: WebGLTexture | null = null;
-  width: number;
-  height = 1;
+  protected width: number;
+  protected height = 1;
   protected priorOptions:
     | LookupTableTextureOptions
     | ControlPointTextureOptions
@@ -443,7 +443,6 @@ abstract class BaseLookupTexture extends RefCounted {
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     }
-
     // If the texture is already up to date, just bind and activate it
     if (texture !== null && this.optionsEqual(options)) {
       activateAndBindTexture(gl, options.textureUnit);
@@ -453,6 +452,10 @@ abstract class BaseLookupTexture extends RefCounted {
     if (texture === null) {
       texture = this.texture = gl.createTexture();
     }
+    // TODO (SKM) remove
+    // if (!this.optionsEqual(options)) {
+    //   console.log("update texture");
+    // }
     // Update the texture
     activateAndBindTexture(gl, options.textureUnit);
     setRawTextureParameters(gl);
@@ -477,7 +480,9 @@ abstract class BaseLookupTexture extends RefCounted {
 
     return this.width * this.height;
   }
-
+  setTextureWidthAndHeightFromSize(size: number) {
+    this.width = size;
+  }
   disposed() {
     this.gl?.deleteTexture(this.texture);
     this.texture = null;
@@ -516,6 +521,7 @@ class DirectLookupTableTexture extends BaseLookupTexture {
     return lookupTableEqual && textureUnitEqual;
   }
   createLookupTable(options: LookupTableTextureOptions): LookupTable {
+    this.setTextureWidthAndHeightFromSize(options.lookupTable.lookupTableSize);
     return options.lookupTable;
   }
 }
@@ -549,9 +555,6 @@ export class ControlPointTexture extends BaseLookupTexture {
     lookupTable.updateFromControlPoints(sortedControlPoints);
     return lookupTable;
   }
-  setTextureWidthAndHeightFromSize(size: number) {
-    this.width = size;
-  }
   ensureTextureSize(size: number) {
     const gl = this.gl;
     if (gl === null) return;
@@ -579,7 +582,11 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     return 1;
   }
   transferFunction = this.registerDisposer(
-    new TransferFunction(this.parent.dataType, this.parent.trackable),
+    new TransferFunction(
+      this.parent.dataType,
+      this.parent.trackable,
+      TRANSFER_FUNCTION_PANEL_SIZE,
+    ),
   );
   controller = this.registerDisposer(
     new TransferFunctionController(
