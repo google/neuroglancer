@@ -14,80 +14,86 @@
  * limitations under the License.
  */
 
+import type { AnnotationGeometryChunkSpecification } from "#src/annotation/base.js";
+import {
+  AnnotationGeometryChunkSource,
+  MultiscaleAnnotationSource,
+} from "#src/annotation/frontend_source.js";
 import {
   AnnotationType,
   makeDataBoundsBoundingBoxAnnotationSet,
   parseAnnotationPropertySpecs,
-} from "#/annotation";
-import { AnnotationGeometryChunkSpecification } from "#/annotation/base";
-import {
-  AnnotationGeometryChunkSource,
-  MultiscaleAnnotationSource,
-} from "#/annotation/frontend_source";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
-import {
+} from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
+import type {
   BoundingBox,
   CoordinateSpace,
+} from "#src/coordinate_transform.js";
+import {
   coordinateSpaceFromJson,
   emptyValidCoordinateSpace,
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
-import {
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
+import type {
   CompleteUrlOptions,
   ConvertLegacyUrlOptions,
   DataSource,
-  DataSourceProvider,
   DataSubsourceEntry,
   GetDataSourceOptions,
   NormalizeUrlOptions,
-  RedirectError,
-} from "#/datasource";
+} from "#src/datasource/index.js";
+import { DataSourceProvider, RedirectError } from "#src/datasource/index.js";
+import type {
+  MultiscaleMeshMetadata,
+  ShardingParameters,
+  SkeletonMetadata,
+} from "#src/datasource/precomputed/base.js";
 import {
   AnnotationSourceParameters,
   AnnotationSpatialIndexSourceParameters,
   DataEncoding,
   IndexedSegmentPropertySourceParameters,
   MeshSourceParameters,
-  MultiscaleMeshMetadata,
   MultiscaleMeshSourceParameters,
   ShardingHashFunction,
-  ShardingParameters,
-  SkeletonMetadata,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/precomputed/base";
-import { VertexPositionFormat } from "#/mesh/base";
-import { MeshSource, MultiscaleMeshSource } from "#/mesh/frontend";
-import {
-  IndexedSegmentPropertySource,
+} from "#src/datasource/precomputed/base.js";
+import { VertexPositionFormat } from "#src/mesh/base.js";
+import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
+import type {
   InlineSegmentProperty,
   InlineSegmentPropertyMap,
+} from "#src/segmentation_display_state/property_map.js";
+import {
+  IndexedSegmentPropertySource,
   normalizeInlineSegmentPropertyMap,
   SegmentPropertyMap,
-} from "#/segmentation_display_state/property_map";
-import { VertexAttributeInfo } from "#/skeleton/base";
-import { SkeletonSource } from "#/skeleton/frontend";
-import { makeSliceViewChunkSpecification } from "#/sliceview/base";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/segmentation_display_state/property_map.js";
+import type { VertexAttributeInfo } from "#src/skeleton/base.js";
+import { SkeletonSource } from "#src/skeleton/frontend.js";
+import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { transposeNestedArrays } from "#/util/array";
-import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#/util/data_type";
-import { Borrowed } from "#/util/disposable";
-import { mat4, vec3 } from "#/util/geom";
-import { completeHttpPath } from "#/util/http_path_completion";
-import { isNotFoundError, responseJson } from "#/util/http_request";
+} from "#src/sliceview/volume/frontend.js";
+import { transposeNestedArrays } from "#src/util/array.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { mat4, vec3 } from "#src/util/geom.js";
+import { completeHttpPath } from "#src/util/http_path_completion.js";
+import { isNotFoundError, responseJson } from "#src/util/http_request.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -105,16 +111,18 @@ import {
   verifyString,
   verifyStringArray,
   verifyOptionalBoolean,
-} from "#/util/json";
-import * as matrix from "#/util/matrix";
-import { getObjectId } from "#/util/object_id";
+} from "#src/util/json.js";
+import * as matrix from "#src/util/matrix.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type {
+  SpecialProtocolCredentials,
+  SpecialProtocolCredentialsProvider,
+} from "#src/util/special_protocol_request.js";
 import {
   cancellableFetchSpecialOk,
   parseSpecialUrl,
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#/util/special_protocol_request";
-import { Uint64 } from "#/util/uint64";
+} from "#src/util/special_protocol_request.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export class PrecomputedVolumeChunkSource extends WithParameters(
   WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),

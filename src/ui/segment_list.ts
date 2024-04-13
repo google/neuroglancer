@@ -14,85 +14,85 @@
  * limitations under the License.
  */
 
-import "./segment_list.css";
+import "#src/ui/segment_list.css";
 
-import type { DebouncedFunc } from "lodash";
-import debounce from "lodash/debounce";
-import throttle from "lodash/throttle";
-import {
-  registerCallbackWhenSegmentationDisplayStateChanged,
-  SegmentationDisplayState,
-  SegmentWidgetWithExtraColumnsFactory,
-} from "#/segmentation_display_state/frontend";
-import {
-  changeTagConstraintInSegmentQuery,
-  executeSegmentQuery,
-  ExplicitIdQuery,
-  FilterQuery,
-  findQueryResultIntersectionSize,
-  forEachQueryResultSegmentIdGenerator,
-  InlineSegmentNumericalProperty,
-  isQueryUnconstrained,
-  NumericalPropertyConstraint,
-  parseSegmentQuery,
-  PreprocessedSegmentPropertyMap,
-  PropertyHistogram,
-  queryIncludesColumn,
-  QueryResult,
-  unparseSegmentQuery,
-  updatePropertyHistograms,
-} from "#/segmentation_display_state/property_map";
+import type { DebouncedFunc } from "lodash-es";
+import { debounce, throttle } from "lodash-es";
 import type {
   SegmentationUserLayer,
   SegmentationUserLayerGroupState,
-} from "#/segmentation_user_layer";
+} from "#src/layer/segmentation/index.js";
+import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import {
-  observeWatchable,
-  WatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { getDefaultSelectBindings } from "#/ui/default_input_event_bindings";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { ArraySpliceOp, getFixedOrderMergeSplices } from "#/util/array";
-import { setClipboard } from "#/util/clipboard";
-import { RefCounted } from "#/util/disposable";
-import { removeChildren, updateInputFieldWidth } from "#/util/dom";
+  registerCallbackWhenSegmentationDisplayStateChanged,
+  SegmentWidgetWithExtraColumnsFactory,
+} from "#src/segmentation_display_state/frontend.js";
+import type {
+  ExplicitIdQuery,
+  FilterQuery,
+  InlineSegmentNumericalProperty,
+  NumericalPropertyConstraint,
+  PreprocessedSegmentPropertyMap,
+  PropertyHistogram,
+  QueryResult,
+} from "#src/segmentation_display_state/property_map.js";
+import {
+  changeTagConstraintInSegmentQuery,
+  executeSegmentQuery,
+  findQueryResultIntersectionSize,
+  forEachQueryResultSegmentIdGenerator,
+  isQueryUnconstrained,
+  parseSegmentQuery,
+  queryIncludesColumn,
+  unparseSegmentQuery,
+  updatePropertyHistograms,
+} from "#src/segmentation_display_state/property_map.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { observeWatchable, WatchableValue } from "#src/trackable_value.js";
+import { getDefaultSelectBindings } from "#src/ui/default_input_event_bindings.js";
+import { SELECT_SEGMENTS_TOOLS_ID } from "#src/ui/segment_select_tools.js";
+import {
+  ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
+  ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
+} from "#src/ui/segment_split_merge_tools.js";
+import { makeToolButton } from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { ArraySpliceOp } from "#src/util/array.js";
+import { getFixedOrderMergeSplices } from "#src/util/array.js";
+import { setClipboard } from "#src/util/clipboard.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
 import {
   EventActionMap,
   KeyboardEventBinder,
   registerActionListener,
-} from "#/util/keyboard_bindings";
-import { MouseEventBinder } from "#/util/mouse_bindings";
-import { neverSignal, NullarySignal, Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
-import { CheckboxIcon } from "#/widget/checkbox_icon";
-import { makeCopyButton } from "#/widget/copy_button";
-import { DependentViewWidget } from "#/widget/dependent_view_widget";
-import { Tab } from "#/widget/tab_view";
-import { VirtualList, VirtualListSource } from "#/widget/virtual_list";
+} from "#src/util/keyboard_bindings.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   clampToInterval,
   computeInvlerp,
   dataTypeCompare,
-  DataTypeInterval,
   dataTypeIntervalEqual,
   getClampedInterval,
   getIntervalBoundsEffectiveFraction,
   parseDataTypeValue,
-} from "#/util/lerp";
+} from "#src/util/lerp.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { neverSignal, NullarySignal, Signal } from "#src/util/signal.js";
+import { Uint64 } from "#src/util/uint64.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { makeEyeButton } from "#src/widget/eye_button.js";
+import type { RangeAndWindowIntervals } from "#src/widget/invlerp.js";
 import {
   CdfController,
   getUpdatedRangeAndWindowParameters,
-  RangeAndWindowIntervals,
-} from "#/widget/invlerp";
-import { makeToolButton } from "#/ui/tool";
-import {
-  ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
-  ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
-} from "#/ui/segment_split_merge_tools";
-import { SELECT_SEGMENTS_TOOLS_ID } from "#/ui/segment_select_tools";
-import { makeEyeButton } from "#/widget/eye_button";
-import { makeStarButton } from "#/widget/star_button";
+} from "#src/widget/invlerp.js";
+import { makeStarButton } from "#src/widget/star_button.js";
+import { Tab } from "#src/widget/tab_view.js";
+import type { VirtualListSource } from "#src/widget/virtual_list.js";
+import { VirtualList } from "#src/widget/virtual_list.js";
 
 const tempUint64 = new Uint64();
 
@@ -725,7 +725,9 @@ class NumericalPropertiesSummary extends RefCounted {
               value as number,
             );
             this.bounds[boundType].changed.dispatch();
-          } catch {}
+          } catch {
+            // Ignore invalid input.
+          }
           updateInputBoundValue(
             e,
             this.bounds[boundType].value[propertyIndex][
@@ -988,12 +990,18 @@ function renderTagSummary(
   const filterQuery = queryResult.query as FilterQuery;
   const tagList = document.createElement("div");
   tagList.classList.add("neuroglancer-segment-query-result-tag-list");
-  for (const { tag, count } of tags) {
+  for (const { tag, count, desc } of tags) {
     const tagElement = document.createElement("div");
     tagElement.classList.add("neuroglancer-segment-query-result-tag");
     const tagName = document.createElement("span");
     tagName.classList.add("neuroglancer-segment-query-result-tag-name");
-    tagName.textContent = tag;
+    // if the tag is different than desc, show both
+    if (tag !== desc && desc !== undefined && desc !== "") {
+      tagName.textContent = tag + " (" + desc + ")";
+    } else {
+      tagName.textContent = tag;
+    }
+
     tagList.appendChild(tagElement);
     const included = filterQuery.includeTags.includes(tag);
     const excluded = filterQuery.excludeTags.includes(tag);

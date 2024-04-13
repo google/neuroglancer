@@ -17,8 +17,7 @@
 /**
  * @file Main entry point for default neuroglancer viewer.
  */
-import { setupDefaultViewer } from "#/ui/default_viewer_setup";
+import { setupDefaultViewer } from "#src/ui/default_viewer_setup.js";
+import "#src/util/google_tag_manager.js";
 
-window.addEventListener("DOMContentLoaded", () => {
-  setupDefaultViewer();
-});
+setupDefaultViewer();

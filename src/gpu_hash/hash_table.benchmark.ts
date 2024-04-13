@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import { HashSetUint64 } from "#/gpu_hash/hash_table";
-import { getRandomValues } from "#/util/random";
-import { Uint64 } from "#/util/uint64";
+import { describe, bench } from "vitest";
+import { HashSetUint64 } from "#src/gpu_hash/hash_table.js";
+import { getRandomValues } from "#src/util/random.js";
+import { Uint64 } from "#src/util/uint64.js";
 
-suite("gpu_hash/hash_table", () => {
+describe("gpu_hash/hash_table", () => {
   const ht = new HashSetUint64();
   const numValues = 100;
   const values = new Uint32Array(numValues * 2);
   const temp = new Uint64();
   getRandomValues(values);
-  benchmark("insert", () => {
+  bench("insert", () => {
     ht.clear();
     for (let i = 0, length = values.length; i < length; i += 2) {
       temp.low = values[i];

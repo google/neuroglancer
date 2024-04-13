@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-import { SingleTextureChunkFormat } from "#/sliceview/single_texture_chunk_format";
-import { defineChunkDataShaderAccess } from "#/sliceview/volume/frontend";
-import { getFortranOrderStrides } from "#/util/array";
-import { TypedArray } from "#/util/array";
-import { DataType } from "#/util/data_type";
-import { Disposable } from "#/util/disposable";
-import { vec3, vec3Key } from "#/util/geom";
-import { Uint64 } from "#/util/uint64";
-import { GL } from "#/webgl/context";
-import { textureTargetForSamplerType } from "#/webgl/shader";
-import {
-  fragmentShaderTest,
-  FragmentShaderTestOutputs,
-} from "#/webgl/shader_testing";
+import { it, expect } from "vitest";
+import type { SingleTextureChunkFormat } from "#src/sliceview/single_texture_chunk_format.js";
+import { defineChunkDataShaderAccess } from "#src/sliceview/volume/frontend.js";
+import type { TypedArray } from "#src/util/array.js";
+import { getFortranOrderStrides } from "#src/util/array.js";
+import { DataType } from "#src/util/data_type.js";
+import type { Disposable } from "#src/util/disposable.js";
+import { vec3, vec3Key } from "#src/util/geom.js";
+import type { Uint64 } from "#src/util/uint64.js";
+import type { GL } from "#src/webgl/context.js";
+import { textureTargetForSamplerType } from "#src/webgl/shader.js";
+import type { FragmentShaderTestOutputs } from "#src/webgl/shader_testing.js";
+import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
   dataType: DataType,
@@ -124,16 +123,15 @@ output${channel} = getDataValue(${channel});
             switch (dataType) {
               case DataType.UINT64: {
                 const result = values[`output${channel}`] as Uint64;
-                expect(result.low).toBe(rawData[curOffset * 2], `${msg} (low)`);
-                expect(result.high).toEqual(
+                expect([result.low, result.high], msg).toEqual([
+                  rawData[curOffset * 2],
                   rawData[curOffset * 2 + 1],
-                  `${msg} (high)`,
-                );
+                ]);
                 break;
               }
               default: {
                 const result = values[`output${channel}`];
-                expect(result).toBe(rawData[curOffset], msg);
+                expect(result, msg).toBe(rawData[curOffset]);
                 break;
               }
             }

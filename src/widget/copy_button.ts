@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import svg_copy from "ikonate/icons/copy.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_copy from "ikonate/icons/copy.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeCopyButton(options: MakeIconOptions = {}) {
   return makeIcon({ svg: svg_copy, ...options });

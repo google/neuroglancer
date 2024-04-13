@@ -1,0 +1,29 @@
+{
+  "name": "neuroglancer-webpack-project-built",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test of a webpack-bundled project that depends on Neuroglancer.",
+  "scripts": {
+    "build": "webpack",
+    "dev-server": "webpack serve"
+  },
+  "dependencies": {
+    "neuroglancer": "file:../../../dist/package"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ],
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "css-loader": "^6.10.0",
+    "html-webpack-plugin": "^5.6.0",
+    "style-loader": "^3.3.4",
+    "svg-inline-loader": "^0.8.2",
+    "webpack": "^5.90.3",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.2"
+  },
+  "type": "module"
+}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { TypedArray } from "#/util/array";
+import type { TypedArray } from "#src/util/array.js";
 
 export function equal<T extends TypedArray, U extends TypedArray>(a: T, b: U) {
   const n = a.length;

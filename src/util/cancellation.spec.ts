@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { describe, expect, it } from "vitest";
+
 import {
   CANCELED,
   CancellationTokenSource,
@@ -21,7 +23,7 @@ import {
   MultipleConsumerCancellationTokenSource,
   throwIfCanceled,
   uncancelableToken,
-} from "#/util/cancellation";
+} from "#src/util/cancellation.js";
 
 describe("cancellation", () => {
   describe("CancellationTokenSource", () => {
@@ -125,29 +127,23 @@ describe("cancellation", () => {
   });
 
   describe("makeCancellablePromise", () => {
-    it("supports basic resolve behavior", (done) => {
+    it("supports basic resolve behavior", async () => {
       const promise = makeCancelablePromise<number>(
         uncancelableToken,
         (resolve, _reject, _token) => {
           resolve(3);
         },
       );
-      promise.then((value) => {
-        expect(value).toBe(3);
-        done();
-      });
+      expect(await promise).toBe(3);
     });
-    it("supports basic reject behavior", (done) => {
-      const promise = makeCancelablePromise<number>(
+    it("supports basic reject behavior", async () => {
+      const promise = makeCancelablePromise<string>(
         uncancelableToken,
         (_resolve, reject, _token) => {
-          reject(3);
+          reject(new Error("abc"));
         },
       );
-      promise.catch((value) => {
-        expect(value).toBe(3);
-        done();
-      });
+      expect(promise).rejects.toThrow("abc");
     });
 
     it("unregisters the cancellation handler when the promise is fulfilled", () => {

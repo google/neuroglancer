@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
+import type { MultiscaleMeshManifest } from "#src/mesh/multiscale.js";
 import {
   getDesiredMultiscaleMeshChunks,
   getMultiscaleChunksToDraw,
-  MultiscaleMeshManifest,
-} from "#/mesh/multiscale";
-import { getFrustrumPlanes, mat4, vec3 } from "#/util/geom";
+} from "#src/mesh/multiscale.js";
+import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
 
 interface MultiscaleChunkResult {
   lod: number;

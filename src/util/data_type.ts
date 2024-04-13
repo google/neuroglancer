@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { TypedArrayConstructor } from "#/util/array";
+import type { TypedArrayConstructor } from "#src/util/array.js";
 
 /**
  * If this is updated, DATA_TYPE_BYTES must also be updated.

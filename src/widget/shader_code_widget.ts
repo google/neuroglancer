@@ -15,22 +15,25 @@
  */
 
 import "codemirror/addon/lint/lint.js";
-import "./shader_code_widget.css";
+import "#src/widget/shader_code_widget.css";
 import "codemirror/lib/codemirror.css";
 import "codemirror/addon/lint/lint.css";
 
 import CodeMirror from "codemirror";
-import glslCodeMirror from "glsl-editor/glsl";
-import debounce from "lodash/debounce";
-import { WatchableValue } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { removeFromParent } from "#/util/dom";
-import { WatchableShaderError } from "#/webgl/dynamic_shader";
-import { ShaderCompilationError, ShaderLinkError } from "#/webgl/shader";
-import {
+import glslCodeMirror from "glsl-editor/glsl.js";
+import { debounce } from "lodash-es";
+import type { WatchableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeFromParent } from "#src/util/dom.js";
+import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
+import type {
+  ShaderCompilationError,
+  ShaderLinkError,
+} from "#src/webgl/shader.js";
+import type {
   ShaderControlParseError,
   ShaderControlState,
-} from "#/webgl/shader_ui_controls";
+} from "#src/webgl/shader_ui_controls.js";
 
 // Install glsl support in CodeMirror.
 glslCodeMirror(CodeMirror);

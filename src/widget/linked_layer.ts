@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import "./linked_layer.css";
+import "#src/widget/linked_layer.css";
 
-import debounce from "lodash/debounce";
-import { LinkedLayerGroup } from "#/layer";
-import { Borrowed, RefCounted } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
-import { makeCloseButton } from "#/widget/close_button";
+import { debounce } from "lodash-es";
+import type { LinkedLayerGroup } from "#src/layer/index.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import { makeCloseButton } from "#src/widget/close_button.js";
 
 export class LinkedLayerGroupWidget extends RefCounted {
   element = document.createElement("div");

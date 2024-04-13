@@ -14,53 +14,57 @@
  * limitations under the License.
  */
 
-import "#/render_layer_backend";
+import "#src/render_layer_backend.js";
 
-import {
-  Chunk,
+import type {
   ChunkConstructor,
   ChunkRenderLayerBackend,
+} from "#src/chunk_manager/backend.js";
+import {
+  Chunk,
   ChunkSource,
   getNextMarkGeneration,
   withChunkManager,
-} from "#/chunk_manager/backend";
-import { ChunkPriorityTier, ChunkState } from "#/chunk_manager/base";
-import { SharedWatchableValue } from "#/shared_watchable_value";
+} from "#src/chunk_manager/backend.js";
+import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type {
+  MultiscaleVolumetricDataRenderLayer,
+  SliceViewChunkSource as SliceViewChunkSourceInterface,
+  SliceViewChunkSpecification,
+  SliceViewRenderLayer as SliceViewRenderLayerInterface,
+  TransformedSource,
+} from "#src/sliceview/base.js";
 import {
   filterVisibleSources,
   forEachPlaneIntersectingVolumetricChunk,
   getNormalizedChunkLayout,
-  MultiscaleVolumetricDataRenderLayer,
   SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID,
   SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID,
   SLICEVIEW_RENDERLAYER_RPC_ID,
   SLICEVIEW_REQUEST_CHUNK_RPC_ID,
   SLICEVIEW_RPC_ID,
   SliceViewBase,
-  SliceViewChunkSource as SliceViewChunkSourceInterface,
-  SliceViewChunkSpecification,
-  SliceViewRenderLayer as SliceViewRenderLayerInterface,
-  TransformedSource,
-} from "#/sliceview/base";
-import { ChunkLayout } from "#/sliceview/chunk_layout";
-import { WatchableValueInterface } from "#/trackable_value";
-import { CANCELED, CancellationToken } from "#/util/cancellation";
-import { erf } from "#/util/erf";
-import { vec3, vec3Key } from "#/util/geom";
-import { VelocityEstimator } from "#/util/velocity_estimation";
+} from "#src/sliceview/base.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { CANCELED } from "#src/util/cancellation.js";
+import { erf } from "#src/util/erf.js";
+import { vec3, vec3Key } from "#src/util/geom.js";
+import { VelocityEstimator } from "#src/util/velocity_estimation.js";
 import {
   getBasePriority,
   getPriorityTier,
   withSharedVisibility,
-} from "#/visibility_priority/backend";
+} from "#src/visibility_priority/backend.js";
+import type { RPC, RPCPromise } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,
   registerRPC,
   registerSharedObject,
-  RPC,
-  RPCPromise,
   SharedObjectCounterpart,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 export const BASE_PRIORITY = -1e12;
 export const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -218,8 +222,6 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
                 j = jumpOffset;
                 continue;
               }
-              if (!Number.isFinite(newPriority)) {
-              }
               chunkManager.requestChunk(
                 chunk,
                 ChunkPriorityTier.PREFETCH,
@@ -366,6 +368,7 @@ export class SliceViewChunk extends Chunk {
 }
 
 export interface SliceViewChunkSourceBackend<
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
   ChunkType extends SliceViewChunk = SliceViewChunk,
 > {
@@ -376,6 +379,7 @@ export interface SliceViewChunkSourceBackend<
   chunkConstructor: ChunkConstructor<SliceViewChunk>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class SliceViewChunkSourceBackend<
     Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
     ChunkType extends SliceViewChunk = SliceViewChunk,

@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import { ChunkManager } from "#/chunk_manager/backend";
-import {
+import type { ChunkManager } from "#src/chunk_manager/backend.js";
+import type {
   CodecArrayInfo,
   CodecChainSpec,
-  CodecKind,
-} from "#/datasource/zarr/codec";
-import { ReadableKvStore } from "#/kvstore";
-import { CancellationToken } from "#/util/cancellation";
-import { RefCounted } from "#/util/disposable";
+} from "#src/datasource/zarr/codec/index.js";
+import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+import type { ReadableKvStore } from "#src/kvstore/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import type { RefCounted } from "#src/util/disposable.js";
 
 export interface Codec {
   name: string;

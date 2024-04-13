@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { parseOBJFromArrayBuffer } from "#/async_computation/obj_mesh_request";
-import { requestAsyncComputation } from "#/async_computation/request";
-import { GenericSharedDataSource } from "#/chunk_manager/generic_file_source";
-import { registerSingleMeshFactory } from "#/single_mesh/backend";
-import { CancellationToken } from "#/util/cancellation";
+import { parseOBJFromArrayBuffer } from "#src/async_computation/obj_mesh_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
+import { registerSingleMeshFactory } from "#src/single_mesh/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 /**
  * This needs to be a global function, because it identifies the instance of GenericSharedDataSource

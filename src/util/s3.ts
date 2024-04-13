@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-import { CancellationToken, uncancelableToken } from "#/util/cancellation";
-import { cancellableFetchOk, ResponseTransform } from "#/util/http_request";
-import { getS3CompatiblePathCompletions } from "#/util/s3_bucket_listing";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import type { ResponseTransform } from "#src/util/http_request.js";
+import { cancellableFetchOk } from "#src/util/http_request.js";
+import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
 
 // Support for s3:// special protocol.
 

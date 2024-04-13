@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { asyncComputation } from "#/async_computation";
+import { asyncComputation } from "#src/async_computation/index.js";
 
 export interface DecodedImage {
   width: number;

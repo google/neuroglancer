@@ -9,7 +9,6 @@ Expects /usr/src/draco to contain the unpacked draco source code (see
 `Dockerfile`).
 """
 
-
 import pathlib
 import re
 import subprocess

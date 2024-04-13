@@ -30,7 +30,7 @@ def guess_mime_type_from_path(path):
 
 
 class StaticContentSource:
-    def get(self, name):
+    def get(self, name, query):
         if name == "":
             name = "index.html"
         return self.get_content(name), guess_mime_type_from_path(name)
@@ -41,9 +41,9 @@ class StaticContentSource:
 
 class ImportlibResourcesContentSource(StaticContentSource):
     def get_content(self, name):
-        if not re.match(r"^[a-z][a-z_\-\.]*\.(?:js|js\.map|css|html)$", name):
+        if not re.match(r"^[a-z0-9][a-zA-Z0-9_\-\.]*\.(?:js|map|css|wasm|html)$", name):
             raise ValueError("Invalid static resource name: %r" % name)
-        path = importlib.resources.files(__name__).joinpath(name)
+        path = importlib.resources.files(__name__).joinpath("client", name)
         if path.is_file():
             return path.read_bytes()
         raise ValueError(
@@ -58,13 +58,17 @@ class HttpSource(StaticContentSource):
     def __init__(self, url):
         self.url = url
 
-    def get_content(self, name):
+    def get(self, name, query):
         import requests
 
+        print("http", repr(name), repr(query))
+
         full_url = posixpath.join(self.url, name)
-        r = requests.get(full_url)
+        r = requests.get(full_url + query)
         if r.status_code >= 200 and r.status_code < 300:
-            return r.content
+            return r.content, (
+                r.headers.get("content-type") or guess_mime_type_from_path(name)
+            )
         raise ValueError(f"Failed to retrieve {full_url!r}: {r.reason}")
 
 

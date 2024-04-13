@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { mat3, mat4, prod3, transformVectorByMat4, vec3 } from "#/util/geom";
-import { pickLengthUnit, pickVolumeUnit } from "#/widget/scale_bar";
+import type { mat4 } from "#src/util/geom.js";
+import { mat3, prod3, transformVectorByMat4, vec3 } from "#src/util/geom.js";
+import { pickLengthUnit, pickVolumeUnit } from "#src/widget/scale_bar.js";
 
 export function formatIntegerPoint(point: Float32Array) {
   let result = "(";

@@ -23,15 +23,16 @@
  * require padding.
  */
 
-import { maybePadArray, TypedArray, TypedArrayConstructor } from "#/util/array";
-import { DATA_TYPE_SIGNED, DataType } from "#/util/data_type";
-import { vec3 } from "#/util/geom";
-import { GL } from "#/webgl/context";
-import {
+import type { TypedArray, TypedArrayConstructor } from "#src/util/array.js";
+import { maybePadArray } from "#src/util/array.js";
+import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
+import type { vec3 } from "#src/util/geom.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ShaderBuilder,
   ShaderCodePart,
   ShaderSamplerPrefix,
-} from "#/webgl/shader";
+} from "#src/webgl/shader.js";
 import {
   getShaderType,
   glsl_float,
@@ -44,11 +45,11 @@ import {
   glsl_uint64,
   glsl_uint8,
   glsl_unpackUint64leFromUint32,
-} from "#/webgl/shader_lib";
+} from "#src/webgl/shader_lib.js";
 import {
   setRawTexture3DParameters,
   setRawTextureParameters,
-} from "#/webgl/texture";
+} from "#src/webgl/texture.js";
 
 export type TextureAccessCoefficients = vec3;
 

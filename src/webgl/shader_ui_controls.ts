@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-import { CoordinateSpaceCombiner } from "#/coordinate_transform";
-import { TrackableBoolean } from "#/trackable_boolean";
+import type { CoordinateSpaceCombiner } from "#src/coordinate_transform.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
+import type {
+  TrackableValueInterface,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
 import {
   constantWatchableValue,
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   TrackableValue,
-  TrackableValueInterface,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { arraysEqual, arraysEqualWithPredicate } from "#/util/array";
-import { parseRGBColorSpecification, TrackableRGB } from "#/util/color";
-import { DataType } from "#/util/data_type";
-import { RefCounted } from "#/util/disposable";
-import { vec3 } from "#/util/geom";
+} from "#src/trackable_value.js";
+import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
+import { parseRGBColorSpecification, TrackableRGB } from "#src/util/color.js";
+import type { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { vec3 } from "#src/util/geom.js";
 import {
   parseFixedLengthArray,
   verifyFiniteFloat,
@@ -36,29 +38,27 @@ import {
   verifyObject,
   verifyOptionalObjectProperty,
   verifyString,
-} from "#/util/json";
+} from "#src/util/json.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   convertDataTypeInterval,
-  DataTypeInterval,
   dataTypeIntervalToJson,
   defaultDataTypeRange,
   normalizeDataTypeInterval,
   parseDataTypeInterval,
   parseUnknownDataTypeInterval,
   validateDataTypeInterval,
-} from "#/util/lerp";
-import { NullarySignal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
-import { GL } from "#/webgl/context";
-import {
-  HistogramChannelSpecification,
-  HistogramSpecifications,
-} from "#/webgl/empirical_cdf";
+} from "#src/util/lerp.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
+import type { GL } from "#src/webgl/context.js";
+import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
+import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
-} from "#/webgl/lerp";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
+} from "#src/webgl/lerp.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 export interface ShaderSliderControl {
   type: "slider";

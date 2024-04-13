@@ -18,8 +18,8 @@
  * @file Support for parsing NumPy dtype strings.
  */
 
-import { DataType } from "#/util/data_type";
-import { Endianness } from "#/util/endian";
+import { DataType } from "#src/util/data_type.js";
+import { Endianness } from "#src/util/endian.js";
 
 export interface NumpyDtype {
   dataType: DataType;

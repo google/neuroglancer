@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { registerAsyncComputation } from "#/async_computation/handler";
-import { parseVTKFromArrayBuffer } from "#/async_computation/vtk_mesh_request";
-import { getTriangularMeshSize, parseVTK } from "#/datasource/vtk/parse";
-import { maybeDecompressGzip } from "#/util/gzip";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { parseVTKFromArrayBuffer } from "#src/async_computation/vtk_mesh_request.js";
+import { getTriangularMeshSize, parseVTK } from "#src/datasource/vtk/parse.js";
+import { maybeDecompressGzip } from "#src/util/gzip.js";
 
 registerAsyncComputation(
   parseVTKFromArrayBuffer,

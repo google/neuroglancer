@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
+import type { Chunk } from "#src/chunk_manager/backend.js";
 import {
   SliceViewChunk,
   SliceViewChunkSourceBackend,
-} from "#/sliceview/backend";
-import {
+} from "#src/sliceview/backend.js";
+import type {
+  DataType,
+  SliceViewChunkSpecification,
+} from "#src/sliceview/base.js";
+import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
-} from "#/sliceview/volume/base";
-import { vec3 } from "#/util/geom";
-import * as vector from "#/util/vector";
-import { RPC } from "#/worker_rpc";
-import { Chunk } from "#/chunk_manager/backend";
-import { DataType, SliceViewChunkSpecification } from "#/sliceview/base";
+} from "#src/sliceview/volume/base.js";
+import type { vec3 } from "#src/util/geom.js";
+import * as vector from "#src/util/vector.js";
+import type { RPC } from "#src/worker_rpc.js";
 
 export class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource | null = null;

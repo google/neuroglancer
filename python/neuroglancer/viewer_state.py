@@ -13,7 +13,6 @@
 # limitations under the License.
 """Wrappers for representing the Neuroglancer viewer state."""
 
-
 import collections
 import collections.abc
 import copy
@@ -162,6 +161,18 @@ class BlendTool(Tool):
 class OpacityTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "opacity"
+
+
+@export_tool
+class VolumeRenderingTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = "volumeRendering"
+
+
+@export_tool
+class VolumeRenderingGainTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = "volumeRenderingGain"
 
 
 @export_tool
@@ -543,6 +554,12 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     )
     opacity = wrapped_property("opacity", optional(float, 0.5))
     blend = wrapped_property("blend", optional(str))
+    volume_rendering = volumeRendering = wrapped_property(
+        "volumeRendering", optional(bool, False)
+    )
+    volume_rendering_gain = volumeRenderingGain = wrapped_property(
+        "volumeRenderingGain", optional(float, 1)
+    )
     volume_rendering_depth_samples = volumeRenderingDepthSamples = wrapped_property(
         "volumeRenderingDepthSamples", optional(float, 64)
     )
@@ -1120,10 +1137,7 @@ class ManagedLayer(JsonObjectWrapper):
             return setattr(self.layer, key, value)
 
     def __repr__(self):
-        return "ManagedLayer({},{})".format(
-            encode_json_for_repr(self.name),
-            encode_json_for_repr(self.to_json()),
-        )
+        return f"ManagedLayer({encode_json_for_repr(self.name)},{encode_json_for_repr(self.to_json())})"
 
     def to_json(self):
         r = self.layer.to_json()
@@ -1630,9 +1644,9 @@ class ViewerState(JsonObjectWrapper):
     projection_depth = projectionDepth = wrapped_property(
         "projectionDepth", optional(float)
     )
-    projection_orientation = (
-        projectionOrientation
-    ) = perspectiveOrientation = perspective_orientation = wrapped_property(
+    projection_orientation = projectionOrientation = perspectiveOrientation = (
+        perspective_orientation
+    ) = wrapped_property(
         "projectionOrientation", optional(array_wrapper(np.float32, 4))
     )
     show_slices = showSlices = wrapped_property("showSlices", optional(bool, True))

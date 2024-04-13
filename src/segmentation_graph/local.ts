@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { VisibleSegmentEquivalencePolicy } from "#/segmentation_graph/segment_id";
+import { debounce } from "lodash-es";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
+import type { ComputedSplit } from "#src/segmentation_graph/source.js";
 import {
-  ComputedSplit,
   SegmentationGraphSource,
   SegmentationGraphSourceConnection,
-} from "#/segmentation_graph/source";
-import { SegmentationUserLayer } from "#/segmentation_user_layer";
-import { SharedDisjointUint64Sets } from "#/shared_disjoint_sets";
-import { Uint64Set } from "#/uint64_set";
-import { DisjointUint64Sets } from "#/util/disjoint_sets";
-import { parseArray } from "#/util/json";
-import { Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
+} from "#src/segmentation_graph/source.js";
+import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
+import type { Uint64Set } from "#src/uint64_set.js";
+import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import { parseArray } from "#src/util/json.js";
+import { Signal } from "#src/util/signal.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export class LocalSegmentationGraphSource extends SegmentationGraphSource {
   spanningTreeEdges = new Map<string, Set<string>>();

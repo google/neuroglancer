@@ -28,8 +28,8 @@
  * munges other characters as well.  Therefore, we hex encode to be safe.
  */
 
-import { hexEncode, hexDecode } from "#/util/hex";
-import { registerEventListener } from "#/util/disposable";
+import { registerEventListener } from "#src/util/disposable.js";
+import { hexEncode, hexDecode } from "#src/util/hex.js";
 
 export function encodeStringAsDragType(s: string) {
   return hexEncode(new TextEncoder().encode(s));

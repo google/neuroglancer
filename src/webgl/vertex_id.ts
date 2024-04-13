@@ -21,10 +21,10 @@
  * https://github.com/KhronosGroup/WebGL/pull/2662
  */
 
-import { RefCounted } from "#/util/disposable";
-import { Buffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
-import { ShaderBuilder } from "#/webgl/shader";
+import { RefCounted } from "#src/util/disposable.js";
+import { Buffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderBuilder } from "#src/webgl/shader.js";
 
 export function defineVertexId(builder: ShaderBuilder) {
   // Define attribute for location 0 that will always equal 0.

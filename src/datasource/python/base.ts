@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { VertexAttributeInfo } from "#/skeleton/base";
+import { VertexAttributeInfo } from "#src/skeleton/base.js";
 
 export enum VolumeChunkEncoding {
   JPEG = 0,
@@ -23,6 +23,7 @@ export enum VolumeChunkEncoding {
 }
 
 export class PythonSourceParameters {
+  baseUrl: string;
   key: string;
 }
 

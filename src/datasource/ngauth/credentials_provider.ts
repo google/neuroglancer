@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
+import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
 import {
   CredentialsProvider,
   makeCredentialsGetter,
-} from "#/credentials_provider";
-import { fetchWithCredentials } from "#/credentials_provider/http_request";
-import { OAuth2Credentials } from "#/credentials_provider/oauth2";
-import { StatusMessage } from "#/status";
-import { HttpError, responseJson } from "#/util/http_request";
-import { verifyObject, verifyObjectProperty, verifyString } from "#/util/json";
+} from "#src/credentials_provider/index.js";
+import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import { StatusMessage } from "#src/status.js";
+import { HttpError, responseJson } from "#src/util/http_request.js";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
 
 function makeOriginError(serverUrl: string): Error {
   return new Error(

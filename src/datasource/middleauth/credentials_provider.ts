@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-import {
+import type {
   CredentialsManager,
-  CredentialsProvider,
   CredentialsWithGeneration,
+} from "#src/credentials_provider/index.js";
+import {
+  CredentialsProvider,
   makeCredentialsGetter,
-} from "#/credentials_provider";
-import { StatusMessage } from "#/status";
+} from "#src/credentials_provider/index.js";
+import { StatusMessage } from "#src/status.js";
 import {
   verifyObject,
   verifyObjectProperty,
   verifyString,
   verifyStringArray,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 export type MiddleAuthToken = {
   tokenType: string;

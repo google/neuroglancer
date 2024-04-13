@@ -19,18 +19,16 @@
  * PerspectiveViewRenderLayer to set chunk priorities based on the state of the perspective panel.
  */
 
-import { PERSPECTIVE_VIEW_RPC_ID } from "#/perspective_view/base";
-import { ProjectionParameters } from "#/projection_parameters";
-import {
-  RenderedViewBackend,
-  RenderLayerBackend,
-} from "#/render_layer_backend";
-import { SharedWatchableValue } from "#/shared_watchable_value";
+import { PERSPECTIVE_VIEW_RPC_ID } from "#src/perspective_view/base.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import type { RenderedViewBackend } from "#src/render_layer_backend.js";
+import { RenderLayerBackend } from "#src/render_layer_backend.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerSharedObject,
-  RPC,
   SharedObjectCounterpart,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 @registerSharedObject(PERSPECTIVE_VIEW_RPC_ID)
 export class PerspectiveViewBackend

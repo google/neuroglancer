@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { MouseSelectionState } from "#/layer";
-import { RenderLayer } from "#/renderlayer";
-import { Uint64 } from "#/util/uint64";
+import type { MouseSelectionState } from "#src/layer/index.js";
+import type { RenderLayer } from "#src/renderlayer.js";
+import type { Uint64 } from "#src/util/uint64.js";
 
 const DEBUG_PICKING = false;
 

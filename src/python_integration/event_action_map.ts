@@ -18,10 +18,10 @@
  * @file Facility for updating an EventActionMap based on a JSON representation.
  */
 
-import { verifyObject, verifyString } from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { Trackable } from "#/util/trackable";
-import { EventActionMap } from "#/util/event_action_map";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import { verifyObject, verifyString } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
 
 export class TrackableBasedEventActionMap implements Trackable {
   eventActionMap = new EventActionMap();

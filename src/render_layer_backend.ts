@@ -14,26 +14,26 @@
  * limitations under the License.
  */
 
-import { ChunkRenderLayerBackend } from "#/chunk_manager/backend";
-import { ProjectionParameters } from "#/projection_parameters";
+import { ChunkRenderLayerBackend } from "#src/chunk_manager/backend.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
 import {
   PROJECTION_PARAMETERS_CHANGED_RPC_METHOD_ID,
   PROJECTION_PARAMETERS_RPC_ID,
   RENDERED_VIEW_ADD_LAYER_RPC_ID,
   RENDERED_VIEW_REMOVE_LAYER_RPC_ID,
-} from "#/render_layer_common";
-import {
+} from "#src/render_layer_common.js";
+import type {
   WatchableValueChangeInterface,
   WatchableValueInterface,
-} from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { Signal } from "#/util/signal";
+} from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { Signal } from "#src/util/signal.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObject,
-  RPC,
   SharedObjectCounterpart,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 export interface RenderedViewBackend {
   visibility: WatchableValueInterface<number>;

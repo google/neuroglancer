@@ -22,9 +22,9 @@ import {
   drawQuads,
   glsl_getQuadVertexPosition,
   VERTICES_PER_QUAD,
-} from "#/webgl/quad";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { glsl_clipLineToDepthRange } from "#/webgl/shader_lib";
+} from "#src/webgl/quad.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { glsl_clipLineToDepthRange } from "#src/webgl/shader_lib.js";
 
 export const VERTICES_PER_LINE = VERTICES_PER_QUAD;
 

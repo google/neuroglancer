@@ -14,22 +14,26 @@
  * limitations under the License.
  */
 
-import "./viewer_settings.css";
+import "#src/ui/viewer_settings.css";
 
-import { TrackableBooleanCheckbox } from "#/trackable_boolean";
-import { TrackableValue, WatchableValueInterface } from "#/trackable_value";
-import { SidePanel, SidePanelManager } from "#/ui/side_panel";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import type {
+  TrackableValue,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
+import type { SidePanelManager } from "#src/ui/side_panel.js";
+import { SidePanel } from "#src/ui/side_panel.js";
+import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
 import {
   DEFAULT_SIDE_PANEL_LOCATION,
-  SidePanelLocation,
   TrackableSidePanelLocation,
-} from "#/ui/side_panel_location";
-import { vec3 } from "#/util/geom";
-import { emptyToUndefined } from "#/util/json";
-import { Viewer } from "#/viewer";
-import { ColorWidget } from "#/widget/color";
-import { NumberInputWidget } from "#/widget/number_input_widget";
-import { TextInputWidget } from "#/widget/text_input";
+} from "#src/ui/side_panel_location.js";
+import type { vec3 } from "#src/util/geom.js";
+import { emptyToUndefined } from "#src/util/json.js";
+import type { Viewer } from "#src/viewer.js";
+import { ColorWidget } from "#src/widget/color.js";
+import { NumberInputWidget } from "#src/widget/number_input_widget.js";
+import { TextInputWidget } from "#src/widget/text_input.js";
 
 const DEFAULT_SETTINGS_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,

@@ -19,21 +19,18 @@
  * limitations under the License.
  */
 
-import { SegmentationUserLayer } from "#/segmentation_user_layer";
-import { removeChildren } from "#/util/dom";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import type { ToolActivation } from "#src/ui/tool.js";
 import {
   makeToolActivationStatusMessageWithHeader,
   registerTool,
   LayerTool,
-  ToolActivation,
-} from "#/ui/tool";
-import {
-  ActionEvent,
-  EventActionMap,
-  Modifiers,
-} from "#/util/event_action_map";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
-import { globalModifiers } from "#/util/keyboard_bindings";
+} from "#src/ui/tool.js";
+import { removeChildren } from "#src/util/dom.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap, Modifiers } from "#src/util/event_action_map.js";
+import { globalModifiers } from "#src/util/keyboard_bindings.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 
 export const SELECT_SEGMENTS_TOOLS_ID = "selectSegments";
 
@@ -180,8 +177,10 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
   }
 }
 
-export function registerSegmentSelectTools() {
-  registerTool(SegmentationUserLayer, SELECT_SEGMENTS_TOOLS_ID, (layer) => {
+export function registerSegmentSelectTools(
+  contextType: typeof SegmentationUserLayer,
+) {
+  registerTool(contextType, SELECT_SEGMENTS_TOOLS_ID, (layer) => {
     return new SelectSegmentsTool(layer);
   });
 }

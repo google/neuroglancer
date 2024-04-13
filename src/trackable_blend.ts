@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { TrackableEnum } from "#/util/trackable_enum";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export enum BLEND_MODES {
   DEFAULT = 0,

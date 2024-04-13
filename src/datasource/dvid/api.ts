@@ -18,15 +18,16 @@
  * limitations under the License.
  */
 
-import { CredentialsProvider } from "#/credentials_provider";
-import { fetchWithCredentials } from "#/credentials_provider/http_request";
-import { CancellationToken, uncancelableToken } from "#/util/cancellation";
+import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
+import type { ResponseTransform } from "#src/util/http_request.js";
 import {
   cancellableFetchOk,
   responseArrayBuffer,
   responseJson,
-  ResponseTransform,
-} from "#/util/http_request";
+} from "#src/util/http_request.js";
 
 export interface DVIDToken {
   // If token is undefined, it indicates anonymous credentials that may be retried.

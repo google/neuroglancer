@@ -12,7 +12,7 @@ def add_example_layer(state):
     b = (
         np.asarray(
             np.floor(np.sqrt((ix - 0.5) ** 2 + (iy - 0.5) ** 2 + (iz - 0.5) ** 2) * 10),
-            dtype=[np.int32],
+            dtype=np.int32,
         )
         - 2
     )

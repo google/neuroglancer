@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { isAABBVisible, mat4, vec3 } from "#/util/geom";
-import { getOctreeChildIndex } from "#/util/zorder";
+import type { mat4, vec3 } from "#src/util/geom.js";
+import { isAABBVisible } from "#src/util/geom.js";
+import { getOctreeChildIndex } from "#src/util/zorder.js";
 
 const DEBUG_CHUNKS_TO_DRAW = false;
 

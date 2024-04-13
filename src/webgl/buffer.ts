@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-import { Disposable, RefCountedValue } from "#/util/disposable";
-import { stableStringify } from "#/util/json";
-import { getObjectId } from "#/util/object_id";
-import { GL } from "#/webgl/context";
-import { AttributeIndex } from "#/webgl/shader";
+import type { Disposable } from "#src/util/disposable.js";
+import { RefCountedValue } from "#src/util/disposable.js";
+import { stableStringify } from "#src/util/json.js";
+import { getObjectId } from "#src/util/object_id.js";
+import type { GL } from "#src/webgl/context.js";
+import type { AttributeIndex } from "#src/webgl/shader.js";
 
 export type BufferType = number;
 export type WebGLDataType = number;

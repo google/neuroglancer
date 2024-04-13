@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { TrackableValue } from "#/trackable_value";
-import { makeVerifyNumberInInterval } from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { VisibilityPriorityAggregator } from "#/visibility_priority/frontend";
+import { TrackableValue } from "#src/trackable_value.js";
+import { makeVerifyNumberInInterval } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
 
 export const numRenderScaleHistogramBins = 40;
 export const renderScaleHistogramBinSize = 0.5;

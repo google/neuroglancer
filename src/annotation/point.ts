@@ -18,26 +18,29 @@
  * @file Support for rendering point annotations.
  */
 
-import { AnnotationType, Point } from "#/annotation";
-import {
+import type { Point } from "#src/annotation/index.js";
+import { AnnotationType } from "#src/annotation/index.js";
+import type {
   AnnotationRenderContext,
-  AnnotationRenderHelper,
   AnnotationShaderGetter,
+} from "#src/annotation/type_handler.js";
+import {
+  AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
-} from "#/annotation/type_handler";
+} from "#src/annotation/type_handler.js";
 import {
   defineCircleShader,
   drawCircles,
   initializeCircleShader,
-} from "#/webgl/circles";
+} from "#src/webgl/circles.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
-} from "#/webgl/lines";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { defineVectorArrayVertexShaderInput } from "#/webgl/shader_lib";
-import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
+} from "#src/webgl/lines.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
+import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 class RenderHelper extends AnnotationRenderHelper {
   private defineShaderCommon(builder: ShaderBuilder) {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#/util/uint64";
+import { Uint64 } from "#src/util/uint64.js";
 
 export enum VisibleSegmentEquivalencePolicy {
   MIN_REPRESENTATIVE = 0, // defafult, representative elmement is the minimum element in equivalence set

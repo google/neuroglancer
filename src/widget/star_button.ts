@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import "./star_button.css";
+import "#src/widget/star_button.css";
 
-import svg_star from "ikonate/icons/star.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_star from "ikonate/icons/star.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeStarButton(options: MakeIconOptions = {}) {
   const icon = makeIcon({ svg: svg_star, ...options });

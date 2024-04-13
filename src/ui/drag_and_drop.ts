@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import "./drag_and_drop.css";
-
-import { filterArrayInplace } from "#/util/array";
-import { removeChildren } from "#/util/dom";
+import "#src/ui/drag_and_drop.css";
+import { filterArrayInplace } from "#src/util/array.js";
+import { removeChildren } from "#src/util/dom.js";
 
 let dragStatusElement: HTMLElement | undefined;
 

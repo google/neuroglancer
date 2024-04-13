@@ -14,30 +14,31 @@
  * limitations under the License.
  */
 
-import { ChunkManager, ChunkSource } from "#/chunk_manager/frontend";
-import { IndexedSegmentProperty } from "#/segmentation_display_state/base";
-import { Uint64OrderedSet } from "#/uint64_ordered_set";
-import { Uint64Set } from "#/uint64_set";
-import {
-  mergeSequences,
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkSource } from "#src/chunk_manager/frontend.js";
+import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
+import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
+import type { Uint64Set } from "#src/uint64_set.js";
+import type {
   TypedArray,
   TypedArrayConstructor,
   WritableArrayLike,
-} from "#/util/array";
-import { DataType } from "#/util/data_type";
-import { Borrowed } from "#/util/disposable";
-import { murmurHash3_x86_32Hash64Bits } from "#/util/hash";
+} from "#src/util/array.js";
+import { mergeSequences } from "#src/util/array.js";
+import { DataType } from "#src/util/data_type.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { murmurHash3_x86_32Hash64Bits } from "#src/util/hash.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   clampToInterval,
   dataTypeCompare,
-  DataTypeInterval,
   dataTypeIntervalEqual,
   dataTypeValueNextAfter,
   parseDataTypeValue,
-} from "#/util/lerp";
-import { getObjectId } from "#/util/object_id";
-import { defaultStringCompare } from "#/util/string";
-import { Uint64 } from "#/util/uint64";
+} from "#src/util/lerp.js";
+import { getObjectId } from "#src/util/object_id.js";
+import { defaultStringCompare } from "#src/util/string.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -676,7 +677,7 @@ export function parseSegmentQuery(
         });
         continue;
       }
-      if (labels === undefined) {
+      if (labels === undefined && tagNames.length == 0) {
         errors.push({
           begin: startIndex,
           end: endIndex,
@@ -777,7 +778,7 @@ export function parseSegmentQuery(
       });
       continue;
     }
-    if (labels === undefined) {
+    if (labels === undefined && tagNames.length == 0) {
       errors.push({
         begin: startIndex,
         end: endIndex,
@@ -805,6 +806,7 @@ export interface TagCount {
   tag: string;
   tagIndex: number;
   count: number;
+  desc: string;
 }
 
 export interface PropertyHistogram {
@@ -859,7 +861,10 @@ export function executeSegmentQuery(
   }
   const properties = inlineProperties?.properties;
   const totalIds = inlineProperties.ids.length / 2;
+  const totalTags = db?.tags?.tags?.length || 0;
   let indices = makeIndicesArray(totalIds, totalIds);
+  const showTags = makeIndicesArray(totalTags, totalTags);
+  showTags.fill(1);
   for (let i = 0; i < totalIds; ++i) {
     indices[i] = i;
   }
@@ -876,16 +881,50 @@ export function executeSegmentQuery(
     }
     indices = indices.subarray(0, outIndex);
   };
+  const filterByTagDescriptions = (regexp: RegExp) => {
+    const tagDescriptions = db!.tags!.tagDescriptions!;
+    const tags = db!.tags!.tags!;
+
+    // reset showTags
+    showTags.fill(0);
+
+    // iterate over tagDescriptions with a for loop
+    for (let i = 0; i < tagDescriptions.length; i++) {
+      if (tagDescriptions[i].match(regexp) !== null) {
+        showTags[i] = 1;
+      }
+      if (tags[i].match(regexp) !== null) {
+        showTags[i] = 1;
+      }
+    }
+  };
 
   // Filter by label
   if (query.regexp !== undefined || query.prefix !== undefined) {
-    const values = db!.labels!.values;
     const { regexp, prefix } = query;
-    if (regexp !== undefined) {
-      filterIndices((index) => values[index].match(regexp) !== null);
+    if (db!.labels !== undefined) {
+      const values = db!.labels!.values;
+      if (regexp !== undefined) {
+        filterIndices((index) => values[index].match(regexp) !== null);
+      }
+      if (prefix !== undefined) {
+        filterIndices((index) => values[index].startsWith(prefix));
+      }
     }
-    if (prefix !== undefined) {
-      filterIndices((index) => values[index].startsWith(prefix));
+    // if the regular expression returns nothing
+    // then assudme the user wants to search through the tags
+    // and/or tag descriptions
+    if (
+      (indices.length == 0 && regexp !== undefined) ||
+      (db!.labels == undefined && regexp != undefined)
+    ) {
+      indices = makeIndicesArray(totalIds, totalIds);
+      for (let i = 0; i < totalIds; ++i) {
+        indices[i] = i;
+      }
+      filterByTagDescriptions(regexp);
+      // reset regexp to none so that it doesn't get applied again
+      query.regexp = undefined;
     }
   }
 
@@ -923,7 +962,6 @@ export function executeSegmentQuery(
     const regexp = new RegExp(pattern);
     filterIndices((index) => values[index].match(regexp) !== null);
   }
-
   let intermediateIndicesMask: IndicesArray | undefined;
   let intermediateIndices: IndicesArray | undefined;
 
@@ -969,7 +1007,7 @@ export function executeSegmentQuery(
   let tagStatistics: TagCount[] = [];
   if (tagsProperty !== undefined) {
     const tagStatisticsInQuery: TagCount[] = [];
-    const { tags, values } = tagsProperty;
+    const { tags, values, tagDescriptions } = tagsProperty;
     const tagCounts = new Uint32Array(tags.length);
     for (let i = 0, n = indices.length; i < n; ++i) {
       const value = values[indices[i]];
@@ -982,9 +1020,16 @@ export function executeSegmentQuery(
       tagIndex < numTags;
       ++tagIndex
     ) {
+      if (showTags[tagIndex] === 0) continue;
       const count = tagCounts[tagIndex];
       const tag = tags[tagIndex];
-      const tagCount = { tag, tagIndex, count: tagCounts[tagIndex] };
+      const tagDesc = tagDescriptions[tagIndex];
+      const tagCount = {
+        tag,
+        tagIndex,
+        count: tagCounts[tagIndex],
+        desc: tagDesc,
+      };
       if (query.includeTags.includes(tag) || query.excludeTags.includes(tag)) {
         tagStatisticsInQuery.push(tagCount);
       } else if (count > 0) {
@@ -1247,7 +1292,7 @@ export function forEachQueryResultSegmentId(
   }
   const { indices } = queryResult;
   if (indices !== undefined) {
-    const { ids } = db?.segmentPropertyMap.inlineProperties!;
+    const { ids } = db!.segmentPropertyMap.inlineProperties!;
     for (let i = 0, count = indices.length; i < count; ++i) {
       const propIndex = indices[i];
       tempUint64.low = ids[propIndex * 2];
@@ -1271,7 +1316,7 @@ export function* forEachQueryResultSegmentIdGenerator(
   }
   const { indices } = queryResult;
   if (indices !== undefined) {
-    const { ids } = db?.segmentPropertyMap.inlineProperties!;
+    const { ids } = db!.segmentPropertyMap.inlineProperties!;
     for (let i = 0, count = indices.length; i < count; ++i) {
       const propIndex = indices[i];
       if (safe) {

@@ -18,9 +18,10 @@
  * @file Defines a generic interface for a simple state tracking mechanism.
  */
 
-import { RefCounted } from "#/util/disposable";
-import { verifyObject, verifyOptionalObjectProperty } from "#/util/json";
-import { NullaryReadonlySignal, NullarySignal } from "#/util/signal";
+import { RefCounted } from "#src/util/disposable.js";
+import { verifyObject, verifyOptionalObjectProperty } from "#src/util/json.js";
+import type { NullaryReadonlySignal } from "#src/util/signal.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 export interface JsonRestorable {
   restoreState: (x: any) => void;

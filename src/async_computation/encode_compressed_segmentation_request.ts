@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { asyncComputation } from "#/async_computation";
+import { asyncComputation } from "#src/async_computation/index.js";
 
 export const encodeCompressedSegmentationUint32 = asyncComputation<
   (

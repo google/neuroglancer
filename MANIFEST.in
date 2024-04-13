@@ -5,6 +5,7 @@ prune python/build_tools
 prune config
 prune ngauth_server
 prune src
+prune build_tools
 prune templates
 prune third_party
 prune typings
@@ -24,9 +25,19 @@ exclude tslint.json
 prune .github
 prune *.egg-info
 exclude tox.ini
+exclude noxfile.py
 exclude python/.pylintrc
 global-exclude .gitignore
+global-exclude .gitattributes
 global-exclude .dockerignore
 exclude python/Dockerfile
 exclude python/CMakeLists.txt
 exclude MANIFEST.in
+exclude *.ts
+exclude .prettierrc.yml
+exclude .prettierignore
+exclude .eslintrc.yml
+exclude index.html
+exclude webpack.config.js
+exclude firebase.json
+exclude .firebaserc

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "./text_icon_button.css";
+import "#src/widget/text_icon_button.css";
 
 export function makeTextIconButton(iconText: string, title?: string) {
   const element = document.createElement("div");

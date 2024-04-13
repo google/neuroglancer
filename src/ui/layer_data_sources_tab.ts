@@ -18,42 +18,46 @@
  * @file Tab for showing layer data sources and coordinate transforms.
  */
 
-import "./layer_data_sources_tab.css";
-
-import { LocalDataSource } from "#/datasource";
+import "#src/ui/layer_data_sources_tab.css";
+import { LocalDataSource } from "#src/datasource/index.js";
+import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
 import {
   changeLayerName,
   changeLayerType,
   NewUserLayer,
-  UserLayer,
-  UserLayerConstructor,
-} from "#/layer";
-import {
+  USER_LAYER_TABS,
+} from "#src/layer/index.js";
+import type {
   LayerDataSource,
   LoadedDataSubsource,
-  LoadedLayerDataSource,
-} from "#/layer_data_source";
-import { MeshSource, MultiscaleMeshSource } from "#/mesh/frontend";
-import { SkeletonSource } from "#/skeleton/frontend";
-import { MultiscaleVolumeChunkSource } from "#/sliceview/volume/frontend";
-import { TrackableBooleanCheckbox } from "#/trackable_boolean";
-import { WatchableValue, WatchableValueInterface } from "#/trackable_value";
+} from "#src/layer/layer_data_source.js";
+import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
+import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
+import { SkeletonSource } from "#src/skeleton/frontend.js";
+import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { DataType } from "#src/util/data_type.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
-  animationFrameDebounce,
-  DebouncedFunction,
-} from "#/util/animation_frame_debounce";
-import { CancellationToken } from "#/util/cancellation";
-import { DataType } from "#/util/data_type";
-import { Borrowed, RefCounted } from "#/util/disposable";
-import { removeChildren, removeFromParent, updateChildren } from "#/util/dom";
-import { MessageList, MessageSeverity } from "#/util/message_list";
-import { makeAddButton } from "#/widget/add_button";
-import { CoordinateSpaceTransformWidget } from "#/widget/coordinate_transform";
+  removeChildren,
+  removeFromParent,
+  updateChildren,
+} from "#src/util/dom.js";
+import type { MessageList } from "#src/util/message_list.js";
+import { MessageSeverity } from "#src/util/message_list.js";
+import { makeAddButton } from "#src/widget/add_button.js";
+import { CoordinateSpaceTransformWidget } from "#src/widget/coordinate_transform.js";
 import {
   AutocompleteTextInput,
   makeCompletionElementWithDescription,
-} from "#/widget/multiline_autocomplete";
-import { Tab } from "#/widget/tab_view";
+} from "#src/widget/multiline_autocomplete.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 class SourceUrlAutocomplete extends AutocompleteTextInput {
   dataSourceView: DataSourceView;
@@ -330,7 +334,9 @@ export class DataSourceView extends RefCounted {
           const newName =
             userLayer.manager.dataSourceProviderRegistry.suggestLayerName(url);
           changeLayerName(userLayer.managedLayer, newName);
-        } catch {}
+        } catch {
+          // Ignore errors obtaining a suggested layer name.
+        }
       }
       source.spec = { ...existingSpec, url };
     };
@@ -523,3 +529,10 @@ export class LayerDataSourcesTab extends Tab {
     this.updateLayerTypeDetection();
   }
 }
+
+USER_LAYER_TABS.push({
+  id: "source",
+  label: "Source",
+  order: -100,
+  getter: (layer) => new LayerDataSourcesTab(layer),
+});

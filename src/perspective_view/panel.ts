@@ -14,66 +14,70 @@
  * limitations under the License.
  */
 
-import "#/noselect.css";
-import "./panel.css";
+import "#src/noselect.css";
+import "#src/perspective_view/panel.css";
 
-import { AxesLineHelper, computeAxisLineMatrix } from "#/axes_lines";
-import {
-  applyRenderViewportToProjectionMatrix,
-  DisplayContext,
-} from "#/display_context";
-import {
-  makeRenderedPanelVisibleLayerTracker,
-  VisibleRenderLayerTracker,
-} from "#/layer";
-import { PERSPECTIVE_VIEW_RPC_ID } from "#/perspective_view/base";
-import {
+import type { PerspectiveViewAnnotationLayer } from "#src/annotation/renderlayer.js";
+import { AxesLineHelper, computeAxisLineMatrix } from "#src/axes_lines.js";
+import type { DisplayContext } from "#src/display_context.js";
+import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
+import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
+import { makeRenderedPanelVisibleLayerTracker } from "#src/layer/index.js";
+import { PERSPECTIVE_VIEW_RPC_ID } from "#src/perspective_view/base.js";
+import type {
   PerspectiveViewReadyRenderContext,
   PerspectiveViewRenderContext,
-  PerspectiveViewRenderLayer,
-} from "#/perspective_view/render_layer";
-import {
-  ProjectionParameters,
-  updateProjectionParametersFromInverseViewAndProjection,
-} from "#/projection_parameters";
+} from "#src/perspective_view/render_layer.js";
+import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import { updateProjectionParametersFromInverseViewAndProjection } from "#src/projection_parameters.js";
+import type {
+  FramePickingData,
+  RenderedDataViewerState,
+} from "#src/rendered_data_panel.js";
 import {
   clearOutOfBoundsPickData,
-  FramePickingData,
   pickDiameter,
   pickOffsetSequence,
   pickRadius,
   RenderedDataPanel,
-  RenderedDataViewerState,
-} from "#/rendered_data_panel";
+} from "#src/rendered_data_panel.js";
 import {
   DerivedProjectionParameters,
   SharedProjectionParameters,
-} from "#/renderlayer";
-import { SliceView, SliceViewRenderHelper } from "#/sliceview/frontend";
-import {
-  TrackableBoolean,
-  TrackableBooleanCheckbox,
-} from "#/trackable_boolean";
-import { TrackableValue, WatchableValueInterface } from "#/trackable_value";
-import { TrackableRGB } from "#/util/color";
-import { Owned } from "#/util/disposable";
-import { ActionEvent, registerActionListener } from "#/util/event_action_map";
-import { kAxes, kZeroVec4, mat4, vec3, vec4 } from "#/util/geom";
-import { startRelativeMouseDrag } from "#/util/mouse_drag";
-import { TouchRotateInfo, TouchTranslateInfo } from "#/util/touch_bindings";
-import { WatchableMap } from "#/util/watchable_map";
-import { withSharedVisibility } from "#/visibility_priority/frontend";
+} from "#src/renderlayer.js";
+import type { SliceView } from "#src/sliceview/frontend.js";
+import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
+import type { TrackableBoolean } from "#src/trackable_boolean.js";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import type {
+  TrackableValue,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
+import type { TrackableRGB } from "#src/util/color.js";
+import type { Owned } from "#src/util/disposable.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { registerActionListener } from "#src/util/event_action_map.js";
+import { kAxes, kZeroVec4, mat4, vec3, vec4 } from "#src/util/geom.js";
+import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import type {
+  TouchRotateInfo,
+  TouchTranslateInfo,
+} from "#src/util/touch_bindings.js";
+import { WatchableMap } from "#src/util/watchable_map.js";
+import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import {
   DepthStencilRenderbuffer,
   FramebufferConfiguration,
   makeTextureBuffers,
   OffscreenCopyHelper,
   TextureBuffer,
-} from "#/webgl/offscreen";
-import { ShaderBuilder } from "#/webgl/shader";
-import { MultipleScaleBarTextures, ScaleBarOptions } from "#/widget/scale_bar";
-import { RPC, SharedObject } from "#/worker_rpc";
-import { PerspectiveViewAnnotationLayer } from "#/annotation/renderlayer";
+} from "#src/webgl/offscreen.js";
+import type { ShaderBuilder } from "#src/webgl/shader.js";
+import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
+import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { SharedObject } from "#src/worker_rpc.js";
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -109,22 +113,26 @@ void emit(vec4 color, highp uint pickId) {
  * http://casual-effects.blogspot.com/2015/03/implemented-weighted-blended-order.html
  */
 export const glsl_computeOITWeight = `
-float computeOITWeight(float alpha) {
+float computeOITWeight(float alpha, float depth) {
   float a = min(1.0, alpha) * 8.0 + 0.01;
-  float b = -gl_FragCoord.z * 0.95 + 1.0;
+  float b = -depth * 0.95 + 1.0;
   return a * a * a * b * b * b;
 }
 `;
 
 // Color must be premultiplied by alpha.
+// Can use emitAccumAndRevealage() to emit a pre-weighted OIT result.
 export const glsl_perspectivePanelEmitOIT = [
   glsl_computeOITWeight,
   `
-void emit(vec4 color, highp uint pickId) {
-  float weight = computeOITWeight(color.a);
-  vec4 accum = color * weight;
-  v4f_fragData0 = vec4(accum.rgb, color.a);
+void emitAccumAndRevealage(vec4 accum, float revealage, highp uint pickId) {
+  v4f_fragData0 = vec4(accum.rgb, revealage);
   v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  float weight = computeOITWeight(color.a, gl_FragCoord.z);
+  vec4 accum = color * weight;
+  emitAccumAndRevealage(accum, color.a, pickId);
 }
 `,
 ];
@@ -846,6 +854,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       renderContext.emitPickID = false;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
+          renderContext.depthBufferTexture =
+            this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
           renderLayer.draw(renderContext, attachment);
         }
       }

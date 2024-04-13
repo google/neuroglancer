@@ -8,6 +8,8 @@ requires = [
 
 [tool.ruff]
 target-version = "py39"
+
+[tool.ruff.lint]
 select = [
     "E", # pycodestyle
     "W", # pycodestyle

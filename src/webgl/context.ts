@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { RefCounted } from "#/util/disposable";
-import { Memoize } from "#/util/memoize";
+import type { RefCounted } from "#src/util/disposable.js";
+import { Memoize } from "#src/util/memoize.js";
 
 export interface GL extends WebGL2RenderingContext {
   memoize: Memoize<any, RefCounted>;

@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import { VisibleSegmentEquivalencePolicy } from "#/segmentation_graph/segment_id";
-import { WatchableValue, WatchableValueInterface } from "#/trackable_value";
-import { Uint64 } from "#/util/uint64";
+import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 const rankSymbol = Symbol("disjoint_sets:rank");
 const parentSymbol = Symbol("disjoint_sets:parent");

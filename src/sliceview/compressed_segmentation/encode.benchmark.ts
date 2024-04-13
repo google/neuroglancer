@@ -14,35 +14,45 @@
  * limitations under the License.
  */
 
-import { encodeChannels as encodeChannelsUint32 } from "#/sliceview/compressed_segmentation/encode_uint32";
-import { encodeChannels as encodeChannelsUint64 } from "#/sliceview/compressed_segmentation/encode_uint64";
-import { makeRandomUint64Array } from "#/sliceview/compressed_segmentation/test_util";
-import { prod4, vec3Key } from "#/util/geom";
-import { Uint32ArrayBuilder } from "#/util/uint32array_builder";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { describe, bench } from "vitest";
+import { encodeChannels as encodeChannelsUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
+import { encodeChannels as encodeChannelsUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
+import { makeRandomUint64Array } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { prod4, vec3Key } from "#src/util/geom.js";
+import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
-const exampleChunkData64 = new Uint32Array(
-  require<Uint8Array>("neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat").buffer,
-);
+describe("64x64x64 example", async () => {
+  const testDataDir = path.resolve(
+    import.meta.dirname,
+    "..",
+    "..",
+    "..",
+    "testdata",
+  );
+  const exampleChunkDataUint8Array = await fs.readFile(
+    path.resolve(testDataDir, "64x64x64-raw-uint64-segmentation.dat"),
+  );
+  const exampleChunkData64 = new Uint32Array(exampleChunkDataUint8Array.buffer);
+  const exampleChunkData32 = exampleChunkData64.filter((_element, index) => {
+    return index % 2 === 0;
+  });
 
-const exampleChunkData32 = exampleChunkData64.filter((_element, index) => {
-  return index % 2 === 0;
-});
-
-suite("64x64x64 example", () => {
   const blockSize = [8, 8, 8];
   const output = new Uint32ArrayBuilder(1000000);
   const volumeSize = [64, 64, 64, 1];
-  benchmark("encode_uint64", () => {
+  bench("encode_uint64", () => {
     output.clear();
     encodeChannelsUint64(output, blockSize, exampleChunkData64, volumeSize);
   });
-  benchmark("encode_uint32", () => {
+  bench("encode_uint32", () => {
     output.clear();
     encodeChannelsUint32(output, blockSize, exampleChunkData32, volumeSize);
   });
 });
 
-suite("compressed_segmentation", () => {
+describe("compressed_segmentation", () => {
   const blockSize = [8, 8, 8];
   const output = new Uint32ArrayBuilder(1000000);
   for (const volumeSize of [
@@ -52,7 +62,7 @@ suite("compressed_segmentation", () => {
   ]) {
     const numPossibleValues = 15;
     const input = makeRandomUint64Array(prod4(volumeSize), numPossibleValues);
-    benchmark(`encode_uint64 ${vec3Key(volumeSize)}`, () => {
+    bench(`encode_uint64 ${vec3Key(volumeSize)}`, () => {
       output.clear();
       encodeChannelsUint64(output, blockSize, input, volumeSize);
     });

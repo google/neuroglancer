@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-import "./checkbox_icon.css";
+import "#src/widget/checkbox_icon.css";
 
-import { WatchableValueInterface } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export interface MakeCheckboxIconOptions
   extends Omit<MakeIconOptions, "onClick" | "title"> {

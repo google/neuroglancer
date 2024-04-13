@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import { VisibleLayerInfo } from "#/layer";
-import { PerspectivePanel } from "#/perspective_view/panel";
-import {
+import type { VisibleLayerInfo } from "#src/layer/index.js";
+import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import type {
   ThreeDimensionalReadyRenderContext,
   ThreeDimensionalRenderContext,
-  VisibilityTrackedRenderLayer,
-} from "#/renderlayer";
-import { vec3 } from "#/util/geom";
-import { ShaderModule } from "#/webgl/shader";
-import { SharedObject } from "#/worker_rpc";
+} from "#src/renderlayer.js";
+import { VisibilityTrackedRenderLayer } from "#src/renderlayer.js";
+import type { vec3 } from "#src/util/geom.js";
+import type { ShaderModule } from "#src/webgl/shader.js";
+import type { SharedObject } from "#src/worker_rpc.js";
 
 export type PerspectiveViewReadyRenderContext =
   ThreeDimensionalReadyRenderContext;
@@ -50,8 +50,14 @@ export interface PerspectiveViewRenderContext
    * Specifies whether there was a previous pick ID pass.
    */
   alreadyEmittedPickID: boolean;
+
+  /**
+   * Specifies the ID of the depth frame buffer texture to query during rendering.
+   */
+  depthBufferTexture?: WebGLTexture | null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class PerspectiveViewRenderLayer<
   AttachmentState = unknown,
 > extends VisibilityTrackedRenderLayer {
@@ -78,6 +84,7 @@ export class PerspectiveViewRenderLayer<
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface PerspectiveViewRenderLayer<AttachmentState = unknown> {
   isTransparent: boolean | undefined;
   isAnnotation: boolean | undefined;

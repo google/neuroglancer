@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-import { parseScale, scaleByExp10, formatScaleWithUnit } from "#/util/si_units";
+import { describe, it, expect } from "vitest";
+import {
+  parseScale,
+  scaleByExp10,
+  formatScaleWithUnit,
+} from "#src/util/si_units.js";
 
 describe("parseScale", () => {
   const patterns: [string, { scale: number; unit: string } | undefined][] = [

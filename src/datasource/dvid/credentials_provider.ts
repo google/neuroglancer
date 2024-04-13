@@ -22,15 +22,16 @@ import {
   AnonymousFirstCredentialsProvider,
   CredentialsProvider,
   makeCredentialsGetter,
-} from "#/credentials_provider";
-import { StatusMessage } from "#/status";
+} from "#src/credentials_provider/index.js";
+import type { DVIDToken } from "#src/datasource/dvid/api.js";
+import { responseText } from "#src/datasource/dvid/api.js";
+import { StatusMessage } from "#src/status.js";
 import {
   CANCELED,
   CancellationTokenSource,
   uncancelableToken,
-} from "#/util/cancellation";
-import { cancellableFetchOk } from "#/util/http_request";
-import { DVIDToken, responseText } from "#/datasource/dvid/api";
+} from "#src/util/cancellation.js";
+import { cancellableFetchOk } from "#src/util/http_request.js";
 
 async function getAuthToken(
   authServer: string,
@@ -78,7 +79,7 @@ class BaseDVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
         status.element.appendChild(button);
         button.addEventListener("click", () => {
           // In the current DVID setup, https://flyemlogin.<domain> is expected for the login server
-          const match = authServer.match(/^[^\/]+\/\/[^\/\.]+\.([^\/]+)/);
+          const match = authServer.match(/^[^/]+\/\/[^/.]+\.([^/]+)/);
           if (match) {
             const loginServer = `https://flyemlogin.${match[1]}/login`;
             window.alert(

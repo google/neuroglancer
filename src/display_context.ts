@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-import { FrameNumberCounter } from "#/chunk_manager/frontend";
-import { TrackableValue } from "#/trackable_value";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { Borrowed, RefCounted } from "#/util/disposable";
-import { mat4 } from "#/util/geom";
-import { parseFixedLengthArray, verifyFloat01 } from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { WatchableVisibilityPriority } from "#/visibility_priority/frontend";
-import { GL, initializeWebGL } from "#/webgl/context";
+import type { FrameNumberCounter } from "#src/chunk_manager/frontend.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { mat4 } from "#src/util/geom.js";
+import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
+import type { GL } from "#src/webgl/context.js";
+import { initializeWebGL } from "#src/webgl/context.js";
 
 export class RenderViewport {
   // Width of visible portion of panel in canvas pixels.

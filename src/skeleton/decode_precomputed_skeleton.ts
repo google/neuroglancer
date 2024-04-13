@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
+import type { SkeletonChunk } from "#src/skeleton/backend.js";
+import { decodeSkeletonVertexPositionsAndIndices } from "#src/skeleton/backend.js";
+import type { VertexAttributeInfo } from "#src/skeleton/base.js";
+import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 import {
-  decodeSkeletonVertexPositionsAndIndices,
-  SkeletonChunk,
-} from "#/skeleton/backend";
-import { VertexAttributeInfo } from "#/skeleton/base";
-import { DATA_TYPE_BYTES } from "#/util/data_type";
-import { convertEndian16, convertEndian32, Endianness } from "#/util/endian";
+  convertEndian16,
+  convertEndian32,
+  Endianness,
+} from "#src/util/endian.js";
 
 export function decodeSkeletonChunk(
   chunk: SkeletonChunk,

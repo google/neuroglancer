@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { TypedArray } from "#/util/array";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { decodeCompresso } from "#/async_computation/decode_compresso_request";
-import { requestAsyncComputation } from "#/async_computation/request";
+import { decodeCompresso } from "#src/async_computation/decode_compresso_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import type { TypedArray } from "#src/util/array.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function decodeCompressoChunk(
   chunk: VolumeChunk,

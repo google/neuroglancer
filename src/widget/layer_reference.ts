@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import debounce from "lodash/debounce";
-import { LayerReference } from "#/layer";
-import { Owned, RefCounted } from "#/util/disposable";
-import { removeChildren } from "#/util/dom";
+import { debounce } from "lodash-es";
+import type { LayerReference } from "#src/layer/index.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
 
 export class LayerReferenceWidget extends RefCounted {
   element = document.createElement("label");

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { decompressPng } from "#/sliceview/png";
-import { decodePng } from "#/async_computation/decode_png_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
+import { decodePng } from "#src/async_computation/decode_png_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { decompressPng } from "#src/sliceview/png/index.js";
 
 registerAsyncComputation(
   decodePng,

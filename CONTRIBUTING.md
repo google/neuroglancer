@@ -23,7 +23,7 @@ All submissions, including submissions by project members, require review.
 ### Coding Style
 
 For consistency, please ensure that all TypeScript/JavaScript files
-are linted with Biome and formatted by `prettier`.
+are linted with `eslint` and formatted by `prettier`.
 
 You can check for lint/format issues with:
 

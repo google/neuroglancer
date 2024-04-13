@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import { BrainmapsInstance, credentialsKey } from "#/datasource/brainmaps/api";
+import type { BrainmapsInstance } from "#src/datasource/brainmaps/api.js";
+import { credentialsKey } from "#src/datasource/brainmaps/api.js";
 import {
   BrainmapsDataSource,
   productionInstance,
-} from "#/datasource/brainmaps/frontend";
-import { registerProvider } from "#/datasource/default_provider";
+} from "#src/datasource/brainmaps/frontend.js";
+import { registerProvider } from "#src/datasource/default_provider.js";
 
 registerProvider(
   "brainmaps",
@@ -30,7 +31,7 @@ registerProvider(
     ),
 );
 
-declare let NEUROGLANCER_BRAINMAPS_SERVERS:
+declare const NEUROGLANCER_BRAINMAPS_SERVERS:
   | { [key: string]: BrainmapsInstance }
   | undefined;
 

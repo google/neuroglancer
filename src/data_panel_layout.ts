@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-import "#/data_panel_layout.css";
+import "#src/data_panel_layout.css";
 
-import debounce from "lodash/debounce";
-import { ChunkManager } from "#/chunk_manager/frontend";
-import { DisplayContext } from "#/display_context";
-import {
+import { debounce } from "lodash-es";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import type { DisplayContext } from "#src/display_context.js";
+import type {
   LayerManager,
   MouseSelectionState,
   SelectedLayerState,
   TrackableDataSelectionState,
-} from "#/layer";
-import * as L from "#/layout";
+} from "#src/layer/index.js";
+import * as L from "#src/layout.js";
+import type { TrackableZoomInterface } from "#src/navigation_state.js";
 import {
   DisplayPose,
   LinkedOrientationState,
@@ -34,38 +35,40 @@ import {
   LinkedZoomState,
   NavigationState,
   OrientationState,
-  TrackableZoomInterface,
-} from "#/navigation_state";
-import { PerspectivePanel } from "#/perspective_view/panel";
-import { RenderedDataPanel } from "#/rendered_data_panel";
-import { RenderLayerRole } from "#/renderlayer";
-import { SliceView } from "#/sliceview/frontend";
-import { SliceViewerState, SliceViewPanel } from "#/sliceview/panel";
-import { TrackableBoolean } from "#/trackable_boolean";
-import {
-  TrackableValue,
+} from "#src/navigation_state.js";
+import { PerspectivePanel } from "#src/perspective_view/panel.js";
+import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
+import type { RenderLayerRole } from "#src/renderlayer.js";
+import { SliceView } from "#src/sliceview/frontend.js";
+import type { SliceViewerState } from "#src/sliceview/panel.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
+import type {
   WatchableSet,
   WatchableValueInterface,
-} from "#/trackable_value";
-import { TrackableRGB } from "#/util/color";
-import { Borrowed, Owned, RefCounted } from "#/util/disposable";
-import { removeChildren, removeFromParent } from "#/util/dom";
+} from "#src/trackable_value.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import type { TrackableRGB } from "#src/util/color.js";
+import type { Borrowed, Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren, removeFromParent } from "#src/util/dom.js";
 import {
   EventActionMap,
   registerActionListener,
-} from "#/util/event_action_map";
-import { quat } from "#/util/geom";
+} from "#src/util/event_action_map.js";
+import { quat } from "#src/util/geom.js";
 import {
   verifyObject,
   verifyObjectProperty,
   verifyPositiveInt,
-} from "#/util/json";
-import { NullarySignal } from "#/util/signal";
-import { optionallyRestoreFromJsonMember, Trackable } from "#/util/trackable";
-import { WatchableMap } from "#/util/watchable_map";
-import { VisibilityPrioritySpecification } from "#/viewer_state";
-import { DisplayDimensionsWidget } from "#/widget/display_dimensions_widget";
-import { ScaleBarOptions } from "#/widget/scale_bar";
+} from "#src/util/json.js";
+import { NullarySignal } from "#src/util/signal.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { optionallyRestoreFromJsonMember } from "#src/util/trackable.js";
+import { WatchableMap } from "#src/util/watchable_map.js";
+import type { VisibilityPrioritySpecification } from "#src/viewer_state.js";
+import { DisplayDimensionsWidget } from "#src/widget/display_dimensions_widget.js";
+import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;

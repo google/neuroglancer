@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { JpegDecoder } from "jpgjs";
-import { decodeJpeg } from "#/async_computation/decode_jpeg_request";
-import { registerAsyncComputation } from "#/async_computation/handler";
-import { transposeArray2d } from "#/util/array";
+import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { JpegDecoder } from "#src/third_party/jpgjs/jpg.js";
+import { transposeArray2d } from "#src/util/array.js";
 
 registerAsyncComputation(
   decodeJpeg,

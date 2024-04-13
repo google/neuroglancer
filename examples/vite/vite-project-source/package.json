@@ -1,0 +1,18 @@
+{
+  "name": "neuroglancer-vite-project-source",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "dev-server": "vite"
+  },
+  "description": "Test of a vite-bundled project that depends on unbuilt (e.g. linked) Neuroglancer package.",
+  "dependencies": {
+    "neuroglancer": "file:../../.."
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "vite": "^5.1.4"
+  },
+  "type": "module"
+}

@@ -14,30 +14,35 @@
  * limitations under the License.
  */
 
-import { WithParameters } from "#/chunk_manager/backend";
-import { ChunkSourceParametersConstructor } from "#/chunk_manager/base";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
-import { BossToken, fetchWithBossCredentials } from "#/datasource/boss/api";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import type { ChunkSourceParametersConstructor } from "#src/chunk_manager/base.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type { BossToken } from "#src/datasource/boss/api.js";
+import { fetchWithBossCredentials } from "#src/datasource/boss/api.js";
 import {
   MeshSourceParameters,
   VolumeChunkSourceParameters,
-} from "#/datasource/boss/base";
+} from "#src/datasource/boss/base.js";
+import type { FragmentChunk, ManifestChunk } from "#src/mesh/backend.js";
 import {
   assignMeshFragmentData,
   decodeJsonManifestChunk,
   decodeTriangleVertexPositionsAndIndices,
-  FragmentChunk,
-  ManifestChunk,
   MeshSource,
-} from "#/mesh/backend";
-import { ChunkDecoder } from "#/sliceview/backend_chunk_decoders";
-import { decodeBossNpzChunk } from "#/sliceview/backend_chunk_decoders/bossNpz";
-import { decodeJpegChunk } from "#/sliceview/backend_chunk_decoders/jpeg";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { Endianness } from "#/util/endian";
-import { cancellableFetchOk, responseArrayBuffer } from "#/util/http_request";
-import { registerSharedObject, SharedObject } from "#/worker_rpc";
+} from "#src/mesh/backend.js";
+import { decodeBossNpzChunk } from "#src/sliceview/backend_chunk_decoders/bossNpz.js";
+import type { ChunkDecoder } from "#src/sliceview/backend_chunk_decoders/index.js";
+import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { Endianness } from "#src/util/endian.js";
+import {
+  cancellableFetchOk,
+  responseArrayBuffer,
+} from "#src/util/http_request.js";
+import type { SharedObject } from "#src/worker_rpc.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 const chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set("npz", decodeBossNpzChunk);

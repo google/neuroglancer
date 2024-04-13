@@ -36,7 +36,7 @@ def write_array(array):
         np.save(name, new_array)
     array_for_json = array
     if dtype == np.uint64:
-        array_for_json = (np.asarray(array, dtype=np.dtype("<u8"))).view("<u4")
+        array_for_json = np.asarray(array, dtype=np.dtype("<u8")).view("<u4")
     if dtype == np.float32:
         array_for_json = np.asarray(array_for_json, dtype=float)
     else:
@@ -65,4 +65,4 @@ write_int_array(np.uint8)
 write_int_array(np.uint16)
 write_int_array(np.uint32)
 write_int_array(np.uint64)
-write_array(np.asarray(gen.standard_normal(shape, dtype=np.float32)))
+write_array(np.asarray(gen.standard_normal(shape), dtype=np.float32))

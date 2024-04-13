@@ -14,34 +14,31 @@
  * limitations under the License.
  */
 
-import { SliceView } from "#/sliceview/frontend";
-import { MultiscaleVolumeChunkSource } from "#/sliceview/volume/frontend";
-import {
-  RenderLayerBaseOptions,
-  SliceViewVolumeRenderLayer,
-} from "#/sliceview/volume/renderlayer";
-import { TrackableAlphaValue } from "#/trackable_alpha";
-import {
-  BLEND_FUNCTIONS,
-  BLEND_MODES,
-  TrackableBlendModeValue,
-} from "#/trackable_blend";
-import { WatchableValue } from "#/trackable_value";
-import { glsl_COLORMAPS } from "#/webgl/colormaps";
+import type { SliceView } from "#src/sliceview/frontend.js";
+import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type { RenderLayerBaseOptions } from "#src/sliceview/volume/renderlayer.js";
+import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js";
+import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
+import type { TrackableBlendModeValue } from "#src/trackable_blend.js";
+import { BLEND_FUNCTIONS, BLEND_MODES } from "#src/trackable_blend.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
+import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
   makeTrackableFragmentMain,
   shaderCodeWithLineDirective,
-  WatchableShaderError,
-} from "#/webgl/dynamic_shader";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
+} from "#src/webgl/dynamic_shader.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type {
+  ShaderControlsBuilderState,
+  ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
   getFallbackBuilderState,
   parseShaderUiControls,
   setControlsInShader,
-  ShaderControlsBuilderState,
-  ShaderControlState,
-} from "#/webgl/shader_ui_controls";
+} from "#src/webgl/shader_ui_controls.js";
 
 const DEFAULT_FRAGMENT_MAIN = `#uicontrol invlerp normalized
 void main() {

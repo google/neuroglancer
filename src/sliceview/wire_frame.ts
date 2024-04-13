@@ -14,24 +14,24 @@
  * limitations under the License.
  */
 
-import { ProjectionParameters } from "#/projection_parameters";
-import {
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import type {
   SliceViewProjectionParameters,
   TransformedSource,
-} from "#/sliceview/base";
+} from "#src/sliceview/base.js";
 import {
   defineBoundingBoxCrossSectionShader,
   setBoundingBoxCrossSectionShaderViewportPlane,
-} from "#/sliceview/bounding_box_shader_helper";
-import { mat4, vec3 } from "#/util/geom";
-import { EDGES_PER_BOX } from "#/webgl/bounding_box";
+} from "#src/sliceview/bounding_box_shader_helper.js";
+import { mat4, vec3 } from "#src/util/geom.js";
+import { EDGES_PER_BOX } from "#src/webgl/bounding_box.js";
 import {
   defineLineShader,
   drawLines,
   initializeLineShader,
   VERTICES_PER_LINE,
-} from "#/webgl/lines";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
+} from "#src/webgl/lines.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 const tempMat4 = mat4.create();
 const tempVec3 = vec3.create();

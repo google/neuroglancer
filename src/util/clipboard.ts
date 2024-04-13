@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { registerEventListener } from "#/util/disposable";
+import { registerEventListener } from "#src/util/disposable.js";
 
 export function setClipboard(data: string, format = "text/plain") {
   let success = false;

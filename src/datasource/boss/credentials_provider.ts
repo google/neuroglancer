@@ -22,16 +22,16 @@
 import {
   CredentialsProvider,
   makeCredentialsGetter,
-} from "#/credentials_provider";
-import { StatusMessage } from "#/status";
+} from "#src/credentials_provider/index.js";
+import { StatusMessage } from "#src/status.js";
 import {
   CANCELED,
   CancellationTokenSource,
   uncancelableToken,
-} from "#/util/cancellation";
-import { verifyObject, verifyString } from "#/util/json";
-import { getRandomHexString } from "#/util/random";
-import { Signal } from "#/util/signal";
+} from "#src/util/cancellation.js";
+import { verifyObject, verifyString } from "#src/util/json.js";
+import { getRandomHexString } from "#src/util/random.js";
+import { Signal } from "#src/util/signal.js";
 
 export type BossToken = string;
 
@@ -127,7 +127,7 @@ export function authenticateKeycloakOIDC(
   const url = handler.makeAuthRequestUrl({
     state: state,
     clientId: options.clientId,
-    redirect_uri: new URL("bossauth.html", window.location.href).href,
+    redirect_uri: new URL("./bossauth.html", import.meta.url).href,
     authServer: options.authServer,
     nonce: nonce,
   });

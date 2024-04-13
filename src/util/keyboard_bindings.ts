@@ -20,16 +20,18 @@
 
 // This is based on goog/ui/keyboardshortcuthandler.js in the Google Closure library.
 
-import { WatchableValue } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import {
+import { WatchableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type {
   ActionEvent,
+  EventActionMapInterface,
+} from "#src/util/event_action_map.js";
+import {
   dispatchEventWithModifiers,
   EventActionMap,
-  EventActionMapInterface,
   registerActionListener,
   getEventModifierMask,
-} from "#/util/event_action_map";
+} from "#src/util/event_action_map.js";
 
 export const globalModifiers = new WatchableValue<number>(0);
 window.addEventListener("keydown", (event) => {

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { RefCounted, RefCountedValue } from "#/util/disposable";
-import { stableStringify } from "#/util/json";
+import type { RefCounted } from "#src/util/disposable.js";
+import { RefCountedValue } from "#src/util/disposable.js";
+import { stableStringify } from "#src/util/json.js";
 
 export class Memoize<Key, Value extends RefCounted> {
   private map = new Map<Key, Value>();

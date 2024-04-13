@@ -14,51 +14,45 @@
  * limitations under the License.
  */
 
-import {
-  ChunkManager,
-  ChunkRenderLayerFrontend,
-} from "#/chunk_manager/frontend";
-import { CoordinateSpace } from "#/coordinate_transform";
-import { VisibleLayerInfo } from "#/layer";
-import {
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import type { VisibleLayerInfo } from "#src/layer/index.js";
+import type {
   ChunkTransformParameters,
   RenderLayerTransformOrError,
-} from "#/render_coordinate_transform";
-import {
-  RenderScaleHistogram,
-  trackableRenderScaleTarget,
-} from "#/render_scale_statistics";
-import {
-  RenderLayer,
+} from "#src/render_coordinate_transform.js";
+import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
+import { trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
+import type {
   ThreeDimensionalReadyRenderContext,
   ThreeDimensionalRenderContext,
-  VisibilityTrackedRenderLayer,
-} from "#/renderlayer";
-import { SharedWatchableValue } from "#/shared_watchable_value";
-import {
-  filterVisibleSources,
-  SLICEVIEW_RENDERLAYER_RPC_ID,
+} from "#src/renderlayer.js";
+import { RenderLayer, VisibilityTrackedRenderLayer } from "#src/renderlayer.js";
+import { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type {
   SliceViewBase,
   SliceViewProjectionParameters,
   SliceViewSourceOptions,
   TransformedSource,
-} from "#/sliceview/base";
+} from "#src/sliceview/base.js";
 import {
+  filterVisibleSources,
+  SLICEVIEW_RENDERLAYER_RPC_ID,
+} from "#src/sliceview/base.js";
+import type {
   MultiscaleSliceViewChunkSource,
   SliceView,
   SliceViewChunkSource,
   SliceViewSingleResolutionSource,
-} from "#/sliceview/frontend";
-import { SliceViewPanel } from "#/sliceview/panel";
-import {
-  constantWatchableValue,
-  WatchableValueInterface,
-} from "#/trackable_value";
-import { Borrowed } from "#/util/disposable";
-import { HistogramSpecifications } from "#/webgl/empirical_cdf";
-import { ShaderModule } from "#/webgl/shader";
-import { RpcId } from "#/worker_rpc";
-import { SharedObject } from "#/worker_rpc";
+} from "#src/sliceview/frontend.js";
+import type { SliceViewPanel } from "#src/sliceview/panel.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { constantWatchableValue } from "#src/trackable_value.js";
+import type { Borrowed } from "#src/util/disposable.js";
+import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import type { ShaderModule } from "#src/webgl/shader.js";
+import type { RpcId, SharedObject } from "#src/worker_rpc.js";
 
 export interface SliceViewRenderLayerOptions {
   /**

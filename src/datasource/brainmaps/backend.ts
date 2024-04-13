@@ -14,70 +14,74 @@
  * limitations under the License.
  */
 
+import type {
+  AnnotationGeometryChunk,
+  AnnotationMetadataChunk,
+  AnnotationSubsetGeometryChunk,
+} from "#src/annotation/backend.js";
 import {
-  Annotation,
-  AnnotationId,
+  AnnotationGeometryChunkSourceBackend,
+  AnnotationGeometryData,
+  AnnotationSource,
+} from "#src/annotation/backend.js";
+import type { Annotation, AnnotationId } from "#src/annotation/index.js";
+import {
   AnnotationSerializer,
   AnnotationType,
   makeAnnotationPropertySerializers,
-} from "#/annotation";
-import {
-  AnnotationGeometryChunk,
-  AnnotationGeometryChunkSourceBackend,
-  AnnotationGeometryData,
-  AnnotationMetadataChunk,
-  AnnotationSource,
-  AnnotationSubsetGeometryChunk,
-} from "#/annotation/backend";
-import { WithParameters } from "#/chunk_manager/backend";
-import { ChunkSourceParametersConstructor } from "#/chunk_manager/base";
-import { CredentialsProvider } from "#/credentials_provider";
-import { WithSharedCredentialsProviderCounterpart } from "#/credentials_provider/shared_counterpart";
-import {
+} from "#src/annotation/index.js";
+import { WithParameters } from "#src/chunk_manager/backend.js";
+import type { ChunkSourceParametersConstructor } from "#src/chunk_manager/base.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type {
   BatchMeshFragment,
   BatchMeshFragmentPayload,
   BrainmapsInstance,
   ChangeStackAwarePayload,
   OAuth2Credentials,
-  makeRequest,
   SkeletonPayload,
   SubvolumePayload,
-} from "#/datasource/brainmaps/api";
+} from "#src/datasource/brainmaps/api.js";
+import { makeRequest } from "#src/datasource/brainmaps/api.js";
+import type { ChangeSpec } from "#src/datasource/brainmaps/base.js";
 import {
   AnnotationSourceParameters,
   AnnotationSpatialIndexSourceParameters,
-  ChangeSpec,
   MeshSourceParameters,
   MultiscaleMeshSourceParameters,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeSourceParameters,
-} from "#/datasource/brainmaps/base";
+} from "#src/datasource/brainmaps/base.js";
+import type {
+  FragmentChunk,
+  ManifestChunk,
+  MultiscaleFragmentChunk,
+  MultiscaleManifestChunk,
+} from "#src/mesh/backend.js";
 import {
   assignMeshFragmentData,
   assignMultiscaleMeshFragmentData,
-  FragmentChunk,
   generateHigherOctreeLevel,
-  ManifestChunk,
   MeshSource,
-  MultiscaleFragmentChunk,
-  MultiscaleManifestChunk,
   MultiscaleMeshSource,
-} from "#/mesh/backend";
-import { VertexPositionFormat } from "#/mesh/base";
-import { MultiscaleMeshManifest } from "#/mesh/multiscale";
+} from "#src/mesh/backend.js";
+import { VertexPositionFormat } from "#src/mesh/base.js";
+import type { MultiscaleMeshManifest } from "#src/mesh/multiscale.js";
+import type { SkeletonChunk } from "#src/skeleton/backend.js";
 import {
   decodeSkeletonVertexPositionsAndIndices,
-  SkeletonChunk,
   SkeletonSource,
-} from "#/skeleton/backend";
-import { decodeCompressedSegmentationChunk } from "#/sliceview/backend_chunk_decoders/compressed_segmentation";
-import { decodeJpegChunk } from "#/sliceview/backend_chunk_decoders/jpeg";
-import { decodeRawChunk } from "#/sliceview/backend_chunk_decoders/raw";
-import { VolumeChunk, VolumeChunkSource } from "#/sliceview/volume/backend";
-import { CancellationToken } from "#/util/cancellation";
-import { convertEndian32, Endianness } from "#/util/endian";
-import { kInfinityVec, kZeroVec, vec3, vec3Key } from "#/util/geom";
+} from "#src/skeleton/backend.js";
+import { decodeCompressedSegmentationChunk } from "#src/sliceview/backend_chunk_decoders/compressed_segmentation.js";
+import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
+import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { convertEndian32, Endianness } from "#src/util/endian.js";
+import { kInfinityVec, kZeroVec, vec3, vec3Key } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -86,17 +90,18 @@ import {
   verifyOptionalString,
   verifyString,
   verifyStringArray,
-} from "#/util/json";
-import { defaultStringCompare } from "#/util/string";
-import { Uint64 } from "#/util/uint64";
-import * as vector from "#/util/vector";
+} from "#src/util/json.js";
+import { defaultStringCompare } from "#src/util/string.js";
+import { Uint64 } from "#src/util/uint64.js";
+import * as vector from "#src/util/vector.js";
 import {
   decodeZIndexCompressed,
   encodeZIndexCompressed3d,
   getOctreeChildIndex,
   zorder3LessThan,
-} from "#/util/zorder";
-import { registerSharedObject, SharedObject } from "#/worker_rpc";
+} from "#src/util/zorder.js";
+import type { SharedObject } from "#src/worker_rpc.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 const CHUNK_DECODERS = new Map([
   [VolumeChunkEncoding.RAW, decodeRawChunk],

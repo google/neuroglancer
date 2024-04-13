@@ -14,85 +14,82 @@
  * limitations under the License.
  */
 
-import { ChunkState } from "#/chunk_manager/base";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import {
   Chunk,
-  ChunkManager,
   ChunkSource,
   WithParameters,
-} from "#/chunk_manager/frontend";
-import { CredentialsManager } from "#/credentials_provider";
+} from "#src/chunk_manager/frontend.js";
 import {
   getCredentialsProviderCounterpart,
   WithCredentialsProvider,
-} from "#/credentials_provider/chunk_source_frontend";
-import { PickState, VisibleLayerInfo } from "#/layer";
-import { PerspectivePanel } from "#/perspective_view/panel";
-import {
-  PerspectiveViewRenderContext,
-  PerspectiveViewRenderLayer,
-} from "#/perspective_view/render_layer";
-import { WatchableRenderLayerTransform } from "#/render_coordinate_transform";
-import {
-  ThreeDimensionalRenderLayerAttachmentState,
-  update3dRenderLayerAttachment,
-} from "#/renderlayer";
+} from "#src/credentials_provider/chunk_source_frontend.js";
+import type { CredentialsManager } from "#src/credentials_provider/index.js";
+import type { PickState, VisibleLayerInfo } from "#src/layer/index.js";
+import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
+import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
+import type { WatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
+import type { ThreeDimensionalRenderLayerAttachmentState } from "#src/renderlayer.js";
+import { update3dRenderLayerAttachment } from "#src/renderlayer.js";
+import type {
+  SingleMeshInfo,
+  VertexAttributeInfo,
+} from "#src/single_mesh/base.js";
 import {
   GET_SINGLE_MESH_INFO_RPC_ID,
   SINGLE_MESH_CHUNK_KEY,
   SINGLE_MESH_LAYER_RPC_ID,
-  SingleMeshInfo,
   SingleMeshSourceParametersWithInfo,
-  VertexAttributeInfo,
-} from "#/single_mesh/base";
-import { WatchableValue } from "#/trackable_value";
-import { DataType } from "#/util/data_type";
-import { mat4, vec3 } from "#/util/geom";
-import {
-  parseSpecialUrl,
-  SpecialProtocolCredentials,
-} from "#/util/special_protocol_request";
-import { withSharedVisibility } from "#/visibility_priority/frontend";
-import { Buffer } from "#/webgl/buffer";
-import { glsl_COLORMAPS } from "#/webgl/colormaps";
-import { GL } from "#/webgl/context";
+} from "#src/single_mesh/base.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { DataType } from "#src/util/data_type.js";
+import type { mat4 } from "#src/util/geom.js";
+import { vec3 } from "#src/util/geom.js";
+import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
+import { parseSpecialUrl } from "#src/util/special_protocol_request.js";
+import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import type { Buffer } from "#src/webgl/buffer.js";
+import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
+import type { GL } from "#src/webgl/context.js";
 import {
   makeTrackableFragmentMain,
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
-} from "#/webgl/dynamic_shader";
+} from "#src/webgl/dynamic_shader.js";
+import type { CountingBuffer } from "#src/webgl/index_emulation.js";
 import {
-  CountingBuffer,
   countingBufferShaderModule,
   disableCountingBuffer,
   getCountingBuffer,
   IndexBufferAttributeHelper,
   makeIndexBuffer,
-} from "#/webgl/index_emulation";
-import {
+} from "#src/webgl/index_emulation.js";
+import type {
   ShaderBuilder,
   ShaderModule,
   ShaderProgram,
   ShaderSamplerType,
-} from "#/webgl/shader";
-import { getShaderType } from "#/webgl/shader_lib";
+} from "#src/webgl/shader.js";
+import { getShaderType } from "#src/webgl/shader_lib.js";
+import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
   getFallbackBuilderState,
   parseShaderUiControls,
   setControlsInShader,
-  ShaderControlsBuilderState,
   ShaderControlState,
-} from "#/webgl/shader_ui_controls";
+} from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
   getSamplerPrefixForDataType,
   OneDimensionalTextureAccessHelper,
   setOneDimensionalTextureData,
   TextureFormat,
-} from "#/webgl/texture_access";
-import { SharedObject } from "#/worker_rpc";
+} from "#src/webgl/texture_access.js";
+import { SharedObject } from "#src/worker_rpc.js";
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();

@@ -14,40 +14,39 @@
  * limitations under the License.
  */
 
-import "./layer_list_panel.css";
-
-import svg_controls_alt from "ikonate/icons/controls-alt.svg";
-import svg_eye_crossed from "ikonate/icons/eye-crossed.svg";
-import svg_eye from "ikonate/icons/eye.svg";
-import {
-  deleteLayer,
+import "#src/ui/layer_list_panel.css";
+import svg_controls_alt from "ikonate/icons/controls-alt.svg?raw";
+import svg_eye_crossed from "ikonate/icons/eye-crossed.svg?raw";
+import svg_eye from "ikonate/icons/eye.svg?raw";
+import type {
   LayerManager,
   ManagedUserLayer,
   TopLevelLayerListSpecification,
-} from "#/layer";
-import { TrackableBooleanCheckbox } from "#/trackable_boolean";
+} from "#src/layer/index.js";
+import { deleteLayer } from "#src/layer/index.js";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
-  DropLayers,
   registerLayerBarDragLeaveHandler,
   registerLayerBarDropHandlers,
   registerLayerDragHandlers,
-} from "#/ui/layer_drag_and_drop";
-import { LayerNameWidget } from "#/ui/layer_side_panel";
-import { SidePanel, SidePanelManager } from "#/ui/side_panel";
+} from "#src/ui/layer_drag_and_drop.js";
+import { LayerNameWidget } from "#src/ui/layer_side_panel.js";
+import type { SidePanelManager } from "#src/ui/side_panel.js";
+import { SidePanel } from "#src/ui/side_panel.js";
+import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
 import {
   DEFAULT_SIDE_PANEL_LOCATION,
-  SidePanelLocation,
   TrackableSidePanelLocation,
-} from "#/ui/side_panel_location";
-import { animationFrameDebounce } from "#/util/animation_frame_debounce";
-import { RefCounted } from "#/util/disposable";
-import { updateChildren } from "#/util/dom";
-import { emptyToUndefined } from "#/util/json";
-import { Trackable } from "#/util/trackable";
-import { makeDeleteButton } from "#/widget/delete_button";
-import { makeIcon } from "#/widget/icon";
-
-import { CheckboxIcon } from "../widget/checkbox_icon";
+} from "#src/ui/side_panel_location.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { updateChildren } from "#src/util/dom.js";
+import { emptyToUndefined } from "#src/util/json.js";
+import type { Trackable } from "#src/util/trackable.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeDeleteButton } from "#src/widget/delete_button.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 const DEFAULT_LAYER_LIST_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,

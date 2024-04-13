@@ -18,8 +18,9 @@
  * limitations under the License.
  */
 
-import { Uint64Set } from "#/uint64_set";
-import { Uint64 } from "#/util/uint64";
+import { describe, it, expect } from "vitest";
+import { Uint64Set } from "#src/uint64_set.js";
+import { Uint64 } from "#src/util/uint64.js";
 
 describe("Uint64Set", () => {
   it("basic", () => {

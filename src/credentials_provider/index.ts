@@ -18,12 +18,11 @@
  * @file Generic facility for providing authentication/authorization credentials.
  */
 
-import {
-  CancellationToken,
-  MultipleConsumerCancellationTokenSource,
-} from "#/util/cancellation";
-import { Owned, RefCounted } from "#/util/disposable";
-import { StringMemoize } from "#/util/memoize";
+import type { CancellationToken } from "#src/util/cancellation.js";
+import { MultipleConsumerCancellationTokenSource } from "#src/util/cancellation.js";
+import type { Owned } from "#src/util/disposable.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { StringMemoize } from "#src/util/memoize.js";
 
 /**
  * Wraps an arbitrary JSON credentials object with a generation number.

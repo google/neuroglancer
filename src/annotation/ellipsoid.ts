@@ -18,27 +18,30 @@
  * @file Support for rendering ellipsoid annotations.
  */
 
-import { AnnotationType, Ellipsoid } from "#/annotation";
-import {
+import type { Ellipsoid } from "#src/annotation/index.js";
+import { AnnotationType } from "#src/annotation/index.js";
+import type {
   AnnotationRenderContext,
-  AnnotationRenderHelper,
   AnnotationShaderGetter,
+} from "#src/annotation/type_handler.js";
+import {
+  AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
-} from "#/annotation/type_handler";
-import { PerspectiveViewRenderContext } from "#/perspective_view/render_layer";
-import { SliceViewPanelRenderContext } from "#/sliceview/renderlayer";
-import { mat3, mat4, vec3 } from "#/util/geom";
+} from "#src/annotation/type_handler.js";
+import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
+import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
+import { mat3, mat4, vec3 } from "#src/util/geom.js";
 import {
   computeCenterOrientEllipseDebug,
   computeCrossSectionEllipseDebug,
   glsl_computeCenterOrientEllipse,
   glsl_computeCrossSectionEllipse,
-} from "#/webgl/ellipse";
-import { drawQuads, glsl_getQuadVertexPosition } from "#/webgl/quad";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { defineVectorArrayVertexShaderInput } from "#/webgl/shader_lib";
-import { SphereRenderHelper } from "#/webgl/spheres";
-import { defineVertexId, VertexIdHelper } from "#/webgl/vertex_id";
+} from "#src/webgl/ellipse.js";
+import { drawQuads, glsl_getQuadVertexPosition } from "#src/webgl/quad.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
+import { SphereRenderHelper } from "#src/webgl/spheres.js";
+import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const tempMat4 = mat4.create();
 

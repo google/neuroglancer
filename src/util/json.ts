@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { WritableArrayLike } from "#/util/array";
-import { vec3 } from "#/util/geom";
+import type { WritableArrayLike } from "#src/util/array.js";
+import { vec3 } from "#src/util/geom.js";
 
 export function verifyFloat(obj: any): number {
   const t = typeof obj;
@@ -396,7 +396,7 @@ export function pythonLiteralToJSON(x: string) {
       .replace(/\)/g, "]")
       .replace("True", "true")
       .replace("False", "false")
-      .replace(/,\s*([\}\]])/g, "$1");
+      .replace(/,\s*([}\]])/g, "$1");
     s += replacement;
   }
   return s;

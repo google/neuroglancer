@@ -14,41 +14,48 @@
  * limitations under the License.
  */
 
-import {
+import type {
   Annotation,
   AnnotationPropertySpec,
   AnnotationType,
+} from "#src/annotation/index.js";
+import {
   annotationTypeHandlers,
   getPropertyOffsets,
   propertyTypeDataType,
-} from "#/annotation";
-import { AnnotationLayer } from "#/annotation/renderlayer";
-import { PerspectiveViewRenderContext } from "#/perspective_view/render_layer";
-import { ChunkDisplayTransformParameters } from "#/render_coordinate_transform";
-import { SliceViewPanelRenderContext } from "#/sliceview/renderlayer";
-import { WatchableValueInterface } from "#/trackable_value";
-import { RefCounted } from "#/util/disposable";
-import { mat4 } from "#/util/geom";
-import { Buffer } from "#/webgl/buffer";
-import { glsl_COLORMAPS } from "#/webgl/colormaps";
-import { GL } from "#/webgl/context";
-import {
+} from "#src/annotation/index.js";
+import type { AnnotationLayer } from "#src/annotation/renderlayer.js";
+import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
+import type { ChunkDisplayTransformParameters } from "#src/render_coordinate_transform.js";
+import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import type { mat4 } from "#src/util/geom.js";
+import type { Buffer } from "#src/webgl/buffer.js";
+import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
+import type { GL } from "#src/webgl/context.js";
+import type {
   ParameterizedContextDependentShaderGetter,
+  WatchableShaderError,
+} from "#src/webgl/dynamic_shader.js";
+import {
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
-  WatchableShaderError,
-} from "#/webgl/dynamic_shader";
+} from "#src/webgl/dynamic_shader.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
-} from "#/webgl/lerp";
-import { ShaderBuilder, ShaderModule, ShaderProgram } from "#/webgl/shader";
+} from "#src/webgl/lerp.js";
+import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
+import type {
+  ShaderControlsBuilderState,
+  ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
   setControlsInShader,
-  ShaderControlsBuilderState,
-  ShaderControlState,
-} from "#/webgl/shader_ui_controls";
+} from "#src/webgl/shader_ui_controls.js";
 
 const DEBUG_HISTOGRAMS = false;
 

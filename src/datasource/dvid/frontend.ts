@@ -19,58 +19,59 @@
  * Support for DVID (https://github.com/janelia-flyem/dvid) servers.
  */
 
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#/annotation";
-import { ChunkManager, WithParameters } from "#/chunk_manager/frontend";
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
+import type { BoundingBox } from "#src/coordinate_transform.js";
 import {
-  BoundingBox,
   makeCoordinateSpace,
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
-} from "#/coordinate_transform";
-import {
+} from "#src/coordinate_transform.js";
+import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
+import type {
   CredentialsManager,
   CredentialsProvider,
-} from "#/credentials_provider";
-import { WithCredentialsProvider } from "#/credentials_provider/chunk_source_frontend";
-import {
-  CompleteUrlOptions,
-  CompletionResult,
-  DataSource,
-  DataSourceProvider,
-  GetDataSourceOptions,
-} from "#/datasource";
+} from "#src/credentials_provider/index.js";
+import type { DVIDToken } from "#src/datasource/dvid/api.js";
 import {
   credentialsKey,
-  DVIDToken,
   makeRequestWithCredentials,
-} from "#/datasource/dvid/api";
+} from "#src/datasource/dvid/api.js";
+import type { DVIDSourceParameters } from "#src/datasource/dvid/base.js";
 import {
-  DVIDSourceParameters,
   MeshSourceParameters,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
-} from "#/datasource/dvid/base";
-import { MeshSource } from "#/mesh/frontend";
-import { SkeletonSource } from "#/skeleton/frontend";
-import { SliceViewSingleResolutionSource } from "#/sliceview/frontend";
+} from "#src/datasource/dvid/base.js";
+import type {
+  CompleteUrlOptions,
+  CompletionResult,
+  DataSource,
+  GetDataSourceOptions,
+} from "#src/datasource/index.js";
+import { DataSourceProvider } from "#src/datasource/index.js";
+import { MeshSource } from "#src/mesh/frontend.js";
+import { SkeletonSource } from "#src/skeleton/frontend.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   DataType,
   makeDefaultVolumeChunkSpecifications,
-  VolumeSourceOptions,
   VolumeType,
-} from "#/sliceview/volume/base";
+} from "#src/sliceview/volume/base.js";
 import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
-} from "#/sliceview/volume/frontend";
-import { StatusMessage } from "#/status";
-import { transposeNestedArrays } from "#/util/array";
+} from "#src/sliceview/volume/frontend.js";
+import { StatusMessage } from "#src/status.js";
+import { transposeNestedArrays } from "#src/util/array.js";
 import {
   applyCompletionOffset,
   getPrefixMatchesWithDescriptions,
-} from "#/util/completion";
-import { mat4, vec3 } from "#/util/geom";
+} from "#src/util/completion.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -83,7 +84,7 @@ import {
   verifyObjectProperty,
   verifyPositiveInt,
   verifyString,
-} from "#/util/json";
+} from "#src/util/json.js";
 
 const serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set("uint8", DataType.UINT8);
@@ -509,7 +510,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   }
 }
 
-const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
+const urlPattern = /^((?:http|https):\/\/[^/]+)\/([^/]+)\/([^/]+)(\?.*)?$/;
 
 function getDefaultAuthServer(baseUrl: string) {
   if (baseUrl.startsWith("https")) {
@@ -699,7 +700,7 @@ export function completeNodeAndInstance(
   serverInfo: ServerInfo,
   prefix: string,
 ): CompletionResult {
-  const match = prefix.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
+  const match = prefix.match(/^(?:([^/]+)(?:\/([^/]*))?)?$/);
   if (match === null) {
     throw new Error("Invalid DVID URL syntax.");
   }
@@ -726,7 +727,7 @@ export function completeNodeAndInstance(
 export async function completeUrl(
   options: CompleteUrlOptions,
 ): Promise<CompletionResult> {
-  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\?]*).*$/;
+  const curUrlPattern = /^((?:http|https):\/\/[^/]+)\/([^?]*).*$/;
   const url = options.providerUrl;
 
   const match = url.match(curUrlPattern);

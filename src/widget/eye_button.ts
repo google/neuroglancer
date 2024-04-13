@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import "./eye_button.css";
+import "#src/widget/eye_button.css";
 
-import svg_eye_crossed from "ikonate/icons/eye-crossed.svg";
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import svg_eye_crossed from "ikonate/icons/eye-crossed.svg?raw";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeEyeButton(options: MakeIconOptions = {}) {
   const icon = makeIcon({ svg: svg_eye_crossed, ...options });

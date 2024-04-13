@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#/util/uint64";
-import { LocalSegmentationGraphSource } from "#/segmentation_graph/local";
+import { describe, it, expect } from "vitest";
 
-beforeEach(() => {
-  jasmine.addCustomEqualityTester((a, b) => {
-    if (a instanceof Uint64 && b instanceof Uint64) {
-      return Uint64.equal(a, b);
-    }
-    return undefined;
-  });
-});
+import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
+import { Uint64 } from "#src/util/uint64.js";
+
+function uint64Tester(a: unknown, b: unknown): boolean | undefined {
+  if (a instanceof Uint64 && b instanceof Uint64) {
+    return Uint64.equal(a, b);
+  }
+  return undefined;
+}
+expect.addEqualityTesters([uint64Tester]);
 
 const u64 = (x: string | number) => Uint64.parseString(x.toString());
 

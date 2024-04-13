@@ -18,16 +18,16 @@
  * limitations under the License.
  */
 
-import { HashMapUint64 } from "#/gpu_hash/hash_table";
-import { WatchableValueInterface } from "#/trackable_value";
-import { Signal } from "#/util/signal";
-import { Uint64 } from "#/util/uint64";
+import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { Signal } from "#src/util/signal.js";
+import type { Uint64 } from "#src/util/uint64.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObject,
-  RPC,
   SharedObjectCounterpart,
-} from "#/worker_rpc";
+} from "#src/worker_rpc.js";
 
 @registerSharedObject("Uint64Map")
 export class Uint64Map

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#/datasource/default_provider";
-import { RenderDataSource } from "#/datasource/render/frontend";
+import { registerProvider } from "#src/datasource/default_provider.js";
+import { RenderDataSource } from "#src/datasource/render/frontend.js";
 
 registerProvider("render", () => new RenderDataSource());

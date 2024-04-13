@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { RefCounted } from "#/util/disposable";
-import { Buffer } from "#/webgl/buffer";
-import { GL } from "#/webgl/context";
-import { ShaderBuilder, ShaderProgram } from "#/webgl/shader";
-import { glsl_uint32 } from "#/webgl/shader_lib";
+import { RefCounted } from "#src/util/disposable.js";
+import { Buffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { glsl_uint32 } from "#src/webgl/shader_lib.js";
 
 export class CountingBuffer extends RefCounted {
   length: number | undefined;

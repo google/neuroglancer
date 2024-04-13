@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import { UserLayer } from "#/layer";
-import { WatchableValue } from "#/trackable_value";
+import type { UserLayer } from "#src/layer/index.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
 import {
   DEFAULT_SIDE_PANEL_LOCATION,
-  SidePanelLocation,
   TrackableSidePanelLocation,
-} from "#/ui/side_panel_location";
-import { arraysEqual } from "#/util/array";
-import { RefCounted } from "#/util/disposable";
+} from "#src/ui/side_panel_location.js";
+import { arraysEqual } from "#src/util/array.js";
+import { RefCounted } from "#src/util/disposable.js";
 import {
   parseArray,
   verifyObject,
   verifyOptionalObjectProperty,
   verifyString,
   verifyStringArray,
-} from "#/util/json";
-import { Signal } from "#/util/signal";
+} from "#src/util/json.js";
+import { Signal } from "#src/util/signal.js";
 
 const TAB_JSON_KEY = "tab";
 const TABS_JSON_KEY = "tabs";

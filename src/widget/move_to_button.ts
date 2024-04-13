@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { makeIcon, MakeIconOptions } from "#/widget/icon";
+import type { MakeIconOptions } from "#src/widget/icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 export function makeMoveToButton(options: MakeIconOptions = {}) {
   return makeIcon({ text: "↗", ...options });
