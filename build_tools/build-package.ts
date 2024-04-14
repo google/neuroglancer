@@ -14,12 +14,31 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import esbuild from "esbuild";
 import { glob } from "glob";
+import ts from "typescript";
 import yargs from "yargs";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 
-async function buildPackage(options: { inplace?: boolean }) {
-  const { inplace = false } = options;
+function buildDeclarationFiles(
+  fileNames: string[],
+  options: ts.CompilerOptions,
+): void {
+  options = {
+    allowJs: true,
+    declaration: true,
+    emitDeclarationOnly: true,
+    ...options,
+  };
+  const host = ts.createCompilerHost(options);
+  const program = ts.createProgram(fileNames, options, host);
+  program.emit();
+}
+
+async function buildPackage(options: {
+  inplace?: boolean;
+  declaration?: boolean;
+}) {
+  const { inplace = false, declaration = false } = options;
 
   const srcDir = path.resolve(rootDir, "src");
   const outDir = inplace ? rootDir : path.resolve(rootDir, "dist", "package");
@@ -45,12 +64,25 @@ async function buildPackage(options: { inplace?: boolean }) {
     nodir: true,
   });
 
+  const entryPoints = typescriptSources.map((name) =>
+    path.resolve(srcDir, name),
+  );
+
   await esbuild.build({
-    entryPoints: typescriptSources.map((name) => path.resolve(srcDir, name)),
+    entryPoints,
     outbase: srcDir,
     bundle: false,
     outdir: libDir,
   });
+
+  if (declaration) {
+    buildDeclarationFiles(entryPoints, {
+      allowJs: true,
+      declaration: true,
+      emitDeclarationOnly: true,
+      outDir: libDir,
+    });
+  }
 
   const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
     cwd: srcDir,
@@ -129,6 +161,11 @@ async function parseArgsAndRunMain() {
         description: "Skip building if invoked on a top-level npm repository.",
         implies: "inplace",
       },
+      ["declaration"]: {
+        type: "boolean",
+        default: false,
+        description: "Generate .d.ts files.",
+      },
     })
     .strict()
     .demandCommand(0, 0)
@@ -160,7 +197,7 @@ async function parseArgsAndRunMain() {
       return;
     }
   }
-  buildPackage({ inplace: argv.inplace });
+  buildPackage({ inplace: argv.inplace, declaration: argv.declaration });
 }
 
 if (process.argv[1] === import.meta.filename) {
