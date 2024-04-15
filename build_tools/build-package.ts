@@ -28,8 +28,7 @@ function buildDeclarationFiles(
     declaration: true,
     emitDeclarationOnly: true,
   };
-  const host = ts.createCompilerHost(options);
-  const program = ts.createProgram(fileNames, options, host);
+  const program = ts.createProgram(fileNames, options);
   program.emit();
 }
 
