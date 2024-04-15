@@ -18,7 +18,7 @@
   "scripts": {
     "generate-code": "tsx ./config/generate_code.ts",
     "update-conditions": "tsx ./build_tools/update-conditions.ts",
-    "prepare": "tsx ./build_tools/build-package.ts --inplace --if-not-toplevel --declaration",
+    "prepare": "tsx ./build_tools/build-package.ts --inplace --if-not-toplevel",
     "prepack": "tsx ./build_tools/build-package.ts --inplace",
     "postpack": "tsx ./build_tools/postpack.ts",
     "build": "tsx ./build_tools/cli.ts build",

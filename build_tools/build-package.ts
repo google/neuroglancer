@@ -33,11 +33,8 @@ function buildDeclarationFiles(
   program.emit();
 }
 
-async function buildPackage(options: {
-  inplace?: boolean;
-  declaration?: boolean;
-}) {
-  const { inplace = false, declaration = false } = options;
+async function buildPackage(options: { inplace?: boolean }) {
+  const { inplace = false } = options;
 
   const srcDir = path.resolve(rootDir, "src");
   const outDir = inplace ? rootDir : path.resolve(rootDir, "dist", "package");
@@ -74,22 +71,20 @@ async function buildPackage(options: {
     outdir: libDir,
   });
 
-  if (declaration) {
-    let compilerOptionsFromConfigFile: ts.CompilerOptions = {};
-    const configFileName = ts.findConfigFile("../", ts.sys.fileExists);
-    if (configFileName) {
-      const configFile = ts.readConfigFile(configFileName, ts.sys.readFile);
-      compilerOptionsFromConfigFile = ts.parseJsonConfigFileContent(
-        configFile.config,
-        ts.sys,
-        "./",
-      ).options;
-    }
-    buildDeclarationFiles(entryPoints, {
-      ...compilerOptionsFromConfigFile,
-      outDir: libDir,
-    });
+  let compilerOptionsFromConfigFile: ts.CompilerOptions = {};
+  const configFileName = ts.findConfigFile("../", ts.sys.fileExists);
+  if (configFileName) {
+    const configFile = ts.readConfigFile(configFileName, ts.sys.readFile);
+    compilerOptionsFromConfigFile = ts.parseJsonConfigFileContent(
+      configFile.config,
+      ts.sys,
+      "./",
+    ).options;
   }
+  buildDeclarationFiles(entryPoints, {
+    ...compilerOptionsFromConfigFile,
+    outDir: libDir,
+  });
 
   const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
     cwd: srcDir,
@@ -168,11 +163,6 @@ async function parseArgsAndRunMain() {
         description: "Skip building if invoked on a top-level npm repository.",
         implies: "inplace",
       },
-      ["declaration"]: {
-        type: "boolean",
-        default: false,
-        description: "Generate .d.ts files.",
-      },
     })
     .strict()
     .demandCommand(0, 0)
@@ -204,7 +194,7 @@ async function parseArgsAndRunMain() {
       return;
     }
   }
-  buildPackage({ inplace: argv.inplace, declaration: argv.declaration });
+  buildPackage({ inplace: argv.inplace });
 }
 
 if (process.argv[1] === import.meta.filename) {
