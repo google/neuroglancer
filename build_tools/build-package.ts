@@ -24,10 +24,9 @@ function buildDeclarationFiles(
   options: ts.CompilerOptions,
 ): void {
   options = {
-    allowJs: true,
+    ...options,
     declaration: true,
     emitDeclarationOnly: true,
-    ...options,
   };
   const host = ts.createCompilerHost(options);
   const program = ts.createProgram(fileNames, options, host);
@@ -76,10 +75,18 @@ async function buildPackage(options: {
   });
 
   if (declaration) {
+    let compilerOptionsFromConfigFile: ts.CompilerOptions = {};
+    const configFileName = ts.findConfigFile("../", ts.sys.fileExists);
+    if (configFileName) {
+      const configFile = ts.readConfigFile(configFileName, ts.sys.readFile);
+      compilerOptionsFromConfigFile = ts.parseJsonConfigFileContent(
+        configFile.config,
+        ts.sys,
+        "./",
+      ).options;
+    }
     buildDeclarationFiles(entryPoints, {
-      allowJs: true,
-      declaration: true,
-      emitDeclarationOnly: true,
+      ...compilerOptionsFromConfigFile,
       outDir: libDir,
     });
   }
