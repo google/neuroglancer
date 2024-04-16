@@ -41,6 +41,7 @@ describe("uint64", () => {
     expect(new Uint64(4294967295, 4294967295).toString(36)).toEqual(
       "3w5e11264sgsf",
     );
+    expect(new Uint64(0, 79741775).toString(29)).toEqual("s2276dsssss2");
   });
 
   it("conversion from string", () => {
@@ -110,7 +111,7 @@ describe("uint64", () => {
       expect(u.toString(13)).toEqual("153c9125c642b111b8");
       check(u, 13);
     }
-
+    check(new Uint64(0, 79741775), 29);
     for (let base = 2; base <= 36; ++base) {
       for (let i = 0; i < count; ++i) {
         check(Uint64.random(), base);
