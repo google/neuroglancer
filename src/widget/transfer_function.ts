@@ -262,8 +262,7 @@ export class SortedControlPoints {
     if (this.autoComputeRange) {
       if (this.controlPoints.length == 0) {
         this.range = defaultDataTypeRange[this.dataType];
-      }
-      else if (this.controlPoints.length === 1) {
+      } else if (this.controlPoints.length === 1) {
         this.range = [
           this.controlPoints[0].inputValue,
           defaultDataTypeRange[this.dataType][1],
@@ -318,8 +317,12 @@ export class LookupTable {
    * @param controlPoints The control points to interpolate between
    * @param dataRange The range of the input data space
    */
-  updateFromControlPoints(sortedControlPoints: SortedControlPoints) {
-    const { controlPoints, range } = sortedControlPoints;
+  updateFromControlPoints(
+    sortedControlPoints: SortedControlPoints,
+    window: DataTypeInterval | undefined = undefined,
+  ) {
+    const range = window ? window : sortedControlPoints.range;
+    const { controlPoints } = sortedControlPoints;
     const out = this.outputValues;
     const size = this.lookupTableSize;
     function addLookupValue(index: number, color: vec4) {
@@ -400,8 +403,8 @@ export class TransferFunction extends RefCounted {
   get sortedControlPoints() {
     return this.trackable.value.sortedControlPoints;
   }
-  updateLookupTable() {
-    this.lookupTable.updateFromControlPoints(this.sortedControlPoints);
+  updateLookupTable(window: DataTypeInterval | undefined = undefined) {
+    this.lookupTable.updateFromControlPoints(this.sortedControlPoints, window);
   }
   addPoint(controlPoint: ControlPoint) {
     this.sortedControlPoints.addPoint(controlPoint);
@@ -1022,7 +1025,7 @@ out_color = tempColor * alpha;
     gl.disable(WebGL2RenderingContext.BLEND);
   }
   update() {
-    this.transferFunction.updateLookupTable();
+    this.transferFunction.updateLookupTable(this.parent.trackable.value.window);
     this.updateTransferFunctionPointsAndLines();
   }
   isReady() {
