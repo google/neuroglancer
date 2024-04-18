@@ -481,3 +481,9 @@ def number_or_string(value):
     if not isinstance(value, numbers.Real) and not isinstance(value, str):
         raise TypeError
     return value
+
+
+def bool_or_string(value):
+    if not isinstance(value, (bool, str)):
+        raise TypeError
+    return value
