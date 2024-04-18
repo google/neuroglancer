@@ -1075,6 +1075,9 @@ function createWindowBoundInputs(
           value,
           /*fitRangeInWindow=*/ true,
         ).window;
+        if (window[0] === window[1]) {
+          throw new Error("Window bounds cannot be equal");
+        }
         model.value = { ...model.value, window };
       } catch {
         updateInputBoundValue(input, existingBounds[endpointIndex]);
