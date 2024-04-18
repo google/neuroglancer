@@ -254,16 +254,18 @@ void emitIntensity(float value) {
 float savedDepth = 0.0;
 float savedIntensity = 0.0;
 vec4 newColor = vec4(0.0);
+float userEmittedIntensity = -100.0;
 `);
             glsl_emitIntensity = `
 float convertIntensity(float value) {
   return clamp(${glsl_intensityConversion}, 0.0, 1.0);
 }
 void emitIntensity(float value) {
-  defaultMaxProjectionIntensity = value;
+  userEmittedIntensity = value;
 }
 float getIntensity() {
-  return convertIntensity(defaultMaxProjectionIntensity);
+  float intensity = userEmittedIntensity > -100.0 ? userEmittedIntensity : defaultMaxProjectionIntensity;
+  return convertIntensity(intensity);
 }
 `;
             glsl_rgbaEmit = `
@@ -283,6 +285,7 @@ void emitRGBA(vec4 rgba) {
   outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity);
   defaultMaxProjectionIntensity = 0.0;
+  userEmittedIntensity = -100.0;
 `;
           }
           emitter(builder);
