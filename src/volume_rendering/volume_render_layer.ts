@@ -835,6 +835,6 @@ void main() {
         }
       },
     );
-    return missing;
+    return !missing;
   }
 }
