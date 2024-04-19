@@ -37,7 +37,6 @@ def test_invlerp(webdriver):
                     "range": [0, 42],
                 },
             },
-            opacity=1.0,
         )
         s.layout = "xy"
         s.cross_section_scale = 1e-6
