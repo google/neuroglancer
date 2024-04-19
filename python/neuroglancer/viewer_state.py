@@ -1293,9 +1293,7 @@ class Layers:
             if index == -1:
                 continue
             other_layer = b[index]
-            if type(other_layer.layer) is not type(
-                layer.layer
-            ):  # pylint: disable=unidiomatic-typecheck  # noqa: E721
+            if type(other_layer.layer) is not type(layer.layer):  # pylint: disable=unidiomatic-typecheck  # noqa: E721
                 continue
             layer.layer = type(layer.layer).interpolate(
                 layer.layer, other_layer.layer, t
