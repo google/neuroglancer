@@ -37,7 +37,10 @@ import {
 const FIXED_TRANSFER_FUNCTION_LENGTH = 1024;
 
 function makeTransferFunction(controlPoints: ControlPoint[]) {
-  const sortedControlPoints = new SortedControlPoints(controlPoints, DataType.UINT8);
+  const sortedControlPoints = new SortedControlPoints(
+    controlPoints,
+    DataType.UINT8,
+  );
   return new TransferFunction(
     DataType.UINT8,
     new TrackableValue<TransferFunctionParameters>(
@@ -58,7 +61,10 @@ describe("lerpBetweenControlPoints", () => {
   );
   it("returns transparent black when given no control points for base classes", () => {
     const controlPoints: ControlPoint[] = [];
-    const sortedControlPoints = new SortedControlPoints(controlPoints, DataType.UINT8);
+    const sortedControlPoints = new SortedControlPoints(
+      controlPoints,
+      DataType.UINT8,
+    );
     const lookupTable = new LookupTable(FIXED_TRANSFER_FUNCTION_LENGTH);
     lookupTable.updateFromControlPoints(sortedControlPoints);
 
@@ -96,8 +102,13 @@ describe("lerpBetweenControlPoints", () => {
     ).toBeTruthy();
   });
   it("correctly interpolates between three control points", () => {
-    function toLookupTableIndex(transferFunction: TransferFunction, index: number) {
-      return transferFunction.sortedControlPoints.controlPoints[index].transferFunctionIndex(
+    function toLookupTableIndex(
+      transferFunction: TransferFunction,
+      index: number,
+    ) {
+      return transferFunction.sortedControlPoints.controlPoints[
+        index
+      ].transferFunctionIndex(
         transferFunction.sortedControlPoints.range,
         transferFunction.size,
       );
@@ -236,7 +247,11 @@ describe("compute transfer function on GPU", () => {
           builder.addFragmentCode(`
 ${shaderType} getInterpolatedDataValue() {
     return inputValue;
-}`);
+}
+${shaderType} getDataValue() {
+    return inputValue;
+}
+`);
           builder.addFragmentCode(
             defineTransferFunctionShader(
               builder,

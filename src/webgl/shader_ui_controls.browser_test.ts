@@ -892,7 +892,7 @@ void main() {
               sortedControlPoints: sortedControlPoints,
               channel: [],
               defaultColor: vec3.fromValues(0, 0, 1),
-              window: [0, 2000],
+              window: [Uint64.fromNumber(0), Uint64.fromNumber(2000)],
             },
           },
         ],
