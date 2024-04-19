@@ -22,6 +22,7 @@ mime_type_map = {
     ".js": "application/javascript",
     ".html": "text/html",
     ".map": "application/json",
+    ".wasm": "application/wasm",
 }
 
 
