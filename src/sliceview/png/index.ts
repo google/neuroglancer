@@ -23,19 +23,26 @@ const libraryEnv = {
   },
 };
 
-const pngModulePromise = (async () => {
-  const m = (
-    await WebAssembly.instantiateStreaming(
-      fetch(new URL("./libpng.wasm", import.meta.url)),
-      {
-        env: libraryEnv,
-        wasi_snapshot_preview1: libraryEnv,
-      },
-    )
-  ).instance;
-  (m.exports._initialize as Function)();
-  return m;
-})();
+let pngModulePromise: Promise<WebAssembly.Instance> | undefined;
+
+function getPngModulePromise() {
+  if (pngModulePromise === undefined) {
+    pngModulePromise = (async () => {
+      const m = (
+        await WebAssembly.instantiateStreaming(
+          fetch(new URL("./libpng.wasm", import.meta.url)),
+          {
+            env: libraryEnv,
+            wasi_snapshot_preview1: libraryEnv,
+          },
+        )
+      ).instance;
+      (m.exports._initialize as Function)();
+      return m;
+    })();
+  }
+  return pngModulePromise;
+}
 
 enum PngColorSpace {
   GRAYSCALE = 0,
@@ -169,7 +176,7 @@ export async function decompressPng(
   bytesPerPixel: number,
   convertToGrayscale: boolean,
 ): Promise<DecodedImage> {
-  const m = await pngModulePromise;
+  const m = await getPngModulePromise();
   let { sx, sy, dataWidth, numChannels } = readHeader(buffer);
 
   if (convertToGrayscale) {

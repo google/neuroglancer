@@ -21,19 +21,26 @@ const libraryEnv = {
   },
 };
 
-const compressoModulePromise = (async () => {
-  const m = (
-    await WebAssembly.instantiateStreaming(
-      fetch(new URL("./compresso.wasm", import.meta.url)),
-      {
-        env: libraryEnv,
-        wasi_snapshot_preview1: libraryEnv,
-      },
-    )
-  ).instance;
-  (m.exports._initialize as Function)();
-  return m;
-})();
+let compressoModulePromise: Promise<WebAssembly.Instance> | undefined;
+
+function getCompressoModulePromise() {
+  if (compressoModulePromise === undefined) {
+    compressoModulePromise = (async () => {
+      const m = (
+        await WebAssembly.instantiateStreaming(
+          fetch(new URL("./compresso.wasm", import.meta.url)),
+          {
+            env: libraryEnv,
+            wasi_snapshot_preview1: libraryEnv,
+          },
+        )
+      ).instance;
+      (m.exports._initialize as Function)();
+      return m;
+    })();
+  }
+  return compressoModulePromise;
+}
 
 // not a full implementation of read header, just the parts we need
 function readHeader(buffer: Uint8Array): {
@@ -69,7 +76,7 @@ function readHeader(buffer: Uint8Array): {
 export async function decompressCompresso(
   buffer: Uint8Array,
 ): Promise<Uint8Array> {
-  const m = await compressoModulePromise;
+  const m = await getCompressoModulePromise();
 
   const { sx, sy, sz, dataWidth } = readHeader(buffer);
   const voxels = sx * sy * sz;

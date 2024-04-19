@@ -22,7 +22,7 @@ import { maybeDecompressGzip } from "#src/util/gzip.js";
 registerAsyncComputation(
   parseVTKFromArrayBuffer,
   async (buffer: ArrayBuffer) => {
-    const mesh = parseVTK(maybeDecompressGzip(buffer));
+    const mesh = parseVTK(await maybeDecompressGzip(buffer));
     return {
       value: { data: mesh, size: getTriangularMeshSize(mesh) },
       transfer: [
