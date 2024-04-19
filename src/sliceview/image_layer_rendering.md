@@ -160,7 +160,7 @@ the inverse linear interpolation of the data value for configured channel/proper
 The `transferFunction` control type allows the user to specify a function which maps
 each data value in a numerical interval to an output color and opacity. The mapping function
 is defined by a series of control points. Each control point is a color and opacity value at a
-specific data input value.  In between control points, the color and opacity is linearly interpolated.
+specific data input value. In between control points, the color and opacity is linearly interpolated.
 Any input data before the first control point is mapped to a completely transparent output.
 Any data point after the last control point is mapped to the same output as the last control point.
 
