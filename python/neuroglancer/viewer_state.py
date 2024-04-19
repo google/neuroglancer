@@ -519,20 +519,13 @@ class InvlerpParameters(JsonObjectWrapper):
 
 
 @export
-class ControlPointsSpec(JsonObjectWrapper):
-    input = wrapped_property("input", optional(numbers.Number))
-    color = wrapped_property("color", optional(str))
-    opacity = wrapped_property("opacity", optional(float))
-
-
-@export
 class TransferFunctionParameters(JsonObjectWrapper):
-    range = wrapped_property("range", optional(array_wrapper(numbers.Number, 2)))
+    window = wrapped_property("window", optional(array_wrapper(numbers.Number, 2)))
     channel = wrapped_property("channel", optional(typed_list(int)))
     controlPoints = wrapped_property(
-        "controlPoints", optional(typed_list(ControlPointsSpec))
+        "controlPoints", optional(typed_list(typed_list(number_or_string)))
     )
-    color = wrapped_property("color", optional(str))
+    defaultColor = wrapped_property("defaultColor", optional(str))
 
 
 _UINT64_STR_PATTERN = re.compile("[0-9]+")
@@ -1300,7 +1293,9 @@ class Layers:
             if index == -1:
                 continue
             other_layer = b[index]
-            if type(other_layer.layer) is not type(layer.layer):  # pylint: disable=unidiomatic-typecheck  # noqa: E721
+            if type(other_layer.layer) is not type(
+                layer.layer
+            ):  # pylint: disable=unidiomatic-typecheck  # noqa: E721
                 continue
             layer.layer = type(layer.layer).interpolate(
                 layer.layer, other_layer.layer, t

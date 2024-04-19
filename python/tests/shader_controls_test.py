@@ -72,13 +72,10 @@ void main() {
 """
     shaderControls = {
         "colormap": {
-            "controlPoints": [
-                {"input": 0, "color": "#000000", "opacity": 0.0},
-                {"input": 84, "color": "#ffffff", "opacity": 1.0},
-            ],
-            "range": [0, 100],
+            "controlPoints": [[0, "#000000", 0.0], [84, "#ffffff", 1.0]],
+            "window": [0, 50],
             "channel": [],
-            "color": "#ff00ff",
+            "defaultColor": "#ff00ff",
         }
     }
     with webdriver.viewer.txn() as s:
@@ -91,7 +88,7 @@ void main() {
             layer=neuroglancer.ImageLayer(
                 source=neuroglancer.LocalVolume(
                     dimensions=s.dimensions,
-                    data=np.full(shape=(1, 1), dtype=np.uint32, fill_value=42),
+                    data=np.full(shape=(1, 1), dtype=np.uint64, fill_value=63),
                 ),
             ),
             visible=True,
@@ -105,7 +102,8 @@ void main() {
         s.show_axis_lines = False
     control = webdriver.viewer.state.layers["image"].shader_controls["colormap"]
     assert isinstance(control, neuroglancer.TransferFunctionParameters)
-    np.testing.assert_equal(control.range, [0, 100])
+    np.testing.assert_equal(control.window, [0, 50])
+    assert control.defaultColor == "#ff00ff"
 
     def expect_color(color):
         webdriver.sync()
@@ -115,20 +113,24 @@ void main() {
             np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)),
         )
 
-    expect_color([64, 64, 64, 255])
+    mapped_opacity = 0.75
+    mapped_color = 0.75 * 255
+    mapped_value = int(mapped_color * mapped_opacity)
+    expected_color = [mapped_value] * 3 + [255]
+    expect_color(expected_color)
     with webdriver.viewer.txn() as s:
         s.layers["image"].shader_controls = {
             "colormap": neuroglancer.TransferFunctionParameters(
-                controlPoints=[
-                    {"input": 0, "color": "#000000", "opacity": 1.0},
-                    {"input": 84, "color": "#ffffff", "opacity": 1.0},
-                ],
-                range=[50, 90],
+                controlPoints=[[0, "#000000", 0.0], [84, "#ffffff", 1.0]],
+                window=[500, 5000],
                 channel=[],
-                color="#ff00ff",
+                defaultColor="#ff0000",
             )
         }
-    expect_color([0, 0, 0, 255])
+    control = webdriver.viewer.state.layers["image"].shader_controls["colormap"]
+    np.testing.assert_equal(control.window, [500, 5000])
+    assert control.defaultColor == "#ff0000"
+    expect_color(expected_color)
 
 
 def test_slider(webdriver):
