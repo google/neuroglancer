@@ -850,7 +850,7 @@ void main() {
   });
   it("handles transfer function control with all properties uint64 data", () => {
     const code = `
-#uicontrol transferFunction colormap(controlPoints=[["18446744073709551615", "#00ff00", 0.1], ["9223372111111111111", "#ff0000", 0.5], [0, "#000000", 0.0]], defaultColor="#0000ff", channel=[])
+#uicontrol transferFunction colormap(controlPoints=[["18446744073709551615", "#00ff00", 0.1], ["9223372111111111111", "#ff0000", 0.5], [0, "#000000", 0.0]], defaultColor="#0000ff", channel=[], window=[0, 2000])
 void main() {
 }
 `;
@@ -892,7 +892,7 @@ void main() {
               sortedControlPoints: sortedControlPoints,
               channel: [],
               defaultColor: vec3.fromValues(0, 0, 1),
-              window: sortedControlPoints.range,
+              window: [0, 2000],
             },
           },
         ],
