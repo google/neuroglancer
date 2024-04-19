@@ -1480,7 +1480,7 @@ vec4 ${name}(${shaderType} inputValue) {
   return v < 0.0 ? vec4(0.0, 0.0, 0.0, 0.0) : ${name}_(clamp(v, 0.0, 1.0));
 }
 vec4 ${name}() {
-  return ${name}(getInterpolatedDataValue(${channel.join(",")}));
+  return ${name}(getDataValue(${channel.join(",")}));
 }
 `;
   if (dataType !== DataType.UINT64 && dataType !== DataType.FLOAT32) {
