@@ -712,22 +712,68 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
           lastPointIndexInWindow = i;
         }
       }
-      // If there are no points in the window, everything is left or right of the window
+      // If there are no points in the window, check if everything is left or right of the window
       // Draw a single line from the left edge to the right edge if all points are left of the window
       if (firstPointIndexInWindow === null) {
-        const allPointsLeftOfWindow = normalizedControlPoints[0].input > 1;
-        const indexOfReferencePoint = allPointsLeftOfWindow
-          ? controlPoints.length - 1
-          : 0;
-        numLines += 1;
-        const referenceOpacity =
-          normalizedControlPoints[indexOfReferencePoint].output;
-        lineFromLeftEdge = vec4.fromValues(
-          -1,
-          referenceOpacity,
-          1,
-          referenceOpacity,
-        );
+        const allPointsLeftOfWindow =
+          normalizedControlPoints[controlPoints.length - 1].input < -1;
+        const allPointsRightOfWindow = normalizedControlPoints[0].input > 1;
+        if (allPointsLeftOfWindow) {
+          const indexOfReferencePoint = controlPoints.length - 1;
+          numLines += 1;
+          const referenceOpacity =
+            normalizedControlPoints[indexOfReferencePoint].output;
+          lineFromLeftEdge = vec4.fromValues(
+            -1,
+            referenceOpacity,
+            1,
+            referenceOpacity,
+          );
+        }
+        // There are no points in the window, but points on either side
+        // Draw lines from the leftmost and rightmost points starting
+        // from the left edge and ending at the right edge via interpolation
+        else if (!allPointsRightOfWindow && controlPoints.length > 1) {
+          numLines += 1;
+          let pointClosestToLeftEdge = null;
+          let pointClosestToRightEdge = null;
+          for (let i = 0; i < controlPoints.length; ++i) {
+            const point = normalizedControlPoints[i];
+            if (point.input < -1) {
+              pointClosestToLeftEdge = point;
+            } else if (point.input > 1) {
+              pointClosestToRightEdge = point;
+              break;
+            }
+          }
+          if (
+            pointClosestToLeftEdge === null ||
+            pointClosestToRightEdge === null
+          ) {
+            throw new Error(
+              "Could not find points closest to the left and right edges",
+            );
+          }
+          const leftInterpFactor = computeInvlerp(
+            [pointClosestToLeftEdge.input, pointClosestToRightEdge.input],
+            -1,
+          );
+          const rightInterpFactor = computeInvlerp(
+            [pointClosestToLeftEdge.input, pointClosestToRightEdge.input],
+            1,
+          );
+          const leftLineY = computeLerp(
+            [pointClosestToLeftEdge.output, pointClosestToRightEdge.output],
+            DataType.FLOAT32,
+            leftInterpFactor,
+          ) as number;
+          const rightLineY = computeLerp(
+            [pointClosestToLeftEdge.output, pointClosestToRightEdge.output],
+            DataType.FLOAT32,
+            rightInterpFactor,
+          ) as number;
+          lineFromLeftEdge = vec4.fromValues(-1, leftLineY, 1, rightLineY);
+        }
       } else {
         const firstPointInWindow =
           normalizedControlPoints[firstPointIndexInWindow];
@@ -804,18 +850,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       }
     }
 
-    const linePositionArray = new Float32Array(
-      numLines * POSITION_VALUES_PER_LINE * VERTICES_PER_LINE,
-    );
-
-    if (lineFromLeftEdge !== null) {
-      linePositionArrayIndex = addLine(
-        linePositionArray,
-        linePositionArrayIndex,
-        lineFromLeftEdge,
-      );
-    }
-
+    const lines: vec4[] = [];
     // Update points and draw lines between control points
     for (let i = 0; i < controlPoints.length; ++i) {
       const colorIndex = i * colorChannels;
@@ -831,18 +866,44 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
       // Don't create a line for the last point
       if (i === controlPoints.length - 1) break;
+      if (
+        inputValue < -1 ||
+        inputValue > 1 ||
+        outputValue < -1 ||
+        outputValue > 1
+      )
+        continue;
+      numLines += 1;
       const lineBetweenPoints = vec4.fromValues(
         inputValue,
         outputValue,
         normalizedControlPoints[i + 1].input,
         normalizedControlPoints[i + 1].output,
       );
+      lines.push(lineBetweenPoints);
+    }
+
+    // Create and fill the line position array
+    const linePositionArray = new Float32Array(
+      numLines * POSITION_VALUES_PER_LINE * VERTICES_PER_LINE,
+    );
+
+    if (lineFromLeftEdge !== null) {
+      linePositionArrayIndex = addLine(
+        linePositionArray,
+        linePositionArrayIndex,
+        lineFromLeftEdge,
+      );
+    }
+
+    for (const lineBetweenPoints of lines) {
       linePositionArrayIndex = addLine(
         linePositionArray,
         linePositionArrayIndex,
         lineBetweenPoints,
       );
     }
+
     // Draw a horizontal line out from the last point
     if (lineToRightEdge !== null) {
       addLine(linePositionArray, linePositionArrayIndex, lineToRightEdge);
