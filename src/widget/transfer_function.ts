@@ -1317,10 +1317,10 @@ class TransferFunctionController extends RefCounted {
     )
       return undefined;
 
-    // Near the y borders of the transfer function, snap the control point to the border
-    if (normalizedX < TRANSFER_FUNCTION_BORDER_WIDTH) {
+    // Near the borders of the transfer function, snap the control point to the border
+    if (normalizedX < TRANSFER_FUNCTION_BORDER_WIDTH / 3) {
       normalizedX = 0.0;
-    } else if (normalizedX > 1 - TRANSFER_FUNCTION_BORDER_WIDTH) {
+    } else if (normalizedX > 1 - TRANSFER_FUNCTION_BORDER_WIDTH / 3) {
       normalizedX = 1.0;
     }
     if (normalizedY < TRANSFER_FUNCTION_BORDER_WIDTH) {
