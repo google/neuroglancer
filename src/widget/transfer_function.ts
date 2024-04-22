@@ -682,6 +682,9 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       }
       return index;
     }
+    function isInWindow(normalizedInput: number) {
+      return normalizedInput >= -1 && normalizedInput <= 1;
+    }
 
     const { transferFunction } = this;
     const { controlPoints } =
@@ -693,6 +696,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     let linePositionArrayIndex = 0;
     let lineFromLeftEdge = null;
     let lineToRightEdge = null;
+    // Map all control points to normalized values for the shader
     const normalizedControlPoints = controlPoints.map((point) => {
       const input = normalizeInput(point.inputValue);
       const output = normalizeOpacity(point.outputColor[3]);
@@ -701,17 +705,14 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
     // Create start and end lines if there are any control points
     if (controlPoints.length > 0) {
-      // Map all control points to normalized values for the shader
       // Try to find the first and last point in the window
-      let firstPointIndexInWindow = null;
-      let lastPointIndexInWindow = null;
-      for (let i = 0; i < controlPoints.length; ++i) {
-        const normalizedInput = normalizedControlPoints[i].input;
-        if (normalizedInput >= -1 && normalizedInput <= 1) {
-          firstPointIndexInWindow = firstPointIndexInWindow ?? i;
-          lastPointIndexInWindow = i;
-        }
-      }
+
+      const {
+        firstPointIndexInWindow,
+        lastPointIndexInWindow,
+        pointClosestToLeftEdge,
+        pointClosestToRightEdge,
+      } = findPointsNearWindowBounds();
       // If there are no points in the window, check if everything is left or right of the window
       // Draw a single line from the left edge to the right edge if all points are left of the window
       if (firstPointIndexInWindow === null) {
@@ -719,85 +720,26 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
           normalizedControlPoints[controlPoints.length - 1].input < -1;
         const allPointsRightOfWindow = normalizedControlPoints[0].input > 1;
         if (allPointsLeftOfWindow) {
-          const indexOfReferencePoint = controlPoints.length - 1;
-          numLines += 1;
-          const referenceOpacity =
-            normalizedControlPoints[indexOfReferencePoint].output;
-          lineFromLeftEdge = vec4.fromValues(
-            -1,
-            referenceOpacity,
-            1,
-            referenceOpacity,
-          );
+          drawHorizontalLineFromPointOutsideLeftWindow();
         }
         // There are no points in the window, but points on either side
         // Draw lines from the leftmost and rightmost points starting
         // from the left edge and ending at the right edge via interpolation
         else if (!allPointsRightOfWindow && controlPoints.length > 1) {
-          numLines += 1;
-          let pointClosestToLeftEdge = null;
-          let pointClosestToRightEdge = null;
-          for (let i = 0; i < controlPoints.length; ++i) {
-            const point = normalizedControlPoints[i];
-            if (point.input < -1) {
-              pointClosestToLeftEdge = point;
-            } else if (point.input > 1) {
-              pointClosestToRightEdge = point;
-              break;
-            }
-          }
-          if (
-            pointClosestToLeftEdge === null ||
-            pointClosestToRightEdge === null
-          ) {
-            throw new Error(
-              "Could not find points closest to the left and right edges",
-            );
-          }
-          const leftInterpFactor = computeInvlerp(
-            [pointClosestToLeftEdge.input, pointClosestToRightEdge.input],
-            -1,
+          drawLineBetweenPointsBothOutsideWindow(
+            pointClosestToLeftEdge,
+            pointClosestToRightEdge,
           );
-          const rightInterpFactor = computeInvlerp(
-            [pointClosestToLeftEdge.input, pointClosestToRightEdge.input],
-            1,
-          );
-          const leftLineY = computeLerp(
-            [pointClosestToLeftEdge.output, pointClosestToRightEdge.output],
-            DataType.FLOAT32,
-            leftInterpFactor,
-          ) as number;
-          const rightLineY = computeLerp(
-            [pointClosestToLeftEdge.output, pointClosestToRightEdge.output],
-            DataType.FLOAT32,
-            rightInterpFactor,
-          ) as number;
-          lineFromLeftEdge = vec4.fromValues(-1, leftLineY, 1, rightLineY);
         }
       } else {
         const firstPointInWindow =
           normalizedControlPoints[firstPointIndexInWindow];
-        // Need to draw a vertical line to the first control point in the window
-        // Unless the first point is at the left edge
         if (firstPointInWindow.input > -1) {
           // If there is a value to the left, draw a line from the point outside the window to the first point in the window
           if (firstPointIndexInWindow > 0) {
-            const pointBeforeWindow =
-              normalizedControlPoints[firstPointIndexInWindow - 1];
-            const interpFactor = computeInvlerp(
-              [pointBeforeWindow.input, firstPointInWindow.input],
-              -1,
-            );
-            const lineStartY = computeLerp(
-              [pointBeforeWindow.output, firstPointInWindow.output],
-              DataType.FLOAT32,
-              interpFactor,
-            ) as number;
-            lineFromLeftEdge = vec4.fromValues(
-              -1,
-              lineStartY,
-              firstPointInWindow.input,
-              firstPointInWindow.output,
+            drawLineBetweenPointInWindowAndLeftPointOutsideWindow(
+              firstPointIndexInWindow,
+              firstPointInWindow,
             );
           }
           // If the first point in the window is the leftmost point, draw a 0 line up to the point
@@ -811,29 +753,15 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
           }
           numLines += 1;
         }
-
         // Need to draw a line from the last control point in the window to the right edge
         const lastPointInWindow =
           normalizedControlPoints[lastPointIndexInWindow!];
         if (lastPointInWindow.input < 1) {
           // If there is a value to the right, draw a line from the last point in the window to the point outside the window
           if (lastPointIndexInWindow! < controlPoints.length - 1) {
-            const pointAfterWindow =
-              normalizedControlPoints[lastPointIndexInWindow! + 1];
-            const interpFactor = computeInvlerp(
-              [lastPointInWindow.input, pointAfterWindow.input],
-              1,
-            );
-            const lineEndY = computeLerp(
-              [lastPointInWindow.output, pointAfterWindow.output],
-              DataType.FLOAT32,
-              interpFactor,
-            ) as number;
-            lineToRightEdge = vec4.fromValues(
-              lastPointInWindow.input,
-              lastPointInWindow.output,
-              1,
-              lineEndY,
+            drawLineBetweenPointInWindowAndRightPointOutsideWindow(
+              lastPointIndexInWindow,
+              lastPointInWindow,
             );
           }
           // If the last point in the window is the rightmost point, draw a line from the point to the right edge
@@ -866,13 +794,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
 
       // Don't create a line for the last point
       if (i === controlPoints.length - 1) break;
-      if (
-        inputValue < -1 ||
-        inputValue > 1 ||
-        outputValue < -1 ||
-        outputValue > 1
-      )
-        continue;
+      if (!(isInWindow(inputValue) && isInWindow(outputValue))) continue;
       numLines += 1;
       const lineBetweenPoints = vec4.fromValues(
         inputValue,
@@ -916,6 +838,122 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     this.controlPointsVertexBuffer.setData(this.controlPointsPositionArray);
     this.controlPointsColorBuffer.setData(this.controlPointsColorArray);
     this.linePositionBuffer.setData(this.linePositionArray);
+
+    function drawLineBetweenPointInWindowAndRightPointOutsideWindow(
+      lastPointIndexInWindow: number | null,
+      lastPointInWindow: { input: number; output: number },
+    ) {
+      const pointAfterWindow =
+        normalizedControlPoints[lastPointIndexInWindow! + 1];
+      const interpFactor = computeInvlerp(
+        [lastPointInWindow.input, pointAfterWindow.input],
+        1,
+      );
+      const lineEndY = computeLerp(
+        [lastPointInWindow.output, pointAfterWindow.output],
+        DataType.FLOAT32,
+        interpFactor,
+      ) as number;
+      lineToRightEdge = vec4.fromValues(
+        lastPointInWindow.input,
+        lastPointInWindow.output,
+        1,
+        lineEndY,
+      );
+    }
+
+    function drawLineBetweenPointInWindowAndLeftPointOutsideWindow(
+      firstPointIndexInWindow: number,
+      firstPointInWindow: { input: number; output: number },
+    ) {
+      const pointBeforeWindow =
+        normalizedControlPoints[firstPointIndexInWindow - 1];
+      const interpFactor = computeInvlerp(
+        [pointBeforeWindow.input, firstPointInWindow.input],
+        -1,
+      );
+      const lineStartY = computeLerp(
+        [pointBeforeWindow.output, firstPointInWindow.output],
+        DataType.FLOAT32,
+        interpFactor,
+      ) as number;
+      lineFromLeftEdge = vec4.fromValues(
+        -1,
+        lineStartY,
+        firstPointInWindow.input,
+        firstPointInWindow.output,
+      );
+    }
+
+    function drawLineBetweenPointsBothOutsideWindow(
+      pointClosestToLeftEdge: { input: number; output: number } | null,
+      pointClosestToRightEdge: { input: number; output: number } | null,
+    ) {
+      numLines += 1;
+      if (pointClosestToLeftEdge === null || pointClosestToRightEdge === null) {
+        throw new Error(
+          "Could not find points closest to the left and right edges",
+        );
+      }
+      const leftInterpFactor = computeInvlerp(
+        [pointClosestToLeftEdge.input, pointClosestToRightEdge.input],
+        -1,
+      );
+      const rightInterpFactor = computeInvlerp(
+        [pointClosestToLeftEdge.input, pointClosestToRightEdge.input],
+        1,
+      );
+      const leftLineY = computeLerp(
+        [pointClosestToLeftEdge.output, pointClosestToRightEdge.output],
+        DataType.FLOAT32,
+        leftInterpFactor,
+      ) as number;
+      const rightLineY = computeLerp(
+        [pointClosestToLeftEdge.output, pointClosestToRightEdge.output],
+        DataType.FLOAT32,
+        rightInterpFactor,
+      ) as number;
+      lineFromLeftEdge = vec4.fromValues(-1, leftLineY, 1, rightLineY);
+    }
+
+    function findPointsNearWindowBounds() {
+      let firstPointIndexInWindow = null;
+      let lastPointIndexInWindow = null;
+      let pointClosestToLeftEdge = null;
+      let pointClosestToRightEdge = null;
+      for (let i = 0; i < controlPoints.length; ++i) {
+        const point = normalizedControlPoints[i];
+        if (isInWindow(point.input)) {
+          firstPointIndexInWindow = firstPointIndexInWindow ?? i;
+          lastPointIndexInWindow = i;
+        }
+        if (point.input < -1) {
+          pointClosestToLeftEdge = point;
+        } else if (point.input > 1) {
+          pointClosestToRightEdge = point;
+          break;
+        }
+      }
+      return {
+        firstPointIndexInWindow,
+        lastPointIndexInWindow,
+        pointClosestToLeftEdge,
+        pointClosestToRightEdge,
+      };
+    }
+
+    function drawHorizontalLineFromPointOutsideLeftWindow() {
+      const indexOfReferencePoint = controlPoints.length - 1;
+      numLines += 1;
+      const referenceOpacity =
+        normalizedControlPoints[indexOfReferencePoint].output;
+      lineFromLeftEdge = vec4.fromValues(
+        -1,
+        referenceOpacity,
+        1,
+        referenceOpacity,
+      );
+    }
   }
 
   private transferFunctionLineShader = this.registerDisposer(
