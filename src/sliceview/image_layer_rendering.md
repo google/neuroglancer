@@ -176,8 +176,8 @@ The following parameters are supported:
 - `window`: Optional. The portion of the input range to view the transfer function over.
   Must be specified as an array. May be overridden using the UI control. Defaults to the min and max
   of the control point input values, if control points are specified, or otherwise to the full range of the
-  data type for integer data types, and `[0, 1]` for float32. It is valid to specify an
-  inverted interval like `[50, 20]`, but not an interval where the start and end points are the same, e.g. `[20, 20]`.
+  data type for integer data types, and `[0, 1]` for float32. It is not valid to specify an
+  inverted interval like `[50, 20]`, or an interval where the start and end points are the same, e.g. `[20, 20]`.
 
 - `controlPoints`: Optional. The points which define the input to output mapping.
   Must be specified as an array, with each value in the array of the form `[inputValue, hexStringColor, floatOpacity]`.

@@ -277,10 +277,6 @@ export class SortedControlPoints {
       this.range = defaultDataTypeRange[this.dataType];
     }
   }
-  updateRange(newRange: DataTypeInterval) {
-    this.range = newRange;
-    this.sortAndComputeRange();
-  }
   copy() {
     const copy = new SortedControlPoints(
       [],
