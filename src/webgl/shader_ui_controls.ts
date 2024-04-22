@@ -1151,7 +1151,8 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
     public dataType: DataType,
     public defaultValue: TransferFunctionParameters,
   ) {
-    // Create a copy of the default value to avoid modifying it.
+    // Create a copy of the default value to enable detecting changes
+    // to the control points in the trackable value.
     const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
     super(defaultValueCopy, (obj) =>
       parseTransferFunctionParameters(obj, dataType, defaultValue),

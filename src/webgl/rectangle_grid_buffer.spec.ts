@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Google Inc.
+ * Copyright 2024 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -22,15 +22,19 @@ describe("createGriddedRectangleArray", () => {
     const result = createGriddedRectangleArray(2, -1, 1, 1, -1);
     expect(result).toEqual(
       new Float32Array([
-        -1, 1, 0, 1, 0, -1, -1, 1, 0, -1, -1, -1, 0, 1, 1, 1, 1, -1, 0, 1, 1,
-        -1, 0, -1,
+        -1, 1, 0, 1, 0, -1 /* triangle in top right for first grid */, -1, 1, 0,
+        -1, -1, -1 /* triangle in bottom left for first grid */, 0, 1, 1, 1, 1,
+        -1 /* triangle in top right for second grid */, 0, 1, 1, -1, 0,
+        -1 /* triangle in bottom left for second grid */,
       ]),
     );
     const resultReverse = createGriddedRectangleArray(2, 1, -1, -1, 1);
     expect(resultReverse).toEqual(
       new Float32Array([
-        1, -1, 0, -1, 0, 1, 1, -1, 0, 1, 1, 1, 0, -1, -1, -1, -1, 1, 0, -1, -1,
-        1, 0, 1,
+        1, -1, 0, -1, 0, 1 /* triangle in top right for first grid */, 1, -1, 0,
+        1, 1, 1 /* triangle in bottom left for first grid */, 0, -1, -1, -1, -1,
+        1 /* triangle in top right for second grid */, 0, -1, -1, 1, 0,
+        1 /* triangle in bottom left for second grid */,
       ]),
     );
   });

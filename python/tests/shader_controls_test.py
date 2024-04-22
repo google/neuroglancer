@@ -112,6 +112,11 @@ void main() {
             np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)),
         )
 
+    # Ensure that the value 63 is mapped to the expected color.
+    # The value 63 is 3/4 of the way between 0 and 84, so the expected color
+    # is 3/4 of the way between black and white.
+    # Additionally, the opacity is 0.75, and the mode is additive, so the
+    # the final color is 0.75 * 0.75 * 255.
     mapped_opacity = 0.75
     mapped_color = 0.75 * 255
     mapped_value = int(mapped_color * mapped_opacity)

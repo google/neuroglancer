@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Google Inc.
+ * Copyright 2024 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -35,7 +35,7 @@ import {
   EventActionMap,
   registerActionListener,
 } from "#src/util/event_action_map.js";
-import { vec3, vec4 } from "#src/util/geom.js";
+import { kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
@@ -90,8 +90,8 @@ const transferFunctionSamplerTextureUnit = Symbol(
 );
 
 const defaultTransferFunctionSizes: Record<DataType, number> = {
-  [DataType.UINT8]: 0xff,
-  [DataType.INT8]: 0xff,
+  [DataType.UINT8]: 256,
+  [DataType.INT8]: 256,
   [DataType.UINT16]: 8192,
   [DataType.INT16]: 8192,
   [DataType.UINT32]: 8192,
@@ -147,8 +147,8 @@ interface CanvasPosition {
  */
 export class ControlPoint {
   constructor(
-    public inputValue: number | Uint64 = 0,
-    public outputColor: vec4 = vec4.create(),
+    public inputValue: number | Uint64,
+    public outputColor: vec4 = kZeroVec4,
   ) {}
 
   /** Convert the input value to a normalized value between 0 and 1 */
@@ -218,8 +218,7 @@ export class SortedControlPoints {
     const value = controlPoint.inputValue;
     const outputValue = controlPoint.outputColor;
     this.sortAndComputeRange();
-    // If two points end up with the same x value, return the index of
-    // the original point after sorting
+    // Return the index of the original point after sorting
     for (let i = 0; i < this.controlPoints.length; ++i) {
       if (
         this.controlPoints[i].inputValue === value &&
@@ -241,7 +240,7 @@ export class SortedControlPoints {
     this.controlPoints[index].outputColor = outputColor;
   }
   findNearestControlPointIndex(inputValue: number | Uint64) {
-    const controlPoint = new ControlPoint(inputValue, vec4.create());
+    const controlPoint = new ControlPoint(inputValue);
     const valueToFind = controlPoint.normalizedInput(this.range);
     return this.findNearestControlPointIndexByNormalizedInput(valueToFind);
   }
@@ -403,6 +402,12 @@ export class TransferFunction extends RefCounted {
   get sortedControlPoints() {
     return this.trackable.value.sortedControlPoints;
   }
+  get range() {
+    return this.sortedControlPoints.range;
+  }
+  get size() {
+    return this.lookupTable.lookupTableSize;
+  }
   updateLookupTable(window: DataTypeInterval | undefined = undefined) {
     this.lookupTable.updateFromControlPoints(this.sortedControlPoints, window);
   }
@@ -428,12 +433,6 @@ export class TransferFunction extends RefCounted {
       normalizedInputValue,
     );
     return this.sortedControlPoints.findNearestControlPointIndex(absoluteValue);
-  }
-  get range() {
-    return this.sortedControlPoints.range;
-  }
-  get size() {
-    return this.lookupTable.lookupTableSize;
   }
 }
 
@@ -695,7 +694,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     const colorChannels = NUM_COLOR_CHANNELS - 1; // ignore alpha
     const colorArray = new Float32Array(controlPoints.length * colorChannels);
     const positionArray = new Float32Array(controlPoints.length * 2);
-    let positionArrayIndex = 0;
+    let linePositionArrayIndex = 0;
     let lineFromLeftEdge = null;
     let lineToRightEdge = null;
     const normalizedControlPoints = controlPoints.map((point) => {
@@ -736,7 +735,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       } else {
         const firstPointInWindow =
           normalizedControlPoints[firstPointIndexInWindow];
-        // Need to draw a line from the left edge to the first control point in the window
+        // Need to draw a vertical line to the first control point in the window
         // Unless the first point is at the left edge
         if (firstPointInWindow.input > -1) {
           // If there is a value to the left, draw a line from the point outside the window to the first point in the window
@@ -795,7 +794,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
               lineEndY,
             );
           }
-          // If the last point in the window is the rightmost point, draw a line from the point to 1
+          // If the last point in the window is the rightmost point, draw a line from the point to the right edge
           else {
             lineToRightEdge = vec4.fromValues(
               lastPointInWindow.input,
@@ -814,9 +813,9 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     );
 
     if (lineFromLeftEdge !== null) {
-      positionArrayIndex = addLine(
+      linePositionArrayIndex = addLine(
         linePositionArray,
-        positionArrayIndex,
+        linePositionArrayIndex,
         lineFromLeftEdge,
       );
     }
@@ -842,15 +841,15 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
         normalizedControlPoints[i + 1].input,
         normalizedControlPoints[i + 1].output,
       );
-      positionArrayIndex = addLine(
+      linePositionArrayIndex = addLine(
         linePositionArray,
-        positionArrayIndex,
+        linePositionArrayIndex,
         lineBetweenPoints,
       );
     }
     // Draw a horizontal line out from the last point
     if (lineToRightEdge !== null) {
-      addLine(linePositionArray, positionArrayIndex, lineToRightEdge);
+      addLine(linePositionArray, linePositionArrayIndex, lineToRightEdge);
     }
 
     // Update buffers
@@ -917,6 +916,8 @@ gl_Position = vec4(aVertexPosition, 0.0, 1.0);
 gl_PointSize = 14.0;
 vColor = aVertexColor;
 `);
+      // Draw control points as circles with a border
+      // The border is white if the color is dark, black if the color is light
       builder.setFragmentMain(`
 float vColorSum = vColor.r + vColor.g + vColor.b;
 vec3 bordercolor = vec3(0.0, 0.0, 0.0);
@@ -1056,7 +1057,7 @@ function createWindowBoundInputs(
   }
 
   const container = document.createElement("div");
-  container.classList.add("neuroglancer-transfer-function-range-bounds");
+  container.classList.add("neuroglancer-transfer-function-window-bounds");
   const inputs = [createWindowBoundInput(0), createWindowBoundInput(1)];
   for (let endpointIndex = 0; endpointIndex < 2; ++endpointIndex) {
     const input = inputs[endpointIndex];
@@ -1259,7 +1260,7 @@ class TransferFunctionController extends RefCounted {
     )
       return undefined;
 
-    // Near the borders of the transfer function, clamp the control point to the border
+    // Near the y borders of the transfer function, snap the control point to the border
     if (normalizedX < TRANSFER_FUNCTION_BORDER_WIDTH) {
       normalizedX = 0.0;
     } else if (normalizedX > 1 - TRANSFER_FUNCTION_BORDER_WIDTH) {
