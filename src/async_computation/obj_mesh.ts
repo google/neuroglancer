@@ -24,7 +24,7 @@ import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 registerAsyncComputation(
   parseOBJFromArrayBuffer,
   async (buffer: ArrayBuffer) => {
-    buffer = maybeDecompressGzip(buffer);
+    buffer = await maybeDecompressGzip(buffer);
     let text = new TextDecoder().decode(buffer);
     // Strip comments
     text = text.replace(/#.*/g, "");
