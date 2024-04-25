@@ -82,6 +82,7 @@ import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
 const TRY_REDUCED_VIEWPORT = true;
+const DOWNSAMPLING_FACTOR = 4;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -953,6 +954,13 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     if (hasTransparent) {
       //Draw transparent objects.
+      let temp_width = width;
+      let temp_height = height;
+      if (TRY_REDUCED_VIEWPORT) {
+        const original_ratio = width / height;
+        temp_width = Math.round(width / DOWNSAMPLING_FACTOR);
+        temp_height = Math.round(temp_width / original_ratio);
+      }
 
       // Create max projection buffer if needed.
       let bindMaxProjectionBuffer: () => void = () => {};
@@ -960,7 +968,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       if (hasMaxProjection) {
         const { maxProjectionConfiguration } = this;
         bindMaxProjectionBuffer = () => {
-          maxProjectionConfiguration.bind(width, height);
+          maxProjectionConfiguration.bind(temp_width, temp_height);
         };
         gl.depthMask(true);
         bindMaxProjectionBuffer();
@@ -973,7 +981,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
         const { maxProjectionPickConfiguration } = this;
         bindMaxProjectionPickingBuffer = () => {
-          maxProjectionPickConfiguration.bind(width, height);
+          maxProjectionPickConfiguration.bind(temp_width, temp_height);
         };
         bindMaxProjectionPickingBuffer();
         gl.clear(
@@ -986,13 +994,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
       const { transparentConfiguration } = this;
-      let temp_width = width;
-      let temp_height = height;
-      if (TRY_REDUCED_VIEWPORT) {
-        const original_ratio = width / height;
-        temp_width = 200;
-        temp_height = temp_width / original_ratio;
-      }
       renderContext.bindFramebuffer = () => {
         transparentConfiguration.bind(temp_width, temp_height);
       };
@@ -1036,6 +1037,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
           // Copy max projection color result to color only buffer
           // Depth testing off to combine max layers into one color via blend
+          gl.viewport(0, 0, width, height);
           this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
           gl.depthMask(false);
           gl.disable(WebGL2RenderingContext.DEPTH_TEST);
