@@ -186,7 +186,37 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 function defineMaxProjectionColorCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);
   builder.setFragmentMain(`
-v4f_fragColor = getValue0();
+//v4f_fragColor = getValue0();
+//return;
+// Get the texture coordinate
+vec2 texCoord = vTexCoord;
+
+// Perform bilinear interpolation
+vec2 texSize = vec2(textureSize(uSampler[0], 0));
+vec2 texelSize = 1.0 / (texSize);
+
+// Calculate the texture coordinate of the four neighboring texels
+vec2 texCoord00 = vTexCoord - texelSize / 2.0;
+vec2 texCoord10 = vec2(vTexCoord.x + texelSize.x, vTexCoord.y) - texelSize / 2.0;
+vec2 texCoord01 = vec2(vTexCoord.x, vTexCoord.y + texelSize.y) - texelSize / 2.0;
+vec2 texCoord11 = vec2(vTexCoord.x + texelSize.x, vTexCoord.y + texelSize.y) - texelSize / 2.0;
+
+// Sample the four texels
+vec4 texel00 = texture(uSampler[0], texCoord00);
+vec4 texel10 = texture(uSampler[0], texCoord10);
+vec4 texel01 = texture(uSampler[0], texCoord01);
+vec4 texel11 = texture(uSampler[0], texCoord11);
+
+// Interpolate between the four texels using the fractional parts of the texture coordinates
+vec2 frac = fract(texCoord * texSize);
+vec4 interpolatedColor = mix(
+    mix(texel00, texel10, frac.x),
+    mix(texel01, texel11, frac.x),
+    frac.y
+);
+
+// Output the final color
+v4f_fragColor = interpolatedColor;
 `);
 }
 
@@ -954,6 +984,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     if (hasTransparent) {
       //Draw transparent objects.
+      console.log(this.navigationState);
       let temp_width = width;
       let temp_height = height;
       if (TRY_REDUCED_VIEWPORT) {
@@ -1039,6 +1070,10 @@ export class PerspectivePanel extends RenderedDataPanel {
           // Depth testing off to combine max layers into one color via blend
           gl.viewport(0, 0, width, height);
           this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // or gl.NEAREST for nearest neighbor filtering
+
+          // Set texture filtering for magnification (when texture is scaled up)
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); // or gl.NEAREST for nearest neighbor filtering
           gl.depthMask(false);
           gl.disable(WebGL2RenderingContext.DEPTH_TEST);
           gl.enable(WebGL2RenderingContext.BLEND);
@@ -1049,6 +1084,10 @@ export class PerspectivePanel extends RenderedDataPanel {
           this.maxProjectionColorCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
           );
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); // or gl.NEAREST for nearest neighbor filtering
+
+          // Set texture filtering for magnification (when texture is scaled up)
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); // or gl.NEAREST for nearest neighbor filtering
 
           // Reset the max projection buffer
           bindMaxProjectionBuffer();
@@ -1081,6 +1120,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // or gl.NEAREST for nearest neighbor filtering
+
+      // Set texture filtering for magnification (when texture is scaled up)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); // or gl.NEAREST for nearest neighbor filtering
       gl.viewport(0, 0, width, height);
       gl.blendFunc(
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
@@ -1090,6 +1133,10 @@ export class PerspectivePanel extends RenderedDataPanel {
         transparentConfiguration.colorBuffers[0].texture,
         transparentConfiguration.colorBuffers[1].texture,
       );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); // or gl.NEAREST for nearest neighbor filtering
+
+      // Set texture filtering for magnification (when texture is scaled up)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); // or gl.NEAREST for nearest neighbor filtering
 
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
