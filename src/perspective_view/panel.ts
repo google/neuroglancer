@@ -81,6 +81,8 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
+const TRY_REDUCED_VIEWPORT = true;
+
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
@@ -698,7 +700,7 @@ export class PerspectivePanel extends RenderedDataPanel {
               this.gl.RGBA,
               this.gl.FLOAT,
             ),
-            depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
+            depthBuffer: new DepthStencilRenderbuffer(this.gl),
           }),
         );
     }
@@ -984,8 +986,15 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.depthMask(false);
       gl.enable(WebGL2RenderingContext.BLEND);
       const { transparentConfiguration } = this;
+      let temp_width = width;
+      let temp_height = height;
+      if (TRY_REDUCED_VIEWPORT) {
+        const original_ratio = width / height;
+        temp_width = 200;
+        temp_height = temp_width / original_ratio;
+      }
       renderContext.bindFramebuffer = () => {
-        transparentConfiguration.bind(width, height);
+        transparentConfiguration.bind(temp_width, temp_height);
       };
       renderContext.bindFramebuffer();
       gl.clearDepth(1.0);
@@ -999,6 +1008,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
+      // TODO (SKM) need to copy the actual depth buffer here
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -1069,6 +1079,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+      gl.viewport(0, 0, width, height);
       gl.blendFunc(
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
         WebGL2RenderingContext.SRC_ALPHA,
