@@ -1038,7 +1038,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             this.maxProjectionConfiguration.colorBuffers[2 /*pick*/].texture,
           );
 
-          // Copy max projection color result to color only buffer
+          // Copy max projection color result to the transparent buffer with OIT
           // Depth testing off to combine max layers into one color via blend
           renderContext.bindFramebuffer();
           gl.depthMask(false);
