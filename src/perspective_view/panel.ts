@@ -183,12 +183,21 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 }
 
 function defineMaxProjectionColorCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
   builder.setFragmentMain(`
-v4f_fragColor = getValue0();
+vec4 color = getValue0();
+float depth = 1.0 - getValue1().r;
+float weight = computeOITWeight(color.a, depth);
+vec4 accum = color * weight;
+float revealage = color.a;
+
+emitAccumAndRevealage(accum, revealage, 0u);
 `);
 }
 
+// Copy the max projection values over to the main pick buffer
 function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
@@ -200,6 +209,9 @@ v4f_fragData2 = getValue1();
 `);
 }
 
+// Note that the depth is actually set as the pick value.
+// This is because we want to pick the highest intensity value.
+// Not the closest depth value.
 function defineMaxProjectionToPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
@@ -308,7 +320,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
   );
   protected maxProjectionColorCopyHelper = this.registerDisposer(
-    OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 1),
+    OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 2),
   );
   protected maxProjectionPickCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionPickCopyShader, 2),
@@ -1028,16 +1040,19 @@ export class PerspectivePanel extends RenderedDataPanel {
 
           // Copy max projection color result to color only buffer
           // Depth testing off to combine max layers into one color via blend
-          this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+          renderContext.bindFramebuffer();
           gl.depthMask(false);
           gl.disable(WebGL2RenderingContext.DEPTH_TEST);
           gl.enable(WebGL2RenderingContext.BLEND);
-          gl.blendFunc(
+          gl.blendFuncSeparate(
             WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ZERO,
             WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
           );
           this.maxProjectionColorCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
+            this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
           );
 
           // Reset the max projection buffer
@@ -1054,12 +1069,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.clearDepth(1.0);
           gl.clearColor(0.0, 0.0, 0.0, 1.0);
           gl.depthMask(false);
-          gl.blendFuncSeparate(
-            WebGL2RenderingContext.ONE,
-            WebGL2RenderingContext.ONE,
-            WebGL2RenderingContext.ZERO,
-            WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-          );
           gl.enable(WebGL2RenderingContext.DEPTH_TEST);
           gl.depthFunc(WebGL2RenderingContext.LESS);
           renderContext.emitter = perspectivePanelEmitOIT;
