@@ -152,15 +152,17 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
 }
 
+// Keep the pick value here below 1 to avoid conflicts with the pick IDs used by uint annotations.
 export function maxProjectionEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
   builder.addOutputBuffer("highp vec4", "v4f_fragData2", 2);
   builder.addFragmentCode(`
 void emit(vec4 color, float depth, float pick) {
+  float pickToEmit = pick * 0.99;
   v4f_fragData0 = color;
   v4f_fragData1 = vec4(1.0 - depth, 1.0 - depth, 1.0 - depth, 1.0);
-  v4f_fragData2 = vec4(pick, pick, pick, 1.0);
+  v4f_fragData2 = vec4(pickToEmit, pickToEmit, pickToEmit, 1.0);
 }`);
 }
 
