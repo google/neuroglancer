@@ -81,8 +81,8 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const TRY_REDUCED_VIEWPORT = true;
-const DOWNSAMPLING_FACTOR = 4;
+const DOWNSAMPLING_FACTOR = 30;
+const SETTLE_TIME_MS = 500;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -246,6 +246,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
+  private shouldVolumeRenderingDownsample = false;
+  private lastCameraMovementTime = Number.NEGATIVE_INFINITY;
+
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
    * this.viewer.showSliceViews.value.
@@ -404,6 +407,13 @@ export class PerspectivePanel extends RenderedDataPanel {
       PerspectiveViewRenderLayer,
       this.viewer.visibleLayerRoles,
       this,
+    );
+
+    this.registerDisposer(
+      this.viewer.navigationState.changed.add(() => {
+        this.shouldVolumeRenderingDownsample = true;
+        this.lastCameraMovementTime = Date.now();
+      }),
     );
 
     registerActionListener(
@@ -959,9 +969,17 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     if (hasTransparent) {
       //Draw transparent objects.
+      // NOTE : issue here, redraw won't trigger after the allotted time
+      // Will need to investigate
+      if (
+        this.shouldVolumeRenderingDownsample &&
+        Date.now() - this.lastCameraMovementTime > SETTLE_TIME_MS
+      ) {
+        this.shouldVolumeRenderingDownsample = false;
+      }
       let temp_width = width;
       let temp_height = height;
-      if (TRY_REDUCED_VIEWPORT) {
+      if (this.shouldVolumeRenderingDownsample) {
         const original_ratio = width / height;
         temp_width = Math.round(width / DOWNSAMPLING_FACTOR);
         temp_height = Math.round(temp_width / original_ratio);
@@ -1081,6 +1099,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.bindFramebuffer();
           continue;
         }
+        console.log("Drawing", renderLayer);
         renderLayer.draw(renderContext, attachment);
       }
       // Copy transparent rendering result back to primary buffer.
