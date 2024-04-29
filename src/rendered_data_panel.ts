@@ -346,7 +346,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   draw() {
-    console.log("Issuing draw")
     const { width, height } = this.renderViewport;
     this.checkForPickRequestCompletion(true);
     const { pickingData } = this;
@@ -396,7 +395,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
   private attemptToIssuePickRequest() {
     if (!this.canIssuePickRequest()) return;
-    console.log("Issuing pick request");
     const currentFrameNumber = this.context.frameNumber;
     const { gl } = this;
 
