@@ -1074,7 +1074,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.depthFunc(WebGL2RenderingContext.LESS);
           renderContext.emitter = perspectivePanelEmitOIT;
           renderContext.bindFramebuffer();
-          continue;
         }
         // Draw regular transparent layers
         else if (renderLayer.isTransparent) {
