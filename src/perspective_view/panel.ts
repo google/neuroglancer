@@ -81,8 +81,8 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const DOWNSAMPLING_FACTOR = 30;
-const SETTLE_TIME_MS = 500;
+const DOWNSAMPLING_FACTOR = 4;
+const CAMERA_MOVEMENT_VR_SETTLE_TIME_MS = 500;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -247,7 +247,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   private shouldVolumeRenderingDownsample = false;
-  private lastCameraMovementTime = Number.NEGATIVE_INFINITY;
+  private timeoutId = -1;
 
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
@@ -412,7 +412,13 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(
       this.viewer.navigationState.changed.add(() => {
         this.shouldVolumeRenderingDownsample = true;
-        this.lastCameraMovementTime = Date.now();
+        if (this.timeoutId !== -1) {
+          window.clearTimeout(this.timeoutId);
+        }
+        this.timeoutId = window.setTimeout(() => {
+          this.shouldVolumeRenderingDownsample = false;
+          this.context.scheduleRedraw();
+        }, CAMERA_MOVEMENT_VR_SETTLE_TIME_MS);
       }),
     );
 
@@ -971,12 +977,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       //Draw transparent objects.
       // NOTE : issue here, redraw won't trigger after the allotted time
       // Will need to investigate
-      if (
-        this.shouldVolumeRenderingDownsample &&
-        Date.now() - this.lastCameraMovementTime > SETTLE_TIME_MS
-      ) {
-        this.shouldVolumeRenderingDownsample = false;
-      }
       let temp_width = width;
       let temp_height = height;
       if (this.shouldVolumeRenderingDownsample) {
