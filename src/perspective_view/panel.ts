@@ -1079,7 +1079,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         // Draw regular transparent layers
         else if (renderLayer.isTransparent) {
           renderLayer.draw(renderContext, attachment);
-          console.log("drawing", renderLayer);
         }
       }
       // Copy transparent rendering result back to primary buffer.
