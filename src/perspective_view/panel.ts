@@ -1018,6 +1018,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
         }
+        // Draw max projection layers
         if (
           renderLayer.isVolumeRendering &&
           isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)
@@ -1075,7 +1076,11 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.bindFramebuffer();
           continue;
         }
-        renderLayer.draw(renderContext, attachment);
+        // Draw regular transparent layers
+        else if (renderLayer.isTransparent) {
+          renderLayer.draw(renderContext, attachment);
+          console.log("drawing", renderLayer);
+        }
       }
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
