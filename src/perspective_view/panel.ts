@@ -83,6 +83,7 @@ import { SharedObject } from "#src/worker_rpc.js";
 
 const DOWNSAMPLING_FACTOR = 4;
 const CAMERA_MOVEMENT_VR_SETTLE_TIME_MS = 500;
+const DESIRED_FRAME_TIMING_MS = 1000 / 30;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -247,6 +248,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   private shouldVolumeRenderingDownsample = false;
+  private lastFrameTimestamp = Number.NEGATIVE_INFINITY;
   private timeoutId = -1;
 
   /**
@@ -980,9 +982,13 @@ export class PerspectivePanel extends RenderedDataPanel {
       let temp_width = width;
       let temp_height = height;
       if (this.shouldVolumeRenderingDownsample) {
-        const original_ratio = width / height;
-        temp_width = Math.round(width / DOWNSAMPLING_FACTOR);
-        temp_height = Math.round(temp_width / original_ratio);
+        const currentFrameTimestamp = Date.now();
+        const frameDelta = currentFrameTimestamp - this.lastFrameTimestamp;
+        if (frameDelta > DESIRED_FRAME_TIMING_MS) {
+          const original_ratio = width / height;
+          temp_width = Math.round(width / DOWNSAMPLING_FACTOR);
+          temp_height = Math.round(temp_width / original_ratio);
+        }
       }
 
       // Create max projection buffer if needed.
@@ -1099,7 +1105,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.bindFramebuffer();
           continue;
         }
-        console.log("Drawing", renderLayer);
         renderLayer.draw(renderContext, attachment);
       }
       // Copy transparent rendering result back to primary buffer.
@@ -1225,6 +1230,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenCopyHelper.draw(
       this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
+    this.lastFrameTimestamp = Date.now();
     return true;
   }
 
