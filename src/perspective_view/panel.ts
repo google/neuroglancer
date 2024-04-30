@@ -413,6 +413,10 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.viewer.navigationState.changed.add(() => {
+        // Don't check for downsampling on picking requests
+        if (this.isMovingToMousePositionOnPick) {
+          return;
+        }
         this.shouldCheckFrameRate = true;
         if (this.timeoutId !== -1) {
           window.clearTimeout(this.timeoutId);
