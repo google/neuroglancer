@@ -999,22 +999,24 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     if (hasTransparent) {
       //Draw transparent objects.
-      // NOTE : issue here, redraw won't trigger after the allotted time
-      // Will need to investigate
-      let temp_width = width;
-      let temp_height = height;
-      let downsample_factor = 1;
+      let volumeRenderingBufferWidth = width;
+      let volumeRenderingBufferHeight = height;
+      let volumeRenderingDownsampleFactor = 1;
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCounter.calculateFrameTimeInMs();
-        downsample_factor = Math.min(
+        volumeRenderingDownsampleFactor = Math.min(
           Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
           10,
         );
       }
-      if (downsample_factor > 1) {
-        const original_ratio = width / height;
-        temp_width = Math.round(width / downsample_factor);
-        temp_height = Math.round(temp_width / original_ratio);
+      if (volumeRenderingDownsampleFactor > 1) {
+        const originalRatio = width / height;
+        volumeRenderingBufferWidth = Math.round(
+          width / volumeRenderingDownsampleFactor,
+        );
+        volumeRenderingBufferHeight = Math.round(
+          volumeRenderingBufferWidth / originalRatio,
+        );
       }
 
       // Create max projection buffer if needed.
@@ -1023,7 +1025,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       if (hasMaxProjection) {
         const { maxProjectionConfiguration } = this;
         bindMaxProjectionBuffer = () => {
-          maxProjectionConfiguration.bind(temp_width, temp_height);
+          maxProjectionConfiguration.bind(
+            volumeRenderingBufferWidth,
+            volumeRenderingBufferHeight,
+          );
         };
         gl.depthMask(true);
         bindMaxProjectionBuffer();
@@ -1036,7 +1041,10 @@ export class PerspectivePanel extends RenderedDataPanel {
 
         const { maxProjectionPickConfiguration } = this;
         bindMaxProjectionPickingBuffer = () => {
-          maxProjectionPickConfiguration.bind(temp_width, temp_height);
+          maxProjectionPickConfiguration.bind(
+            volumeRenderingBufferWidth,
+            volumeRenderingBufferHeight,
+          );
         };
         bindMaxProjectionPickingBuffer();
         gl.clear(
@@ -1050,7 +1058,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.clearDepth(1.0);
       const { transparentConfiguration } = this;
       renderContext.bindFramebuffer = () => {
-        transparentConfiguration.bind(temp_width, temp_height);
+        transparentConfiguration.bind(
+          volumeRenderingBufferWidth,
+          volumeRenderingBufferHeight,
+        );
       };
       renderContext.bindFramebuffer();
       gl.clear(WebGL2RenderingContext.DEPTH_BUFFER_BIT);
