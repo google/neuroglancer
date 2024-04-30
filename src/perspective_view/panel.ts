@@ -999,16 +999,42 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     if (hasTransparent) {
       //Draw transparent objects.
-      let volumeRenderingBufferWidth = width;
-      let volumeRenderingBufferHeight = height;
-      let volumeRenderingDownsampleFactor = 1;
+
+      // Check the sample rate for volume rendering
+      let volumeRenderingDownsampleFactorBasedOnSize = 1000;
+      for (const [renderLayer, ] of visibleLayers) {
+        if (renderLayer.isVolumeRendering) {
+          const volumeRenderingRenderLayer =
+            renderLayer as VolumeRenderingRenderLayer;
+          const sampleRate = volumeRenderingRenderLayer.lastUsedSampleRate;
+          const ratio = Math.floor(width / sampleRate);
+          volumeRenderingDownsampleFactorBasedOnSize = Math.max(
+            Math.min(volumeRenderingDownsampleFactorBasedOnSize, ratio),
+            1,
+          );
+        }
+      }
+      if (volumeRenderingDownsampleFactorBasedOnSize === 1000) {
+        volumeRenderingDownsampleFactorBasedOnSize = 1;
+      }
+      
+      let volumeRenderingDownsampleFactorBasedOnFramerate = 1;
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCounter.calculateFrameTimeInMs();
-        volumeRenderingDownsampleFactor = Math.min(
-          Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
+        volumeRenderingDownsampleFactorBasedOnFramerate = Math.min(
+          Math.max(
+            Math.round(frameDelta / DESIRED_FRAME_TIMING_MS),
+            volumeRenderingDownsampleFactorBasedOnSize,
+          ),
           10,
         );
       }
+      const volumeRenderingDownsampleFactor = Math.max(
+        volumeRenderingDownsampleFactorBasedOnSize,
+        volumeRenderingDownsampleFactorBasedOnFramerate,
+      );
+      let volumeRenderingBufferWidth = width;
+      let volumeRenderingBufferHeight = height;
       if (volumeRenderingDownsampleFactor > 1) {
         const originalRatio = width / height;
         volumeRenderingBufferWidth = Math.round(
