@@ -249,7 +249,6 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private frameRateCounter = new FrameRateCounter(10);
   private shouldCheckFrameRate = false;
-  private shouldVolumeRenderingDownsample = false;
   private timeoutId = -1;
 
   /**
@@ -420,7 +419,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         this.timeoutId = window.setTimeout(() => {
           this.shouldCheckFrameRate = false;
-          this.shouldVolumeRenderingDownsample = false;
           this.frameRateCounter.reset();
           this.context.scheduleRedraw();
         }, CAMERA_MOVEMENT_VR_SETTLE_TIME_MS);
@@ -987,18 +985,16 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Will need to investigate
       let temp_width = width;
       let temp_height = height;
-      let downsample_factor = 2;
+      let downsample_factor = 1;
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCounter.calculateFrameTimeInMs();
-        this.shouldVolumeRenderingDownsample =
-          this.shouldVolumeRenderingDownsample ||
-          frameDelta > DESIRED_FRAME_TIMING_MS;
         downsample_factor = Math.min(
           Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
           10,
         );
+        console.log(frameDelta, downsample_factor);
       }
-      if (this.shouldVolumeRenderingDownsample) {
+      if (downsample_factor > 1) {
         const original_ratio = width / height;
         temp_width = Math.round(width / downsample_factor);
         temp_height = Math.round(temp_width / original_ratio);
