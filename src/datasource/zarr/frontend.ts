@@ -222,7 +222,7 @@ interface ZarrScaleInfo {
   metadata: ArrayMetadata;
 }
 
-interface ZarrMultiscaleInfo {
+export interface ZarrMultiscaleInfo {
   coordinateSpace: CoordinateSpace;
   dataType: DataType;
   scales: ZarrScaleInfo[];
@@ -262,7 +262,7 @@ function getNormalizedDimensionNames(
   });
 }
 
-function getMultiscaleInfoForSingleArray(
+export function getMultiscaleInfoForSingleArray(
   url: string,
   metadata: ArrayMetadata,
 ): ZarrMultiscaleInfo {
@@ -296,7 +296,7 @@ function getMultiscaleInfoForSingleArray(
   };
 }
 
-async function resolveOmeMultiscale(
+export async function resolveOmeMultiscale(
   chunkManager: ChunkManager,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   multiscale: OmeMultiscaleMetadata,
@@ -385,7 +385,7 @@ async function resolveOmeMultiscale(
   };
 }
 
-async function getMetadata(
+export async function getMetadata(
   chunkManager: ChunkManager,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
