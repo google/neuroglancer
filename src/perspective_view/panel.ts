@@ -996,7 +996,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
           10,
         );
-        console.log(frameDelta, downsample_factor);
       }
       if (downsample_factor > 1) {
         const original_ratio = width / height;
