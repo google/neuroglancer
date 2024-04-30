@@ -184,6 +184,17 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
+function defineDepthCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.setFragmentMain(`
+  v4f_fragData0 = vec4(0.0, 0.0, 0.0, 1.0);
+  v4f_fragData1 = vec4(0.0, 0.0, 0.0, 1.0);
+  vec4 v0 = getValue0();
+  gl_FragDepth = 1.0 - v0.r;
+`);
+}
+
 function defineMaxProjectionColorCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);
   builder.setFragmentMain(`
@@ -320,6 +331,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       1,
       true,
     ),
+  );
+  protected offscreenDepthCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(this.gl, defineDepthCopyShader, 1),
   );
   protected maxProjectionPickCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionPickCopyShader, 2),
@@ -790,11 +804,11 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   drawWithPicking(pickingData: FramePickingData): boolean {
-    if (this.shouldCheckFrameRate) {
-      this.frameRateCounter.addFrame();
-    }
     if (!this.navigationState.valid) {
       return false;
+    }
+    if (this.shouldCheckFrameRate) {
+      this.frameRateCounter.addFrame();
     }
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
@@ -1031,15 +1045,22 @@ export class PerspectivePanel extends RenderedDataPanel {
         );
       }
 
-      // Compute accumulate and revealage textures.
-      gl.depthMask(false);
-      gl.enable(WebGL2RenderingContext.BLEND);
+      // Copy the depth buffer from the offscreen framebuffer to the transparent framebuffer.
+      gl.depthMask(true);
+      gl.clearDepth(1.0);
       const { transparentConfiguration } = this;
       renderContext.bindFramebuffer = () => {
         transparentConfiguration.bind(temp_width, temp_height);
       };
       renderContext.bindFramebuffer();
-      gl.clearDepth(1.0);
+      gl.clear(WebGL2RenderingContext.DEPTH_BUFFER_BIT);
+      this.offscreenDepthCopyHelper.draw(
+        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture,
+      );
+
+      // Compute accumulate and revealage textures.
+      gl.depthMask(false);
+      gl.enable(WebGL2RenderingContext.BLEND);
       gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
@@ -1050,7 +1071,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      // TODO (SKM) need to copy the actual depth buffer here
+
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
