@@ -58,6 +58,7 @@ import type { TrackableRGB } from "#src/util/color.js";
 import type { Owned } from "#src/util/disposable.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
+import { FrameRateCounter } from "#src/util/framerate.js";
 import { kAxes, kZeroVec4, mat4, vec3, vec4 } from "#src/util/geom.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import type {
@@ -81,9 +82,8 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const DOWNSAMPLING_FACTOR = 4;
-const CAMERA_MOVEMENT_VR_SETTLE_TIME_MS = 500;
-const DESIRED_FRAME_TIMING_MS = 1000 / 30;
+const CAMERA_MOVEMENT_VR_SETTLE_TIME_MS = 200;
+const DESIRED_FRAME_TIMING_MS = 1000 / 60;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -247,8 +247,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
+  private frameRateCounter = new FrameRateCounter(10);
+  private shouldCheckFrameRate = false;
   private shouldVolumeRenderingDownsample = false;
-  private lastFrameTimestamp = Number.NEGATIVE_INFINITY;
   private timeoutId = -1;
 
   /**
@@ -413,12 +414,14 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.viewer.navigationState.changed.add(() => {
-        this.shouldVolumeRenderingDownsample = true;
+        this.shouldCheckFrameRate = true;
         if (this.timeoutId !== -1) {
           window.clearTimeout(this.timeoutId);
         }
         this.timeoutId = window.setTimeout(() => {
+          this.shouldCheckFrameRate = false;
           this.shouldVolumeRenderingDownsample = false;
+          this.frameRateCounter.reset();
           this.context.scheduleRedraw();
         }, CAMERA_MOVEMENT_VR_SETTLE_TIME_MS);
       }),
@@ -785,6 +788,9 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   drawWithPicking(pickingData: FramePickingData): boolean {
+    if (this.shouldCheckFrameRate) {
+      this.frameRateCounter.addFrame();
+    }
     if (!this.navigationState.valid) {
       return false;
     }
@@ -981,14 +987,21 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Will need to investigate
       let temp_width = width;
       let temp_height = height;
+      let downsample_factor = 2;
+      if (this.shouldCheckFrameRate) {
+        const frameDelta = this.frameRateCounter.calculateFrameTimeInMs();
+        this.shouldVolumeRenderingDownsample =
+          this.shouldVolumeRenderingDownsample ||
+          frameDelta > DESIRED_FRAME_TIMING_MS;
+        downsample_factor = Math.min(
+          Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
+          10,
+        );
+      }
       if (this.shouldVolumeRenderingDownsample) {
-        const currentFrameTimestamp = Date.now();
-        const frameDelta = currentFrameTimestamp - this.lastFrameTimestamp;
-        if (frameDelta > DESIRED_FRAME_TIMING_MS) {
-          const original_ratio = width / height;
-          temp_width = Math.round(width / DOWNSAMPLING_FACTOR);
-          temp_height = Math.round(temp_width / original_ratio);
-        }
+        const original_ratio = width / height;
+        temp_width = Math.round(width / downsample_factor);
+        temp_height = Math.round(temp_width / original_ratio);
       }
 
       // Create max projection buffer if needed.
@@ -1230,7 +1243,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenCopyHelper.draw(
       this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
-    this.lastFrameTimestamp = Date.now();
     return true;
   }
 
