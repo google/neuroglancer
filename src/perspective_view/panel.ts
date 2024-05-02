@@ -84,6 +84,7 @@ import { SharedObject } from "#src/worker_rpc.js";
 
 const CAMERA_MOVEMENT_VR_SETTLE_TIME_MS = 200;
 const DESIRED_FRAME_TIMING_MS = 1000 / 60;
+const MAX_VR_DOWNSAMPLE_FACTOR = 20;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -996,7 +997,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       //Draw transparent objects.
 
       // Check the sample rate for volume rendering
-      let volumeRenderingDownsampleFactorBasedOnSize = 1000;
+      let volumeRenderingDownsampleFactorBasedOnSize = Infinity;
       for (const [renderLayer] of visibleLayers) {
         if (renderLayer.isVolumeRendering) {
           const volumeRenderingRenderLayer =
@@ -1009,7 +1010,9 @@ export class PerspectivePanel extends RenderedDataPanel {
           );
         }
       }
-      if (volumeRenderingDownsampleFactorBasedOnSize === 1000) {
+      if (
+        volumeRenderingDownsampleFactorBasedOnSize > MAX_VR_DOWNSAMPLE_FACTOR
+      ) {
         volumeRenderingDownsampleFactorBasedOnSize = 1;
       }
 
@@ -1021,7 +1024,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             Math.round(frameDelta / DESIRED_FRAME_TIMING_MS),
             volumeRenderingDownsampleFactorBasedOnSize,
           ),
-          10,
+          MAX_VR_DOWNSAMPLE_FACTOR,
         );
       }
       const volumeRenderingDownsampleFactor = Math.max(
