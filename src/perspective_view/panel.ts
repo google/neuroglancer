@@ -325,12 +325,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
   );
   protected maxProjectionColorCopyHelper = this.registerDisposer(
-    OffscreenCopyHelper.get(
-      this.gl,
-      defineMaxProjectionColorCopyShader,
-      1,
-      true,
-    ),
+    OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 1),
   );
   protected offscreenDepthCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineDepthCopyShader, 1),

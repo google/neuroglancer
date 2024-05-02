@@ -349,7 +349,6 @@ export class OffscreenCopyHelper extends RefCounted {
   constructor(
     public gl: GL,
     public shader: ShaderProgram,
-    public linearInterpolation = false,
   ) {
     super();
     this.registerDisposer(shader);
@@ -365,10 +364,6 @@ export class OffscreenCopyHelper extends RefCounted {
     for (let i = 0; i < numTextures; ++i) {
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.bindTexture(gl.TEXTURE_2D, textures[i]);
-      if (this.linearInterpolation) {
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      }
     }
 
     gl.uniformMatrix4fv(
@@ -401,7 +396,6 @@ export class OffscreenCopyHelper extends RefCounted {
     gl: GL,
     shaderModule: ShaderModule = defineCopyFragmentShader,
     numTextures = 1,
-    linearInterpolation = false,
   ) {
     return gl.memoize.get(
       `OffscreenCopyHelper:${numTextures}:${getObjectId(shaderModule)}`,
@@ -409,7 +403,6 @@ export class OffscreenCopyHelper extends RefCounted {
         new OffscreenCopyHelper(
           gl,
           elementWiseTextureShader(gl, shaderModule, numTextures),
-          linearInterpolation,
         ),
     );
   }
