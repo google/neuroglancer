@@ -728,7 +728,6 @@ void main() {
         const optimalSampleRate = optimalSamples;
         const actualSampleRate = this.depthSamplesTarget.value;
         const brightnessFactor = optimalSampleRate / actualSampleRate;
-        this.lastUsedSampleRate = Math.max(actualSampleRate, optimalSampleRate);
         gl.uniform1f(shader.uniform("uBrightnessFactor"), brightnessFactor);
         const nearLimitFraction = (adjustedNear - near) / (far - near);
         const farLimitFraction = (adjustedFar - near) / (far - near);
