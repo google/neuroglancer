@@ -409,7 +409,7 @@ export class OffscreenCopyHelper extends RefCounted {
         new OffscreenCopyHelper(
           gl,
           elementWiseTextureShader(gl, shaderModule, numTextures),
-          linearInterpolation
+          linearInterpolation,
         ),
     );
   }

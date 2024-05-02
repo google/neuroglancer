@@ -1002,7 +1002,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
       // Check the sample rate for volume rendering
       let volumeRenderingDownsampleFactorBasedOnSize = 1000;
-      for (const [renderLayer, ] of visibleLayers) {
+      for (const [renderLayer] of visibleLayers) {
         if (renderLayer.isVolumeRendering) {
           const volumeRenderingRenderLayer =
             renderLayer as VolumeRenderingRenderLayer;
@@ -1017,7 +1017,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       if (volumeRenderingDownsampleFactorBasedOnSize === 1000) {
         volumeRenderingDownsampleFactorBasedOnSize = 1;
       }
-      
+
       let volumeRenderingDownsampleFactorBasedOnFramerate = 1;
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCounter.calculateFrameTimeInMs();

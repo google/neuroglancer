@@ -618,9 +618,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     registerActionListener(element, "move-to-mouse-position", () => {
       const { mouseState } = this.viewer;
       if (mouseState.updateUnconditionally()) {
-        this.isMovingToMousePositionOnPick  = true;
+        this.isMovingToMousePositionOnPick = true;
         this.navigationState.position.value = mouseState.position;
-        this.isMovingToMousePositionOnPick  = false;
+        this.isMovingToMousePositionOnPick = false;
       }
     });
 
