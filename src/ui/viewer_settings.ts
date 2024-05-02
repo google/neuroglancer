@@ -64,7 +64,7 @@ export class ViewerSettingsPanel extends SidePanel {
     viewer: Viewer,
   ) {
     super(sidePanelManager, state.location);
-    this.addTitleBar({ title: "Settings (MC b1)" });
+    this.addTitleBar({ title: "Settings" });
 
     const body = document.createElement("div");
     body.classList.add("neuroglancer-settings-body");
