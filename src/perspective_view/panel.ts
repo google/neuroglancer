@@ -912,7 +912,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     let hasMaxProjection = false;
 
     let hasAnnotation = false;
-    let nVolumeRenderingLayers = 0;
 
     // Draw fully-opaque layers first.
     for (const [renderLayer, attachment] of visibleLayers) {
@@ -929,7 +928,6 @@ export class PerspectivePanel extends RenderedDataPanel {
             hasMaxProjection ||
             isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
         }
-        nVolumeRenderingLayers++;
       }
     }
     this.drawSliceViews(renderContext);
@@ -1023,16 +1021,10 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let currentVolumeRenderingLayer = 0;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
-        }
-        if (renderLayer.isVolumeRendering) {
-          currentVolumeRenderingLayer++;
-          renderContext.volumePickID =
-            currentVolumeRenderingLayer / (nVolumeRenderingLayers + 1);
         }
         // Draw max projection layers
         if (

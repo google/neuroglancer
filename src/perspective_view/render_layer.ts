@@ -55,11 +55,6 @@ export interface PerspectiveViewRenderContext
    * Specifies the ID of the depth frame buffer texture to query during rendering.
    */
   depthBufferTexture?: WebGLTexture | null;
-
-  /**
-   * Specifies the ID to use for the pick ID in volume rendering.
-   */
-  volumePickID?: number;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
