@@ -1022,7 +1022,7 @@ export class PerspectivePanel extends RenderedDataPanel {
               Math.log2(transparentBufferDownsampleFactorBasedOnFramerate),
             ),
           ),
-          8,
+          MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
         );
         this.maxDownsamplingFactorThisCameraMove = Math.max(
           this.maxDownsamplingFactorThisCameraMove,
