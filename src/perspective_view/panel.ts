@@ -1028,11 +1028,13 @@ export class PerspectivePanel extends RenderedDataPanel {
           ),
           MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
         );
-        if (this.maxDownsamplingFactorThisCameraMove > 1) {
+        const downsamplingFactor =
+          this.maxDownsamplingFactorThisCameraMove > 1
+            ? Math.max(2, transparentBufferDownsampleFactorBasedOnFramerate)
+            : 1;
+        if (downsamplingFactor > 1) {
           const originalRatio = width / height;
-          volumeRenderingBufferWidth = Math.round(
-            width / this.maxDownsamplingFactorThisCameraMove,
-          );
+          volumeRenderingBufferWidth = Math.round(width / downsamplingFactor);
           volumeRenderingBufferHeight = Math.round(
             volumeRenderingBufferWidth / originalRatio,
           );
