@@ -283,7 +283,7 @@ void emitRGBA(vec4 rgba) {
   savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
-  emit(outputColor, savedDepth, savedIntensity, pickId);
+  emit(outputColor, savedDepth, savedIntensity, uPickId);
   defaultMaxProjectionIntensity = 0.0;
   userEmittedIntensity = -100.0;
 `;
@@ -311,7 +311,7 @@ void emitRGBA(vec4 rgba) {
 
           builder.addUniform("highp float", "uBrightnessFactor");
           builder.addUniform("highp float", "uGain");
-          builder.addUniform("highp float", "pickId");
+          builder.addUniform("highp float", "uPickId");
           builder.addVarying("highp vec4", "vNormalizedPosition");
           builder.addTextureSampler(
             "sampler2D",
@@ -369,7 +369,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 `;
             if (isProjectionMode(shaderParametersState.mode)) {
               glsl_emitWireframe = `
-  emit(outputColor, 1.0, uChunkNumber, pickId);
+  emit(outputColor, 1.0, uChunkNumber, uPickId);
             `;
             }
             builder.setFragmentMainFunction(`
@@ -805,7 +805,7 @@ void main() {
           const pickId = renderContext.volumePickID
             ? renderContext.volumePickID
             : 0.99;
-          gl.uniform1f(shader.uniform("pickId"), pickId);
+          gl.uniform1f(shader.uniform("uPickId"), pickId);
           drawBoxes(gl, 1, 1);
           ++presentCount;
         } else {
