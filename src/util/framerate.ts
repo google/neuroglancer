@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-export class FrameRateCounter {
+export class FrameRateCalculator {
   private frameTimeStamps: number[] = [];
   constructor(
     private numberOfStoredFrameTimes: number = 10,

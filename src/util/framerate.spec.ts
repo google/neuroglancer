@@ -15,11 +15,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { FrameRateCounter } from "#src/util/framerate.js";
+import { FrameRateCalculator } from "#src/util/framerate.js";
 
 describe("FrameRateCounter", () => {
   it("calculates valid fps for evenly spaced frames", () => {
-    const frameRateCounter = new FrameRateCounter(10);
+    const frameRateCounter = new FrameRateCalculator(10);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
       if (i === 0) {
@@ -30,7 +30,7 @@ describe("FrameRateCounter", () => {
     }
   });
   it("calculates valid fps for many frames", () => {
-    const frameRateCounter = new FrameRateCounter(10);
+    const frameRateCounter = new FrameRateCalculator(10);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
     }
@@ -41,6 +41,6 @@ describe("FrameRateCounter", () => {
   });
   it("removes frames if no frames have been requested", () => {
     // TODO (SKM) implement this test
-    expect(new FrameRateCounter().calculateFrameTimeInMs()).toEqual(0);
+    expect(new FrameRateCalculator().calculateFrameTimeInMs()).toEqual(0);
   });
 });

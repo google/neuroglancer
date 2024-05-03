@@ -58,7 +58,7 @@ import type { TrackableRGB } from "#src/util/color.js";
 import type { Owned } from "#src/util/disposable.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
-import { FrameRateCounter } from "#src/util/framerate.js";
+import { FrameRateCalculator } from "#src/util/framerate.js";
 import { kAxes, kZeroVec4, mat4, vec3, vec4 } from "#src/util/geom.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import type {
@@ -82,9 +82,9 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const CAMERA_MOVEMENT_VR_SETTLE_TIME_MS = 200;
+const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 const DESIRED_FRAME_TIMING_MS = 1000 / 60;
-const MAX_VR_DOWNSAMPLE_FACTOR = 20;
+const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 10;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -185,6 +185,9 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
+// Copy the depth from opaque pass to the depth buffer for OIT.
+// This copy is required because the OIT depth buffer might be
+// smaller than the main depth buffer.
 function defineDepthCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
@@ -259,9 +262,13 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
-  private frameRateCounter = new FrameRateCounter(10);
-  private shouldCheckFrameRate = false;
-  private timeoutId = -1;
+  private frameRateCalculator = new FrameRateCalculator(10);
+  private redrawAfterMoveTimeOutId = -1;
+  private hasTransparent = false;
+
+  get shouldCheckFrameRate() {
+    return this.redrawAfterMoveTimeOutId !== -1;
+  }
 
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
@@ -423,19 +430,19 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.viewer.navigationState.changed.add(() => {
+        // No need to check if all objects are opaque
         // Don't check for downsampling on picking requests
-        if (this.isMovingToMousePositionOnPick) {
+        if (!this.hasTransparent || this.isMovingToMousePositionOnPick) {
           return;
         }
-        this.shouldCheckFrameRate = true;
-        if (this.timeoutId !== -1) {
-          window.clearTimeout(this.timeoutId);
+        if (this.redrawAfterMoveTimeOutId !== -1) {
+          window.clearTimeout(this.redrawAfterMoveTimeOutId);
         }
-        this.timeoutId = window.setTimeout(() => {
-          this.shouldCheckFrameRate = false;
-          this.frameRateCounter.reset();
+        this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
+          this.redrawAfterMoveTimeOutId = -1;
+          this.frameRateCalculator.reset();
           this.context.scheduleRedraw();
-        }, CAMERA_MOVEMENT_VR_SETTLE_TIME_MS);
+        }, FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE);
       }),
     );
 
@@ -804,7 +811,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       return false;
     }
     if (this.shouldCheckFrameRate) {
-      this.frameRateCounter.addFrame();
+      this.frameRateCalculator.addFrame();
     }
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
@@ -930,9 +937,8 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     const { visibleLayers } = this.visibleLayerTracker;
 
-    let hasTransparent = false;
+    this.hasTransparent = false;
     let hasMaxProjection = false;
-
     let hasAnnotation = false;
 
     // Draw fully-opaque layers first.
@@ -944,7 +950,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           hasAnnotation = true;
         }
       } else {
-        hasTransparent = true;
+        this.hasTransparent = true;
         if (renderLayer.isVolumeRendering) {
           hasMaxProjection =
             hasMaxProjection ||
@@ -993,7 +999,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       /*dppass=*/ WebGL2RenderingContext.KEEP,
     );
 
-    if (hasTransparent) {
+    if (this.hasTransparent) {
       //Draw transparent objects.
 
       // Check the sample rate for volume rendering
@@ -1011,20 +1017,20 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
       if (
-        volumeRenderingDownsampleFactorBasedOnSize > MAX_VR_DOWNSAMPLE_FACTOR
+        volumeRenderingDownsampleFactorBasedOnSize > MAX_TRANSPARENT_DOWNSAMPLE_FACTOR
       ) {
         volumeRenderingDownsampleFactorBasedOnSize = 1;
       }
 
       let volumeRenderingDownsampleFactorBasedOnFramerate = 1;
       if (this.shouldCheckFrameRate) {
-        const frameDelta = this.frameRateCounter.calculateFrameTimeInMs();
+        const frameDelta = this.frameRateCalculator.calculateFrameTimeInMs();
         volumeRenderingDownsampleFactorBasedOnFramerate = Math.min(
           Math.max(
             Math.round(frameDelta / DESIRED_FRAME_TIMING_MS),
             volumeRenderingDownsampleFactorBasedOnSize,
           ),
-          MAX_VR_DOWNSAMPLE_FACTOR,
+          MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
         );
       }
       const volumeRenderingDownsampleFactor = Math.max(
