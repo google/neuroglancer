@@ -84,7 +84,7 @@ import { SharedObject } from "#src/worker_rpc.js";
 
 const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 const DESIRED_FRAME_TIMING_MS = 1000 / 60;
-const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 16;
+const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 8;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -264,6 +264,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private frameRateCalculator = new FrameRateCalculator(10);
   private redrawAfterMoveTimeOutId = -1;
+  private maxDownsamplingFactorThisCameraMove = 1;
   private hasTransparent = false;
 
   get shouldCheckFrameRate() {
@@ -440,6 +441,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
           this.redrawAfterMoveTimeOutId = -1;
+          this.maxDownsamplingFactorThisCameraMove = 1;
           this.frameRateCalculator.reset();
           this.context.scheduleRedraw();
         }, FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE);
@@ -1002,31 +1004,33 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (this.hasTransparent) {
       //Draw transparent objects.
 
-      let transparentBufferDownsampleFactorBasedOnFramerate = 1;
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCalculator.calculateFrameTimeInMs();
-        transparentBufferDownsampleFactorBasedOnFramerate = Math.min(
-          Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
-          MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
+        let transparentBufferDownsampleFactorBasedOnFramerate = Math.max(
+          frameDelta / DESIRED_FRAME_TIMING_MS,
+          1,
         );
-        console.log(
-          "before",
-          transparentBufferDownsampleFactorBasedOnFramerate,
-        );
+        // Round to the nearest power of 2.
         transparentBufferDownsampleFactorBasedOnFramerate = Math.pow(
           2,
           Math.round(
             Math.log2(transparentBufferDownsampleFactorBasedOnFramerate),
           ),
         );
-        console.log("after", transparentBufferDownsampleFactorBasedOnFramerate);
+        this.maxDownsamplingFactorThisCameraMove = Math.min(
+          Math.max(
+            this.maxDownsamplingFactorThisCameraMove,
+            transparentBufferDownsampleFactorBasedOnFramerate,
+          ),
+          MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
+        );
       }
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
-      if (transparentBufferDownsampleFactorBasedOnFramerate > 1) {
+      if (this.maxDownsamplingFactorThisCameraMove > 1) {
         const originalRatio = width / height;
         volumeRenderingBufferWidth = Math.round(
-          width / transparentBufferDownsampleFactorBasedOnFramerate,
+          width / this.maxDownsamplingFactorThisCameraMove,
         );
         volumeRenderingBufferHeight = Math.round(
           volumeRenderingBufferWidth / originalRatio,
