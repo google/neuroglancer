@@ -16,26 +16,39 @@
 
 export class FrameRateCalculator {
   private frameTimeStamps: number[] = [];
+  private frameDeltas: number[] = [];
   constructor(private numberOfStoredFrameTimes: number = 10) {}
   reset() {
     this.frameTimeStamps = [];
+    this.frameDeltas = [];
   }
 
   addFrame(timestamp: number = Date.now()) {
     if (this.frameTimeStamps.length >= this.numberOfStoredFrameTimes) {
       this.frameTimeStamps.shift();
+      this.frameDeltas.shift();
     }
     this.frameTimeStamps.push(timestamp);
+    if (this.frameTimeStamps.length > 1) {
+      this.calculateFrameDelta();
+    }
+  }
+
+  private calculateFrameDelta() {
+    this.frameDeltas.push(
+      this.frameTimeStamps[this.frameTimeStamps.length - 1] -
+        this.frameTimeStamps[this.frameTimeStamps.length - 2],
+    );
   }
 
   calculateFrameTimeInMs() {
-    if (this.frameTimeStamps.length <= 1) {
+    if (this.frameDeltas.length < 1) {
       return 0;
     }
-    return (
-      (this.frameTimeStamps[this.frameTimeStamps.length - 1] -
-        this.frameTimeStamps[0]) /
-      (this.frameTimeStamps.length - 1)
-    );
+    const sortedFrameDeltas = this.frameDeltas.slice().sort((a, b) => a - b);
+    const midpoint = Math.floor(sortedFrameDeltas.length / 2);
+    return sortedFrameDeltas.length % 2 === 1
+      ? sortedFrameDeltas[midpoint]
+      : (sortedFrameDeltas[midpoint - 1] + sortedFrameDeltas[midpoint]) / 2;
   }
 }
