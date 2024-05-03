@@ -263,7 +263,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
-  private frameRateCalculator = new FrameRateCalculator(10);
+  private frameRateCalculator = new FrameRateCalculator(20);
   private redrawAfterMoveTimeOutId = -1;
   private maxDownsamplingFactorThisCameraMove = 1;
   private hasTransparent = false;
