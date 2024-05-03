@@ -311,7 +311,7 @@ void emitRGBA(vec4 rgba) {
 
           builder.addUniform("highp float", "uBrightnessFactor");
           builder.addUniform("highp float", "uGain");
-          builder.addUniform("highp float", "uPickId");
+          builder.addUniform("highp uint", "uPickId");
           builder.addVarying("highp vec4", "vNormalizedPosition");
           builder.addTextureSampler(
             "sampler2D",
@@ -625,6 +625,9 @@ void main() {
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
+    const pickId = isProjectionMode(this.mode.value)
+      ? renderContext.pickIDs.register(this)
+      : 0;
     forEachVisibleVolumeRenderingChunk(
       renderContext.projectionParameters,
       this.localPosition.value,
@@ -802,10 +805,7 @@ void main() {
           }
           newSource = false;
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
-          const pickId = renderContext.volumePickID
-            ? renderContext.volumePickID
-            : 0.99;
-          gl.uniform1f(shader.uniform("uPickId"), pickId);
+          gl.uniform1ui(shader.uniform("uPickId"), pickId);
           drawBoxes(gl, 1, 1);
           ++presentCount;
         } else {
