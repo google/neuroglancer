@@ -38,7 +38,7 @@ describe("FrameRateCounter", () => {
       frameRateCounter.addFrame(i * 10);
     }
     expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(10);
-    expect(frameRateCounter.calculateFrameTimeInMs(true)).toEqual(10);
+    expect(frameRateCounter.calculateFrameTimeInMs(false)).toEqual(10);
   });
   it("removes frames after reset", () => {
     const frameRateCounter = new FrameRateCalculator(10);

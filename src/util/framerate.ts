@@ -49,8 +49,9 @@ export class FrameRateCalculator {
       return this.calculateMedianFrameTime();
     }
     return (
-      this.frameTimeStamps[this.frameTimeStamps.length - 1] -
-      this.frameTimeStamps[0] / (this.frameTimeStamps.length - 1)
+      (this.frameTimeStamps[this.frameTimeStamps.length - 1] -
+        this.frameTimeStamps[0]) /
+      (this.frameTimeStamps.length - 1)
     );
   }
 
