@@ -16,22 +16,7 @@
 
 export class FrameRateCalculator {
   private frameTimeStamps: number[] = [];
-  constructor(
-    private numberOfStoredFrameTimes: number = 10,
-    private timeoutInMS: number = 1000,
-  ) {}
-
-  start(timestamp: number = Date.now()) {
-    if (this.frameTimeStamps.length == 0) {
-      this.frameTimeStamps.push(timestamp);
-    } else if (
-      timestamp - this.frameTimeStamps[this.frameTimeStamps.length - 1] >=
-      this.timeoutInMS
-    ) {
-      this.reset();
-      this.frameTimeStamps.push(timestamp);
-    }
-  }
+  constructor(private numberOfStoredFrameTimes: number = 10) {}
   reset() {
     this.frameTimeStamps = [];
   }

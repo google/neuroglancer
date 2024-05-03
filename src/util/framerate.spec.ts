@@ -39,8 +39,14 @@ describe("FrameRateCounter", () => {
     }
     expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(10);
   });
-  it("removes frames if no frames have been requested", () => {
-    // TODO (SKM) implement this test
-    expect(new FrameRateCalculator().calculateFrameTimeInMs()).toEqual(0);
+  it("removes frames after reset", () => {
+    const frameRateCounter = new FrameRateCalculator(10);
+    expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(0);
+    for (let i = 0; i < 10; i++) {
+      frameRateCounter.addFrame(i * 100);
+    }
+    expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(100);
+    frameRateCounter.reset();
+    expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(0);
   });
 });
