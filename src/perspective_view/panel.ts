@@ -88,6 +88,7 @@ const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 8;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
+  adaptiveDownsampling: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -1004,7 +1005,10 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (this.hasTransparent) {
       //Draw transparent objects.
 
-      if (this.shouldCheckFrameRate) {
+      let volumeRenderingBufferWidth = width;
+      let volumeRenderingBufferHeight = height;
+
+      if (this.viewer.adaptiveDownsampling.value && this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCalculator.calculateFrameTimeInMs();
         let transparentBufferDownsampleFactorBasedOnFramerate = Math.max(
           frameDelta / DESIRED_FRAME_TIMING_MS,
@@ -1024,17 +1028,15 @@ export class PerspectivePanel extends RenderedDataPanel {
           ),
           MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
         );
-      }
-      let volumeRenderingBufferWidth = width;
-      let volumeRenderingBufferHeight = height;
-      if (this.maxDownsamplingFactorThisCameraMove > 1) {
-        const originalRatio = width / height;
-        volumeRenderingBufferWidth = Math.round(
-          width / this.maxDownsamplingFactorThisCameraMove,
-        );
-        volumeRenderingBufferHeight = Math.round(
-          volumeRenderingBufferWidth / originalRatio,
-        );
+        if (this.maxDownsamplingFactorThisCameraMove > 1) {
+          const originalRatio = width / height;
+          volumeRenderingBufferWidth = Math.round(
+            width / this.maxDownsamplingFactorThisCameraMove,
+          );
+          volumeRenderingBufferHeight = Math.round(
+            volumeRenderingBufferWidth / originalRatio,
+          );
+        }
       }
 
       // Create max projection buffer if needed.

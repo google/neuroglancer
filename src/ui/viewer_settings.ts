@@ -125,6 +125,7 @@ export class ViewerSettingsPanel extends SidePanel {
     );
     addCheckbox("Wire frame rendering", viewer.wireFrame);
     addCheckbox("Enable prefetching", viewer.chunkQueueManager.enablePrefetch);
+    addCheckbox("Enable adaptive downsampling", viewer.adaptiveDownsampling);
 
     const addColor = (label: string, value: WatchableValueInterface<vec3>) => {
       const labelElement = document.createElement("label");
