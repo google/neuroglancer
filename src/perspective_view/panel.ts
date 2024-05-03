@@ -1015,18 +1015,18 @@ export class PerspectivePanel extends RenderedDataPanel {
           1,
         );
         // Round to the nearest power of 2.
-        transparentBufferDownsampleFactorBasedOnFramerate = Math.pow(
-          2,
-          Math.round(
-            Math.log2(transparentBufferDownsampleFactorBasedOnFramerate),
+        transparentBufferDownsampleFactorBasedOnFramerate = Math.min(
+          Math.pow(
+            2,
+            Math.round(
+              Math.log2(transparentBufferDownsampleFactorBasedOnFramerate),
+            ),
           ),
+          8,
         );
-        this.maxDownsamplingFactorThisCameraMove = Math.min(
-          Math.max(
-            this.maxDownsamplingFactorThisCameraMove,
-            transparentBufferDownsampleFactorBasedOnFramerate,
-          ),
-          MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
+        this.maxDownsamplingFactorThisCameraMove = Math.max(
+          this.maxDownsamplingFactorThisCameraMove,
+          transparentBufferDownsampleFactorBasedOnFramerate,
         );
         const downsamplingFactor =
           this.maxDownsamplingFactorThisCameraMove > 1
