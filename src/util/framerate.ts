@@ -41,10 +41,20 @@ export class FrameRateCalculator {
     );
   }
 
-  calculateFrameTimeInMs() {
+  calculateFrameTimeInMs(useMedian: boolean = true): number {
     if (this.frameDeltas.length < 1) {
       return 0;
     }
+    if (useMedian) {
+      return this.calculateMedianFrameTime();
+    }
+    return (
+      this.frameTimeStamps[this.frameTimeStamps.length - 1] -
+      this.frameTimeStamps[0] / (this.frameTimeStamps.length - 1)
+    );
+  }
+
+  private calculateMedianFrameTime(): number {
     const sortedFrameDeltas = this.frameDeltas.slice().sort((a, b) => a - b);
     const midpoint = Math.floor(sortedFrameDeltas.length / 2);
     return sortedFrameDeltas.length % 2 === 1
