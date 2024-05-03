@@ -152,7 +152,6 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
 }
 
-// Keep the pick value here below 1 to avoid conflicts with the pick IDs used by uint annotations.
 export function maxProjectionEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
@@ -160,10 +159,11 @@ export function maxProjectionEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "v4f_fragData3", 3);
   builder.addFragmentCode(`
 void emit(vec4 color, float depth, float intensity, highp uint pickId) {
-  v4f_fragData0 = color;
-  v4f_fragData1 = vec4(1.0 - depth, 1.0 - depth, 1.0 - depth, 1.0);
-  v4f_fragData2 = vec4(intensity, intensity, intensity, 1.0);
   float pickIdFloat = float(pickId);
+  float bufferDepth = 1.0 - depth;
+  v4f_fragData0 = color;
+  v4f_fragData1 = vec4(bufferDepth, bufferDepth, bufferDepth, 1.0);
+  v4f_fragData2 = vec4(intensity, intensity, intensity, 1.0);
   v4f_fragData3 = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
 }`);
 }
@@ -172,6 +172,7 @@ const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
 
+// Copy the OIT values to the main color buffer
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);
   builder.setFragmentMain(`
@@ -184,14 +185,15 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
+// Copy the max projection color to the OIT buffer
 function defineMaxProjectionColorCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
   builder.setFragmentMain(`
 vec4 color = getValue0();
-float depth = 1.0 - getValue1().r;
-float weight = computeOITWeight(color.a, depth);
+float bufferDepth = getValue1().r;
+float weight = computeOITWeight(color.a, 1.0 - bufferDepth);
 vec4 accum = color * weight;
 float revealage = color.a;
 
@@ -199,7 +201,7 @@ emitAccumAndRevealage(accum, revealage, 0u);
 `);
 }
 
-// Copy the max projection values over to the main pick buffer
+// Copy the max projection depth and pick values to the main buffer
 function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
@@ -211,9 +213,10 @@ v4f_fragData2 = getValue1();
 `);
 }
 
+// Copy the max projection depth and picking to the max projection pick buffer.
 // Note that the depth is set as the intensity value from the render layer.
-// This is because we want to pick the highest intensity value.
-// Not the closest depth value.
+// This is to combine max projection picking data via depth testing
+// on the maximum intensity value of the data.
 function defineMaxProjectionToPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
