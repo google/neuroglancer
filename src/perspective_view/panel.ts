@@ -1002,47 +1002,20 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (this.hasTransparent) {
       //Draw transparent objects.
 
-      // Check the sample rate for volume rendering
-      let volumeRenderingDownsampleFactorBasedOnSize = Infinity;
-      for (const [renderLayer] of visibleLayers) {
-        if (renderLayer.isVolumeRendering) {
-          const volumeRenderingRenderLayer =
-            renderLayer as VolumeRenderingRenderLayer;
-          const sampleRate = volumeRenderingRenderLayer.lastUsedSampleRate;
-          const ratio = Math.floor(width / sampleRate);
-          volumeRenderingDownsampleFactorBasedOnSize = Math.max(
-            Math.min(volumeRenderingDownsampleFactorBasedOnSize, ratio),
-            1,
-          );
-        }
-      }
-      if (
-        volumeRenderingDownsampleFactorBasedOnSize > MAX_TRANSPARENT_DOWNSAMPLE_FACTOR
-      ) {
-        volumeRenderingDownsampleFactorBasedOnSize = 1;
-      }
-
-      let volumeRenderingDownsampleFactorBasedOnFramerate = 1;
+      let transparentBufferDownsampleFactorBasedOnFramerate = 1;
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCalculator.calculateFrameTimeInMs();
-        volumeRenderingDownsampleFactorBasedOnFramerate = Math.min(
-          Math.max(
-            Math.round(frameDelta / DESIRED_FRAME_TIMING_MS),
-            volumeRenderingDownsampleFactorBasedOnSize,
-          ),
+        transparentBufferDownsampleFactorBasedOnFramerate = Math.min(
+          Math.round(frameDelta / DESIRED_FRAME_TIMING_MS),
           MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
         );
       }
-      const volumeRenderingDownsampleFactor = Math.max(
-        volumeRenderingDownsampleFactorBasedOnSize,
-        volumeRenderingDownsampleFactorBasedOnFramerate,
-      );
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
-      if (volumeRenderingDownsampleFactor > 1) {
+      if (transparentBufferDownsampleFactorBasedOnFramerate  > 1) {
         const originalRatio = width / height;
         volumeRenderingBufferWidth = Math.round(
-          width / volumeRenderingDownsampleFactor,
+          width / transparentBufferDownsampleFactorBasedOnFramerate ,
         );
         volumeRenderingBufferHeight = Math.round(
           volumeRenderingBufferWidth / originalRatio,

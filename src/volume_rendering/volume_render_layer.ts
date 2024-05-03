@@ -190,8 +190,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     return true;
   }
 
-  public lastUsedSampleRate = 0;
-
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
     this.gain = options.gain;
@@ -774,12 +772,6 @@ void main() {
                   ? 1
                   : chunkDataSize[chunkDim];
             }
-            this.lastUsedSampleRate = Math.max(
-              this.lastUsedSampleRate,
-              chunkDataDisplaySize[0],
-              chunkDataDisplaySize[1],
-              chunkDataDisplaySize[2],
-            );
             gl.uniform3fv(
               shader.uniform("uChunkDataSize"),
               chunkDataDisplaySize,
@@ -813,7 +805,6 @@ void main() {
         }
       },
     );
-    this.lastUsedSampleRate = this.lastUsedSampleRate * presentCount;
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
