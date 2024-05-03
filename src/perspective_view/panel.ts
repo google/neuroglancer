@@ -84,7 +84,7 @@ import { SharedObject } from "#src/worker_rpc.js";
 
 const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 const DESIRED_FRAME_TIMING_MS = 1000 / 60;
-const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 10;
+const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 16;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -1006,16 +1006,27 @@ export class PerspectivePanel extends RenderedDataPanel {
       if (this.shouldCheckFrameRate) {
         const frameDelta = this.frameRateCalculator.calculateFrameTimeInMs();
         transparentBufferDownsampleFactorBasedOnFramerate = Math.min(
-          Math.round(frameDelta / DESIRED_FRAME_TIMING_MS),
+          Math.max(Math.round(frameDelta / DESIRED_FRAME_TIMING_MS), 1),
           MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
         );
+        console.log(
+          "before",
+          transparentBufferDownsampleFactorBasedOnFramerate,
+        );
+        transparentBufferDownsampleFactorBasedOnFramerate = Math.pow(
+          2,
+          Math.round(
+            Math.log2(transparentBufferDownsampleFactorBasedOnFramerate),
+          ),
+        );
+        console.log("after", transparentBufferDownsampleFactorBasedOnFramerate);
       }
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
-      if (transparentBufferDownsampleFactorBasedOnFramerate  > 1) {
+      if (transparentBufferDownsampleFactorBasedOnFramerate > 1) {
         const originalRatio = width / height;
         volumeRenderingBufferWidth = Math.round(
-          width / transparentBufferDownsampleFactorBasedOnFramerate ,
+          width / transparentBufferDownsampleFactorBasedOnFramerate,
         );
         volumeRenderingBufferHeight = Math.round(
           volumeRenderingBufferWidth / originalRatio,
