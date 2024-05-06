@@ -1136,27 +1136,21 @@ export class PerspectivePanel extends RenderedDataPanel {
         /*dppass=*/ WebGL2RenderingContext.REPLACE,
       );
       gl.stencilMask(2);
+      if (hasMaxProjection) {
+        this.maxProjectionPickCopyHelper.draw(
+          this.maxProjectionPickConfiguration.colorBuffers[0].texture /*depth*/,
+          this.maxProjectionPickConfiguration.colorBuffers[1].texture /*pick*/,
+        );
+      }
       for (const [renderLayer, attachment] of visibleLayers) {
-        if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
+        if (
+          !renderLayer.isTransparent ||
+          !renderLayer.transparentPickEnabled ||
+          renderLayer.isVolumeRendering
+        ) {
+          // Skip non-transparent layers and transparent layers with transparentPickEnabled=false.
+          // Volume rendering layers are handled separately and are combined in a pick buffer
           continue;
-        }
-        // For max projection layers, can copy over the pick buffer directly.
-        if (renderLayer.isVolumeRendering) {
-          if (isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)) {
-            this.maxProjectionPickCopyHelper.draw(
-              this.maxProjectionPickConfiguration.colorBuffers[0]
-                .texture /*depth*/,
-              this.maxProjectionPickConfiguration.colorBuffers[1]
-                .texture /*pick*/,
-            );
-          }
-          // Draw picking for non min/max volume rendering layers
-          else {
-            // Currently volume rendering layers have no picking support
-            // Outside of min/max mode
-            continue;
-          }
-          // other transparent layers are drawn as usual
         } else {
           renderLayer.draw(renderContext, attachment);
         }
