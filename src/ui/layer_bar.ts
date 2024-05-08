@@ -17,8 +17,10 @@
 import "#src/noselect.css";
 import "#src/ui/layer_bar.css";
 import svg_plus from "ikonate/icons/plus.svg?raw";
+import { GraphConnection } from "#src/datasource/graphene/frontend.js";
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
+import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -67,6 +69,42 @@ class LayerWidget extends RefCounted {
     element.appendChild(prefetchProgress);
     labelElement.className = "neuroglancer-layer-item-label";
     labelElement.appendChild(labelElementText);
+
+    this.registerDisposer(
+      layer.readyStateChanged.add(() => {
+        console.log("layer is ready", layer.isReady());
+        if (layer.isReady() && layer.layer instanceof SegmentationUserLayer) {
+          const graphConnection = layer.layer.graphConnection;
+          const timeElement = document.createElement("div");
+          timeElement.innerHTML = "🕘";
+          let timeStampDisposer: (() => boolean) | undefined = undefined;
+          const graphConnectionChanged = () => {
+            if (timeStampDisposer) timeStampDisposer();
+            if (graphConnection.value instanceof GraphConnection) {
+              element.appendChild(timeElement);
+              const { timestamp } = graphConnection.value.state;
+              const updateTimeDisplay = () => {
+                timeElement.style.display =
+                  timestamp.value > 0 ? "inherit" : "none";
+              };
+              timeStampDisposer = this.registerDisposer(
+                timestamp.changed.add(updateTimeDisplay),
+              );
+              updateTimeDisplay();
+            } else {
+              if (element.contains(timeElement)) {
+                element.removeChild(timeElement);
+              }
+            }
+          };
+          graphConnectionChanged();
+          this.registerDisposer(
+            graphConnection.changed.add(graphConnectionChanged),
+          );
+        }
+      }),
+    );
+
     visibleProgress.className = "neuroglancer-layer-item-visible-progress";
     prefetchProgress.className = "neuroglancer-layer-item-prefetch-progress";
     layerNumberElement.className = "neuroglancer-layer-item-number";
