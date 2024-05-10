@@ -100,13 +100,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
       this.maxDownsamplingFactorSinceReset,
       downsampleFactorBasedOnFramerate,
     );
-    const downsampleRateFromHistory = Math.min(
-      this.maxDownsamplingFactorSinceReset,
-      4,
-    );
     return Math.max(
       downsampleFactorBasedOnFramerate,
-      downsampleRateFromHistory,
+      this.maxDownsamplingFactorSinceReset,
     );
   }
 
