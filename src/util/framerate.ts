@@ -14,15 +14,31 @@
  * limitations under the License.
  */
 
-const DESIRED_FRAME_TIMING_MS = 1000 / 60;
-const MAX_DOWNSAMPLE_FACTOR = 8;
-
-export class FrameRateCalculator {
+export class DownsamplingBasedOnFrameRateCalculator {
   private lastFrameTime: number | null = null;
+  private maxDownsamplingFactorSinceReset: number = 1;
   private frameDeltas: number[] = [];
-  constructor(private numberOfStoredFrameDeltas: number = 10) {}
+  constructor(
+    private numberOfStoredFrameDeltas: number = 10,
+    private maxDownsamplingFactor: number = 8,
+    private desiredFrameTimingMs = 1000 / 60,
+  ) {
+    if (numberOfStoredFrameDeltas < 1) {
+      throw new Error(
+        `Number of stored frame deltas must be at least 1, ` +
+          `but got ${numberOfStoredFrameDeltas}.`,
+      );
+    }
+    if (maxDownsamplingFactor < 2) {
+      throw new Error(
+        `Max downsampling factor must be at least 2, ` +
+          `but got ${maxDownsamplingFactor}.`,
+      );
+    }
+  }
   resetLastFrameTime() {
     this.lastFrameTime = null;
+    this.maxDownsamplingFactorSinceReset = 1;
   }
 
   addFrame(timestamp: number = Date.now()) {
@@ -65,24 +81,27 @@ export class FrameRateCalculator {
 
   calculateDownsamplingRateBasedOnFrameDeltas(
     useMedian: boolean = true,
-    desiredFrameTimingMs: number = DESIRED_FRAME_TIMING_MS,
-    maxDownsamplingFactor: number = MAX_DOWNSAMPLE_FACTOR,
   ): number {
     console.log(this.getFrameDeltas());
     const frameDelta = this.calculateFrameTimeInMs(useMedian);
     if (frameDelta === 0) {
-      return Math.min(4, maxDownsamplingFactor);
+      return Math.min(4, this.maxDownsamplingFactor);
     }
     let downsampleFactorBasedOnFramerate = Math.max(
-      frameDelta / desiredFrameTimingMs,
+      frameDelta / this.desiredFrameTimingMs,
       1,
     );
     // Round to the nearest power of 2.
     downsampleFactorBasedOnFramerate = Math.min(
       Math.pow(2, Math.round(Math.log2(downsampleFactorBasedOnFramerate))),
-      maxDownsamplingFactor,
+      this.maxDownsamplingFactor,
     );
-    return downsampleFactorBasedOnFramerate;
+    const downsampleRateFromHistory =
+      this.maxDownsamplingFactorSinceReset > 1 ? 2 : 1;
+    return Math.max(
+      downsampleFactorBasedOnFramerate,
+      downsampleRateFromHistory,
+    );
   }
 
   getFrameDeltas(): number[] {

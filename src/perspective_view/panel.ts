@@ -58,7 +58,7 @@ import type { TrackableRGB } from "#src/util/color.js";
 import type { Owned } from "#src/util/disposable.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
-import { FrameRateCalculator } from "#src/util/framerate.js";
+import { DownsamplingBasedOnFrameRateCalculator } from "#src/util/framerate.js";
 import { kAxes, kZeroVec4, mat4, vec3, vec4 } from "#src/util/geom.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import type {
@@ -82,7 +82,7 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
+const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 400;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -261,7 +261,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
-  private frameRateCalculator = new FrameRateCalculator(5);
+  private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(5);
   private redrawAfterMoveTimeOutId = -1;
   private hasTransparent = false;
 
@@ -439,6 +439,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
           this.redrawAfterMoveTimeOutId = -1;
+          this.frameRateCalculator.resetLastFrameTime();
           this.context.scheduleRedraw();
         }, FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE);
       }),
@@ -1006,8 +1007,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       if (this.viewer.adaptiveDownsampling.value && this.shouldCheckFrameRate) {
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(
-            true,
+            false,
           );
+        console.log("Downsampling factor: ", downsamplingFactor);
         if (downsamplingFactor > 1) {
           const originalRatio = width / height;
           volumeRenderingBufferWidth = Math.round(width / downsamplingFactor);
@@ -1273,10 +1275,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenCopyHelper.draw(
       this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
-    if (this.shouldCheckFrameRate) {
-      this.frameRateCalculator.addFrame();
-      this.frameRateCalculator.resetLastFrameTime();
-    }
     return true;
   }
 

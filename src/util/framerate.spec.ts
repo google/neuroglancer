@@ -15,11 +15,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { FrameRateCalculator } from "#src/util/framerate.js";
+import { DownsamplingBasedOnFrameRateCalculator } from "#src/util/framerate.js";
 
 describe("FrameRateCounter", () => {
   it("calculates valid fps for evenly spaced frames", () => {
-    const frameRateCounter = new FrameRateCalculator(10);
+    const frameRateCounter = new DownsamplingBasedOnFrameRateCalculator(10);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
       if (i === 0) {
@@ -30,7 +30,7 @@ describe("FrameRateCounter", () => {
     }
   });
   it("calculates valid fps for many frames", () => {
-    const frameRateCounter = new FrameRateCalculator(9);
+    const frameRateCounter = new DownsamplingBasedOnFrameRateCalculator(9);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
     }
@@ -42,7 +42,7 @@ describe("FrameRateCounter", () => {
     expect(frameRateCounter.calculateFrameTimeInMs(false)).toEqual(10);
   });
   it("removes last frame after reset", () => {
-    const frameRateCounter = new FrameRateCalculator(10);
+    const frameRateCounter = new DownsamplingBasedOnFrameRateCalculator(10);
     expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(0);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
