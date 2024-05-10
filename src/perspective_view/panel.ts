@@ -153,18 +153,18 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
 }
 
 export function maxProjectionEmit(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData2", 2);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData3", 3);
+  builder.addOutputBuffer("vec4", "out_color", 0);
+  builder.addOutputBuffer("highp vec4", "out_z", 1);
+  builder.addOutputBuffer("highp vec4", "out_intensity", 2);
+  builder.addOutputBuffer("highp vec4", "out_pickId", 3);
   builder.addFragmentCode(`
 void emit(vec4 color, float depth, float intensity, highp uint pickId) {
   float pickIdFloat = float(pickId);
   float bufferDepth = 1.0 - depth;
-  v4f_fragData0 = color;
-  v4f_fragData1 = vec4(bufferDepth, bufferDepth, bufferDepth, 1.0);
-  v4f_fragData2 = vec4(intensity, intensity, intensity, 1.0);
-  v4f_fragData3 = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+  out_color = color;
+  out_z = vec4(bufferDepth, bufferDepth, bufferDepth, 1.0);
+  out_intensity = vec4(intensity, intensity, intensity, 1.0);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
 }`);
 }
 
@@ -203,13 +203,13 @@ emitAccumAndRevealage(accum, revealage, 0u);
 
 // Copy the max projection depth and pick values to the main buffer
 function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData2", 2);
+  builder.addOutputBuffer("vec4", "out_color", 0);
+  builder.addOutputBuffer("highp vec4", "out_z", 1);
+  builder.addOutputBuffer("highp vec4", "out_pickId", 2);
   builder.setFragmentMain(`
-v4f_fragData0 = vec4(0.0);
-v4f_fragData1 = getValue0();
-v4f_fragData2 = getValue1();
+out_color = vec4(0.0);
+out_z = getValue0();
+out_pickId = getValue1();
 `);
 }
 
@@ -218,11 +218,11 @@ v4f_fragData2 = getValue1();
 // This is to combine max projection picking data via depth testing
 // on the maximum intensity value of the data.
 function defineMaxProjectionToPickCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("highp vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
+  builder.addOutputBuffer("highp vec4", "out_z", 0);
+  builder.addOutputBuffer("highp vec4", "out_pickId", 1);
   builder.setFragmentMain(`
-v4f_fragData0 = getValue0();
-v4f_fragData1 = getValue2();
+out_z = getValue0();
+out_pickId = getValue2();
 gl_FragDepth = getValue1().r;
 `);
 }
