@@ -83,8 +83,6 @@ import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
 const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
-const DESIRED_FRAME_TIMING_MS = 1000 / 60;
-const MAX_TRANSPARENT_DOWNSAMPLE_FACTOR = 8;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -265,7 +263,6 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private frameRateCalculator = new FrameRateCalculator(5);
   private redrawAfterMoveTimeOutId = -1;
-  private maxDownsamplingFactorThisCameraMove = 1;
   private hasTransparent = false;
 
   get shouldCheckFrameRate() {
@@ -442,8 +439,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
           this.redrawAfterMoveTimeOutId = -1;
-          this.maxDownsamplingFactorThisCameraMove = 1;
-          this.frameRateCalculator.resetLastFrameTime();
           this.context.scheduleRedraw();
         }, FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE);
       }),
@@ -1009,29 +1004,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       let volumeRenderingBufferHeight = height;
 
       if (this.viewer.adaptiveDownsampling.value && this.shouldCheckFrameRate) {
-        const frameDelta = this.frameRateCalculator.calculateFrameTimeInMs();
-        let transparentBufferDownsampleFactorBasedOnFramerate = Math.max(
-          frameDelta / DESIRED_FRAME_TIMING_MS,
-          1,
-        );
-        // Round to the nearest power of 2.
-        transparentBufferDownsampleFactorBasedOnFramerate = Math.min(
-          Math.pow(
-            2,
-            Math.round(
-              Math.log2(transparentBufferDownsampleFactorBasedOnFramerate),
-            ),
-          ),
-          MAX_TRANSPARENT_DOWNSAMPLE_FACTOR,
-        );
-        this.maxDownsamplingFactorThisCameraMove = Math.max(
-          this.maxDownsamplingFactorThisCameraMove,
-          transparentBufferDownsampleFactorBasedOnFramerate,
-        );
         const downsamplingFactor =
-          this.maxDownsamplingFactorThisCameraMove > 1
-            ? Math.max(2, transparentBufferDownsampleFactorBasedOnFramerate)
-            : 1;
+          this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(
+            true,
+          );
         if (downsamplingFactor > 1) {
           const originalRatio = width / height;
           volumeRenderingBufferWidth = Math.round(width / downsamplingFactor);
@@ -1297,6 +1273,10 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenCopyHelper.draw(
       this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
+    if (this.shouldCheckFrameRate) {
+      this.frameRateCalculator.addFrame();
+      this.frameRateCalculator.resetLastFrameTime();
+    }
     return true;
   }
 

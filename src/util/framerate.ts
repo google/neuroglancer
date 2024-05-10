@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+const DESIRED_FRAME_TIMING_MS = 1000 / 60;
+const MAX_DOWNSAMPLE_FACTOR = 8;
+
 export class FrameRateCalculator {
   private lastFrameTime: number | null = null;
   private frameDeltas: number[] = [];
@@ -29,7 +32,7 @@ export class FrameRateCalculator {
         throw new Error(
           `Frame delta should be non-negative, but got ${frameDelta}. ` +
             `This can happen if the clock is reset or if the ` +
-            `timestamp is generated in the future.`
+            `timestamp is generated in the future.`,
         );
       }
       this.frameDeltas.push(timestamp - this.lastFrameTime);
@@ -58,5 +61,31 @@ export class FrameRateCalculator {
     return sortedFrameDeltas.length % 2 === 1
       ? sortedFrameDeltas[midpoint]
       : (sortedFrameDeltas[midpoint - 1] + sortedFrameDeltas[midpoint]) / 2;
+  }
+
+  calculateDownsamplingRateBasedOnFrameDeltas(
+    useMedian: boolean = true,
+    desiredFrameTimingMs: number = DESIRED_FRAME_TIMING_MS,
+    maxDownsamplingFactor: number = MAX_DOWNSAMPLE_FACTOR,
+  ): number {
+    console.log(this.getFrameDeltas());
+    const frameDelta = this.calculateFrameTimeInMs(useMedian);
+    if (frameDelta === 0) {
+      return Math.min(4, maxDownsamplingFactor);
+    }
+    let downsampleFactorBasedOnFramerate = Math.max(
+      frameDelta / desiredFrameTimingMs,
+      1,
+    );
+    // Round to the nearest power of 2.
+    downsampleFactorBasedOnFramerate = Math.min(
+      Math.pow(2, Math.round(Math.log2(downsampleFactorBasedOnFramerate))),
+      maxDownsamplingFactor,
+    );
+    return downsampleFactorBasedOnFramerate;
+  }
+
+  getFrameDeltas(): number[] {
+    return this.frameDeltas;
   }
 }
