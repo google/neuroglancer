@@ -30,24 +30,28 @@ describe("FrameRateCounter", () => {
     }
   });
   it("calculates valid fps for many frames", () => {
-    const frameRateCounter = new FrameRateCalculator(10);
+    const frameRateCounter = new FrameRateCalculator(9);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
     }
+    frameRateCounter.resetLastFrameTime();
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 10);
     }
     expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(10);
     expect(frameRateCounter.calculateFrameTimeInMs(false)).toEqual(10);
   });
-  it("removes frames after reset", () => {
+  it("removes last frame after reset", () => {
     const frameRateCounter = new FrameRateCalculator(10);
     expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(0);
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 100);
     }
     expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(100);
-    frameRateCounter.reset();
-    expect(frameRateCounter.calculateFrameTimeInMs()).toEqual(0);
+    frameRateCounter.resetLastFrameTime();
+    for (let i = 0; i < 5; i++) {
+      frameRateCounter.addFrame(i * 200);
+    }
+    expect(frameRateCounter.calculateFrameTimeInMs(false)).toEqual(140);
   });
 });

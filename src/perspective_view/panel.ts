@@ -443,7 +443,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
           this.redrawAfterMoveTimeOutId = -1;
           this.maxDownsamplingFactorThisCameraMove = 1;
-          this.frameRateCalculator.reset();
+          this.frameRateCalculator.resetLastFrameTime();
           this.context.scheduleRedraw();
         }, FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE);
       }),

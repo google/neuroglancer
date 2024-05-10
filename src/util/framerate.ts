@@ -15,30 +15,29 @@
  */
 
 export class FrameRateCalculator {
-  private frameTimeStamps: number[] = [];
+  private lastFrameTime: number | null = null;
   private frameDeltas: number[] = [];
-  constructor(private numberOfStoredFrameTimes: number = 10) {}
-  reset() {
-    this.frameTimeStamps = [];
-    this.frameDeltas = [];
+  constructor(private numberOfStoredFrameDeltas: number = 10) {}
+  resetLastFrameTime() {
+    this.lastFrameTime = null;
   }
 
   addFrame(timestamp: number = Date.now()) {
-    if (this.frameTimeStamps.length >= this.numberOfStoredFrameTimes) {
-      this.frameTimeStamps.shift();
-      this.frameDeltas.shift();
+    if (this.lastFrameTime !== null) {
+      const frameDelta = timestamp - this.lastFrameTime;
+      if (frameDelta < 0) {
+        throw new Error(
+          `Frame delta should be non-negative, but got ${frameDelta}. ` +
+            `This can happen if the clock is reset or if the ` +
+            `timestamp is generated in the future.`
+        );
+      }
+      this.frameDeltas.push(timestamp - this.lastFrameTime);
+      if (this.frameDeltas.length > this.numberOfStoredFrameDeltas) {
+        this.frameDeltas.shift();
+      }
     }
-    this.frameTimeStamps.push(timestamp);
-    if (this.frameTimeStamps.length > 1) {
-      this.calculateFrameDelta();
-    }
-  }
-
-  private calculateFrameDelta() {
-    this.frameDeltas.push(
-      this.frameTimeStamps[this.frameTimeStamps.length - 1] -
-        this.frameTimeStamps[this.frameTimeStamps.length - 2],
-    );
+    this.lastFrameTime = timestamp;
   }
 
   calculateFrameTimeInMs(useMedian: boolean = true): number {
@@ -49,9 +48,7 @@ export class FrameRateCalculator {
       return this.calculateMedianFrameTime();
     }
     return (
-      (this.frameTimeStamps[this.frameTimeStamps.length - 1] -
-        this.frameTimeStamps[0]) /
-      (this.frameTimeStamps.length - 1)
+      this.frameDeltas.reduce((a, b) => a + b, 0) / this.frameDeltas.length
     );
   }
 
