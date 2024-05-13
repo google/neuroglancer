@@ -117,7 +117,7 @@ export class NiftiZarrDataSource extends DataSourceProvider {
           // May be an OME-zarr multiscale dataset.
           const multiscale = parseOmeMetadata(url, metadata.userAttributes);
           if (multiscale === undefined) {
-            throw new Error("Neithre array nor OME multiscale metadata found");
+            throw new Error("Neither array nor OME multiscale metadata found");
           }
           multiscaleInfo = await resolveOmeMultiscale(
             options.chunkManager,
