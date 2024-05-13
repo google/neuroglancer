@@ -278,16 +278,16 @@
       "default": "./src/datasource/nifti/register_default.ts"
     },
     "#datasource/niftizarr/backend": {
-      "neuroglancer/datasource/niftizarr:enabled": "./src/datasource/niftizarr/backend.ts",
+      "neuroglancer/datasource/niftizarr:enabled": "./src/datasource/zarr/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/niftizarr:disabled": "./src/datasource/niftizarr/backend.ts",
-      "default": "./src/datasource/niftizarr/backend.ts"
+      "neuroglancer/datasource/niftizarr:disabled": "./src/datasource/zarr/backend.ts",
+      "default": "./src/datasource/zarr/backend.ts"
     },
     "#datasource/niftizarr/async_computation": {
-      "neuroglancer/datasource/niftizarr:enabled": "./src/datasource/niftizarr/async_computation.ts",
+      "neuroglancer/datasource/niftizarr:enabled": "./src/datasource/zarr/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/niftizarr:disabled": "./src/datasource/niftizarr/async_computation.ts",
-      "default": "./src/datasource/niftizarr/async_computation.ts"
+      "neuroglancer/datasource/niftizarr:disabled": "./src/datasource/zarr/async_computation.ts",
+      "default": "./src/datasource/zarr/async_computation.ts"
     },
     "#datasource/niftizarr/register_default": {
       "neuroglancer/datasource/niftizarr:enabled": "./src/datasource/niftizarr/register_default.ts",

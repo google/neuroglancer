@@ -19,31 +19,29 @@
  * files as volumes.
  */
 
-import {
-  getMetadata,
-  ZarrMultiscaleInfo,
-  resolveOmeMultiscale,
-  getMultiscaleInfoForSingleArray,
-  MultiscaleVolumeChunkSource
-} from "#src/datasource/zarr/frontend.ts";
-import {
-  getNiftiVolumeInfo,
-} from "#src/datasource/nifti/frontend.ts";
+import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import {
   makeCoordinateSpace,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
-
-import "#src/datasource/zarr/codec/blosc/resolve.js";
-import "#src/datasource/zarr/codec/zstd/resolve.js";
-
-import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import type {
   CompleteUrlOptions,
   DataSource,
   GetDataSourceOptions,
 } from "#src/datasource/index.js";
 import { DataSourceProvider } from "#src/datasource/index.js";
+import {
+  getNiftiVolumeInfo,
+} from "#src/datasource/nifti/frontend.ts";
+import type {ZarrMultiscaleInfo} from "#src/datasource/zarr/frontend.ts";
+import {
+  getMetadata,
+  resolveOmeMultiscale,
+  getMultiscaleInfoForSingleArray,
+  MultiscaleVolumeChunkSource
+} from "#src/datasource/zarr/frontend.ts";
+import "#src/datasource/zarr/codec/blosc/resolve.js";
+import "#src/datasource/zarr/codec/zstd/resolve.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
 import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
@@ -53,6 +51,7 @@ import {
   parseDimensionSeparator,
 } from "#src/datasource/zarr/metadata/parse.js";
 import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
 import { completeHttpPath } from "#src/util/http_path_completion.js";
 import {
   parseQueryStringParameters,
@@ -62,7 +61,6 @@ import {
 import {
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 
 
 export class NiftiZarrDataSource extends DataSourceProvider {
@@ -72,7 +70,7 @@ export class NiftiZarrDataSource extends DataSourceProvider {
   get description() {
     const versionStr =
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
-    return `Nifti Zarr${versionStr} data source`;
+    return `Nifti Zarr ${versionStr} data source`;
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
     // Pattern is infallible.
