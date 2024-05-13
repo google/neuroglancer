@@ -2,7 +2,7 @@
   "name": "neuroglancer",
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
-  "version": "2.39.1",
+  "version": "2.39.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google/neuroglancer.git"
@@ -21,7 +21,6 @@
     "prepare": "tsx ./build_tools/build-package.ts --inplace --if-not-toplevel",
     "prepack": "tsx ./build_tools/build-package.ts --inplace",
     "postpack": "tsx ./build_tools/postpack.ts",
-    "build-min": "tsx ./build_tools/cli.ts build",
     "build": "tsx ./build_tools/cli.ts build",
     "build:watch": "tsx ./build_tools/cli.ts build --watch",
     "dev-server": "tsx ./build_tools/cli.ts serve",
@@ -29,8 +28,6 @@
     "build-package": "tsx ./build_tools/build-package.ts",
     "build-python": "tsx ./build_tools/cli.ts --python build",
     "build-python:watch": "tsx ./build_tools/cli.ts --python build --watch",
-    "build-python-min": "tsx ./build_tools/cli.ts --python build",
-    "build-python-dev": "tsx ./build_tools/cli.ts --python --mode=development build",
     "test": "vitest --run",
     "test:watch": "vitest watch",
     "benchmark": "vitest bench --run",
@@ -43,7 +40,6 @@
     "version": "tsx ./build_tools/after-version-change.ts"
   },
   "devDependencies": {
-    "@rollup/pluginutils": "^5.1.0",
     "@types/codemirror": "5.60.15",
     "@types/gl-matrix": "^2.4.5",
     "@types/lodash-es": "^4.17.12",
@@ -54,20 +50,31 @@
     "@typescript-eslint/parser": "^7.0.2",
     "@vitest/browser": "^1.3.1",
     "@vitest/ui": "^1.3.1",
+    "css-loader": "^6.10.0",
     "esbuild": "^0.20.1",
+    "esbuild-loader": "^4.1.0",
     "eslint": "^8.56.0",
     "eslint-formatter-codeframe": "^7.32.1",
     "eslint-import-resolver-typescript": "^3.6.1",
     "eslint-interactive": "^10.8.0",
     "eslint-plugin-import": "^2.29.1",
+    "eslint-webpack-plugin": "^4.0.1",
+    "fork-ts-checker-webpack-plugin": "^6.5.3",
     "glob": "^10.3.10",
+    "html-webpack-plugin": "^5.6.0",
+    "mini-css-extract-plugin": "^2.8.1",
     "prettier": "3.2.5",
+    "style-loader": "^3.3.4",
+    "svg-inline-loader": "^0.8.2",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3",
-    "vite": "^5.1.4",
-    "vite-plugin-checker": "^0.6.4",
     "vitest": "^1.3.1",
-    "webdriverio": "^8.32.3"
+    "webdriverio": "^8.32.3",
+    "webpack": "^5.90.3",
+    "webpack-bundle-analyzer": "^4.10.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.2",
+    "webpack-merge": "^5.10.0"
   },
   "dependencies": {
     "codemirror": "^5.61.1",
@@ -89,8 +96,8 @@
   "type": "module",
   "exports": {
     ".": "./src/main_module.ts",
-    "./*.js": "./src/*.ts",
-    "./*": "./src/*"
+    "./unstable/*.js": "./src/*.ts",
+    "./unstable/*": "./src/*"
   },
   "imports": {
     "#src/third_party/jpgjs/jpg.js": "./src/third_party/jpgjs/jpg.js",

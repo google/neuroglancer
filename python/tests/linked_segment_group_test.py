@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests for linked_segmentation_{,color}group."""
 
-
 import neuroglancer
 import numpy as np
 

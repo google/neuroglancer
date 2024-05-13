@@ -432,7 +432,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
         new IntersectionObserver(this.resizeCallback, {
           root: this.container,
           rootMargin: margin,
-          threshold: [0.99, 1],
+          threshold: [0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1],
         }));
       intersectionObserver.observe(element);
     }

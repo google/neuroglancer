@@ -60,26 +60,33 @@ const libraryEnv = {
     throw `proc exit: ${code}`;
   },
 };
-const dracoModulePromise = (async () => {
-  const m = (wasmModule = (
-    await WebAssembly.instantiateStreaming(
-      fetch(new URL("./neuroglancer_draco.wasm", import.meta.url)),
-      {
-        env: libraryEnv,
-        wasi_snapshot_preview1: libraryEnv,
-      },
-    )
-  ).instance);
-  (m.exports._initialize as Function)();
-  return m;
-})();
+let dracoModulePromise: Promise<WebAssembly.Instance> | undefined;
+
+function getDracoModulePromise() {
+  if (dracoModulePromise == undefined) {
+    dracoModulePromise = (async () => {
+      const m = (wasmModule = (
+        await WebAssembly.instantiateStreaming(
+          fetch(new URL("./neuroglancer_draco.wasm", import.meta.url)),
+          {
+            env: libraryEnv,
+            wasi_snapshot_preview1: libraryEnv,
+          },
+        )
+      ).instance);
+      (m.exports._initialize as Function)();
+      return m;
+    })();
+  }
+  return dracoModulePromise;
+}
 
 export async function decodeDracoPartitioned(
   buffer: Uint8Array,
   vertexQuantizationBits: number,
   partition: boolean,
 ): Promise<RawPartitionedMeshData> {
-  const m = await dracoModulePromise;
+  const m = await getDracoModulePromise();
   const offset = (m.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, offset);
@@ -101,7 +108,7 @@ export async function decodeDracoPartitioned(
 }
 
 export async function decodeDraco(buffer: Uint8Array): Promise<RawMeshData> {
-  const m = await dracoModulePromise;
+  const m = await getDracoModulePromise();
   const offset = (m.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, offset);

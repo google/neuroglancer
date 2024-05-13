@@ -41,7 +41,6 @@ import {
   MultiscaleMeshLayer,
   MultiscaleMeshSource,
 } from "#src/mesh/frontend.js";
-import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
@@ -108,6 +107,7 @@ import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
+import { gatherUpdate } from "#src/util/array.js";
 import {
   packColor,
   parseRGBColorSpecification,
@@ -1229,13 +1229,31 @@ export class SegmentationUserLayer extends Base {
 
   moveToSegment(id: Uint64) {
     for (const layer of this.renderLayers) {
-      if (!(layer instanceof MultiscaleMeshLayer)) continue;
-      const layerPosition = layer.getObjectPosition(id);
-      if (layerPosition === undefined) continue;
-      this.setLayerPosition(
-        layer.displayState.transform.value as RenderLayerTransform,
-        layerPosition,
+      if (
+        !(layer instanceof MultiscaleMeshLayer || layer instanceof MeshLayer)
+      ) {
+        continue;
+      }
+      const transform = layer.displayState.transform.value;
+      if (transform.error !== undefined) return undefined;
+      const { rank, globalToRenderLayerDimensions } = transform;
+      const { globalPosition } = this.manager.root;
+      const globalLayerPosition = new Float32Array(rank);
+      const renderToGlobalLayerDimensions = [];
+      for (let i = 0; i < rank; i++) {
+        renderToGlobalLayerDimensions[globalToRenderLayerDimensions[i]] = i;
+      }
+      gatherUpdate(
+        globalLayerPosition,
+        globalPosition.value,
+        renderToGlobalLayerDimensions,
       );
+      const layerPosition =
+        layer instanceof MeshLayer
+          ? layer.getObjectPosition(id, globalLayerPosition)
+          : layer.getObjectPosition(id);
+      if (layerPosition === undefined) continue;
+      this.setLayerPosition(transform, layerPosition);
       return;
     }
     StatusMessage.showTemporaryMessage(

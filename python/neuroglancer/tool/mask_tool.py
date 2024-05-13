@@ -221,18 +221,18 @@ class Annotator:
 
         with viewer.config_state.txn() as s:
             s.input_event_bindings.data_view["bracketleft"] = "anno-decrease-block-size"
-            s.input_event_bindings.data_view[
-                "bracketright"
-            ] = "anno-increase-block-size"
+            s.input_event_bindings.data_view["bracketright"] = (
+                "anno-increase-block-size"
+            )
             s.input_event_bindings.data_view["control+keys"] = "anno-save"
             s.input_event_bindings.data_view["control+mousedown0"] = "anno-mark-pre"
-            s.input_event_bindings.data_view[
-                "control+shift+mousedown0"
-            ] = "anno-unmark-pre"
+            s.input_event_bindings.data_view["control+shift+mousedown0"] = (
+                "anno-unmark-pre"
+            )
             s.input_event_bindings.data_view["control+mousedown2"] = "anno-mark-post"
-            s.input_event_bindings.data_view[
-                "control+shift+mousedown2"
-            ] = "anno-unmark-post"
+            s.input_event_bindings.data_view["control+shift+mousedown2"] = (
+                "anno-unmark-post"
+            )
 
         self.cur_message = None
 

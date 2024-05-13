@@ -27,7 +27,6 @@ import {
 } from "#src/util/cancellation.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
-import redirectUrl from "#src/util/google_oauth2_redirect.html?url";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -133,11 +132,8 @@ function makeAuthRequestUrl(options: {
   immediate?: boolean;
 }) {
   let url = `${AUTH_SERVER}?client_id=${encodeURIComponent(options.clientId)}`;
-  const redirectUri = new URL(redirectUrl, import.meta.url).href.replace(
-    /\?.*$/,
-    "",
-  );
-
+  const redirectUri = new URL("./google_oauth2_redirect.html", import.meta.url)
+    .href;
   url += `&redirect_uri=${redirectUri}`;
   let responseType = "token";
   const { scopes } = options;

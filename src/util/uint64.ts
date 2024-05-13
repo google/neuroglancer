@@ -105,7 +105,7 @@ export class Uint64 {
     vHigh *= trueBase;
     const { lowBase, lowDigits } = stringConversionData[base];
     const vHighExtra = vHigh % lowBase;
-    vHigh = Math.floor(vHigh / lowBase);
+    vHigh = Number(BigInt(vHigh) / BigInt(lowBase));
     vLow += vHighExtra;
     vHigh += Math.floor(vLow / lowBase);
     vLow = vLow % lowBase;

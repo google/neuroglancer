@@ -13,7 +13,6 @@
 # limitations under the License.
 """Facilities for converting JSON <-> Python objects"""
 
-
 import copy
 import inspect
 import numbers
@@ -480,5 +479,11 @@ def typed_list(
 
 def number_or_string(value):
     if not isinstance(value, numbers.Real) and not isinstance(value, str):
+        raise TypeError
+    return value
+
+
+def bool_or_string(value):
+    if not isinstance(value, (bool, str)):
         raise TypeError
     return value

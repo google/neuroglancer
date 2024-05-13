@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests for equivalence_map.py"""
 
-
 from neuroglancer import equivalence_map
 
 

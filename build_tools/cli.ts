@@ -16,12 +16,22 @@
 
 // Command-line interface for building Neuroglancer.
 
+/// <reference types="webpack-dev-server" />
+
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import path from "path";
-import * as vite from "vite";
-import checkerPlugin from "vite-plugin-checker";
+import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
+import type { Configuration } from "webpack";
+import webpackCli from "webpack-cli/lib/bootstrap.js"; // eslint-disable-line import/default
+import * as webpackMerge from "webpack-merge";
 import yargs from "yargs";
+import { normalizeConfigurationWithDefine } from "./webpack/configuration_with_define.js";
+import { setConfig } from "./webpack/webpack_config_from_cli.cjs";
+
+export interface WebpackConfigurationWithDefine extends Configuration {
+  define?: Record<string, any> | undefined;
+}
 
 function parseDefines(
   definesArg:
@@ -66,53 +76,78 @@ function parseDefines(
 
 type Argv = Awaited<ReturnType<typeof parseArgs>>;
 
-async function getViteConfig(argv: Argv): Promise<vite.UserConfig> {
-  let config: vite.UserConfig = {};
-  for (const configPath of argv.config) {
-    const loadedConfig = (await import(pathToFileURL(configPath).href)).default;
-    config = vite.mergeConfig(config, loadedConfig);
-  }
+async function getWebpackConfig(
+  argv: Argv,
+  ...extraConfigs: WebpackConfigurationWithDefine[]
+): Promise<(...args: any[]) => Configuration> {
+  const configPaths = [
+    pathToFileURL(path.resolve(import.meta.dirname, "../webpack.config.js"))
+      .href,
+    ...argv.config.map((configPath) => pathToFileURL(configPath).href),
+  ];
+  const allConfigs = await Promise.all(
+    configPaths.map(async (configPath) => (await import(configPath)).default),
+  );
+  allConfigs.push(...extraConfigs);
+  return (webpackEnv, webpackArgs) => {
+    webpackEnv = { ...webpackEnv, NEUROGLANCER_CLI: true };
+    const conditions = argv.conditions;
+    if (argv.python) conditions.push("neuroglancer/python");
+    let outDir =
+      (argv.output as string | undefined) ??
+      (argv.python
+        ? path.resolve(
+            import.meta.dirname,
+            "..",
+            "python",
+            "neuroglancer",
+            "static",
+            "client",
+          )
+        : undefined);
+    if (outDir !== undefined) {
+      outDir = path.resolve(outDir);
+    }
+    const plugins = [];
+    if (argv.typecheck || argv.lint) {
+      plugins.push(
+        new ForkTsCheckerWebpackPlugin({
+          typescript: argv.typecheck,
+          eslint: argv.lint
+            ? {
+                files: ".",
+              }
+            : undefined,
+        }),
+      );
+    }
+    const inlineConfig = {
+      define: argv.define,
+      plugins,
+      output: {
+        path: outDir,
+      },
+      resolve: {
+        conditionNames: ["...", ...conditions],
+      },
+    } satisfies WebpackConfigurationWithDefine;
+    const resolvedConfigs = allConfigs.map((config) =>
+      typeof config === "function" ? config(webpackEnv, webpackArgs) : config,
+    );
+    return normalizeConfigurationWithDefine(
+      webpackMerge.merge([...resolvedConfigs, inlineConfig]),
+    );
+  };
+}
 
-  const conditions = argv.conditions;
-  if (argv.python) conditions.push("neuroglancer/python");
-  const outDir =
-    (argv.output as string | undefined) ??
-    (argv.python
-      ? path.resolve(
-          import.meta.dirname,
-          "..",
-          "python",
-          "neuroglancer",
-          "static",
-          "client",
-        )
-      : undefined);
-  const inlineConfig = {
-    root: path.resolve(import.meta.dirname, ".."),
-    base: argv.base,
-    define: argv.define,
-    ...(argv.mode !== undefined ? { mode: argv.mode } : {}),
-    build: {
-      watch: argv.watch ? {} : undefined,
-      outDir,
-    },
-    plugins: [
-      argv.typecheck || argv.lint
-        ? checkerPlugin({
-            typescript: argv.typecheck ?? false,
-            eslint: argv.lint
-              ? {
-                  lintCommand: "eslint .",
-                }
-              : undefined,
-          })
-        : undefined,
-    ],
-    resolve: {
-      conditions,
-    },
-  } satisfies vite.UserConfig;
-  return vite.mergeConfig(config, inlineConfig);
+async function runWebpack(...args: string[]) {
+  // @ts-expect-error: no typings available
+  await webpackCli([
+    ...process.argv.slice(0, 2),
+    ...args,
+    "--config",
+    path.resolve(import.meta.dirname, "webpack", "webpack_config_from_cli.cjs"),
+  ]);
 }
 
 function parseArgs() {
@@ -154,17 +189,13 @@ function parseArgs() {
         description: "Build mode",
         type: "string",
       },
-      base: {
-        type: "string",
-        description: "Base path to assume.",
-      },
       config: {
         array: true,
         string: true,
         nargs: 1,
         default: [],
         description:
-          "Additional vite config module to merge into configuration.",
+          "Additional webpack config module to merge into configuration.",
       },
     })
     .command({
@@ -192,18 +223,15 @@ function parseArgs() {
           },
         }),
       handler: async (argv) => {
-        const server = await vite.createServer(
-          vite.mergeConfig(await getViteConfig(argv), {
-            server: {
-              port: argv.port,
+        setConfig(
+          await getWebpackConfig(argv, {
+            devServer: {
+              port: argv.port === 0 ? "auto" : argv.port,
               host: argv.host,
             },
           }),
         );
-        await server.listen();
-
-        server.printUrls();
-        server.bindCLIShortcuts({ print: true });
+        await runWebpack("serve", `--mode=${argv.mode}`);
       },
     })
     .command({
@@ -227,7 +255,8 @@ function parseArgs() {
           },
         }),
       handler: async (argv) => {
-        await vite.build(vite.mergeConfig(await getViteConfig(argv), {}));
+        setConfig(await getWebpackConfig(argv, { watch: argv.watch }));
+        await runWebpack("build", `--mode=${argv.mode}`);
       },
     })
     .strict()

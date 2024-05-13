@@ -134,7 +134,12 @@ class BundleClientCommand(
         (
             "client-bundle-type=",
             None,
-            'The nodejs bundle type. "min" (default) creates condensed static files for production, "dev" creates human-readable files.',
+            'The nodejs bundle type. "production" (default) creates condensed static files for production, "development" creates human-readable files.',
+        ),
+        (
+            "prebuilt-bundle",
+            None,
+            "Assume the client bundle already exists within the source tree, and don't build it again.",
         ),
         ("build-bundle-inplace", None, "Build the client bundle inplace."),
         (
@@ -151,24 +156,25 @@ class BundleClientCommand(
 
     def initialize_options(self):
         self.build_lib = None
-        self.client_bundle_type = "min"
+        self.client_bundle_type = "production"
         self.skip_npm_reinstall = None
         self.skip_rebuild = None
-        self.build_bundle_inplace = None
+        self.build_bundle_inplace = False
+        self.prebuilt_bundle = None
 
     def finalize_options(self):
         self.set_undefined_options("build_py", ("build_lib", "build_lib"))
 
-        if self.client_bundle_type not in ["min", "dev"]:
-            raise RuntimeError('client-bundle-type has to be one of "min" or "dev"')
+        if self.client_bundle_type not in ["production", "development"]:
+            raise RuntimeError(
+                'client-bundle-type has to be one of "production" or "development"'
+            )
 
         if self.skip_npm_reinstall is None:
             self.skip_npm_reinstall = False
 
-        if self.build_bundle_inplace is None:
-            self.build_bundle_inplace = (
-                os.getenv("NEUROGLANCER_BUILD_BUNDLE_INPLACE") == "1"
-            )
+        if self.prebuilt_bundle is None:
+            self.prebuilt_bundle = os.getenv("NEUROGLANCER_PREBUILT_CLIENT") == "1"
 
         if self.skip_rebuild is None:
             self.skip_rebuild = self.build_bundle_inplace
@@ -207,8 +213,12 @@ class BundleClientCommand(
 
         # If building from an sdist, `package.json` won't be present but the
         # bundled files will.
-        if not _PACKAGE_JSON_EXISTS:
-            print("Skipping build of client bundle because package.json does not exist")
+        if not _PACKAGE_JSON_EXISTS or self.prebuilt_bundle:
+            if not _PACKAGE_JSON_EXISTS:
+                reason = "package.json does not exist"
+            else:
+                reason = "it was prebuilt"
+            print(f"Skipping build of client bundle because {reason}")
             if not self.build_bundle_inplace:
                 shutil.copytree(
                     self._get_inplace_client_dir(), self._get_client_output_dir()
@@ -221,15 +231,10 @@ class BundleClientCommand(
             html_path = os.path.join(output_dir, "index.html")
             if os.path.exists(html_path):
                 print(
-                    "Skipping rebuild of client bundle since {} already exists".format(
-                        html_path
-                    )
+                    f"Skipping rebuild of client bundle since {html_path} already exists"
                 )
                 return
 
-        target = {"min": "build-python-min", "dev": "build-python-dev"}
-
-        t = target[self.client_bundle_type]
         node_modules_path = os.path.join(root_dir, "node_modules")
         if self.skip_npm_reinstall and os.path.exists(node_modules_path):
             print(f"Skipping `npm install` since {node_modules_path} already exists")
@@ -239,8 +244,9 @@ class BundleClientCommand(
             [
                 "npm",
                 "run",
-                t,
+                "build-python",
                 "--",
+                f"--mode={self.client_bundle_type}",
                 "--no-typecheck",
                 "--no-lint",
                 f"--output={output_dir}",

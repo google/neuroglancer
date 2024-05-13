@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests for segment_colors and segment_default_color."""
 
-
 import neuroglancer
 import numpy as np
 from neuroglancer.segment_colors import hash_function, hex_string_from_segment_id
