@@ -477,10 +477,14 @@ void main() {
           shaderBuilderState,
           shaderParametersState,
         ) => {
-          if (shaderBuilderState.parseResult.errors.length !== 0) {
-            throw new Error("Invalid UI control specification");
-          }
+          shaderBuilderState;
           defineVertexId(builder);
+          builder.addVertexCode(`
+vec3 chunkSamplePosition;
+struct uint16_t {
+  highp uint value;
+};
+`);
           defineChunkDataShaderAccess(
             builder,
             chunkFormat,
@@ -512,9 +516,6 @@ void main() {
             depthSamplerTextureUnit,
           );
           builder.addVertexCode(glsl_simpleFloatHash);
-          builder.addVertexCode(`
-vec3 chunkSamplePosition;
-          `);
           builder.setVertexMain(`
 vec3 p = vec3(simpleFloatHash(vec2(float(gl_VertexID), float(gl_InstanceID))),
               simpleFloatHash(vec2(float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
@@ -524,12 +525,7 @@ float x = invlerpForHistogram0(getDataValueAt(p));
 if (x < 0.0) x = 0.0;
 else if (x > 1.0) x = 1.0;
 else x = (1.0 + x * 253.0) / 255.0;
-float stencilValue = texture(uDepthSampler, p).x;
-if (stencilValue == 1.0) {
-  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-} else {
-  gl_Position = vec4(2.0 * (dataValue * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
-}
+gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
 gl_PointSize = 1.0;
 `);
           builder.setFragmentMain(`
@@ -764,7 +760,11 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           histogramShaderResult = this.histogramShaderGetter({
             chunkFormat: chunkFormat!,
           });
+          console.log("shaderResult", shaderResult);
+          console.log("histogramShaderResult", histogramShaderResult);
           histogramShader = histogramShaderResult.shader;
+          console.log("shader", shader);
+          console.log("histogramShader", histogramShader);
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
