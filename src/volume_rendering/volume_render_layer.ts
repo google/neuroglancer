@@ -82,6 +82,7 @@ import {
   parameterizedContextDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
 import type {
   ShaderControlsBuilderState,
@@ -171,6 +172,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
+  dataHistogramSpecifications: HistogramSpecifications;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
@@ -201,6 +203,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
     this.mode = options.mode;
+    this.dataHistogramSpecifications =
+      this.shaderControlState.histogramSpecifications;
     this.registerDisposer(
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
