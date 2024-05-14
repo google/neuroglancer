@@ -212,6 +212,11 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.registerDisposer(
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
+    this.registerDisposer(
+      this.dataHistogramSpecifications.producerVisibility.add(
+        this.visibility,
+      ),
+    );
     const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         (space: CoordinateSpace, mode: VolumeRenderingModes) => ({
