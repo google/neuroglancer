@@ -59,11 +59,11 @@ import {
   makeWatchableShaderError,
   parameterizedContextDependentShaderGetter,
 } from "#src/webgl/dynamic_shader.js";
+import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import {
-  defineShaderCodeForHistograms,
-  type HistogramChannelSpecification,
-} from "#src/webgl/empirical_cdf.js";
-import { enableLerpShaderFunction } from "#src/webgl/lerp.js";
+  defineInvlerpShaderFunction,
+  enableLerpShaderFunction,
+} from "#src/webgl/lerp.js";
 import {
   defineLineShader,
   drawLines,
@@ -416,12 +416,35 @@ void emit(vec4 color) {
         );
         const numHistograms = dataHistogramChannelSpecifications.length;
         if (dataHistogramsEnabled && numHistograms > 0) {
-          const histogramCollectionCode = defineShaderCodeForHistograms(
-            builder,
-            numHistograms,
-            chunkFormat,
-            dataHistogramChannelSpecifications,
-          );
+          let histogramCollectionCode = "";
+          const { dataType } = chunkFormat;
+          for (let i = 0; i < numHistograms; ++i) {
+            const { channel } = dataHistogramChannelSpecifications[i];
+            const outputName = `out_histogram${i}`;
+            builder.addOutputBuffer("vec4", outputName, 1 + i);
+            const getDataValueExpr = `getDataValue(${channel.join(",")})`;
+            const invlerpName = `invlerpForHistogram${i}`;
+            builder.addFragmentCode(
+              defineInvlerpShaderFunction(
+                builder,
+                invlerpName,
+                dataType,
+                /*clamp=*/ false,
+              ),
+            );
+            builder.addFragmentCode(`
+float getHistogramValue${i}() {
+  return invlerpForHistogram${i}(${getDataValueExpr});
+}
+`);
+            histogramCollectionCode += `{
+float x = getHistogramValue${i}();
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
+${outputName} = vec4(x, x, x, 1.0);
+}`;
+          }
           builder.addFragmentCode(`void userMain();
 void main() {
   ${histogramCollectionCode}
