@@ -83,9 +83,9 @@ import {
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
-import { defineInvlerpShaderFunction } from "#src/webgl/lerp.js";
+// import { defineInvlerpShaderFunction } from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
-import { glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
+// import { glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -478,59 +478,64 @@ void main() {
           shaderParametersState,
         ) => {
           shaderBuilderState;
-          defineVertexId(builder);
-          builder.addVertexCode(`
-vec3 chunkSamplePosition;
-struct uint16_t {
-  highp uint value;
-};
-`);
-          defineChunkDataShaderAccess(
-            builder,
-            chunkFormat,
-            shaderParametersState.numChannelDimensions,
-            "chunkSamplePosition",
-            true,
-          );
-          // TODO (SKM) provide a way to specify the number of histograms
-          //const numHistograms = dataHistogramChannelSpecifications.length;
-          const numHistograms = 1;
-          const { dataType } = chunkFormat;
-          for (let i = 0; i < numHistograms; ++i) {
-            //const { channel } = dataHistogramChannelSpecifications[i];
-            //const getDataValueExpr = `getDataValueAt(chunkSamplePosition, 0)`;
-            const invlerpName = `invlerpForHistogram${i}`;
-            builder.addVertexCode(
-              defineInvlerpShaderFunction(
-                builder,
-                invlerpName,
-                dataType,
-                false,
-              ),
-            );
-          }
+          chunkFormat;
+          shaderParametersState;
+          //           defineVertexId(builder);
+          //           builder.addVertexCode(`
+          // vec3 chunkSamplePosition;
+          // struct uint16_t {
+          //   highp uint value;
+          // };
+          // `);
+          //           defineChunkDataShaderAccess(
+          //             builder,
+          //             chunkFormat,
+          //             shaderParametersState.numChannelDimensions,
+          //             "chunkSamplePosition",
+          //             true,
+          //           );
+          //           // TODO (SKM) provide a way to specify the number of histograms
+          //           //const numHistograms = dataHistogramChannelSpecifications.length;
+          //           const numHistograms = 1;
+          //           const { dataType } = chunkFormat;
+          //           for (let i = 0; i < numHistograms; ++i) {
+          //             //const { channel } = dataHistogramChannelSpecifications[i];
+          //             //const getDataValueExpr = `getDataValueAt(chunkSamplePosition, 0)`;
+          //             const invlerpName = `invlerpForHistogram${i}`;
+          //             builder.addVertexCode(
+          //               defineInvlerpShaderFunction(
+          //                 builder,
+          //                 invlerpName,
+          //                 dataType,
+          //                 false,
+          //               ),
+          //             );
+          //           }
+          //           builder.addOutputBuffer("vec4", "outputValue", 0);
+          //           builder.addTextureSampler(
+          //             "sampler2D",
+          //             "uDepthSampler",
+          //             depthSamplerTextureUnit,
+          //           );
+          //           builder.addVertexCode(glsl_simpleFloatHash);
+          //           builder.setVertexMain(`
+          // vec3 p = vec3(simpleFloatHash(vec2(float(gl_VertexID), float(gl_InstanceID))),
+          //               simpleFloatHash(vec2(float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
+          //               simpleFloatHash(vec2(float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
+          //             );
+          // float x = invlerpForHistogram0(getDataValueAt(p));
+          // if (x < 0.0) x = 0.0;
+          // else if (x > 1.0) x = 1.0;
+          // else x = (1.0 + x * 253.0) / 255.0;
+          // gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
+          // gl_PointSize = 1.0;
+          // `);
+          //           builder.setFragmentMain(`
+          // outputValue = vec4(1.0, 1.0, 1.0, 1.0);
+          // `);
           builder.addOutputBuffer("vec4", "outputValue", 0);
-          builder.addTextureSampler(
-            "sampler2D",
-            "uDepthSampler",
-            depthSamplerTextureUnit,
-          );
-          builder.addVertexCode(glsl_simpleFloatHash);
-          builder.setVertexMain(`
-vec3 p = vec3(simpleFloatHash(vec2(float(gl_VertexID), float(gl_InstanceID))),
-              simpleFloatHash(vec2(float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
-              simpleFloatHash(vec2(float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
-            );
-float x = invlerpForHistogram0(getDataValueAt(p));
-if (x < 0.0) x = 0.0;
-else if (x > 1.0) x = 1.0;
-else x = (1.0 + x * 253.0) / 255.0;
-gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
-gl_PointSize = 1.0;
-`);
-          builder.setFragmentMain(`
-outputValue = vec4(1.0, 1.0, 1.0, 1.0);
-`);
+          builder.setVertexMain(`gl_Position = vec4(0.0, 0.0, 0.0, 1.0);`);
+          builder.setFragmentMain(`outputValue = vec4(1.0, 1.0, 1.0, 1.0);`);
         },
       },
     );
