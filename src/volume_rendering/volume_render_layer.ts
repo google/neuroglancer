@@ -83,7 +83,9 @@ import {
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import { defineInvlerpShaderFunction } from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import { glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -176,6 +178,12 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
+    ShaderControlsBuilderState,
+    VolumeRenderingShaderParameters
+  >;
+
+  private histogramShaderGetter: ParameterizedContextDependentShaderGetter<
+    { chunkFormat: ChunkFormat },
     ShaderControlsBuilderState,
     VolumeRenderingShaderParameters
   >;
@@ -453,6 +461,84 @@ void main() {
         },
       },
     );
+    // TODO (SKM) - see volume/renderlayer.ts histogram code and follow the ideas
+    this.histogramShaderGetter = parameterizedContextDependentShaderGetter(
+      this,
+      this.gl,
+      {
+        memoizeKey: "VolumeRenderingRenderLayerHistogram",
+        parameters: options.shaderControlState.builderState,
+        getContextKey: ({ chunkFormat }) => `${chunkFormat.shaderKey}`,
+        shaderError: options.shaderError,
+        extraParameters: extraParameters,
+        defineShader: (
+          builder,
+          { chunkFormat },
+          shaderBuilderState,
+          shaderParametersState,
+        ) => {
+          if (shaderBuilderState.parseResult.errors.length !== 0) {
+            throw new Error("Invalid UI control specification");
+          }
+          defineVertexId(builder);
+          defineChunkDataShaderAccess(
+            builder,
+            chunkFormat,
+            shaderParametersState.numChannelDimensions,
+            "chunkSamplePosition",
+            true,
+          );
+          // TODO (SKM) provide a way to specify the number of histograms
+          //const numHistograms = dataHistogramChannelSpecifications.length;
+          const numHistograms = 1;
+          const { dataType } = chunkFormat;
+          for (let i = 0; i < numHistograms; ++i) {
+            //const { channel } = dataHistogramChannelSpecifications[i];
+            //const getDataValueExpr = `getDataValueAt(chunkSamplePosition, 0)`;
+            const invlerpName = `invlerpForHistogram${i}`;
+            builder.addVertexCode(
+              defineInvlerpShaderFunction(
+                builder,
+                invlerpName,
+                dataType,
+                false,
+              ),
+            );
+          }
+          builder.addOutputBuffer("vec4", "outputValue", 0);
+          builder.addTextureSampler(
+            "sampler2D",
+            "uDepthSampler",
+            depthSamplerTextureUnit,
+          );
+          builder.addVertexCode(glsl_simpleFloatHash);
+          builder.addVertexCode(`
+vec3 chunkSamplePosition;
+          `);
+          builder.setVertexMain(`
+vec3 p = vec3(simpleFloatHash(vec2(float(gl_VertexID), float(gl_InstanceID))),
+              simpleFloatHash(vec2(float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
+              simpleFloatHash(vec2(float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
+            );
+float x = invlerpForHistogram0(getDataValueAt(p));
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
+float stencilValue = texture(uDepthSampler, p).x;
+if (stencilValue == 1.0) {
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+} else {
+  gl_Position = vec4(2.0 * (dataValue * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
+}
+gl_PointSize = 1.0;
+`);
+          builder.setFragmentMain(`
+outputValue = vec4(1.0, 1.0, 1.0, 1.0);
+`);
+        },
+      },
+    );
+
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
 
     this.registerDisposer(
@@ -559,8 +645,13 @@ void main() {
       activeIndex: 0,
     };
     let shader: ShaderProgram | null = null;
+    let histogramShader: ShaderProgram | null = null;
     let prevChunkFormat: ChunkFormat | undefined | null;
     let shaderResult: ParameterizedShaderGetterResult<
+      ShaderControlsBuilderState,
+      VolumeRenderingShaderParameters
+    >;
+    let histogramShaderResult: ParameterizedShaderGetterResult<
       ShaderControlsBuilderState,
       VolumeRenderingShaderParameters
     >;
@@ -670,6 +761,10 @@ void main() {
             wireFrame: renderContext.wireFrame,
           });
           shader = shaderResult.shader;
+          histogramShaderResult = this.histogramShaderGetter({
+            chunkFormat: chunkFormat!,
+          });
+          histogramShader = histogramShaderResult.shader;
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
@@ -828,6 +923,10 @@ void main() {
         gl.clearColor(1.0, 1.0, 1.0, 1.0);
         gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       }
+      console.log(histogramShader);
+      // if (histogramShader !== null) {
+      //   histogramShader.bind();
+      // }
     }
   }
 
