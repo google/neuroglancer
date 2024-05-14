@@ -213,9 +213,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
     this.registerDisposer(
-      this.dataHistogramSpecifications.producerVisibility.add(
-        this.visibility,
-      ),
+      this.dataHistogramSpecifications.producerVisibility.add(this.visibility),
     );
     const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
@@ -821,12 +819,15 @@ void main() {
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
-    const outputBuffers = this.dataHistogramSpecifications.getFramebuffers(gl);
-    const count = this.getDataHistogramCount();
-    for (let i = 0; i < count; ++i) {
-      outputBuffers[i].bind(256, 1);
-      gl.clearColor(1.0, 1.0, 1.0, 1.0);
-      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+    if (!renderContext.wireFrame && !renderContext.sliceViewsPresent) {
+      const outputBuffers =
+        this.dataHistogramSpecifications.getFramebuffers(gl);
+      const count = this.getDataHistogramCount();
+      for (let i = 0; i < count; ++i) {
+        outputBuffers[i].bind(256, 1);
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+      }
     }
   }
 

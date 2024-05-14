@@ -877,6 +877,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       alreadyEmittedPickID: false,
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
+      sliceViewsPresent: this.sliceViews.size > 0,
     };
 
     mat4.copy(
