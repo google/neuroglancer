@@ -25,11 +25,13 @@
  */
 
 import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
+import { defineInvlerpShaderFunction } from "#src/webgl/lerp.js";
 import type { TextureBuffer } from "#src/webgl/offscreen.js";
 import {
   FramebufferConfiguration,
@@ -40,6 +42,10 @@ import { glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
 
 const DEBUG_HISTOGRAMS = false;
+
+interface ChunkFormatInterface {
+  dataType: DataType;
+}
 
 export interface HistogramChannelSpecification {
   // Channel coordinates.
@@ -228,4 +234,44 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
+}
+
+export function defineShaderCodeForHistograms(
+  builder: ShaderBuilder,
+  numHistograms: number,
+  chunkFormat: ChunkFormatInterface,
+  dataHistogramChannelSpecifications: HistogramChannelSpecification[],
+  start: number = 1,
+  nameAppend: string = "",
+) {
+  let histogramCollectionCode = "";
+  const { dataType } = chunkFormat;
+  for (let i = 0; i < numHistograms; ++i) {
+    const { channel } = dataHistogramChannelSpecifications[i];
+    const outputName = `out_histogram${i}${nameAppend}`;
+    builder.addOutputBuffer("vec4", outputName, start + i);
+    const getDataValueExpr = `getDataValue(${channel.join(",")})`;
+    const invlerpName = `invlerpForHistogram${i}${nameAppend}`;
+    builder.addFragmentCode(
+      defineInvlerpShaderFunction(
+        builder,
+        invlerpName,
+        dataType,
+        /*clamp=*/ false,
+      ),
+    );
+    builder.addFragmentCode(`
+float getHistogramValue${i}() {
+  return invlerpForHistogram${i}(${getDataValueExpr});
+}
+    `);
+    histogramCollectionCode += `{
+float x = getHistogramValue${i}();
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
+${outputName} = vec4(x, x, x, 1.0);
+    }`;
+  }
+  return histogramCollectionCode;
 }
