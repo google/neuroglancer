@@ -192,6 +192,10 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     return true;
   }
 
+  getDataHistogramCount() {
+    return this.dataHistogramSpecifications.visibleHistograms;
+  }
+
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
     this.gain = options.gain;
@@ -812,6 +816,13 @@ void main() {
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
+    const outputBuffers = this.dataHistogramSpecifications.getFramebuffers(gl);
+    const count = this.getDataHistogramCount();
+    for (let i = 0; i < count; ++i) {
+      outputBuffers[i].bind(256, 1);
+      gl.clearColor(1.0, 1.0, 1.0, 1.0);
+      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+    }
   }
 
   isReady(

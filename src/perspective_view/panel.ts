@@ -1065,6 +1065,8 @@ export class PerspectivePanel extends RenderedDataPanel {
           continue;
         }
         renderLayer.draw(renderContext, attachment);
+        renderContext.bindFramebuffer();
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
       }
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
