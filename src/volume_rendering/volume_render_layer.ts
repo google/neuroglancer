@@ -762,10 +762,15 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
     const chunkRank = this.multiscaleSource.rank;
     const chunkPosition = vec3.create();
 
+    const needToDrawHistogram =
+      this.getDataHistogramCount() > 0 &&
+      !renderContext.wireFrame &&
+      !renderContext.sliceViewsPresent;
+
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
-    if (!renderContext.wireFrame && !renderContext.sliceViewsPresent) {
+    if (needToDrawHistogram) {
       const outputBuffers =
         this.dataHistogramSpecifications.getFramebuffers(gl);
       const count = this.getDataHistogramCount();
@@ -957,14 +962,11 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               newSource,
             );
           }
-          newSource = false;
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
           console.log(histogramShader);
-          histogramSamples;
-          this.inputIndexBuffer;
           const DO_DRAW = true;
-          if (histogramShader !== null && DO_DRAW) {
+          if (histogramShader !== null && DO_DRAW && needToDrawHistogram) {
             const outputBuffers =
               this.dataHistogramSpecifications.getFramebuffers(gl);
             // const count = this.getDataHistogramCount();
@@ -977,21 +979,23 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
             const chunkFormat = transformedSource.source.chunkFormat;
             chunkFormat.beginDrawing(gl, histogramShader);
             chunkFormat.beginSource(gl, histogramShader);
-            chunkFormat.bindChunk(
-              gl,
-              histogramShader!,
-              chunk,
-              fixedPositionWithinChunk,
-              chunkDisplayDimensionIndices,
-              channelToChunkDimensionIndices,
-              true,
-            );
+            if (prevChunkFormat != null) {
+              prevChunkFormat.bindChunk(
+                gl,
+                histogramShader!,
+                chunk,
+                fixedPositionWithinChunk,
+                chunkDisplayDimensionIndices,
+                channelToChunkDimensionIndices,
+                newSource,
+              );
+            }
             // TODO (SKM) need uniform again?
             gl.uniform3fv(
               shader.uniform("uChunkDataSize"),
               chunkDataDisplaySize,
             );
-            console.log(chunkDataDisplaySize)
+            console.log(chunkDataDisplaySize);
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             gl.enable(WebGL2RenderingContext.BLEND);
             this.inputIndexBuffer.value.bindToVertexAttrib(
@@ -1043,7 +1047,10 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               chunkDataDisplaySize,
             );
             this.vertexIdHelper.enable();
+            chunkFormat.beginDrawing(gl, shader);
+            chunkFormat.beginSource(gl, shader);
           }
+          newSource = false;
           ++presentCount;
         } else {
           ++notPresentCount;
