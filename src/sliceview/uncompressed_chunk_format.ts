@@ -139,7 +139,11 @@ export class ChunkFormat
     );
   }
 
-  defineShader(builder: ShaderBuilder, numChannelDimensions: number) {
+  defineShader(
+    builder: ShaderBuilder,
+    numChannelDimensions: number,
+    inVertexShader: boolean = false,
+  ) {
     super.defineShader(builder, numChannelDimensions);
     const { textureDims } = this;
     const textureVecType = `ivec${this.textureDims}`;
@@ -153,13 +157,23 @@ export class ChunkFormat
       "uVolumeChunkStrides",
       4 + numChannelDimensions,
     );
-    builder.addFragmentCode(
-      textureAccessHelper.getAccessor(
-        "readVolumeData",
-        "uVolumeChunkSampler",
-        this.dataType,
-      ),
-    );
+    if (inVertexShader) {
+      builder.addVertexCode(
+        textureAccessHelper.getAccessor(
+          "readVolumeData",
+          "uVolumeChunkSampler",
+          this.dataType,
+        ),
+      );
+    } else {
+      builder.addFragmentCode(
+        textureAccessHelper.getAccessor(
+          "readVolumeData",
+          "uVolumeChunkSampler",
+          this.dataType,
+        ),
+      );
+    }
     const shaderType = getShaderType(this.dataType);
     let code = `
 ${shaderType} getDataValueAt(highp ivec3 p`;
@@ -181,7 +195,11 @@ ${shaderType} getDataValueAt(highp ivec3 p`;
   return readVolumeData(offset);
 }
 `;
-    builder.addFragmentCode(code);
+    if (inVertexShader) {
+      builder.addVertexCode(code);
+    } else {
+      builder.addFragmentCode(code);
+    }
   }
 
   /**
