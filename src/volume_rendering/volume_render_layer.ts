@@ -499,7 +499,7 @@ void main() {
           builder.addOutputBuffer("vec4", "outputValue", null);
           builder.addUniform("highp vec3", "uChunkDataSize");
           builder.addAttribute("float", "aInput1");
-          const TEMP_SIMPLE = true;
+          const TEMP_SIMPLE = false;
           if (TEMP_SIMPLE) {
             builder.setVertexMain(`
 gl_Position = vec4(0.1, aInput1, 0.0, 1.0);
@@ -564,8 +564,7 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
           if (x < 0.0) x = 0.0;
           else if (x > 1.0) x = 1.0;
           else x = (1.0 + x * 253.0) / 255.0;
-          //gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
-          gl_Position = vec4(0.5, 0.0, 0.0, 1.0);
+          gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
           gl_PointSize = 1.0;
           `);
           builder.setFragmentMain(`
@@ -957,7 +956,8 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
           console.log(histogramShader);
           histogramSamples;
           this.inputIndexBuffer;
-          if (histogramShader !== null) {
+          const DO_DRAW = true;
+          if (histogramShader !== null && DO_DRAW) {
             const outputBuffers =
               this.dataHistogramSpecifications.getFramebuffers(gl);
             // const count = this.getDataHistogramCount();
@@ -965,7 +965,7 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
             //   outputBuffers[i].bind(256, 1);
             // }
             outputBuffers[0].bind(256, 1);
-            // TODO (SKM) handle max projection
+            //TODO (SKM) handle max projection
             histogramShader.bind();
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             gl.enable(WebGL2RenderingContext.BLEND);
@@ -981,7 +981,6 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               histogramSamplesPerInstance,
               histogramSamples / histogramSamplesPerInstance,
             );
-            gl.enable(WebGL2RenderingContext.DEPTH_TEST);
 
             const DEBUG_HISTOGRAMS = true;
             if (DEBUG_HISTOGRAMS) {
@@ -1001,7 +1000,11 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               }
               console.log("histogram", tempBuffer2.join(" "));
             }
+            // TODO (SKM) first bind - see picking in VR branch
+            gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             renderContext.bindFramebuffer();
+            shader.bind();
+            this.vertexIdHelper.enable();
           }
           ++presentCount;
         } else {
