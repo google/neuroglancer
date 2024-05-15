@@ -548,10 +548,16 @@ vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_In
               simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
             );
 chunkSamplePosition = rand3 * (uChunkDataSize - 1.0);
-//chunkSamplePosition = rand3;
 float x = invlerpForHistogram0(getDataValue(0));
-x = clamp(x, 0.0, 1.0);
-gl_Position = vec4(x * 2.0 - 1.0, 0.0, 0.0, 1.0);
+if (x == 0.0) {
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}
+else {
+  if (x < 0.0) x = 0.0;
+  else if (x > 1.0) x = 1.0;
+  else x = (1.0 + x * 253.0) / 255.0;
+  gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
+}
 gl_PointSize = 1.0;
           `);
           builder.setFragmentMain(`
