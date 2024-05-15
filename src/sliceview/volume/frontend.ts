@@ -52,7 +52,11 @@ export interface ChunkFormat {
    *
    * where value_type is `getShaderType(this.dataType)`.
    */
-  defineShader: (builder: ShaderBuilder, numChannelDimensions: number) => void;
+  defineShader: (
+    builder: ShaderBuilder,
+    numChannelDimensions: number,
+    inVertexShader?: boolean,
+  ) => void;
 
   /**
    * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first
@@ -89,10 +93,8 @@ export function defineChunkDataShaderAccess(
   chunkFormat: ChunkFormat,
   numChannelDimensions: number,
   getPositionWithinChunkExpr: string,
-  inVertexShader: boolean = false,
 ) {
   const { dataType } = chunkFormat;
-  // TODO (SKM) - something I can do about this? Vertex shader
   chunkFormat.defineShader(builder, numChannelDimensions);
   let dataAccessChannelParams = "";
   let dataAccessChannelArgs = "";
@@ -106,11 +108,7 @@ export function defineChunkDataShaderAccess(
     }
   }
 
-  if (inVertexShader) {
-    builder.addVertexCode(glsl_mixLinear);
-  } else {
-    builder.addFragmentCode(glsl_mixLinear);
-  }
+  builder.addFragmentCode(glsl_mixLinear);
   const dataAccessCode = `
 ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
   highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
@@ -140,11 +138,7 @@ ${getShaderType(
   return mixLinear(xvalues[0], xvalues[1], mixCoeff.x);
 }
 `;
-  if (inVertexShader) {
-    builder.addVertexCode(dataAccessCode);
-  } else {
-    builder.addFragmentCode(dataAccessCode);
-  }
+  builder.addFragmentCode(dataAccessCode);
   if (numChannelDimensions <= 1) {
     builder.addFragmentCode(`
 ${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
