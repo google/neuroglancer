@@ -86,7 +86,10 @@ import {
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
-import { defineInvlerpShaderFunction } from "#src/webgl/lerp.js";
+import {
+  defineInvlerpShaderFunction,
+  enableLerpShaderFunction,
+} from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
 import type {
@@ -501,8 +504,13 @@ void main() {
           builder.addAttribute("float", "aInput1");
           const TEMP_SIMPLE = false;
           if (TEMP_SIMPLE) {
+            builder.addVertexCode(glsl_simpleFloatHash);
             builder.setVertexMain(`
-gl_Position = vec4(0.1, aInput1, 0.0, 1.0);
+float x = simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID)));
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
+gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
 gl_PointSize = 1.0;
 `);
             builder.setFragmentMain(`outputValue = vec4(1.0, 1.0, 1.0, 1.0);`);
@@ -556,15 +564,14 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
           //           );
           builder.addVertexCode(glsl_simpleFloatHash);
           builder.setVertexMain(`
-          vec3 chunkSamplePosition = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
-                        simpleFloatHash(vec2(float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
-                        simpleFloatHash(vec2(float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
+          vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
+                        simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
+                        simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
                       );
+          chunkSamplePosition = rand3 * uChunkDataSize;
           float x = invlerpForHistogram0(getDataValue(0));
-          if (x < 0.0) x = 0.0;
-          else if (x > 1.0) x = 1.0;
-          else x = (1.0 + x * 253.0) / 255.0;
-          gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
+          x = clamp(x, 0.0, 1.0);
+          gl_Position = vec4(x * 2.0 - 1.0, 0.0, 0.0, 1.0);
           gl_PointSize = 1.0;
           `);
           builder.setFragmentMain(`
@@ -967,6 +974,24 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
             outputBuffers[0].bind(256, 1);
             //TODO (SKM) handle max projection
             histogramShader.bind();
+            const chunkFormat = transformedSource.source.chunkFormat;
+            chunkFormat.beginDrawing(gl, histogramShader);
+            chunkFormat.beginSource(gl, histogramShader);
+            chunkFormat.bindChunk(
+              gl,
+              histogramShader!,
+              chunk,
+              fixedPositionWithinChunk,
+              chunkDisplayDimensionIndices,
+              channelToChunkDimensionIndices,
+              true,
+            );
+            // TODO (SKM) need uniform again?
+            gl.uniform3fv(
+              shader.uniform("uChunkDataSize"),
+              chunkDataDisplaySize,
+            );
+            console.log(chunkDataDisplaySize)
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             gl.enable(WebGL2RenderingContext.BLEND);
             this.inputIndexBuffer.value.bindToVertexAttrib(
@@ -975,6 +1000,15 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               WebGL2RenderingContext.UNSIGNED_BYTE,
               /*normalized=*/ true,
             );
+            const dataType = this.dataType;
+            const histogramSpecifications = this.dataHistogramSpecifications;
+            enableLerpShaderFunction(
+              histogramShader,
+              "invlerpForHistogram0",
+              dataType,
+              histogramSpecifications.bounds.value[0],
+            );
+            console.log(histogramSpecifications.bounds.value[0]);
             gl.drawArraysInstanced(
               WebGL2RenderingContext.POINTS,
               0,
@@ -1004,6 +1038,10 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             renderContext.bindFramebuffer();
             shader.bind();
+            gl.uniform3fv(
+              shader.uniform("uChunkDataSize"),
+              chunkDataDisplaySize,
+            );
             this.vertexIdHelper.enable();
           }
           ++presentCount;
