@@ -168,11 +168,11 @@ function clampAndRoundResolutionTargetValue(value: number) {
   return clampToInterval(depthSamplesBounds, Math.round(value)) as number;
 }
 
-const histogramSamplesPerInstance = 4096;
+const histogramSamplesPerInstance = 1024;
 
 // Number of points to sample in computing the histogram.  Increasing this increases the precision
 // of the histogram but also slows down rendering.
-const histogramSamples = 2 ** 14;
+const histogramSamples = 4096;
 
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   gain: WatchableValueInterface<number>;
@@ -502,22 +502,6 @@ void main() {
           builder.addOutputBuffer("vec4", "outputValue", null);
           builder.addUniform("highp vec3", "uChunkDataSize");
           builder.addAttribute("float", "aInput1");
-          const TEMP_SIMPLE = false;
-          if (TEMP_SIMPLE) {
-            builder.addVertexCode(glsl_simpleFloatHash);
-            builder.setVertexMain(`
-float x = simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID)));
-if (x < 0.0) x = 0.0;
-else if (x > 1.0) x = 1.0;
-else x = (1.0 + x * 253.0) / 255.0;
-gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
-gl_PointSize = 1.0;
-`);
-            builder.setFragmentMain(`outputValue = vec4(1.0, 1.0, 1.0, 1.0);`);
-            return;
-          }
-
-          //defineVertexId(builder);
           builder.addVertexCode(`
 vec3 chunkSamplePosition;
           `);
@@ -557,25 +541,21 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
           builder.addVertexCode(
             defineInvlerpShaderFunction(builder, invlerpName, dataType, false),
           );
-          //           builder.addTextureSampler(
-          //             "sampler2D",
-          //             "uDepthSampler",
-          //             depthSamplerTextureUnit,
-          //           );
           builder.addVertexCode(glsl_simpleFloatHash);
           builder.setVertexMain(`
-          vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
-                        simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
-                        simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
-                      );
-          chunkSamplePosition = rand3 * uChunkDataSize;
-          float x = invlerpForHistogram0(getDataValue(0));
-          x = clamp(x, 0.0, 1.0);
-          gl_Position = vec4(x * 2.0 - 1.0, 0.0, 0.0, 1.0);
-          gl_PointSize = 1.0;
+vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
+              simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
+              simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
+            );
+chunkSamplePosition = rand3 * (uChunkDataSize - 1.0);
+//chunkSamplePosition = rand3;
+float x = invlerpForHistogram0(getDataValue(0));
+x = clamp(x, 0.0, 1.0);
+gl_Position = vec4(x * 2.0 - 1.0, 0.0, 0.0, 1.0);
+gl_PointSize = 1.0;
           `);
           builder.setFragmentMain(`
-          outputValue = vec4(1.0, 1.0, 1.0, 1.0);
+outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           `);
         },
       },
@@ -964,7 +944,6 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
-          console.log(histogramShader);
           const DO_DRAW = true;
           if (histogramShader !== null && DO_DRAW && needToDrawHistogram) {
             const outputBuffers =
@@ -992,10 +971,9 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
             }
             // TODO (SKM) need uniform again?
             gl.uniform3fv(
-              shader.uniform("uChunkDataSize"),
+              histogramShader.uniform("uChunkDataSize"),
               chunkDataDisplaySize,
             );
-            console.log(chunkDataDisplaySize);
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             gl.enable(WebGL2RenderingContext.BLEND);
             this.inputIndexBuffer.value.bindToVertexAttrib(
@@ -1012,7 +990,6 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               dataType,
               histogramSpecifications.bounds.value[0],
             );
-            console.log(histogramSpecifications.bounds.value[0]);
             gl.drawArraysInstanced(
               WebGL2RenderingContext.POINTS,
               0,
@@ -1020,24 +997,6 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
               histogramSamples / histogramSamplesPerInstance,
             );
 
-            const DEBUG_HISTOGRAMS = true;
-            if (DEBUG_HISTOGRAMS) {
-              const tempBuffer = new Float32Array(256 * 4);
-              gl.readPixels(
-                0,
-                0,
-                256,
-                1,
-                WebGL2RenderingContext.RGBA,
-                WebGL2RenderingContext.FLOAT,
-                tempBuffer,
-              );
-              const tempBuffer2 = new Float32Array(256);
-              for (let j = 0; j < 256; ++j) {
-                tempBuffer2[j] = tempBuffer[j * 4];
-              }
-              console.log("histogram", tempBuffer2.join(" "));
-            }
             // TODO (SKM) first bind - see picking in VR branch
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             renderContext.bindFramebuffer();
@@ -1060,23 +1019,28 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
-    // if (!renderContext.wireFrame && !renderContext.sliceViewsPresent) {
-    //   const outputBuffers =
-    //     this.dataHistogramSpecifications.getFramebuffers(gl);
-    //   const count = this.getDataHistogramCount();
-    //   for (let i = 0; i < count; ++i) {
-    //     outputBuffers[i].bind(256, 1);
-    //     gl.clearColor(1.0, 1.0, 1.0, 1.0);
-    //     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
-    //   }
-    //   //console.log(histogramShader);
-    //   const histogramShaderAgain: ShaderProgram | null =
-    //     histogramShader as ShaderProgram | null;
-    //   console.log(histogramShaderAgain);
-    //   if (histogramShaderAgain !== null) {
-    //     histogramShaderAgain.bind();
-    //   }
-    // }
+    const DEBUG_HISTOGRAMS = true;
+    if (needToDrawHistogram && DEBUG_HISTOGRAMS) {
+      const outputBuffers =
+        this.dataHistogramSpecifications.getFramebuffers(gl);
+      outputBuffers[0].bind(256, 1);
+      const tempBuffer = new Float32Array(256 * 4);
+      gl.readPixels(
+        0,
+        0,
+        256,
+        1,
+        WebGL2RenderingContext.RGBA,
+        WebGL2RenderingContext.FLOAT,
+        tempBuffer,
+      );
+      const tempBuffer2 = new Float32Array(256);
+      for (let j = 0; j < 256; ++j) {
+        tempBuffer2[j] = tempBuffer[j * 4];
+      }
+      console.log("histogram", tempBuffer2.join(" "));
+      renderContext.bindFramebuffer();
+    }
   }
 
   isReady(
