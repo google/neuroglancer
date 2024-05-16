@@ -62,7 +62,7 @@ export interface ChunkFormat {
    * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first
    * source.  This is not called before each source is drawn.
    */
-  beginDrawing: (gl: GL, shader: ShaderProgram) => void;
+  beginDrawing: (gl: GL, shader: ShaderProgram, reset?: boolean) => void;
 
   /**
    * Called once after all chunks have been drawn, on the ChunkFormat of the first source.
