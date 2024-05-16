@@ -165,9 +165,9 @@ class OpacityTool(Tool):
 
 
 @export_tool
-class VolumeRenderingModeTool(Tool):
+class VolumeRenderingTool(Tool):
     __slots__ = ()
-    TOOL_TYPE = "volumeRenderingMode"
+    TOOL_TYPE = "volumeRendering"
 
 
 @export_tool
