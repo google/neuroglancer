@@ -1001,6 +1001,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
+
+          // Draw histograms if needed
           if (histogramShader !== null && needToDrawHistogram) {
             // Setup the state for drawing histograms
             histogramShader.bind();
