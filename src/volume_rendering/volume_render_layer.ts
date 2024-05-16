@@ -85,7 +85,10 @@ import {
   parameterizedContextDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
-import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import type {
+  HistogramChannelSpecification,
+  HistogramSpecifications,
+} from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
@@ -246,11 +249,20 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     );
     const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (space: CoordinateSpace, mode: VolumeRenderingModes) => ({
+        (
+          space: CoordinateSpace,
+          mode: VolumeRenderingModes,
+          dataHistogramChannelSpecifications: HistogramChannelSpecification[],
+        ) => ({
           numChannelDimensions: space.rank,
           mode,
+          dataHistogramChannelSpecifications,
         }),
-        [this.channelCoordinateSpace, this.mode],
+        [
+          this.channelCoordinateSpace,
+          this.mode,
+          this.dataHistogramSpecifications.channels,
+        ],
       ),
     );
     this.shaderGetter = parameterizedContextDependentShaderGetter(
@@ -501,6 +513,7 @@ void main() {
           shaderBuilderState;
           builder.addOutputBuffer("vec4", "outputValue", null);
           builder.addUniform("highp vec3", "uChunkDataSize");
+          builder.addUniform("highp int", "uHistogramIndex");
           builder.addAttribute("float", "aInput1");
           builder.addVertexCode(`
 vec3 chunkSamplePosition;
@@ -530,17 +543,32 @@ ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
   return getDataValueAt(p${dataAccessChannelArgs});
 }`;
           builder.addVertexCode(dataAccessCode);
-          //           // TODO (SKM) provide a way to specify the number of histograms
-          //           //const numHistograms = dataHistogramChannelSpecifications.length;
-          //           const numHistograms = 1;
-          //           const { dataType } = chunkFormat;
-          //           for (let i = 0; i < numHistograms; ++i) {
-          //             //const { channel } = dataHistogramChannelSpecifications[i];
-          //             //const getDataValueExpr = `getDataValueAt(chunkSamplePosition, 0)`;
-          const invlerpName = `invlerpForHistogram0`;
-          builder.addVertexCode(
-            defineInvlerpShaderFunction(builder, invlerpName, dataType, false),
-          );
+          if (numChannelDimensions <= 1) {
+            builder.addVertexCode(`
+${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
+`);
+          }
+          const dataHistogramChannelSpecifications =
+            shaderParametersState.dataHistogramChannelSpecifications;
+          const numHistograms = dataHistogramChannelSpecifications.length;
+          for (let i = 0; i < numHistograms; ++i) {
+            const { channel } = dataHistogramChannelSpecifications[i];
+            const getDataValueExpr = `getDataValue(${channel.join(",")})`;
+            const invlerpName = `invlerpForHistogram${i}`;
+            builder.addVertexCode(
+              defineInvlerpShaderFunction(
+                builder,
+                invlerpName,
+                dataType,
+                false,
+              ),
+            );
+            builder.addVertexCode(`
+          float getHistogramValue${i}() {
+            return invlerpForHistogram${i}(${getDataValueExpr});
+          }
+          `);
+          }
           builder.addVertexCode(glsl_simpleFloatHash);
           builder.setVertexMain(`
 vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
@@ -548,7 +576,7 @@ vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_In
               simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
             );
 chunkSamplePosition = rand3 * (uChunkDataSize - 1.0);
-float x = invlerpForHistogram0(getDataValue(0));
+float x = getHistogramValue0();
 if (x == 0.0) {
   gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
@@ -950,15 +978,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
-          const DO_DRAW = true;
-          if (histogramShader !== null && DO_DRAW && needToDrawHistogram) {
-            const outputBuffers =
-              this.dataHistogramSpecifications.getFramebuffers(gl);
-            // const count = this.getDataHistogramCount();
-            // for (let i = 0; i < count; ++i) {
-            //   outputBuffers[i].bind(256, 1);
-            // }
-            outputBuffers[0].bind(256, 1);
+          console.log(histogramShader);
+          if (histogramShader !== null && needToDrawHistogram) {
             //TODO (SKM) handle max projection
             histogramShader.bind();
             const chunkFormat = transformedSource.source.chunkFormat;
@@ -988,14 +1009,20 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               WebGL2RenderingContext.UNSIGNED_BYTE,
               /*normalized=*/ true,
             );
-            const dataType = this.dataType;
-            const histogramSpecifications = this.dataHistogramSpecifications;
-            enableLerpShaderFunction(
-              histogramShader,
-              "invlerpForHistogram0",
-              dataType,
-              histogramSpecifications.bounds.value[0],
-            );
+            const { dataType, dataHistogramSpecifications } = this;
+            const count = this.getDataHistogramCount();
+            const outputFramebuffers =
+              dataHistogramSpecifications.getFramebuffers(gl);
+            const bounds = this.dataHistogramSpecifications.bounds.value;
+            for (let i = 0; i < count; ++i) {
+              outputFramebuffers[i].bind(256, 1);
+              enableLerpShaderFunction(
+                histogramShader,
+                `invlerpForHistogram${i}`,
+                dataType,
+                bounds[i],
+              );
+            }
             gl.drawArraysInstanced(
               WebGL2RenderingContext.POINTS,
               0,
