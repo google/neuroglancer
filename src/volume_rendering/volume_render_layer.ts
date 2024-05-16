@@ -1007,7 +1007,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 newSource,
               );
             }
-            // TODO (SKM) need uniform again?
             gl.uniform3fv(
               histogramShader.uniform("uChunkDataSize"),
               chunkDataDisplaySize,
@@ -1044,12 +1043,14 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
             // TODO (SKM) first bind - see picking in VR branch
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-            renderContext.bindFramebuffer();
+            if (isProjectionMode(this.mode.value)) {
+              gl.disable(WebGL2RenderingContext.BLEND);
+              renderContext.bindMaxProjectionBuffer!();
+            }
+            else {
+              renderContext.bindFramebuffer();
+            }
             shader.bind();
-            gl.uniform3fv(
-              shader.uniform("uChunkDataSize"),
-              chunkDataDisplaySize,
-            );
             this.vertexIdHelper.enable();
             chunkFormat.beginDrawing(gl, shader);
             chunkFormat.beginSource(gl, shader);

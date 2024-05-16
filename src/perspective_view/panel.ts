@@ -963,6 +963,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         };
         gl.depthMask(true);
         bindMaxProjectionBuffer();
+        renderContext.bindMaxProjectionBuffer = bindMaxProjectionBuffer;
         gl.clearColor(0.0, 0.0, 0.0, 0.0);
         gl.clearDepth(0.0);
         gl.clear(

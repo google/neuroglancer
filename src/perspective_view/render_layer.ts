@@ -60,6 +60,11 @@ export interface PerspectiveViewRenderContext
    * Specifies if there are any slice views
    */
   sliceViewsPresent: boolean;
+
+  /**
+    * Specifices how to bind the max projection buffer
+    */
+  bindMaxProjectionBuffer?: () => void | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
