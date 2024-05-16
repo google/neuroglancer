@@ -737,6 +737,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       if (shader === null) return;
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
+        if (histogramShader !== null) {
+          prevChunkFormat!.endDrawing(gl, histogramShader);
+        }
       }
       const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit);
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthTextureUnit);
@@ -804,8 +807,17 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       }
-      // TODO (SKM) handle max projection
-      renderContext.bindFramebuffer();
+      if (isProjectionMode(this.mode.value)) {
+        if (renderContext.bindMaxProjectionBuffer !== undefined) {
+          renderContext.bindMaxProjectionBuffer();
+        } else {
+          throw new Error(
+            "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
+          );
+        }
+      } else {
+        renderContext.bindFramebuffer();
+      }
     }
 
     forEachVisibleVolumeRenderingChunk(
@@ -989,17 +1001,17 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
-          console.log(histogramShader);
           if (histogramShader !== null && needToDrawHistogram) {
-            //TODO (SKM) handle max projection
+            // Setup the state for drawing histograms
             histogramShader.bind();
             const chunkFormat = transformedSource.source.chunkFormat;
-            chunkFormat.beginDrawing(gl, histogramShader);
+            const onlyActivateTexture = !newSource;
+            chunkFormat.beginDrawing(gl, histogramShader, onlyActivateTexture);
             chunkFormat.beginSource(gl, histogramShader);
             if (prevChunkFormat != null) {
               prevChunkFormat.bindChunk(
                 gl,
-                histogramShader!,
+                histogramShader,
                 chunk,
                 fixedPositionWithinChunk,
                 chunkDisplayDimensionIndices,
@@ -1024,6 +1036,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             const outputFramebuffers =
               dataHistogramSpecifications.getFramebuffers(gl);
             const bounds = this.dataHistogramSpecifications.bounds.value;
+
+            // Draw each histogram
             for (let i = 0; i < count; ++i) {
               outputFramebuffers[i].bind(256, 1);
               enableLerpShaderFunction(
@@ -1041,18 +1055,23 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               );
             }
 
-            // TODO (SKM) first bind - see picking in VR branch
+            // Reset the state back to regular drawing mode
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
             if (isProjectionMode(this.mode.value)) {
               gl.disable(WebGL2RenderingContext.BLEND);
-              renderContext.bindMaxProjectionBuffer!();
-            }
-            else {
+              if (renderContext.bindMaxProjectionBuffer !== undefined) {
+                renderContext.bindMaxProjectionBuffer();
+              } else {
+                throw new Error(
+                  "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
+                );
+              }
+            } else {
               renderContext.bindFramebuffer();
             }
             shader.bind();
             this.vertexIdHelper.enable();
-            chunkFormat.beginDrawing(gl, shader);
+            chunkFormat.beginDrawing(gl, shader, true);
             chunkFormat.beginSource(gl, shader);
           }
           newSource = false;
