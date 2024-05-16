@@ -171,7 +171,7 @@ function clampAndRoundResolutionTargetValue(value: number) {
   return clampToInterval(depthSamplesBounds, Math.round(value)) as number;
 }
 
-const histogramSamplesPerInstance = 1024;
+const histogramSamplesPerInstance = 512;
 
 // Number of points to sample in computing the histogram.  Increasing this increases the precision
 // of the histogram but also slows down rendering.
@@ -551,6 +551,9 @@ ${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
           const dataHistogramChannelSpecifications =
             shaderParametersState.dataHistogramChannelSpecifications;
           const numHistograms = dataHistogramChannelSpecifications.length;
+          let histogramFetchCode = `
+float x;
+switch (uHistogramIndex) {`;
           for (let i = 0; i < numHistograms; ++i) {
             const { channel } = dataHistogramChannelSpecifications[i];
             const getDataValueExpr = `getDataValue(${channel.join(",")})`;
@@ -564,11 +567,19 @@ ${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
               ),
             );
             builder.addVertexCode(`
-          float getHistogramValue${i}() {
-            return invlerpForHistogram${i}(${getDataValueExpr});
+float getHistogramValue${i}() {
+  return invlerpForHistogram${i}(${getDataValueExpr});
+}
+`);
+            histogramFetchCode += `
+case ${i}:
+  x = getHistogramValue${i}();
+  break;
+`;
           }
-          `);
-          }
+          histogramFetchCode += `
+}
+`;
           builder.addVertexCode(glsl_simpleFloatHash);
           builder.setVertexMain(`
 vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
@@ -576,7 +587,7 @@ vec3 rand3 = vec3(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_In
               simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID)))
             );
 chunkSamplePosition = rand3 * (uChunkDataSize - 1.0);
-float x = getHistogramValue0();
+${histogramFetchCode}
 if (x == 0.0) {
   gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
@@ -1022,13 +1033,14 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 dataType,
                 bounds[i],
               );
+              gl.uniform1i(histogramShader.uniform("uHistogramIndex"), i);
+              gl.drawArraysInstanced(
+                WebGL2RenderingContext.POINTS,
+                0,
+                histogramSamplesPerInstance,
+                histogramSamples / histogramSamplesPerInstance,
+              );
             }
-            gl.drawArraysInstanced(
-              WebGL2RenderingContext.POINTS,
-              0,
-              histogramSamplesPerInstance,
-              histogramSamples / histogramSamplesPerInstance,
-            );
 
             // TODO (SKM) first bind - see picking in VR branch
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
