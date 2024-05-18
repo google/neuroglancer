@@ -570,6 +570,7 @@ void main() {
 
     const endShader = () => {
       if (shader === null) return;
+      shader.unbindTransferFunctionTextures();
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
       }

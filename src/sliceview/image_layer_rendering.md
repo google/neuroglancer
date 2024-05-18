@@ -155,6 +155,42 @@ annotation layers). The one-parameter overload simply computes the inverse linea
 the specified value within the range specified by the control. The zero-parameter overload returns
 the inverse linear interpolation of the data value for configured channel/property.
 
+### `transferFunction` controls
+
+The `transferFunction` control type allows the user to specify a function which maps
+each data value in a numerical interval to an output color and opacity. The mapping function
+is defined by a series of control points. Each control point is a color and opacity value at a
+specific data input value. In between control points, the color and opacity is linearly interpolated.
+Any input data before the first control point is mapped to a completely transparent output.
+Any data point after the last control point is mapped to the same output as the last control point.
+
+Directive syntax:
+
+```glsl
+#uicontrol transferFunction <name>(window=[lower, higher], controlPoints=[[input, hexColorString, opacity]], channel=[], defaultColor="#rrggbb")
+#uicontrol transferFunction colormap(window=[0, 100], controlPoints=[[10.0, "#000000", 0.0], [100.0, "#ffffff", 1.0]], channel=[], defaultColor="#00ffaa")
+```
+
+The following parameters are supported:
+
+- `window`: Optional. The portion of the input range to view the transfer function over.
+  Must be specified as an array. May be overridden using the UI control. Defaults to the min and max
+  of the control point input values, if control points are specified, or otherwise to the full range of the
+  data type for integer data types, and `[0, 1]` for float32. It is not valid to specify an
+  inverted interval like `[50, 20]`, or an interval where the start and end points are the same, e.g. `[20, 20]`.
+
+- `controlPoints`: Optional. The points which define the input to output mapping.
+  Must be specified as an array, with each value in the array of the form `[inputValue, hexStringColor, floatOpacity]`.
+  The default transfer function is a simple interpolation from transparent black to fully opaque white.
+
+- `channel`: Optional. The channel to perform the mapping on.
+  If the rank of the channel coordinate space is 1, may be specified as a single number,
+  e.g. `channel=2`. Otherwise, must be specified as an array, e.g. `channel=[2, 3]`. May be
+  overriden using the UI control. If not specified, defaults to all-zero channel coordinates.
+
+- `defaultColor`: Optional. The default color for new control points added via the UI control.
+  Defaults to `#ffffff`, and must be specified as a hex string if provided `#rrggbb`.
+
 ## API
 
 ### Retrieving voxel channel value
