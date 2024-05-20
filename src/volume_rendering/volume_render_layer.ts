@@ -67,6 +67,7 @@ import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/tr
 import {
   VolumeRenderingModes,
   isProjectionMode,
+  trackableShaderModeValue,
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   drawBoxes,
@@ -169,6 +170,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
+  modeOverride: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
@@ -201,16 +203,21 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
     this.mode = options.mode;
+    this.modeOverride = trackableShaderModeValue();
     this.registerDisposer(
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
     const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (space: CoordinateSpace, mode: VolumeRenderingModes) => ({
+        (
+          space: CoordinateSpace,
+          mode: VolumeRenderingModes,
+          modeOverride: VolumeRenderingModes,
+        ) => ({
           numChannelDimensions: space.rank,
-          mode,
+          mode: modeOverride === VolumeRenderingModes.OFF ? mode : modeOverride,
         }),
-        [this.channelCoordinateSpace, this.mode],
+        [this.channelCoordinateSpace, this.mode, this.modeOverride],
       ),
     );
     this.shaderGetter = parameterizedContextDependentShaderGetter(
@@ -626,9 +633,10 @@ void main() {
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
-    const pickId = isProjectionMode(this.mode.value)
-      ? renderContext.pickIDs.register(this)
-      : 0;
+    const isProjection =
+      isProjectionMode(this.mode.value) ||
+      isProjectionMode(this.modeOverride.value);
+    const pickId = isProjection ? renderContext.pickIDs.register(this) : 0;
     forEachVisibleVolumeRenderingChunk(
       renderContext.projectionParameters,
       this.localPosition.value,
