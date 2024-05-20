@@ -108,6 +108,12 @@ import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
+const HISTOGRAM_SAMPLES_PER_INSTANCE = 512;
+
+// Number of points to sample in computing the histogram.  Increasing this increases the precision
+// of the histogram but also slows down rendering.
+const NUM_HISTOGRAM_SAMPLES = 4096;
+const DEBUG_HISTOGRAMS = true;
 
 const depthSamplerTextureUnit = Symbol("depthSamplerTextureUnit");
 
@@ -171,12 +177,6 @@ function clampAndRoundResolutionTargetValue(value: number) {
   return clampToInterval(depthSamplesBounds, Math.round(value)) as number;
 }
 
-const histogramSamplesPerInstance = 512;
-
-// Number of points to sample in computing the histogram.  Increasing this increases the precision
-// of the histogram but also slows down rendering.
-const histogramSamples = 4096;
-
 export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   gain: WatchableValueInterface<number>;
   multiscaleSource: MultiscaleVolumeChunkSource;
@@ -189,7 +189,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
-  dataHistogramSpecifications: HistogramSpecifications;
+  private dataHistogramSpecifications: HistogramSpecifications;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
@@ -219,7 +219,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     return this.dataHistogramSpecifications.visibleHistograms;
   }
 
-  private inputIndexBuffer: RefCountedValue<Buffer>;
+  private histogramIndexBuffer: RefCountedValue<Buffer>;
 
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
@@ -234,11 +234,11 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.mode = options.mode;
     this.dataHistogramSpecifications =
       this.shaderControlState.histogramSpecifications;
-    this.inputIndexBuffer = this.registerDisposer(
+    this.histogramIndexBuffer = this.registerDisposer(
       getMemoizedBuffer(
         this.gl,
         WebGL2RenderingContext.ARRAY_BUFFER,
-        () => new Uint8Array(histogramSamplesPerInstance),
+        () => new Uint8Array(HISTOGRAM_SAMPLES_PER_INSTANCE),
       ),
     );
     this.registerDisposer(
@@ -494,7 +494,6 @@ void main() {
         },
       },
     );
-    // TODO (SKM) - see volume/renderlayer.ts histogram code and follow the ideas
     this.histogramShaderGetter = parameterizedContextDependentShaderGetter(
       this,
       this.gl,
@@ -733,6 +732,21 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber,
     );
 
+    const restoreFrameBuffer = () => {
+      if (isProjectionMode(this.mode.value)) {
+        gl.disable(WebGL2RenderingContext.BLEND);
+        if (renderContext.bindMaxProjectionBuffer !== undefined) {
+          renderContext.bindMaxProjectionBuffer();
+        } else {
+          throw new Error(
+            "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
+          );
+        }
+      } else {
+        renderContext.bindFramebuffer();
+      }
+    };
+
     const endShader = () => {
       if (shader === null) return;
       if (prevChunkFormat !== null) {
@@ -807,17 +821,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       }
-      if (isProjectionMode(this.mode.value)) {
-        if (renderContext.bindMaxProjectionBuffer !== undefined) {
-          renderContext.bindMaxProjectionBuffer();
-        } else {
-          throw new Error(
-            "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
-          );
-        }
-      } else {
-        renderContext.bindFramebuffer();
-      }
+      restoreFrameBuffer();
     }
 
     forEachVisibleVolumeRenderingChunk(
@@ -858,10 +862,12 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             wireFrame: renderContext.wireFrame,
           });
           shader = shaderResult.shader;
-          histogramShaderResult = this.histogramShaderGetter({
-            chunkFormat: chunkFormat!,
-          });
-          histogramShader = histogramShaderResult.shader;
+          if (needToDrawHistogram) {
+            histogramShaderResult = this.histogramShaderGetter({
+              chunkFormat: chunkFormat!,
+            });
+            histogramShader = histogramShaderResult.shader;
+          }
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
@@ -1027,7 +1033,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             );
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             gl.enable(WebGL2RenderingContext.BLEND);
-            this.inputIndexBuffer.value.bindToVertexAttrib(
+            this.histogramIndexBuffer.value.bindToVertexAttrib(
               histogramShader.attribute("aInput1"),
               1,
               WebGL2RenderingContext.UNSIGNED_BYTE,
@@ -1052,28 +1058,21 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               gl.drawArraysInstanced(
                 WebGL2RenderingContext.POINTS,
                 0,
-                histogramSamplesPerInstance,
-                histogramSamples / histogramSamplesPerInstance,
+                HISTOGRAM_SAMPLES_PER_INSTANCE,
+                NUM_HISTOGRAM_SAMPLES / HISTOGRAM_SAMPLES_PER_INSTANCE,
               );
             }
 
             // Reset the state back to regular drawing mode
             gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-            if (isProjectionMode(this.mode.value)) {
-              gl.disable(WebGL2RenderingContext.BLEND);
-              if (renderContext.bindMaxProjectionBuffer !== undefined) {
-                renderContext.bindMaxProjectionBuffer();
-              } else {
-                throw new Error(
-                  "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
-                );
-              }
-            } else {
-              renderContext.bindFramebuffer();
-            }
+            restoreFrameBuffer();
             shader.bind();
             this.vertexIdHelper.enable();
-            chunkFormat.beginDrawing(gl, shader, true /* onlyActivateTexture */);
+            chunkFormat.beginDrawing(
+              gl,
+              shader,
+              true /* onlyActivateTexture */,
+            );
             chunkFormat.beginSource(gl, shader);
           }
           newSource = false;
@@ -1086,7 +1085,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
-    const DEBUG_HISTOGRAMS = true;
     if (needToDrawHistogram && DEBUG_HISTOGRAMS) {
       const outputBuffers =
         this.dataHistogramSpecifications.getFramebuffers(gl);
@@ -1106,7 +1104,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         tempBuffer2[j] = tempBuffer[j * 4];
       }
       console.log("histogram", tempBuffer2.join(" "));
-      renderContext.bindFramebuffer();
+      restoreFrameBuffer();
     }
   }
 
