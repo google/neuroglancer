@@ -1091,19 +1091,20 @@ export class PerspectivePanel extends RenderedDataPanel {
             this.maxProjectionConfiguration.colorBuffers[3 /*pick*/].texture,
           );
 
+          // Turn back on OIT blending
+          gl.enable(WebGL2RenderingContext.BLEND);
+          gl.blendFuncSeparate(
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ZERO,
+            WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+          );
           if (!needTwoRenderingPasses) {
             // Copy max projection color result to the transparent buffer with OIT
             // Depth testing off to combine max layers into one color via blend
             renderContext.bindFramebuffer();
             gl.depthMask(false);
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-            gl.enable(WebGL2RenderingContext.BLEND);
-            gl.blendFuncSeparate(
-              WebGL2RenderingContext.ONE,
-              WebGL2RenderingContext.ONE,
-              WebGL2RenderingContext.ZERO,
-              WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-            );
             this.maxProjectionColorCopyHelper.draw(
               this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
               this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
@@ -1125,15 +1126,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.clearColor(0.0, 0.0, 0.0, 1.0);
           gl.depthMask(false);
           gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-          if (needTwoRenderingPasses) {
-            gl.enable(WebGL2RenderingContext.BLEND);
-            gl.blendFuncSeparate(
-              WebGL2RenderingContext.ONE,
-              WebGL2RenderingContext.ONE,
-              WebGL2RenderingContext.ZERO,
-              WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-            );
-          }
           gl.depthFunc(WebGL2RenderingContext.LESS);
           renderContext.emitter = perspectivePanelEmitOIT;
           renderContext.bindFramebuffer();
