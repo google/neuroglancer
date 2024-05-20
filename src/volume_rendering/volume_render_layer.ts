@@ -1073,7 +1073,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             }
             shader.bind();
             this.vertexIdHelper.enable();
-            chunkFormat.beginDrawing(gl, shader, true);
+            chunkFormat.beginDrawing(gl, shader, true /* onlyActivateTexture */);
             chunkFormat.beginSource(gl, shader);
           }
           newSource = false;
