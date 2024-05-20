@@ -165,6 +165,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   pickRequestPending = false;
 
   private mouseStateForcer = () => this.blockOnPickRequest();
+  protected isMovingToMousePosition: boolean = false;
 
   inputEventMap: EventActionMap;
 
@@ -616,7 +617,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     registerActionListener(element, "move-to-mouse-position", () => {
       const { mouseState } = this.viewer;
       if (mouseState.updateUnconditionally()) {
+        this.isMovingToMousePosition = true;
         this.navigationState.position.value = mouseState.position;
+        this.isMovingToMousePosition = false;
       }
     });
 
