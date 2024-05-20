@@ -157,48 +157,38 @@ export class ChunkFormat
       "uVolumeChunkStrides",
       4 + numChannelDimensions,
     );
-    if (inVertexShader) {
-      builder.addVertexCode(
-        textureAccessHelper.getAccessor(
-          "readVolumeData",
-          "uVolumeChunkSampler",
-          this.dataType,
-        ),
-      );
-    } else {
-      builder.addFragmentCode(
-        textureAccessHelper.getAccessor(
-          "readVolumeData",
-          "uVolumeChunkSampler",
-          this.dataType,
-        ),
-      );
-    }
+    const textureSamplerCode = textureAccessHelper.getAccessor(
+      "readVolumeData",
+      "uVolumeChunkSampler",
+      this.dataType,
+    );
     const shaderType = getShaderType(this.dataType);
-    let code = `
+    let dataAccessCode = `
 ${shaderType} getDataValueAt(highp ivec3 p`;
     for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      code += `, highp int channelIndex${channelDim}`;
+      dataAccessCode += `, highp int channelIndex${channelDim}`;
     }
-    code += `) {
+    dataAccessCode += `) {
   highp ${textureVecType} offset = uVolumeChunkStrides[0]
                      + p.x * uVolumeChunkStrides[1]
                      + p.y * uVolumeChunkStrides[2]
                      + p.z * uVolumeChunkStrides[3];
 `;
     for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      code += `
+      dataAccessCode += `
   offset += channelIndex${channelDim} * uVolumeChunkStrides[${4 + channelDim}];
 `;
     }
-    code += `
+    dataAccessCode += `
   return readVolumeData(offset);
 }
 `;
     if (inVertexShader) {
-      builder.addVertexCode(code);
+      builder.addVertexCode(textureSamplerCode);
+      builder.addVertexCode(dataAccessCode);
     } else {
-      builder.addFragmentCode(code);
+      builder.addVertexCode(textureSamplerCode);
+      builder.addFragmentCode(dataAccessCode);
     }
   }
 
