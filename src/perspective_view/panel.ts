@@ -939,6 +939,8 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     let hasTransparent = false;
     let hasVolumeRendering = false;
+    // By default, volume rendering layers are not pickable when the camera is moving.
+    let hasVolumeRenderingPick = !this.isCameraMoving;
 
     let hasAnnotation = false;
 
@@ -954,6 +956,9 @@ export class PerspectivePanel extends RenderedDataPanel {
         hasTransparent = true;
         if (renderLayer.isVolumeRendering) {
           hasVolumeRendering = true;
+          hasVolumeRenderingPick =
+            hasVolumeRenderingPick ||
+            isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
         }
       }
     }
@@ -1055,12 +1060,17 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         // Draw volume rendering layers
         if (renderLayer.isVolumeRendering) {
-          const needTwoRenderingPasses = !isProjectionLayer(
+          const layerIsProjection = isProjectionLayer(
             renderLayer as VolumeRenderingRenderLayer,
           );
+          const needTwoRenderingPasses =
+            !layerIsProjection && !this.isCameraMoving;
           if (needTwoRenderingPasses) {
             (renderLayer as VolumeRenderingRenderLayer).modeOverride.value =
               VolumeRenderingModes.MAX;
+          } else if (!layerIsProjection) {
+            renderLayer.draw(renderContext, attachment);
+            continue;
           }
 
           // Set state for max projection mode and draw
@@ -1181,7 +1191,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         /*dppass=*/ WebGL2RenderingContext.REPLACE,
       );
       gl.stencilMask(2);
-      if (hasVolumeRendering) {
+      if (hasVolumeRenderingPick) {
         this.maxProjectionPickCopyHelper.draw(
           this.maxProjectionPickConfiguration.colorBuffers[0].texture /*depth*/,
           this.maxProjectionPickConfiguration.colorBuffers[1].texture /*pick*/,
