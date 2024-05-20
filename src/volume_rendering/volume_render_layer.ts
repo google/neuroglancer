@@ -307,16 +307,18 @@ void emitIntensity(float value) {
 float savedDepth = 0.0;
 float savedIntensity = 0.0;
 vec4 newColor = vec4(0.0);
+float userEmittedIntensity = -100.0;
 `);
             glsl_emitIntensity = `
 float convertIntensity(float value) {
   return clamp(${glsl_intensityConversion}, 0.0, 1.0);
 }
 void emitIntensity(float value) {
-  defaultMaxProjectionIntensity = value;
+  userEmittedIntensity = value;
 }
 float getIntensity() {
-  return convertIntensity(defaultMaxProjectionIntensity);
+  float intensity = userEmittedIntensity > -100.0 ? userEmittedIntensity : defaultMaxProjectionIntensity;
+  return convertIntensity(intensity);
 }
 `;
             glsl_rgbaEmit = `
@@ -334,8 +336,9 @@ void emitRGBA(vec4 rgba) {
   savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
-  emit(outputColor, savedDepth, savedIntensity);
+  emit(outputColor, savedDepth, savedIntensity, uPickId);
   defaultMaxProjectionIntensity = 0.0;
+  userEmittedIntensity = -100.0;
 `;
           }
           emitter(builder);
@@ -361,6 +364,7 @@ void emitRGBA(vec4 rgba) {
 
           builder.addUniform("highp float", "uBrightnessFactor");
           builder.addUniform("highp float", "uGain");
+          builder.addUniform("highp uint", "uPickId");
           builder.addVarying("highp vec4", "vNormalizedPosition");
           builder.addTextureSampler(
             "sampler2D",
@@ -418,7 +422,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 `;
             if (isProjectionMode(shaderParametersState.mode)) {
               glsl_emitWireframe = `
-  emit(outputColor, 1.0, uChunkNumber);
+  emit(outputColor, 1.0, uChunkNumber, uPickId);
             `;
             }
             builder.setFragmentMainFunction(`
@@ -750,6 +754,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
     const endShader = () => {
       if (shader === null) return;
+      shader.unbindTransferFunctionTextures();
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
         if (histogramShader !== null) {
@@ -825,6 +830,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       restoreFrameBuffer();
     }
 
+    const pickId = isProjectionMode(this.mode.value)
+      ? renderContext.pickIDs.register(this)
+      : 0;
     forEachVisibleVolumeRenderingChunk(
       renderContext.projectionParameters,
       this.localPosition.value,
@@ -1007,6 +1015,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             );
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
+          gl.uniform1ui(shader.uniform("uPickId"), pickId);
           drawBoxes(gl, 1, 1);
 
           // Draw histograms if needed

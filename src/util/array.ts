@@ -185,6 +185,39 @@ export function binarySearch<T>(
 }
 
 /**
+ * Returns the index of the element in `haystack` that is closest to `needle`, according to
+ * `compare`.  If there are multiple elements that are equally close, the index of the first such
+ * element encountered is returned.  If `haystack` is empty, returns -1.
+ */
+export function findClosestMatchInSortedArray<T>(
+  haystack: ArrayLike<T>,
+  needle: T,
+  compare: (a: T, b: T) => number,
+  low = 0,
+  high = haystack.length,
+): number {
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+  while (low < high) {
+    const mid = (low + high - 1) >> 1;
+    const compareResult = compare(needle, haystack[mid]);
+    if (compareResult > 0) {
+      low = mid + 1;
+    } else if (compareResult < 0) {
+      high = mid;
+    } else {
+      return mid;
+    }
+    const distance = Math.abs(compareResult);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = mid;
+    }
+  }
+  return bestIndex;
+}
+
+/**
  * Returns the first index in `[begin, end)` for which `predicate` is `true`, or returns `end` if no
  * such index exists.
  *
