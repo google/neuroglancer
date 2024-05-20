@@ -112,6 +112,7 @@ const HISTOGRAM_SAMPLES_PER_INSTANCE = 512;
 
 // Number of points to sample in computing the histogram.  Increasing this increases the precision
 // of the histogram but also slows down rendering.
+// Here, we use 4096 samples per chunk to compute the histogram.
 const NUM_HISTOGRAM_SAMPLES = 4096;
 const DEBUG_HISTOGRAMS = false;
 
