@@ -187,7 +187,7 @@ ${shaderType} getDataValueAt(highp ivec3 p`;
       builder.addVertexCode(textureSamplerCode);
       builder.addVertexCode(dataAccessCode);
     } else {
-      builder.addVertexCode(textureSamplerCode);
+      builder.addFragmentCode(textureSamplerCode);
       builder.addFragmentCode(dataAccessCode);
     }
   }
