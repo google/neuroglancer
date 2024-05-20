@@ -925,6 +925,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
+      cameraMovementInProgress: this.isCameraMoving,
     };
 
     mat4.copy(

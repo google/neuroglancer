@@ -62,6 +62,11 @@ export interface PerspectiveViewRenderContext
   sliceViewsPresent: boolean;
 
   /**
+   * Specifies if the camera is moving
+   */
+  cameraMovementInProgress: boolean;
+
+  /**
     * Specifices how to bind the max projection buffer
     */
   bindMaxProjectionBuffer?: () => void | undefined;
