@@ -82,7 +82,7 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 400;
+const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -261,7 +261,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
-  private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(5);
+  private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
+    5 /* numberOfStoredFrameDeltas */,
+    8 /* maxDownsamplingFactor */,
+    8 /* desiredFrameTimingMs */,
+  );
   private redrawAfterMoveTimeOutId = -1;
   private hasTransparent = false;
 
@@ -810,7 +814,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       return false;
     }
     if (this.shouldCheckFrameRate) {
-      this.frameRateCalculator.addFrame();
+      this.frameRateCalculator.setFrameDeltas(
+        this.context.getLastFrameTimesInMs(),
+      );
     }
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
@@ -1009,7 +1015,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(
             false,
           );
-        console.log("Downsampling factor: ", downsamplingFactor);
         if (downsamplingFactor > 1) {
           const originalRatio = width / height;
           volumeRenderingBufferWidth = Math.round(width / downsamplingFactor);
