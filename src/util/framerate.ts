@@ -14,85 +14,6 @@
  * limitations under the License.
  */
 
-export class FramerateMonitor {
-  private timeElapsedQueries: (WebGLQuery | null)[] = [];
-  private warnedAboutMissingExtension = false;
-
-  constructor(private queryPoolSize: number = 10) {
-    if (this.queryPoolSize < 1) {
-      throw new Error(
-        `Query pool size must be at least 1, but got ${queryPoolSize}.`,
-      );
-    }
-  }
-
-  getTimingExtension(gl: WebGL2RenderingContext) {
-    const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");
-    if (ext === null && !this.warnedAboutMissingExtension) {
-      console.warn(
-        "EXT_disjoint_timer_query_webgl2 extension not available. " +
-          "Cannot measure frame time.",
-      );
-      this.warnedAboutMissingExtension = true;
-    }
-    return ext;
-  }
-
-  startFrameTimeQuery(gl: WebGL2RenderingContext, ext: any) {
-    if (ext === null) {
-      return null;
-    }
-    const query = gl.createQuery();
-    if (query !== null) {
-      gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
-    }
-    return query;
-  }
-
-  endFrameTimeQuery(
-    gl: WebGL2RenderingContext,
-    ext: any,
-    query: WebGLQuery | null,
-  ) {
-    if (ext !== null && query !== null) {
-      gl.endQuery(ext.TIME_ELAPSED_EXT);
-    }
-    if (this.timeElapsedQueries.length >= this.queryPoolSize) {
-      const oldestQuery = this.timeElapsedQueries.shift();
-      if (oldestQuery !== null) {
-        gl.deleteQuery(oldestQuery!);
-      }
-    }
-    this.timeElapsedQueries.push(query);
-  }
-
-  getLastFrameTimesInMs(
-    gl: WebGL2RenderingContext,
-    numberOfFrames: number = 5,
-  ) {
-    const { timeElapsedQueries } = this;
-    const results: number[] = [];
-    for (let i = timeElapsedQueries.length - 1; i >= 0; i--) {
-      const timeElapsedQuery = timeElapsedQueries[i];
-      if (timeElapsedQuery !== null) {
-        const available = gl.getQueryParameter(
-          timeElapsedQuery,
-          gl.QUERY_RESULT_AVAILABLE,
-        );
-        if (available) {
-          const result =
-            gl.getQueryParameter(timeElapsedQuery, gl.QUERY_RESULT) / 1e6;
-          results.push(result);
-        }
-      }
-      if (results.length >= numberOfFrames) {
-        break;
-      }
-    }
-    return results;
-  }
-}
-
 export enum FrameTimingMethod {
   MEDIAN = 0,
   MEAN = 1,
@@ -124,7 +45,6 @@ export class DownsamplingBasedOnFrameRateCalculator {
   }
   resetLastFrameTime() {
     this.lastFrameTime = null;
-    this.downsamplingRates = [];
   }
 
   addFrame(timestamp: number = Date.now()) {

@@ -58,7 +58,10 @@ import type { TrackableRGB } from "#src/util/color.js";
 import type { Owned } from "#src/util/disposable.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
-import { DownsamplingBasedOnFrameRateCalculator } from "#src/util/framerate.js";
+import {
+  DownsamplingBasedOnFrameRateCalculator,
+  FrameTimingMethod,
+} from "#src/util/framerate.js";
 import { kAxes, kZeroVec4, mat4, vec3, vec4 } from "#src/util/geom.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import type {
@@ -285,10 +288,10 @@ export class PerspectivePanel extends RenderedDataPanel {
   // if a high downsample rate is applied, it persists for a few frames
   // to avoid flickering when the camera is moving
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
-    1 /* numberOfStoredFrameDeltas */,
+    3 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
     8 /* desiredFrameTimingMs */,
-    40 /* downsamplingPersistenceDurationInFrames */,
+    60 /* downsamplingPersistenceDurationInFrames */,
   );
   private redrawAfterMoveTimeOutId = -1;
   private hasTransparent = false;
@@ -842,6 +845,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (!this.navigationState.valid) {
       return false;
     }
+    if (this.viewer.adaptiveDownsampling.value && this.isCameraMoving) {
+      this.frameRateCalculator.addFrame();
+    }
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
@@ -1035,11 +1041,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       let volumeRenderingBufferHeight = height;
 
       if (this.viewer.adaptiveDownsampling.value && this.isCameraMoving) {
-        this.frameRateCalculator.setFrameDeltas(
-          this.context.getLastFrameTimesInMs(),
-        );
         const downsamplingFactor =
-          this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas();
+          this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(
+            FrameTimingMethod.MEAN,
+          );
         if (downsamplingFactor > 1) {
           const originalRatio = width / height;
           volumeRenderingBufferWidth = Math.round(width / downsamplingFactor);
