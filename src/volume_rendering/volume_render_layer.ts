@@ -116,7 +116,7 @@ const HISTOGRAM_SAMPLES_PER_INSTANCE = 512;
 // Here, we use 4096 samples per chunk to compute the histogram.
 const NUM_HISTOGRAM_SAMPLES = 4096;
 const DEBUG_HISTOGRAMS = false;
-const CHECK_PERFORMANCE = true;
+const CHECK_PERFORMANCE = false;
 
 const depthSamplerTextureUnit = Symbol("depthSamplerTextureUnit");
 
@@ -719,13 +719,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       activeIndex: 0,
     };
     let shader: ShaderProgram | null = null;
-    let histogramShader: ShaderProgram | null = null;
     let prevChunkFormat: ChunkFormat | undefined | null;
     let shaderResult: ParameterizedShaderGetterResult<
-      ShaderControlsBuilderState,
-      VolumeRenderingShaderParameters
-    >;
-    let histogramShaderResult: ParameterizedShaderGetterResult<
       ShaderControlsBuilderState,
       VolumeRenderingShaderParameters
     >;
@@ -767,9 +762,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       shader.unbindTransferFunctionTextures();
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
-        if (histogramShader !== null) {
-          prevChunkFormat!.endDrawing(gl, histogramShader);
-        }
       }
       const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit);
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthTextureUnit);
@@ -828,18 +820,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
-    if (needToDrawHistogram) {
-      const outputBuffers =
-        this.dataHistogramSpecifications.getFramebuffers(gl);
-      const count = this.getDataHistogramCount();
-      for (let i = 0; i < count; ++i) {
-        outputBuffers[i].bind(256, 1);
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
-      }
-      restoreFrameBuffer();
-    }
-
+    const chunkInfoForHistogram: any[] = [];
     const pickId = isProjectionMode(this.mode.value)
       ? renderContext.pickIDs.register(this)
       : 0;
@@ -881,12 +862,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             wireFrame: renderContext.wireFrame,
           });
           shader = shaderResult.shader;
-          if (needToDrawHistogram) {
-            histogramShaderResult = this.histogramShaderGetter({
-              chunkFormat: chunkFormat!,
-            });
-            histogramShader = histogramShaderResult.shader;
-          }
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
@@ -1023,78 +998,22 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               channelToChunkDimensionIndices,
               newSource,
             );
-          }
-          gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
-          gl.uniform1ui(shader.uniform("uPickId"), pickId);
-          drawBoxes(gl, 1, 1);
-
-          // Draw histograms if needed
-          if (histogramShader !== null && needToDrawHistogram) {
-            // Setup the state for drawing histograms
-            histogramShader.bind();
-            const chunkFormat = transformedSource.source.chunkFormat;
-            const onlyActivateTexture = !newSource;
-            chunkFormat.beginDrawing(gl, histogramShader, onlyActivateTexture);
-            chunkFormat.beginSource(gl, histogramShader);
-            if (prevChunkFormat != null) {
-              prevChunkFormat.bindChunk(
-                gl,
-                histogramShader,
+            if (needToDrawHistogram) {
+              chunkInfoForHistogram.push({
                 chunk,
                 fixedPositionWithinChunk,
                 chunkDisplayDimensionIndices,
                 channelToChunkDimensionIndices,
                 newSource,
-              );
+                chunkDataDisplaySize,
+                chunkFormat: prevChunkFormat,
+              });
             }
-            gl.uniform3fv(
-              histogramShader.uniform("uChunkDataSize"),
-              chunkDataDisplaySize,
-            );
-            gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-            gl.enable(WebGL2RenderingContext.BLEND);
-            this.histogramIndexBuffer.value.bindToVertexAttrib(
-              histogramShader.attribute("aInput1"),
-              1,
-              WebGL2RenderingContext.UNSIGNED_BYTE,
-              /*normalized=*/ true,
-            );
-            const { dataType, dataHistogramSpecifications } = this;
-            const count = this.getDataHistogramCount();
-            const outputFramebuffers =
-              dataHistogramSpecifications.getFramebuffers(gl);
-            const bounds = this.dataHistogramSpecifications.bounds.value;
-
-            // Draw each histogram
-            for (let i = 0; i < count; ++i) {
-              outputFramebuffers[i].bind(256, 1);
-              enableLerpShaderFunction(
-                histogramShader,
-                `invlerpForHistogram${i}`,
-                dataType,
-                bounds[i],
-              );
-              gl.uniform1i(histogramShader.uniform("uHistogramIndex"), i);
-              gl.drawArraysInstanced(
-                WebGL2RenderingContext.POINTS,
-                0,
-                HISTOGRAM_SAMPLES_PER_INSTANCE,
-                NUM_HISTOGRAM_SAMPLES / HISTOGRAM_SAMPLES_PER_INSTANCE,
-              );
-            }
-
-            // Reset the state back to regular drawing mode
-            gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-            restoreFrameBuffer();
-            shader.bind();
-            this.vertexIdHelper.enable();
-            chunkFormat.beginDrawing(
-              gl,
-              shader,
-              true /* onlyActivateTexture */,
-            );
-            chunkFormat.beginSource(gl, shader);
           }
+          gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
+          gl.uniform1ui(shader.uniform("uPickId"), pickId);
+          drawBoxes(gl, 1, 1);
+
           newSource = false;
           ++presentCount;
         } else {
@@ -1105,6 +1024,99 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
+    if (!needToDrawHistogram) {
+      if (CHECK_PERFORMANCE) {
+        frameRateMonitor.endFrameTimeQuery(gl, ext, query);
+        console.log(frameRateMonitor.getLastFrameTimesInMs(gl, ext));
+      }
+      return;
+    }
+    let histogramShader: ShaderProgram | null = null;
+    let histogramShaderResult: ParameterizedShaderGetterResult<
+      ShaderControlsBuilderState,
+      VolumeRenderingShaderParameters
+    >;
+    const endHistogramShader = () => {
+      if (histogramShader === null) return;
+      histogramShader.unbindTransferFunctionTextures();
+      if (prevChunkFormat !== null) {
+        prevChunkFormat!.endDrawing(gl, histogramShader);
+      }
+    };
+    prevChunkFormat = null;
+    const { dataType, dataHistogramSpecifications } = this;
+    const outputFramebuffers = dataHistogramSpecifications.getFramebuffers(gl);
+    const count = this.getDataHistogramCount();
+    for (let i = 0; i < count; ++i) {
+      outputFramebuffers[i].bind(256, 1);
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+    }
+    const bounds = this.dataHistogramSpecifications.bounds.value;
+    for (let j = 0; j < presentCount; ++j) {
+      const fullInfo = chunkInfoForHistogram[j];
+      const chunkFormat = fullInfo.chunkFormat;
+      if (chunkFormat !== prevChunkFormat) {
+        prevChunkFormat = chunkFormat;
+        endHistogramShader();
+        histogramShaderResult = this.histogramShaderGetter({
+          chunkFormat: chunkFormat!,
+        });
+        histogramShader = histogramShaderResult.shader;
+        if (histogramShader !== null) {
+          if (chunkFormat !== null) {
+            chunkFormat.beginDrawing(gl, histogramShader);
+            chunkFormat.beginSource(gl, histogramShader);
+          }
+          histogramShader.bind();
+        } else {
+          return;
+        }
+      }
+      if (histogramShader === null) return;
+      gl.uniform3fv(
+        histogramShader.uniform("uChunkDataSize"),
+        fullInfo.chunkDataDisplaySize,
+      );
+      if (prevChunkFormat != null) {
+        prevChunkFormat.bindChunk(
+          gl,
+          histogramShader!,
+          fullInfo.chunk,
+          fullInfo.fixedPositionWithinChunk,
+          fullInfo.chunkDisplayDimensionIndices,
+          fullInfo.channelToChunkDimensionIndices,
+          fullInfo.newSource,
+        );
+      }
+      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+      gl.enable(WebGL2RenderingContext.BLEND);
+      this.histogramIndexBuffer.value.bindToVertexAttrib(
+        histogramShader.attribute("aInput1"),
+        1,
+        WebGL2RenderingContext.UNSIGNED_BYTE,
+        /*normalized=*/ true,
+      );
+
+      // Draw each histogram
+      for (let i = 0; i < count; ++i) {
+        outputFramebuffers[i].bind(256, 1);
+        enableLerpShaderFunction(
+          histogramShader,
+          `invlerpForHistogram${i}`,
+          dataType,
+          bounds[i],
+        );
+        gl.uniform1i(histogramShader.uniform("uHistogramIndex"), i);
+        gl.drawArraysInstanced(
+          WebGL2RenderingContext.POINTS,
+          0,
+          HISTOGRAM_SAMPLES_PER_INSTANCE,
+          NUM_HISTOGRAM_SAMPLES / HISTOGRAM_SAMPLES_PER_INSTANCE,
+        );
+      }
+    }
+
     if (needToDrawHistogram && DEBUG_HISTOGRAMS) {
       const outputBuffers =
         this.dataHistogramSpecifications.getFramebuffers(gl);
@@ -1124,12 +1136,12 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         tempBuffer2[j] = tempBuffer[j * 4];
       }
       console.log("histogram", tempBuffer2.join(" "));
-      restoreFrameBuffer();
     }
     if (CHECK_PERFORMANCE) {
       frameRateMonitor.endFrameTimeQuery(gl, ext, query);
       console.log(frameRateMonitor.getLastFrameTimesInMs(gl, ext));
     }
+    restoreFrameBuffer();
   }
 
   isReady(
