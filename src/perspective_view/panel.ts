@@ -81,6 +81,8 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
+const REDRAW_DELAY_AFTER_CAMERA_MOVE = 400;
+
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
@@ -251,6 +253,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected visibleLayerTracker: Owned<
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
+  private redrawAfterMoveTimeOutId: number = -1;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -260,6 +263,9 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
   get displayDimensionRenderInfo() {
     return this.navigationState.displayDimensionRenderInfo;
+  }
+  get isCameraMoving() {
+    return this.redrawAfterMoveTimeOutId !== -1;
   }
 
   /**
@@ -415,6 +421,22 @@ export class PerspectivePanel extends RenderedDataPanel {
       PerspectiveViewRenderLayer,
       this.viewer.visibleLayerRoles,
       this,
+    );
+
+    this.registerDisposer(
+      this.viewer.navigationState.changed.add(() => {
+        // Don't mark camera moving on picking requests
+        if (this.isMovingToMousePosition) {
+          return;
+        }
+        if (this.redrawAfterMoveTimeOutId !== -1) {
+          window.clearTimeout(this.redrawAfterMoveTimeOutId);
+        }
+        this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
+          this.redrawAfterMoveTimeOutId = -1;
+          this.context.scheduleRedraw();
+        }, REDRAW_DELAY_AFTER_CAMERA_MOVE);
+      }),
     );
 
     registerActionListener(
@@ -903,6 +925,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
+      cameraMovementInProgress: this.isCameraMoving,
     };
 
     mat4.copy(
