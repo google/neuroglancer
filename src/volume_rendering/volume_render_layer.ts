@@ -54,6 +54,7 @@ import {
   registerNested,
 } from "#src/trackable_value.js";
 import type { RefCountedValue } from "#src/util/disposable.js";
+import { FramerateMonitor } from "#src/util/framerate.js";
 import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
 import { clampToInterval } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -115,6 +116,7 @@ const HISTOGRAM_SAMPLES_PER_INSTANCE = 512;
 // Here, we use 4096 samples per chunk to compute the histogram.
 const NUM_HISTOGRAM_SAMPLES = 4096;
 const DEBUG_HISTOGRAMS = false;
+const CHECK_PERFORMANCE = true;
 
 const depthSamplerTextureUnit = Symbol("depthSamplerTextureUnit");
 
@@ -221,6 +223,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   }
 
   private histogramIndexBuffer: RefCountedValue<Buffer>;
+  private framerateMonitor = new FramerateMonitor();
 
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
@@ -730,6 +733,13 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     const chunkDataDisplaySize = vec3.create();
 
     const { gl } = this;
+    let query: WebGLQuery | null = null;
+    let ext: any = null;
+    const frameRateMonitor = this.framerateMonitor;
+    if (CHECK_PERFORMANCE) {
+      ext = frameRateMonitor.getTimingExtension(gl);
+      query = frameRateMonitor.startFrameTimeQuery(gl, ext);
+    }
     this.vertexIdHelper.enable();
 
     const { chunkResolutionHistogram: renderScaleHistogram } = this;
@@ -1115,6 +1125,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       }
       console.log("histogram", tempBuffer2.join(" "));
       restoreFrameBuffer();
+    }
+    if (CHECK_PERFORMANCE) {
+      frameRateMonitor.endFrameTimeQuery(gl, ext, query);
+      console.log(frameRateMonitor.getLastFrameTimesInMs(gl, ext));
     }
   }
 
