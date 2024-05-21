@@ -72,7 +72,8 @@ export class FramerateMonitor {
   ) {
     const { timeElapsedQueries } = this;
     const results: number[] = [];
-    timeElapsedQueries.forEach((timeElapsedQuery) => {
+    for (let i = timeElapsedQueries.length - 1; i >= 0; i--) {
+      const timeElapsedQuery = timeElapsedQueries[i];
       if (timeElapsedQuery !== null) {
         const available = gl.getQueryParameter(
           timeElapsedQuery,
@@ -84,8 +85,11 @@ export class FramerateMonitor {
           results.push(result);
         }
       }
-    });
-    return results.slice(-numberOfFrames);
+      if (results.length >= numberOfFrames) {
+        break;
+      }
+    }
+    return results;
   }
 }
 
