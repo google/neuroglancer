@@ -288,7 +288,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   // if a high downsample rate is applied, it persists for a few frames
   // to avoid flickering when the camera is moving
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
-    3 /* numberOfStoredFrameDeltas */,
+    10 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
     16 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
@@ -443,6 +443,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       }),
     );
     this.projectionParameters.changed.add(() => this.context.scheduleRedraw());
+    this.viewer.adaptiveDownsampling.changed.add(() => {
+      this.frameRateCalculator.resetLastFrameTime();
+    });
 
     const sharedObject = (this.sharedObject = this.registerDisposer(
       new PerspectiveViewState(this),
