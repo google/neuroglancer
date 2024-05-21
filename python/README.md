@@ -152,8 +152,8 @@ headlessly on Firefox using `xvfb-run`.  On other platforms, tests can't be run 
 
 ```shell
 # For headless using Firefox on xvfb (Linux only)
-sudo apt-get instrall xvfb # On Debian-based systems
-tox -e firefox-xvfb  # Run tests using non-headless Firefox
+sudo apt-get install xvfb # On Debian-based systems
+tox -e firefox-xvfb  # Run tests using headless Firefox
 
 # For non-headless using Chrome
 tox -e chrome

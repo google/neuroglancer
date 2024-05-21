@@ -27,11 +27,16 @@ import {
   TrackableValue,
 } from "#src/trackable_value.js";
 import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
-import { parseRGBColorSpecification, TrackableRGB } from "#src/util/color.js";
-import type { DataType } from "#src/util/data_type.js";
-import { RefCounted } from "#src/util/disposable.js";
-import type { vec3 } from "#src/util/geom.js";
 import {
+  parseRGBColorSpecification,
+  serializeColor,
+  TrackableRGB,
+} from "#src/util/color.js";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
+import {
+  parseArray,
   parseFixedLengthArray,
   verifyFiniteFloat,
   verifyInt,
@@ -41,16 +46,19 @@ import {
 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
+  computeLerp,
   convertDataTypeInterval,
   dataTypeIntervalToJson,
   defaultDataTypeRange,
   normalizeDataTypeInterval,
   parseDataTypeInterval,
+  parseDataTypeValue,
   parseUnknownDataTypeInterval,
   validateDataTypeInterval,
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
+import type { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -59,6 +67,13 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
+import {
+  defineTransferFunctionShader,
+  enableTransferFunctionShader,
+  SortedControlPoints,
+  ControlPoint,
+} from "#src/widget/transfer_function.js";
 
 export interface ShaderSliderControl {
   type: "slider";
@@ -98,12 +113,19 @@ export interface ShaderCheckboxControl {
   default: boolean;
 }
 
+export interface ShaderTransferFunctionControl {
+  type: "transferFunction";
+  dataType: DataType;
+  default: TransferFunctionParameters;
+}
+
 export type ShaderUiControl =
   | ShaderSliderControl
   | ShaderColorControl
   | ShaderImageInvlerpControl
   | ShaderPropertyInvlerpControl
-  | ShaderCheckboxControl;
+  | ShaderCheckboxControl
+  | ShaderTransferFunctionControl;
 
 export interface ShaderControlParseError {
   line: number;
@@ -564,6 +586,101 @@ function parsePropertyInvlerpDirective(
   };
 }
 
+function parseTransferFunctionDirective(
+  valueType: string,
+  parameters: DirectiveParameters,
+  dataContext: ShaderDataContext,
+): DirectiveParseResult {
+  const imageData = dataContext.imageData;
+  const dataType = imageData?.dataType;
+  const channelRank = imageData?.channelRank;
+  const errors = [];
+  let channel = new Array(channelRank).fill(0);
+  let defaultColor = vec3.fromValues(1.0, 1.0, 1.0);
+  let window: DataTypeInterval | undefined;
+  let sortedControlPoints = new SortedControlPoints(
+    [],
+    dataType !== undefined ? dataType : DataType.FLOAT32,
+  );
+  let specifedPoints = false;
+  if (valueType !== "transferFunction") {
+    errors.push("type must be transferFunction");
+  }
+  if (dataType === undefined) {
+    errors.push("image data must be provided to use a transfer function");
+  }
+  for (const [key, value] of parameters) {
+    try {
+      switch (key) {
+        case "channel": {
+          channel = parseInvlerpChannel(value, channel.length);
+          break;
+        }
+        case "defaultColor": {
+          defaultColor = parseRGBColorSpecification(value);
+          break;
+        }
+        case "window": {
+          if (dataType !== undefined) {
+            window = validateDataTypeInterval(
+              parseDataTypeInterval(value, dataType),
+            );
+          }
+          break;
+        }
+        case "controlPoints": {
+          specifedPoints = true;
+          if (dataType !== undefined) {
+            sortedControlPoints = parseTransferFunctionControlPoints(
+              value,
+              dataType,
+            );
+          }
+          break;
+        }
+        default:
+          errors.push(`Invalid parameter: ${key}`);
+          break;
+      }
+    } catch (e) {
+      errors.push(`Invalid ${key} value: ${e.message}`);
+    }
+  }
+
+  if (window === undefined) {
+    window = sortedControlPoints.range;
+  }
+  // Set a simple black to white transfer function if no control points are specified.
+  if (
+    sortedControlPoints.length === 0 &&
+    !specifedPoints &&
+    dataType !== undefined
+  ) {
+    const startPoint = computeLerp(window, dataType, 0.4) as number;
+    const endPoint = computeLerp(window, dataType, 0.7) as number;
+    sortedControlPoints.addPoint(new ControlPoint(startPoint, kZeroVec4));
+    sortedControlPoints.addPoint(
+      new ControlPoint(endPoint, vec4.fromValues(255, 255, 255, 255)),
+    );
+  }
+  if (errors.length > 0) {
+    return { errors };
+  }
+  return {
+    control: {
+      type: "transferFunction",
+      dataType,
+      default: {
+        sortedControlPoints,
+        channel,
+        defaultColor,
+        window,
+      },
+    } as ShaderTransferFunctionControl,
+    errors: undefined,
+  };
+}
+
 export interface ImageDataSpecification {
   dataType: DataType;
   channelRank: number;
@@ -586,6 +703,7 @@ const controlParsers = new Map<
   ["color", parseColorDirective],
   ["invlerp", parseInvlerpDirective],
   ["checkbox", parseCheckboxDirective],
+  ["transferFunction", parseTransferFunctionDirective],
 ]);
 
 export function parseShaderUiControls(
@@ -706,6 +824,18 @@ float ${uName}() {
         const code = `#define ${name} ${builderValue.value}\n`;
         builder.addFragmentCode(code);
         builder.addVertexCode(code);
+        break;
+      }
+      case "transferFunction": {
+        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        builder.addFragmentCode(
+          defineTransferFunctionShader(
+            builder,
+            uName,
+            control.dataType,
+            builderValue.channel,
+          ),
+        );
         break;
       }
       default: {
@@ -917,6 +1047,182 @@ class TrackablePropertyInvlerpParameters extends TrackableValue<PropertyInvlerpP
   }
 }
 
+function parseTransferFunctionControlPoints(
+  controlPointsDefinition: unknown,
+  dataType: DataType,
+) {
+  const parsedPoints = parseArray(controlPointsDefinition, (x) => {
+    // Validate input length and types
+    const allowedInput =
+      dataType === DataType.UINT64
+        ? typeof x[0] === "string" || typeof x[0] === "number"
+        : typeof x[0] === "number";
+    if (
+      x.length !== 3 ||
+      !allowedInput ||
+      typeof x[1] !== "string" ||
+      typeof x[2] !== "number"
+    ) {
+      throw new Error(
+        `Expected array of length 3 (x, "#RRGGBB", A), but received: ${JSON.stringify(
+          x,
+        )}`,
+      );
+    }
+    const inputValue = parseDataTypeValue(dataType, x[0]);
+
+    if (x[1].length !== 7 || x[1][0] !== "#") {
+      throw new Error(
+        `Expected #RRGGBB, but received: ${JSON.stringify(x[1])}`,
+      );
+    }
+    if (x[2] < 0 || x[2] > 1) {
+      throw new Error(
+        `Expected opacity in range [0, 1], but received: ${JSON.stringify(
+          x[2],
+        )}`,
+      );
+    }
+    const color = parseRGBColorSpecification(x[1]);
+    function floatToUint8(float: number) {
+      return Math.min(255, Math.max(Math.round(float * 255), 0));
+    }
+    return new ControlPoint(
+      inputValue,
+      vec4.fromValues(
+        floatToUint8(color[0]),
+        floatToUint8(color[1]),
+        floatToUint8(color[2]),
+        floatToUint8(x[2]),
+      ),
+    );
+  });
+  return new SortedControlPoints(parsedPoints, dataType);
+}
+
+export function parseTransferFunctionParameters(
+  obj: unknown,
+  dataType: DataType,
+  defaultValue: TransferFunctionParameters,
+): TransferFunctionParameters {
+  if (obj === undefined) return defaultValue;
+  verifyObject(obj);
+  const sortedControlPoints = verifyOptionalObjectProperty(
+    obj,
+    "controlPoints",
+    (x) => parseTransferFunctionControlPoints(x, dataType),
+    defaultValue.sortedControlPoints,
+  );
+  const window = verifyOptionalObjectProperty(
+    obj,
+    "window",
+    (x) => parseDataTypeInterval(x, dataType),
+    defaultValue.window,
+  );
+  return {
+    sortedControlPoints,
+    channel: verifyOptionalObjectProperty(
+      obj,
+      "channel",
+      (x) => parseInvlerpChannel(x, defaultValue.channel.length),
+      defaultValue.channel,
+    ),
+    defaultColor: verifyOptionalObjectProperty(
+      obj,
+      "defaultColor",
+      (x) => parseRGBColorSpecification(x),
+      defaultValue.defaultColor,
+    ),
+    window,
+  };
+}
+
+function copyTransferFunctionParameters(
+  defaultValue: TransferFunctionParameters,
+) {
+  return {
+    ...defaultValue,
+    sortedControlPoints: defaultValue.sortedControlPoints.copy(),
+  };
+}
+
+export class TrackableTransferFunctionParameters extends TrackableValue<TransferFunctionParameters> {
+  constructor(
+    public dataType: DataType,
+    public defaultValue: TransferFunctionParameters,
+  ) {
+    // Create a copy of the default value to enable detecting changes
+    // to the control points in the trackable value.
+    const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
+    super(defaultValueCopy, (obj) =>
+      parseTransferFunctionParameters(obj, dataType, defaultValue),
+    );
+  }
+
+  controlPointsToJson(controlPoints: ControlPoint[], dataType: DataType) {
+    function inputToJson(inputValue: number | Uint64) {
+      if (dataType === DataType.UINT64) {
+        return (inputValue as Uint64).toJSON();
+      }
+      return inputValue;
+    }
+
+    return controlPoints.map((x) => [
+      inputToJson(x.inputValue),
+      serializeColor(
+        vec3.fromValues(
+          x.outputColor[0] / 255,
+          x.outputColor[1] / 255,
+          x.outputColor[2] / 255,
+        ),
+      ),
+      x.outputColor[3] / 255,
+    ]);
+  }
+
+  toJSON() {
+    const {
+      value: { channel, sortedControlPoints, defaultColor, window },
+      dataType,
+      defaultValue,
+    } = this;
+    const windowJson = dataTypeIntervalToJson(
+      window,
+      dataType,
+      defaultValue.window,
+    );
+    const channelJson = arraysEqual(defaultValue.channel, channel)
+      ? undefined
+      : channel;
+    const colorJson = arraysEqual(defaultValue.defaultColor, defaultColor)
+      ? undefined
+      : serializeColor(defaultColor);
+    const controlPointsJson = arraysEqualWithPredicate(
+      defaultValue.sortedControlPoints.controlPoints,
+      sortedControlPoints.controlPoints,
+      (a, b) =>
+        arraysEqual(a.outputColor, b.outputColor) &&
+        a.inputValue === b.inputValue,
+    )
+      ? undefined
+      : this.controlPointsToJson(sortedControlPoints.controlPoints, dataType);
+    if (
+      channelJson === undefined &&
+      colorJson === undefined &&
+      controlPointsJson === undefined &&
+      windowJson === undefined
+    ) {
+      return undefined;
+    }
+    return {
+      channel: channelJson,
+      defaultColor: colorJson,
+      controlPoints: controlPointsJson,
+      window: windowJson,
+    };
+  }
+}
+
 function getControlTrackable(control: ShaderUiControl): {
   trackable: TrackableValueInterface<any>;
   getBuilderValue: (value: any) => any;
@@ -973,6 +1279,17 @@ function getControlTrackable(control: ShaderUiControl): {
       return {
         trackable: new TrackableBoolean(control.default),
         getBuilderValue: (value) => ({ value }),
+      };
+    case "transferFunction":
+      return {
+        trackable: new TrackableTransferFunctionParameters(
+          control.dataType,
+          control.default,
+        ),
+        getBuilderValue: (value: TransferFunctionParameters) => ({
+          channel: value.channel,
+          dataType: control.dataType,
+        }),
       };
   }
 }
@@ -1346,6 +1663,13 @@ function setControlInShader(
     case "checkbox":
       // Value is hard-coded in shader.
       break;
+    case "transferFunction":
+      enableTransferFunctionShader(
+        shader,
+        uName,
+        control.dataType,
+        value.sortedControlPoints,
+      );
   }
 }
 

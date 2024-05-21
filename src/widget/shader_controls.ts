@@ -43,6 +43,7 @@ import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 import { Tab } from "#src/widget/tab_view.js";
+import { transferFunctionLayerControl } from "#src/widget/transfer_function.js";
 
 export interface LegendShaderOptions
   extends ParameterizedEmitterDependentShaderOptions {
@@ -112,6 +113,15 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         histogramSpecifications: shaderControlState.histogramSpecifications,
         histogramIndex,
         legendShaderOptions: layerShaderControls.legendShaderOptions,
+      }));
+    }
+    case "transferFunction": {
+      return transferFunctionLayerControl(() => ({
+        dataType: control.dataType,
+        watchableValue: controlState.trackable,
+        channelCoordinateSpaceCombiner:
+          shaderControlState.channelCoordinateSpaceCombiner,
+        defaultChannel: control.default.channel,
       }));
     }
   }

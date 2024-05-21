@@ -49,7 +49,7 @@ from .viewer_state import (
     PlaceEllipsoidTool,  # noqa: F401
     BlendTool,  # noqa: F401
     OpacityTool,  # noqa: F401
-    VolumeRenderingModeTool,  # noqa: F401
+    VolumeRenderingTool,  # noqa: F401
     VolumeRenderingGainTool,  # noqa: F401
     VolumeRenderingDepthSamplesTool,  # noqa: F401
     CrossSectionRenderScaleTool,  # noqa: F401
@@ -89,6 +89,7 @@ from .viewer_state import (
     LayerDataSource,  # noqa: F401
     LayerDataSources,  # noqa: F401
     InvlerpParameters,  # noqa: F401
+    TransferFunctionParameters,  # noqa: F401
     ImageLayer,  # noqa: F401
     SkeletonRenderingOptions,  # noqa: F401
     StarredSegments,  # noqa: F401

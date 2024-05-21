@@ -157,14 +157,18 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
 }
 
 export function maxProjectionEmit(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData2", 2);
+  builder.addOutputBuffer("vec4", "out_color", 0);
+  builder.addOutputBuffer("highp vec4", "out_z", 1);
+  builder.addOutputBuffer("highp vec4", "out_intensity", 2);
+  builder.addOutputBuffer("highp vec4", "out_pickId", 3);
   builder.addFragmentCode(`
-void emit(vec4 color, float depth, float pick) {
-  v4f_fragData0 = color;
-  v4f_fragData1 = vec4(1.0 - depth, 1.0 - depth, 1.0 - depth, 1.0);
-  v4f_fragData2 = vec4(pick, pick, pick, 1.0);
+void emit(vec4 color, float depth, float intensity, highp uint pickId) {
+  float pickIdFloat = float(pickId);
+  float bufferDepth = 1.0 - depth;
+  out_color = color;
+  out_z = vec4(bufferDepth, bufferDepth, bufferDepth, 1.0);
+  out_intensity = vec4(intensity, intensity, intensity, 1.0);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
 }`);
 }
 
@@ -172,6 +176,7 @@ const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
 
+// Copy the OIT values to the main color buffer
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);
   builder.setFragmentMain(`
@@ -198,31 +203,45 @@ function defineDepthCopyShader(builder: ShaderBuilder) {
 `);
 }
 
+// Copy the max projection color to the OIT buffer
 function defineMaxProjectionColorCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
-  builder.setFragmentMain(`
-v4f_fragColor = getValue0();
-`);
-}
-
-function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData2", 2);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
   builder.setFragmentMain(`
-v4f_fragData0 = vec4(0.0);
-v4f_fragData1 = getValue0();
-v4f_fragData2 = getValue1();
+vec4 color = getValue0();
+float bufferDepth = getValue1().r;
+float weight = computeOITWeight(color.a, 1.0 - bufferDepth);
+vec4 accum = color * weight;
+float revealage = color.a;
+
+emitAccumAndRevealage(accum, revealage, 0u);
 `);
 }
 
-function defineMaxProjectionToPickCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("highp vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("highp vec4", "v4f_fragData1", 1);
+// Copy the max projection depth and pick values to the main buffer
+function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "out_color", 0);
+  builder.addOutputBuffer("highp vec4", "out_z", 1);
+  builder.addOutputBuffer("highp vec4", "out_pickId", 2);
   builder.setFragmentMain(`
-v4f_fragData0 = getValue0();
-v4f_fragData1 = getValue1();
-gl_FragDepth = v4f_fragData1.r;
+out_color = vec4(0.0);
+out_z = getValue0();
+out_pickId = getValue1();
+`);
+}
+
+// Copy the max projection depth and picking to the max projection pick buffer.
+// Note that the depth is set as the intensity value from the render layer.
+// This is to combine max projection picking data via depth testing
+// on the maximum intensity value of the data.
+function defineMaxProjectionToPickCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("highp vec4", "out_z", 0);
+  builder.addOutputBuffer("highp vec4", "out_pickId", 1);
+  builder.setFragmentMain(`
+out_z = getValue0();
+out_pickId = getValue2();
+gl_FragDepth = getValue1().r;
 `);
 }
 
@@ -336,7 +355,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
   );
   protected maxProjectionColorCopyHelper = this.registerDisposer(
-    OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 1),
+    OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 2),
   );
   protected offscreenDepthCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineDepthCopyShader, 1),
@@ -345,7 +364,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionPickCopyShader, 2),
   );
   protected maxProjectionToPickCopyHelper = this.registerDisposer(
-    OffscreenCopyHelper.get(this.gl, defineMaxProjectionToPickCopyShader, 2),
+    OffscreenCopyHelper.get(this.gl, defineMaxProjectionToPickCopyShader, 3),
   );
 
   private sharedObject: PerspectiveViewState;
@@ -781,6 +800,12 @@ export class PerspectivePanel extends RenderedDataPanel {
                 WebGL2RenderingContext.RED,
                 WebGL2RenderingContext.FLOAT,
               ),
+              new TextureBuffer(
+                this.gl,
+                WebGL2RenderingContext.R32F,
+                WebGL2RenderingContext.RED,
+                WebGL2RenderingContext.FLOAT,
+              ),
             ],
             depthBuffer: new DepthStencilRenderbuffer(this.gl),
           }),
@@ -1093,6 +1118,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
         }
+        // Draw max projection layers
         if (
           renderLayer.isVolumeRendering &&
           isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)
@@ -1110,22 +1136,26 @@ export class PerspectivePanel extends RenderedDataPanel {
           bindMaxProjectionPickingBuffer();
           this.maxProjectionToPickCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
-            this.maxProjectionConfiguration.colorBuffers[2 /*pick*/].texture,
+            this.maxProjectionConfiguration.colorBuffers[2 /*intensity*/]
+              .texture,
+            this.maxProjectionConfiguration.colorBuffers[3 /*pick*/].texture,
           );
 
-          // Copy max projection color result to color only buffer
+          // Copy max projection color result to the transparent buffer with OIT
           // Depth testing off to combine max layers into one color via blend
-          gl.viewport(0, 0, width, height);
-          this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+          renderContext.bindFramebuffer();
           gl.depthMask(false);
           gl.disable(WebGL2RenderingContext.DEPTH_TEST);
           gl.enable(WebGL2RenderingContext.BLEND);
-          gl.blendFunc(
+          gl.blendFuncSeparate(
             WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ONE,
+            WebGL2RenderingContext.ZERO,
             WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
           );
           this.maxProjectionColorCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
+            this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
           );
 
           // Reset the max projection buffer
@@ -1142,18 +1172,13 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.clearDepth(1.0);
           gl.clearColor(0.0, 0.0, 0.0, 1.0);
           gl.depthMask(false);
-          gl.blendFuncSeparate(
-            WebGL2RenderingContext.ONE,
-            WebGL2RenderingContext.ONE,
-            WebGL2RenderingContext.ZERO,
-            WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-          );
           gl.enable(WebGL2RenderingContext.DEPTH_TEST);
           gl.depthFunc(WebGL2RenderingContext.LESS);
           renderContext.emitter = perspectivePanelEmitOIT;
           renderContext.bindFramebuffer();
-          continue;
-        } else if (renderLayer.isTransparent) {
+        }
+        // Draw regular transparent layers
+        else if (renderLayer.isTransparent) {
           renderLayer.draw(renderContext, attachment);
         }
       }
@@ -1201,27 +1226,21 @@ export class PerspectivePanel extends RenderedDataPanel {
         /*dppass=*/ WebGL2RenderingContext.REPLACE,
       );
       gl.stencilMask(2);
+      if (hasMaxProjection) {
+        this.maxProjectionPickCopyHelper.draw(
+          this.maxProjectionPickConfiguration.colorBuffers[0].texture /*depth*/,
+          this.maxProjectionPickConfiguration.colorBuffers[1].texture /*pick*/,
+        );
+      }
       for (const [renderLayer, attachment] of visibleLayers) {
-        if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
+        if (
+          !renderLayer.isTransparent ||
+          !renderLayer.transparentPickEnabled ||
+          renderLayer.isVolumeRendering
+        ) {
+          // Skip non-transparent layers and transparent layers with transparentPickEnabled=false.
+          // Volume rendering layers are handled separately and are combined in a pick buffer
           continue;
-        }
-        // For max projection layers, can copy over the pick buffer directly.
-        if (renderLayer.isVolumeRendering) {
-          if (isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)) {
-            this.maxProjectionPickCopyHelper.draw(
-              this.maxProjectionPickConfiguration.colorBuffers[0]
-                .texture /*depth*/,
-              this.maxProjectionPickConfiguration.colorBuffers[1]
-                .texture /*pick*/,
-            );
-          }
-          // Draw picking for non min/max volume rendering layers
-          else {
-            // Currently volume rendering layers have no picking support
-            // Outside of min/max mode
-            continue;
-          }
-          // other transparent layers are drawn as usual
         } else {
           renderLayer.draw(renderContext, attachment);
         }
