@@ -89,6 +89,12 @@ export class FramerateMonitor {
   }
 }
 
+export enum FrameTimingMethod {
+  MEDIAN = 0,
+  MEAN = 1,
+  MAX = 2,
+}
+
 export class DownsamplingBasedOnFrameRateCalculator {
   private lastFrameTime: number | null = null;
   private maxDownsamplingFactorSinceReset: number = 1;
@@ -134,13 +140,23 @@ export class DownsamplingBasedOnFrameRateCalculator {
     this.lastFrameTime = timestamp;
   }
 
-  calculateFrameTimeInMs(useMedian: boolean = true): number {
+  calculateFrameTimeInMs(
+    method: FrameTimingMethod = FrameTimingMethod.MAX,
+  ): number {
     if (this.frameDeltas.length < 1) {
       return 0;
     }
-    if (useMedian) {
-      return this.calculateMedianFrameTime();
+    switch (method) {
+      case FrameTimingMethod.MEDIAN:
+        return this.calculateMedianFrameTime();
+      case FrameTimingMethod.MEAN:
+        return this.calculateMeanFrameTime();
+      case FrameTimingMethod.MAX:
+        return Math.max(...this.frameDeltas);
     }
+  }
+
+  private calculateMeanFrameTime(): number {
     return (
       this.frameDeltas.reduce((a, b) => a + b, 0) / this.frameDeltas.length
     );
@@ -155,9 +171,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
   }
 
   calculateDownsamplingRateBasedOnFrameDeltas(
-    useMedian: boolean = true,
+    method: FrameTimingMethod = FrameTimingMethod.MAX,
   ): number {
-    const frameDelta = this.calculateFrameTimeInMs(useMedian);
+    const frameDelta = this.calculateFrameTimeInMs(method);
     if (frameDelta === 0) {
       return Math.min(4, this.maxDownsamplingFactor);
     }

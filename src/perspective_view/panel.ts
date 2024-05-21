@@ -1037,9 +1037,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
       if (this.viewer.adaptiveDownsampling.value && this.shouldCheckFrameRate) {
         const downsamplingFactor =
-          this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(
-            false,
-          );
+          this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas();
         if (downsamplingFactor > 1) {
           const originalRatio = width / height;
           volumeRenderingBufferWidth = Math.round(width / downsamplingFactor);
