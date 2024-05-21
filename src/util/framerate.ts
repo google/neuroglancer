@@ -97,12 +97,13 @@ export enum FrameTimingMethod {
 
 export class DownsamplingBasedOnFrameRateCalculator {
   private lastFrameTime: number | null = null;
-  private maxDownsamplingFactorSinceReset: number = 1;
   private frameDeltas: number[] = [];
+  private downsamplingRates: number[] = [];
   constructor(
     private numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
     private desiredFrameTimingMs = 1000 / 60,
+    private downsamplingPersistenceDurationInFrames = 15,
   ) {
     if (numberOfStoredFrameDeltas < 1) {
       throw new Error(
@@ -119,7 +120,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
   }
   resetLastFrameTime() {
     this.lastFrameTime = null;
-    this.maxDownsamplingFactorSinceReset = 1;
+    this.downsamplingRates = [];
   }
 
   addFrame(timestamp: number = Date.now()) {
@@ -186,14 +187,14 @@ export class DownsamplingBasedOnFrameRateCalculator {
       Math.pow(2, Math.round(Math.log2(downsampleFactorBasedOnFramerate))),
       this.maxDownsamplingFactor,
     );
-    this.maxDownsamplingFactorSinceReset = Math.max(
-      this.maxDownsamplingFactorSinceReset,
-      downsampleFactorBasedOnFramerate,
-    );
-    return Math.max(
-      downsampleFactorBasedOnFramerate,
-      this.maxDownsamplingFactorSinceReset,
-    );
+    this.downsamplingRates.push(downsampleFactorBasedOnFramerate);
+    if (
+      this.downsamplingRates.length >
+      this.downsamplingPersistenceDurationInFrames
+    ) {
+      this.downsamplingRates.shift();
+    }
+    return Math.max(...this.downsamplingRates);
   }
 
   getFrameDeltas(): number[] {
