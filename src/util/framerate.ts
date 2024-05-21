@@ -187,6 +187,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
       Math.pow(2, Math.round(Math.log2(downsampleFactorBasedOnFramerate))),
       this.maxDownsamplingFactor,
     );
+    // Store the downsampling rate.
     this.downsamplingRates.push(downsampleFactorBasedOnFramerate);
     if (
       this.downsamplingRates.length >
@@ -194,6 +195,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
     ) {
       this.downsamplingRates.shift();
     }
+    // Return the maximum downsampling rate over the last few frames.
     return Math.max(...this.downsamplingRates);
   }
 
@@ -202,6 +204,6 @@ export class DownsamplingBasedOnFrameRateCalculator {
   }
 
   setFrameDeltas(frameDeltas: number[]) {
-    this.frameDeltas = frameDeltas;
+    this.frameDeltas = frameDeltas.slice(-this.numberOfStoredFrameDeltas);
   }
 }

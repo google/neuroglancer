@@ -280,10 +280,15 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
+  // the frame rate calculator is used to determine if downsampling should be applied
+  // after a camera move
+  // if a high downsample rate is applied, it persists for a few frames
+  // to avoid flickering when the camera is moving
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
-    5 /* numberOfStoredFrameDeltas */,
+    1 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
     8 /* desiredFrameTimingMs */,
+    40 /* downsamplingPersistenceDurationInFrames */,
   );
   private redrawAfterMoveTimeOutId = -1;
   private hasTransparent = false;
