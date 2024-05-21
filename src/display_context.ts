@@ -19,6 +19,7 @@ import { TrackableValue } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
 import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -396,6 +397,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+  private framerateMonitor = new FramerateMonitor();
 
   // Panels ordered by `drawOrder`.  If length is 0, needs to be recomputed.
   private orderedPanels: RenderedPanel[] = [];
@@ -557,6 +559,8 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     ++this.frameNumber;
     this.updateStarted.dispatch();
     const gl = this.gl;
+    const ext = this.framerateMonitor.getTimingExtension(gl);
+    const query = this.framerateMonitor.startFrameTimeQuery(gl, ext);
     this.ensureBoundsUpdated();
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -580,6 +584,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.gl.colorMask(true, true, true, true);
     this.updateFinished.dispatch();
+    this.framerateMonitor.endFrameTimeQuery(gl, ext, query);
   }
 
   getDepthArray(): Float32Array {
@@ -606,5 +611,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       }
     }
     return depthArray;
+  }
+
+  getLastFrameTimesInMs(numberOfFrames: number = 5) {
+    return this.framerateMonitor.getLastFrameTimesInMs(this.gl, numberOfFrames);
   }
 }
