@@ -45,6 +45,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
   }
   resetLastFrameTime() {
     this.lastFrameTime = null;
+    this.downsamplingRates = [];
   }
 
   addFrame(timestamp: number = Date.now()) {

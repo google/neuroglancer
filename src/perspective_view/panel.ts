@@ -290,7 +290,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
     3 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
-    8 /* desiredFrameTimingMs */,
+    16 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
   private redrawAfterMoveTimeOutId = -1;
