@@ -82,7 +82,7 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE = 300;
+const REDRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -293,7 +293,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   private redrawAfterMoveTimeOutId = -1;
   private hasTransparent = false;
 
-  get shouldCheckFrameRate() {
+  get isCameraMoving() {
     return this.redrawAfterMoveTimeOutId !== -1;
   }
 
@@ -457,9 +457,8 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.viewer.navigationState.changed.add(() => {
-        // No need to check if all objects are opaque
-        // Don't check for downsampling on picking requests
-        if (!this.hasTransparent || this.isMovingToMousePositionOnPick) {
+        // Don't mark camera moving on picking requests
+        if (this.isMovingToMousePositionOnPick) {
           return;
         }
         if (this.redrawAfterMoveTimeOutId !== -1) {
@@ -469,7 +468,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           this.redrawAfterMoveTimeOutId = -1;
           this.frameRateCalculator.resetLastFrameTime();
           this.context.scheduleRedraw();
-        }, FULL_RESOLUTION_DRAW_DELAY_AFTER_CAMERA_MOVE);
+        }, REDRAW_DELAY_AFTER_CAMERA_MOVE);
       }),
     );
 
@@ -843,11 +842,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (!this.navigationState.valid) {
       return false;
     }
-    if (this.shouldCheckFrameRate) {
-      this.frameRateCalculator.setFrameDeltas(
-        this.context.getLastFrameTimesInMs(),
-      );
-    }
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
@@ -1040,7 +1034,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
 
-      if (this.viewer.adaptiveDownsampling.value && this.shouldCheckFrameRate) {
+      if (this.viewer.adaptiveDownsampling.value && this.isCameraMoving) {
+        this.frameRateCalculator.setFrameDeltas(
+          this.context.getLastFrameTimesInMs(),
+        );
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas();
         if (downsamplingFactor > 1) {
