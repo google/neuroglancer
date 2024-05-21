@@ -815,7 +815,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     const needToDrawHistogram =
       this.getDataHistogramCount() > 0 &&
       !renderContext.wireFrame &&
-      !renderContext.sliceViewsPresent;
+      !renderContext.sliceViewsPresent &&
+      !renderContext.cameraMovementInProgress;
 
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
