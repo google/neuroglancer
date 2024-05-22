@@ -156,6 +156,15 @@ interface VolumeRenderingShaderParameters {
   mode: VolumeRenderingModes;
 }
 
+interface StoredChunkInfoForHistogram {
+  chunk: VolumeChunk;
+  fixedPositionWithinChunk: Uint32Array;
+  chunkDisplayDimensionIndices: number[];
+  channelToChunkDimensionIndices: readonly number[];
+  chunkDataDisplaySize: vec3;
+  chunkFormat: ChunkFormat;
+}
+
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
@@ -821,7 +830,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
-    const chunkInfoForHistogram: any[] = [];
+    const chunkInfoForHistogram: StoredChunkInfoForHistogram[] = [];
     const pickId = isProjectionMode(this.mode.value)
       ? renderContext.pickIDs.register(this)
       : 0;
@@ -1005,7 +1014,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 fixedPositionWithinChunk,
                 chunkDisplayDimensionIndices,
                 channelToChunkDimensionIndices,
-                newSource,
                 chunkDataDisplaySize,
                 chunkFormat: prevChunkFormat,
               });
@@ -1055,6 +1063,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     }
     const bounds = this.dataHistogramSpecifications.bounds.value;
     for (let j = 0; j < presentCount; ++j) {
+      newSource = true;
       const fullInfo = chunkInfoForHistogram[j];
       const chunkFormat = fullInfo.chunkFormat;
       if (chunkFormat !== prevChunkFormat) {
@@ -1087,7 +1096,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           fullInfo.fixedPositionWithinChunk,
           fullInfo.chunkDisplayDimensionIndices,
           fullInfo.channelToChunkDimensionIndices,
-          fullInfo.newSource,
+          newSource,
         );
       }
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
@@ -1116,6 +1125,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           NUM_HISTOGRAM_SAMPLES / HISTOGRAM_SAMPLES_PER_INSTANCE,
         );
       }
+      newSource = false;
     }
 
     if (needToDrawHistogram && DEBUG_HISTOGRAMS) {
