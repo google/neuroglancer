@@ -109,12 +109,12 @@ import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
-const HISTOGRAM_SAMPLES_PER_INSTANCE = 512;
+const HISTOGRAM_SAMPLES_PER_INSTANCE = 256;
 
 // Number of points to sample in computing the histogram.  Increasing this increases the precision
 // of the histogram but also slows down rendering.
 // Here, we use 4096 samples per chunk to compute the histogram.
-const NUM_HISTOGRAM_SAMPLES = 4096;
+const NUM_HISTOGRAM_SAMPLES = 2 ** 14;
 const DEBUG_HISTOGRAMS = false;
 const CHECK_PERFORMANCE = false;
 
@@ -1040,6 +1040,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       }
       return;
     }
+    // Handle histogram drawing
     let histogramShader: ShaderProgram | null = null;
     let histogramShaderResult: ParameterizedShaderGetterResult<
       ShaderControlsBuilderState,
@@ -1052,6 +1053,26 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         prevChunkFormat!.endDrawing(gl, histogramShader);
       }
     };
+    const determineNumHistogramInstances = (
+      chunkDataSize: vec3,
+      numHistograms: number,
+    ) => {
+      const maxSamplesInChunk = Math.ceil(
+        chunkDataSize.reduce((a, b) => a * b, 1) / 2.0,
+      );
+      const totalDesiredSamplesInChunk = NUM_HISTOGRAM_SAMPLES / numHistograms;
+      const desiredSamples = Math.min(
+        maxSamplesInChunk,
+        totalDesiredSamplesInChunk,
+      );
+
+      // round to nearest multiple of NUM_HISTOGRAM_SAMPLES_PER_INSTANCE
+      return Math.max(
+        Math.round(desiredSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
+        1,
+      );
+    };
+
     prevChunkFormat = null;
     const { dataType, dataHistogramSpecifications } = this;
     const outputFramebuffers = dataHistogramSpecifications.getFramebuffers(gl);
@@ -1064,8 +1085,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     const bounds = this.dataHistogramSpecifications.bounds.value;
     for (let j = 0; j < presentCount; ++j) {
       newSource = true;
-      const fullInfo = chunkInfoForHistogram[j];
-      const chunkFormat = fullInfo.chunkFormat;
+      const chunkInfo = chunkInfoForHistogram[j];
+      const chunkFormat = chunkInfo.chunkFormat;
       if (chunkFormat !== prevChunkFormat) {
         prevChunkFormat = chunkFormat;
         endHistogramShader();
@@ -1086,16 +1107,16 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       if (histogramShader === null) return;
       gl.uniform3fv(
         histogramShader.uniform("uChunkDataSize"),
-        fullInfo.chunkDataDisplaySize,
+        chunkInfo.chunkDataDisplaySize,
       );
       if (prevChunkFormat != null) {
         prevChunkFormat.bindChunk(
           gl,
           histogramShader!,
-          fullInfo.chunk,
-          fullInfo.fixedPositionWithinChunk,
-          fullInfo.chunkDisplayDimensionIndices,
-          fullInfo.channelToChunkDimensionIndices,
+          chunkInfo.chunk,
+          chunkInfo.fixedPositionWithinChunk,
+          chunkInfo.chunkDisplayDimensionIndices,
+          chunkInfo.channelToChunkDimensionIndices,
           newSource,
         );
       }
@@ -1109,6 +1130,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       );
 
       // Draw each histogram
+      const numInstances = determineNumHistogramInstances(
+        chunkInfo.chunkDataDisplaySize,
+        presentCount,
+      );
       for (let i = 0; i < count; ++i) {
         outputFramebuffers[i].bind(256, 1);
         enableLerpShaderFunction(
@@ -1122,7 +1147,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           WebGL2RenderingContext.POINTS,
           0,
           HISTOGRAM_SAMPLES_PER_INSTANCE,
-          NUM_HISTOGRAM_SAMPLES / HISTOGRAM_SAMPLES_PER_INSTANCE,
+          numInstances,
         );
       }
       newSource = false;
