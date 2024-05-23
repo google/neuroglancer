@@ -84,7 +84,7 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const REDRAW_DELAY_AFTER_CAMERA_MOVE = 400;
+const REDRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
@@ -257,6 +257,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
   private redrawAfterMoveTimeOutId: number = -1;
+  private hasVolumeRendering = false;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -429,7 +430,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(
       this.viewer.navigationState.changed.add(() => {
         // Don't mark camera moving on picking requests
-        if (this.isMovingToMousePosition) {
+        // Also, at the moment this is only used for the volume rendering layer
+        if (this.isMovingToMousePosition || !this.hasVolumeRendering) {
           return;
         }
         if (this.redrawAfterMoveTimeOutId !== -1) {
@@ -938,10 +940,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     const { visibleLayers } = this.visibleLayerTracker;
 
     let hasTransparent = false;
-    let hasVolumeRendering = false;
+    this.hasVolumeRendering = false;
     // By default, volume rendering layers are not pickable when the camera is moving.
     let hasVolumeRenderingPick = !this.isCameraMoving;
-
     let hasAnnotation = false;
 
     // Draw fully-opaque layers first.
@@ -955,7 +956,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       } else {
         hasTransparent = true;
         if (renderLayer.isVolumeRendering) {
-          hasVolumeRendering = true;
+          this.hasVolumeRendering = true;
           hasVolumeRenderingPick =
             hasVolumeRenderingPick ||
             isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
@@ -1009,7 +1010,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Create max projection buffer if needed.
       let bindMaxProjectionBuffer: () => void = () => {};
       let bindMaxProjectionPickingBuffer: () => void = () => {};
-      if (hasVolumeRendering) {
+      if (this.hasVolumeRendering) {
         const { maxProjectionConfiguration } = this;
         bindMaxProjectionBuffer = () => {
           maxProjectionConfiguration.bind(width, height);
