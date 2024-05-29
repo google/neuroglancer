@@ -288,7 +288,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   // if a high downsample rate is applied, it persists for a few frames
   // to avoid flickering when the camera is moving
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
-    10 /* numberOfStoredFrameDeltas */,
+    6 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
     16 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
