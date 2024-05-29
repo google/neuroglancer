@@ -1039,7 +1039,9 @@ export class PerspectivePanel extends RenderedDataPanel {
 
       if (this.viewer.adaptiveDownsampling.value && this.isCameraMoving) {
         this.frameRateCalculator.setFrameDeltas(
-          this.context.getLastFrameTimesInMs(),
+          this.context.getLastFrameTimesInMs(
+            this.frameRateCalculator.numberOfStoredFrameDeltas,
+          ),
         );
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(

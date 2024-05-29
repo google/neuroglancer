@@ -614,7 +614,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     return depthArray;
   }
 
-  getLastFrameTimesInMs(numberOfFrames: number = 5) {
+  getLastFrameTimesInMs(numberOfFrames: number = 10) {
     return this.framerateMonitor.getLastFrameTimesInMs(numberOfFrames);
   }
 }

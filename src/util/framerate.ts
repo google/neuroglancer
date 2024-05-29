@@ -96,7 +96,7 @@ export class FramerateMonitor {
   }
 
   getLastFrameTimesInMs(
-    numberOfFrames: number = 5,
+    numberOfFrames: number = 10,
   ) {
     return this.storedTimeDeltas.slice(-numberOfFrames);
   }
@@ -117,7 +117,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
   private frameDeltas: number[] = [];
   private downsamplingRates: number[] = [];
   constructor(
-    private numberOfStoredFrameDeltas: number = 10,
+    public numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
     private desiredFrameTimingMs = 1000 / 60,
     private downsamplingPersistenceDurationInFrames = 15,
