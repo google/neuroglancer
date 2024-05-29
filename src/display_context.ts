@@ -585,6 +585,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.gl.colorMask(true, true, true, true);
     this.updateFinished.dispatch();
     this.framerateMonitor.endFrameTimeQuery(gl, ext, query);
+    this.framerateMonitor.grabAnyFinishedQueryResults(gl);
   }
 
   getDepthArray(): Float32Array {
@@ -614,6 +615,6 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   }
 
   getLastFrameTimesInMs(numberOfFrames: number = 5) {
-    return this.framerateMonitor.getLastFrameTimesInMs(this.gl, numberOfFrames);
+    return this.framerateMonitor.getLastFrameTimesInMs(numberOfFrames);
   }
 }

@@ -17,8 +17,12 @@
 export class FramerateMonitor {
   private timeElapsedQueries: (WebGLQuery | null)[] = [];
   private warnedAboutMissingExtension = false;
+  private storedTimeDeltas: number[] = [];
 
-  constructor(private queryPoolSize: number = 10) {
+  constructor(
+    private numStoredTimes: number = 10,
+    private queryPoolSize: number = 10,
+  ) {
     if (this.queryPoolSize < 1) {
       throw new Error(
         `Query pool size must be at least 1, but got ${queryPoolSize}.`,
@@ -59,37 +63,46 @@ export class FramerateMonitor {
     }
     if (this.timeElapsedQueries.length >= this.queryPoolSize) {
       const oldestQuery = this.timeElapsedQueries.shift();
-      if (oldestQuery !== null) {
-        gl.deleteQuery(oldestQuery!);
+      if (oldestQuery !== null && oldestQuery !== undefined) {
+        gl.deleteQuery(oldestQuery);
       }
     }
     this.timeElapsedQueries.push(query);
   }
 
-  getLastFrameTimesInMs(
-    gl: WebGL2RenderingContext,
-    numberOfFrames: number = 5,
-  ) {
-    const { timeElapsedQueries } = this;
-    const results: number[] = [];
-    for (let i = timeElapsedQueries.length - 1; i >= 0; i--) {
-      const timeElapsedQuery = timeElapsedQueries[i];
-      if (timeElapsedQuery !== null) {
+  grabAnyFinishedQueryResults(gl: WebGL2RenderingContext) {
+    const deletedQueryIndices: number[] = [];
+    for (let i = 0; i < this.timeElapsedQueries.length; i++) {
+      const query = this.timeElapsedQueries[i];
+      if (query !== null) {
         const available = gl.getQueryParameter(
-          timeElapsedQuery,
+          query,
           gl.QUERY_RESULT_AVAILABLE,
         );
         if (available) {
-          const result =
-            gl.getQueryParameter(timeElapsedQuery, gl.QUERY_RESULT) / 1e6;
-          results.push(result);
+          const result = gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6;
+          this.storedTimeDeltas.push(result);
+          gl.deleteQuery(query);
+          deletedQueryIndices.push(i);
         }
       }
-      if (results.length >= numberOfFrames) {
-        break;
-      }
     }
-    return results;
+    for (let i = deletedQueryIndices.length - 1; i >= 0; i--) {
+      this.timeElapsedQueries.splice(i, 1);
+    }
+    if (this.storedTimeDeltas.length > this.numStoredTimes) {
+      this.storedTimeDeltas = this.storedTimeDeltas.slice(-this.numStoredTimes);
+    }
+  }
+
+  getLastFrameTimesInMs(
+    numberOfFrames: number = 5,
+  ) {
+    return this.storedTimeDeltas.slice(-numberOfFrames);
+  }
+
+  getQueries() {
+    return this.timeElapsedQueries;
   }
 }
 
