@@ -81,7 +81,7 @@ async function decodeNiftiFile(
   return { data, size: buffer.byteLength };
 }
 
-function getNiftiFileData(
+export function getNiftiFileData(
   chunkManager: Borrowed<ChunkManager>,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
@@ -100,7 +100,7 @@ function getNiftiFileData(
 
 const NIFTI_HEADER_INFO_PRIORITY = 1000;
 
-async function getNiftiHeaderInfo(
+export async function getNiftiHeaderInfo(
   chunkManager: Borrowed<ChunkManager>,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
@@ -119,7 +119,7 @@ async function getNiftiHeaderInfo(
   return data.header;
 }
 
-function convertAffine(affine: number[][]) {
+export function convertAffine(affine: number[][]) {
   return mat4.fromValues(
     affine[0][0],
     affine[1][0],
@@ -140,7 +140,7 @@ function convertAffine(affine: number[][]) {
   );
 }
 
-enum NiftiDataType {
+export enum NiftiDataType {
   NONE = 0,
   BINARY = 1,
   UINT8 = 2,
@@ -160,7 +160,7 @@ enum NiftiDataType {
   COMPLEX256 = 2048,
 }
 
-const DATA_TYPE_CONVERSIONS = new Map([
+export const DATA_TYPE_CONVERSIONS = new Map([
   [NiftiDataType.INT8, { dataType: DataType.INT8 }],
   [NiftiDataType.UINT8, { dataType: DataType.UINT8 }],
   [NiftiDataType.INT16, { dataType: DataType.INT16 }],
