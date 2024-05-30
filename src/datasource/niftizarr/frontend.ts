@@ -89,12 +89,12 @@ export class NiftiZarrDataSource extends DataSourceProvider {
       providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
     return options.chunkManager.memoize.getUncounted(
-      { type: "nifti/getVolume", providerUrl },
-      /*{
+      //{ type: "nifti/getVolume", providerUrl },
+      {
         type: "zarr:MultiscaleVolumeChunkSource",
         providerUrl,
         dimensionSeparator,
-      },*/
+      },
       async () => {
         const { url, credentialsProvider } = parseSpecialUrl(
           providerUrl,
