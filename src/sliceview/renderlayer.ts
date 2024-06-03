@@ -163,8 +163,8 @@ export abstract class SliceViewRenderLayer<
       // Sort by volume scaling factor.
       visibleSourcesList_.sort((a, b) => {
         return (
-          a.chunkTransform.chunkToLayerTransformDet -
-          b.chunkTransform.chunkToLayerTransformDet
+          Math.abs(a.chunkTransform.chunkToLayerTransformDet) -
+          Math.abs(b.chunkTransform.chunkToLayerTransformDet)
         );
       });
     }
