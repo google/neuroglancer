@@ -81,7 +81,7 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const REDRAW_DELAY_AFTER_CAMERA_MOVE = 400;
+const REDRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;

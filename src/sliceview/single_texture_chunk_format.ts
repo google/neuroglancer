@@ -56,12 +56,10 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
 
   abstract get shaderSamplerType(): ShaderSamplerType;
 
-  beginDrawing(gl: GL, shader: ShaderProgram, onlyActivateTexture: boolean = false) {
+  beginDrawing(gl: GL, shader: ShaderProgram) {
     const textureUnit = shader.textureUnit(textureUnitSymbol);
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
-    if (!onlyActivateTexture) {
-      (<any>shader)[textureLayoutSymbol] = null;
-    }
+    (<any>shader)[textureLayoutSymbol] = null;
   }
 
   endDrawing(gl: GL, shader: ShaderProgram) {
