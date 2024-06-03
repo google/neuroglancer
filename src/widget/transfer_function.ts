@@ -262,9 +262,16 @@ export class SortedControlPoints {
       if (this.controlPoints.length == 0) {
         this.range = defaultDataTypeRange[this.dataType];
       } else if (this.controlPoints.length === 1) {
+        let rangeEnd = defaultDataTypeRange[this.dataType][1];
+        if (
+          this.dataType === DataType.FLOAT32 &&
+          rangeEnd <= this.controlPoints[0].inputValue
+        ) {
+          rangeEnd = (this.controlPoints[0].inputValue as number) + 1;
+        }
         this.range = [
           this.controlPoints[0].inputValue,
-          defaultDataTypeRange[this.dataType][1],
+          rangeEnd,
         ] as DataTypeInterval;
       } else {
         this.range = [
