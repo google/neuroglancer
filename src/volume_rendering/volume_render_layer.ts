@@ -756,6 +756,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       } else {
         renderContext.bindFramebuffer();
       }
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
     };
 
     const endShader = () => {
