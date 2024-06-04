@@ -175,16 +175,16 @@ export class NiftiZarrDataSource extends DataSourceProvider {
         });
         console.log(outputSpace, inputSpace, volumeNifti, info)
         //const inputSpace = volumeZarr.modelSpace;
-        console.log(inputSpace, matrix);
+        console.log(inputSpace, matrix, makeIdentityTransform);
         return {
-          modelTransform: makeIdentityTransform(volumeZarr.modelSpace),
-          /*modelTransform: {
+          //modelTransform: makeIdentityTransform(volumeZarr.modelSpace),
+          modelTransform: {
             sourceRank: info.rank,
             rank: info.rank,
             inputSpace,
             outputSpace,
             transform: info.transform,
-          },*/
+          },
           /*
           modelTransform: {
             rank: inputSpace.rank,
@@ -206,7 +206,7 @@ export class NiftiZarrDataSource extends DataSourceProvider {
               default: true,
               url: undefined,
               subsource: {
-                staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(volumeZarr.modelSpace.bounds,),  // box vs. volume.modelSpace.bounds,
+                staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box),  // box vs. volume.modelSpace.bounds,
               },
             },
           ],
