@@ -21,9 +21,9 @@
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import {
-  //makeCoordinateSpace,
+  makeCoordinateSpace,
   makeIdentityTransform,
-  //makeIdentityTransformedBoundingBox,
+  makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import type {
   CompleteUrlOptions,
@@ -31,11 +31,11 @@ import type {
   GetDataSourceOptions,
 } from "#src/datasource/index.js";
 import { DataSourceProvider } from "#src/datasource/index.js";
-/*import {
+import {
   getNiftiVolumeInfo,
   NiftiMultiscaleVolumeChunkSource,
-} from "#src/datasource/nifti/frontend.ts";*/
-import type {ZarrMultiscaleInfo} from "#src/datasource/zarr/frontend.ts";
+} from "#src/datasource/nifti/frontend.ts";
+import type { ZarrMultiscaleInfo } from "#src/datasource/zarr/frontend.ts";
 import {
   getMetadata,
   resolveOmeMultiscale,
@@ -53,13 +53,14 @@ import {
   parseDimensionSeparator,
 } from "#src/datasource/zarr/metadata/parse.js";
 import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
-//import { uncancelableToken } from "#src/util/cancellation.js";
+import { uncancelableToken } from "#src/util/cancellation.js";
 import { completeHttpPath } from "#src/util/http_path_completion.js";
 import {
   parseQueryStringParameters,
   verifyObject,
   verifyOptionalObjectProperty,
 } from "#src/util/json.js";
+import * as matrix from "#src/util/matrix.js";
 import {
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
@@ -89,12 +90,12 @@ export class NiftiZarrDataSource extends DataSourceProvider {
       providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
     return options.chunkManager.memoize.getUncounted(
-      //{ type: "nifti/getVolume", providerUrl },
-      {
+      { type: "nifti/getVolume", providerUrl },
+      /*{
         type: "zarr:MultiscaleVolumeChunkSource",
         providerUrl,
         dimensionSeparator,
-      },
+      },*/
       async () => {
         const { url, credentialsProvider } = parseSpecialUrl(
           providerUrl,
@@ -136,37 +137,45 @@ export class NiftiZarrDataSource extends DataSourceProvider {
           credentialsProvider,
           multiscaleInfo,
         );
-        /*const info = await getNiftiVolumeInfo(
+        console.log(url);
+        const niftiUrl = url.concat("/nifti/0");
+        console.log("HI does this work?");
+        console.log(niftiUrl);
+
+        const info = await getNiftiVolumeInfo(
           options.chunkManager,
           credentialsProvider,
-          url,
+          niftiUrl,
           uncancelableToken,
         );
+        console.log(info);
         const volumeNifti = new NiftiMultiscaleVolumeChunkSource(
           options.chunkManager,
           credentialsProvider,
           url,
           info,
-        );/*
+        );
         const box = {
           lowerBounds: new Float64Array(info.rank),
           upperBounds: Float64Array.from(info.volumeSize),
         };
+        console.log(volumeNifti, box);
         const inputSpace = makeCoordinateSpace({
           rank: info.rank,
           names: info.sourceNames,
           scales: info.sourceScales,
           units: info.units,
           boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
-        });*/
-        //const inputSpace = volumeZarr.modelSpace;
-        /*const outputSpace = makeCoordinateSpace({
+        });
+        const outputSpace = makeCoordinateSpace({
           rank: info.rank,
           names: info.viewNames,
           scales: info.viewScales,
           units: info.units,
-        });*/
-        //console.log(/*outputSpace, inputSpace*/volumeNifti, info)
+        });
+        console.log(outputSpace, inputSpace, volumeNifti, info)
+        //const inputSpace = volumeZarr.modelSpace;
+        console.log(inputSpace, matrix);
         return {
           modelTransform: makeIdentityTransform(volumeZarr.modelSpace),
           /*modelTransform: {
@@ -183,7 +192,8 @@ export class NiftiZarrDataSource extends DataSourceProvider {
             inputSpace,
             outputSpace: inputSpace,
             transform: matrix.createIdentity(Float64Array, inputSpace.rank + 1),
-          },*/
+          },
+          */
           subsources: [
             {
               id: "default",
