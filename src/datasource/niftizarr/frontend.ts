@@ -22,7 +22,6 @@
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import {
   makeCoordinateSpace,
-  makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import type {
@@ -33,7 +32,6 @@ import type {
 import { DataSourceProvider } from "#src/datasource/index.js";
 import {
   getNiftiVolumeInfo,
-  NiftiMultiscaleVolumeChunkSource,
 } from "#src/datasource/nifti/frontend.ts";
 import type { ZarrMultiscaleInfo } from "#src/datasource/zarr/frontend.ts";
 import {
@@ -60,7 +58,6 @@ import {
   verifyObject,
   verifyOptionalObjectProperty,
 } from "#src/util/json.js";
-import * as matrix from "#src/util/matrix.js";
 import {
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
@@ -90,12 +87,11 @@ export class NiftiZarrDataSource extends DataSourceProvider {
       providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
     return options.chunkManager.memoize.getUncounted(
-      { type: "nifti/getVolume", providerUrl },
-      /*{
+      {
         type: "zarr:MultiscaleVolumeChunkSource",
         providerUrl,
         dimensionSeparator,
-      },*/
+      },
       async () => {
         const { url, credentialsProvider } = parseSpecialUrl(
           providerUrl,
@@ -137,29 +133,19 @@ export class NiftiZarrDataSource extends DataSourceProvider {
           credentialsProvider,
           multiscaleInfo,
         );
-        console.log(url);
-        const niftiUrl = url.concat("/nifti/0");
-        console.log("HI does this work?");
-        console.log(niftiUrl);
 
+        // nifti head stored separately
+        const niftiUrl = url.concat("/nifti/0");
         const info = await getNiftiVolumeInfo(
           options.chunkManager,
           credentialsProvider,
           niftiUrl,
           uncancelableToken,
         );
-        console.log(info);
-        const volumeNifti = new NiftiMultiscaleVolumeChunkSource(
-          options.chunkManager,
-          credentialsProvider,
-          url,
-          info,
-        );
         const box = {
           lowerBounds: new Float64Array(info.rank),
           upperBounds: Float64Array.from(info.volumeSize),
         };
-        console.log(volumeNifti, box);
         const inputSpace = makeCoordinateSpace({
           rank: info.rank,
           names: info.sourceNames,
@@ -173,11 +159,13 @@ export class NiftiZarrDataSource extends DataSourceProvider {
           scales: info.viewScales,
           units: info.units,
         });
-        console.log(outputSpace, inputSpace, volumeNifti, info)
-        //const inputSpace = volumeZarr.modelSpace;
-        console.log(inputSpace, matrix, makeIdentityTransform);
+
+        // the code in activateDataSubsources is really bad and requires you name the variable "volume"
+        // could change the code in index.ts but this is how it is in neuroglancer so wanted to follow convention
+        const volume = volumeZarr;
+
         return {
-          //modelTransform: makeIdentityTransform(volumeZarr.modelSpace),
+          // use tranformation from the nifti portion of header
           modelTransform: {
             sourceRank: info.rank,
             rank: info.rank,
@@ -185,28 +173,19 @@ export class NiftiZarrDataSource extends DataSourceProvider {
             outputSpace,
             transform: info.transform,
           },
-          /*
-          modelTransform: {
-            rank: inputSpace.rank,
-            sourceRank: inputSpace.rank,
-            inputSpace,
-            outputSpace: inputSpace,
-            transform: matrix.createIdentity(Float64Array, inputSpace.rank + 1),
-          },
-          */
           subsources: [
             {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volumeZarr },
+              subsource: { volume },  // volume from zarr portion
             },
             {
               id: "bounds",
               default: true,
               url: undefined,
               subsource: {
-                staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box),  // box vs. volume.modelSpace.bounds,
+                staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(volumeZarr.modelSpace.bounds),  // volume from zarr portion
               },
             },
           ],
