@@ -23,7 +23,8 @@ export enum FrameTimingMethod {
 export class DownsamplingBasedOnFrameRateCalculator {
   private lastFrameTime: number | null = null;
   private frameDeltas: number[] = [];
-  private downsamplingRates: number[] = [];
+  private downsamplingRates: Map<number, number> = new Map();
+  private frameCount = 0;
 
   /**
    * Creates an instance of DownsamplingBasedOnFrameRateCalculator.
@@ -40,6 +41,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
     private downsamplingPersistenceDurationInFrames = 15,
   ) {
     this.validateConstructorArguments();
+    for (let i = 1; i <= this.maxDownsamplingFactor; i *= 2) {
+      this.downsamplingRates.set(i, -Infinity);
+    }
   }
 
   private validateConstructorArguments() {
@@ -78,9 +82,27 @@ export class DownsamplingBasedOnFrameRateCalculator {
     return Math.max(...this.frameDeltas);
   }
 
-  resetLastFrameTime() {
+  private updateMaxTrackedDownsamplingRate(downsampleFactor: number) {
+    this.downsamplingRates.set(downsampleFactor, this.frameCount);
+    let maxTrackedDownsamplingRate = 1;
+    for (const [downsamplingRate, frameCount] of this.downsamplingRates) {
+      if (
+        this.frameCount - frameCount <=
+        this.downsamplingPersistenceDurationInFrames
+      ) {
+        maxTrackedDownsamplingRate = downsamplingRate;
+      }
+    }
+    return maxTrackedDownsamplingRate;
+  }
+
+  /* This doesn't reset stored frame deltas. Is usually called on a new continous camera move */
+  resetForNewFrameSet() {
     this.lastFrameTime = null;
-    this.downsamplingRates = [];
+    this.frameCount = 0;
+    this.downsamplingRates.forEach((_, key) => {
+      this.downsamplingRates.set(key, -Infinity);
+    });
   }
 
   addFrame(timestamp: number = Date.now()) {
@@ -91,12 +113,13 @@ export class DownsamplingBasedOnFrameRateCalculator {
       }
     }
     this.lastFrameTime = timestamp;
+    this.frameCount++;
   }
 
   calculateFrameTimeInMs(
     method: FrameTimingMethod = FrameTimingMethod.MAX,
   ): number {
-    if (this.frameDeltas.length < 1) {
+    if (this.frameDeltas.length === 0) {
       return 0;
     }
     switch (method) {
@@ -115,6 +138,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
   ): number {
     const calculatedFrameTime = this.calculateFrameTimeInMs(method);
     if (calculatedFrameTime === 0) {
+      // Don't add this one to tracking, it's just to start the process
       return Math.min(4, this.maxDownsamplingFactor);
     }
     let downsampleFactorBasedOnFramerate = Math.max(
@@ -126,23 +150,27 @@ export class DownsamplingBasedOnFrameRateCalculator {
       Math.pow(2, Math.round(Math.log2(downsampleFactorBasedOnFramerate))),
       this.maxDownsamplingFactor,
     );
-    // Store the downsampling rate.
-    this.downsamplingRates.push(downsampleFactorBasedOnFramerate);
-    if (
-      this.downsamplingRates.length >
-      this.downsamplingPersistenceDurationInFrames
-    ) {
-      this.downsamplingRates.shift();
-    }
-    // Return the maximum downsampling rate over the last few frames.
-    return Math.max(...this.downsamplingRates);
+    return this.updateMaxTrackedDownsamplingRate(
+      downsampleFactorBasedOnFramerate,
+    );
   }
 
   getFrameDeltas(): number[] {
     return this.frameDeltas;
   }
 
-  setFrameDeltas(frameDeltas: number[]) {
+  getFrameCount(): number {
+    return this.frameCount;
+  }
+
+  getDownsamplingRates(): Map<number, number> {
+    return this.downsamplingRates;
+  }
+
+  setFrameDeltas(frameDeltas: number[], incrementFrameCount = true) {
     this.frameDeltas = frameDeltas.slice(-this.numberOfStoredFrameDeltas);
+    if (incrementFrameCount) {
+      this.frameCount++;
+    }
   }
 }

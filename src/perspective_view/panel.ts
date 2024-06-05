@@ -444,7 +444,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
     this.projectionParameters.changed.add(() => this.context.scheduleRedraw());
     this.viewer.enableAdaptiveDownsampling.changed.add(() => {
-      this.frameRateCalculator.resetLastFrameTime();
+      this.frameRateCalculator.resetForNewFrameSet();
     });
 
     const sharedObject = (this.sharedObject = this.registerDisposer(
@@ -472,7 +472,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
           this.redrawAfterMoveTimeOutId = -1;
-          this.frameRateCalculator.resetLastFrameTime();
+          this.frameRateCalculator.resetForNewFrameSet();
           this.context.scheduleRedraw();
         }, REDRAW_DELAY_AFTER_CAMERA_MOVE);
       }),
