@@ -94,7 +94,7 @@ export interface LayerGroupViewerState {
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
-  adaptiveDownsampling: TrackableBoolean;
+  enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
@@ -357,8 +357,8 @@ export class LayerGroupViewer extends RefCounted {
   get wireFrame() {
     return this.viewerState.wireFrame;
   }
-  get adaptiveDownsampling() {
-    return this.viewerState.adaptiveDownsampling;
+  get enableAdaptiveDownsampling() {
+    return this.viewerState.enableAdaptiveDownsampling;
   }
   get showScaleBar() {
     return this.viewerState.showScaleBar;

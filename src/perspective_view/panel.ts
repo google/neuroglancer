@@ -89,7 +89,7 @@ const REDRAW_DELAY_AFTER_CAMERA_MOVE = 300;
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
-  adaptiveDownsampling: WatchableValueInterface<boolean>;
+  enableAdaptiveDownsampling: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -443,7 +443,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       }),
     );
     this.projectionParameters.changed.add(() => this.context.scheduleRedraw());
-    this.viewer.adaptiveDownsampling.changed.add(() => {
+    this.viewer.enableAdaptiveDownsampling.changed.add(() => {
       this.frameRateCalculator.resetLastFrameTime();
     });
 
@@ -848,7 +848,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (!this.navigationState.valid) {
       return false;
     }
-    if (this.viewer.adaptiveDownsampling.value && this.isCameraMoving) {
+    if (this.viewer.enableAdaptiveDownsampling.value && this.isCameraMoving) {
       this.frameRateCalculator.addFrame();
     }
     const { width, height } = this.renderViewport;
@@ -1043,7 +1043,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
 
-      if (this.viewer.adaptiveDownsampling.value && this.isCameraMoving) {
+      if (this.viewer.enableAdaptiveDownsampling.value && this.isCameraMoving) {
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRateBasedOnFrameDeltas(
             FrameTimingMethod.MEAN,
