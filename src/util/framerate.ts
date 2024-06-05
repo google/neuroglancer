@@ -57,16 +57,6 @@ export class DownsamplingBasedOnFrameRateCalculator {
     }
   }
 
-  private validateFrameDelta(frameDelta: number) {
-    if (frameDelta < 0) {
-      throw new Error(
-        `Frame delta should be non-negative, but got ${frameDelta}. ` +
-          `This can happen if the clock is reset or if the ` +
-          `timestamp is generated in the future.`,
-      );
-    }
-  }
-
   private storeFrameDelta(frameDelta: number) {
     this.frameDeltas.push(frameDelta);
     if (this.frameDeltas.length > this.numberOfStoredFrameDeltas) {
@@ -100,8 +90,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
   addFrame(timestamp: number = Date.now()) {
     if (this.lastFrameTime !== null) {
       const frameDelta = timestamp - this.lastFrameTime;
-      this.validateFrameDelta(frameDelta);
-      this.storeFrameDelta(frameDelta);
+      if (frameDelta > 0) {
+        this.storeFrameDelta(frameDelta);
+      }
     }
     this.lastFrameTime = timestamp;
   }
@@ -122,8 +113,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
     }
   }
 
-  calculateDownsamplingRateBasedOnFrameDeltas(
-    method: FrameTimingMethod = FrameTimingMethod.MAX,
+  /** Should be called once per frame for proper downsampling persistence */
+  calculateDownsamplingRate(
+    method: FrameTimingMethod = FrameTimingMethod.MEAN,
   ): number {
     const calculatedFrameTime = this.calculateFrameTimeInMs(method);
     if (calculatedFrameTime === 0) {
