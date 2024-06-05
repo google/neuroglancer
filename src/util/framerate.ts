@@ -24,61 +24,53 @@ export class DownsamplingBasedOnFrameRateCalculator {
   private lastFrameTime: number | null = null;
   private frameDeltas: number[] = [];
   private downsamplingRates: number[] = [];
+
+  /**
+   * Creates an instance of DownsamplingBasedOnFrameRateCalculator.
+   *
+   * @param numberOfStoredFrameDeltas The number of frame deltas to store. Oldest frame deltas are removed. Must be at least 1.
+   * @param maxDownsamplingFactor The maximum factor for downsampling. Must be at least 2.
+   * @param desiredFrameTimingMs The desired frame timing in milliseconds. The downsampling rate is based on a comparison of the actual frame timing to this value.
+   * @param downsamplingPersistenceDurationInFrames The max number of frames over which a high downsampling rate persists.
+   */
   constructor(
     private numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
     private desiredFrameTimingMs = 1000 / 60,
     private downsamplingPersistenceDurationInFrames = 15,
   ) {
-    if (numberOfStoredFrameDeltas < 1) {
+    this.validateConstructorArguments();
+  }
+
+  private validateConstructorArguments() {
+    if (this.numberOfStoredFrameDeltas < 1) {
       throw new Error(
         `Number of stored frame deltas must be at least 1, ` +
-          `but got ${numberOfStoredFrameDeltas}.`,
+          `but got ${this.numberOfStoredFrameDeltas}.`,
       );
     }
-    if (maxDownsamplingFactor < 2) {
+    if (this.maxDownsamplingFactor < 2) {
       throw new Error(
         `Max downsampling factor must be at least 2, ` +
-          `but got ${maxDownsamplingFactor}.`,
+          `but got ${this.maxDownsamplingFactor}.`,
       );
     }
   }
-  resetLastFrameTime() {
-    this.lastFrameTime = null;
-    this.downsamplingRates = [];
+
+  private validateFrameDelta(frameDelta: number) {
+    if (frameDelta < 0) {
+      throw new Error(
+        `Frame delta should be non-negative, but got ${frameDelta}. ` +
+          `This can happen if the clock is reset or if the ` +
+          `timestamp is generated in the future.`,
+      );
+    }
   }
 
-  addFrame(timestamp: number = Date.now()) {
-    if (this.lastFrameTime !== null) {
-      const frameDelta = timestamp - this.lastFrameTime;
-      if (frameDelta < 0) {
-        throw new Error(
-          `Frame delta should be non-negative, but got ${frameDelta}. ` +
-            `This can happen if the clock is reset or if the ` +
-            `timestamp is generated in the future.`,
-        );
-      }
-      this.frameDeltas.push(timestamp - this.lastFrameTime);
-      if (this.frameDeltas.length > this.numberOfStoredFrameDeltas) {
-        this.frameDeltas.shift();
-      }
-    }
-    this.lastFrameTime = timestamp;
-  }
-
-  calculateFrameTimeInMs(
-    method: FrameTimingMethod = FrameTimingMethod.MAX,
-  ): number {
-    if (this.frameDeltas.length < 1) {
-      return 0;
-    }
-    switch (method) {
-      case FrameTimingMethod.MEDIAN:
-        return this.calculateMedianFrameTime();
-      case FrameTimingMethod.MEAN:
-        return this.calculateMeanFrameTime();
-      case FrameTimingMethod.MAX:
-        return Math.max(...this.frameDeltas);
+  private storeFrameDelta(frameDelta: number) {
+    this.frameDeltas.push(frameDelta);
+    if (this.frameDeltas.length > this.numberOfStoredFrameDeltas) {
+      this.frameDeltas.shift();
     }
   }
 
@@ -96,15 +88,49 @@ export class DownsamplingBasedOnFrameRateCalculator {
       : (sortedFrameDeltas[midpoint - 1] + sortedFrameDeltas[midpoint]) / 2;
   }
 
+  private calculateMaxFrameTime(): number {
+    return Math.max(...this.frameDeltas);
+  }
+
+  resetLastFrameTime() {
+    this.lastFrameTime = null;
+    this.downsamplingRates = [];
+  }
+
+  addFrame(timestamp: number = Date.now()) {
+    if (this.lastFrameTime !== null) {
+      const frameDelta = timestamp - this.lastFrameTime;
+      this.validateFrameDelta(frameDelta);
+      this.storeFrameDelta(frameDelta);
+    }
+    this.lastFrameTime = timestamp;
+  }
+
+  calculateFrameTimeInMs(
+    method: FrameTimingMethod = FrameTimingMethod.MAX,
+  ): number {
+    if (this.frameDeltas.length < 1) {
+      return 0;
+    }
+    switch (method) {
+      case FrameTimingMethod.MEDIAN:
+        return this.calculateMedianFrameTime();
+      case FrameTimingMethod.MEAN:
+        return this.calculateMeanFrameTime();
+      case FrameTimingMethod.MAX:
+        return this.calculateMaxFrameTime();
+    }
+  }
+
   calculateDownsamplingRateBasedOnFrameDeltas(
     method: FrameTimingMethod = FrameTimingMethod.MAX,
   ): number {
-    const frameDelta = this.calculateFrameTimeInMs(method);
-    if (frameDelta === 0) {
+    const calculatedFrameTime = this.calculateFrameTimeInMs(method);
+    if (calculatedFrameTime === 0) {
       return Math.min(4, this.maxDownsamplingFactor);
     }
     let downsampleFactorBasedOnFramerate = Math.max(
-      frameDelta / this.desiredFrameTimingMs,
+      calculatedFrameTime / this.desiredFrameTimingMs,
       1,
     );
     // Round to the nearest power of 2.
