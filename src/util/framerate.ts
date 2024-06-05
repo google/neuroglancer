@@ -27,8 +27,6 @@ export class DownsamplingBasedOnFrameRateCalculator {
   private frameCount = 0;
 
   /**
-   * Creates an instance of DownsamplingBasedOnFrameRateCalculator.
-   *
    * @param numberOfStoredFrameDeltas The number of frame deltas to store. Oldest frame deltas are removed. Must be at least 1.
    * @param maxDownsamplingFactor The maximum factor for downsampling. Must be at least 2.
    * @param desiredFrameTimingMs The desired frame timing in milliseconds. The downsampling rate is based on a comparison of the actual frame timing to this value.
