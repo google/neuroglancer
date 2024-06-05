@@ -64,4 +64,40 @@ describe("FrameRateCounter", () => {
       frameRateCounter.calculateFrameTimeInMs(FrameTimingMethod.MAX),
     ).toEqual(200);
   });
+  it("calculates a valid downsampling rate", () => {
+    const frameRateCounter = new DownsamplingBasedOnFrameRateCalculator(
+      10,
+      8,
+      100,
+      15,
+    );
+    for (let i = 0; i < 10; i++) {
+      frameRateCounter.addFrame(i * 80);
+    }
+    // 80ms / 100ms < 1, so no downsampling
+    expect(frameRateCounter.calculateDownsamplingRate()).toEqual(1);
+    for (let i = 0; i < 10; i++) {
+      frameRateCounter.addFrame(i * 400);
+    }
+    // 400ms / 100ms = 4, so downsampling by 4
+    expect(frameRateCounter.calculateDownsamplingRate()).toEqual(4);
+    // Better fps now, but the rate persists for a while
+    for (let i = 0; i < 10; i++) {
+      frameRateCounter.addFrame(i * 50);
+      frameRateCounter.calculateDownsamplingRate();
+    }
+    expect(frameRateCounter.calculateDownsamplingRate()).toEqual(4);
+    // The downsampling rate will eventually drop
+    for (let i = 0; i < 11; i++) {
+      frameRateCounter.addFrame(i * 50);
+      frameRateCounter.calculateDownsamplingRate();
+    }
+    expect(frameRateCounter.calculateDownsamplingRate()).toEqual(1);
+    // If the frame rate is very bad, still caps at 8
+    frameRateCounter.resetLastFrameTime();
+    for (let i = 0; i < 2; i++) {
+      frameRateCounter.addFrame(i * 10000);
+    }
+    expect(frameRateCounter.calculateDownsamplingRate()).toEqual(8);
+  });
 });
