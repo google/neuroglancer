@@ -43,18 +43,14 @@ export class DownsamplingBasedOnFrameRateCalculator {
   }
 
   private validateConstructorArguments() {
-    if (this.numberOfStoredFrameDeltas < 1) {
-      throw new Error(
-        `Number of stored frame deltas must be at least 1, ` +
-          `but got ${this.numberOfStoredFrameDeltas}.`,
-      );
-    }
-    if (this.maxDownsamplingFactor < 2) {
-      throw new Error(
-        `Max downsampling factor must be at least 2, ` +
-          `but got ${this.maxDownsamplingFactor}.`,
-      );
-    }
+    this.numberOfStoredFrameDeltas = Math.max(
+      1,
+      Math.round(this.numberOfStoredFrameDeltas),
+    );
+    this.maxDownsamplingFactor = Math.max(
+      2,
+      Math.round(this.maxDownsamplingFactor),
+    );
   }
 
   private storeFrameDelta(frameDelta: number) {
