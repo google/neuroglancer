@@ -25,6 +25,7 @@
   flex-direction: column;
   flex: 1;
   height: 0px;
+  z-index: 1;
 }
 
 .neuroglancer-layer-data-source-url-input input.autocomplete-input {
