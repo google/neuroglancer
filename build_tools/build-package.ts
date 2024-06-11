@@ -14,9 +14,23 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import esbuild from "esbuild";
 import { glob } from "glob";
+import ts from "typescript";
 import yargs from "yargs";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
+
+function buildDeclarationFiles(
+  fileNames: string[],
+  options: ts.CompilerOptions,
+): void {
+  options = {
+    ...options,
+    declaration: true,
+    emitDeclarationOnly: true,
+  };
+  const program = ts.createProgram(fileNames, options);
+  program.emit();
+}
 
 async function buildPackage(options: { inplace?: boolean }) {
   const { inplace = false } = options;
@@ -45,11 +59,30 @@ async function buildPackage(options: { inplace?: boolean }) {
     nodir: true,
   });
 
+  const entryPoints = typescriptSources.map((name) =>
+    path.resolve(srcDir, name),
+  );
+
   await esbuild.build({
-    entryPoints: typescriptSources.map((name) => path.resolve(srcDir, name)),
+    entryPoints,
     outbase: srcDir,
     bundle: false,
     outdir: libDir,
+  });
+
+  let compilerOptionsFromConfigFile: ts.CompilerOptions = {};
+  const configFileName = ts.findConfigFile("../", ts.sys.fileExists);
+  if (configFileName) {
+    const configFile = ts.readConfigFile(configFileName, ts.sys.readFile);
+    compilerOptionsFromConfigFile = ts.parseJsonConfigFileContent(
+      configFile.config,
+      ts.sys,
+      "./",
+    ).options;
+  }
+  buildDeclarationFiles(entryPoints, {
+    ...compilerOptionsFromConfigFile,
+    outDir: libDir,
   });
 
   const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
