@@ -52,7 +52,11 @@ export interface ChunkFormat {
    *
    * where value_type is `getShaderType(this.dataType)`.
    */
-  defineShader: (builder: ShaderBuilder, numChannelDimensions: number) => void;
+  defineShader: (
+    builder: ShaderBuilder,
+    numChannelDimensions: number,
+    inVertexShader?: boolean,
+  ) => void;
 
   /**
    * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first

@@ -929,6 +929,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       alreadyEmittedPickID: false,
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
+      sliceViewsPresent: this.sliceViews.size > 0,
       cameraMovementInProgress: this.isCameraMoving,
     };
 
@@ -1017,6 +1018,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         };
         gl.depthMask(true);
         bindMaxProjectionBuffer();
+        renderContext.bindMaxProjectionBuffer = bindMaxProjectionBuffer;
         gl.clearColor(0.0, 0.0, 0.0, 0.0);
         gl.clearDepth(0.0);
         gl.clear(

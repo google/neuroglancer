@@ -1155,7 +1155,7 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
     // to the control points in the trackable value.
     const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
     super(defaultValueCopy, (obj) =>
-      parseTransferFunctionParameters(obj, dataType, defaultValue),
+      parseTransferFunctionParameters(obj, dataType, defaultValueCopy),
     );
   }
 

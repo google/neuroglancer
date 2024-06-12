@@ -57,13 +57,18 @@ export interface PerspectiveViewRenderContext
   depthBufferTexture?: WebGLTexture | null;
 
   /**
+   * Specifies if there are any slice views
+   */
+  sliceViewsPresent: boolean;
+
+  /**
    * Specifies if the camera is moving
    */
   cameraMovementInProgress: boolean;
 
   /**
-    * Specifices how to bind the max projection buffer
-    */
+   * Specifices how to bind the max projection buffer
+   */
   bindMaxProjectionBuffer?: () => void | undefined;
 }
 

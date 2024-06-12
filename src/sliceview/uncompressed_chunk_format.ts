@@ -139,7 +139,11 @@ export class ChunkFormat
     );
   }
 
-  defineShader(builder: ShaderBuilder, numChannelDimensions: number) {
+  defineShader(
+    builder: ShaderBuilder,
+    numChannelDimensions: number,
+    inVertexShader: boolean = false,
+  ) {
     super.defineShader(builder, numChannelDimensions);
     const { textureDims } = this;
     const textureVecType = `ivec${this.textureDims}`;
@@ -153,35 +157,39 @@ export class ChunkFormat
       "uVolumeChunkStrides",
       4 + numChannelDimensions,
     );
-    builder.addFragmentCode(
-      textureAccessHelper.getAccessor(
-        "readVolumeData",
-        "uVolumeChunkSampler",
-        this.dataType,
-      ),
+    const textureSamplerCode = textureAccessHelper.getAccessor(
+      "readVolumeData",
+      "uVolumeChunkSampler",
+      this.dataType,
     );
     const shaderType = getShaderType(this.dataType);
-    let code = `
+    let dataAccessCode = `
 ${shaderType} getDataValueAt(highp ivec3 p`;
     for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      code += `, highp int channelIndex${channelDim}`;
+      dataAccessCode += `, highp int channelIndex${channelDim}`;
     }
-    code += `) {
+    dataAccessCode += `) {
   highp ${textureVecType} offset = uVolumeChunkStrides[0]
                      + p.x * uVolumeChunkStrides[1]
                      + p.y * uVolumeChunkStrides[2]
                      + p.z * uVolumeChunkStrides[3];
 `;
     for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      code += `
+      dataAccessCode += `
   offset += channelIndex${channelDim} * uVolumeChunkStrides[${4 + channelDim}];
 `;
     }
-    code += `
+    dataAccessCode += `
   return readVolumeData(offset);
 }
 `;
-    builder.addFragmentCode(code);
+    if (inVertexShader) {
+      builder.addVertexCode(textureSamplerCode);
+      builder.addVertexCode(dataAccessCode);
+    } else {
+      builder.addFragmentCode(textureSamplerCode);
+      builder.addFragmentCode(dataAccessCode);
+    }
   }
 
   /**
