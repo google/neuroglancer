@@ -836,7 +836,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
     const pickId = isProjection ? renderContext.pickIDs.register(this) : 0;
     const chunkInfoForHistogram: StoredChunkInfoForHistogram[] = [];
+    // TODO (SKM) make interface and add typing
     const shaderUniformsForSecondPass: any[] = [];
+    // TODO (SKM) this might also need to be an array
+    let shaderSetupUniformsForSecondPass: any = {};
 
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
@@ -931,11 +934,12 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         );
         const clippingPlanes = tempVisibleVolumetricClippingPlanes;
         getFrustrumPlanes(clippingPlanes, modelViewProjection);
-        mat4.invert(modelViewProjection, modelViewProjection);
+        const modelViewProjectionInverse = mat4.create();
+        mat4.invert(modelViewProjectionInverse, modelViewProjection);
         gl.uniformMatrix4fv(
           shader.uniform("uInvModelViewProjectionMatrix"),
           false,
-          modelViewProjection,
+          modelViewProjectionInverse,
         );
         const { near, far, adjustedNear, adjustedFar } =
           getVolumeRenderingNearFarBounds(
@@ -965,6 +969,20 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           shader.uniform("uUpperClipBound"),
           transformedSource.upperClipDisplayBound,
         );
+        if (needSecondPassRendering) {
+          shaderSetupUniformsForSecondPass = {
+            uNearLimitFraction: nearLimitFraction,
+            uFarLimitFraction: farLimitFraction,
+            uMaxSteps: this.depthSamplesTarget.value,
+            uBrightnessFactor: brightnessFactor,
+            uGain: Math.exp(this.gain.value),
+            uPickId: pickId,
+            uLowerClipBound: transformedSource.lowerClipDisplayBound,
+            uUpperClipBound: transformedSource.upperClipDisplayBound,
+            uModelViewProjectionMatrix: modelViewProjection,
+            uInvModelViewProjectionMatrix: modelViewProjectionInverse,
+          };
+        }
       },
       (transformedSource) => {
         if (shader === null) return;
@@ -1126,7 +1144,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             newSource,
           );
         }
-        const uniforms = shaderUniformsForSecondPass[j];
+        // TODO (SKM) remove this let, make const
+        let uniforms = shaderUniformsForSecondPass[j];
         gl.uniform3fv(
           shader.uniform("uChunkDataSize"),
           uniforms.uChunkDataSize,
@@ -1135,6 +1154,25 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           shader.uniform("uTranslation"),
           chunkInfo.fixedPositionWithinChunk,
         );
+        gl.uniformMatrix4fv(
+          shader.uniform("uModelViewProjectionMatrix"),
+          false,
+          uniforms.uModelViewProjectionMatrix,
+        )
+        gl.uniformMatrix4fv(
+          shader.uniform("uInvModelViewProjectionMatrix"),
+          false,
+          uniforms.uInvModelViewProjectionMatrix,
+        )
+        uniforms = shaderSetupUniformsForSecondPass;
+        // TODO (SKM) refactor to a new function
+        gl.uniform1f(shader.uniform("uNearLimitFraction"), uniforms.uNearLimitFraction);
+        gl.uniform1f(shader.uniform("uFarLimitFraction"), uniforms.uFarLimitFraction);
+        gl.uniform1f(shader.uniform("uGain"), uniforms.uGain);
+        gl.uniform1ui(shader.uniform("uPickId"), uniforms.uPickId);
+        gl.uniform1i(shader.uniform("uMaxSteps"), uniforms.uMaxSteps);
+        gl.uniform3fv(shader.uniform("uLowerClipBound"), uniforms.uLowerClipBound);
+        gl.uniform3fv(shader.uniform("uUpperClipBound"), uniforms.uUpperClipBound);
         drawBoxes(gl, 1, 1);
         newSource = false;
       }
