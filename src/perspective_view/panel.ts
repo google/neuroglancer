@@ -1012,6 +1012,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       let bindMaxProjectionBuffer: () => void = () => {};
       let bindMaxProjectionPickingBuffer: () => void = () => {};
       if (this.hasVolumeRendering) {
+        renderContext.maxProjectionEmit = maxProjectionEmit;
         const { maxProjectionConfiguration } = this;
         bindMaxProjectionBuffer = () => {
           maxProjectionConfiguration.bind(width, height);
@@ -1068,6 +1069,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           );
           const needTwoRenderingPasses =
             !layerIsProjection && !this.isCameraMoving;
+          // TODO (skm) - remove this
           if (needTwoRenderingPasses) {
             (renderLayer as VolumeRenderingRenderLayer).modeOverride.value =
               VolumeRenderingModes.MAX;
@@ -1076,13 +1078,17 @@ export class PerspectivePanel extends RenderedDataPanel {
             continue;
           }
 
+          
           // Set state for max projection mode and draw
-          gl.depthMask(true);
-          gl.disable(WebGL2RenderingContext.BLEND);
-          gl.depthFunc(WebGL2RenderingContext.GREATER);
-          renderContext.emitter = maxProjectionEmit;
-          bindMaxProjectionBuffer();
-          renderLayer.draw(renderContext, attachment);
+          // This happens in the VR layer in two rendering passes
+          if (!needTwoRenderingPasses) {
+            gl.depthMask(true);
+            gl.disable(WebGL2RenderingContext.BLEND);
+            gl.depthFunc(WebGL2RenderingContext.GREATER);
+            renderContext.emitter = maxProjectionEmit;
+            bindMaxProjectionBuffer();
+            renderLayer.draw(renderContext, attachment);
+          }
 
           // Copy max projection result to picking buffer
           // Depth testing on to combine max layers into one pick buffer via depth
