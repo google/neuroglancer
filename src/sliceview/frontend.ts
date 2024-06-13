@@ -453,6 +453,7 @@ export class SliceView extends Base {
         rpcMessage.sources = serializeAllTransformedSources(
           layerInfo.allSources,
         );
+        rpcMessage.displayDimensionRenderInfo = displayDimensionRenderInfo;
         this.flushBackendProjectionParameters();
         rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
         changed = true;

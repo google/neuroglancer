@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import {
+  validateDisplayDimensionRenderInfoProperty,
+  type DisplayDimensionRenderInfo,
+} from "#src/navigation_state.js";
 import { ProjectionParameters } from "#src/projection_parameters.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
@@ -289,8 +292,9 @@ function visibleSourcesInvalidated(
 ) {
   if (
     oldValue.displayDimensionRenderInfo !== newValue.displayDimensionRenderInfo
-  )
+  ) {
     return true;
+  }
   if (oldValue.pixelSize !== newValue.pixelSize) return true;
   const { viewMatrix: oldViewMatrix } = oldValue;
   const { viewMatrix: newViewMatrix } = newValue;
@@ -347,14 +351,15 @@ export class SliceViewBase<
       this.projectionParameters.value.displayDimensionRenderInfo;
 
     const { visibleLayers } = this;
-    for (const [
-      renderLayer,
-      { allSources, visibleSources, displayDimensionRenderInfo },
-    ] of visibleLayers) {
+    for (const [renderLayer, visibleLayerSources] of visibleLayers) {
+      const { allSources, visibleSources } = visibleLayerSources;
       visibleSources.length = 0;
       if (
-        displayDimensionRenderInfo !== curDisplayDimensionRenderInfo ||
-        allSources.length === 0
+        allSources.length === 0 ||
+        !validateDisplayDimensionRenderInfoProperty(
+          visibleLayerSources,
+          curDisplayDimensionRenderInfo,
+        )
       ) {
         continue;
       }
