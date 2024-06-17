@@ -841,7 +841,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     const chunkInfoForHistogram: StoredChunkInfoForHistogram[] = [];
     // TODO (SKM) make interface and add typing
     const shaderUniformsForSecondPass: any[] = [];
-    // TODO (SKM) this might also need to be an array
     let shaderSetupUniformsForSecondPass: any = {};
 
     gl.enable(WebGL2RenderingContext.CULL_FACE);
@@ -1049,9 +1048,13 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             });
           }
           if (needSecondPassRendering) {
+            const copiedDisplaySize = vec3.create();
+            const copiedPosition = vec3.create();
+            vec3.copy(copiedDisplaySize, chunkDataDisplaySize);
+            vec3.copy(copiedPosition, chunkPosition);
             shaderUniformsForSecondPass.push({
-              uChunkDataSize: chunkDataDisplaySize,
-              uTranslation: chunkPosition,
+              uChunkDataSize: copiedDisplaySize,
+              uTranslation: copiedPosition,
             });
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
@@ -1069,7 +1072,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     // TODO (SKM) - need to keep the transfer function textures bound?
     shader = null;
     prevChunkFormat = null;
-    shaderSetupUniformsForSecondPass;
     if (needSecondPassRendering) {
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
@@ -1089,6 +1091,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       for (let j = 0; j < presentCount; ++j) {
         newSource = true;
         const chunkInfo = chunkInfoForHistogram[j];
+        let uniforms = shaderUniformsForSecondPass[j];
         const chunkFormat = chunkInfo.chunkFormat;
         if (chunkFormat !== prevChunkFormat) {
           prevChunkFormat = chunkFormat;
@@ -1133,10 +1136,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           }
         }
         if (shader === null) break;
-        gl.uniform3fv(
-          shader.uniform("uChunkDataSize"),
-          chunkInfo.chunkDataDisplaySize,
-        );
         if (chunkFormat != null) {
           chunkFormat.bindChunk(
             gl,
@@ -1148,17 +1147,13 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             newSource,
           );
         }
-        // TODO (SKM) remove this let, make const
-        let uniforms = shaderUniformsForSecondPass[j];
+        gl.uniform3fv(shader.uniform("uTranslation"), uniforms.uTranslation);
         gl.uniform3fv(
           shader.uniform("uChunkDataSize"),
           uniforms.uChunkDataSize,
         );
-        gl.uniform3fv(
-          shader.uniform("uTranslation"),
-          chunkInfo.fixedPositionWithinChunk,
-        );
         // TODO (SKM) refactor to a new function
+        // Find the uniform with the same index
         uniforms = shaderSetupUniformsForSecondPass;
         gl.uniformMatrix4fv(
           shader.uniform("uModelViewProjectionMatrix"),
