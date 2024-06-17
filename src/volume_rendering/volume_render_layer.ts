@@ -161,7 +161,7 @@ interface StoredChunkInfoForHistogram {
   chunkDisplayDimensionIndices: number[];
   channelToChunkDimensionIndices: readonly number[];
   chunkDataDisplaySize: vec3;
-  chunkFormat: ChunkFormat;
+  chunkFormat: ChunkFormat | null | undefined;
 }
 
 const tempMat4 = mat4.create();
@@ -748,7 +748,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber,
     );
 
-    const restoreDrawingBuffers = () => {
+    const restoreDrawingBuffersAndState = () => {
       const needSecondPassRendering =
         !isProjectionMode(this.mode.value) &&
         !renderContext.cameraMovementInProgress;
@@ -762,6 +762,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           );
         }
       } else {
+        gl.enable(WebGL2RenderingContext.BLEND);
+        gl.depthMask(false);
+        gl.depthFunc(WebGL2RenderingContext.LESS);
         renderContext.bindFramebuffer();
       }
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
@@ -1034,22 +1037,22 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               channelToChunkDimensionIndices,
               newSource,
             );
-            if (needToDrawHistogram || needSecondPassRendering) {
-              chunkInfoForHistogram.push({
-                chunk,
-                fixedPositionWithinChunk,
-                chunkDisplayDimensionIndices,
-                channelToChunkDimensionIndices,
-                chunkDataDisplaySize,
-                chunkFormat: prevChunkFormat,
-              });
-            }
-            if (needSecondPassRendering) {
-              shaderUniformsForSecondPass.push({
-                uChunkDataSize: chunkDataDisplaySize,
-                uTranslation: chunkPosition,
-              });
-            }
+          }
+          if (needToDrawHistogram || needSecondPassRendering) {
+            chunkInfoForHistogram.push({
+              chunk,
+              fixedPositionWithinChunk,
+              chunkDisplayDimensionIndices,
+              channelToChunkDimensionIndices,
+              chunkDataDisplaySize,
+              chunkFormat: prevChunkFormat,
+            });
+          }
+          if (needSecondPassRendering) {
+            shaderUniformsForSecondPass.push({
+              uChunkDataSize: chunkDataDisplaySize,
+              uTranslation: chunkPosition,
+            });
           }
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
@@ -1065,13 +1068,15 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
     // TODO (SKM) - need to keep the transfer function textures bound?
     shader = null;
-    // TODO (SKM) - implement correct endShader
+    prevChunkFormat = null;
+    shaderSetupUniformsForSecondPass;
     if (needSecondPassRendering) {
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.depthFunc(WebGL2RenderingContext.GREATER);
       renderContext.emitter = renderContext.maxProjectionEmit!;
       renderContext.bindMaxProjectionBuffer!();
+      this.modeOverride.value = VolumeRenderingModes.MAX;
 
       const endHistogramShader = () => {
         if (shader === null) return;
@@ -1096,7 +1101,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           shader = shaderResult.shader;
           if (shader !== null) {
             shader.bind();
-            if (chunkFormat !== null) {
+            if (chunkFormat !== null && chunkFormat !== undefined) {
               setControlsInShader(
                 gl,
                 shader,
@@ -1127,14 +1132,13 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             }
           }
         }
-        chunkDataSize = undefined;
         if (shader === null) break;
         gl.uniform3fv(
           shader.uniform("uChunkDataSize"),
           chunkInfo.chunkDataDisplaySize,
         );
-        if (prevChunkFormat != null) {
-          prevChunkFormat.bindChunk(
+        if (chunkFormat != null) {
+          chunkFormat.bindChunk(
             gl,
             shader,
             chunkInfo.chunk,
@@ -1154,28 +1158,41 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           shader.uniform("uTranslation"),
           chunkInfo.fixedPositionWithinChunk,
         );
+        // TODO (SKM) refactor to a new function
+        uniforms = shaderSetupUniformsForSecondPass;
         gl.uniformMatrix4fv(
           shader.uniform("uModelViewProjectionMatrix"),
           false,
           uniforms.uModelViewProjectionMatrix,
-        )
+        );
         gl.uniformMatrix4fv(
           shader.uniform("uInvModelViewProjectionMatrix"),
           false,
           uniforms.uInvModelViewProjectionMatrix,
-        )
-        uniforms = shaderSetupUniformsForSecondPass;
-        // TODO (SKM) refactor to a new function
-        gl.uniform1f(shader.uniform("uNearLimitFraction"), uniforms.uNearLimitFraction);
-        gl.uniform1f(shader.uniform("uFarLimitFraction"), uniforms.uFarLimitFraction);
+        );
+        gl.uniform1f(
+          shader.uniform("uNearLimitFraction"),
+          uniforms.uNearLimitFraction,
+        );
+        gl.uniform1f(
+          shader.uniform("uFarLimitFraction"),
+          uniforms.uFarLimitFraction,
+        );
         gl.uniform1f(shader.uniform("uGain"), uniforms.uGain);
         gl.uniform1ui(shader.uniform("uPickId"), uniforms.uPickId);
         gl.uniform1i(shader.uniform("uMaxSteps"), uniforms.uMaxSteps);
-        gl.uniform3fv(shader.uniform("uLowerClipBound"), uniforms.uLowerClipBound);
-        gl.uniform3fv(shader.uniform("uUpperClipBound"), uniforms.uUpperClipBound);
+        gl.uniform3fv(
+          shader.uniform("uLowerClipBound"),
+          uniforms.uLowerClipBound,
+        );
+        gl.uniform3fv(
+          shader.uniform("uUpperClipBound"),
+          uniforms.uUpperClipBound,
+        );
         drawBoxes(gl, 1, 1);
         newSource = false;
       }
+      this.modeOverride.value = VolumeRenderingModes.OFF;
     }
     this.vertexIdHelper.disable();
     gl.disable(WebGL2RenderingContext.CULL_FACE);
@@ -1240,7 +1257,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           });
           histogramShader = histogramShaderResult.shader;
           if (histogramShader !== null) {
-            if (chunkFormat !== null) {
+            if (chunkFormat !== null && chunkFormat !== undefined) {
               chunkFormat.beginDrawing(gl, histogramShader);
               chunkFormat.beginSource(gl, histogramShader);
             }
@@ -1319,7 +1336,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         }
       }
       endHistogramShader();
-      restoreDrawingBuffers();
+    }
+    if (needSecondPassRendering || needToDrawHistogram) {
+      restoreDrawingBuffersAndState();
     }
   }
 

@@ -66,10 +66,7 @@ import type {
 } from "#src/util/touch_bindings.js";
 import { WatchableMap } from "#src/util/watchable_map.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
-import {
-  VolumeRenderingModes,
-  isProjectionLayer,
-} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
+import { isProjectionLayer } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import type { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 import {
   DepthStencilRenderbuffer,
@@ -1069,16 +1066,13 @@ export class PerspectivePanel extends RenderedDataPanel {
           );
           const needTwoRenderingPasses =
             !layerIsProjection && !this.isCameraMoving;
-          // TODO (skm) - remove this
-          if (needTwoRenderingPasses) {
-            (renderLayer as VolumeRenderingRenderLayer).modeOverride.value =
-              VolumeRenderingModes.MAX;
-          } else if (!layerIsProjection) {
+          // Draw a single pass if the camera is moving
+          // TODO clearer condition
+          if (!needTwoRenderingPasses && !layerIsProjection) {
             renderLayer.draw(renderContext, attachment);
             continue;
           }
 
-          
           // Set state for max projection mode and draw
           // This happens in the VR layer in two rendering passes
           if (!needTwoRenderingPasses) {
@@ -1088,10 +1082,15 @@ export class PerspectivePanel extends RenderedDataPanel {
             renderContext.emitter = maxProjectionEmit;
             bindMaxProjectionBuffer();
             renderLayer.draw(renderContext, attachment);
+          } else {
+            renderLayer.draw(renderContext, attachment);
           }
 
           // Copy max projection result to picking buffer
           // Depth testing on to combine max layers into one pick buffer via depth
+          gl.depthMask(true);
+          gl.disable(WebGL2RenderingContext.BLEND);
+          gl.depthFunc(WebGL2RenderingContext.GREATER);
           bindMaxProjectionPickingBuffer();
           this.maxProjectionToPickCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
@@ -1138,11 +1137,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.depthFunc(WebGL2RenderingContext.LESS);
           renderContext.emitter = perspectivePanelEmitOIT;
           renderContext.bindFramebuffer();
-          if (needTwoRenderingPasses) {
-            (renderLayer as VolumeRenderingRenderLayer).modeOverride.value =
-              VolumeRenderingModes.OFF;
-            renderLayer.draw(renderContext, attachment);
-          }
         }
         // Draw regular transparent layers
         else if (renderLayer.isTransparent) {
