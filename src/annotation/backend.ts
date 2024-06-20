@@ -43,7 +43,7 @@ import {
 } from "#src/chunk_manager/backend.js";
 import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
 import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
-import { displayDimensionRenderInfosEqual } from "#src/navigation_state.js";
+import { validateDisplayDimensionRenderInfoProperty } from "#src/navigation_state.js";
 import type {
   RenderedViewBackend,
   RenderLayerBackendAttachment,
@@ -412,22 +412,15 @@ class AnnotationSpatiallyIndexedRenderLayerBackend extends withChunkManager(
       }
       const attachmentState =
         attachment.state! as AnnotationRenderLayerAttachmentState;
-      const { transformedSources, displayDimensionRenderInfo } =
-        attachmentState;
-      if (transformedSources.length === 0) continue;
-      const viewDisplayDimensionRenderInfo =
-        view.projectionParameters.value.displayDimensionRenderInfo;
-      if (displayDimensionRenderInfo !== viewDisplayDimensionRenderInfo) {
-        if (
-          !displayDimensionRenderInfosEqual(
-            displayDimensionRenderInfo,
-            viewDisplayDimensionRenderInfo,
-          )
-        ) {
-          continue;
-        }
-        attachmentState.displayDimensionRenderInfo =
-          viewDisplayDimensionRenderInfo;
+      const { transformedSources } = attachmentState;
+      if (
+        transformedSources.length === 0 ||
+        !validateDisplayDimensionRenderInfoProperty(
+          attachmentState,
+          view.projectionParameters.value.displayDimensionRenderInfo,
+        )
+      ) {
+        continue;
       }
       const priorityTier = getPriorityTier(visibility);
       const basePriority = getBasePriority(visibility);

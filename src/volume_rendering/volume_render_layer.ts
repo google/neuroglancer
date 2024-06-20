@@ -699,6 +699,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 layer: this.backend.rpcId,
                 view: attachment.view.rpcId,
                 sources: serializeAllTransformedSources(transformedSources),
+                displayDimensionRenderInfo,
               },
             );
             this.redrawNeeded.dispatch();

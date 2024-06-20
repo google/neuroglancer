@@ -16,7 +16,10 @@
 
 import { withChunkManager } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
-import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
+import {
+  type DisplayDimensionRenderInfo,
+  validateDisplayDimensionRenderInfoProperty,
+} from "#src/navigation_state.js";
 import type {
   RenderedViewBackend,
   RenderLayerBackendAttachment,
@@ -113,12 +116,16 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager(
       if (visibility === Number.NEGATIVE_INFINITY) {
         continue;
       }
-      const { transformedSources, displayDimensionRenderInfo } =
+      const state =
         attachment.state as VolumeRenderingRenderLayerAttachmentState;
+      const { transformedSources } = state;
+
       if (
         transformedSources.length === 0 ||
-        displayDimensionRenderInfo !==
-          view.projectionParameters.value.displayDimensionRenderInfo
+        !validateDisplayDimensionRenderInfoProperty(
+          state,
+          view.projectionParameters.value.displayDimensionRenderInfo,
+        )
       ) {
         continue;
       }
@@ -193,7 +200,6 @@ registerRPC(VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, function (x) {
     VolumeChunkSource,
     VolumeRenderingRenderLayerBackend
   >(this, x.sources, layer);
-  attachment.state!.displayDimensionRenderInfo =
-    attachment.view.projectionParameters.value.displayDimensionRenderInfo;
+  attachment.state!.displayDimensionRenderInfo = x.displayDimensionRenderInfo;
   layer.chunkManager.scheduleUpdateChunkPriorities();
 });
