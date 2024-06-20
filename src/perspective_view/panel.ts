@@ -447,6 +447,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       element,
       "rotate-in-plane-via-touchrotate",
       (e: ActionEvent<TouchRotateInfo>) => {
+        this.context.flagContinuousCameraMotion();
         const { detail } = e;
         this.navigationState.pose.rotateRelative(
           kAxes[2],
@@ -459,6 +460,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       element,
       "rotate-out-of-plane-via-touchtranslate",
       (e: ActionEvent<TouchTranslateInfo>) => {
+        this.context.flagContinuousCameraMotion();
         const { detail } = e;
         this.navigationState.pose.rotateRelative(
           kAxes[1],
