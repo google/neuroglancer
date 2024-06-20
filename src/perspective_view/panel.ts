@@ -81,8 +81,6 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const REDRAW_DELAY_AFTER_CAMERA_MOVE = 300;
-
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
@@ -253,7 +251,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected visibleLayerTracker: Owned<
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
-  private redrawAfterMoveTimeOutId: number = -1;
+
+  private hasVolumeRendering = false;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -263,9 +262,6 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
   get displayDimensionRenderInfo() {
     return this.navigationState.displayDimensionRenderInfo;
-  }
-  get isCameraMoving() {
-    return this.redrawAfterMoveTimeOutId !== -1;
   }
 
   /**
@@ -424,18 +420,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
 
     this.registerDisposer(
-      this.viewer.navigationState.changed.add(() => {
-        // Don't mark camera moving on picking requests
-        if (this.isMovingToMousePosition) {
-          return;
-        }
-        if (this.redrawAfterMoveTimeOutId !== -1) {
-          window.clearTimeout(this.redrawAfterMoveTimeOutId);
-        }
-        this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
-          this.redrawAfterMoveTimeOutId = -1;
-          this.context.scheduleRedraw();
-        }, REDRAW_DELAY_AFTER_CAMERA_MOVE);
+      this.context.continuousCameraMotionFinished.add(() => {
+        if (this.hasVolumeRendering) this.scheduleRedraw();
       }),
     );
 
@@ -444,6 +430,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       "rotate-via-mouse-drag",
       (e: ActionEvent<MouseEvent>) => {
         startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+          this.context.flagContinuousCameraMotion();
           this.navigationState.pose.rotateRelative(
             kAxes[1],
             ((deltaX / 4.0) * Math.PI) / 180.0,
@@ -925,7 +912,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
-      cameraMovementInProgress: this.isCameraMoving,
+      continousCameraMovementInProgress:
+        this.context.isContinuousCameraMotionInProgress,
     };
 
     mat4.copy(
@@ -937,8 +925,8 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     let hasTransparent = false;
     let hasMaxProjection = false;
-
     let hasAnnotation = false;
+    let hasVolumeRendering = false;
 
     // Draw fully-opaque layers first.
     for (const [renderLayer, attachment] of visibleLayers) {
@@ -951,12 +939,14 @@ export class PerspectivePanel extends RenderedDataPanel {
       } else {
         hasTransparent = true;
         if (renderLayer.isVolumeRendering) {
+          hasVolumeRendering = true;
           hasMaxProjection =
             hasMaxProjection ||
             isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
         }
       }
     }
+    this.hasVolumeRendering = hasVolumeRendering;
     this.drawSliceViews(renderContext);
 
     if (hasAnnotation) {
