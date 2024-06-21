@@ -81,8 +81,6 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
-const REDRAW_DELAY_AFTER_CAMERA_MOVE = 300;
-
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
@@ -253,7 +251,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected visibleLayerTracker: Owned<
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
-  private redrawAfterMoveTimeOutId: number = -1;
+  private hasVolumeRendering = false;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -263,9 +261,6 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
   get displayDimensionRenderInfo() {
     return this.navigationState.displayDimensionRenderInfo;
-  }
-  get isCameraMoving() {
-    return this.redrawAfterMoveTimeOutId !== -1;
   }
 
   /**
@@ -424,18 +419,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
 
     this.registerDisposer(
-      this.viewer.navigationState.changed.add(() => {
-        // Don't mark camera moving on picking requests
-        if (this.isMovingToMousePosition) {
-          return;
-        }
-        if (this.redrawAfterMoveTimeOutId !== -1) {
-          window.clearTimeout(this.redrawAfterMoveTimeOutId);
-        }
-        this.redrawAfterMoveTimeOutId = window.setTimeout(() => {
-          this.redrawAfterMoveTimeOutId = -1;
-          this.context.scheduleRedraw();
-        }, REDRAW_DELAY_AFTER_CAMERA_MOVE);
+      this.context.continuousCameraMotionFinished.add(() => {
+        if (this.hasVolumeRendering) this.scheduleRedraw();
       }),
     );
 
@@ -444,6 +429,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       "rotate-via-mouse-drag",
       (e: ActionEvent<MouseEvent>) => {
         startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+          this.context.flagContinuousCameraMotion();
           this.navigationState.pose.rotateRelative(
             kAxes[1],
             ((deltaX / 4.0) * Math.PI) / 180.0,
@@ -460,6 +446,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       element,
       "rotate-in-plane-via-touchrotate",
       (e: ActionEvent<TouchRotateInfo>) => {
+        this.context.flagContinuousCameraMotion();
         const { detail } = e;
         this.navigationState.pose.rotateRelative(
           kAxes[2],
@@ -472,6 +459,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       element,
       "rotate-out-of-plane-via-touchtranslate",
       (e: ActionEvent<TouchTranslateInfo>) => {
+        this.context.flagContinuousCameraMotion();
         const { detail } = e;
         this.navigationState.pose.rotateRelative(
           kAxes[1],
@@ -925,7 +913,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
-      cameraMovementInProgress: this.isCameraMoving,
+      isContinuousCameraMotionInProgress:
+        this.context.isContinuousCameraMotionInProgress,
     };
 
     mat4.copy(
@@ -936,9 +925,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     const { visibleLayers } = this.visibleLayerTracker;
 
     let hasTransparent = false;
-    let hasMaxProjection = false;
-
+    // By default, volume rendering layers are not pickable when the camera is moving.
+    let hasVolumeRenderingPick =
+      !this.context.isContinuousCameraMotionInProgress;
     let hasAnnotation = false;
+    let hasVolumeRendering = false;
 
     // Draw fully-opaque layers first.
     for (const [renderLayer, attachment] of visibleLayers) {
@@ -951,12 +942,14 @@ export class PerspectivePanel extends RenderedDataPanel {
       } else {
         hasTransparent = true;
         if (renderLayer.isVolumeRendering) {
-          hasMaxProjection =
-            hasMaxProjection ||
+          hasVolumeRendering = true;
+          hasVolumeRenderingPick =
+            hasVolumeRenderingPick ||
             isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
         }
       }
     }
+    this.hasVolumeRendering = hasVolumeRendering;
     this.drawSliceViews(renderContext);
 
     if (hasAnnotation) {
@@ -1004,7 +997,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Create max projection buffer if needed.
       let bindMaxProjectionBuffer: () => void = () => {};
       let bindMaxProjectionPickingBuffer: () => void = () => {};
-      if (hasMaxProjection) {
+      if (this.hasVolumeRendering) {
+        renderContext.maxProjectionEmit = maxProjectionEmit;
         const { maxProjectionConfiguration } = this;
         bindMaxProjectionBuffer = () => {
           maxProjectionConfiguration.bind(width, height);
@@ -1050,25 +1044,41 @@ export class PerspectivePanel extends RenderedDataPanel {
       );
       renderContext.emitPickID = false;
       for (const [renderLayer, attachment] of visibleLayers) {
-        if (renderLayer.isTransparent) {
+        if (renderLayer.isVolumeRendering) {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
-        }
-        // Draw max projection layers
-        if (
-          renderLayer.isVolumeRendering &&
-          isProjectionLayer(renderLayer as VolumeRenderingRenderLayer)
-        ) {
-          // Set state for max projection mode and draw
-          gl.depthMask(true);
-          gl.disable(WebGL2RenderingContext.BLEND);
-          gl.depthFunc(WebGL2RenderingContext.GREATER);
-          renderContext.emitter = maxProjectionEmit;
-          bindMaxProjectionBuffer();
+
+          const isVolumeProjectionLayer = isProjectionLayer(
+            renderLayer as VolumeRenderingRenderLayer,
+          );
+          const needsSecondPickingPass =
+            !isVolumeProjectionLayer &&
+            !this.context.isContinuousCameraMotionInProgress;
+
+          // Two cases for volume rendering layers
+
+          // Case 1 - No picking pass needed and not a projection layer
+          // Draw the layer as normal and continue on
+          if (!needsSecondPickingPass && !isVolumeProjectionLayer) {
+            renderLayer.draw(renderContext, attachment);
+            continue;
+          }
+
+          // Case 2 - Picking will be computed from a max projection
+          // But a second pass may not be needed to do this picking
+
+          // Set state for max projection mode if needed
+          if (isVolumeProjectionLayer) {
+            gl.depthMask(true);
+            gl.disable(WebGL2RenderingContext.BLEND);
+            gl.depthFunc(WebGL2RenderingContext.GREATER);
+            renderContext.emitter = maxProjectionEmit;
+            bindMaxProjectionBuffer();
+          }
           renderLayer.draw(renderContext, attachment);
 
-          // Copy max projection result to picking buffer
-          // Depth testing on to combine max layers into one pick buffer via depth
+          // Copy the volume rendering picking result to the main picking buffer
+          // Depth testing remains on to combine max layers into one pick buffer via depth
           bindMaxProjectionPickingBuffer();
           this.maxProjectionToPickCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
@@ -1077,11 +1087,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             this.maxProjectionConfiguration.colorBuffers[3 /*pick*/].texture,
           );
 
-          // Copy max projection color result to the transparent buffer with OIT
-          // Depth testing off to combine max layers into one color via blend
-          renderContext.bindFramebuffer();
-          gl.depthMask(false);
-          gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+          // Turn back on OIT blending
           gl.enable(WebGL2RenderingContext.BLEND);
           gl.blendFuncSeparate(
             WebGL2RenderingContext.ONE,
@@ -1089,12 +1095,20 @@ export class PerspectivePanel extends RenderedDataPanel {
             WebGL2RenderingContext.ZERO,
             WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
           );
-          this.maxProjectionColorCopyHelper.draw(
-            this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
-            this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
-          );
 
-          // Reset the max projection buffer
+          // Copy max projection color result to the transparent buffer with OIT
+          // Depth testing off to combine max layers into one color via blending
+          if (isVolumeProjectionLayer) {
+            renderContext.bindFramebuffer();
+            gl.depthMask(false);
+            gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+            this.maxProjectionColorCopyHelper.draw(
+              this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
+              this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
+            );
+          }
+
+          // Reset the max projection color, depth, and picking buffer
           bindMaxProjectionBuffer();
           gl.depthMask(true);
           gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -1161,7 +1175,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         /*dppass=*/ WebGL2RenderingContext.REPLACE,
       );
       gl.stencilMask(2);
-      if (hasMaxProjection) {
+      if (hasVolumeRenderingPick) {
         this.maxProjectionPickCopyHelper.draw(
           this.maxProjectionPickConfiguration.colorBuffers[0].texture /*depth*/,
           this.maxProjectionPickConfiguration.colorBuffers[1].texture /*pick*/,

@@ -176,6 +176,7 @@ export class SliceViewPanel extends RenderedDataPanel {
         if (mouseState.updateUnconditionally()) {
           const initialPosition = Float32Array.from(mouseState.position);
           startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+            this.context.flagContinuousCameraMotion();
             const { pose } = this.navigationState;
             const xAxis = vec3.transformQuat(
               tempVec3,
@@ -210,6 +211,7 @@ export class SliceViewPanel extends RenderedDataPanel {
         const { mouseState } = this.viewer;
         this.handleMouseMove(detail.centerX, detail.centerY);
         if (mouseState.updateUnconditionally()) {
+          this.context.flagContinuousCameraMotion();
           this.navigationState.pose.rotateAbsolute(
             this.sliceView.projectionParameters.value
               .viewportNormalInCanonicalCoordinates,
