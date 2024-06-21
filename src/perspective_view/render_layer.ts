@@ -64,7 +64,7 @@ export interface PerspectiveViewRenderContext
   /**
    * Specifies if the camera is moving
    */
-  continousCameraMovementInProgress: boolean;
+  isContinuousCameraMotionInProgress: boolean;
 
   /**
    * Specifices how to bind the max projection buffer
