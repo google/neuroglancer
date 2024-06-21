@@ -1090,7 +1090,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       newSource = true;
       for (let j = 0; j < presentCount; ++j) {
         const chunkInfo = chunkInfoForMultipass[j];
-        let uniforms = shaderUniformsForSecondPass[j];
+        const uniforms = shaderUniformsForSecondPass[j];
         const chunkFormat = chunkInfo.chunkFormat;
         if (chunkFormat !== prevChunkFormat) {
           prevChunkFormat = chunkFormat;
