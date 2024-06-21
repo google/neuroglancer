@@ -754,17 +754,13 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         !isProjectionMode(this.mode.value) &&
         !renderContext.cameraMovementInProgress;
       if (isProjectionMode(this.mode.value) || needSecondPassRendering) {
+        gl.depthMask(true);
         gl.disable(WebGL2RenderingContext.BLEND);
-        if (renderContext.bindMaxProjectionBuffer !== undefined) {
-          renderContext.bindMaxProjectionBuffer();
-        } else {
-          throw new Error(
-            "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
-          );
-        }
+        gl.depthFunc(WebGL2RenderingContext.GREATER);
+        renderContext.bindMaxProjectionBuffer!();
       } else {
-        gl.enable(WebGL2RenderingContext.BLEND);
         gl.depthMask(false);
+        gl.enable(WebGL2RenderingContext.BLEND);
         gl.depthFunc(WebGL2RenderingContext.LESS);
         renderContext.bindFramebuffer();
       }

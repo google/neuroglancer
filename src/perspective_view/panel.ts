@@ -1055,42 +1055,40 @@ export class PerspectivePanel extends RenderedDataPanel {
       );
       renderContext.emitPickID = false;
       for (const [renderLayer, attachment] of visibleLayers) {
-        if (renderLayer.isTransparent) {
+        if (renderLayer.isVolumeRendering) {
           renderContext.depthBufferTexture =
             this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
-        }
-        // Draw volume rendering layers
-        if (renderLayer.isVolumeRendering) {
-          const layerIsProjection = isProjectionLayer(
+
+          const isVolumeProjectionLayer = isProjectionLayer(
             renderLayer as VolumeRenderingRenderLayer,
           );
-          const needTwoRenderingPasses =
-            !layerIsProjection && !this.isCameraMoving;
-          // Draw a single pass if the camera is moving
-          // TODO clearer condition
-          if (!needTwoRenderingPasses && !layerIsProjection) {
+          const needsSecondPickingPass =
+            !isVolumeProjectionLayer && !this.isCameraMoving;
+
+          // Two cases for volume rendering layers
+
+          // Case 1 - No picking pass needed and not a projection layer
+          // Draw the layer as normal and continue on
+          if (!needsSecondPickingPass && !isVolumeProjectionLayer) {
             renderLayer.draw(renderContext, attachment);
             continue;
           }
 
-          // Set state for max projection mode and draw
-          // This happens in the VR layer in two rendering passes
-          if (!needTwoRenderingPasses) {
+          // Case 2 - Picking will be computed from a max projection
+          // But a second pass may not be needed to do this picking
+
+          // Set state for max projection mode if needed
+          if (isVolumeProjectionLayer) {
             gl.depthMask(true);
             gl.disable(WebGL2RenderingContext.BLEND);
             gl.depthFunc(WebGL2RenderingContext.GREATER);
             renderContext.emitter = maxProjectionEmit;
             bindMaxProjectionBuffer();
-            renderLayer.draw(renderContext, attachment);
-          } else {
-            renderLayer.draw(renderContext, attachment);
           }
+          renderLayer.draw(renderContext, attachment);
 
-          // Copy max projection result to picking buffer
-          // Depth testing on to combine max layers into one pick buffer via depth
-          gl.depthMask(true);
-          gl.disable(WebGL2RenderingContext.BLEND);
-          gl.depthFunc(WebGL2RenderingContext.GREATER);
+          // Copy the volume rendering picking result to the main picking buffer
+          // Depth testing remains on to combine max layers into one pick buffer via depth
           bindMaxProjectionPickingBuffer();
           this.maxProjectionToPickCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
@@ -1107,9 +1105,10 @@ export class PerspectivePanel extends RenderedDataPanel {
             WebGL2RenderingContext.ZERO,
             WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
           );
-          if (!needTwoRenderingPasses) {
-            // Copy max projection color result to the transparent buffer with OIT
-            // Depth testing off to combine max layers into one color via blend
+
+          // Copy max projection color result to the transparent buffer with OIT
+          // Depth testing off to combine max layers into one color via blending
+          if (isVolumeProjectionLayer) {
             renderContext.bindFramebuffer();
             gl.depthMask(false);
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
@@ -1119,7 +1118,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             );
           }
 
-          // Reset the max projection buffer
+          // Reset the max projection color, depth, and picking buffer
           bindMaxProjectionBuffer();
           gl.depthMask(true);
           gl.clearColor(0.0, 0.0, 0.0, 0.0);
