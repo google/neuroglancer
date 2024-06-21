@@ -774,7 +774,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     const restoreDrawingBuffersAndState = () => {
       const performedSecondPassForPicking =
         !isProjectionMode(this.mode.value) &&
-        !renderContext.cameraMovementInProgress;
+        !renderContext.isContinuousCameraMotionInProgress;
       // In this case, we need the max projection buffer
       if (isProjectionMode(this.mode.value) || performedSecondPassForPicking) {
         gl.depthMask(true);
@@ -850,10 +850,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       this.getDataHistogramCount() > 0 &&
       !renderContext.wireFrame &&
       !renderContext.sliceViewsPresent &&
-      !renderContext.cameraMovementInProgress;
+      !renderContext.isContinuousCameraMotionInProgress;
     const needPickingPass =
       !isProjectionMode(this.mode.value) &&
-      !renderContext.cameraMovementInProgress;
+      !renderContext.isContinuousCameraMotionInProgress;
     const hasPicking = isProjectionMode(this.mode.value) || needPickingPass;
 
     const pickId = hasPicking ? renderContext.pickIDs.register(this) : 0;
