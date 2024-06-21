@@ -764,6 +764,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
     const { gl } = this;
     this.vertexIdHelper.enable();
+    this.modeOverride.value = VolumeRenderingModes.OFF;
 
     const { chunkResolutionHistogram: renderScaleHistogram } = this;
     renderScaleHistogram.begin(
@@ -1024,6 +1025,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 ? 0
                 : originalChunkSize[i] * chunkGridPosition[chunkDim];
           }
+          gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           if (prevChunkFormat != null) {
             prevChunkFormat.bindChunk(
               gl,
@@ -1035,6 +1037,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               newSource,
             );
           }
+          // Save information for possible repasses through the data
           if (needToDrawHistogram || needPickingPass) {
             chunkInfoForMultipass.push({
               chunk,
@@ -1055,7 +1058,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               uTranslation: copiedPosition,
             });
           }
-          gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           drawBoxes(gl, 1, 1);
 
           newSource = false;
@@ -1085,8 +1087,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         }
       };
 
+      newSource = true;
       for (let j = 0; j < presentCount; ++j) {
-        newSource = true;
         const chunkInfo = chunkInfoForMultipass[j];
         let uniforms = shaderUniformsForSecondPass[j];
         const chunkFormat = chunkInfo.chunkFormat;
