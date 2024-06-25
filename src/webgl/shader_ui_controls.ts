@@ -1418,7 +1418,11 @@ export class ShaderControlState
       (state) => {
         const channels: HistogramChannelSpecification[] = [];
         for (const { control, trackable } of state.values()) {
-          if (control.type !== "imageInvlerp") continue;
+          if (
+            control.type !== "imageInvlerp" &&
+            control.type !== "transferFunction"
+          )
+            continue;
           channels.push({ channel: trackable.value.channel });
         }
         return channels;
