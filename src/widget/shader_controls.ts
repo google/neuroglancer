@@ -102,6 +102,8 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         channelCoordinateSpaceCombiner:
           shaderControlState.channelCoordinateSpaceCombiner,
         defaultChannel: control.default.channel,
+        histogramSpecifications: shaderControlState.histogramSpecifications,
+        histogramIndex: calculateHistogramIndex(),
       }));
     }
   }
@@ -109,7 +111,8 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
   function calculateHistogramIndex(controlType: string = control.type) {
     let histogramIndex = 0;
     for (const [
-      otherName, {
+      otherName,
+      {
         control: { type: otherType },
       },
     ] of shaderControlState.state) {
