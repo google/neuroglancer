@@ -17,3 +17,4 @@ import "#datasource/precomputed/register_default";
 import "#datasource/render/register_default";
 import "#datasource/vtk/register_default";
 import "#datasource/zarr/register_default";
+import "#datasource/niftizarr/register_default";
