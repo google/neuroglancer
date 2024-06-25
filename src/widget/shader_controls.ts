@@ -75,16 +75,6 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
     case "checkbox":
       return checkboxLayerControl(() => controlState.trackable);
     case "imageInvlerp": {
-      let histogramIndex = 0;
-      for (const [
-        otherName,
-        {
-          control: { type: otherType },
-        },
-      ] of shaderControlState.state) {
-        if (otherName === controlId) break;
-        if (otherType === "imageInvlerp") ++histogramIndex;
-      }
       return channelInvlerpLayerControl(() => ({
         dataType: control.dataType,
         defaultChannel: control.default.channel,
@@ -92,26 +82,16 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         channelCoordinateSpaceCombiner:
           shaderControlState.channelCoordinateSpaceCombiner,
         histogramSpecifications: shaderControlState.histogramSpecifications,
-        histogramIndex,
+        histogramIndex: calculateHistogramIndex(),
         legendShaderOptions: layerShaderControls.legendShaderOptions,
       }));
     }
     case "propertyInvlerp": {
-      let histogramIndex = 0;
-      for (const [
-        otherName,
-        {
-          control: { type: otherType },
-        },
-      ] of shaderControlState.state) {
-        if (otherName === controlId) break;
-        if (otherType === "propertyInvlerp") ++histogramIndex;
-      }
       return propertyInvlerpLayerControl(() => ({
         properties: control.properties,
         watchableValue: controlState.trackable,
         histogramSpecifications: shaderControlState.histogramSpecifications,
-        histogramIndex,
+        histogramIndex: calculateHistogramIndex(),
         legendShaderOptions: layerShaderControls.legendShaderOptions,
       }));
     }
@@ -124,6 +104,19 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         defaultChannel: control.default.channel,
       }));
     }
+  }
+
+  function calculateHistogramIndex(controlType: string = control.type) {
+    let histogramIndex = 0;
+    for (const [
+      otherName, {
+        control: { type: otherType },
+      },
+    ] of shaderControlState.state) {
+      if (otherName === controlId) break;
+      if (otherType === controlType) ++histogramIndex;
+    }
+    return histogramIndex;
   }
 }
 
