@@ -979,7 +979,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     }
   }
 
-  private lineShader = this.registerDisposer(
+  private histogramLineShader = this.registerDisposer(
     (() => {
       const builder = new ShaderBuilder(this.gl);
       defineLineShader(builder);
@@ -1028,7 +1028,7 @@ float cdf2 = cumSumEnd / total;
 emitLine(getVertex(cdf1, lineNumber), getVertex(cdf2, lineNumber + 1), 1.0);
 `);
       builder.setFragmentMain(`
-out_color = vec4(1.0, 0.0, 1.0, getLineAlpha());
+out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
 `);
       return builder.build();
     })(),
@@ -1047,7 +1047,7 @@ vec4 end = vec4(aLineStartEnd[2], aLineStartEnd[3], 0.0, 1.0);
 emitLine(start, end, 1.0);
 `);
       builder.setFragmentMain(`
-out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
+out_color = vec4(0.35, 0.35, 0.35, getLineAlpha());
 `);
       return builder.build();
     })(),
@@ -1113,7 +1113,7 @@ out_color = tempColor * alpha;
       gl,
       transferFunctionShader,
       controlPointsShader,
-      lineShader,
+      histogramLineShader: lineShader,
     } = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
