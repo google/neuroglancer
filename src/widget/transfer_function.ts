@@ -51,6 +51,7 @@ import type { WatchableVisibilityPriority } from "#src/visibility_priority/front
 import type { Buffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
@@ -72,7 +73,6 @@ import {
   getUpdatedRangeAndWindowParameters,
   updateInputBoundValue,
   updateInputBoundWidth,
-  NUM_HISTOGRAM_BINS_IN_RANGE,
   NUM_CDF_LINES,
 } from "#src/widget/invlerp.js";
 import type {
@@ -81,7 +81,6 @@ import type {
 } from "#src/widget/layer_control.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
 import { Tab } from "#src/widget/tab_view.js";
-import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 
 const TRANSFER_FUNCTION_PANEL_SIZE = 512;
 export const NUM_COLOR_CHANNELS = 4;
