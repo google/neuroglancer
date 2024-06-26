@@ -109,6 +109,21 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
   }
 
   function calculateHistogramIndex(controlType: string = control.type) {
+    const isMatchingControlType = (otherControlType: string) => {
+      if (
+        controlType === "imageInvlerp" ||
+        controlType === "transferFunction"
+      ) {
+        return (
+          otherControlType === "imageInvlerp" ||
+          otherControlType === "transferFunction"
+        );
+      } else if (controlType === "propertyInvlerp") {
+        return otherControlType === "propertyInvlerp";
+      } else {
+        throw new Error(`${controlType} does not support histogram index.`);
+      }
+    };
     let histogramIndex = 0;
     for (const [
       otherName,
@@ -117,7 +132,7 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
       },
     ] of shaderControlState.state) {
       if (otherName === controlId) break;
-      if (otherType === controlType) ++histogramIndex;
+      if (isMatchingControlType(otherType)) histogramIndex++;
     }
     return histogramIndex;
   }
