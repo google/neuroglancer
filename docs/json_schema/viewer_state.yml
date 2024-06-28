@@ -1,0 +1,252 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: ViewerState
+title: "Complete state of a Neuroglancer instance."
+type: object
+properties:
+  dimensions:
+    $ref: CoordinateSpace
+    title: "Global coordinate space."
+  relativeDisplayScales:
+    $ref: RelativeDisplayScales
+    title: "Default additional relative display scale factors for each `global dimension<.dimensions>`."
+  displayDimensions:
+    $ref: DisplayDimensions
+    title: "Default display dimensions for 2d and 3d projections."
+  position:
+    $ref: Position
+    title: "Global position within each `global dimension<.dimensions>`."
+  crossSectionOrientation:
+    $ref: Orientation
+    title: "Default orientation within the `.displayDimensions`."
+  crossSectionScale:
+    $ref: DisplayScale
+    title: "Default display scale (zoom level) for cross-section views."
+  crossSectionDepth:
+    $ref: DepthRange
+    title: "Default depth-of-field for cross-section views."
+  projectionOrientation:
+    $ref: Orientation
+    title: "Default orientation within the `.displayDimensions`."
+  projectionScale:
+    $ref: DisplayScale
+    title: "Default display scale (zoom level) for projection views."
+  projectionDepth:
+    $ref: DepthRange
+    title: "Default depth-of-field for projection views."
+  layers:
+    type: array
+    items:
+      $ref: Layer
+  showAxisLines:
+    type: boolean
+    title: "Indicates whether to show the red/green/blue axis lines."
+    default: true
+  wireFrame:
+    type: boolean
+    title: "Indicates whether to enable wireframe rendering mode (for debugging)."
+    default: false
+  showScaleBar:
+    type: boolean
+    title: "Indicates whether to show scale bars."
+    default: true
+  showDefaultAnnotations:
+    type: boolean
+    title: "Indicates whether to show bounding boxes of data sources."
+    default: true
+  showSlices:
+    type: boolean
+    title: "Indicates whether to show cross sections in the 3-d view of `~DataPanelLayoutType.4panel` layouts."
+    default: true
+  gpuMemoryLimit:
+    type: integer
+    title: "GPU memory limit, in bytes."
+  systemMemoryLimit:
+    type: integer
+    title: "System memory limit, in bytes."
+  concurrentDownloads:
+    type: integer
+    title: "Maximum number of concurrent downloads."
+  prefetch:
+    type: boolean
+    title: "Indicates whether to use adaptive prefetching."
+    default: true
+  title:
+    type: string
+    title: "Additional text to include in the page title."
+  layout:
+    oneOf:
+      - $ref: DataPanelLayoutType
+      - $ref: DataPanelLayout
+      - $ref: HierarchicalLayout
+    title: "Data panel and layer group layout."
+definitions:
+  CoordinateSpace:
+    $id: CoordinateSpace
+    title: "Specifies a coordinate space."
+    type: object
+    properties:
+      "<dimension-name>":
+        type: array
+        items:
+          - type: number
+          - type: string
+        title: Specifies a dimension name and the corresponding scale/unit.
+
+  DisplayDimensions:
+    $id: DisplayDimensions
+    type: array
+    items:
+      type: string
+    minItems: 0
+    maxItems: 3
+    uniqueItems: true
+    title: "Specifies the display dimensions for 2d and 3d projections."
+    description: |
+  Orientation:
+    $id: Orientation
+    title: "Specifies a 3-d orientation as a unit quaternion."
+    description: |
+      For the 3-d projection view and for the `DataPanelLayoutType.xy` cross-section
+      view, with the default orientation of ``[0, 0, 0, 1]`` the first display
+      dimension (red axis) points right, the second display dimension (green
+      axis) points down, and the third display dimension (blue axis) points away
+      from the camera.
+    type: array
+    items:
+      - type: number
+      - type: number
+      - type: number
+      - type: number
+    default: [0, 0, 0, 1]
+  DisplayScale:
+    $id: DisplayScale
+    title: "Specifies the scale (zoom level) of a cross-section or 3d projection view."
+    description: |
+      For cross-section views, the scale is specified in canonical voxels per
+      screen pixel, and defaults to ``1``.  For 3d projection views, the scale is specified in
+      canonical voxels per viewport height.
+    type: number
+    exclusiveMinimum: 0
+  RelativeDisplayScales:
+    $id: RelativeDisplayScales
+    title: "Specifies additional relative display scale factors for each `global dimension<ViewerState.dimensions>`."
+    description: |
+      The length must be equal to the number of `global
+      dimensions<ViewerState.dimensions>`.  Defaults to a vector of all ones.
+    type: array
+    items:
+      type: number
+  Position:
+    $id: Position
+    title: "Specifies the position within a `CoordinateSpace`."
+    description: |
+      The length must be equal to the number of dimensions in the coordinate
+      space.
+    type: array
+    items:
+      type: number
+  DepthRange:
+    $id: DepthRange
+    title: "Specifies the depth-of-field for cross section or 3d projection views."
+    type: number
+    exclusiveMinimum: 0
+  HierarchicalLayout:
+    $id: HierarchicalLayout
+    title: "Specifies a hierarchical grid of layer groups and data views."
+    type: object
+    properties:
+      type:
+        type: string
+        title: Indicates the layout type.
+      flex:
+        type: number
+        title: Indicates the relative size of this layout within its parent stack.
+    required:
+      - "type"
+  DataPanelLayoutType:
+    $id: DataPanelLayoutType
+    title: "Specifies a layout of 3-d projection and 2-d cross-section views for a layer group."
+    oneOf:
+      - const: "4panel"
+        title: "2x2 grid layout with `.xy`, `.xz`, `.3d`, and `.yz` panels."
+        description: |
+          The top left is an `.xy` cross-section view, the top right is an `.xz`
+          cross-section view, the bottom left is a `.3d` projection view, and the
+          bottom right is a `.yz` cross-section view.
+      - const: "xy"
+        title: "Single cross-section view in the default orientation."
+        description: |
+          with the first display dimension (red)
+          pointing right, the second display dimension (green) pointing down, and
+          the third display dimension (blue) pointing away from the camera.
+      - const: "xz"
+        title: |
+          Single cross-section view with the first display dimension (red)
+          pointing right, the third display dimension (blue) pointing down, and
+          the second display dimension (green) pointing towards the camera.
+      - const: "yz"
+        title: |
+          Single cross-section view with the second display dimension (green)
+          pointing down, the third display dimension (blue) pointing left, and
+          the first display dimension (red) pointing away from the camera.
+      - const: "3d"
+        title: "Single 3-d projection view."
+      - const: "xy-3d"
+      - const: "xz-3d"
+      - const: "yz-3d"
+  DataPanelLayout:
+    $id: DataPanelLayout
+    title: "Describes the :ref:`data views<data-view>` to display."
+    type: object
+    properties:
+      type:
+        $ref: DataPanelLayoutType
+        title: Indicates the layout type.
+      orthographicProjection:
+        type: boolean
+        title: |
+          Indicates whether the :ref:`projection views<projection-view>`, if
+          present, uses orthographic rather than perspective projection.
+        default: false
+    required:
+      - "type"
+  LayerGroupViewer:
+    $id: LayerGroupViewer
+    title: "Specifies a :json:schema:`DataPanelLayout` for a subset of the layers."
+    allOf:
+      - $ref: HierarchicalLayout
+      - type: object
+        properties:
+          type:
+            const: "viewer"
+          layers:
+            type: array
+            items:
+              type: string
+            title: "Names of layers included in this sub-viewer."
+            description: |
+              Each name must match the name of a layer specified in the
+              top-level `ViewerState.layers`.
+          layout:
+            oneOf:
+              - $ref: DataPanelLayoutType
+              - $ref: DataPanelLayout
+            title: Layout of the data panels for this viewer.
+            default: "xy"
+
+  StackLayout:
+    $id: StackLayout
+    title: "Specifies a row or column of sub-layouts."
+    allOf:
+      - $ref: HierarchicalLayout
+      - type: object
+        properties:
+          type:
+            oneOf:
+              - const: "row"
+              - const: "column"
+            title: Indicates the stack direction.
+          children:
+            type: array
+            items:
+              $ref: HierarchicalLayout

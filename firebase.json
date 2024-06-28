@@ -2,5 +2,9 @@
   "hosting": {
     "target": "app",
     "public": "dist/client"
+  },
+  "hosting": {
+    "target": "docs",
+    "public": "dist/docs"
   }
 }

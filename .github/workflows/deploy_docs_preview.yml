@@ -1,8 +1,8 @@
-name: Deploy preview
+name: Deploy docs preview
 
 on:
   workflow_run:
-    workflows: ["Build preview"]
+    workflows: ["Build docs preview"]
     types: [completed]
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
           script: |
             const commitId = "${{ github.event.workflow_run.head_commit.id }}";
             await github.rest.repos.createCommitStatus({
-                context: "client-preview",
+                context: "docs-preview",
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 sha: commitId,
@@ -28,8 +28,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: client
-          path: dist/client
+          name: docs
+          path: dist/docs
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           run-id: "${{ github.event.workflow_run.id }}"
       - name: Get PR ID
@@ -46,7 +46,7 @@ jobs:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
           firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
           expires: 30d
-          channelId: "pr${{ steps.pr-id.outputs.pr-id }}"
+          channelId: "pr${{ steps.pr-id.outputs.pr-id }}-docs"
           projectId: neuroglancer-demo
           target: docs
       - name: "Update commit status"
@@ -57,7 +57,7 @@ jobs:
             const expires = new Date("${{ steps.deploy.outputs.expire_time }}");
             const commitId = "${{ github.event.workflow_run.head_commit.id }}";
             await github.rest.repos.createCommitStatus({
-                context: "client-preview",
+                context: "docs-preview",
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 sha: commitId,
