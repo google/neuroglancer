@@ -1,3 +1,5 @@
+import os
+
 import nox
 
 nox.options.reuse_existing_virtualenvs = True
@@ -20,3 +22,22 @@ def format(session):
 def mypy(session):
     session.install("-r", "python/requirements-mypy.txt")
     session.run("mypy", ".")
+
+
+@nox.session
+def docs(session):
+    session.install("-r", "docs/requirements.txt")
+    session.run(
+        "sphinx-build",
+        "docs",
+        "dist/docs",
+        "-E",
+        "-j",
+        "auto",
+        "-T",
+        "-W",
+        "--keep-going",
+        env={
+            "PYTHONPATH": os.path.join(os.path.dirname(__file__), "python"),
+        },
+    )
