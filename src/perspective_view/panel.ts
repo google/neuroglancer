@@ -1256,7 +1256,6 @@ export class PerspectivePanel extends RenderedDataPanel {
             currentTransparentRenderingState !==
             TransparentRenderingState.Transparent
           ) {
-            console.log("transparent buffer binding");
             renderContext.emitter = perspectivePanelEmitOIT;
             renderContext.bindFramebuffer();
           }
