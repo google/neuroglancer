@@ -55,6 +55,21 @@ export interface PerspectiveViewRenderContext
    * Specifies the ID of the depth frame buffer texture to query during rendering.
    */
   depthBufferTexture?: WebGLTexture | null;
+
+  /**
+   * Specifies if there are any slice views
+   */
+  sliceViewsPresent: boolean;
+
+  /**
+   * Specifies if the camera is moving
+   */
+  isContinuousCameraMotionInProgress: boolean;
+
+  /**
+   * Specifices how to bind the max projection buffer
+   */
+  bindMaxProjectionBuffer?: () => void | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging

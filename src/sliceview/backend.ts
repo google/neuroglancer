@@ -65,6 +65,7 @@ import {
   registerSharedObject,
   SharedObjectCounterpart,
 } from "#src/worker_rpc.js";
+import type { DisplayDimensionRenderInfo } from "src/navigation_state";
 
 export const BASE_PRIORITY = -1e12;
 export const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -255,8 +256,8 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
       SliceViewRenderLayerBackend,
       SliceViewChunkSourceBackend
     >[][],
+    displayDimensionRenderInfo: DisplayDimensionRenderInfo,
   ) {
-    const { displayDimensionRenderInfo } = this.projectionParameters.value;
     let layerInfo = this.visibleLayers.get(layer);
     if (layerInfo === undefined) {
       layerInfo = {
@@ -334,7 +335,7 @@ registerRPC(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, function (x) {
     SliceViewChunkSourceBackend,
     SliceViewRenderLayerBackend
   >(this, x.sources, layer);
-  obj.addVisibleLayer(layer, sources);
+  obj.addVisibleLayer(layer, sources, x.displayDimensionRenderInfo);
 });
 registerRPC(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, function (x) {
   const obj = <SliceViewBackend>this.get(x.id);

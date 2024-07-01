@@ -53,6 +53,7 @@ import {
   makeCachedDerivedWatchableValue,
   registerNested,
 } from "#src/trackable_value.js";
+import type { RefCountedValue } from "#src/util/disposable.js";
 import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
 import { clampToInterval } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -72,6 +73,8 @@ import {
   drawBoxes,
   glsl_getBoxFaceVertexPosition,
 } from "#src/webgl/bounding_box.js";
+import type { Buffer } from "#src/webgl/buffer.js";
+import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type {
   ParameterizedContextDependentShaderGetter,
@@ -82,7 +85,16 @@ import {
   parameterizedContextDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
+import type {
+  HistogramChannelSpecification,
+  HistogramSpecifications,
+} from "#src/webgl/empirical_cdf.js";
+import {
+  defineInvlerpShaderFunction,
+  enableLerpShaderFunction,
+} from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import { getShaderType, glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -96,6 +108,13 @@ import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
+const HISTOGRAM_SAMPLES_PER_INSTANCE = 256;
+
+// Number of points to sample in computing the histogram.  Increasing this increases the precision
+// of the histogram but also slows down rendering.
+// Here, we use 4096 samples per chunk to compute the histogram.
+const NUM_HISTOGRAM_SAMPLES = 2 ** 14;
+const DEBUG_HISTOGRAMS = false;
 
 const depthSamplerTextureUnit = Symbol("depthSamplerTextureUnit");
 
@@ -135,6 +154,15 @@ interface VolumeRenderingShaderParameters {
   mode: VolumeRenderingModes;
 }
 
+interface StoredChunkInfoForHistogram {
+  chunk: VolumeChunk;
+  fixedPositionWithinChunk: Uint32Array;
+  chunkDisplayDimensionIndices: number[];
+  channelToChunkDimensionIndices: readonly number[];
+  chunkDataDisplaySize: vec3;
+  chunkFormat: ChunkFormat;
+}
+
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
@@ -171,9 +199,16 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
+  private dataHistogramSpecifications: HistogramSpecifications;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
+    ShaderControlsBuilderState,
+    VolumeRenderingShaderParameters
+  >;
+
+  private histogramShaderGetter: ParameterizedContextDependentShaderGetter<
+    { chunkFormat: ChunkFormat },
     ShaderControlsBuilderState,
     VolumeRenderingShaderParameters
   >;
@@ -190,6 +225,12 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     return true;
   }
 
+  getDataHistogramCount() {
+    return this.dataHistogramSpecifications.visibleHistograms;
+  }
+
+  private histogramIndexBuffer: RefCountedValue<Buffer>;
+
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
     this.gain = options.gain;
@@ -201,16 +242,37 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
     this.mode = options.mode;
+    this.dataHistogramSpecifications =
+      this.shaderControlState.histogramSpecifications;
+    this.histogramIndexBuffer = this.registerDisposer(
+      getMemoizedBuffer(
+        this.gl,
+        WebGL2RenderingContext.ARRAY_BUFFER,
+        () => new Uint8Array(HISTOGRAM_SAMPLES_PER_INSTANCE),
+      ),
+    );
     this.registerDisposer(
       this.chunkResolutionHistogram.visibility.add(this.visibility),
     );
+    this.registerDisposer(
+      this.dataHistogramSpecifications.producerVisibility.add(this.visibility),
+    );
     const extraParameters = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (space: CoordinateSpace, mode: VolumeRenderingModes) => ({
+        (
+          space: CoordinateSpace,
+          mode: VolumeRenderingModes,
+          dataHistogramChannelSpecifications: HistogramChannelSpecification[],
+        ) => ({
           numChannelDimensions: space.rank,
           mode,
+          dataHistogramChannelSpecifications,
         }),
-        [this.channelCoordinateSpace, this.mode],
+        [
+          this.channelCoordinateSpace,
+          this.mode,
+          this.dataHistogramSpecifications.channels,
+        ],
       ),
     );
     this.shaderGetter = parameterizedContextDependentShaderGetter(
@@ -446,6 +508,119 @@ void main() {
         },
       },
     );
+    this.histogramShaderGetter = parameterizedContextDependentShaderGetter(
+      this,
+      this.gl,
+      {
+        memoizeKey: "VolumeRenderingRenderLayerHistogram",
+        parameters: options.shaderControlState.builderState,
+        getContextKey: ({ chunkFormat }) => `${chunkFormat.shaderKey}`,
+        shaderError: options.shaderError,
+        extraParameters: extraParameters,
+        defineShader: (
+          builder,
+          { chunkFormat },
+          shaderBuilderState,
+          shaderParametersState,
+        ) => {
+          shaderBuilderState;
+          builder.addOutputBuffer("vec4", "outputValue", null);
+          builder.addUniform("highp vec3", "uChunkDataSize");
+          builder.addUniform("highp int", "uHistogramIndex");
+          builder.addAttribute("float", "aInput1");
+          builder.addVertexCode(`
+vec3 chunkSamplePosition;
+          `);
+          const numChannelDimensions =
+            shaderParametersState.numChannelDimensions;
+          chunkFormat.defineShader(
+            builder,
+            numChannelDimensions,
+            true /*inVertexShader*/,
+          );
+          const { dataType } = chunkFormat;
+          let dataAccessChannelParams = "";
+          let dataAccessChannelArgs = "";
+          if (numChannelDimensions === 0) {
+            dataAccessChannelParams += "highp int ignoredChannelIndex";
+          } else {
+            for (
+              let channelDim = 0;
+              channelDim < numChannelDimensions;
+              ++channelDim
+            ) {
+              if (channelDim !== 0) dataAccessChannelParams += ", ";
+              dataAccessChannelParams += `highp int channelIndex${channelDim}`;
+              dataAccessChannelArgs += `, channelIndex${channelDim}`;
+            }
+          }
+          const dataAccessCode = `
+${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
+  highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(chunkSamplePosition), uChunkDataSize - 1.0)));
+  return getDataValueAt(p${dataAccessChannelArgs});
+}`;
+          builder.addVertexCode(dataAccessCode);
+          if (numChannelDimensions <= 1) {
+            builder.addVertexCode(`
+${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
+`);
+          }
+          const dataHistogramChannelSpecifications =
+            shaderParametersState.dataHistogramChannelSpecifications;
+          const numHistograms = dataHistogramChannelSpecifications.length;
+          let histogramFetchCode = `
+  float x;
+  switch (uHistogramIndex) {`;
+          for (let i = 0; i < numHistograms; ++i) {
+            const { channel } = dataHistogramChannelSpecifications[i];
+            const getDataValueExpr = `getDataValue(${channel.join(",")})`;
+            const invlerpName = `invlerpForHistogram${i}`;
+            builder.addVertexCode(
+              defineInvlerpShaderFunction(
+                builder,
+                invlerpName,
+                dataType,
+                false /*clamp*/,
+              ),
+            );
+            builder.addVertexCode(`
+float getHistogramValue${i}() {
+  return invlerpForHistogram${i}(${getDataValueExpr});
+}
+`);
+            histogramFetchCode += `
+  case ${i}:
+    x = getHistogramValue${i}();
+    break;`;
+          }
+          histogramFetchCode += `
+  }
+`;
+          builder.addVertexCode(glsl_simpleFloatHash);
+          builder.setVertexMain(`
+  vec3 rand3val = vec3(
+    simpleFloatHash(vec2(aInput1 + float(gl_VertexID), float(gl_InstanceID))),
+    simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 10.0, 5.0 + float(gl_InstanceID))),
+    simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID))));
+  chunkSamplePosition = rand3val * (uChunkDataSize - 1.0);
+${histogramFetchCode}
+  if (x == 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  }
+  else {
+    if (x < 0.0) x = 0.0;
+    else if (x > 1.0) x = 1.0;
+    else x = (1.0 + x * 253.0) / 255.0;
+    gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
+  }
+  gl_PointSize = 1.0;`);
+          builder.setFragmentMain(`
+outputValue = vec4(1.0, 1.0, 1.0, 1.0);
+          `);
+        },
+      },
+    );
+
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
 
     this.registerDisposer(
@@ -519,6 +694,7 @@ void main() {
                 layer: this.backend.rpcId,
                 view: attachment.view.rpcId,
                 sources: serializeAllTransformedSources(transformedSources),
+                displayDimensionRenderInfo,
               },
             );
             this.redrawNeeded.dispatch();
@@ -567,6 +743,22 @@ void main() {
     renderScaleHistogram.begin(
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber,
     );
+
+    const restoreDrawingBuffers = () => {
+      if (isProjectionMode(this.mode.value)) {
+        gl.disable(WebGL2RenderingContext.BLEND);
+        if (renderContext.bindMaxProjectionBuffer !== undefined) {
+          renderContext.bindMaxProjectionBuffer();
+        } else {
+          throw new Error(
+            "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
+          );
+        }
+      } else {
+        renderContext.bindFramebuffer();
+      }
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+    };
 
     const endShader = () => {
       if (shader === null) return;
@@ -623,9 +815,16 @@ void main() {
     const chunkRank = this.multiscaleSource.rank;
     const chunkPosition = vec3.create();
 
+    const needToDrawHistogram =
+      this.getDataHistogramCount() > 0 &&
+      !renderContext.wireFrame &&
+      !renderContext.sliceViewsPresent &&
+      !renderContext.isContinuousCameraMotionInProgress;
+
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
+    const chunkInfoForHistogram: StoredChunkInfoForHistogram[] = [];
     const pickId = isProjectionMode(this.mode.value)
       ? renderContext.pickIDs.register(this)
       : 0;
@@ -803,11 +1002,22 @@ void main() {
               channelToChunkDimensionIndices,
               newSource,
             );
+            if (needToDrawHistogram) {
+              chunkInfoForHistogram.push({
+                chunk,
+                fixedPositionWithinChunk,
+                chunkDisplayDimensionIndices,
+                channelToChunkDimensionIndices,
+                chunkDataDisplaySize,
+                chunkFormat: prevChunkFormat,
+              });
+            }
           }
-          newSource = false;
           gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           gl.uniform1ui(shader.uniform("uPickId"), pickId);
           drawBoxes(gl, 1, 1);
+
+          newSource = false;
           ++presentCount;
         } else {
           ++notPresentCount;
@@ -817,6 +1027,148 @@ void main() {
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
     this.vertexIdHelper.disable();
+
+    if (needToDrawHistogram) {
+      let histogramShader: ShaderProgram | null = null;
+      let histogramShaderResult: ParameterizedShaderGetterResult<
+        ShaderControlsBuilderState,
+        VolumeRenderingShaderParameters
+      >;
+      const endHistogramShader = () => {
+        if (histogramShader === null) return;
+        histogramShader.unbindTransferFunctionTextures();
+        if (prevChunkFormat !== null) {
+          prevChunkFormat!.endDrawing(gl, histogramShader);
+        }
+      };
+      const determineNumHistogramInstances = (
+        chunkDataSize: vec3,
+        numHistograms: number,
+      ) => {
+        const maxSamplesInChunk = Math.ceil(
+          chunkDataSize.reduce((a, b) => a * b, 1) / 2.0,
+        );
+        const totalDesiredSamplesInChunk =
+          NUM_HISTOGRAM_SAMPLES / numHistograms;
+        const desiredSamples = Math.min(
+          maxSamplesInChunk,
+          totalDesiredSamplesInChunk,
+        );
+
+        // round to nearest multiple of NUM_HISTOGRAM_SAMPLES_PER_INSTANCE
+        return Math.max(
+          Math.round(desiredSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
+          1,
+        );
+      };
+
+      prevChunkFormat = null;
+      const { dataType, dataHistogramSpecifications } = this;
+      const histogramFramebuffers =
+        dataHistogramSpecifications.getFramebuffers(gl);
+      const numHistograms = this.getDataHistogramCount();
+      for (let i = 0; i < numHistograms; ++i) {
+        histogramFramebuffers[i].bind(256, 1);
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+      }
+      const bounds = this.dataHistogramSpecifications.bounds.value;
+      // Blending on to accumulate histograms.
+      gl.enable(WebGL2RenderingContext.BLEND);
+      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+      for (let j = 0; j < presentCount; ++j) {
+        newSource = true;
+        const chunkInfo = chunkInfoForHistogram[j];
+        const chunkFormat = chunkInfo.chunkFormat;
+        if (chunkFormat !== prevChunkFormat) {
+          prevChunkFormat = chunkFormat;
+          endHistogramShader();
+          histogramShaderResult = this.histogramShaderGetter({
+            chunkFormat: chunkFormat!,
+          });
+          histogramShader = histogramShaderResult.shader;
+          if (histogramShader !== null) {
+            if (chunkFormat !== null) {
+              chunkFormat.beginDrawing(gl, histogramShader);
+              chunkFormat.beginSource(gl, histogramShader);
+            }
+            histogramShader.bind();
+          } else {
+            break;
+          }
+        }
+        if (histogramShader === null) break;
+        gl.uniform3fv(
+          histogramShader.uniform("uChunkDataSize"),
+          chunkInfo.chunkDataDisplaySize,
+        );
+        if (prevChunkFormat != null) {
+          prevChunkFormat.bindChunk(
+            gl,
+            histogramShader,
+            chunkInfo.chunk,
+            chunkInfo.fixedPositionWithinChunk,
+            chunkInfo.chunkDisplayDimensionIndices,
+            chunkInfo.channelToChunkDimensionIndices,
+            newSource,
+          );
+        }
+        this.histogramIndexBuffer.value.bindToVertexAttrib(
+          histogramShader.attribute("aInput1"),
+          1,
+          WebGL2RenderingContext.UNSIGNED_BYTE,
+          /*normalized=*/ true,
+        );
+
+        // Draw each histogram
+        const numInstances = determineNumHistogramInstances(
+          chunkInfo.chunkDataDisplaySize,
+          presentCount,
+        );
+        for (let i = 0; i < numHistograms; ++i) {
+          histogramFramebuffers[i].bind(256, 1);
+          enableLerpShaderFunction(
+            histogramShader,
+            `invlerpForHistogram${i}`,
+            dataType,
+            bounds[i],
+          );
+          gl.uniform1i(histogramShader.uniform("uHistogramIndex"), i);
+          gl.drawArraysInstanced(
+            WebGL2RenderingContext.POINTS,
+            0,
+            HISTOGRAM_SAMPLES_PER_INSTANCE,
+            numInstances,
+          );
+        }
+        newSource = false;
+      }
+
+      if (needToDrawHistogram && DEBUG_HISTOGRAMS) {
+        const histogramFrameBuffers =
+          this.dataHistogramSpecifications.getFramebuffers(gl);
+        for (let i = 0; i < numHistograms; ++i) {
+          histogramFrameBuffers[i].bind(256, 1);
+          const tempBuffer = new Float32Array(256 * 4);
+          gl.readPixels(
+            0,
+            0,
+            256,
+            1,
+            WebGL2RenderingContext.RGBA,
+            WebGL2RenderingContext.FLOAT,
+            tempBuffer,
+          );
+          const tempBuffer2 = new Float32Array(256);
+          for (let j = 0; j < 256; ++j) {
+            tempBuffer2[j] = tempBuffer[j * 4];
+          }
+          console.log("histogram%d", i, tempBuffer2.join(" "));
+        }
+      }
+      endHistogramShader();
+      restoreDrawingBuffers();
+    }
   }
 
   isReady(

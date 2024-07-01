@@ -40,6 +40,7 @@ jobs:
         run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
           npm run build -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"
+          echo $build_info > ./dist/client/version.json
         shell: bash
       - name: Build Python client bundles
         run: npm run build-python -- --no-typecheck --no-lint

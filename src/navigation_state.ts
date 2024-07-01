@@ -1432,6 +1432,19 @@ export function displayDimensionRenderInfosEqual(
   );
 }
 
+export function validateDisplayDimensionRenderInfoProperty(
+  obj: { displayDimensionRenderInfo: DisplayDimensionRenderInfo },
+  expected: DisplayDimensionRenderInfo,
+): boolean {
+  const actual = obj.displayDimensionRenderInfo;
+  if (actual === expected) return true;
+  if (displayDimensionRenderInfosEqual(actual, expected)) {
+    obj.displayDimensionRenderInfo = expected;
+    return true;
+  }
+  return false;
+}
+
 export class WatchableDisplayDimensionRenderInfo extends RefCounted {
   changed = new NullarySignal();
   private curRelativeDisplayScales: RelativeDisplayScales =

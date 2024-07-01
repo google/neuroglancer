@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { debounce } from "lodash-es";
+
 import type { FrameNumberCounter } from "#src/chunk_manager/frontend.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -25,6 +27,8 @@ import { NullarySignal } from "#src/util/signal.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
 import { initializeWebGL } from "#src/webgl/context.js";
+
+const DELAY_AFTER_CONTINUOUS_CAMERA_MOTION_MS = 300;
 
 export class RenderViewport {
   // Width of visible portion of panel in canvas pixels.
@@ -390,12 +394,15 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   gl: GL;
   updateStarted = new NullarySignal();
   updateFinished = new NullarySignal();
+  continuousCameraMotionFinished = new NullarySignal();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
   canvasRect: DOMRect | undefined;
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+
+  private continuousCameraMotionInProgress = false;
 
   // Panels ordered by `drawOrder`.  If length is 0, needs to be recomputed.
   private orderedPanels: RenderedPanel[] = [];
@@ -446,6 +453,22 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   }
 
   private resizeObserver = new ResizeObserver(this.resizeCallback);
+
+  private debouncedEndContinuousCameraMotion = this.registerCancellable(
+    debounce(() => {
+      this.continuousCameraMotionInProgress = false;
+      this.continuousCameraMotionFinished.dispatch();
+    }, DELAY_AFTER_CONTINUOUS_CAMERA_MOTION_MS),
+  );
+
+  flagContinuousCameraMotion() {
+    this.continuousCameraMotionInProgress = true;
+    this.debouncedEndContinuousCameraMotion();
+  }
+
+  get isContinuousCameraMotionInProgress() {
+    return this.continuousCameraMotionInProgress;
+  }
 
   constructor(public container: HTMLElement) {
     super();
