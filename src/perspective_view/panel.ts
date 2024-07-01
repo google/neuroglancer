@@ -105,10 +105,11 @@ export enum OffscreenTextures {
   NUM_TEXTURES = 3,
 }
 
-enum TransparentRenderingMode {
+enum TransparentRenderingState {
   Transparent = 0,
   VOLUME_RENDERING = 1,
   MAX_PROJECTION = 2,
+  UNSET = 3,
 }
 
 export const glsl_perspectivePanelEmit = `
@@ -1167,7 +1168,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let transparentRenderingMode = TransparentRenderingMode.Transparent;
+      let currentTransparentRenderingState = TransparentRenderingState.UNSET;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -1184,7 +1185,8 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.depthFunc(WebGL2RenderingContext.GREATER);
 
           if (
-            transparentRenderingMode !== TransparentRenderingMode.MAX_PROJECTION
+            currentTransparentRenderingState !==
+            TransparentRenderingState.MAX_PROJECTION
           ) {
             renderContext.emitter = maxProjectionEmit;
             bindMaxProjectionBuffer();
@@ -1235,29 +1237,32 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.enable(WebGL2RenderingContext.DEPTH_TEST);
           gl.depthFunc(WebGL2RenderingContext.LESS);
 
-          transparentRenderingMode = TransparentRenderingMode.MAX_PROJECTION;
+          currentTransparentRenderingState =
+            TransparentRenderingState.MAX_PROJECTION;
+        } else if (renderLayer.isVolumeRendering) {
+          if (
+            currentTransparentRenderingState !==
+            TransparentRenderingState.VOLUME_RENDERING
+          ) {
+            renderContext.emitter = perspectivePanelEmitOIT;
+            bindVolumeRenderingBuffer();
+          }
+          currentTransparentRenderingState =
+            TransparentRenderingState.VOLUME_RENDERING;
+          renderLayer.draw(renderContext, attachment);
         }
         // Draw regular transparent layers
         else if (renderLayer.isTransparent) {
-          if (renderLayer.isVolumeRendering) {
-            if (
-              transparentRenderingMode !==
-              TransparentRenderingMode.VOLUME_RENDERING
-            ) {
-              renderContext.emitter = perspectivePanelEmitOIT;
-              bindVolumeRenderingBuffer();
-            }
-            transparentRenderingMode =
-              TransparentRenderingMode.VOLUME_RENDERING;
-          } else {
-            if (
-              transparentRenderingMode !== TransparentRenderingMode.Transparent
-            ) {
-              renderContext.emitter = perspectivePanelEmitOIT;
-              renderContext.bindFramebuffer();
-            }
-            transparentRenderingMode = TransparentRenderingMode.Transparent;
+          if (
+            currentTransparentRenderingState !==
+            TransparentRenderingState.Transparent
+          ) {
+            console.log("transparent buffer binding");
+            renderContext.emitter = perspectivePanelEmitOIT;
+            renderContext.bindFramebuffer();
           }
+          currentTransparentRenderingState =
+            TransparentRenderingState.Transparent;
           renderLayer.draw(renderContext, attachment);
         }
       }
@@ -1269,16 +1274,16 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
         WebGL2RenderingContext.SRC_ALPHA,
       );
-      this.transparencyCopyHelper.draw(
-        transparentConfiguration.colorBuffers[0].texture,
-        transparentConfiguration.colorBuffers[1].texture,
-      );
       if (hasVolumeRendering) {
         this.transparencyCopyHelper.draw(
           this.volumeRenderingConfiguration.colorBuffers[0].texture,
           this.volumeRenderingConfiguration.colorBuffers[1].texture,
         );
       }
+      this.transparencyCopyHelper.draw(
+        transparentConfiguration.colorBuffers[0].texture,
+        transparentConfiguration.colorBuffers[1].texture,
+      );
 
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
