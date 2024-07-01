@@ -1082,11 +1082,6 @@ export class PerspectivePanel extends RenderedDataPanel {
             this.frameRateCalculator.numberOfStoredFrameDeltas,
           ),
         );
-        console.log(
-          this.context.getLastFrameTimesInMs(
-            this.frameRateCalculator.numberOfStoredFrameDeltas,
-          ),
-        );
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRate(
             FrameTimingMethod.MEAN,
