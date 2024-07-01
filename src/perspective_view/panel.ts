@@ -109,7 +109,6 @@ enum TransparentRenderingState {
   Transparent = 0,
   VOLUME_RENDERING = 1,
   MAX_PROJECTION = 2,
-  UNSET = 3,
 }
 
 export const glsl_perspectivePanelEmit = `
@@ -1168,7 +1167,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let currentTransparentRenderingState = TransparentRenderingState.UNSET;
+      let currentTransparentRenderingState = TransparentRenderingState.Transparent;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
