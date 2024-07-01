@@ -293,7 +293,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   // to avoid flickering when the camera is moving
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
     6 /* numberOfStoredFrameDeltas */,
-    8 /* maxDownsamplingFactor */,
+    4 /* maxDownsamplingFactor */,
     16 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
