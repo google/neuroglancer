@@ -1163,7 +1163,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           for (let j = 0; j < 256; ++j) {
             tempBuffer2[j] = tempBuffer[j * 4];
           }
-          console.log("histogram%d", i, tempBuffer2.join(" "));
+          console.log(`histogram${i}`, tempBuffer2.join(" "));
         }
       }
       endHistogramShader();

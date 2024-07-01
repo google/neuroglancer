@@ -1418,7 +1418,11 @@ export class ShaderControlState
       (state) => {
         const channels: HistogramChannelSpecification[] = [];
         for (const { control, trackable } of state.values()) {
-          if (control.type !== "imageInvlerp") continue;
+          if (
+            control.type !== "imageInvlerp" &&
+            control.type !== "transferFunction"
+          )
+            continue;
           channels.push({ channel: trackable.value.channel });
         }
         return channels;
@@ -1444,7 +1448,10 @@ export class ShaderControlState
     const histogramBounds = makeCachedLazyDerivedWatchableValue((state) => {
       const bounds: DataTypeInterval[] = [];
       for (const { control, trackable } of state.values()) {
-        if (control.type === "imageInvlerp") {
+        if (
+          control.type === "imageInvlerp" ||
+          control.type === "transferFunction"
+        ) {
           bounds.push(trackable.value.window);
         } else if (control.type === "propertyInvlerp") {
           const { dataType, range, window } =

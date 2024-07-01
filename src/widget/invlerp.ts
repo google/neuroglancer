@@ -287,7 +287,7 @@ export function getUpdatedRangeAndWindowParameters<
 // 256 bins in total.  The first and last bin are for values below the lower bound/above the upper
 // bound.
 const NUM_HISTOGRAM_BINS_IN_RANGE = 254;
-const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
+export const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
 
 /**
  * Panel that shows Cumulative Distribution Function (CDF) of visible data.
