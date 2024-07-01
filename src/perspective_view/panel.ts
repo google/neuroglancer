@@ -277,8 +277,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
 
-  private hasVolumeRendering = false;
-
   get rpc() {
     return this.sharedObject.rpc!;
   }
@@ -299,12 +297,15 @@ export class PerspectivePanel extends RenderedDataPanel {
     16 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
-  private redrawAfterMoveTimeOutId = -1;
-  private hasTransparent = false;
-
-  get isCameraMoving() {
-    return this.redrawAfterMoveTimeOutId !== -1;
+  private isCameraInContinuousMotion = false;
+  get shouldDownsample() {
+    return (
+      this.viewer.enableAdaptiveDownsampling.value &&
+      this.isCameraInContinuousMotion
+    );
   }
+  private hasVolumeRendering = false;
+  private hasTransparent = false;
 
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
@@ -453,9 +454,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       }),
     );
     this.projectionParameters.changed.add(() => this.context.scheduleRedraw());
-    this.viewer.enableAdaptiveDownsampling.changed.add(() => {
-      this.frameRateCalculator.resetForNewFrameSet();
-    });
 
     const sharedObject = (this.sharedObject = this.registerDisposer(
       new PerspectiveViewState(this),
@@ -473,7 +471,17 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.context.continuousCameraMotionFinished.add(() => {
-        if (this.hasVolumeRendering) this.scheduleRedraw();
+        if (this.hasVolumeRendering) {
+          this.scheduleRedraw();
+          this.isCameraInContinuousMotion = false;
+        }
+      }),
+    );
+    this.registerDisposer(
+      this.context.continuousCameraMotionStarted.add(() => {
+        if (this.hasVolumeRendering) {
+          this.isCameraInContinuousMotion = true;
+        }
       }),
     );
 
@@ -870,9 +878,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (!this.navigationState.valid) {
       return false;
     }
-    if (this.viewer.enableAdaptiveDownsampling.value && this.isCameraMoving) {
-      this.frameRateCalculator.addFrame();
-    }
+    this.frameRateCalculator.addFrame();
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
@@ -1071,7 +1077,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
 
-      if (this.viewer.enableAdaptiveDownsampling.value && this.isCameraMoving) {
+      if (this.shouldDownsample) {
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRate(
             FrameTimingMethod.MEAN,
