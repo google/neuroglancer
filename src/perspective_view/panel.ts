@@ -106,7 +106,7 @@ export enum OffscreenTextures {
 }
 
 enum TransparentRenderingState {
-  Transparent = 0,
+  TRANSPARENT = 0,
   VOLUME_RENDERING = 1,
   MAX_PROJECTION = 2,
 }
@@ -1172,7 +1172,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       );
       renderContext.emitPickID = false;
       let currentTransparentRenderingState =
-        TransparentRenderingState.Transparent;
+        TransparentRenderingState.TRANSPARENT;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =
@@ -1259,13 +1259,13 @@ export class PerspectivePanel extends RenderedDataPanel {
         else if (renderLayer.isTransparent) {
           if (
             currentTransparentRenderingState !==
-            TransparentRenderingState.Transparent
+            TransparentRenderingState.TRANSPARENT
           ) {
             renderContext.emitter = perspectivePanelEmitOIT;
             renderContext.bindFramebuffer();
           }
           currentTransparentRenderingState =
-            TransparentRenderingState.Transparent;
+            TransparentRenderingState.TRANSPARENT;
           renderLayer.draw(renderContext, attachment);
         }
       }
