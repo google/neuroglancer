@@ -394,6 +394,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   gl: GL;
   updateStarted = new NullarySignal();
   updateFinished = new NullarySignal();
+  continuousCameraMotionStarted = new NullarySignal();
   continuousCameraMotionFinished = new NullarySignal();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
@@ -462,6 +463,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   );
 
   flagContinuousCameraMotion() {
+    if (!this.continuousCameraMotionInProgress) {
+      this.continuousCameraMotionStarted.dispatch();
+    }
     this.continuousCameraMotionInProgress = true;
     this.debouncedEndContinuousCameraMotion();
   }
