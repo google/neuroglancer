@@ -1668,6 +1668,9 @@ class ViewerState(JsonObjectWrapper):
     show_axis_lines = showAxisLines = wrapped_property(
         "showAxisLines", optional(bool, True)
     )
+    enable_adaptive_downsampling = enableAdaptiveDownsampling = wrapped_property(
+        "enableAdaptiveDownsampling", optional(bool, True)
+    )
     show_scale_bar = showScaleBar = wrapped_property(
         "showScaleBar", optional(bool, True)
     )
