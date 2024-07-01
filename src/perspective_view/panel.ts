@@ -293,8 +293,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   // to avoid flickering when the camera is moving
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
     6 /* numberOfStoredFrameDeltas */,
-    4 /* maxDownsamplingFactor */,
-    16 /* desiredFrameTimingMs */,
+    16 /* maxDownsamplingFactor */,
+    8 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
   private isCameraInContinuousMotion = false;
@@ -878,7 +878,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (!this.navigationState.valid) {
       return false;
     }
-    this.frameRateCalculator.addFrame();
     const { width, height } = this.renderViewport;
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
@@ -1078,6 +1077,16 @@ export class PerspectivePanel extends RenderedDataPanel {
       let volumeRenderingBufferHeight = height;
 
       if (this.shouldDownsample) {
+        this.frameRateCalculator.setFrameDeltas(
+          this.context.getLastFrameTimesInMs(
+            this.frameRateCalculator.numberOfStoredFrameDeltas,
+          ),
+        );
+        console.log(
+          this.context.getLastFrameTimesInMs(
+            this.frameRateCalculator.numberOfStoredFrameDeltas,
+          ),
+        );
         const downsamplingFactor =
           this.frameRateCalculator.calculateDownsamplingRate(
             FrameTimingMethod.MEAN,
@@ -1167,7 +1176,8 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
-      let currentTransparentRenderingState = TransparentRenderingState.Transparent;
+      let currentTransparentRenderingState =
+        TransparentRenderingState.Transparent;
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderContext.depthBufferTexture =

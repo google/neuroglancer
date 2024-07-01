@@ -20,6 +20,96 @@ export enum FrameTimingMethod {
   MAX = 2,
 }
 
+export class FramerateMonitor {
+  private timeElapsedQueries: (WebGLQuery | null)[] = [];
+  private warnedAboutMissingExtension = false;
+  private storedTimeDeltas: number[] = [];
+
+  constructor(
+    private numStoredTimes: number = 10,
+    private queryPoolSize: number = 10,
+  ) {
+    if (this.queryPoolSize < 1) {
+      throw new Error(
+        `Query pool size must be at least 1, but got ${queryPoolSize}.`,
+      );
+    }
+  }
+
+  getTimingExtension(gl: WebGL2RenderingContext) {
+    const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");
+    if (ext === null && !this.warnedAboutMissingExtension) {
+      console.log(
+        "EXT_disjoint_timer_query_webgl2 extension not available. " +
+          "Cannot measure frame time.",
+      );
+      this.warnedAboutMissingExtension = true;
+    }
+    return ext;
+  }
+
+  startFrameTimeQuery(gl: WebGL2RenderingContext, ext: any) {
+    if (ext === null) {
+      return null;
+    }
+    const query = gl.createQuery();
+    if (query !== null) {
+      gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
+    }
+    return query;
+  }
+
+  endFrameTimeQuery(
+    gl: WebGL2RenderingContext,
+    ext: any,
+    query: WebGLQuery | null,
+  ) {
+    if (ext !== null && query !== null) {
+      gl.endQuery(ext.TIME_ELAPSED_EXT);
+    }
+    if (this.timeElapsedQueries.length >= this.queryPoolSize) {
+      const oldestQuery = this.timeElapsedQueries.shift();
+      if (oldestQuery !== null && oldestQuery !== undefined) {
+        gl.deleteQuery(oldestQuery);
+      }
+    }
+    this.timeElapsedQueries.push(query);
+  }
+
+  grabAnyFinishedQueryResults(gl: WebGL2RenderingContext) {
+    const deletedQueryIndices: number[] = [];
+    for (let i = 0; i < this.timeElapsedQueries.length; i++) {
+      const query = this.timeElapsedQueries[i];
+      if (query !== null) {
+        const available = gl.getQueryParameter(
+          query,
+          gl.QUERY_RESULT_AVAILABLE,
+        );
+        if (available) {
+          const result = gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6;
+          this.storedTimeDeltas.push(result);
+          gl.deleteQuery(query);
+          deletedQueryIndices.push(i);
+        }
+      }
+    }
+    for (let i = deletedQueryIndices.length - 1; i >= 0; i--) {
+      this.timeElapsedQueries.splice(i, 1);
+    }
+    if (this.storedTimeDeltas.length > this.numStoredTimes) {
+      this.storedTimeDeltas = this.storedTimeDeltas.slice(-this.numStoredTimes);
+    }
+  }
+
+  getLastFrameTimesInMs(numberOfFrames: number = 10) {
+    return this.storedTimeDeltas.slice(-numberOfFrames);
+  }
+
+  getQueries() {
+    return this.timeElapsedQueries;
+  }
+}
+
 export class DownsamplingBasedOnFrameRateCalculator {
   private lastFrameTime: number | null = null;
   private frameDeltas: number[] = [];
@@ -33,7 +123,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
    * @param downsamplingPersistenceDurationInFrames The max number of frames over which a high downsampling rate persists.
    */
   constructor(
-    private numberOfStoredFrameDeltas: number = 10,
+    public numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
     private desiredFrameTimingMs = 1000 / 60,
     private downsamplingPersistenceDurationInFrames = 15,
