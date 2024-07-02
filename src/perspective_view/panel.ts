@@ -472,17 +472,16 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.context.continuousCameraMotionFinished.add(() => {
+        this.isCameraInContinuousMotion = false;
         if (this.hasVolumeRendering) {
           this.scheduleRedraw();
-          this.isCameraInContinuousMotion = false;
+          this.frameRateCalculator.resetForNewFrameSet();
         }
       }),
     );
     this.registerDisposer(
       this.context.continuousCameraMotionStarted.add(() => {
-        if (this.hasVolumeRendering) {
-          this.isCameraInContinuousMotion = true;
-        }
+        this.isCameraInContinuousMotion = true;
       }),
     );
 
