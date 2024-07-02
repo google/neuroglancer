@@ -301,7 +301,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   get shouldDownsample() {
     return (
       this.viewer.enableAdaptiveDownsampling.value &&
-      this.isCameraInContinuousMotion
+      this.isCameraInContinuousMotion &&
+      this.hasVolumeRendering
     );
   }
   private hasVolumeRendering = false;
