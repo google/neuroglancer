@@ -993,8 +993,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
-      isContinuousCameraMotionInProgress:
-        this.context.isContinuousCameraMotionInProgress,
+      isContinuousCameraMotionInProgress: this.isCameraInContinuousMotion,
     };
 
     mat4.copy(
@@ -1005,9 +1004,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     const { visibleLayers } = this.visibleLayerTracker;
 
     let hasTransparent = false;
-    // By default, volume rendering layers are not pickable when the camera is moving.
-    let hasVolumeRenderingPick =
-      !this.context.isContinuousCameraMotionInProgress;
+    let hasVolumeRenderingPick = false;
     let hasAnnotation = false;
     let hasVolumeRendering = false;
 
@@ -1029,6 +1026,9 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
     }
+    // Volume rendering layers are not pickable when the camera is moving.
+    hasVolumeRenderingPick =
+      hasVolumeRenderingPick && !this.isCameraInContinuousMotion;
     this.hasVolumeRendering = hasVolumeRendering;
     this.drawSliceViews(renderContext);
 
@@ -1142,14 +1142,13 @@ export class PerspectivePanel extends RenderedDataPanel {
           );
         };
         bindVolumeRenderingBuffer();
-        // Copy the depth buffer from the offscreen framebuffer to the volume rendering framebuffer.
-        gl.depthMask(true);
         gl.clearDepth(1.0);
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(
           WebGL2RenderingContext.COLOR_BUFFER_BIT |
             WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
+        // Copy the depth buffer from the offscreen framebuffer to the volume rendering framebuffer.
         this.offscreenDepthCopyHelper.draw(
           this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture,
         );
@@ -1185,8 +1184,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             renderLayer as VolumeRenderingRenderLayer,
           );
           const needsSecondPickingPass =
-            !isVolumeProjectionLayer &&
-            !this.context.isContinuousCameraMotionInProgress;
+            !isVolumeProjectionLayer && !this.isCameraInContinuousMotion;
 
           // Two cases for volume rendering layers
 
