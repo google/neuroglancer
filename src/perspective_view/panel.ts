@@ -196,6 +196,20 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
+function defineTransparentToTransparencyCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
+  builder.setFragmentMain(`
+vec4 v0 = getValue0();
+vec4 v1 = getValue1();
+vec4 accum = vec4(v0.rgb, v1.r);
+float revealage = v0.a;
+
+emitAccumAndRevealage(accum, 1.0 - revealage, 0u);
+`);
+}
+
 // Copy the depth from opaque pass to the depth buffer for OIT.
 // This copy is required because the OIT depth buffer might be
 // smaller than the main depth buffer.
@@ -372,6 +386,13 @@ export class PerspectivePanel extends RenderedDataPanel {
   );
   protected transparencyCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
+  );
+  protected transparentToTransparencyCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(
+      this.gl,
+      defineTransparentToTransparencyCopyShader,
+      2,
+    ),
   );
   protected maxProjectionColorCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 2),
@@ -1299,18 +1320,18 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
       // Copy transparent rendering result back to primary buffer.
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-      gl.viewport(0, 0, width, height);
-      this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
-      gl.blendFunc(
-        WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-        WebGL2RenderingContext.SRC_ALPHA,
-      );
       if (hasVolumeRendering) {
-        this.transparencyCopyHelper.draw(
+        renderContext.bindFramebuffer();
+        this.transparentToTransparencyCopyHelper.draw(
           this.volumeRenderingConfiguration.colorBuffers[0].texture,
           this.volumeRenderingConfiguration.colorBuffers[1].texture,
         );
       }
+      gl.blendFunc(
+        WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+        WebGL2RenderingContext.SRC_ALPHA,
+      );
+      this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       this.transparencyCopyHelper.draw(
         transparentConfiguration.colorBuffers[0].texture,
         transparentConfiguration.colorBuffers[1].texture,
