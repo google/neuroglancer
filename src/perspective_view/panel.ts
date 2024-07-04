@@ -1020,15 +1020,15 @@ export class PerspectivePanel extends RenderedDataPanel {
         hasTransparent = true;
         if (renderLayer.isVolumeRendering) {
           hasVolumeRendering = true;
+          // Volume rendering layers are not pickable when the camera is moving.
+          // Unless the layer is a projection layer.
           hasVolumeRenderingPick =
             hasVolumeRenderingPick ||
+            !this.isCameraInContinuousMotion ||
             isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
         }
       }
     }
-    // Volume rendering layers are not pickable when the camera is moving.
-    hasVolumeRenderingPick =
-      hasVolumeRenderingPick && !this.isCameraInContinuousMotion;
     this.hasVolumeRendering = hasVolumeRendering;
     this.drawSliceViews(renderContext);
 
