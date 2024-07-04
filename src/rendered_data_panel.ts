@@ -447,6 +447,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.attemptToIssuePickRequest();
   }
 
+  protected isMovingToMousePositionOnPick = false;
+
   constructor(
     context: Borrowed<DisplayContext>,
     element: HTMLElement,
@@ -629,9 +631,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     registerActionListener(element, "move-to-mouse-position", () => {
       const { mouseState } = this.viewer;
       if (mouseState.updateUnconditionally()) {
-        this.isMovingToMousePosition = true;
         this.navigationState.position.value = mouseState.position;
-        this.isMovingToMousePosition = false;
       }
     });
 
