@@ -1219,6 +1219,16 @@ export class PerspectivePanel extends RenderedDataPanel {
               renderContext.emitter = maxProjectionEmit;
               bindMaxProjectionBuffer();
             }
+          } else {
+            if (
+              currentTransparentRenderingState !==
+              TransparentRenderingState.VOLUME_RENDERING
+            ) {
+              renderContext.emitter = perspectivePanelEmitOIT;
+              bindVolumeRenderingBuffer();
+            }
+            currentTransparentRenderingState =
+              TransparentRenderingState.VOLUME_RENDERING;
           }
           renderLayer.draw(renderContext, attachment);
 
