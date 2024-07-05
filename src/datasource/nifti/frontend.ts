@@ -117,7 +117,7 @@ export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
   }
 }
 
-function getNiftiVolumeInfo(
+export function getNiftiVolumeInfo(
   chunkManager: ChunkManager,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
