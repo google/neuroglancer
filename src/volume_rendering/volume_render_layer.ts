@@ -931,20 +931,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           projectionParameters.viewProjectionMat,
           chunkLayout.transform,
         );
-        gl.uniformMatrix4fv(
-          shader.uniform("uModelViewProjectionMatrix"),
-          false,
-          modelViewProjection,
-        );
         const clippingPlanes = tempVisibleVolumetricClippingPlanes;
         getFrustrumPlanes(clippingPlanes, modelViewProjection);
         const inverseModelViewProjection = mat4.create();
         mat4.invert(inverseModelViewProjection, modelViewProjection);
-        gl.uniformMatrix4fv(
-          shader.uniform("uInvModelViewProjectionMatrix"),
-          false,
-          inverseModelViewProjection,
-        );
         const { near, far, adjustedNear, adjustedFar } =
           getVolumeRenderingNearFarBounds(
             clippingPlanes,
@@ -954,25 +944,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         const optimalSampleRate = optimalSamples;
         const actualSampleRate = this.depthSamplesTarget.value;
         const brightnessFactor = optimalSampleRate / actualSampleRate;
-        gl.uniform1f(shader.uniform("uBrightnessFactor"), brightnessFactor);
         const nearLimitFraction = (adjustedNear - near) / (far - near);
         const farLimitFraction = (adjustedFar - near) / (far - near);
-        gl.uniform1f(shader.uniform("uNearLimitFraction"), nearLimitFraction);
-        gl.uniform1f(shader.uniform("uFarLimitFraction"), farLimitFraction);
-        gl.uniform1f(shader.uniform("uGain"), Math.exp(this.gain.value));
-        gl.uniform1ui(shader.uniform("uPickId"), pickId);
-        gl.uniform1i(
-          shader.uniform("uMaxSteps"),
-          this.depthSamplesTarget.value,
-        );
-        gl.uniform3fv(
-          shader.uniform("uLowerClipBound"),
-          transformedSource.lowerClipDisplayBound,
-        );
-        gl.uniform3fv(
-          shader.uniform("uUpperClipBound"),
-          transformedSource.upperClipDisplayBound,
-        );
         shaderSetupUniforms = {
           uNearLimitFraction: nearLimitFraction,
           uFarLimitFraction: farLimitFraction,
@@ -1339,6 +1312,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     gl.uniform1i(shader.uniform("uMaxSteps"), uniforms.uMaxSteps);
     gl.uniform3fv(shader.uniform("uLowerClipBound"), uniforms.uLowerClipBound);
     gl.uniform3fv(shader.uniform("uUpperClipBound"), uniforms.uUpperClipBound);
+    gl.uniform1f(
+      shader.uniform("uBrightnessFactor"),
+      uniforms.uBrightnessFactor,
+    );
   }
 
   isReady(
