@@ -1164,6 +1164,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           );
         };
         bindVolumeRenderingBuffer();
+        renderContext.bindVolumeRenderingBuffer = bindVolumeRenderingBuffer;
         gl.clearDepth(1.0);
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(

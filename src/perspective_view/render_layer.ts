@@ -72,6 +72,11 @@ export interface PerspectiveViewRenderContext
   bindMaxProjectionBuffer?: () => void | undefined;
 
   /**
+   * Specifies how to bind the volume rendering buffer
+   */
+  bindVolumeRenderingBuffer?: () => void | undefined;
+
+  /**
    * Specifies how to assign the max projection emitter
    */
   maxProjectionEmit?: (builder: ShaderBuilder) => void | undefined;

@@ -775,18 +775,20 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       const performedSecondPassForPicking =
         !isProjectionMode(this.mode.value) &&
         !renderContext.isContinuousCameraMotionInProgress;
-      // In this case, we need the max projection buffer
+      // If the layer is in projection mode or the second pass for picking has been performed,
+      // the max projection state is needed
+      // the max projection buffer is not bound, because it is immediately read back
+      // in the perspective panel to update the max projection picking buffer
       if (isProjectionMode(this.mode.value) || performedSecondPassForPicking) {
         gl.depthMask(true);
         gl.disable(WebGL2RenderingContext.BLEND);
         gl.depthFunc(WebGL2RenderingContext.GREATER);
-        renderContext.bindMaxProjectionBuffer!();
       } else {
-        // Otherwise, the regular OIT buffer is needed
+        // Otherwise, the regular OIT buffer is needed along with the state
         gl.depthMask(false);
         gl.enable(WebGL2RenderingContext.BLEND);
         gl.depthFunc(WebGL2RenderingContext.LESS);
-        renderContext.bindFramebuffer();
+        renderContext.bindVolumeRenderingBuffer!();
       }
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
     };
