@@ -51,6 +51,33 @@ class SpecialProtocolKvStore implements ReadableKvStore {
     public credentialsProvider: SpecialProtocolCredentialsProvider,
     public baseUrl: string,
   ) {}
+
+  async getObjectLength(url: string, options: ReadOptions){
+    // Use a HEAD request to get the length of an object
+    const { cancellationToken = uncancelableToken } = options;
+    const headResponse = await cancellableFetchSpecialOk(
+      this.credentialsProvider,
+      url,
+      { method: "HEAD" },
+      async (response) => response,
+      cancellationToken,
+    );
+  
+    if (headResponse.status !== 200) {
+      throw new Error(
+        "Failed to determine total size in order to fetch suffix",
+      );
+    }
+    const contentLength = headResponse.headers.get("content-length");
+    if (contentLength === undefined) {
+      throw new Error(
+        "Failed to determine total size in order to fetch suffix",
+      );
+    }
+    const contentLengthNumber = Number(contentLength);
+    return contentLengthNumber
+  }
+
   async read(
     key: string,
     options: ReadOptions,
@@ -83,21 +110,25 @@ class SpecialProtocolKvStore implements ReadableKvStore {
           if (contentRange === null) {
             if (byteRangeRequest !== undefined) {
               if ("suffixLength" in byteRangeRequest) {
-                throw new Error(
-                  "Content-range header not provided with HTTP 206 response.  Check server CORS configuration.",
-                );
+               const objectSize = await this.getObjectLength(url, options)
+                byteRange = {
+                  offset: objectSize - byteRangeRequest.suffixLength,
+                  length: Number(response.headers.get('content-length'))
+                }
               }
+              else {
               byteRange = {
                 offset: byteRangeRequest.offset,
                 length: data.byteLength,
-              };
+              }}
             } else {
               throw new Error(
                 "Unexpected HTTP 206 response when no byte range specified.",
               );
             }
           }
-          if (contentRange !== null) {
+          
+          if (contentRange !== null) {        
             const m = contentRange.match(
               /bytes ([0-9]+)-([0-9]+)\/([0-9]+|\*)/,
             );
@@ -134,25 +165,7 @@ class SpecialProtocolKvStore implements ReadableKvStore {
         ) {
           // Some servers, such as the npm http-server package, do not support suffixLength
           // byte-range requests.
-          const headResponse = await cancellableFetchSpecialOk(
-            this.credentialsProvider,
-            url,
-            { method: "HEAD" },
-            async (response) => response,
-            cancellationToken,
-          );
-          if (headResponse.status !== 200) {
-            throw new Error(
-              "Failed to determine total size in order to fetch suffix",
-            );
-          }
-          const contentLength = headResponse.headers.get("content-length");
-          if (contentLength === undefined) {
-            throw new Error(
-              "Failed to determine total size in order to fetch suffix",
-            );
-          }
-          const contentLengthNumber = Number(contentLength);
+          const contentLengthNumber = await this.getObjectLength(url, options)
           byteRangeRequest = composeByteRangeRequest(
             { offset: 0, length: contentLengthNumber },
             byteRangeRequest,
@@ -173,3 +186,4 @@ export function getSpecialProtocolKvStore(
 ): ReadableKvStore {
   return new SpecialProtocolKvStore(credentialsProvider, baseUrl);
 }
+
