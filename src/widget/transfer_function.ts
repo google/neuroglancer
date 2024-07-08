@@ -46,6 +46,7 @@ import {
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import type { Uint64 } from "#src/util/uint64.js";
+import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { Buffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
@@ -1199,6 +1200,7 @@ const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "add-or-drag-point" },
   "shift+dblclick0": { action: "remove-point" },
   "shift?+mousedown2": { action: "change-point-color" },
+  "shift?+wheel": { action: "zoom-via-wheel" },
 });
 
 /**
@@ -1265,6 +1267,40 @@ class TransferFunctionController extends RefCounted {
         }
       },
     );
+    registerActionListener<WheelEvent>(
+      element,
+      "zoom-via-wheel",
+      (actionEvent) => {
+        const wheelEvent = actionEvent.detail;
+        const zoomAmount = getWheelZoomAmount(wheelEvent);
+        const relativeX = this.getTargetFraction(wheelEvent);
+        const { dataType } = this;
+        const bounds = this.getModel();
+        const newLower = computeLerp(
+          bounds.window,
+          dataType,
+          relativeX * (1 - zoomAmount),
+        );
+        const newUpper = computeLerp(
+          bounds.window,
+          dataType,
+          (1 - relativeX) * zoomAmount + relativeX,
+        );
+        if (newLower !== newUpper) {
+          this.setModel({
+            ...bounds,
+            window: [newLower, newUpper] as DataTypeInterval,
+          });
+        }
+      },
+    );
+  }
+  /**
+   * Get fraction of distance in x along bounding rect for a MouseEvent.
+   */
+  getTargetFraction(event: MouseEvent) {
+    const clientRect = this.element.getBoundingClientRect();
+    return (event.clientX - clientRect.left) / clientRect.width;
   }
   updateValue(value: TransferFunctionParameters | undefined) {
     if (value === undefined) return;
@@ -1531,16 +1567,14 @@ class TransferFunctionWidget extends Tab {
         this.updateControlPointsAndDraw();
       }),
     );
-    updateInputBoundValue(
-      this.window.inputs[0],
-      this.trackable.value.window[0],
-    );
-    updateInputBoundValue(
-      this.window.inputs[1],
-      this.trackable.value.window[1],
-    );
   }
   updateView() {
+    for (let i = 0; i < 2; ++i) {
+      updateInputBoundValue(
+        this.window.inputs[i],
+        this.trackable.value.window[i],
+      );
+    }
     this.transferFunctionPanel.scheduleRedraw();
   }
   updateControlPointsAndDraw() {
