@@ -1046,6 +1046,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     shader = null;
     prevChunkFormat = null;
     if (needPickingPass) {
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.depthFunc(WebGL2RenderingContext.GREATER);
