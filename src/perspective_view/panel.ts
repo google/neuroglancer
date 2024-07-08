@@ -196,7 +196,7 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
-function defineTransparentToTransparencyCopyShader(builder: ShaderBuilder) {
+function defineTransparentToTransparentCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
@@ -312,11 +312,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     8 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
-  private isCameraInContinuousMotion = false;
+  private isContinuousCameraMotionInProgress = false;
   get shouldDownsample() {
     return (
       this.viewer.enableAdaptiveDownsampling.value &&
-      this.isCameraInContinuousMotion &&
+      this.isContinuousCameraMotionInProgress &&
       this.hasVolumeRendering
     );
   }
@@ -387,10 +387,10 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected transparencyCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
   );
-  protected transparentToTransparencyCopyHelper = this.registerDisposer(
+  protected transparentToTransparentopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(
       this.gl,
-      defineTransparentToTransparencyCopyShader,
+      defineTransparentToTransparentCopyShader,
       2,
     ),
   );
@@ -492,7 +492,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     this.registerDisposer(
       this.context.continuousCameraMotionFinished.add(() => {
-        this.isCameraInContinuousMotion = false;
+        this.isContinuousCameraMotionInProgress = false;
         if (this.hasVolumeRendering) {
           this.scheduleRedraw();
           this.frameRateCalculator.resetForNewFrameSet();
@@ -501,7 +501,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
     this.registerDisposer(
       this.context.continuousCameraMotionStarted.add(() => {
-        this.isCameraInContinuousMotion = true;
+        this.isContinuousCameraMotionInProgress = true;
       }),
     );
 
@@ -1014,7 +1014,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
-      isContinuousCameraMotionInProgress: this.isCameraInContinuousMotion,
+      isContinuousCameraMotionInProgress: this.isContinuousCameraMotionInProgress,
     };
 
     mat4.copy(
@@ -1045,7 +1045,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           // Unless the layer is a projection layer.
           hasVolumeRenderingPick =
             hasVolumeRenderingPick ||
-            !this.isCameraInContinuousMotion ||
+            !this.isContinuousCameraMotionInProgress ||
             isProjectionLayer(renderLayer as VolumeRenderingRenderLayer);
         }
       }
@@ -1205,7 +1205,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             renderLayer as VolumeRenderingRenderLayer,
           );
           const needsSecondPickingPass =
-            !isVolumeProjectionLayer && !this.isCameraInContinuousMotion;
+            !isVolumeProjectionLayer && !this.isContinuousCameraMotionInProgress;
 
           // Two cases for volume rendering layers
 
@@ -1322,7 +1322,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       if (hasVolumeRendering) {
         renderContext.bindFramebuffer();
-        this.transparentToTransparencyCopyHelper.draw(
+        this.transparentToTransparentopyHelper.draw(
           this.volumeRenderingConfiguration.colorBuffers[0].texture,
           this.volumeRenderingConfiguration.colorBuffers[1].texture,
         );
