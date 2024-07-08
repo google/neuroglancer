@@ -1275,20 +1275,20 @@ class TransferFunctionController extends RefCounted {
         const zoomAmount = getWheelZoomAmount(wheelEvent);
         const relativeX = this.getTargetFraction(wheelEvent);
         const { dataType } = this;
-        const bounds = this.getModel();
+        const model = this.getModel();
         const newLower = computeLerp(
-          bounds.window,
+          model.window,
           dataType,
           relativeX * (1 - zoomAmount),
         );
         const newUpper = computeLerp(
-          bounds.window,
+          model.window,
           dataType,
           (1 - relativeX) * zoomAmount + relativeX,
         );
         if (newLower !== newUpper) {
           this.setModel({
-            ...bounds,
+            ...model,
             window: [newLower, newUpper] as DataTypeInterval,
           });
         }
