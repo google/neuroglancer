@@ -71,10 +71,10 @@ describe("FrameRateCounter", () => {
       100,
       15,
     );
-    
+
     // Without any frames, the downsampling rate is 4
     expect(frameRateCounter.calculateDownsamplingRate()).toEqual(4);
-    
+
     // 80ms / 100ms < 1, so no downsampling
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 80);
@@ -86,19 +86,19 @@ describe("FrameRateCounter", () => {
       frameRateCounter.addFrame(i * 400);
     }
     expect(frameRateCounter.calculateDownsamplingRate()).toEqual(4);
-  
+
     // Better fps now, but the high rate persists for a while
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 50);
     }
     expect(frameRateCounter.calculateDownsamplingRate()).toEqual(4);
-    
+
     // The downsampling rate will eventually drop
     for (let i = 0; i < 10; i++) {
       frameRateCounter.addFrame(i * 50);
     }
     expect(frameRateCounter.calculateDownsamplingRate()).toEqual(1);
-    
+
     // If the frame rate is very bad, still caps at 8
     frameRateCounter.resetForNewFrameSet();
     expect(frameRateCounter.calculateDownsamplingRate()).toEqual(1);
