@@ -291,6 +291,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
   private hasVolumeRendering = false;
+  private needToCleanUpVolumeRendering = false;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -1051,6 +1052,8 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
     }
+    this.needToCleanUpVolumeRendering =
+      this.needToCleanUpVolumeRendering || hasVolumeRendering;
     this.hasVolumeRendering = hasVolumeRendering;
     this.drawSliceViews(renderContext);
 
@@ -1163,6 +1166,9 @@ export class PerspectivePanel extends RenderedDataPanel {
             volumeRenderingBufferHeight,
           );
         };
+      }
+
+      if (this.needToCleanUpVolumeRendering) {
         bindVolumeRenderingBuffer();
         renderContext.bindVolumeRenderingBuffer = bindVolumeRenderingBuffer;
         gl.clearDepth(1.0);
@@ -1171,10 +1177,18 @@ export class PerspectivePanel extends RenderedDataPanel {
           WebGL2RenderingContext.COLOR_BUFFER_BIT |
             WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
+        this.needToCleanUpVolumeRendering = false;
+      }
+
+      if (this.hasVolumeRendering) {
         // Copy the depth buffer from the offscreen framebuffer to the volume rendering framebuffer.
+        gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+        gl.disable(WebGL2RenderingContext.BLEND);
         this.offscreenDepthCopyHelper.draw(
           this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture,
         );
+        gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+        gl.enable(WebGL2RenderingContext.BLEND);
       }
 
       const { transparentConfiguration } = this;
@@ -1230,13 +1244,15 @@ export class PerspectivePanel extends RenderedDataPanel {
               renderContext.emitter = perspectivePanelEmitOIT;
               bindVolumeRenderingBuffer();
             }
+            gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             currentTransparentRenderingState =
               TransparentRenderingState.VOLUME_RENDERING;
-          }
-
-          // Two cases for volume rendering layers
-          // Either way, a draw call is needed first
+            }
+            
+            // Two cases for volume rendering layers
+            // Either way, a draw call is needed first
           renderLayer.draw(renderContext, attachment);
+          gl.enable(WebGL2RenderingContext.DEPTH_TEST);
 
           // Case 1 - No picking pass needed and not a projection layer
           // we already have the color information, so we skip the max projection pass
@@ -1248,7 +1264,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           // And a second pass may be needed to do this picking
 
           // Copy the volume rendering picking result to the main picking buffer
-          // Depth testing remains on to combine max layers into one pick buffer via depth
+          // Depth testing on to combine max layers into one pick buffer via depth
           bindMaxProjectionPickingBuffer();
           this.maxProjectionToPickCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,

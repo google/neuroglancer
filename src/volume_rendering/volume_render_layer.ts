@@ -790,7 +790,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         gl.depthFunc(WebGL2RenderingContext.LESS);
         renderContext.bindVolumeRenderingBuffer!();
       }
-      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
     };
 
     const endShader = () => {
