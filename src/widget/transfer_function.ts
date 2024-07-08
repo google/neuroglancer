@@ -73,6 +73,7 @@ import {
   getUpdatedRangeAndWindowParameters,
   updateInputBoundValue,
   updateInputBoundWidth,
+  createCDFLineShader,
   NUM_CDF_LINES,
 } from "#src/widget/invlerp.js";
 import type {
@@ -980,58 +981,7 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
   }
 
   private histogramLineShader = this.registerDisposer(
-    (() => {
-      const builder = new ShaderBuilder(this.gl);
-      defineLineShader(builder);
-      builder.addTextureSampler(
-        "sampler2D",
-        "uHistogramSampler",
-        histogramSamplerTextureUnit,
-      );
-      builder.addOutputBuffer("vec4", "out_color", 0);
-      builder.addAttribute("uint", "aDataValue");
-      builder.addUniform("float", "uBoundsFraction");
-      builder.addVertexCode(`
-float getCount(int i) {
-  return texelFetch(uHistogramSampler, ivec2(i, 0), 0).x;
-}
-vec4 getVertex(float cdf, int i) {
-  float x;
-  if (i == 0) {
-    x = -1.0;
-  } else if (i == 255) {
-    x = 1.0;
-  } else {
-    x = float(i) / 254.0 * uBoundsFraction * 2.0 - 1.0;
-  }
-  return vec4(x, cdf * (2.0 - uLineParams.y) - 1.0 + uLineParams.y * 0.5, 0.0, 1.0);
-}
-`);
-      builder.setVertexMain(`
-int lineNumber = int(aDataValue);
-int dataValue = lineNumber;
-float cumSum = 0.0;
-for (int i = 0; i <= dataValue; ++i) {
-  cumSum += getCount(i);
-}
-float total = cumSum + getCount(dataValue + 1);
-float cumSumEnd = dataValue == ${NUM_CDF_LINES - 1} ? cumSum : total;
-if (dataValue == ${NUM_CDF_LINES - 1}) {
-  cumSum + getCount(dataValue + 1);
-}
-for (int i = dataValue + 2; i < 256; ++i) {
-  total += getCount(i);
-}
-total = max(total, 1.0);
-float cdf1 = cumSum / total;
-float cdf2 = cumSumEnd / total;
-emitLine(getVertex(cdf1, lineNumber), getVertex(cdf2, lineNumber + 1), 1.0);
-`);
-      builder.setFragmentMain(`
-out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
-`);
-      return builder.build();
-    })(),
+    (() => createCDFLineShader(this.gl, histogramSamplerTextureUnit))(),
   );
 
   private transferFunctionLineShader = this.registerDisposer(
