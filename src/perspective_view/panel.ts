@@ -210,20 +210,6 @@ emitAccumAndRevealage(accum, 1.0 - revealage, 0u);
 `);
 }
 
-// Copy the depth from opaque pass to the depth buffer for OIT.
-// This copy is required because the OIT depth buffer might be
-// smaller than the main depth buffer.
-function defineDepthCopyShader(builder: ShaderBuilder) {
-  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
-  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
-  builder.setFragmentMain(`
-  v4f_fragData0 = vec4(0.0, 0.0, 0.0, 1.0);
-  v4f_fragData1 = vec4(0.0, 0.0, 0.0, 1.0);
-  vec4 v0 = getValue0();
-  gl_FragDepth = 1.0 - v0.r;
-`);
-}
-
 // Copy the max projection color to the OIT buffer
 function defineMaxProjectionColorCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
@@ -397,9 +383,6 @@ export class PerspectivePanel extends RenderedDataPanel {
   );
   protected maxProjectionColorCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 2),
-  );
-  protected offscreenDepthCopyHelper = this.registerDisposer(
-    OffscreenCopyHelper.get(this.gl, defineDepthCopyShader, 1),
   );
   protected maxProjectionPickCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionPickCopyShader, 2),
@@ -1178,17 +1161,6 @@ export class PerspectivePanel extends RenderedDataPanel {
             WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
         this.needToCleanUpVolumeRendering = false;
-      }
-
-      if (this.hasVolumeRendering) {
-        // Copy the depth buffer from the offscreen framebuffer to the volume rendering framebuffer.
-        gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-        gl.disable(WebGL2RenderingContext.BLEND);
-        this.offscreenDepthCopyHelper.draw(
-          this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture,
-        );
-        gl.enable(WebGL2RenderingContext.DEPTH_TEST);
-        gl.enable(WebGL2RenderingContext.BLEND);
       }
 
       const { transparentConfiguration } = this;
