@@ -387,7 +387,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected transparencyCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
   );
-  protected transparentToTransparentopyHelper = this.registerDisposer(
+  protected transparentToTransparentCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(
       this.gl,
       defineTransparentToTransparentCopyShader,
@@ -1317,7 +1317,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       if (hasVolumeRendering) {
         renderContext.bindFramebuffer();
-        this.transparentToTransparentopyHelper.draw(
+        this.transparentToTransparentCopyHelper.draw(
           this.volumeRenderingConfiguration.colorBuffers[0].texture,
           this.volumeRenderingConfiguration.colorBuffers[1].texture,
         );
