@@ -1014,7 +1014,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
       sliceViewsPresent: this.sliceViews.size > 0,
-      isContinuousCameraMotionInProgress: this.isContinuousCameraMotionInProgress,
+      isContinuousCameraMotionInProgress:
+        this.isContinuousCameraMotionInProgress,
     };
 
     mat4.copy(
@@ -1205,30 +1206,10 @@ export class PerspectivePanel extends RenderedDataPanel {
             renderLayer as VolumeRenderingRenderLayer,
           );
           const needsSecondPickingPass =
-            !isVolumeProjectionLayer && !this.isContinuousCameraMotionInProgress;
+            !isVolumeProjectionLayer &&
+            !this.isContinuousCameraMotionInProgress;
 
-          // Two cases for volume rendering layers
-
-          // Case 1 - No picking pass needed and not a projection layer
-          // Draw the layer as normal and continue on
-          if (!needsSecondPickingPass && !isVolumeProjectionLayer) {
-            if (
-              currentTransparentRenderingState !==
-              TransparentRenderingState.VOLUME_RENDERING
-            ) {
-              renderContext.emitter = perspectivePanelEmitOIT;
-              bindVolumeRenderingBuffer();
-            }
-            currentTransparentRenderingState =
-              TransparentRenderingState.VOLUME_RENDERING;
-            renderLayer.draw(renderContext, attachment);
-            continue;
-          }
-
-          // Case 2 - Picking will be computed from a max projection
-          // But a second pass may not be needed to do this picking
-
-          // Set state for max projection mode if needed
+          // Bind the appropriate buffer and set state
           if (isVolumeProjectionLayer) {
             gl.depthMask(true);
             gl.disable(WebGL2RenderingContext.BLEND);
@@ -1251,7 +1232,19 @@ export class PerspectivePanel extends RenderedDataPanel {
             currentTransparentRenderingState =
               TransparentRenderingState.VOLUME_RENDERING;
           }
+
+          // Two cases for volume rendering layers
+          // Either way, a draw call is needed first
           renderLayer.draw(renderContext, attachment);
+
+          // Case 1 - No picking pass needed and not a projection layer
+          // we already have the color information, so we skip the max projection pass
+          if (!needsSecondPickingPass && !isVolumeProjectionLayer) {
+            continue;
+          }
+
+          // Case 2 - Picking will be computed from a max projection
+          // And a second pass may be needed to do this picking
 
           // Copy the volume rendering picking result to the main picking buffer
           // Depth testing remains on to combine max layers into one pick buffer via depth
@@ -1286,6 +1279,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
           // Reset the max projection color, depth, and picking buffer
           bindMaxProjectionBuffer();
+          renderContext.emitter = maxProjectionEmit;
           gl.depthMask(true);
           gl.clearColor(0.0, 0.0, 0.0, 0.0);
           gl.clearDepth(0.0);
