@@ -1194,7 +1194,8 @@ export class PerspectivePanel extends RenderedDataPanel {
           );
           const needsSecondPickingPass =
             !isVolumeProjectionLayer &&
-            !this.isContinuousCameraMotionInProgress;
+            !this.isContinuousCameraMotionInProgress &&
+            !renderContext.wireFrame;
 
           // Bind the appropriate buffer and set state
           if (isVolumeProjectionLayer) {
@@ -1219,10 +1220,10 @@ export class PerspectivePanel extends RenderedDataPanel {
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
             currentTransparentRenderingState =
               TransparentRenderingState.VOLUME_RENDERING;
-            }
-            
-            // Two cases for volume rendering layers
-            // Either way, a draw call is needed first
+          }
+
+          // Two cases for volume rendering layers
+          // Either way, a draw call is needed first
           renderLayer.draw(renderContext, attachment);
           gl.enable(WebGL2RenderingContext.DEPTH_TEST);
 

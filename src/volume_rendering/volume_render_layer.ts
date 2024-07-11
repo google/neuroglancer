@@ -854,7 +854,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       !renderContext.isContinuousCameraMotionInProgress;
     const needPickingPass =
       !isProjectionMode(this.mode.value) &&
-      !renderContext.isContinuousCameraMotionInProgress;
+      !renderContext.isContinuousCameraMotionInProgress &&
+      !renderContext.wireFrame;
     const hasPicking = isProjectionMode(this.mode.value) || needPickingPass;
 
     const pickId = hasPicking ? renderContext.pickIDs.register(this) : 0;
