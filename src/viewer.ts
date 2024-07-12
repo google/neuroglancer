@@ -70,6 +70,8 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import { overlaysOpen } from "#src/overlay.js";
+import type { ScreenshotActionState } from "#src/python_integration/screenshots.js";
+import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
 import { StatusMessage } from "#src/status.js";
 import {
@@ -487,6 +489,12 @@ export class Viewer extends RefCounted implements ViewerState {
 
   resetInitiated = new NullarySignal();
 
+  private screenshotHandler = this.registerDisposer(
+    new ScreenshotHandler(this),
+  );
+  private screenshotId = 0;
+  private screenshotUrl: string | undefined;
+
   get chunkManager() {
     return this.dataContext.chunkManager;
   }
@@ -564,6 +572,11 @@ export class Viewer extends RefCounted implements ViewerState {
       observeWatchable((value) => {
         this.display.applyWindowedViewportToElement(element, value);
       }, this.partialViewport),
+    );
+    this.registerDisposer(
+      this.screenshotHandler.sendScreenshotRequested.add((state) => {
+        this.saveScreenshot(state);
+      }),
     );
 
     this.registerDisposer(() => removeFromParent(this.element));
@@ -1140,6 +1153,53 @@ export class Viewer extends RefCounted implements ViewerState {
       value = !this.statisticsDisplayState.location.visible;
     }
     this.statisticsDisplayState.location.visible = value;
+  }
+
+  screenshot() {
+    this.screenshotHandler.requestState.value = this.screenshotId.toString();
+    this.screenshotId++;
+  }
+
+  private saveScreenshot(actionState: ScreenshotActionState) {
+    function binaryStringToUint8Array(binaryString: string) {
+      const length = binaryString.length;
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    function base64ToUint8Array(base64: string) {
+      const binaryString = window.atob(base64);
+      return binaryStringToUint8Array(binaryString);
+    }
+
+    const { screenshot } = actionState;
+    const { image, imageType } = screenshot;
+    const screenshotImage = new Blob([base64ToUint8Array(image)], {
+      type: imageType,
+    });
+    if (this.screenshotUrl !== undefined) {
+      URL.revokeObjectURL(this.screenshotUrl);
+    }
+    this.screenshotUrl = URL.createObjectURL(screenshotImage);
+
+    const a = document.createElement("a");
+    const url = this.screenshotUrl;
+    if (url !== undefined) {
+      let nowtime = new Date().toLocaleString();
+      nowtime = nowtime.replace(", ", "-");
+      a.href = url;
+      a.download = `neuroglancer-screenshot-${nowtime}.png`;
+      document.body.appendChild(a);
+      try {
+        a.click();
+      }
+      finally {
+        document.body.removeChild(a);
+      } 
+    }
   }
 
   get gl() {

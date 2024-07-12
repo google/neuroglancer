@@ -125,7 +125,10 @@ export class ViewerSettingsPanel extends SidePanel {
     );
     addCheckbox("Wire frame rendering", viewer.wireFrame);
     addCheckbox("Enable prefetching", viewer.chunkQueueManager.enablePrefetch);
-    addCheckbox("Enable adaptive downsampling", viewer.enableAdaptiveDownsampling);
+    addCheckbox(
+      "Enable adaptive downsampling",
+      viewer.enableAdaptiveDownsampling,
+    );
 
     const addColor = (label: string, value: WatchableValueInterface<vec3>) => {
       const labelElement = document.createElement("label");
@@ -137,5 +140,13 @@ export class ViewerSettingsPanel extends SidePanel {
 
     addColor("Cross-section background", viewer.crossSectionBackgroundColor);
     addColor("Projection background", viewer.perspectiveViewBackgroundColor);
+
+    const addButton = (label: string, callback: () => void) => {
+      const button = document.createElement("button");
+      button.textContent = label;
+      button.addEventListener("click", callback);
+      scroll.appendChild(button);
+    };
+    addButton("Take screenshot", () => viewer.screenshot());
   }
 }
