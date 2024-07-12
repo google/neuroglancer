@@ -221,8 +221,16 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    viewport.logicalWidth = logicalWidth;
-    viewport.logicalHeight = logicalHeight;
+    // TODO this does not work for 2D panels
+    if (this.context.tempIgnoreCanvasSize) {
+      viewport.width = logicalWidth * screenToCanvasPixelScaleX;
+      viewport.height = logicalHeight * screenToCanvasPixelScaleY;
+      viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;
+      viewport.logicalHeight = logicalHeight * screenToCanvasPixelScaleY;
+    } else {
+      viewport.logicalWidth = logicalWidth;
+      viewport.logicalHeight = logicalHeight;
+    }
     viewport.visibleLeftFraction = (clippedLeft - logicalLeft) / logicalWidth;
     viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
     viewport.visibleWidthFraction = clippedWidth / logicalWidth;
@@ -403,6 +411,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+  tempIgnoreCanvasSize = false;
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;
@@ -575,8 +584,10 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
     const { canvas } = this;
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    if (!this.tempIgnoreCanvasSize) {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
     this.canvasRect = canvas.getBoundingClientRect();
     this.rootRect = this.container.getBoundingClientRect();
     this.boundsGeneration = resizeGeneration;

@@ -148,5 +148,29 @@ export class ViewerSettingsPanel extends SidePanel {
       scroll.appendChild(button);
     };
     addButton("Take screenshot", () => viewer.screenshot());
+
+    const addIntSlider = (
+      label: string,
+      min: number,
+      max: number,
+      callback: (value: number) => void,
+    ) => {
+      const labelElement = document.createElement("label");
+      labelElement.textContent = label;
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = min.toString();
+      slider.max = max.toString();
+      slider.value = callback.toString();
+      slider.addEventListener("input", () => {
+        callback(parseInt(slider.value));
+      });
+      labelElement.appendChild(slider);
+      slider.value = viewer.screenshotScale.toString();
+      scroll.appendChild(labelElement);
+    };
+    addIntSlider("Screenshot resolution scale", 1, 8, (value) => {
+      viewer.screenshotScale = value;
+    });
   }
 }

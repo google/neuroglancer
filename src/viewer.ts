@@ -492,8 +492,9 @@ export class Viewer extends RefCounted implements ViewerState {
   private screenshotHandler = this.registerDisposer(
     new ScreenshotHandler(this),
   );
-  private screenshotId = 0;
+  private screenshotId: number | undefined;
   private screenshotUrl: string | undefined;
+  screenshotScale: number = 1;
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -576,6 +577,15 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(
       this.screenshotHandler.sendScreenshotRequested.add((state) => {
         this.saveScreenshot(state);
+        this.resetCanvasSize();
+      }),
+    );
+    this.registerDisposer(
+      this.display.updateFinished.add(() => {
+        if (this.screenshotId !== undefined) {
+          this.screenshotHandler.requestState.value =
+            this.screenshotId.toString();
+        }
       }),
     );
 
@@ -1047,7 +1057,7 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    this.bindAction("help", () => this.toggleHelpPanel());
+    this.bindAction("help", () => this.screenshot());
 
     for (let i = 1; i <= 9; ++i) {
       this.bindAction(`toggle-layer-${i}`, () => {
@@ -1156,8 +1166,37 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   screenshot() {
-    this.screenshotHandler.requestState.value = this.screenshotId.toString();
-    this.screenshotId++;
+    const shouldResize = this.screenshotScale !== 1;
+    if (shouldResize) {
+      const oldSize = {
+        width: this.display.canvas.width,
+        height: this.display.canvas.height,
+      };
+      const newSize = {
+        width: Math.round(oldSize.width * this.screenshotScale),
+        height: Math.round(oldSize.height * this.screenshotScale),
+      };
+      this.display.canvas.width = newSize.width;
+      this.display.canvas.height = newSize.height;
+    }
+    if (this.screenshotId === undefined) {
+      this.screenshotId = 0;
+    } else {
+      this.screenshotId++;
+    }
+    this.display.tempIgnoreCanvasSize = true;
+    if (!shouldResize) {
+      this.display.scheduleRedraw();
+    } else {
+      ++this.display.resizeGeneration;
+      this.display.resizeCallback();
+    }
+  }
+
+  private resetCanvasSize() {
+    this.display.tempIgnoreCanvasSize = false;
+    ++this.display.resizeGeneration;
+    this.display.resizeCallback();
   }
 
   private saveScreenshot(actionState: ScreenshotActionState) {
@@ -1176,7 +1215,7 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     const { screenshot } = actionState;
-    const { image, imageType } = screenshot;
+    const { image, imageType, width, height } = screenshot;
     const screenshotImage = new Blob([base64ToUint8Array(image)], {
       type: imageType,
     });
@@ -1191,14 +1230,13 @@ export class Viewer extends RefCounted implements ViewerState {
       let nowtime = new Date().toLocaleString();
       nowtime = nowtime.replace(", ", "-");
       a.href = url;
-      a.download = `neuroglancer-screenshot-${nowtime}.png`;
+      a.download = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
       document.body.appendChild(a);
       try {
         a.click();
-      }
-      finally {
+      } finally {
         document.body.removeChild(a);
-      } 
+      }
     }
   }
 
