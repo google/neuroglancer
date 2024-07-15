@@ -27,6 +27,7 @@ import type { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
+import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
 import {
   EventActionMap,
   registerActionListener,
@@ -51,7 +52,10 @@ import type { WatchableVisibilityPriority } from "#src/visibility_priority/front
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
-import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import {
+  copyHistogramToCPU,
+  type HistogramSpecifications,
+} from "#src/webgl/empirical_cdf.js";
 import {
   defineLerpShaderFunction,
   enableLerpShaderFunction,
@@ -777,6 +781,13 @@ export class InvlerpWidget extends Tab {
     element.appendChild(this.cdfPanel.element);
     element.classList.add("neuroglancer-invlerp-widget");
     element.appendChild(boundElements.window.container);
+    const newRangeButton = document.createElement("button");
+    newRangeButton.textContent = "Auto";
+    newRangeButton.title = "Automatically adjust range to cover 95% of data";
+    newRangeButton.addEventListener("click", () => {
+      this.autoComputeRange();
+    });
+    element.appendChild(newRangeButton);
     this.updateView();
     this.registerDisposer(
       trackable.changed.add(
@@ -819,6 +830,22 @@ export class InvlerpWidget extends Tab {
     const { invertArrows } = this;
     invertArrows[reversed ? 1 : 0].style.display = "";
     invertArrows[reversed ? 0 : 1].style.display = "none";
+  }
+
+  autoComputeRange() {
+    const { trackable, dataType } = this;
+    const gl = this.display.gl;
+    const { range } = trackable.value;
+    const frameBuffer =
+      this.histogramSpecifications.getFramebuffers(gl)[this.histogramIndex];
+    frameBuffer.bind(256, 1);
+    const empiricalCdf = copyHistogramToCPU(gl);
+    const newRange = computeRangeForCdf(0.95, empiricalCdf, range, dataType);
+    this.trackable.value = {
+      ...this.trackable.value,
+      range: newRange,
+      window: newRange,
+    };
   }
 }
 

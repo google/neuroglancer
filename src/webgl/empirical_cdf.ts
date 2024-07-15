@@ -209,23 +209,28 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       );
 
       if (DEBUG_HISTOGRAMS) {
-        const tempBuffer = new Float32Array(256 * 4);
-        gl.readPixels(
-          0,
-          0,
-          256,
-          1,
-          WebGL2RenderingContext.RGBA,
-          WebGL2RenderingContext.FLOAT,
-          tempBuffer,
-        );
-        const tempBuffer2 = new Float32Array(256);
-        for (let j = 0; j < 256; ++j) {
-          tempBuffer2[j] = tempBuffer[j * 4];
-        }
+        const tempBuffer2 = copyHistogramToCPU(gl);
         console.log("histogram", tempBuffer2.join(" "));
       }
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }
+}
+
+export function copyHistogramToCPU(gl: GL) {
+  const tempBuffer = new Float32Array(256 * 4);
+  gl.readPixels(
+    0,
+    0,
+    256,
+    1,
+    WebGL2RenderingContext.RGBA,
+    WebGL2RenderingContext.FLOAT,
+    tempBuffer,
+  );
+  const tempBuffer2 = new Float32Array(256);
+  for (let j = 0; j < 256; ++j) {
+    tempBuffer2[j] = tempBuffer[j * 4];
+  }
+  return tempBuffer2;
 }
