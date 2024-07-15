@@ -23,7 +23,7 @@ import { IndirectRenderedPanel } from "#src/display_context.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { DataType } from "#src/util/data_type.js";
+import { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
@@ -38,6 +38,7 @@ import {
   computeLerp,
   dataTypeCompare,
   dataTypeIntervalEqual,
+  defaultDataTypeRange,
   getClampedInterval,
   getClosestEndpoint,
   getIntervalBoundsEffectiveFraction,
@@ -747,6 +748,8 @@ export class InvlerpWidget extends Tab {
   private invertRange() {
     invertInvlerpRange(this.trackable);
   }
+  private shouldAutoComputeRange = false;
+  private lastAutoComputeRange: DataTypeInterval | null = null;
   constructor(
     visibility: WatchableVisibilityPriority,
     public display: DisplayContext,
@@ -796,6 +799,11 @@ export class InvlerpWidget extends Tab {
         ),
       ),
     );
+    this.registerDisposer(
+      this.display.updateFinished.add(() => {
+        this.maybeAutoComputeRange();
+      }),
+    );
   }
 
   updateView() {
@@ -834,6 +842,33 @@ export class InvlerpWidget extends Tab {
 
   autoComputeRange() {
     const { trackable, dataType } = this;
+    let oldRange = trackable.value.window;
+    if (!this.shouldAutoComputeRange) {
+      this.shouldAutoComputeRange = true;
+      this.lastAutoComputeRange = null;
+
+      // Create a large range to search over
+      // It's easier to contract the range than to expand it
+      oldRange = defaultDataTypeRange[dataType];
+      if (this.dataType === DataType.FLOAT32) {
+        oldRange = [-64000, 64000];
+      }
+      // We need a new histogram pass if the window has changed
+      if (!dataTypeIntervalEqual(dataType, oldRange, trackable.value.window)) {
+        this.trackable.value = {
+          ...this.trackable.value,
+          window: oldRange,
+          range: oldRange,
+        };
+        return;
+      }
+    }
+    this.maybeAutoComputeRange();
+  }
+
+  private maybeAutoComputeRange() {
+    if (!this.shouldAutoComputeRange) return;
+    const { trackable, dataType } = this;
     const gl = this.display.gl;
     const { range } = trackable.value;
     const frameBuffer =
@@ -841,6 +876,16 @@ export class InvlerpWidget extends Tab {
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
     const newRange = computeRangeForCdf(0.95, empiricalCdf, range, dataType);
+    // If the range is the same, don't update, and we are done with the search
+    if (
+      this.lastAutoComputeRange !== null &&
+      dataTypeIntervalEqual(dataType, newRange, this.lastAutoComputeRange)
+    ) {
+      this.shouldAutoComputeRange = false;
+      this.lastAutoComputeRange = null;
+      return;
+    }
+    this.lastAutoComputeRange = newRange;
     this.trackable.value = {
       ...this.trackable.value,
       range: newRange,
