@@ -17,12 +17,14 @@
 import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
 import type { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { WatchableValue } from "#src/trackable_value.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type { RefCounted } from "#src/util/disposable.js";
 import type { Uint64 } from "#src/util/uint64.js";
 
 export interface VisibleSegmentsState {
+  timestamp: WatchableValue<number | undefined>;
   visibleSegments: Uint64Set;
   selectedSegments: Uint64OrderedSet;
   segmentEquivalences: SharedDisjointUint64Sets;
