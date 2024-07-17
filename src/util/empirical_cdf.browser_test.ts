@@ -117,7 +117,6 @@ describe("empirical_cdf", () => {
       });
     }
   }
-  return;
 
   // 5 - 95 percentile
   {
