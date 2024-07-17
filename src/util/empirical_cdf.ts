@@ -112,29 +112,19 @@ export function computeRangeForCdf(
   let lowerBound = previousRange[0];
   let upperBound = previousRange[1];
   const cdf = calculateEmpiricalCdf(histogram);
-  console.log("cdf", cdf);
   const binSize = calculateBinSize(histogram, previousRange, inputDataType);
-  console.log(previousRange, binSize);
 
   // Find the indices of the percentiles.
-  let lowerIndex = [...cdf]
-    .reverse()
-    .findIndex((cdfValue) => cdfValue <= lowerPercentile);
-  if (lowerIndex !== -1) {
-    lowerIndex = cdf.length - 1 - lowerIndex;
+  let lowerIndex = 0;
+  for (let i = 0; i < cdf.length; i++) {
+    lowerIndex = i;
+    if (cdf[i] > lowerPercentile) {
+      break;
+    }
   }
-  let upperIndex = cdf.findIndex((cdfValue) => cdfValue >= upperPercentile);
-  console.log("indices", lowerIndex, upperIndex);
 
-  // The indices should never be -1, but just in case.
-  if (lowerIndex === -1) {
-    console.log("Lower index not found.");
-    lowerIndex = 0;
-  }
-  if (upperIndex === -1) {
-    console.log("Upper index not found.");
-    upperIndex = histogram.length - 1;
-  }
+  let upperIndex = cdf.findIndex((cdfValue) => cdfValue >= upperPercentile);
+  upperIndex = upperIndex === -1 ? histogram.length - 1 : upperIndex;
 
   // Find new bounds based on the indices.
   if (lowerIndex === 0) {
@@ -157,8 +147,6 @@ export function computeRangeForCdf(
       binSize * shiftAmount,
     );
   }
-  console.log("indices", lowerIndex, upperIndex);
-  console.log("bounds", lowerBound, upperBound);
 
   return [lowerBound, upperBound] as DataTypeInterval;
 }

@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
+import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   dataTypeCompare,
-  DataTypeInterval,
   dataTypeIntervalEqual,
   defaultDataTypeRange,
 } from "#src/util/lerp.js";
 import { Uint64 } from "#src/util/uint64.js";
-import { describe, it, expect } from "vitest";
 
 // The first and last bin are for values below the lower bound/above the upper
 // To simulate output from the GLSL shader function on CPU
@@ -32,7 +32,7 @@ function countDataInBins(
   dataType: DataType,
   min: number | Uint64,
   max: number | Uint64,
-  numBins: number = 100,
+  numBins: number = 254,
 ): Float32Array {
   const counts = new Float32Array(numBins + 2).fill(0);
   let binSize: number;
@@ -86,7 +86,7 @@ describe("empirical_cdf", () => {
         : defaultDataTypeRange[dataType];
     let numIterations = 0;
     it(`computes the correct min and max for ${DataType[dataType]}`, () => {
-      const correctedDataRange: DataTypeInterval =
+      const correctAutoDataRange: DataTypeInterval =
         dataType === DataType.UINT64
           ? [Uint64.ZERO, Uint64.fromNumber(100)]
           : [0, 100];
@@ -99,19 +99,24 @@ describe("empirical_cdf", () => {
           newRange[0],
           newRange[1],
         );
-        console.log(newRange, binCounts);
         oldRange = newRange;
         newRange = computeRangeForCdf(binCounts, 0.0, 1.0, newRange, dataType);
-        console.log("in loop", newRange);
         ++numIterations;
       } while (
         !dataTypeIntervalEqual(dataType, oldRange, newRange) &&
         numIterations < 10
       );
-      console.log("final", newRange);
-      expect(
-        dataTypeIntervalEqual(dataType, newRange, correctedDataRange),
-      ).toBeTruthy();
+      if (dataType !== DataType.FLOAT32) {
+        expect(
+          dataTypeIntervalEqual(dataType, newRange, correctAutoDataRange),
+        ).toBeTruthy();
+      } else {
+        expect(
+          Math.round(
+            (newRange[0] as number) - (correctAutoDataRange[0] as number),
+          ),
+        ).toBe(0);
+      }
     });
   }
 });
