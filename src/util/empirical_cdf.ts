@@ -16,77 +16,149 @@
  * @file Defines facilities for manipulation of empirical cumulative distribution functions.
  */
 import { DataType } from "#src/util/data_type.js";
-import type { DataTypeInterval } from "#src/util/lerp.js";
+import {
+  clampToInterval,
+  defaultDataTypeRange,
+  type DataTypeInterval,
+} from "#src/util/lerp.js";
+import { Uint64 } from "#src/util/uint64.js";
 
-// 256 bins in total.  The first and last bin are for values below the lower bound/above the upper
-// bound.
-// TODO add some simple tests for this.
+function calculateEmpiricalCdf(histogram: Float32Array): Float32Array {
+  const totalSamples = histogram.reduce((a, b) => a + b, 0);
+  let cumulativeCount = 0;
+  const empiricalCdf = histogram.map((count) => {
+    cumulativeCount += count;
+    return cumulativeCount / totalSamples;
+  });
+  return empiricalCdf;
+}
+
+function calculateBinSize(
+  histogram: Float32Array,
+  previousRange: DataTypeInterval,
+  inputDataType: DataType,
+): number {
+  const totalBins = histogram.length - 2; // Exclude the first and last bins.
+  if (inputDataType === DataType.UINT64) {
+    const numerator64 = new Uint64();
+    const denominator64 = Uint64.fromNumber(totalBins);
+    const min = previousRange[0] as Uint64;
+    const max = previousRange[1] as Uint64;
+    Uint64.subtract(numerator64, max, min);
+    return numerator64.toNumber() / denominator64.toNumber();
+  } else {
+    const min = previousRange[0] as number;
+    const max = previousRange[1] as number;
+    return (max - min) / totalBins;
+  }
+}
+
+function decreaseBound(
+  bound: number | Uint64,
+  dataType: DataType,
+  change: number,
+): number | Uint64 {
+  if (dataType !== DataType.FLOAT32) {
+    const minBound = defaultDataTypeRange[dataType][0];
+    if (minBound === bound) {
+      return bound;
+    }
+  }
+  const delta = dataType === DataType.FLOAT32 ? change : Math.round(change);
+  const temp = new Uint64();
+  const decreasedBound =
+    dataType === DataType.UINT64
+      ? Uint64.subtract(temp, bound as Uint64, Uint64.fromNumber(delta))
+      : (bound as number) - delta;
+  if (dataType === DataType.FLOAT32) {
+    return decreasedBound;
+  }
+  const maxDataRange = defaultDataTypeRange[dataType];
+  return clampToInterval(maxDataRange, decreasedBound);
+}
+
+function increaseBound(
+  bound: number | Uint64,
+  dataType: DataType,
+  change: number,
+): number | Uint64 {
+  if (dataType !== DataType.FLOAT32) {
+    const maxBound = defaultDataTypeRange[dataType][1];
+    if (maxBound === bound) {
+      return bound;
+    }
+  }
+  const delta = dataType === DataType.FLOAT32 ? change : Math.round(change);
+  const temp = new Uint64();
+  const increasedBound =
+    dataType === DataType.UINT64
+      ? Uint64.add(temp, bound as Uint64, Uint64.fromNumber(delta))
+      : (bound as number) + delta;
+  if (dataType === DataType.FLOAT32) {
+    return increasedBound;
+  }
+  const maxDataRange = defaultDataTypeRange[dataType];
+  return clampToInterval(maxDataRange, increasedBound);
+}
+
 export function computeRangeForCdf(
-  percentile: number,
-  empiricalCdf: Float32Array,
+  histogram: Float32Array,
+  lowerPercentile: number = 0.05,
+  upperPercentile: number = 0.95,
   previousRange: DataTypeInterval,
   inputDataType: DataType,
 ): DataTypeInterval {
-  const midPoint = Math.round((empiricalCdf.length - 1) / 2);
-  const totalLeftOfMidPoint = empiricalCdf
-    .subarray(0, midPoint + 1)
-    .reduce((a, b) => a + b, 0);
-  const totalRightOfMidPoint = empiricalCdf
-    .subarray(midPoint + 1)
-    .reduce((a, b) => a + b, 0);
-  const total = totalLeftOfMidPoint + totalRightOfMidPoint;
-  const totalOutsideRange =
-    empiricalCdf[0] + empiricalCdf[empiricalCdf.length - 1];
-  const desiredAmount = total * percentile;
+  // 256 bins total. First and last bin are below lower bound/above upper.
+  let lowerBound = previousRange[0];
+  let upperBound = previousRange[1];
+  const cdf = calculateEmpiricalCdf(histogram);
+  console.log("cdf", cdf);
+  const binSize = calculateBinSize(histogram, previousRange, inputDataType);
+  console.log(previousRange, binSize);
 
-  // TODO implement for Uint64
-  if (inputDataType === DataType.UINT64) {
-    throw new Error("Not implemented for UINT64");
+  // Find the indices of the percentiles.
+  let lowerIndex = [...cdf]
+    .reverse()
+    .findIndex((cdfValue) => cdfValue <= lowerPercentile);
+  if (lowerIndex !== -1) {
+    lowerIndex = cdf.length - 1 - lowerIndex;
   }
-  const referenceRange = previousRange as [number, number];
+  let upperIndex = cdf.findIndex((cdfValue) => cdfValue >= upperPercentile);
+  console.log("indices", lowerIndex, upperIndex);
 
-  // Shrink to the left before midpoint
-  if (desiredAmount < totalLeftOfMidPoint) {
-    const midPoint = Math.ceil(
-      referenceRange[0] + (referenceRange[1] - referenceRange[0]) / 2,
-    );
-    return [referenceRange[0], midPoint];
+  // The indices should never be -1, but just in case.
+  if (lowerIndex === -1) {
+    console.log("Lower index not found.");
+    lowerIndex = 0;
   }
-
-  // Shrink to the right after midpoint
-  if (desiredAmount < totalRightOfMidPoint) {
-    const midPoint = Math.floor(
-      referenceRange[0] + (referenceRange[1] - referenceRange[0]) / 2,
-    );
-    return [midPoint, referenceRange[1]];
+  if (upperIndex === -1) {
+    console.log("Upper index not found.");
+    upperIndex = histogram.length - 1;
   }
 
-  const pushAmount = Math.round(referenceRange[1] - referenceRange[0] / 4);
-  // Expand the range on both sides
-  if (total - totalOutsideRange < desiredAmount) {
-    // TODO clamp to data range when expanding - clampToInterval with defaultBounds
-    return [referenceRange[0] - pushAmount, referenceRange[1] + pushAmount];
+  // Find new bounds based on the indices.
+  if (lowerIndex === 0) {
+    lowerBound = decreaseBound(lowerBound, inputDataType, binSize / 2);
   } else {
-    // See if we can shrink the range on both sides
-    let totalInRange = total - totalOutsideRange;
-    let leftIndex = 0;
-    let rightIndex = empiricalCdf.length - 1;
-    const binSize = Math.round(
-      referenceRange[1] - referenceRange[0] / (empiricalCdf.length - 2),
+    const shiftAmount = lowerIndex - 1; // Exclude the first bin.
+    lowerBound = increaseBound(
+      lowerBound,
+      inputDataType,
+      binSize * shiftAmount,
     );
-    let leftRange = referenceRange[0];
-    let rightRange = referenceRange[1];
-    while (totalInRange < desiredAmount) {
-      totalInRange -= empiricalCdf[++leftIndex];
-      totalInRange -= empiricalCdf[--rightIndex];
-      if (totalInRange < desiredAmount) {
-        leftRange += binSize;
-        rightRange -= binSize;
-      }
-      if (leftIndex >= rightIndex) {
-        break;
-      }
-    }
-    return [leftRange, rightRange];
   }
+  if (upperIndex === histogram.length - 1) {
+    upperBound = increaseBound(upperBound, inputDataType, binSize / 2);
+  } else {
+    const shiftAmount = histogram.length - 2 - upperIndex; // Exclude the first bin.
+    upperBound = decreaseBound(
+      upperBound,
+      inputDataType,
+      binSize * shiftAmount,
+    );
+  }
+  console.log("indices", lowerIndex, upperIndex);
+  console.log("bounds", lowerBound, upperBound);
+
+  return [lowerBound, upperBound] as DataTypeInterval;
 }
