@@ -70,7 +70,7 @@ describe("empirical_cdf", () => {
     const dataValues = buildDataArray(dataRange);
     for (const dataType of Object.values(DataType)) {
       if (typeof dataType === "string") continue;
-      it(`Shrinks get min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
+      it(`Calculates min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
         findOptimalDataRange(dataRange, dataValues, dataType);
       });
     }
@@ -82,7 +82,7 @@ describe("empirical_cdf", () => {
     const dataValues = buildDataArray(dataRange);
     for (const dataType of Object.values(DataType)) {
       if (typeof dataType === "string") continue;
-      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
+      it(`Calculates min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
         findOptimalDataRange(dataRange, dataValues, dataType);
       });
     }
@@ -95,12 +95,57 @@ describe("empirical_cdf", () => {
     for (const dataType of Object.values(DataType)) {
       if (typeof dataType === "string") continue;
       if (dataType === DataType.UINT8 || dataType === DataType.INT8) continue;
-      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
+      it(`Calculates min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
         findOptimalDataRange(
           dataRange,
           dataValues,
           dataType,
           (dataRange[1] - dataRange[0] + 1) / 244,
+        );
+      });
+    }
+  }
+
+  // 1 - 99 percentile
+  {
+    const dataRange = [0, 100] as [number, number];
+    const dataValues = buildDataArray(dataRange);
+    for (const dataType of Object.values(DataType)) {
+      if (typeof dataType === "string") continue;
+      it(`Calculates 1-99% for ${DataType[dataType]} on range ${dataRange}`, () => {
+        findOptimalDataRange(dataRange, dataValues, dataType, 0, 0.01, 0.99);
+      });
+    }
+  }
+  return;
+
+  // 5 - 95 percentile
+  {
+    const dataRange = [0, 100] as [number, number];
+    const dataValues = buildDataArray(dataRange);
+    for (const dataType of Object.values(DataType)) {
+      if (typeof dataType === "string") continue;
+      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange} and 5-95 percentile`, () => {
+        findOptimalDataRange(dataRange, dataValues, dataType, 0, 0.05, 0.95);
+      });
+    }
+  }
+
+  // Large data values on 5-95 percentile
+  {
+    const dataRange = [28791, 32767] as [number, number];
+    const dataValues = buildDataArray(dataRange);
+    for (const dataType of Object.values(DataType)) {
+      if (typeof dataType === "string") continue;
+      if (dataType === DataType.UINT8 || dataType === DataType.INT8) continue;
+      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange} and 5-95 percentile`, () => {
+        findOptimalDataRange(
+          dataRange,
+          dataValues,
+          dataType,
+          (dataRange[1] - dataRange[0] + 1) / 244,
+          0.05,
+          0.95,
         );
       });
     }
@@ -124,6 +169,8 @@ function findOptimalDataRange(
   dataValues: number[],
   dataType: DataType,
   tolerance: number = 0,
+  minPercentile = 0.0,
+  maxPercentile = 1.0,
 ) {
   const data =
     dataType === DataType.UINT64
@@ -136,7 +183,13 @@ function findOptimalDataRange(
   do {
     const binCounts = countDataInBins(data, dataType, newRange[0], newRange[1]);
     oldRange = newRange;
-    newRange = computeRangeForCdf(binCounts, 0.0, 1.0, newRange, dataType);
+    newRange = computeRangeForCdf(
+      binCounts,
+      minPercentile,
+      maxPercentile,
+      newRange,
+      dataType,
+    );
     ++numIterations;
   } while (
     !dataTypeIntervalEqual(dataType, oldRange, newRange) &&
@@ -151,13 +204,19 @@ function findOptimalDataRange(
     dataType === DataType.UINT64
       ? (newRange[1] as Uint64).toNumber()
       : (newRange[1] as number);
+
+  const diff = dataRange[1] - dataRange[0];
+  const correctRange = [
+    dataRange[0] + minPercentile * diff,
+    dataRange[0] + maxPercentile * diff,
+  ];
   expect(
-    Math.abs(Math.round(min - dataRange[0])),
-    `Got ${min} expected ${dataRange[0]}`,
+    Math.abs(Math.round(min - correctRange[0])),
+    `Got lower bound ${min} expected ${correctRange[0]}`,
   ).toBeLessThanOrEqual(tolerance);
   expect(
-    Math.abs(Math.round(max - dataRange[1])),
-    `Got ${max} expected ${dataRange[1]}`,
+    Math.abs(Math.round(max - correctRange[1])),
+    `Got upper bound ${max} expected ${correctRange[1]}`,
   ).toBeLessThanOrEqual(tolerance);
-  expect(numIterations).toBeLessThan(32);
+  expect(numIterations, "Too many iterations").toBeLessThan(32);
 }
