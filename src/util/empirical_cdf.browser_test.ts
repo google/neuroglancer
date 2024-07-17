@@ -17,7 +17,6 @@
 import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
-import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   dataTypeCompare,
   dataTypeIntervalEqual,
@@ -65,58 +64,100 @@ function countDataInBins(
 }
 
 describe("empirical_cdf", () => {
-  const dataValues = Array.from({ length: 101 }, (_, i) => i);
-  const dataValuesUint64 = dataValues.map((v) => Uint64.fromNumber(v));
-  for (const dataType of Object.values(DataType)) {
-    // TODO temp condition for debug
-    if (typeof dataType === "string") continue;
-    if (
-      !(
-        dataType === DataType.UINT8 ||
-        dataType === DataType.UINT64 ||
-        dataType === DataType.FLOAT32
-      )
-    )
-      continue;
-    // Fill with data from 0 to 100
-    const data = dataType === DataType.UINT64 ? dataValuesUint64 : dataValues;
-    const dataRange =
-      dataType === DataType.FLOAT32
-        ? ([-10000, 10000] as [number, number])
-        : defaultDataTypeRange[dataType];
-    let numIterations = 0;
-    it(`computes the correct min and max for ${DataType[dataType]}`, () => {
-      const correctAutoDataRange: DataTypeInterval =
-        dataType === DataType.UINT64
-          ? [Uint64.ZERO, Uint64.fromNumber(100)]
-          : [0, 100];
-      let oldRange = dataRange;
-      let newRange = dataRange;
-      do {
-        const binCounts = countDataInBins(
-          data,
+  // 0 to 100 inclusive
+  {
+    const dataRange = [0, 100] as [number, number];
+    const dataValues = buildDataArray(dataRange);
+    for (const dataType of Object.values(DataType)) {
+      if (typeof dataType === "string") continue;
+      it(`Shrinks get min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
+        findOptimalDataRange(dataRange, dataValues, dataType);
+      });
+    }
+  }
+
+  // 100 to 125 inclusive
+  {
+    const dataRange = [100, 125] as [number, number];
+    const dataValues = buildDataArray(dataRange);
+    for (const dataType of Object.values(DataType)) {
+      if (typeof dataType === "string") continue;
+      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
+        findOptimalDataRange(dataRange, dataValues, dataType);
+      });
+    }
+  }
+
+  // Try larger values and exclude low bit data types
+  {
+    const dataRange = [28791, 32767] as [number, number];
+    const dataValues = buildDataArray(dataRange);
+    for (const dataType of Object.values(DataType)) {
+      if (typeof dataType === "string") continue;
+      if (dataType === DataType.UINT8 || dataType === DataType.INT8) continue;
+      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
+        findOptimalDataRange(
+          dataRange,
+          dataValues,
           dataType,
-          newRange[0],
-          newRange[1],
+          (dataRange[1] - dataRange[0] + 1) / 244,
         );
-        oldRange = newRange;
-        newRange = computeRangeForCdf(binCounts, 0.0, 1.0, newRange, dataType);
-        ++numIterations;
-      } while (
-        !dataTypeIntervalEqual(dataType, oldRange, newRange) &&
-        numIterations < 10
-      );
-      if (dataType !== DataType.FLOAT32) {
-        expect(
-          dataTypeIntervalEqual(dataType, newRange, correctAutoDataRange),
-        ).toBeTruthy();
-      } else {
-        expect(
-          Math.round(
-            (newRange[0] as number) - (correctAutoDataRange[0] as number),
-          ),
-        ).toBe(0);
-      }
-    });
+      });
+    }
+  }
+
+  function buildDataArray(dataRange: [number, number]) {
+    return Array.from(
+      { length: dataRange[1] - dataRange[0] + 1 },
+      (_, i) => i + dataRange[0],
+    );
   }
 });
+function getDataRange(dataType: DataType) {
+  return dataType === DataType.FLOAT32
+    ? ([-10000, 10000] as [number, number])
+    : defaultDataTypeRange[dataType];
+}
+
+function findOptimalDataRange(
+  dataRange: [number, number],
+  dataValues: number[],
+  dataType: DataType,
+  tolerance: number = 0,
+) {
+  const data =
+    dataType === DataType.UINT64
+      ? dataValues.map((v) => Uint64.fromNumber(v))
+      : dataValues;
+  let numIterations = 0;
+  const startRange = getDataRange(dataType);
+  let oldRange = startRange;
+  let newRange = startRange;
+  do {
+    const binCounts = countDataInBins(data, dataType, newRange[0], newRange[1]);
+    oldRange = newRange;
+    newRange = computeRangeForCdf(binCounts, 0.0, 1.0, newRange, dataType);
+    ++numIterations;
+  } while (
+    !dataTypeIntervalEqual(dataType, oldRange, newRange) &&
+    numIterations < 32
+  );
+
+  const min =
+    dataType === DataType.UINT64
+      ? (newRange[0] as Uint64).toNumber()
+      : (newRange[0] as number);
+  const max =
+    dataType === DataType.UINT64
+      ? (newRange[1] as Uint64).toNumber()
+      : (newRange[1] as number);
+  expect(
+    Math.abs(Math.round(min - dataRange[0])),
+    `Got ${min} expected ${dataRange[0]}`,
+  ).toBeLessThanOrEqual(tolerance);
+  expect(
+    Math.abs(Math.round(max - dataRange[1])),
+    `Got ${max} expected ${dataRange[1]}`,
+  ).toBeLessThanOrEqual(tolerance);
+  expect(numIterations).toBeLessThan(32);
+}
