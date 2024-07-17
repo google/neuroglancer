@@ -126,9 +126,15 @@ export function computeRangeForCdf(
   let upperIndex = cdf.findIndex((cdfValue) => cdfValue >= upperPercentile);
   upperIndex = upperIndex === -1 ? histogram.length - 1 : upperIndex;
 
-  // Find new bounds based on the indices.
+  // Find new bounds based on the indices. This usually involves trimming the
+  // bounds, but for float data, we actually need to expand the bounds in some cases
   if (lowerIndex === 0) {
-    lowerBound = decreaseBound(lowerBound, inputDataType, binSize / 2);
+    const boundAsNumber =
+      inputDataType === DataType.UINT64
+        ? (lowerBound as Uint64).toNumber()
+        : (lowerBound as number);
+    const shiftAmount = Math.max(1, boundAsNumber / 2);
+    lowerBound = decreaseBound(lowerBound, inputDataType, shiftAmount);
   } else {
     const shiftAmount = lowerIndex - 1; // Exclude the first bin.
     lowerBound = increaseBound(
@@ -138,7 +144,12 @@ export function computeRangeForCdf(
     );
   }
   if (upperIndex === histogram.length - 1) {
-    upperBound = increaseBound(upperBound, inputDataType, binSize / 2);
+    const boundAsNumber =
+      inputDataType === DataType.UINT64
+        ? (upperBound as Uint64).toNumber()
+        : (upperBound as number);
+    const shiftAmount = Math.max(1, boundAsNumber / 2);
+    upperBound = increaseBound(upperBound, inputDataType, shiftAmount);
   } else {
     const shiftAmount = histogram.length - 2 - upperIndex; // Exclude the first bin.
     upperBound = decreaseBound(
