@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
+import type { DisplayContext } from "#src/display_context.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
-import type { GL } from "#src/webgl/context.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import "#src/widget/auto_range_lerp.css";
@@ -42,10 +42,7 @@ interface ParentWidget {
     };
   };
   dataType: DataType;
-  display: {
-    force3DHistogramForAutoRange: boolean;
-    gl: GL;
-  };
+  display: DisplayContext;
   element: HTMLDivElement;
   histogramSpecifications: HistogramSpecifications;
   histogramIndex: number;
@@ -92,22 +89,18 @@ export class AutoRangeFinder extends RefCounted {
 
       // Create a large range to search over
       // It's easier to contract the range than to expand it
-      let oldRange = trackable.value.window;
-      oldRange = defaultDataTypeRange[dataType];
-      if (dataType === DataType.FLOAT32) {
-        oldRange = [-64000, 64000];
-      }
-      // We need a new rendering pass if the window has changed
-      if (!dataTypeIntervalEqual(dataType, oldRange, trackable.value.window)) {
-        trackable.value = {
-          ...trackable.value,
-          window: oldRange,
-          range: oldRange,
-        };
-        return;
-      }
+      const maxRange =
+        dataType === DataType.FLOAT32
+          ? ([-65536, 65536] as [number, number])
+          : defaultDataTypeRange[dataType];
+      trackable.value = {
+        ...trackable.value,
+        window: maxRange,
+        range: maxRange,
+      };
+      // Force a redraw, in case the range was already at the max
+      display.scheduleRedraw();
     }
-    this.maybeAutoComputeRange();
   }
 
   public maybeAutoComputeRange() {
