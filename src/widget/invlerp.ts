@@ -23,11 +23,10 @@ import { IndirectRenderedPanel } from "#src/display_context.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { DataType } from "#src/util/data_type.js";
+import type { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
-import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
 import {
   EventActionMap,
   registerActionListener,
@@ -38,7 +37,6 @@ import {
   computeLerp,
   dataTypeCompare,
   dataTypeIntervalEqual,
-  defaultDataTypeRange,
   getClampedInterval,
   getClosestEndpoint,
   getIntervalBoundsEffectiveFraction,
@@ -53,10 +51,7 @@ import type { WatchableVisibilityPriority } from "#src/visibility_priority/front
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
-import {
-  copyHistogramToCPU,
-  type HistogramSpecifications,
-} from "#src/webgl/empirical_cdf.js";
+import { type HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   defineLerpShaderFunction,
   enableLerpShaderFunction,
@@ -72,26 +67,17 @@ import { getShaderType } from "#src/webgl/shader_lib.js";
 import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
-import { makeAutoRangeButtons } from "#src/widget/auto_range_button.js";
+import { AutoRangeFinder } from "#src/widget/auto_range_lerp.js";
 import { makeIcon } from "#src/widget/icon.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
-
-const MAX_AUTO_RANGE_ITERATIONS = 16;
 
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },
   "shift?+alt+mousedown0": { action: "adjust-window-via-drag" },
   "shift?+wheel": { action: "zoom-via-wheel" },
 });
-
-interface AutoRangeData {
-  inputPercentileBounds: [number, number];
-  autoComputeInProgress: boolean;
-  lastComputedLerpRange: DataTypeInterval | null;
-  numIterationsThisCompute: number;
-}
 
 export class CdfController<
   T extends RangeAndWindowIntervals,
@@ -750,6 +736,7 @@ export class InvlerpWidget extends Tab {
     window: createRangeBoundInputs("window", this.dataType, this.trackable),
   };
   invertArrows: HTMLElement[];
+  autoRangeFinder: AutoRangeFinder;
   get texture() {
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
       this.histogramIndex
@@ -758,12 +745,6 @@ export class InvlerpWidget extends Tab {
   private invertRange() {
     invertInvlerpRange(this.trackable);
   }
-  private autoRangeData: AutoRangeData = {
-    inputPercentileBounds: [0, 1],
-    autoComputeInProgress: false,
-    lastComputedLerpRange: null,
-    numIterationsThisCompute: 0,
-  };
   constructor(
     visibility: WatchableVisibilityPriority,
     public display: DisplayContext,
@@ -798,12 +779,7 @@ export class InvlerpWidget extends Tab {
     element.appendChild(this.cdfPanel.element);
     element.classList.add("neuroglancer-invlerp-widget");
     element.appendChild(boundElements.window.container);
-    makeAutoRangeButtons(
-      element,
-      () => this.autoComputeRange(0.0, 1.0),
-      () => this.autoComputeRange(0.01, 0.99),
-      () => this.autoComputeRange(0.05, 0.95),
-    );
+    this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
     this.updateView();
     this.registerDisposer(
       trackable.changed.add(
@@ -814,7 +790,7 @@ export class InvlerpWidget extends Tab {
     );
     this.registerDisposer(
       this.display.updateFinished.add(() => {
-        this.maybeAutoComputeRange();
+        this.autoRangeFinder.maybeAutoComputeRange();
       }),
     );
   }
@@ -851,92 +827,6 @@ export class InvlerpWidget extends Tab {
     const { invertArrows } = this;
     invertArrows[reversed ? 1 : 0].style.display = "";
     invertArrows[reversed ? 0 : 1].style.display = "none";
-  }
-
-  autoComputeRange(minPercentile: number, maxPercentile: number) {
-    // Start the auto-compute process if it's not already in progress
-    if (!this.autoRangeData.autoComputeInProgress) {
-      const { trackable, dataType, autoRangeData } = this;
-
-      // Reset the auto-compute state
-      autoRangeData.inputPercentileBounds = [minPercentile, maxPercentile];
-      autoRangeData.lastComputedLerpRange = null;
-      autoRangeData.numIterationsThisCompute = 0;
-      autoRangeData.autoComputeInProgress = true;
-      this.display.force3DHistogramForAutoRange = true;
-
-      // Create a large range to search over
-      // It's easier to contract the range than to expand it
-      let oldRange = trackable.value.window;
-      oldRange = defaultDataTypeRange[dataType];
-      if (this.dataType === DataType.FLOAT32) {
-        oldRange = [-64000, 64000];
-      }
-      // We need a new rendering pass if the window has changed
-      if (!dataTypeIntervalEqual(dataType, oldRange, trackable.value.window)) {
-        this.trackable.value = {
-          ...this.trackable.value,
-          window: oldRange,
-          range: oldRange,
-        };
-        return;
-      }
-    }
-    this.maybeAutoComputeRange();
-  }
-
-  private maybeAutoComputeRange() {
-    if (!this.autoRangeData.autoComputeInProgress) {
-      this.display.force3DHistogramForAutoRange = false;
-      return;
-    }
-    const { trackable, dataType, autoRangeData } = this;
-    const gl = this.display.gl;
-    const { range } = trackable.value;
-
-    // Read the histogram from the GPU and compute new range based on this
-    const frameBuffer =
-      this.histogramSpecifications.getFramebuffers(gl)[this.histogramIndex];
-    frameBuffer.bind(256, 1);
-    const empiricalCdf = copyHistogramToCPU(gl);
-    const { range: newRange, window: newWindow } = computeRangeForCdf(
-      empiricalCdf,
-      autoRangeData.inputPercentileBounds[0],
-      autoRangeData.inputPercentileBounds[1],
-      range,
-      dataType,
-    );
-
-    // If the range remains constant over two iterations
-    // or if we've exceeded the maximum number of iterations, stop
-    const foundRange =
-      autoRangeData.lastComputedLerpRange !== null &&
-      dataTypeIntervalEqual(
-        dataType,
-        newRange,
-        autoRangeData.lastComputedLerpRange,
-      );
-    const exceededMaxIterations =
-      autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
-    autoRangeData.lastComputedLerpRange = newRange;
-    ++autoRangeData.numIterationsThisCompute;
-    if (foundRange || exceededMaxIterations) {
-      autoRangeData.autoComputeInProgress = false;
-      autoRangeData.lastComputedLerpRange = null;
-      autoRangeData.numIterationsThisCompute = 0;
-      this.trackable.value = {
-        ...this.trackable.value,
-        range: newRange,
-        window: newWindow,
-      };
-    } else {
-      this.display.force3DHistogramForAutoRange = true;
-      this.trackable.value = {
-        ...this.trackable.value,
-        range: newRange,
-        window: newRange,
-      };
-    }
   }
 }
 
