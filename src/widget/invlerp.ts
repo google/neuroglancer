@@ -863,6 +863,7 @@ export class InvlerpWidget extends Tab {
       autoRangeData.lastComputedLerpRange = null;
       autoRangeData.numIterationsThisCompute = 0;
       autoRangeData.autoComputeInProgress = true;
+      this.display.force3DHistogramForAutoRange = true;
 
       // Create a large range to search over
       // It's easier to contract the range than to expand it
@@ -885,7 +886,10 @@ export class InvlerpWidget extends Tab {
   }
 
   private maybeAutoComputeRange() {
-    if (!this.autoRangeData.autoComputeInProgress) return;
+    if (!this.autoRangeData.autoComputeInProgress) {
+      this.display.force3DHistogramForAutoRange = false;
+      return;
+    }
     const { trackable, dataType, autoRangeData } = this;
     const gl = this.display.gl;
     const { range } = trackable.value;
@@ -926,6 +930,7 @@ export class InvlerpWidget extends Tab {
         window: newWindow,
       };
     } else {
+      this.display.force3DHistogramForAutoRange = true;
       this.trackable.value = {
         ...this.trackable.value,
         range: newRange,

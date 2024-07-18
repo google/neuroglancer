@@ -816,10 +816,11 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     const chunkPosition = vec3.create();
 
     const needToDrawHistogram =
-      this.getDataHistogramCount() > 0 &&
-      !renderContext.wireFrame &&
-      !renderContext.sliceViewsPresent &&
-      !renderContext.isContinuousCameraMotionInProgress;
+      renderContext.force3DHistogramForAutoRange ||
+      (this.getDataHistogramCount() > 0 &&
+        !renderContext.wireFrame &&
+        !renderContext.sliceViewsPresent &&
+        !renderContext.isContinuousCameraMotionInProgress);
 
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);

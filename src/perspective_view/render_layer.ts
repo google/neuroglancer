@@ -70,6 +70,8 @@ export interface PerspectiveViewRenderContext
    * Specifices how to bind the max projection buffer
    */
   bindMaxProjectionBuffer?: () => void | undefined;
+
+  force3DHistogramForAutoRange: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
