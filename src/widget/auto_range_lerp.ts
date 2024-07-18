@@ -17,18 +17,11 @@
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
-import type {
-  DataTypeInterval} from "#src/util/lerp.js";
-import {
-  dataTypeIntervalEqual,
-  defaultDataTypeRange,
-} from "#src/util/lerp.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
+import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 import type { GL } from "#src/webgl/context.js";
-import type {
-  HistogramSpecifications} from "#src/webgl/empirical_cdf.js";
-import {
-  copyHistogramToCPU
-} from "#src/webgl/empirical_cdf.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import "#src/widget/auto_range_lerp.css";
 
 const MAX_AUTO_RANGE_ITERATIONS = 16;
@@ -38,6 +31,7 @@ interface AutoRangeData {
   autoComputeInProgress: boolean;
   lastComputedLerpRange: DataTypeInterval | null;
   numIterationsThisCompute: number;
+  invertedInitialRange: boolean;
 }
 
 interface ParentWidget {
@@ -64,6 +58,7 @@ export class AutoRangeFinder extends RefCounted {
     autoComputeInProgress: false,
     lastComputedLerpRange: null,
     numIterationsThisCompute: 0,
+    invertedInitialRange: false,
   };
 
   constructor(public parent: ParentWidget) {
@@ -74,6 +69,11 @@ export class AutoRangeFinder extends RefCounted {
       () => this.autoComputeRange(0.01, 0.99),
       () => this.autoComputeRange(0.05, 0.95),
     );
+  }
+
+  private wasInputInverted() {
+    const { range } = this.parent.trackable.value;
+    return range[0] > range[1];
   }
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
@@ -87,6 +87,7 @@ export class AutoRangeFinder extends RefCounted {
       autoRangeData.lastComputedLerpRange = null;
       autoRangeData.numIterationsThisCompute = 0;
       autoRangeData.autoComputeInProgress = true;
+      autoRangeData.invertedInitialRange = this.wasInputInverted();
       display.force3DHistogramForAutoRange = true;
 
       // Create a large range to search over
@@ -152,9 +153,13 @@ export class AutoRangeFinder extends RefCounted {
     autoRangeData.lastComputedLerpRange = newRange;
     ++autoRangeData.numIterationsThisCompute;
     if (foundRange || exceededMaxIterations) {
+      if (autoRangeData.invertedInitialRange) {
+        newRange.reverse();
+      }
       autoRangeData.autoComputeInProgress = false;
       autoRangeData.lastComputedLerpRange = null;
       autoRangeData.numIterationsThisCompute = 0;
+      autoRangeData.invertedInitialRange = false;
       trackable.value = {
         ...trackable.value,
         range: newRange,
