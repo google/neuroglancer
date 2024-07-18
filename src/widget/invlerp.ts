@@ -918,6 +918,8 @@ export class InvlerpWidget extends Tab {
     ++autoRangeData.numIterationsThisCompute;
     if (foundRange || exceededMaxIterations) {
       autoRangeData.autoComputeInProgress = false;
+      autoRangeData.lastComputedLerpRange = null;
+      autoRangeData.numIterationsThisCompute = 0;
       this.trackable.value = {
         ...this.trackable.value,
         range: newRange,

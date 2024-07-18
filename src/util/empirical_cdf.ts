@@ -29,8 +29,11 @@ interface AutoRangeResult {
   window: DataTypeInterval;
 }
 
-function calculateEmpiricalCdf(histogram: Float32Array): Float32Array {
+function calculateEmpiricalCdf(histogram: Float32Array): Float32Array | null {
   const totalSamples = histogram.reduce((a, b) => a + b, 0);
+  if (totalSamples === 0) {
+    return null;
+  }
   let cumulativeCount = 0;
   const empiricalCdf = histogram.map((count) => {
     cumulativeCount += count;
@@ -118,6 +121,9 @@ export function computeRangeForCdf(
   let lowerBound = previousRange[0];
   let upperBound = previousRange[1];
   const cdf = calculateEmpiricalCdf(histogram);
+  if (cdf === null) {
+    return { range: previousRange, window: previousRange };
+  }
   const binSize = calculateBinSize(histogram, previousRange, inputDataType);
 
   // Find the indices of the percentiles.
