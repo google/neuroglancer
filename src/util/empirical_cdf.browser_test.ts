@@ -124,7 +124,7 @@ describe("empirical_cdf", () => {
     const dataValues = buildDataArray(dataRange);
     for (const dataType of Object.values(DataType)) {
       if (typeof dataType === "string") continue;
-      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange} and 5-95 percentile`, () => {
+      it(`Calculates 5-95% for ${DataType[dataType]} on range ${dataRange}`, () => {
         findOptimalDataRange(dataRange, dataValues, dataType, 0, 0.05, 0.95);
       });
     }
@@ -137,7 +137,7 @@ describe("empirical_cdf", () => {
     for (const dataType of Object.values(DataType)) {
       if (typeof dataType === "string") continue;
       if (dataType === DataType.UINT8 || dataType === DataType.INT8) continue;
-      it(`Shrinks to get min and max for ${DataType[dataType]} on range ${dataRange} and 5-95 percentile`, () => {
+      it(`Calcalates 5-95% for ${DataType[dataType]} on range ${dataRange}`, () => {
         findOptimalDataRange(
           dataRange,
           dataValues,
