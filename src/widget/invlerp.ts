@@ -27,10 +27,7 @@ import { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
-import {
-  computeRangeForCdf,
-  makeAutoRangeButtons,
-} from "#src/util/empirical_cdf.js";
+import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
 import {
   EventActionMap,
   registerActionListener,
@@ -75,6 +72,7 @@ import { getShaderType } from "#src/webgl/shader_lib.js";
 import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
+import { makeAutoRangeButtons } from "#src/widget/auto_range_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
