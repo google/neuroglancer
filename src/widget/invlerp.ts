@@ -78,7 +78,7 @@ import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-const MAX_AUTO_RANGE_ITERATIONS = 32;
+const MAX_AUTO_RANGE_ITERATIONS = 16;
 
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },
@@ -915,6 +915,7 @@ export class InvlerpWidget extends Tab {
     const exceededMaxIterations =
       autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
     autoRangeData.lastComputedLerpRange = newRange;
+    ++autoRangeData.numIterationsThisCompute;
     if (foundRange || exceededMaxIterations) {
       autoRangeData.autoComputeInProgress = false;
       this.trackable.value = {

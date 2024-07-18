@@ -217,5 +217,5 @@ function findOptimalDataRange(
     Math.abs(Math.round(max - correctRange[1])),
     `Got upper bound ${max} expected ${correctRange[1]}`,
   ).toBeLessThanOrEqual(tolerance);
-  expect(numIterations, "Too many iterations").toBeLessThan(32);
+  expect(numIterations, "Too many iterations").toBeLessThan(16);
 }
