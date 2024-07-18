@@ -31,7 +31,7 @@ import {
   renderScaleHistogramBinSize,
 } from "#src/render_scale_statistics.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import { getNormalizedChunkLayout } from "#src/sliceview/base.js";
+import { DataType, getNormalizedChunkLayout } from "#src/sliceview/base.js";
 import type { FrontendTransformedSource } from "#src/sliceview/frontend.js";
 import {
   getVolumetricTransformedSources,
@@ -570,8 +570,18 @@ ${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
           const numHistograms = dataHistogramChannelSpecifications.length;
           let histogramFetchCode = `
   float x;
+  ${getShaderType(dataType)} inputDataValue;
+  bool should_discard = false;
   switch (uHistogramIndex) {`;
           for (let i = 0; i < numHistograms; ++i) {
+            let discardCode = `should_discard = false;`;
+            if (
+              dataType === DataType.UINT8 ||
+              dataType === DataType.UINT16 ||
+              dataType === DataType.UINT32
+            ) {
+              discardCode = `should_discard = (toNormalized(inputDataValue) == 0.0);`;
+            }
             const { channel } = dataHistogramChannelSpecifications[i];
             const getDataValueExpr = `getDataValue(${channel.join(",")})`;
             const invlerpName = `invlerpForHistogram${i}`;
@@ -584,13 +594,18 @@ ${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
               ),
             );
             builder.addVertexCode(`
-float getHistogramValue${i}() {
-  return invlerpForHistogram${i}(${getDataValueExpr});
+float getHistogramValue${i}(${getShaderType(dataType)} inputDataValue) {
+  return invlerpForHistogram${i}(inputDataValue);
+}
+${getShaderType(dataType)} getHistogramDataValue${i}() {
+  return ${getDataValueExpr};
 }
 `);
             histogramFetchCode += `
   case ${i}:
-    x = getHistogramValue${i}();
+    inputDataValue = getHistogramDataValue${i}();
+    ${discardCode}
+    x = getHistogramValue${i}(inputDataValue);
     break;`;
           }
           histogramFetchCode += `
@@ -604,7 +619,7 @@ float getHistogramValue${i}() {
     simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID))));
   chunkSamplePosition = rand3val * (uChunkDataSize - 1.0);
 ${histogramFetchCode}
-  if (x == 0.0) {
+  if (should_discard) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   }
   else {
