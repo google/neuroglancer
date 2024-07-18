@@ -895,7 +895,7 @@ export class InvlerpWidget extends Tab {
       this.histogramSpecifications.getFramebuffers(gl)[this.histogramIndex];
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
-    const newRange = computeRangeForCdf(
+    const { range: newRange, window: newWindow } = computeRangeForCdf(
       empiricalCdf,
       autoRangeData.inputPercentileBounds[0],
       autoRangeData.inputPercentileBounds[1],
@@ -915,13 +915,19 @@ export class InvlerpWidget extends Tab {
     const exceededMaxIterations =
       autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
     autoRangeData.lastComputedLerpRange = newRange;
-    this.trackable.value = {
-      ...this.trackable.value,
-      range: newRange,
-      window: newRange,
-    };
     if (foundRange || exceededMaxIterations) {
       autoRangeData.autoComputeInProgress = false;
+      this.trackable.value = {
+        ...this.trackable.value,
+        range: newRange,
+        window: newWindow,
+      };
+    } else {
+      this.trackable.value = {
+        ...this.trackable.value,
+        range: newRange,
+        window: newRange,
+      };
     }
   }
 }

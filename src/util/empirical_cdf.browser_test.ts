@@ -188,7 +188,7 @@ function findOptimalDataRange(
       maxPercentile,
       newRange,
       dataType,
-    );
+    ).range;
     ++numIterations;
   } while (
     !dataTypeIntervalEqual(dataType, oldRange, newRange) &&

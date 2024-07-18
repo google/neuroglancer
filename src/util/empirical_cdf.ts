@@ -23,6 +23,12 @@ import {
 } from "#src/util/lerp.js";
 import { Uint64 } from "#src/util/uint64.js";
 
+// The window is a little bit larger than the range, to allow easier modification.
+interface AutoRangeResult {
+  range: DataTypeInterval;
+  window: DataTypeInterval;
+}
+
 function calculateEmpiricalCdf(histogram: Float32Array): Float32Array {
   const totalSamples = histogram.reduce((a, b) => a + b, 0);
   let cumulativeCount = 0;
@@ -107,7 +113,7 @@ export function computeRangeForCdf(
   upperPercentile: number = 0.95,
   previousRange: DataTypeInterval,
   inputDataType: DataType,
-): DataTypeInterval {
+): AutoRangeResult {
   // 256 bins total. First and last bin are below lower bound/above upper.
   let lowerBound = previousRange[0];
   let upperBound = previousRange[1];
@@ -162,5 +168,13 @@ export function computeRangeForCdf(
     );
   }
 
-  return [lowerBound, upperBound] as DataTypeInterval;
+  const range = [lowerBound, upperBound] as DataTypeInterval;
+
+  // Bump the window out a bit to make it easier to adjust.
+  const window = [
+    decreaseBound(lowerBound, inputDataType, binSize * 64),
+    increaseBound(upperBound, inputDataType, binSize * 64),
+  ] as DataTypeInterval;
+
+  return { range, window };
 }
