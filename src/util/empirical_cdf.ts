@@ -164,3 +164,31 @@ export function computeRangeForCdf(
 
   return [lowerBound, upperBound] as DataTypeInterval;
 }
+
+export function makeAutoRangeButtons(
+  parent: HTMLDivElement,
+  minMaxHandler: () => void,
+  oneTo99Handler: () => void,
+  fiveTo95Handler: () => void,
+) {
+  const minMaxButton = document.createElement("button");
+  minMaxButton.textContent = "Min-Max";
+  minMaxButton.title = "Set range to the minimum and maximum values.";
+  minMaxButton.classList.add("neuroglancer-auto-range-button");
+  minMaxButton.addEventListener("click", minMaxHandler);
+  parent.appendChild(minMaxButton);
+
+  const midButton = document.createElement("button");
+  midButton.textContent = "1-99%";
+  midButton.title = "Set range to the 1st and 99th percentiles.";
+  midButton.classList.add("neuroglancer-auto-range-button");
+  midButton.addEventListener("click", oneTo99Handler);
+  parent.appendChild(midButton);
+
+  const highButton = document.createElement("button");
+  highButton.textContent = "5-95%";
+  highButton.title = "Set range to the 5th and 95th percentiles.";
+  highButton.classList.add("neuroglancer-auto-range-button");
+  highButton.addEventListener("click", fiveTo95Handler);
+  parent.appendChild(highButton);
+}

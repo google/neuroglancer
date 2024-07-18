@@ -27,7 +27,10 @@ import { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
-import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
+import {
+  computeRangeForCdf,
+  makeAutoRangeButtons,
+} from "#src/util/empirical_cdf.js";
 import {
   EventActionMap,
   registerActionListener,
@@ -77,11 +80,20 @@ import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
+const MAX_AUTO_RANGE_ITERATIONS = 32;
+
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },
   "shift?+alt+mousedown0": { action: "adjust-window-via-drag" },
   "shift?+wheel": { action: "zoom-via-wheel" },
 });
+
+interface AutoRangeData {
+  inputPercentileBounds: [number, number];
+  autoComputeInProgress: boolean;
+  lastComputedLerpRange: DataTypeInterval | null;
+  numIterationsThisCompute: number;
+}
 
 export class CdfController<
   T extends RangeAndWindowIntervals,
@@ -748,8 +760,12 @@ export class InvlerpWidget extends Tab {
   private invertRange() {
     invertInvlerpRange(this.trackable);
   }
-  private shouldAutoComputeRange = false;
-  private lastAutoComputeRange: DataTypeInterval | null = null;
+  private autoRangeData: AutoRangeData = {
+    inputPercentileBounds: [0, 1],
+    autoComputeInProgress: false,
+    lastComputedLerpRange: null,
+    numIterationsThisCompute: 0,
+  };
   constructor(
     visibility: WatchableVisibilityPriority,
     public display: DisplayContext,
@@ -784,13 +800,12 @@ export class InvlerpWidget extends Tab {
     element.appendChild(this.cdfPanel.element);
     element.classList.add("neuroglancer-invlerp-widget");
     element.appendChild(boundElements.window.container);
-    const newRangeButton = document.createElement("button");
-    newRangeButton.textContent = "Auto";
-    newRangeButton.title = "Automatically adjust range to cover 95% of data";
-    newRangeButton.addEventListener("click", () => {
-      this.autoComputeRange();
-    });
-    element.appendChild(newRangeButton);
+    makeAutoRangeButtons(
+      element,
+      () => this.autoComputeRange(0.0, 1.0),
+      () => this.autoComputeRange(0.01, 0.99),
+      () => this.autoComputeRange(0.05, 0.95),
+    );
     this.updateView();
     this.registerDisposer(
       trackable.changed.add(
@@ -840,20 +855,25 @@ export class InvlerpWidget extends Tab {
     invertArrows[reversed ? 0 : 1].style.display = "none";
   }
 
-  autoComputeRange() {
-    const { trackable, dataType } = this;
-    let oldRange = trackable.value.window;
-    if (!this.shouldAutoComputeRange) {
-      this.shouldAutoComputeRange = true;
-      this.lastAutoComputeRange = null;
+  autoComputeRange(minPercentile: number, maxPercentile: number) {
+    // Start the auto-compute process if it's not already in progress
+    if (!this.autoRangeData.autoComputeInProgress) {
+      const { trackable, dataType, autoRangeData } = this;
+
+      // Reset the auto-compute state
+      autoRangeData.inputPercentileBounds = [minPercentile, maxPercentile];
+      autoRangeData.lastComputedLerpRange = null;
+      autoRangeData.numIterationsThisCompute = 0;
+      autoRangeData.autoComputeInProgress = true;
 
       // Create a large range to search over
       // It's easier to contract the range than to expand it
+      let oldRange = trackable.value.window;
       oldRange = defaultDataTypeRange[dataType];
       if (this.dataType === DataType.FLOAT32) {
         oldRange = [-64000, 64000];
       }
-      // We need a new histogram pass if the window has changed
+      // We need a new rendering pass if the window has changed
       if (!dataTypeIntervalEqual(dataType, oldRange, trackable.value.window)) {
         this.trackable.value = {
           ...this.trackable.value,
@@ -867,30 +887,44 @@ export class InvlerpWidget extends Tab {
   }
 
   private maybeAutoComputeRange() {
-    if (!this.shouldAutoComputeRange) return;
-    const { trackable, dataType } = this;
+    if (!this.autoRangeData.autoComputeInProgress) return;
+    const { trackable, dataType, autoRangeData } = this;
     const gl = this.display.gl;
     const { range } = trackable.value;
+
+    // Read the histogram from the GPU and compute new range based on this
     const frameBuffer =
       this.histogramSpecifications.getFramebuffers(gl)[this.histogramIndex];
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
-    const newRange = computeRangeForCdf(0.95, empiricalCdf, range, dataType);
-    // If the range is the same, don't update, and we are done with the search
-    if (
-      this.lastAutoComputeRange !== null &&
-      dataTypeIntervalEqual(dataType, newRange, this.lastAutoComputeRange)
-    ) {
-      this.shouldAutoComputeRange = false;
-      this.lastAutoComputeRange = null;
-      return;
-    }
-    this.lastAutoComputeRange = newRange;
+    const newRange = computeRangeForCdf(
+      empiricalCdf,
+      autoRangeData.inputPercentileBounds[0],
+      autoRangeData.inputPercentileBounds[1],
+      range,
+      dataType,
+    );
+
+    // If the range remains constant over two iterations
+    // or if we've exceeded the maximum number of iterations, stop
+    const foundRange =
+      autoRangeData.lastComputedLerpRange !== null &&
+      dataTypeIntervalEqual(
+        dataType,
+        newRange,
+        autoRangeData.lastComputedLerpRange,
+      );
+    const exceededMaxIterations =
+      autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
+    autoRangeData.lastComputedLerpRange = newRange;
     this.trackable.value = {
       ...this.trackable.value,
       range: newRange,
       window: newRange,
     };
+    if (foundRange || exceededMaxIterations) {
+      autoRangeData.autoComputeInProgress = false;
+    }
   }
 }
 
