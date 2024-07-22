@@ -23,7 +23,7 @@ import neuroglancer.webdriver
 import numpy as np
 import PIL.Image
 import pytest
-import pytest_html  # type: ignore[import-untyped]
+import pytest_html  # type: ignore[import-untyped,import]
 
 root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
 examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")

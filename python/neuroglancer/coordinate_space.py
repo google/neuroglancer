@@ -13,10 +13,12 @@
 # limitations under the License.
 """Wrappers for representing a Neuroglancer coordinate space."""
 
-import collections
 import re
+from collections.abc import Sequence
+from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
+import numpy.typing
 
 __all__ = []
 
@@ -68,11 +70,13 @@ def parse_unit(scale, unit):
         return (scale / 10 ** (-exponent), unit)
 
 
-def parse_unit_and_scale(unit_and_scale: str) -> tuple[float, str]:
+def parse_unit_and_scale(
+    unit_and_scale: str, coefficient: float = 1.0
+) -> tuple[float, str]:
     if unit_and_scale == "":
-        return (1, "")
+        return (coefficient, "")
     m = re.fullmatch(
-        r"/^((?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)?([µa-zA-Z]+)?$", unit_and_scale
+        r"^((?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)?([µa-zA-Z]+)?$", unit_and_scale
     )
     if m is None:
         raise ValueError("Invalid unit", unit_and_scale)
@@ -82,6 +86,7 @@ def parse_unit_and_scale(unit_and_scale: str) -> tuple[float, str]:
     else:
         scale = float(scale_str)
 
+    scale *= coefficient
     unit = ""
     unit_str = m.group(2)
     if unit_str is not None:
@@ -154,23 +159,15 @@ class CoordinateArray:
 
 
 @export
-class DimensionScale(
-    collections.namedtuple("DimensionScale", ["scale", "unit", "coordinate_array"])
-):
-    """
-    Attributes
-    ----------
-    scale : float
-        Voxel spacing along the dimension.
-    unit : str
-        Units of `scale`.
-    coordinate_array : neuroglancer.CoordinateArray
-    """
+class DimensionScale(NamedTuple):
+    scale: float = 1
+    """Voxel scaling along the dimension."""
 
-    __slots__ = ()
+    unit: str = ""
+    """Units of `.scale`."""
 
-    def __new__(cls, scale=1, unit="", coordinate_array=None):
-        return super().__new__(cls, scale, unit, coordinate_array)
+    coordinate_array: Optional[CoordinateArray] = None
+    """Coordinate array for the dimension."""
 
     @staticmethod
     def from_json(json):
@@ -193,37 +190,75 @@ class DimensionScale(
 class CoordinateSpace:
     __slots__ = ("names", "scales", "units", "coordinate_arrays")
 
+    names: tuple[str, ...]
+    """Name of each dimension.
+
+    Length is equal to `.rank`.
+    """
+
+    scales: np.typing.NDArray[np.float64]
+    """Physical scale coefficient for `.unit` for each dimension.
+
+    Length is equal to `.rank`.
+    """
+
+    units: tuple[str, ...]
+    """Physical unit for each dimension.
+
+    Length is equal to `.rank`.
+    """
+
+    coordinate_arrays: tuple[Optional[CoordinateArray], ...]
+    """Coordinate array for each dimension.
+
+    Length is equal to `.rank`.
+    """
+
     def __init__(
-        self, json=None, names=None, scales=None, units=None, coordinate_arrays=None
+        self,
+        json: Any = None,
+        names: Optional[Sequence[str]] = None,
+        scales: Optional[Sequence[float]] = None,
+        units: Optional[Union[str, Sequence[str]]] = None,
+        coordinate_arrays: Optional[Sequence[Optional[CoordinateArray]]] = None,
     ):
         """
-        Parameters
-        ----------
-        names : Iterable[str]
-            Dimension names (e.g., ['x', 'y', 'z']).
-        scales : float, Iterable[float]
-            Voxel spacing along each dimension.
-        units : str, Iterable[str]
-            Units of the values in `scales`.
-        coordinate_arrays : Iterable[neuroglancer.CoordinateArray]
+        Constructs a coordinate space.
+
+        Args:
+          json: JSON representation.
+          names: Dimension names (e.g., ['x', 'y', 'z']).
+          scales: Voxel spacing along each dimension.
+          units: Units of the values in :py:param:`.scales`.
+          coordinate_arrays: Coordinate arrays associated with each dimension.
         """
         if json is None:
             if names is not None:
-                self.names = tuple(names)
-                scales = np.array(scales, dtype=np.float64)
+                names_tuple = tuple(names)
+                rank = len(names_tuple)
+                self.names = names_tuple
+                if scales is None:
+                    scales_array = np.ones(rank, dtype=np.float64)
+                else:
+                    scales_array = np.array(scales, dtype=np.float64)
+                if units is None:
+                    units = ""
                 if isinstance(units, str):
-                    units = tuple(units for _ in names)
+                    units = tuple(units for _ in names_tuple)
                 scales_and_units = tuple(
-                    parse_unit(scale, unit) for scale, unit in zip(scales, units)
+                    parse_unit_and_scale(unit, scale)
+                    for scale, unit in zip(scales_array, units)
                 )
-                scales = np.array([s[0] for s in scales_and_units], dtype=np.float64)
+                scales_array = np.array(
+                    [s[0] for s in scales_and_units], dtype=np.float64
+                )
                 units = tuple(s[1] for s in scales_and_units)
                 if coordinate_arrays is None:
-                    coordinate_arrays = tuple(None for x in units)
+                    coordinate_arrays = tuple(None for _ in units)
                 else:
                     coordinate_arrays = tuple(coordinate_arrays)
                 self.units = units
-                self.scales = scales
+                self.scales = scales_array
                 self.coordinate_arrays = coordinate_arrays
             else:
                 self.names = ()
@@ -241,7 +276,8 @@ class CoordinateSpace:
         self.scales.setflags(write=False)
 
     @property
-    def rank(self):
+    def rank(self) -> int:
+        """Number of dimensions."""
         return len(self.names)
 
     def __getitem__(self, i):

@@ -13,11 +13,18 @@
 # limitations under the License.
 
 
+import collections
 import copy
+from collections.abc import ItemsView, Iterator, KeysView
+from typing import Optional
 
 
 class EquivalenceMap:
-    """Union-find data structure"""
+    """Union-find data structure.
+
+    Group:
+      viewer-state-segments
+    """
 
     supports_readonly = True
 
@@ -41,8 +48,8 @@ class EquivalenceMap:
                     self.union(*group)
         self._readonly = _readonly
 
-    def _get_representative(self, obj):
-        """Finds and returns the root of the set containing `obj`."""
+    def _get_representative(self, obj: int) -> int:
+        """Finds and returns the root of the set containing the specified element."""
 
         if obj not in self._parents:
             self._parents[obj] = obj
@@ -62,20 +69,20 @@ class EquivalenceMap:
             self._parents[ancestor] = root
         return root
 
-    def __getitem__(self, obj):
-        """Returns the minimum element in the set containing `obj`."""
+    def __getitem__(self, obj: int) -> int:
+        """Returns the minimum element in the set containing the specified element."""
         if obj not in self._parents:
             return obj
         return self._min_values[self._get_representative(obj)]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         """Iterates over all elements known to this equivalence map."""
         return iter(self._parents)
 
-    def items(self):
+    def items(self) -> ItemsView[int, int]:
         return self._parents.items()
 
-    def keys(self):
+    def keys(self) -> KeysView[int]:
         return self._parents.keys()
 
     def clear(self):
@@ -84,20 +91,20 @@ class EquivalenceMap:
         self._prev_next.clear()
         self._min_values.clear()
 
-    def union(self, *args):
-        """Unions the equivalence classes containing the elements in `*args`."""
+    def union(self, *elements: int) -> Optional[int]:
+        """Unions the equivalence classes containing the specified elements."""
         if self._readonly:
             raise AttributeError
 
-        if len(args) == 0:
+        if len(elements) == 0:
             return None
-        if len(args) == 1:
-            return self[args[0]]
-        for a, b in zip(args[:-1], args[1:]):
+        if len(elements) == 1:
+            return self[elements[0]]
+        for a, b in zip(elements[:-1], elements[1:]):
             result = self._union_pair(a, b)
         return result
 
-    def _union_pair(self, a, b):
+    def _union_pair(self, a: int, b: int) -> int:
         a = self._get_representative(a)
         b = self._get_representative(b)
         if a == b:
@@ -128,35 +135,35 @@ class EquivalenceMap:
         self._parents[b] = a
         return self._min_values[a]
 
-    def members(self, x):
-        """Yields the members of the equivalence class containing `x`."""
-        if x not in self._parents:
-            yield x
+    def members(self, element: int) -> Iterator[int]:
+        """Yields the members of the equivalence class containing the specified element."""
+        if element not in self._parents:
+            yield element
             return
-        cur_x = x
+        cur_x = element
         while True:
             yield cur_x
             cur_x = self._prev_next[cur_x][1]
-            if cur_x == x:
+            if cur_x == element:
                 break
 
-    def sets(self):
+    def sets(self) -> frozenset[frozenset[int]]:
         """Returns the equivalence classes as a set of sets."""
-        sets = {}
+        sets: dict[int, set[int]] = collections.defaultdict(set)
         for x in self._parents:
-            sets.setdefault(self[x], set()).add(x)
+            sets[self[x]].add(x)
         return frozenset(frozenset(v) for v in sets.values())
 
-    def to_json(self):
+    def to_json(self) -> list[list[int]]:
         """Returns the equivalence classes a sorted list of sorted lists."""
         sets = self.sets()
         return sorted(sorted(x) for x in sets)
 
-    def __copy__(self):
+    def __copy__(self) -> "EquivalenceMap":
         """Does not preserve _readonly attribute."""
         return EquivalenceMap(self)
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo) -> "EquivalenceMap":
         """Does not preserve _readonly attribute."""
         result = EquivalenceMap()
         result._parents = copy.deepcopy(self._parents, memo)
@@ -165,23 +172,23 @@ class EquivalenceMap:
         result._min_values = copy.deepcopy(self._min_values, memo)
         return result
 
-    def copy(self):
+    def copy(self) -> "EquivalenceMap":
         """Returns a copy of the equivalence map."""
         return EquivalenceMap(self)
 
-    def delete_set(self, x):
-        """Removes the equivalence class containing `x`."""
-        if x not in self._parents:
+    def delete_set(self, element: int):
+        """Removes the equivalence class containing the specified element."""
+        if element not in self._parents:
             return
-        members = list(self.members(x))
+        members = list(self.members(element))
         for v in members:
             del self._parents[v]
             del self._weights[v]
             del self._prev_next[v]
             del self._min_values[v]
 
-    def isolate_element(self, x):
-        """Isolates `x` from its equivalence class."""
-        members = list(self.members(x))
-        self.delete_set(x)
-        self.union(*(v for v in members if v != x))
+    def isolate_element(self, element: int):
+        """Isolates the specified element from its equivalence class."""
+        members = list(self.members(element))
+        self.delete_set(element)
+        self.union(*(v for v in members if v != element))

@@ -21,8 +21,7 @@ from neuroglancer import write_annotations
 
 
 def test_annotation_writer_axis_aligned_bounding_box(tmp_path: pathlib.Path):
-    dim_dict = {"names": ["x", "y"], "units": ["m", "m"], "scales": [1, 1]}
-    coordinate_space = neuroglancer.CoordinateSpace(**dim_dict)
+    coordinate_space = neuroglancer.CoordinateSpace(names=["x", "y"], units="m")
     writer = write_annotations.AnnotationWriter(
         coordinate_space=coordinate_space, annotation_type="axis_aligned_bounding_box"
     )
@@ -34,8 +33,7 @@ def test_annotation_writer_axis_aligned_bounding_box(tmp_path: pathlib.Path):
 
 
 def test_annotation_writer_point(tmp_path: pathlib.Path):
-    dim_dict = {"names": ["x", "y"], "units": ["m", "m"], "scales": [1, 1]}
-    coordinate_space = neuroglancer.CoordinateSpace(**dim_dict)
+    coordinate_space = neuroglancer.CoordinateSpace(names=["x", "y"], units="m")
     writer = write_annotations.AnnotationWriter(
         coordinate_space=coordinate_space, annotation_type="point"
     )

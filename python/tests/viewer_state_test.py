@@ -103,3 +103,16 @@ def test_layers():
     layers_rw = viewer_state.Layers(layer_json)
     del layers_rw[:]
     assert layers_rw.to_json() == []
+
+
+def test_tool():
+    p = viewer_state.Tool("shaderControl", control="abc")
+    assert isinstance(p, viewer_state.ShaderControlTool)
+    assert p.control == "abc"
+
+    p2 = viewer_state.ShaderControlTool(control="abc")
+    assert p2.control == "abc"
+
+
+def test_annotation():
+    viewer_state.PointAnnotation(point=[1])
