@@ -17,6 +17,12 @@ import os
 
 
 class ScreenshotSaver:
+    """Saves screenshots in sequentially-numbered files.
+
+    Group:
+      screenshots
+    """
+
     def __init__(self, viewer, directory):
         self.viewer = viewer
         self.directory = directory

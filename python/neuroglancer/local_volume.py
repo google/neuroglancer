@@ -42,6 +42,12 @@ class InvalidObjectIdForMesh(Exception):
 
 
 class LocalVolume(trackable_state.ChangeNotifier):
+    """Exposes a local array as a Neuroglancer data source.
+
+    Group:
+      serve-data
+    """
+
     def __init__(
         self,
         data,
@@ -166,15 +172,19 @@ class LocalVolume(trackable_state.ChangeNotifier):
             voxelOffset=self.voxel_offset,
             chunkLayout=self.chunk_layout,
             downsamplingLayout=self.downsampling_layout,
-            maxDownsampling=None
-            if math.isinf(self.max_downsampling)
-            else self.max_downsampling,
-            maxDownsampledSize=None
-            if math.isinf(self.max_downsampled_size)
-            else self.max_downsampled_size,
-            maxDownsamplingScales=None
-            if math.isinf(self.max_downsampling_scales)
-            else self.max_downsampling_scales,
+            maxDownsampling=(
+                None if math.isinf(self.max_downsampling) else self.max_downsampling
+            ),
+            maxDownsampledSize=(
+                None
+                if math.isinf(self.max_downsampled_size)
+                else self.max_downsampled_size
+            ),
+            maxDownsamplingScales=(
+                None
+                if math.isinf(self.max_downsampling_scales)
+                else self.max_downsampling_scales
+            ),
         )
         if self.max_voxels_per_chunk_log2 is not None:
             info["maxVoxelsPerChunkLog2"] = self.max_voxels_per_chunk_log2

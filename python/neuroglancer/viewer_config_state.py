@@ -14,22 +14,24 @@
 
 
 import base64
-import collections
 import io
 import numbers
+import os
 import traceback
+import typing
 
 import numpy as np
 
 from . import viewer_state
 from .json_wrappers import (
     JsonObjectWrapper,
+    Map,
+    _set_type_annotation,
     array_wrapper,
     optional,
-    text_type,
     typed_list,
+    typed_map,
     typed_set,
-    typed_string_map,
     wrapped_property,
 )
 
@@ -37,13 +39,25 @@ _uint64_keys = frozenset(["t", "v"])
 _map_entry_keys = frozenset(["key", "value"])
 
 
-class SegmentIdMapEntry(
-    collections.namedtuple("SegmentIdMapEntry", ["key", "value", "label"])
-):
-    def __new__(cls, key, value=None, label=None):
-        return super().__new__(cls, key, value, label)
+_BUILDING_DOCS = os.environ.get("NEUROGLANCER_BUILDING_DOCS") == "1"
 
 
+__all__ = []
+
+
+def export(obj):
+    __all__.append(obj.__name__)
+    return obj
+
+
+@export
+class SegmentIdMapEntry(typing.NamedTuple):
+    key: int
+    value: typing.Optional[int] = None
+    label: typing.Optional[str] = None
+
+
+@export
 def layer_selected_value(x):
     if isinstance(x, numbers.Number):
         return x
@@ -57,6 +71,12 @@ def layer_selected_value(x):
     return None
 
 
+_set_type_annotation(
+    layer_selected_value, typing.Union[None, numbers.Number, SegmentIdMapEntry]
+)
+
+
+@export
 class LayerSelectionState(JsonObjectWrapper):
     __slots__ = ()
     supports_validation = True
@@ -66,16 +86,25 @@ class LayerSelectionState(JsonObjectWrapper):
     value = wrapped_property("value", optional(layer_selected_value))
 
 
-LayerSelectedValues = typed_string_map(LayerSelectionState)
+if typing.TYPE_CHECKING or _BUILDING_DOCS:
+    _LayerSelectedValuesBase = Map[str, LayerSelectionState]
+else:
+    _LayerSelectedValuesBase = typed_map(str, LayerSelectionState)
 
 
+@export
+class LayerSelectedValues(_LayerSelectedValuesBase):
+    """Specifies the data values associated with the current mouse position."""
+
+
+@export
 class ScreenshotReply(JsonObjectWrapper):
     __slots__ = ()
-    id = wrapped_property("id", text_type)
+    id = wrapped_property("id", str)
     image = wrapped_property("image", base64.b64decode)
     width = wrapped_property("width", int)
     height = wrapped_property("height", int)
-    image_type = imageType = wrapped_property("imageType", text_type)
+    image_type = imageType = wrapped_property("imageType", str)
     depth_data = depthData = wrapped_property("depthData", optional(base64.b64decode))
 
     @property
@@ -94,6 +123,7 @@ class ScreenshotReply(JsonObjectWrapper):
         return np.frombuffer(depth_data, dtype="<f4").reshape((self.height, self.width))
 
 
+@export
 class AggregateChunkSourceStatistics(JsonObjectWrapper):
     __slots__ = ()
     visible_chunks_total = visibleChunksTotal = wrapped_property(
@@ -112,14 +142,16 @@ class AggregateChunkSourceStatistics(JsonObjectWrapper):
     download_latency = downloadLatency = wrapped_property("downloadLatency", float)
 
 
+@export
 class ChunkSourceStatistics(JsonObjectWrapper):
     __slots__ = ()
-    distinct_id = distinctId = wrapped_property("distinctId", text_type)
+    distinct_id = distinctId = wrapped_property("distinctId", str)
 
 
+@export
 class ScreenshotStatistics(JsonObjectWrapper):
     __slots__ = ()
-    id = wrapped_property("id", text_type)
+    id = wrapped_property("id", str)
 
     chunk_sources = chunkSources = wrapped_property(
         "chunkSources", typed_list(ChunkSourceStatistics)
@@ -127,6 +159,7 @@ class ScreenshotStatistics(JsonObjectWrapper):
     total = wrapped_property("total", AggregateChunkSourceStatistics)
 
 
+@export
 class ActionState(JsonObjectWrapper):
     __slots__ = ()
     viewer_state = viewerState = wrapped_property(
@@ -144,6 +177,7 @@ class ActionState(JsonObjectWrapper):
     )
 
 
+@export
 class Actions:
     def __init__(self, set_config):
         self._action_handlers = dict()
@@ -183,9 +217,10 @@ class Actions:
                     traceback.print_exc()
 
 
-EventActionMap = typed_string_map(text_type)
+EventActionMap = typed_map(str, str)
 
 
+@export
 class InputEventBindings(JsonObjectWrapper):
     __slots__ = ()
     viewer = wrapped_property("viewer", EventActionMap)
@@ -196,6 +231,7 @@ class InputEventBindings(JsonObjectWrapper):
     data_view = dataView = wrapped_property("dataView", EventActionMap)
 
 
+@export
 class PrefetchState(JsonObjectWrapper):
     __slots__ = ()
     supports_validation = True
@@ -203,6 +239,7 @@ class PrefetchState(JsonObjectWrapper):
     state = wrapped_property("state", viewer_state.ViewerState)
 
 
+@export
 class ScaleBarOptions(JsonObjectWrapper):
     __slots__ = ()
     supports_validation = True
@@ -216,9 +253,7 @@ class ScaleBarOptions(JsonObjectWrapper):
     bar_top_margin_in_pixels = barTopMarginInPixels = wrapped_property(
         "barTopMarginInPixels", optional(float, 5)
     )
-    font_name = fontName = wrapped_property(
-        "fontName", optional(text_type, "sans-serif")
-    )
+    font_name = fontName = wrapped_property("fontName", optional(str, "sans-serif"))
     padding_in_pixels = paddingInPixels = wrapped_property(
         "paddingInPixels", optional(float, 2)
     )
@@ -236,6 +271,7 @@ class ScaleBarOptions(JsonObjectWrapper):
     )
 
 
+@export
 class VolumeInfo(JsonObjectWrapper):
     __slots__ = ()
 
@@ -252,6 +288,7 @@ class VolumeInfo(JsonObjectWrapper):
         return self.dimensions.rank
 
 
+@export
 class VolumeRequest(JsonObjectWrapper):
     __slots__ = ()
     id = wrapped_property("id", str)
@@ -264,20 +301,21 @@ class VolumeRequest(JsonObjectWrapper):
     )
 
 
+@export
 class ConfigState(JsonObjectWrapper):
     __slots__ = ()
-    credentials = wrapped_property("credentials", typed_string_map(dict))
-    actions = wrapped_property("actions", typed_set(text_type))
+    credentials = wrapped_property("credentials", typed_map(str, dict))
+    actions = wrapped_property("actions", typed_set(str))
     input_event_bindings = inputEventBindings = wrapped_property(
         "inputEventBindings", InputEventBindings
     )
     status_messages = statusMessages = wrapped_property(
-        "statusMessages", typed_string_map(text_type)
+        "statusMessages", typed_map(str, str)
     )
     source_generations = sourceGenerations = wrapped_property(
-        "sourceGenerations", typed_string_map(int)
+        "sourceGenerations", typed_map(str, int)
     )
-    screenshot = wrapped_property("screenshot", optional(text_type))
+    screenshot = wrapped_property("screenshot", optional(str))
     show_ui_controls = showUIControls = wrapped_property(
         "showUIControls", optional(bool, True)
     )
@@ -318,8 +356,3 @@ class ConfigState(JsonObjectWrapper):
     volume_requests = volumeRequests = wrapped_property(
         "volumeRequests", typed_list(VolumeRequest)
     )
-
-
-class PrivateState(JsonObjectWrapper):
-    __slots__ = ()
-    credentials = wrapped_property("credentials", typed_string_map(optional(int)))
