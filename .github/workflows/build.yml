@@ -50,6 +50,10 @@ jobs:
       - uses: ./.github/actions/setup-firefox
       - name: Run JavaScript tests (including WebGL)
         run: npm test
+        if: ${{ runner.os != 'macOS' }}
+      - name: Run JavaScript tests (excluding WebGL)
+        run: npm test -- --project node
+        if: ${{ runner.os == 'macOS' }}
       - name: Run JavaScript benchmarks
         run: npm run benchmark
       - name: Upload NPM package as artifact
