@@ -55,7 +55,12 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
     return -1;
   }
   auto* descr = PyArray_DESCR(array);
-  npy_intp elsize = PyDataType_ELSIZE(descr);
+  npy_intp elsize;
+#ifdef NPY_2_0_API_VERSION
+  elsize = PyDataType_ELSIZE(descr);
+#else
+  elsize = descr->elsize;
+#endif
   if ((descr->kind != 'i' && descr->kind != 'u') ||
       (elsize != 1 && elsize != 2 && elsize != 4 && elsize != 8)) {
     Py_DECREF(array);
