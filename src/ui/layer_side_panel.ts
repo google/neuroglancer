@@ -37,9 +37,9 @@ import {
   CachedWatchableValue,
   observeWatchable,
 } from "#src/trackable_value.js";
-import type { UserLayerSidePanelState } from "#src/ui//layer_side_panel_state.js";
-import { LAYER_SIDE_PANEL_DEFAULT_LOCATION } from "#src/ui//layer_side_panel_state.js";
 import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
+import type { UserLayerSidePanelState } from "#src/ui/layer_side_panel_state.js";
+import { LAYER_SIDE_PANEL_DEFAULT_LOCATION } from "#src/ui/layer_side_panel_state.js";
 import type { DragSource, SidePanelManager } from "#src/ui/side_panel.js";
 import { DRAG_OVER_CLASSNAME, SidePanel } from "#src/ui/side_panel.js";
 import { RefCounted } from "#src/util/disposable.js";

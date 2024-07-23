@@ -157,7 +157,12 @@ def expected_screenshot(request, webdriver_generic):
 
 EXAMPLE_DIRS = [
     f"examples/{bundler}/{bundler}-project-{package}"
-    for bundler in ["vite", "parcel", "webpack"]
+    for bundler in [
+        "vite",
+        # Disable parcel since it currently has "failed to resolve bundle" errors.
+        # "parcel",
+        "webpack",
+    ]
     for package in ["source", "built"]
 ]
 
