@@ -22,7 +22,7 @@ import type {
 } from "#src/renderlayer.js";
 import { VisibilityTrackedRenderLayer } from "#src/renderlayer.js";
 import type { vec3 } from "#src/util/geom.js";
-import type { ShaderModule } from "#src/webgl/shader.js";
+import type { ShaderBuilder, ShaderModule } from "#src/webgl/shader.js";
 import type { SharedObject } from "#src/worker_rpc.js";
 
 export type PerspectiveViewReadyRenderContext =
@@ -70,6 +70,16 @@ export interface PerspectiveViewRenderContext
    * Specifices how to bind the max projection buffer
    */
   bindMaxProjectionBuffer?: () => void | undefined;
+
+  /**
+   * Specifies how to bind the volume rendering buffer
+   */
+  bindVolumeRenderingBuffer?: () => void | undefined;
+
+  /**
+   * Specifies how to assign the max projection emitter
+   */
+  maxProjectionEmit?: (builder: ShaderBuilder) => void | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
