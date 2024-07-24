@@ -125,7 +125,10 @@ export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<OAuth2
     super();
   }
   get = makeCredentialsGetter(async () => {
-    return {tokenType: "Bearer", accessToken: "blah"}
+    console.log('i am here')
+    
+    console.log("hmm")
+    return {tokenType: "Bearer", accessToken: "blah"};
     console.log('iampotato')
     console.log(this.serverUrl)
     const response = await fetchWithCredentials(
