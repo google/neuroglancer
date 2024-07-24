@@ -44,12 +44,14 @@ function getMiddleAuthCredentialsProvider(
 function getGlobusAuthCredentialsProvider(
   credentialsManager: CredentialsManager,
   serverUrl: string,
+  path: string
 ): SpecialProtocolCredentialsProvider {
   console.log('here')
   console.log(serverUrl)
+  console.log(path)
   return credentialsManager.getCredentialsProvider(
     "globusauthapp",
-    new URL(serverUrl),
+    { serverUrl: new URL(serverUrl) }
   );
 }
 
@@ -128,6 +130,7 @@ export function parseSpecialUrl(
           credentialsProvider: getGlobusAuthCredentialsProvider(
             credentialsManager,
             `https://${u.host}`,
+            u.path,
           ),
           url: `https://${u.host}`,
         };
