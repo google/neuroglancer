@@ -77,6 +77,7 @@
     "webpack-merge": "^6.0.1"
   },
   "dependencies": {
+    "@globus/sdk": "^3.5.0",
     "codemirror": "^5.61.1",
     "gl-matrix": "3.1.0",
     "glsl-editor": "^1.0.0",

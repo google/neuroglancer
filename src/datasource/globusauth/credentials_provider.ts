@@ -52,13 +52,18 @@ import type {
             `Waiting for login to Globus server ${serverUrl}...`,
             "Retry",
           );
-          console.log(serverUrl)
+          console.log('prepopup')
           const auth_popup =  window.open(
             serverUrl,
             undefined,
             `toolbar=no, menubar=no`,
           );
+
+          const closeAuthPopup = () => {
+            auth_popup?.close();
+          };
   
+          window.addEventListener("beforeunload", closeAuthPopup);
           const checkClosed = setInterval(() => {
             if (auth_popup?.closed) {
               clearInterval(checkClosed);
@@ -70,12 +75,12 @@ import type {
           }, 1000);
   
           const tokenListener = async (ev: MessageEvent) => {
+            console.log('ev')
             if (ev.source === auth_popup) {
               clearInterval(checkClosed);
               window.removeEventListener("message", tokenListener);
-              // closeAuthPopup();
-  
-              verifyObject(ev.data);
+              window.removeEventListener("beforeunload", closeAuthPopup);
+              closeAuthPopup();              verifyObject(ev.data);
               const accessToken = verifyObjectProperty(
                 ev.data,
                 "access_token",
