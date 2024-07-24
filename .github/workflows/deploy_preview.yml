@@ -48,6 +48,7 @@ jobs:
           expires: 30d
           channelId: "pr${{ steps.pr-id.outputs.pr-id }}"
           projectId: neuroglancer-demo
+          target: docs
       - name: "Update commit status"
         uses: actions/github-script@v7
         with:

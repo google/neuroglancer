@@ -514,11 +514,21 @@ def _get_server_token():
 
 
 def set_static_content_source(*args, **kwargs):
+    """Specifies the Neuroglancer client hosted by the Python integration webserver.
+
+    Group:
+      server
+    """
     global global_static_content_source
     global_static_content_source = static.get_static_content_source(*args, **kwargs)
 
 
 def set_dev_server_content_source():
+    """Builds the Neuroglancer client from source on demand for the Python integration.
+
+    Group:
+      Server
+    """
     static_content_url = None
     root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
     build_process = subprocess.Popen(
@@ -564,22 +574,39 @@ def set_dev_server_content_source():
 
 
 def set_server_bind_address(bind_address=None, bind_port=0):
+    """Sets the bind adress and port for the Python integration webserver.
+
+    If the server is already running, this does not have any effect until the server is
+    restarted.
+
+    Group:
+      Server
+
+    """
     if bind_address is None:
         bind_address = "127.0.0.1"
     with _global_server_lock:
         global_server_args.update(bind_address=bind_address, bind_port=bind_port)
 
 
-def is_server_running():
+def is_server_running() -> bool:
+    """Returns ``True`` if the Python integration webserver is running.
+
+    Group:
+      Server
+    """
     with _global_server_lock:
         return global_server is not None
 
 
-def stop():
+def stop() -> None:
     """Stop the server, invalidating any viewer URLs.
 
     This allows any previously-referenced data arrays to be garbage collected if there are no other
     references to them.
+
+    Group:
+      server
     """
     global global_server
     with _global_server_lock:
@@ -589,11 +616,18 @@ def stop():
         server.stop()
 
 
-def get_server_url():
+def get_server_url() -> str:
+    if global_server is None:
+        raise ValueError("Server is not started")
     return global_server.server_url
 
 
-def start():
+def start() -> None:
+    """Starts the Python integration webserver if not already started.
+
+    Group:
+      Server
+    """
     global global_server
     with _global_server_lock:
         if global_server is not None:
@@ -612,6 +646,10 @@ def register_viewer(viewer):
 
 
 def defer_callback(callback, *args, **kwargs):
-    """Register `callback` to run in the server event loop thread."""
+    """Register `callback` to run in the server event loop thread.
+
+    Group:
+      Server
+    """
     start()
     global_server.loop.call_soon_threadsafe(lambda: callback(*args, **kwargs))

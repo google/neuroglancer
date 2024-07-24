@@ -399,7 +399,7 @@ class ViewerBase(ViewerCommonBase):
         )
 
     @property
-    def state(self):
+    def state(self) -> viewer_state.ViewerState:
         return self.shared_state.state
 
     def set_state(self, *args, **kwargs):
