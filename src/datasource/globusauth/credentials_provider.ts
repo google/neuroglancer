@@ -99,6 +99,7 @@ export class GlobusAuthCredentialsProvider extends CredentialsProvider<Credentia
   }
   get = makeCredentialsGetter(async () => {
     console.log('iampotato2')
+    console.log(this.serverUrl)
     const response = await fetch(`${this.serverUrl}/token`, {
       method: "POST",
       credentials: "include",
@@ -125,6 +126,7 @@ export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<OAuth2
   }
   get = makeCredentialsGetter(async () => {
     console.log('iampotato')
+    console.log(this.serverUrl)
     const response = await fetchWithCredentials(
       this.globusauthCredentialsProvider,
       `${this.serverUrl}`,

@@ -45,9 +45,11 @@ function getGlobusAuthCredentialsProvider(
   credentialsManager: CredentialsManager,
   serverUrl: string,
 ): SpecialProtocolCredentialsProvider {
+  console.log('here')
+  console.log(serverUrl)
   return credentialsManager.getCredentialsProvider(
     "globusauthapp",
-    new URL(serverUrl).origin,
+    new URL(serverUrl),
   );
 }
 

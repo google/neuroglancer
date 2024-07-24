@@ -25,18 +25,19 @@ defaultCredentialsManager.register(
   "globus",
   (serverUrl) => new GlobusAuthCredentialsProvider(serverUrl),
 );
+
 defaultCredentialsManager.register(
   "globusauthapp",
   (
-    parameters: { authServer: string; bucket: string },
+    parameters: { serverUrl: string},
     credentialsManager: CredentialsManager,
   ) => {
     return new GlobusAuthAppCredentialsProvider(
       credentialsManager.getCredentialsProvider(
         "globus",
-        parameters.authServer,
+        parameters.serverUrl,
       ),
-      parameters.authServer,
+      parameters.serverUrl,
     );
   },
 );
