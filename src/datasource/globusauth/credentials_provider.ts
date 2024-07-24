@@ -30,7 +30,7 @@ import {
 
 function makeOriginError(serverUrl: string): Error {
   return new Error(
-    `ngauth server ${serverUrl} ` +
+    `globusauth server ${serverUrl} ` +
       `does not allow requests from Neuroglancer instance ${self.origin}`,
   );
 }
@@ -51,7 +51,7 @@ async function waitForLogin(serverUrl: string): Promise<Credentials> {
         `${serverUrl}/login?origin=${encodeURIComponent(self.origin)}`,
       );
       writeLoginStatus(
-        `Waiting for login to ngauth server ${serverUrl}...`,
+        `Waiting for login to globusauth server ${serverUrl}...`,
         "Retry",
       );
     });
@@ -78,14 +78,14 @@ async function waitForLogin(serverUrl: string): Promise<Credentials> {
         resolve(token);
       } catch (e) {
         console.log(
-          "ngauth: Received unexpected message from ${serverUrl}",
+          "globusauth: Received unexpected message from ${serverUrl}",
           event,
         );
       }
     }
     window.addEventListener("message", messageHandler, false);
   });
-  writeLoginStatus(`ngauth server ${serverUrl} login required.`, "Login");
+  writeLoginStatus(`globusauth server ${serverUrl} login required.`, "Login");
   try {
     return { token: await messagePromise };
   } finally {
@@ -98,6 +98,7 @@ export class GlobusAuthCredentialsProvider extends CredentialsProvider<Credentia
     super();
   }
   get = makeCredentialsGetter(async () => {
+    console.log('iampotato2')
     const response = await fetch(`${this.serverUrl}/token`, {
       method: "POST",
       credentials: "include",
@@ -117,14 +118,15 @@ export class GlobusAuthCredentialsProvider extends CredentialsProvider<Credentia
 
 export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<OAuth2Credentials> {
   constructor(
-    public ngauthCredentialsProvider: CredentialsProvider<Credentials>,
+    public globusauthCredentialsProvider: CredentialsProvider<Credentials>,
     public serverUrl: string,
   ) {
     super();
   }
   get = makeCredentialsGetter(async () => {
+    console.log('iampotato')
     const response = await fetchWithCredentials(
-      this.ngauthCredentialsProvider,
+      this.globusauthCredentialsProvider,
       `${this.serverUrl}`,
       { method: "POST" },
       responseJson,
