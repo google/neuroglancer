@@ -277,7 +277,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
   private hasVolumeRendering = false;
-  private needToCleanUpVolumeRendering = false;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -1035,8 +1034,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
     }
-    this.needToCleanUpVolumeRendering =
-      this.needToCleanUpVolumeRendering || hasVolumeRendering;
     this.hasVolumeRendering = hasVolumeRendering;
     this.drawSliceViews(renderContext);
 
@@ -1149,9 +1146,6 @@ export class PerspectivePanel extends RenderedDataPanel {
             volumeRenderingBufferHeight,
           );
         };
-      }
-
-      if (this.needToCleanUpVolumeRendering) {
         bindVolumeRenderingBuffer();
         renderContext.bindVolumeRenderingBuffer = bindVolumeRenderingBuffer;
         gl.clearDepth(1.0);
@@ -1160,7 +1154,6 @@ export class PerspectivePanel extends RenderedDataPanel {
           WebGL2RenderingContext.COLOR_BUFFER_BIT |
             WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
-        this.needToCleanUpVolumeRendering = false;
       }
 
       const { transparentConfiguration } = this;
