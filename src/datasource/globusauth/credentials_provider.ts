@@ -14,184 +14,136 @@
  * limitations under the License.
  */
 
-import type {
-    CredentialsManager,
-    CredentialsWithGeneration,
-  } from "#src/credentials_provider/index.js";
-  import {
-    CredentialsProvider,
-    makeCredentialsGetter,
-  } from "#src/credentials_provider/index.js";
-  import { StatusMessage } from "#src/status.js";
-  import {
-    verifyObject,
-    verifyObjectProperty,
-    verifyString,
-    verifyStringArray,
-  } from "#src/util/json.js";
-  
-  export type GlobusAuthToken = {
-    tokenType: string;
-    accessToken: string;
-    url: string;
-    appUrls: string[];
-  };
-  
-  
-  async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
-    const status = new StatusMessage(/*delay=*/ false);
-    const res: Promise<GlobusAuthToken> = new Promise((f) => {
-      function writeLoginStatus(message: string, buttonMessage: string) {
-        status.element.textContent = message + " ";
-        const button = document.createElement("button");
-        button.textContent = buttonMessage;
-        status.element.appendChild(button);
+import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
+import {
+  CredentialsProvider,
+  makeCredentialsGetter,
+} from "#src/credentials_provider/index.js";
+import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import { StatusMessage } from "#src/status.js";
+import { HttpError, responseJson } from "#src/util/http_request.js";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
 
-        button.addEventListener("click", () => {
-          writeLoginStatus(
-            `Waiting for login to Globus server ${serverUrl}...`,
-            "Retry",
-          );
-          console.log('prepopup')
-          const auth_popup =  window.open(
-            serverUrl,
-            undefined,
-            `toolbar=no, menubar=no`,
-          );
+function makeOriginError(serverUrl: string): Error {
+  return new Error(
+    `ngauth server ${serverUrl} ` +
+      `does not allow requests from Neuroglancer instance ${self.origin}`,
+  );
+}
 
-          const closeAuthPopup = () => {
-            auth_popup?.close();
-          };
-  
-          window.addEventListener("beforeunload", closeAuthPopup);
-          const checkClosed = setInterval(() => {
-            if (auth_popup?.closed) {
-              clearInterval(checkClosed);
-              writeLoginStatus(
-                `Login window closed for Globus server ${serverUrl}.`,
-                "Retry",
-              );
-            }
-          }, 1000);
-  
-          const tokenListener = async (ev: MessageEvent) => {
-            console.log('ev')
-            if (ev.source === auth_popup) {
-              clearInterval(checkClosed);
-              window.removeEventListener("message", tokenListener);
-              window.removeEventListener("beforeunload", closeAuthPopup);
-              closeAuthPopup();              verifyObject(ev.data);
-              const accessToken = verifyObjectProperty(
-                ev.data,
-                "access_token",
-                verifyString,
-              );
-              const appUrls = verifyObjectProperty(
-                ev.data,
-                "app_urls",
-                verifyStringArray,
-              );
-  
-              const token: GlobusAuthToken = {
-                tokenType: "Bearer",
-                accessToken,
-                url: serverUrl,
-                appUrls,
-              };
-              f(token);
-            }
-          };
-  
-          window.addEventListener("message", tokenListener);
-        });
-      }
-  
-      writeLoginStatus(`Globus server ${serverUrl} login required.`, "Login");
+export interface Credentials {
+  token: string;
+}
+
+async function waitForLogin(serverUrl: string): Promise<Credentials> {
+  const status = new StatusMessage(/*delay=*/ false);
+  function writeLoginStatus(message: string, buttonMessage: string) {
+    status.element.textContent = message + " ";
+    const button = document.createElement("button");
+    button.textContent = buttonMessage;
+    status.element.appendChild(button);
+    button.addEventListener("click", () => {
+      window.open(
+        `${serverUrl}/login?origin=${encodeURIComponent(self.origin)}`,
+      );
+      writeLoginStatus(
+        `Waiting for login to ngauth server ${serverUrl}...`,
+        "Retry",
+      );
     });
-  
-    try {
-      return await res;
-    } finally {
-      status.dispose();
-    }
   }
-  
-  const LOCAL_STORAGE_AUTH_KEY = "globus_auth_token_v2";
-  
-  function getAuthTokenFromLocalStorage(authURL: string) {
-    const token = localStorage.getItem(`${LOCAL_STORAGE_AUTH_KEY}_${authURL}`);
-    if (token) {
-      return <GlobusAuthToken>JSON.parse(token);
+  const messagePromise = new Promise<string>((resolve, reject) => {
+    function messageHandler(event: MessageEvent) {
+      const eventOrigin =
+        event.origin || (<MessageEvent>(<any>event).originalEvent).origin;
+      if (eventOrigin !== serverUrl) {
+        return;
+      }
+      const removeListener = () => {
+        window.removeEventListener("message", messageHandler, false);
+      };
+      const { data } = event;
+      if (event.data === "badorigin") {
+        removeListener();
+        reject(makeOriginError(serverUrl));
+      }
+      try {
+        verifyObject(data);
+        const token = verifyObjectProperty(data, "token", verifyString);
+        removeListener();
+        resolve(token);
+      } catch (e) {
+        console.log(
+          "ngauth: Received unexpected message from ${serverUrl}",
+          event,
+        );
+      }
     }
-    return null;
+    window.addEventListener("message", messageHandler, false);
+  });
+  writeLoginStatus(`ngauth server ${serverUrl} login required.`, "Login");
+  try {
+    return { token: await messagePromise };
+  } finally {
+    status.dispose();
   }
-  
-  function saveAuthTokenToLocalStorage(authURL: string, value: GlobusAuthToken) {
-    localStorage.setItem(
-      `${LOCAL_STORAGE_AUTH_KEY}_${authURL}`,
-      JSON.stringify(value),
+}
+
+export class GlobusAuthCredentialsProvider extends CredentialsProvider<Credentials> {
+  constructor(public serverUrl: string) {
+    super();
+  }
+  get = makeCredentialsGetter(async () => {
+    const response = await fetch(`${this.serverUrl}/token`, {
+      method: "POST",
+      credentials: "include",
+    });
+    switch (response.status) {
+      case 200:
+        return { token: await response.text() };
+      case 401:
+        return await waitForLogin(this.serverUrl);
+      case 403:
+        throw makeOriginError(this.serverUrl);
+      default:
+        throw HttpError.fromResponse(response);
+    }
+  });
+}
+
+export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<OAuth2Credentials> {
+  constructor(
+    public ngauthCredentialsProvider: CredentialsProvider<Credentials>,
+    public serverUrl: string,
+  ) {
+    super();
+  }
+  get = makeCredentialsGetter(async () => {
+    const response = await fetchWithCredentials(
+      this.ngauthCredentialsProvider,
+      `${this.serverUrl}`,
+      { method: "POST" },
+      responseJson,
+      (credentials, init) => {
+        return {
+          ...init,
+          body: JSON.stringify({
+            token: credentials.token,
+          }),
+        };
+      },
+      (error) => {
+        const { status } = error;
+        if (status === 401) {
+          return "refresh";
+        }
+        throw error;
+      },
     );
-  }
-  
-  export class GlobusAuthCredentialsProvider extends CredentialsProvider<GlobusAuthToken> {
-    alreadyTriedLocalStorage = false;
-  
-    constructor(private serverUrl: string) {
-      super();
-    }
-    get = makeCredentialsGetter(async () => {
-      let token = undefined;
-  
-      if (!this.alreadyTriedLocalStorage) {
-        this.alreadyTriedLocalStorage = true;
-        token = getAuthTokenFromLocalStorage(this.serverUrl);
-      }
-  
-      if (!token) {
-        token = await waitForLogin(this.serverUrl);
-        console.log('iamhere2')
-        saveAuthTokenToLocalStorage(this.serverUrl, token);
-      }
-  
-      return token;
-    });
-  }
-  
-  export class UnverifiedApp extends Error {
-    url: string;
-  
-    constructor(url: string) {
-      super();
-      this.url = url;
-    }
-  }
-  
-  export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<GlobusAuthToken> {
-    private credentials: CredentialsWithGeneration<GlobusAuthToken> | undefined =
-      undefined;
-  
-    constructor(
-      private serverUrl: string,
-      private credentialsManager: CredentialsManager,
-    ) {
-      super();
-    }
-  
-    get = makeCredentialsGetter(async () => {
-
-      const provider = this.credentialsManager.getCredentialsProvider(
-        "globus",
-        this.serverUrl,
-      ) as GlobusAuthCredentialsProvider;
-
-      this.credentials = await provider.get(this.credentials);
-  
-      if (this.credentials.credentials.appUrls.includes(this.serverUrl)) {
-        return this.credentials.credentials;
-      }
-      const status = new StatusMessage(/*delay=*/ false);
-      status.setText(`Globus: unverified app ${this.serverUrl}`);
-      throw new UnverifiedApp(this.serverUrl);
-    });
-  }
-  
+    return { tokenType: "Bearer", accessToken: response.token };
+  });
+}
