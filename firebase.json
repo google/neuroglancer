@@ -1,10 +1,12 @@
 {
-  "hosting": {
-    "target": "app",
-    "public": "dist/client"
-  },
-  "hosting": {
-    "target": "docs",
-    "public": "dist/docs"
-  }
+  "hosting": [
+    {
+      "target": "app",
+      "public": "dist/client"
+    },
+    {
+      "target": "docs",
+      "public": "dist/docs"
+    }
+  ]
 }
