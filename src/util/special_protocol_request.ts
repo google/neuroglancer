@@ -132,7 +132,7 @@ export function parseSpecialUrl(
             `https://${u.host}`,
             u.path,
           ),
-          url: `https://${u.host}`,
+          url: `https://${u.host}` + u.path,
         };
     case "middleauth+https":
       url = url.substr("middleauth+".length);
