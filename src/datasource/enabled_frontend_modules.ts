@@ -6,6 +6,7 @@ import "#datasource/brainmaps/register_credentials_provider";
 import "#datasource/deepzoom/register_default";
 import "#datasource/dvid/register_default";
 import "#datasource/dvid/register_credentials_provider";
+import "#datasource/globusauth/register_credentials_provider";
 import "#datasource/graphene/register_default";
 import "#datasource/middleauth/register_credentials_provider";
 import "#datasource/n5/register_default";

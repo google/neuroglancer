@@ -23,6 +23,7 @@ import type {
 } from "#src/util/completion.js";
 import { getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
 import { getGcsPathCompletions } from "#src/util/gcs_bucket_listing.js";
+import { getGlobusPathCompletions } from "#src/util/globus_listing.js";
 import { parseUrl } from "#src/util/http_request.js";
 import { getS3PathCompletions } from "#src/util/s3.js";
 import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
@@ -100,6 +101,7 @@ export async function getHtmlPathCompletions(
 const specialProtocolEmptyCompletions: CompletionWithDescription[] = [
   { value: "gs://", description: "Google Cloud Storage (JSON API)" },
   { value: "gs+xml://", description: "Google Cloud Storage (XML API)" },
+  { value: "globus://", description: "Globus storage" },
   {
     value: "gs+ngauth+http://",
     description: "Google Cloud Storage (JSON API) authenticated via ngauth",
@@ -164,6 +166,14 @@ export async function completeHttpPath(
         credentialsProvider,
         `${protocol}://${host}`,
         host,
+        path,
+        cancellationToken,
+      );
+    }
+    if (protocol === "globus" && path.length > 0) {
+      return await getGlobusPathCompletions(
+        credentialsProvider,
+        `${protocol}://${host}`,
         path,
         cancellationToken,
       );

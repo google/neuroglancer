@@ -41,6 +41,16 @@ function getMiddleAuthCredentialsProvider(
   );
 }
 
+function getGlobusAuthCredentialsProvider(
+  credentialsManager: CredentialsManager,
+  serverUrl: string,
+): SpecialProtocolCredentialsProvider {
+  return credentialsManager.getCredentialsProvider(
+    "globusauthapp",
+    new URL(serverUrl).origin,
+  );
+}
+
 function getNgauthCredentialsProvider(
   credentialsManager: CredentialsManager,
   serverUrl: string,
@@ -62,6 +72,8 @@ export function parseSpecialUrl(
   credentialsManager: CredentialsManager,
 ): { url: string; credentialsProvider: SpecialProtocolCredentialsProvider } {
   const u = parseUrl(url);
+  console.log(url)
+  console.log(u)
   switch (u.protocol) {
     case "gs":
     case "gs+xml":
@@ -109,6 +121,14 @@ export function parseSpecialUrl(
         ),
         url: "gs+xml:/" + u.path,
       };
+    case "globus":
+        return {
+          credentialsProvider: getGlobusAuthCredentialsProvider(
+            credentialsManager,
+            `https://${u.host}`,
+          ),
+          url: `https://${u.host}`,
+        };
     case "middleauth+https":
       url = url.substr("middleauth+".length);
       return {

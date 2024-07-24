@@ -96,8 +96,8 @@
   "type": "module",
   "exports": {
     ".": "./src/main_module.ts",
-    "./unstable/*.js": "./src/*.ts",
-    "./unstable/*": "./src/*"
+    "./*.js": "./src/*.ts",
+    "./*": "./src/*"
   },
   "imports": {
     "#src/third_party/jpgjs/jpg.js": "./src/third_party/jpgjs/jpg.js",
@@ -196,6 +196,13 @@
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
       "neuroglancer/datasource/dvid:disabled": "./src/datasource/dvid/register_credentials_provider.ts",
       "default": "./src/datasource/dvid/register_credentials_provider.ts"
+    },
+    "#datasource/globusauth/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/globusauth:enabled": "./src/datasource/globusauth/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/globusauth:disabled": "./src/datasource/globusauth/register_credentials_provider.ts",
+      "default": "./src/datasource/globusauth/register_credentials_provider.ts"
     },
     "#datasource/graphene/backend": {
       "neuroglancer/datasource/graphene:enabled": "./src/datasource/graphene/backend.ts",
