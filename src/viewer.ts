@@ -1027,6 +1027,30 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
+    const sendEventToSelectedLayerTab = (type: string) => {
+      const elements = document.querySelectorAll(
+        '[data-neuroglancer-layer-panel-pinned="false"] .neuroglancer-stack-view > .neuroglancer-tab-content:not([style*="display: none"]):not([style*="display: none"]) > *',
+      );
+      for (const element of elements) {
+        const event = new Event(type);
+        console.log("sending", type, "to", element);
+        element.dispatchEvent(event);
+      }
+
+      const selectedLayer = this.selectedLayer.layer?.layer;
+      if (selectedLayer) {
+        selectedLayer.dispatchLayerEvent(type);
+      }
+    };
+
+    this.bindAction("select-previous", () => {
+      sendEventToSelectedLayerTab("select-previous");
+    });
+
+    this.bindAction("select-next", () => {
+      sendEventToSelectedLayerTab("select-next");
+    });
+
     for (const action of ["select", "star"]) {
       this.bindAction(action, () => {
         this.mouseState.updateUnconditionally();
