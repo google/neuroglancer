@@ -46,7 +46,7 @@ jobs:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
           firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
           expires: 30d
-          channelId: "pr${{ steps.pr-id.outputs.pr-id }}-docs"
+          channelId: "pr${{ steps.pr-id.outputs.pr-id }}"
           projectId: neuroglancer-demo
           target: docs
       - name: "Update commit status"
