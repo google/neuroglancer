@@ -38,3 +38,41 @@
   background-color: #333;
   padding: 2px;
 }
+
+#statusContainerModal {
+  pointer-events: none;
+  position: absolute;
+  z-index: 100;
+  color: white;
+  margin: 0px;
+  padding: 0px;
+  font: 10pt sans-serif;
+
+  display: grid;
+  align-content: center;
+  justify-content: center;
+  height: 100vh;
+  width: 80vw;
+  left: 10vw;
+  grid-row-gap: 10px;
+}
+
+#statusContainerModal > div {
+  pointer-events: initial;
+  position: relative;
+  background-color: #808080;
+  padding: 20px;
+  padding-top: 30px;
+}
+
+#statusContainerModal > div > div:first-child {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  margin: 0;
+  padding: 0;
+}
+
+#statusContainerModal li {
+  display: block;
+}

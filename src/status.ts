@@ -16,7 +16,10 @@
 
 import "#src/status.css";
 
+import { makeCloseButton } from "#src/widget/close_button.js";
+
 let statusContainer: HTMLElement | null = null;
+let modalStatusContainer: HTMLElement | null = null;
 
 export const DEFAULT_STATUS_DELAY = 200;
 
@@ -24,8 +27,9 @@ export type Delay = boolean | number;
 
 export class StatusMessage {
   element: HTMLElement;
+  modalElementWrapper: HTMLElement | undefined;
   private timer: number | null;
-  constructor(delay: Delay = false) {
+  constructor(delay: Delay = false, modal = false) {
     if (statusContainer === null) {
       statusContainer = document.createElement("ul");
       statusContainer.id = "statusContainer";
@@ -36,6 +40,18 @@ export class StatusMessage {
         el.appendChild(statusContainer);
       } else {
         document.body.appendChild(statusContainer);
+      }
+    }
+    if (modal && modalStatusContainer === null) {
+      modalStatusContainer = document.createElement("ul");
+      modalStatusContainer.id = "statusContainerModal";
+      const el: HTMLElement | null = document.getElementById(
+        "neuroglancer-container",
+      );
+      if (el) {
+        el.appendChild(modalStatusContainer);
+      } else {
+        document.body.appendChild(modalStatusContainer);
       }
     }
     const element = document.createElement("li");
@@ -49,13 +65,40 @@ export class StatusMessage {
     } else {
       this.timer = null;
     }
-    statusContainer.appendChild(element);
+    if (modal) {
+      const modalElementWrapper = document.createElement("div");
+      const dismissModalElement = makeCloseButton({
+        title: "Dismiss",
+        onClick: () => {
+          this.dismissModal();
+        },
+      });
+      dismissModalElement.classList.add("dismiss-modal");
+      dismissModalElement.addEventListener("click", () => this.dismissModal());
+      modalElementWrapper.appendChild(dismissModalElement);
+      modalElementWrapper.appendChild(element);
+      this.modalElementWrapper = modalElementWrapper;
+      modalStatusContainer!.appendChild(modalElementWrapper);
+    } else {
+      statusContainer.appendChild(element);
+    }
   }
   dispose() {
-    statusContainer!.removeChild(this.element);
+    if (this.modalElementWrapper) {
+      modalStatusContainer!.removeChild(this.modalElementWrapper);
+    } else {
+      statusContainer!.removeChild(this.element);
+    }
     this.element = <any>undefined;
     if (this.timer !== null) {
       clearTimeout(this.timer);
+    }
+  }
+  dismissModal() {
+    if (this.modalElementWrapper) {
+      modalStatusContainer!.removeChild(this.modalElementWrapper);
+      this.modalElementWrapper = undefined;
+      statusContainer!.appendChild(this.element);
     }
   }
   setText(text: string, makeVisible?: boolean) {
