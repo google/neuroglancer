@@ -27,12 +27,13 @@ import type {
   VisibleSegmentsState,
 } from "#src/segmentation_display_state/base.js";
 import {
+  VISIBLE_SEGMENTS_STATE_PROPERTIES,
   onTemporaryVisibleSegmentsStateChanged,
   onVisibleSegmentsStateChanged,
-  VISIBLE_SEGMENTS_STATE_PROPERTIES,
 } from "#src/segmentation_display_state/base.js";
 import type { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { WatchableValue } from "#src/trackable_value.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type { AnyConstructor } from "#src/util/mixin.js";
@@ -57,6 +58,7 @@ export const withSegmentationLayerBackendState = <
   Base: TBase,
 ) =>
   class SegmentationLayerState extends Base implements VisibleSegmentsState {
+    timestamp: WatchableValue<number | undefined>;
     visibleSegments: Uint64Set;
     selectedSegments: Uint64OrderedSet;
     segmentEquivalences: SharedDisjointUint64Sets;
