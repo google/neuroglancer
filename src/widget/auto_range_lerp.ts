@@ -20,6 +20,7 @@ import { RefCounted } from "#src/util/disposable.js";
 import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
+import { Uint64 } from "#src/util/uint64.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import "#src/widget/auto_range_lerp.css";
@@ -48,7 +49,6 @@ interface ParentWidget {
   histogramIndex: number;
 }
 
-// TODO invert range if was inverted
 export class AutoRangeFinder extends RefCounted {
   autoRangeData: AutoRangeData = {
     inputPercentileBounds: [0, 1],
@@ -74,7 +74,6 @@ export class AutoRangeFinder extends RefCounted {
   }
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
-    // Start the auto-compute process if it's not already in progress
     if (!this.autoRangeData.autoComputeInProgress) {
       const { autoRangeData } = this;
       const { trackable, dataType, display } = this.parent;
@@ -98,9 +97,34 @@ export class AutoRangeFinder extends RefCounted {
         window: maxRange,
         range: maxRange,
       };
-      // Force a redraw, in case the range was already at the max
       display.scheduleRedraw();
     }
+  }
+
+  /**
+   * Due to how the 3D histogram is computed, the lower bound of the range
+   * can sometimes be 1 unit away from the minimum value of the data type.
+   * This function checks if the lower bound is near the minimum value and
+   * adjusts the range accordingly.
+   */
+  correctLowerBound(range: DataTypeInterval) {
+    const { dataType } = this.parent;
+    if (dataType !== DataType.UINT64) {
+      const minRange = defaultDataTypeRange[dataType][0] as number;
+      const lowerBound = range[0] as number;
+      if (lowerBound === minRange + 1) {
+        return [minRange, range[1]] as [number, number];
+      }
+    } else {
+      const minRange = Uint64.ZERO;
+      const lowerBound = range[0] as Uint64;
+      const minRangePlusOne = new Uint64();
+      Uint64.increment(minRangePlusOne, minRange);
+      if (lowerBound === minRangePlusOne) {
+        return [minRange, range[1]] as [Uint64, Uint64];
+      }
+    }
+    return range;
   }
 
   public maybeAutoComputeRange() {
@@ -124,7 +148,7 @@ export class AutoRangeFinder extends RefCounted {
       histogramSpecifications.getFramebuffers(gl)[histogramIndex];
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
-    const { range: newRange, window: newWindow } = computeRangeForCdf(
+    let { range: newRange, window: newWindow } = computeRangeForCdf(
       empiricalCdf,
       autoRangeData.inputPercentileBounds[0],
       autoRangeData.inputPercentileBounds[1],
@@ -146,6 +170,7 @@ export class AutoRangeFinder extends RefCounted {
     autoRangeData.lastComputedLerpRange = newRange;
     ++autoRangeData.numIterationsThisCompute;
     if (foundRange || exceededMaxIterations) {
+      newRange = this.correctLowerBound(newRange);
       if (autoRangeData.invertedInitialRange) {
         newRange.reverse();
       }
