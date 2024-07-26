@@ -38,7 +38,7 @@ interface AutoRangeData {
 interface ParentWidget {
   trackable: {
     value: {
-      range: DataTypeInterval;
+      range?: DataTypeInterval;
       window: DataTypeInterval;
     };
   };
@@ -70,7 +70,7 @@ export class AutoRangeFinder extends RefCounted {
 
   private wasInputInverted() {
     const { range } = this.parent.trackable.value;
-    return range[0] > range[1];
+    return range !== undefined && range[0] > range[1];
   }
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
@@ -127,6 +127,23 @@ export class AutoRangeFinder extends RefCounted {
     return range;
   }
 
+  setTrackableValue(range: DataTypeInterval, window: DataTypeInterval) {
+    const hasRange = this.parent.trackable.value.range !== undefined;
+
+    if (hasRange) {
+      this.parent.trackable.value = {
+        ...this.parent.trackable.value,
+        range,
+        window,
+      };
+    } else {
+      this.parent.trackable.value = {
+        ...this.parent.trackable.value,
+        window,
+      };
+    }
+  }
+
   public maybeAutoComputeRange() {
     if (!this.autoRangeData.autoComputeInProgress) {
       this.parent.display.force3DHistogramForAutoRange = false;
@@ -141,7 +158,10 @@ export class AutoRangeFinder extends RefCounted {
       histogramIndex,
     } = this.parent;
     const gl = display.gl;
-    const { range } = trackable.value;
+    let { range } = trackable.value;
+    if (range === undefined) {
+      range = trackable.value.window;
+    }
 
     // Read the histogram from the GPU and compute new range based on this
     const frameBuffer =
@@ -178,18 +198,10 @@ export class AutoRangeFinder extends RefCounted {
       autoRangeData.lastComputedLerpRange = null;
       autoRangeData.numIterationsThisCompute = 0;
       autoRangeData.invertedInitialRange = false;
-      trackable.value = {
-        ...trackable.value,
-        range: newRange,
-        window: newWindow,
-      };
+      this.setTrackableValue(newRange, newWindow);
     } else {
       display.force3DHistogramForAutoRange = true;
-      trackable.value = {
-        ...trackable.value,
-        range: newRange,
-        window: newRange,
-      };
+      this.setTrackableValue(newRange, newRange);
     }
   }
 }

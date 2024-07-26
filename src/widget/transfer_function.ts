@@ -69,6 +69,7 @@ import type { ShaderCodePart, ShaderProgram } from "#src/webgl/shader.js";
 import { ShaderBuilder } from "#src/webgl/shader.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
+import { AutoRangeFinder } from "#src/widget/auto_range_lerp.js";
 import { ColorWidget } from "#src/widget/color.js";
 import {
   getUpdatedRangeAndWindowParameters,
@@ -1573,7 +1574,7 @@ class TransferFunctionWidget extends Tab {
   private transferFunctionPanel = this.registerDisposer(
     new TransferFunctionPanel(this),
   );
-
+  autoRangeFinder: AutoRangeFinder;
   window = createWindowBoundInputs(this.dataType, this.trackable);
 
   get texture() {
@@ -1630,10 +1631,17 @@ class TransferFunctionWidget extends Tab {
     colorPickerDiv.appendChild(colorPicker.element);
 
     element.appendChild(colorPickerDiv);
+
+    this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
     this.updateControlPointsAndDraw();
     this.registerDisposer(
       this.trackable.changed.add(() => {
         this.updateControlPointsAndDraw();
+      }),
+    );
+    this.registerDisposer(
+      this.display.updateFinished.add(() => {
+        this.autoRangeFinder.maybeAutoComputeRange();
       }),
     );
   }
