@@ -19,7 +19,11 @@ import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
-import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
+import {
+  dataTypeCompare,
+  dataTypeIntervalEqual,
+  defaultDataTypeRange,
+} from "#src/util/lerp.js";
 import { Uint64 } from "#src/util/uint64.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
@@ -130,6 +134,13 @@ export class AutoRangeFinder extends RefCounted {
   setTrackableValue(range: DataTypeInterval, window: DataTypeInterval) {
     const hasRange = this.parent.trackable.value.range !== undefined;
 
+    const ensureWindowBoundsNotEqual = (window: DataTypeInterval) => {
+      if (dataTypeCompare(window[0], window[1]) === 0) {
+        return defaultDataTypeRange[this.parent.dataType];
+      }
+      return window;
+    };
+
     if (hasRange) {
       this.parent.trackable.value = {
         ...this.parent.trackable.value,
@@ -139,7 +150,7 @@ export class AutoRangeFinder extends RefCounted {
     } else {
       this.parent.trackable.value = {
         ...this.parent.trackable.value,
-        window,
+        window: ensureWindowBoundsNotEqual(window),
       };
     }
   }
