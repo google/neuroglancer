@@ -22,7 +22,7 @@ import type {
 } from "#src/renderlayer.js";
 import { VisibilityTrackedRenderLayer } from "#src/renderlayer.js";
 import type { vec3 } from "#src/util/geom.js";
-import type { ShaderModule } from "#src/webgl/shader.js";
+import type { ShaderBuilder, ShaderModule } from "#src/webgl/shader.js";
 import type { SharedObject } from "#src/worker_rpc.js";
 
 export type PerspectiveViewReadyRenderContext =
@@ -67,11 +67,25 @@ export interface PerspectiveViewRenderContext
   isContinuousCameraMotionInProgress: boolean;
 
   /**
+   * Usually, the histogram in 3D is disabled during camera movement
+   * This flag is used to force 3D histogram rendering during camera movement
+   */
+  force3DHistogramForAutoRange: boolean;
+
+  /**
    * Specifices how to bind the max projection buffer
    */
   bindMaxProjectionBuffer?: () => void | undefined;
 
-  force3DHistogramForAutoRange: boolean;
+  /**
+   * Specifies how to bind the volume rendering buffer
+   */
+  bindVolumeRenderingBuffer?: () => void | undefined;
+
+  /**
+   * Specifies how to assign the max projection emitter
+   */
+  maxProjectionEmit?: (builder: ShaderBuilder) => void | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging

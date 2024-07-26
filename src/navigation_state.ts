@@ -544,7 +544,7 @@ export class CoordinateSpacePlaybackVelocity extends RefCounted {
       },
       set value(enabled: boolean) {
         self.modifyDimension(id, (oldInfo) =>
-          enabled ? oldInfo ?? new DimensionPlaybackVelocity() : undefined,
+          enabled ? (oldInfo ?? new DimensionPlaybackVelocity()) : undefined,
         );
       },
     };

@@ -5,3 +5,5 @@
 .parcel-cache
 dist
 /lib
+/docs/_build/
+/.ruff_cache

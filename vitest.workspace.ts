@@ -3,6 +3,7 @@ import { defineWorkspace } from "vitest/config";
 export default defineWorkspace([
   {
     test: {
+      name: "node",
       environment: "node",
       setupFiles: ["./build_tools/vitest/setup-crypto.ts"],
       include: ["src/**/*.spec.ts"],
@@ -13,11 +14,13 @@ export default defineWorkspace([
   },
   {
     test: {
+      name: "browser",
       include: ["src/**/*.browser_test.ts"],
       benchmark: {
         include: [],
       },
       browser: {
+        provider: "webdriverio",
         enabled: true,
         headless: true,
         name: "chrome",

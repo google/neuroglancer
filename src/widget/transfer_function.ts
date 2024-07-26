@@ -41,15 +41,18 @@ import {
   computeInvlerp,
   computeLerp,
   defaultDataTypeRange,
+  getIntervalBoundsEffectiveFraction,
   parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import type { Uint64 } from "#src/util/uint64.js";
+import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { Buffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
@@ -71,6 +74,8 @@ import {
   getUpdatedRangeAndWindowParameters,
   updateInputBoundValue,
   updateInputBoundWidth,
+  createCDFLineShader,
+  NUM_CDF_LINES,
 } from "#src/widget/invlerp.js";
 import type {
   LayerControlFactory,
@@ -88,6 +93,7 @@ const TRANSFER_FUNCTION_BORDER_WIDTH = 0.05;
 const transferFunctionSamplerTextureUnit = Symbol(
   "transferFunctionSamplerTexture",
 );
+const histogramSamplerTextureUnit = Symbol("histogramSamplerTexture");
 
 const defaultTransferFunctionSizes: Record<DataType, number> = {
   [DataType.UINT8]: 256,
@@ -631,6 +637,18 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       },
     ),
   );
+  private dataValuesBuffer = this.registerDisposer(
+    getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => {
+      const array = new Uint8Array(NUM_CDF_LINES * VERTICES_PER_LINE);
+      for (let i = 0; i < NUM_CDF_LINES; ++i) {
+        for (let j = 0; j < VERTICES_PER_LINE; ++j) {
+          array[i * VERTICES_PER_LINE + j] = i;
+        }
+      }
+      return array;
+    }),
+  ).value;
+
   constructor(public parent: TransferFunctionWidget) {
     super(parent.display, document.createElement("div"), parent.visibility);
     const { element, gl } = this;
@@ -963,6 +981,10 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
     }
   }
 
+  private histogramLineShader = this.registerDisposer(
+    (() => createCDFLineShader(this.gl, histogramSamplerTextureUnit))(),
+  );
+
   private transferFunctionLineShader = this.registerDisposer(
     (() => {
       const builder = new ShaderBuilder(this.gl);
@@ -976,7 +998,7 @@ vec4 end = vec4(aLineStartEnd[2], aLineStartEnd[3], 0.0, 1.0);
 emitLine(start, end, 1.0);
 `);
       builder.setFragmentMain(`
-out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
+out_color = vec4(0.35, 0.35, 0.35, getLineAlpha());
 `);
       return builder.build();
     })(),
@@ -1042,6 +1064,7 @@ out_color = tempColor * alpha;
       gl,
       transferFunctionShader,
       controlPointsShader,
+      histogramLineShader: lineShader,
     } = this;
     this.setGLLogicalViewport();
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -1078,6 +1101,42 @@ out_color = tempColor * alpha;
       gl.disableVertexAttribArray(aVertexPosition);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
+    // Draw CDF lines
+    if (this.parent.histogramSpecifications.producerVisibility.visible) {
+      const { renderViewport } = this;
+      lineShader.bind();
+      initializeLineShader(
+        lineShader,
+        {
+          width: renderViewport.logicalWidth,
+          height: renderViewport.logicalHeight,
+        },
+        /*featherWidthInPixels=*/ 1.0,
+      );
+      const histogramTextureUnit = lineShader.textureUnit(
+        histogramSamplerTextureUnit,
+      );
+      gl.uniform1f(
+        lineShader.uniform("uBoundsFraction"),
+        getIntervalBoundsEffectiveFraction(
+          this.parent.dataType,
+          this.parent.trackable.value.window,
+        ),
+      );
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + histogramTextureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.parent.texture);
+      setRawTextureParameters(gl);
+      const aDataValue = lineShader.attribute("aDataValue");
+      this.dataValuesBuffer.bindToVertexAttribI(
+        aDataValue,
+        /*componentsPerVertexAttribute=*/ 1,
+        /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE,
+      );
+      drawLines(gl, /*linesPerInstance=*/ NUM_CDF_LINES, /*numInstances=*/ 1);
+      gl.disableVertexAttribArray(aDataValue);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+    }
+
     // Draw lines and control points on top of transfer function - if there are any
     if (this.controlPointsPositionArray.length > 0) {
       const { renderViewport } = this;
@@ -1199,6 +1258,7 @@ const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "add-or-drag-point" },
   "shift+dblclick0": { action: "remove-point" },
   "shift?+mousedown2": { action: "change-point-color" },
+  "shift?+wheel": { action: "zoom-via-wheel" },
 });
 
 /**
@@ -1265,6 +1325,40 @@ class TransferFunctionController extends RefCounted {
         }
       },
     );
+    registerActionListener<WheelEvent>(
+      element,
+      "zoom-via-wheel",
+      (actionEvent) => {
+        const wheelEvent = actionEvent.detail;
+        const zoomAmount = getWheelZoomAmount(wheelEvent);
+        const relativeX = this.getTargetFraction(wheelEvent);
+        const { dataType } = this;
+        const model = this.getModel();
+        const newLower = computeLerp(
+          model.window,
+          dataType,
+          relativeX * (1 - zoomAmount),
+        );
+        const newUpper = computeLerp(
+          model.window,
+          dataType,
+          (1 - relativeX) * zoomAmount + relativeX,
+        );
+        if (newLower !== newUpper) {
+          this.setModel({
+            ...model,
+            window: [newLower, newUpper] as DataTypeInterval,
+          });
+        }
+      },
+    );
+  }
+  /**
+   * Get fraction of distance in x along bounding rect for a MouseEvent.
+   */
+  getTargetFraction(event: MouseEvent) {
+    const clientRect = this.element.getBoundingClientRect();
+    return (event.clientX - clientRect.left) / clientRect.width;
   }
   updateValue(value: TransferFunctionParameters | undefined) {
     if (value === undefined) return;
@@ -1481,13 +1575,24 @@ class TransferFunctionWidget extends Tab {
   );
 
   window = createWindowBoundInputs(this.dataType, this.trackable);
+
+  get texture() {
+    return this.histogramSpecifications.getFramebuffers(this.display.gl)[
+      this.histogramIndex
+    ].colorBuffers[0].texture;
+  }
   constructor(
     visibility: WatchableVisibilityPriority,
     public display: DisplayContext,
     public dataType: DataType,
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
+    public histogramSpecifications: HistogramSpecifications,
+    public histogramIndex: number,
   ) {
     super(visibility);
+    this.registerDisposer(
+      histogramSpecifications.visibility.add(this.visibility),
+    );
     const { element } = this;
     element.classList.add("neuroglancer-transfer-function-widget");
     element.appendChild(this.transferFunctionPanel.element);
@@ -1531,16 +1636,14 @@ class TransferFunctionWidget extends Tab {
         this.updateControlPointsAndDraw();
       }),
     );
-    updateInputBoundValue(
-      this.window.inputs[0],
-      this.trackable.value.window[0],
-    );
-    updateInputBoundValue(
-      this.window.inputs[1],
-      this.trackable.value.window[1],
-    );
   }
   updateView() {
+    for (let i = 0; i < 2; ++i) {
+      updateInputBoundValue(
+        this.window.inputs[i],
+        this.trackable.value.window[i],
+      );
+    }
     this.transferFunctionPanel.scheduleRedraw();
   }
   updateControlPointsAndDraw() {
@@ -1660,6 +1763,8 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
     watchableValue: WatchableValueInterface<TransferFunctionParameters>;
     defaultChannel: number[];
     channelCoordinateSpaceCombiner: CoordinateSpaceCombiner | undefined;
+    histogramSpecifications: HistogramSpecifications;
+    histogramIndex: number;
     dataType: DataType;
   },
 ): LayerControlFactory<LayerType, TransferFunctionWidget> {
@@ -1669,6 +1774,8 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
         watchableValue,
         channelCoordinateSpaceCombiner,
         defaultChannel,
+        histogramSpecifications,
+        histogramIndex,
         dataType,
       } = getter(layer);
 
@@ -1717,6 +1824,8 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
           options.display,
           dataType,
           watchableValue,
+          histogramSpecifications,
+          histogramIndex,
         ),
       );
       return { control, controlElement: control.element };

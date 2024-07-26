@@ -1,0 +1,218 @@
+digraph coordinate_spaces {
+  newrank = true;
+  outputorder = "edgesfirst";
+  compound = true;
+
+  node [
+    style="rounded"
+    shape=rect
+  ]
+
+  edge [
+  ]
+
+  graph [
+    rankdir = LR
+    fillcolor = "var(--md-default-fg-color--lightest)"
+    style="solid,filled"
+  ]
+  {
+    rank=same;
+    projection_view_space cross_section_view_space global_space
+  }
+
+  subgraph cluster_layer {
+    label = <Layer <i>i</i>>
+
+    subgraph cluster_datasource {
+      label = <Data source <i>j</i>>
+
+      { rank=same;  
+
+        datasource_space [
+          label="Coordinate space"
+            href="#data-source-coordinate-space"
+        ]
+
+        datasource_transform [
+        label = "Coordinate transform"
+          href="#data-source-coordinate-transform"
+        ]
+
+      }
+      style="filled,dashed"
+    }
+
+    {
+      rank = same;
+
+      subgraph cluster_layer_space {
+        label = "Coordinate space"
+
+        layer_global_dims [
+          label="Global dimensions"
+        ]
+        layer_local_dims [
+          label="Local dimensions"
+        ]
+        layer_channel_dims [
+           label="Channel dimensions"
+        ]
+      }
+
+      layer_position [
+        label = "Local position"
+      ]
+    }
+
+    datasource_space -> datasource_transform
+    datasource_transform -> layer_local_dims [
+      lhead="cluster_layer_space"
+    ]
+    style="filled,dashed"
+  }
+
+  global_space [
+    label="Global\ncoordinate\nspace"
+  ]
+
+  layer_global_dims -> global_space [
+    label="Merge"
+  ]
+
+  subgraph cluster_globalcamera {
+    label = "Global camera parameters"
+
+    subgraph cluster_globalcamera_cross_section {
+
+      label = "Cross-section"
+
+      global_cross_section_orientation [
+        label = "Orientation"
+      ]                           
+
+      global_cross_section_scale [
+        label = "Scale"
+      ]
+      global_cross_section_depth [
+        label = "Depth bounds"
+      ]
+    }
+
+    global_center_position [
+      label = "Center position"
+    ]
+
+    global_display_dimensions [
+      label = "Display dimensions"
+    ]
+
+    global_relative_display_scales [
+      label = "Relative\ndisplay scales"
+    ]
+
+    subgraph cluster_globalcamera_projection {
+
+      label = "3-d projection"
+
+      global_projection_orientation [
+        label = "Orientation"
+      ]                           
+
+      global_projection_scale [
+        label = "Scale"
+      ]
+
+      global_projection_depth [
+        label = "Depth bounds"
+      ]
+    }
+  }
+
+  subgraph cluster_layergroupviewer {
+    label = <Layer group viewer <i>k</i>>
+
+    layergroupviewer_center_position [
+      label = "Center position"
+    ]
+
+    layergroupviewer_display_dimensions [
+      label = "Display dimensions"
+    ]
+
+    layergroupviewer_relative_display_scales [
+      label = "Relative\ndisplay scales"
+    ]
+
+    subgraph cluster_layergroupviewer_cross_section {
+      label = "Cross-section views"
+
+      layergroupviewer_cross_section_orientation [
+        label = "Orientation"
+      ]                           
+
+      layergroupviewer_cross_section_scale [
+        label = "Scale"
+      ]
+      layergroupviewer_cross_section_depth [
+        label = "Depth bounds"
+      ]
+      cross_section_view_space [
+        label = "View\ncoordinate\nspace"
+      ]
+    }
+
+    subgraph cluster_layergroupviewer_projection {
+      label = "3-d projection view"
+
+      layergroupviewer_projection_orientation [
+        label = "Orientation"
+      ]                           
+
+      layergroupviewer_projection_scale [
+        label = "Scale"
+      ]
+
+      layergroupviewer_projection_depth [
+        label = "Depth bounds"
+      ]
+
+      projection_view_space [
+        label = "View\ncoordinate\nspace"
+      ]
+
+    }
+
+    { layergroupviewer_display_dimensions,
+      layergroupviewer_relative_display_scales,
+      layergroupviewer_center_position,
+      layergroupviewer_cross_section_depth,
+      layergroupviewer_cross_section_scale,
+      layergroupviewer_cross_section_orientation } -> cross_section_view_space
+
+    { layergroupviewer_display_dimensions,
+      layergroupviewer_relative_display_scales,
+      layergroupviewer_center_position,
+      layergroupviewer_projection_depth,
+      layergroupviewer_projection_scale,
+      layergroupviewer_projection_orientation } -> projection_view_space
+    style="filled,dashed"
+  }
+
+  {
+    edge [
+      style=dotted
+    ]
+    global_center_position -> layergroupviewer_center_position
+    global_cross_section_orientation -> layergroupviewer_cross_section_orientation
+    global_cross_section_scale -> layergroupviewer_cross_section_scale
+    global_cross_section_depth -> layergroupviewer_cross_section_depth
+    global_projection_orientation -> layergroupviewer_projection_orientation
+    global_projection_scale -> layergroupviewer_projection_scale
+    global_projection_depth -> layergroupviewer_projection_depth
+    global_display_dimensions -> layergroupviewer_display_dimensions
+    global_relative_display_scales -> layergroupviewer_relative_display_scales
+  }
+
+  global_space -> {cross_section_view_space,projection_view_space}
+}

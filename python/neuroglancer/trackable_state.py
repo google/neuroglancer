@@ -16,29 +16,48 @@
 import contextlib
 import copy
 import threading
+import typing
 
 from .random_token import make_random_token
 
 
 class ConcurrentModificationError(RuntimeError):
+    """Indicates a concurrent modification during an update to `.TrackableState`.
+
+    Group:
+      trackable-state
+    """
+
     pass
 
 
 class ChangeNotifier:
+    """Notifies registered callbacks in response to changes.
+
+    Group:
+      trackable-state
+    """
+
+    change_count: int
+    """Total number of changes that have occurred."""
+
     def __init__(self):
         self.__changed_callbacks = set()
         self.change_count = 0
         self.__lock = threading.Lock()
 
-    def add_changed_callback(self, callback):
+    def add_changed_callback(self, callback: typing.Callable[[], None]):
         """Registers a callback to be invoked when the state changes.
+
+        Registering an already-registered callback is a no-op.
 
         The callback is invoked immediately with no arguments.  The callback must not block.
         """
         with self.__lock:
             self.__changed_callbacks.add(callback)
 
-    def remove_changed_callback(self, callback):
+    def remove_changed_callback(self, callback: typing.Callable[[], None]):
+        """Removes a previously-registered callback."""
         with self.__lock:
             self.__changed_callbacks.remove(callback)
 
@@ -49,7 +68,21 @@ class ChangeNotifier:
                 callback()
 
 
-class TrackableState(ChangeNotifier):
+State = typing.TypeVar("State")
+
+Generation = str
+
+
+class TrackableState(ChangeNotifier, typing.Generic[State]):
+    """State object that supports registering change notification callbacks.
+
+    Type parameters:
+      State: Value type.
+
+    Group:
+      trackable-state
+    """
+
     def __init__(self, wrapper_type, transform_state=None):
         super().__init__()
         self._raw_state = {}
@@ -67,7 +100,27 @@ class TrackableState(ChangeNotifier):
             transform_state = transform_state_function
         self._transform_state = transform_state
 
-    def set_state(self, new_state, generation=None, existing_generation=None):
+    def set_state(
+        self,
+        new_state: typing.Union[typing.Any, State],
+        generation: typing.Optional[Generation] = None,
+        existing_generation: typing.Optional[Generation] = None,
+    ) -> Generation:
+        """
+        Sets a new value.
+
+        Args:
+          new_state: New state value to assign.
+          generation: Generation associated with :py:param:`.new_state`.  If
+            not specified, a new unique generation is generated.
+          existing_generation: Atomically assign the new state only if the
+            existing state has the specified generation.
+        Returns:
+          Generation associated with the new state.
+        Raises:
+          ConcurrentModificationError: If :py:param:`.existing_generation` is
+            specified and does not match.
+        """
         with self._lock:
             if (
                 existing_generation is not None
@@ -87,25 +140,25 @@ class TrackableState(ChangeNotifier):
             return self._generation
 
     @property
-    def state_and_generation(self):
+    def state_and_generation(self) -> tuple[State, Generation]:
         with self._lock:
             return (self.state, self.state_generation)
 
     @property
-    def raw_state_and_generation(self):
+    def raw_state_and_generation(self) -> tuple[typing.Any, Generation]:
         with self._lock:
             return (self.raw_state, self.state_generation)
 
     @property
-    def state_generation(self):
+    def state_generation(self) -> Generation:
         return self._generation
 
     @property
-    def raw_state(self):
+    def raw_state(self) -> typing.Any:
         return self._raw_state
 
     @property
-    def state(self):
+    def state(self) -> State:
         with self._lock:
             wrapped_state = self._wrapped_state
             if wrapped_state is None:
@@ -115,11 +168,12 @@ class TrackableState(ChangeNotifier):
             return wrapped_state
 
     @contextlib.contextmanager
-    def txn(self, overwrite=False, lock=True):
+    def txn(self, overwrite: bool = False, lock: bool = True):
         """Context manager for a state modification transaction."""
         if lock:
             self._lock.acquire()
         try:
+            existing_generation: typing.Optional[Generation]
             new_state, existing_generation = self.state_and_generation
             new_state = copy.deepcopy(new_state)
             yield new_state
@@ -130,7 +184,7 @@ class TrackableState(ChangeNotifier):
             if lock:
                 self._lock.release()
 
-    def retry_txn(self, func, retries=10, lock=False):
+    def retry_txn(self, func, retries: int = 10, lock: bool = False):
         for retry in range(retries):
             try:
                 with self.txn(lock=lock) as s:
@@ -140,5 +194,12 @@ class TrackableState(ChangeNotifier):
                     pass
                 raise
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{type(self).__name__}({self.state!r})"
+
+
+__all__ = [
+    "ChangeNotifier",
+    "TrackableState",
+    "ConcurrentModificationError",
+]

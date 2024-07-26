@@ -68,6 +68,7 @@ import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/tr
 import {
   VolumeRenderingModes,
   isProjectionMode,
+  trackableShaderModeValue,
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   drawBoxes,
@@ -154,13 +155,34 @@ interface VolumeRenderingShaderParameters {
   mode: VolumeRenderingModes;
 }
 
-interface StoredChunkInfoForHistogram {
+interface StoredChunkDataForMultipass {
   chunk: VolumeChunk;
   fixedPositionWithinChunk: Uint32Array;
   chunkDisplayDimensionIndices: number[];
   channelToChunkDimensionIndices: readonly number[];
   chunkDataDisplaySize: vec3;
-  chunkFormat: ChunkFormat;
+  chunkFormat: ChunkFormat | null | undefined;
+}
+
+interface ShaderSetupUniforms {
+  uNearLimitFraction: number;
+  uFarLimitFraction: number;
+  uMaxSteps: number;
+  uBrightnessFactor: number;
+  uGain: number;
+  uPickId: number;
+  uLowerClipBound: vec3;
+  uUpperClipBound: vec3;
+  uModelViewProjectionMatrix: mat4;
+  uInvModelViewProjectionMatrix: mat4;
+}
+
+/**
+ * Represents the uniform variables used by the shader for each chunk in the volume rendering layer.
+ */
+interface PerChunkShaderUniforms {
+  uTranslation: vec3;
+  uChunkDataSize: vec3;
 }
 
 const tempMat4 = mat4.create();
@@ -198,6 +220,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
+  private modeOverride: TrackableVolumeRenderingModeValue;
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
 
@@ -242,6 +265,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
     this.mode = options.mode;
+    this.modeOverride = trackableShaderModeValue();
     this.dataHistogramSpecifications =
       this.shaderControlState.histogramSpecifications;
     this.histogramIndexBuffer = this.registerDisposer(
@@ -262,15 +286,17 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         (
           space: CoordinateSpace,
           mode: VolumeRenderingModes,
+          modeOverride: VolumeRenderingModes,
           dataHistogramChannelSpecifications: HistogramChannelSpecification[],
         ) => ({
           numChannelDimensions: space.rank,
-          mode,
+          mode: modeOverride === VolumeRenderingModes.OFF ? mode : modeOverride,
           dataHistogramChannelSpecifications,
         }),
         [
           this.channelCoordinateSpace,
           this.mode,
+          this.modeOverride,
           this.dataHistogramSpecifications.channels,
         ],
       ),
@@ -753,26 +779,32 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
     const { gl } = this;
     this.vertexIdHelper.enable();
+    this.modeOverride.value = VolumeRenderingModes.OFF;
 
     const { chunkResolutionHistogram: renderScaleHistogram } = this;
     renderScaleHistogram.begin(
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber,
     );
 
-    const restoreDrawingBuffers = () => {
-      if (isProjectionMode(this.mode.value)) {
+    const restoreDrawingBuffersAndState = () => {
+      const performedSecondPassForPicking =
+        !isProjectionMode(this.mode.value) &&
+        !renderContext.isContinuousCameraMotionInProgress;
+      // If the layer is in projection mode or the second pass for picking has been performed,
+      // the max projection state is needed
+      // the max projection buffer is not bound, because it is immediately read back
+      // in the perspective panel to update the max projection picking buffer
+      if (isProjectionMode(this.mode.value) || performedSecondPassForPicking) {
+        gl.depthMask(true);
         gl.disable(WebGL2RenderingContext.BLEND);
-        if (renderContext.bindMaxProjectionBuffer !== undefined) {
-          renderContext.bindMaxProjectionBuffer();
-        } else {
-          throw new Error(
-            "bindMaxProjectionBuffer is undefined in VolumeRenderingRenderLayer",
-          );
-        }
+        gl.depthFunc(WebGL2RenderingContext.GREATER);
       } else {
-        renderContext.bindFramebuffer();
+        // Otherwise, the regular OIT buffer is needed along with the state
+        gl.depthMask(false);
+        gl.enable(WebGL2RenderingContext.BLEND);
+        gl.depthFunc(WebGL2RenderingContext.LESS);
+        renderContext.bindVolumeRenderingBuffer!();
       }
-      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
     };
 
     const endShader = () => {
@@ -836,14 +868,20 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       !renderContext.sliceViewsPresent &&
       (!renderContext.isContinuousCameraMotionInProgress ||
         renderContext.force3DHistogramForAutoRange);
+    const needPickingPass =
+      !isProjectionMode(this.mode.value) &&
+      !renderContext.isContinuousCameraMotionInProgress &&
+      !renderContext.wireFrame;
+    const hasPicking = isProjectionMode(this.mode.value) || needPickingPass;
+
+    const pickId = hasPicking ? renderContext.pickIDs.register(this) : 0;
+    const chunkInfoForMultipass: StoredChunkDataForMultipass[] = [];
+    const shaderUniformsForSecondPass: PerChunkShaderUniforms[] = [];
+    let shaderSetupUniforms: ShaderSetupUniforms | undefined;
 
     gl.enable(WebGL2RenderingContext.CULL_FACE);
     gl.cullFace(WebGL2RenderingContext.FRONT);
 
-    const chunkInfoForHistogram: StoredChunkInfoForHistogram[] = [];
-    const pickId = isProjectionMode(this.mode.value)
-      ? renderContext.pickIDs.register(this)
-      : 0;
     forEachVisibleVolumeRenderingChunk(
       renderContext.projectionParameters,
       this.localPosition.value,
@@ -891,25 +929,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 this.shaderControlState,
                 shaderResult.parameters.parseResult.controls,
               );
-              if (
-                renderContext.depthBufferTexture !== undefined &&
-                renderContext.depthBufferTexture !== null
-              ) {
-                const depthTextureUnit = shader.textureUnit(
-                  depthSamplerTextureUnit,
-                );
-                gl.activeTexture(
-                  WebGL2RenderingContext.TEXTURE0 + depthTextureUnit,
-                );
-                gl.bindTexture(
-                  WebGL2RenderingContext.TEXTURE_2D,
-                  renderContext.depthBufferTexture,
-                );
-              } else {
-                throw new Error(
-                  "Depth buffer texture ID for volume rendering is undefined or null",
-                );
-              }
+              this.bindDepthBufferTexture(renderContext, shader);
               chunkFormat.beginDrawing(gl, shader);
               chunkFormat.beginSource(gl, shader);
             }
@@ -927,19 +947,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           projectionParameters.viewProjectionMat,
           chunkLayout.transform,
         );
-        gl.uniformMatrix4fv(
-          shader.uniform("uModelViewProjectionMatrix"),
-          false,
-          modelViewProjection,
-        );
         const clippingPlanes = tempVisibleVolumetricClippingPlanes;
         getFrustrumPlanes(clippingPlanes, modelViewProjection);
-        mat4.invert(modelViewProjection, modelViewProjection);
-        gl.uniformMatrix4fv(
-          shader.uniform("uInvModelViewProjectionMatrix"),
-          false,
-          modelViewProjection,
-        );
+        const inverseModelViewProjection = mat4.create();
+        mat4.invert(inverseModelViewProjection, modelViewProjection);
         const { near, far, adjustedNear, adjustedFar } =
           getVolumeRenderingNearFarBounds(
             clippingPlanes,
@@ -949,24 +960,21 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         const optimalSampleRate = optimalSamples;
         const actualSampleRate = this.depthSamplesTarget.value;
         const brightnessFactor = optimalSampleRate / actualSampleRate;
-        gl.uniform1f(shader.uniform("uBrightnessFactor"), brightnessFactor);
         const nearLimitFraction = (adjustedNear - near) / (far - near);
         const farLimitFraction = (adjustedFar - near) / (far - near);
-        gl.uniform1f(shader.uniform("uNearLimitFraction"), nearLimitFraction);
-        gl.uniform1f(shader.uniform("uFarLimitFraction"), farLimitFraction);
-        gl.uniform1f(shader.uniform("uGain"), Math.exp(this.gain.value));
-        gl.uniform1i(
-          shader.uniform("uMaxSteps"),
-          this.depthSamplesTarget.value,
-        );
-        gl.uniform3fv(
-          shader.uniform("uLowerClipBound"),
-          transformedSource.lowerClipDisplayBound,
-        );
-        gl.uniform3fv(
-          shader.uniform("uUpperClipBound"),
-          transformedSource.upperClipDisplayBound,
-        );
+        shaderSetupUniforms = {
+          uNearLimitFraction: nearLimitFraction,
+          uFarLimitFraction: farLimitFraction,
+          uMaxSteps: this.depthSamplesTarget.value,
+          uBrightnessFactor: brightnessFactor,
+          uGain: Math.exp(this.gain.value),
+          uPickId: pickId,
+          uLowerClipBound: transformedSource.lowerClipDisplayBound,
+          uUpperClipBound: transformedSource.upperClipDisplayBound,
+          uModelViewProjectionMatrix: modelViewProjection,
+          uInvModelViewProjectionMatrix: inverseModelViewProjection,
+        };
+        this.setShaderUniforms(shader, shaderSetupUniforms);
       },
       (transformedSource) => {
         if (shader === null) return;
@@ -1008,6 +1016,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 ? 0
                 : originalChunkSize[i] * chunkGridPosition[chunkDim];
           }
+          gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
           if (prevChunkFormat != null) {
             prevChunkFormat.bindChunk(
               gl,
@@ -1018,19 +1027,28 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               channelToChunkDimensionIndices,
               newSource,
             );
-            if (needToDrawHistogram) {
-              chunkInfoForHistogram.push({
-                chunk,
-                fixedPositionWithinChunk,
-                chunkDisplayDimensionIndices,
-                channelToChunkDimensionIndices,
-                chunkDataDisplaySize,
-                chunkFormat: prevChunkFormat,
-              });
-            }
           }
-          gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
-          gl.uniform1ui(shader.uniform("uPickId"), pickId);
+          // Save information for possible repasses through the data
+          if (needToDrawHistogram || needPickingPass) {
+            chunkInfoForMultipass.push({
+              chunk,
+              fixedPositionWithinChunk,
+              chunkDisplayDimensionIndices,
+              channelToChunkDimensionIndices,
+              chunkDataDisplaySize,
+              chunkFormat: prevChunkFormat,
+            });
+          }
+          if (needPickingPass) {
+            const copiedDisplaySize = vec3.create();
+            const copiedPosition = vec3.create();
+            vec3.copy(copiedDisplaySize, chunkDataDisplaySize);
+            vec3.copy(copiedPosition, chunkPosition);
+            shaderUniformsForSecondPass.push({
+              uChunkDataSize: copiedDisplaySize,
+              uTranslation: copiedPosition,
+            });
+          }
           drawBoxes(gl, 1, 1);
 
           newSource = false;
@@ -1040,9 +1058,81 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         }
       },
     );
-    gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
+
+    shader = null;
+    prevChunkFormat = null;
+    if (needPickingPass) {
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+      gl.depthMask(true);
+      gl.disable(WebGL2RenderingContext.BLEND);
+      gl.depthFunc(WebGL2RenderingContext.GREATER);
+      renderContext.emitter = renderContext.maxProjectionEmit!;
+      renderContext.bindMaxProjectionBuffer!();
+      this.modeOverride.value = VolumeRenderingModes.MAX;
+
+      const endPickingPassShader = () => {
+        if (shader === null) return;
+        shader.unbindTransferFunctionTextures();
+        if (prevChunkFormat !== null) {
+          prevChunkFormat!.endDrawing(gl, shader);
+        }
+      };
+
+      newSource = true;
+      for (let j = 0; j < presentCount; ++j) {
+        const chunkInfo = chunkInfoForMultipass[j];
+        const uniforms = shaderUniformsForSecondPass[j];
+        const chunkFormat = chunkInfo.chunkFormat;
+        if (chunkFormat !== prevChunkFormat) {
+          prevChunkFormat = chunkFormat;
+          endPickingPassShader();
+          shaderResult = this.shaderGetter({
+            emitter: renderContext.emitter,
+            chunkFormat: chunkFormat!,
+            wireFrame: renderContext.wireFrame,
+          });
+          shader = shaderResult.shader;
+          if (shader !== null && shaderSetupUniforms !== undefined) {
+            shader.bind();
+            if (chunkFormat !== null && chunkFormat !== undefined) {
+              setControlsInShader(
+                gl,
+                shader,
+                this.shaderControlState,
+                shaderResult.parameters.parseResult.controls,
+              );
+              this.bindDepthBufferTexture(renderContext, shader);
+              this.setShaderUniforms(shader, shaderSetupUniforms);
+              chunkFormat.beginDrawing(gl, shader);
+              chunkFormat.beginSource(gl, shader);
+            }
+          }
+        }
+        if (shader === null) break;
+        if (chunkFormat != null) {
+          chunkFormat.bindChunk(
+            gl,
+            shader,
+            chunkInfo.chunk,
+            chunkInfo.fixedPositionWithinChunk,
+            chunkInfo.chunkDisplayDimensionIndices,
+            chunkInfo.channelToChunkDimensionIndices,
+            newSource,
+          );
+        }
+        gl.uniform3fv(shader.uniform("uTranslation"), uniforms.uTranslation);
+        gl.uniform3fv(
+          shader.uniform("uChunkDataSize"),
+          uniforms.uChunkDataSize,
+        );
+        drawBoxes(gl, 1, 1);
+        newSource = false;
+      }
+      this.modeOverride.value = VolumeRenderingModes.OFF;
+    }
     this.vertexIdHelper.disable();
+    gl.disable(WebGL2RenderingContext.CULL_FACE);
 
     if (needToDrawHistogram) {
       let histogramShader: ShaderProgram | null = null;
@@ -1094,7 +1184,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       for (let j = 0; j < presentCount; ++j) {
         newSource = true;
-        const chunkInfo = chunkInfoForHistogram[j];
+        const chunkInfo = chunkInfoForMultipass[j];
         const chunkFormat = chunkInfo.chunkFormat;
         if (chunkFormat !== prevChunkFormat) {
           prevChunkFormat = chunkFormat;
@@ -1104,7 +1194,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           });
           histogramShader = histogramShaderResult.shader;
           if (histogramShader !== null) {
-            if (chunkFormat !== null) {
+            if (chunkFormat !== null && chunkFormat !== undefined) {
               chunkFormat.beginDrawing(gl, histogramShader);
               chunkFormat.beginSource(gl, histogramShader);
             }
@@ -1179,12 +1269,70 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           for (let j = 0; j < 256; ++j) {
             tempBuffer2[j] = tempBuffer[j * 4];
           }
-          console.log("histogram%d", i, tempBuffer2.join(" "));
+          console.log(`histogram${i}`, tempBuffer2.join(" "));
         }
       }
       endHistogramShader();
-      restoreDrawingBuffers();
     }
+    if (needPickingPass || needToDrawHistogram) {
+      restoreDrawingBuffersAndState();
+    }
+  }
+
+  private bindDepthBufferTexture(
+    renderContext: PerspectiveViewRenderContext,
+    shader: ShaderProgram,
+  ) {
+    const { gl } = this;
+    if (
+      renderContext.depthBufferTexture !== undefined &&
+      renderContext.depthBufferTexture !== null
+    ) {
+      const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit);
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthTextureUnit);
+      gl.bindTexture(
+        WebGL2RenderingContext.TEXTURE_2D,
+        renderContext.depthBufferTexture,
+      );
+    } else {
+      throw new Error(
+        "Depth buffer texture ID for volume rendering is undefined or null",
+      );
+    }
+  }
+
+  private setShaderUniforms(
+    shader: ShaderProgram,
+    uniforms: ShaderSetupUniforms,
+  ) {
+    const { gl } = this;
+    gl.uniformMatrix4fv(
+      shader.uniform("uModelViewProjectionMatrix"),
+      false,
+      uniforms.uModelViewProjectionMatrix,
+    );
+    gl.uniformMatrix4fv(
+      shader.uniform("uInvModelViewProjectionMatrix"),
+      false,
+      uniforms.uInvModelViewProjectionMatrix,
+    );
+    gl.uniform1f(
+      shader.uniform("uNearLimitFraction"),
+      uniforms.uNearLimitFraction,
+    );
+    gl.uniform1f(
+      shader.uniform("uFarLimitFraction"),
+      uniforms.uFarLimitFraction,
+    );
+    gl.uniform1f(shader.uniform("uGain"), uniforms.uGain);
+    gl.uniform1ui(shader.uniform("uPickId"), uniforms.uPickId);
+    gl.uniform1i(shader.uniform("uMaxSteps"), uniforms.uMaxSteps);
+    gl.uniform3fv(shader.uniform("uLowerClipBound"), uniforms.uLowerClipBound);
+    gl.uniform3fv(shader.uniform("uUpperClipBound"), uniforms.uUpperClipBound);
+    gl.uniform1f(
+      shader.uniform("uBrightnessFactor"),
+      uniforms.uBrightnessFactor,
+    );
   }
 
   isReady(

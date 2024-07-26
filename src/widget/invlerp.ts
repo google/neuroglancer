@@ -49,6 +49,7 @@ import { Uint64 } from "#src/util/uint64.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import type { GL } from "#src/webgl/context.js";
 import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { type HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -78,6 +79,55 @@ const inputEventMap = EventActionMap.fromObject({
   "shift?+alt+mousedown0": { action: "adjust-window-via-drag" },
   "shift?+wheel": { action: "zoom-via-wheel" },
 });
+
+export function createCDFLineShader(gl: GL, textureUnit: symbol) {
+  const builder = new ShaderBuilder(gl);
+  defineLineShader(builder);
+  builder.addTextureSampler("sampler2D", "uHistogramSampler", textureUnit);
+  builder.addOutputBuffer("vec4", "out_color", 0);
+  builder.addAttribute("uint", "aDataValue");
+  builder.addUniform("float", "uBoundsFraction");
+  builder.addVertexCode(`
+float getCount(int i) {
+  return texelFetch(uHistogramSampler, ivec2(i, 0), 0).x;
+}
+vec4 getVertex(float cdf, int i) {
+  float x;
+  if (i == 0) {
+    x = -1.0;
+  } else if (i == 255) {
+    x = 1.0;
+  } else {
+    x = float(i) / 254.0 * uBoundsFraction * 2.0 - 1.0;
+  }
+  return vec4(x, cdf * (2.0 - uLineParams.y) - 1.0 + uLineParams.y * 0.5, 0.0, 1.0);
+}
+`);
+  builder.setVertexMain(`
+int lineNumber = int(aDataValue);
+int dataValue = lineNumber;
+float cumSum = 0.0;
+for (int i = 0; i <= dataValue; ++i) {
+  cumSum += getCount(i);
+}
+float total = cumSum + getCount(dataValue + 1);
+float cumSumEnd = dataValue == ${NUM_CDF_LINES - 1} ? cumSum : total;
+if (dataValue == ${NUM_CDF_LINES - 1}) {
+  cumSum + getCount(dataValue + 1);
+}
+for (int i = dataValue + 2; i < 256; ++i) {
+  total += getCount(i);
+}
+total = max(total, 1.0);
+float cdf1 = cumSum / total;
+float cdf2 = cumSumEnd / total;
+emitLine(getVertex(cdf1, lineNumber), getVertex(cdf2, lineNumber + 1), 1.0);
+`);
+  builder.setFragmentMain(`
+out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
+`);
+  return builder.build();
+}
 
 export class CdfController<
   T extends RangeAndWindowIntervals,
@@ -288,7 +338,7 @@ export function getUpdatedRangeAndWindowParameters<
 // 256 bins in total.  The first and last bin are for values below the lower bound/above the upper
 // bound.
 const NUM_HISTOGRAM_BINS_IN_RANGE = 254;
-const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
+export const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
 
 /**
  * Panel that shows Cumulative Distribution Function (CDF) of visible data.
@@ -326,58 +376,7 @@ class CdfPanel extends IndirectRenderedPanel {
   ).value;
 
   private lineShader = this.registerDisposer(
-    (() => {
-      const builder = new ShaderBuilder(this.gl);
-      defineLineShader(builder);
-      builder.addTextureSampler(
-        "sampler2D",
-        "uHistogramSampler",
-        histogramSamplerTextureUnit,
-      );
-      builder.addOutputBuffer("vec4", "out_color", 0);
-      builder.addAttribute("uint", "aDataValue");
-      builder.addUniform("float", "uBoundsFraction");
-      builder.addVertexCode(`
-float getCount(int i) {
-  return texelFetch(uHistogramSampler, ivec2(i, 0), 0).x;
-}
-vec4 getVertex(float cdf, int i) {
-  float x;
-  if (i == 0) {
-    x = -1.0;
-  } else if (i == 255) {
-    x = 1.0;
-  } else {
-    x = float(i) / 254.0 * uBoundsFraction * 2.0 - 1.0;
-  }
-  return vec4(x, cdf * (2.0 - uLineParams.y) - 1.0 + uLineParams.y * 0.5, 0.0, 1.0);
-}
-`);
-      builder.setVertexMain(`
-int lineNumber = int(aDataValue);
-int dataValue = lineNumber;
-float cumSum = 0.0;
-for (int i = 0; i <= dataValue; ++i) {
-  cumSum += getCount(i);
-}
-float total = cumSum + getCount(dataValue + 1);
-float cumSumEnd = dataValue == ${NUM_CDF_LINES - 1} ? cumSum : total;
-if (dataValue == ${NUM_CDF_LINES - 1}) {
-  cumSum + getCount(dataValue + 1);
-}
-for (int i = dataValue + 2; i < 256; ++i) {
-  total += getCount(i);
-}
-total = max(total, 1.0);
-float cdf1 = cumSum / total;
-float cdf2 = cumSumEnd / total;
-emitLine(getVertex(cdf1, lineNumber), getVertex(cdf2, lineNumber + 1), 1.0);
-`);
-      builder.setFragmentMain(`
-out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
-`);
-      return builder.build();
-    })(),
+    (() => createCDFLineShader(this.gl, histogramSamplerTextureUnit))(),
   );
 
   private regionCornersBuffer = getSquareCornersBuffer(this.gl, 0, -1, 1, 1);
