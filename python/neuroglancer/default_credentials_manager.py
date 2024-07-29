@@ -48,4 +48,9 @@ default_credentials_manager.register(
 
 
 def set_boss_token(token):
+    """Sets the authentication token for connecting to bossDB.
+
+    Group:
+      credentials
+    """
     boss_credentials_provider.set_token(token)

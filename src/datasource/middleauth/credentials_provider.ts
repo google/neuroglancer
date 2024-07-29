@@ -52,7 +52,7 @@ function openPopupCenter(url: string, width: number, height: number) {
 }
 
 async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
-  const status = new StatusMessage(/*delay=*/ false);
+  const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
 
   const res: Promise<MiddleAuthToken> = new Promise((f) => {
     function writeLoginStatus(message: string, buttonMessage: string) {

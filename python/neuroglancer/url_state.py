@@ -100,17 +100,32 @@ def url_fragment_to_json(fragment_value):
     return url_safe_to_json(unquoted)
 
 
-def parse_url_fragment(fragment_value):
+def parse_url_fragment(fragment_value) -> viewer_state.ViewerState:
+    """Parses a Neuroglancer state from a URL fragment.
+
+    Group:
+      viewer-state-url
+    """
     json_string = url_fragment_to_json(fragment_value)
     return viewer_state.ViewerState(json.loads(json_string))
 
 
-def parse_url(url):
+def parse_url(url: str) -> viewer_state.ViewerState:
+    """Parses a Neuroglancer state from a URL.
+
+    Group:
+      viewer-state-url
+    """
     result = urllib.parse.urlparse(url)
     return parse_url_fragment(result.fragment)
 
 
-def to_url_fragment(state):
+def to_url_fragment(state: viewer_state.ViewerState):
+    """Encodes a viewer state as a URL fragment.
+
+    Group:
+      viewer-state-url
+    """
     json_string = json.dumps(
         to_json(state), separators=(",", ":"), default=json_encoder_default
     )
@@ -120,11 +135,21 @@ def to_url_fragment(state):
 default_neuroglancer_url = "https://neuroglancer-demo.appspot.com"
 
 
-def to_url(state, prefix=default_neuroglancer_url):
+def to_url(state: viewer_state.ViewerState, prefix=default_neuroglancer_url):
+    """Encodes a viewer state as a URL.
+
+    Group:
+      viewer-state-url
+    """
     return f"{prefix}#!{to_url_fragment(state)}"
 
 
 def to_json_dump(state, indent=None, separators=None):
+    """Returns the JSON-encoded text representation of the viewer state object.
+
+    Group:
+      viewer-state-url
+    """
     return json.dumps(
         to_json(state),
         separators=separators,

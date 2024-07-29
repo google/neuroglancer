@@ -1,0 +1,14 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: Layer
+title: "Layer within a Neuroglancer instance."
+type: object
+properties:
+  type:
+    type: string
+    title: "Specifies the layer type."
+  name:
+    type: string
+    title: "Specifies the layer name to show in the UI."
+  visible:
+    type: boolean
+    title: "Indicates whether the layer is displayed in 2d and 3d projections."

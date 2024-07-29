@@ -55,8 +55,14 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
     return -1;
   }
   auto* descr = PyArray_DESCR(array);
+  npy_intp elsize;
+#ifdef NPY_2_0_API_VERSION
+  elsize = PyDataType_ELSIZE(descr);
+#else
+  elsize = descr->elsize;
+#endif
   if ((descr->kind != 'i' && descr->kind != 'u') ||
-      (descr->elsize != 1 && descr->elsize != 2 && descr->elsize != 4 && descr->elsize != 8)) {
+      (elsize != 1 && elsize != 2 && elsize != 4 && elsize != 8)) {
     Py_DECREF(array);
     PyErr_SetString(PyExc_ValueError, "ndarray must have 8-, 16-, 32-, or 64-bit integer type");
     return -1;
@@ -65,15 +71,14 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
   npy_intp* dims = PyArray_DIMS(array);
   int64_t size_int64[] = {dims[2], dims[1], dims[0]};
   npy_intp* strides_in_bytes = PyArray_STRIDES(array);
-  int64_t strides_in_elements[] = {strides_in_bytes[2] / descr->elsize,
-                                   strides_in_bytes[1] / descr->elsize,
-                                   strides_in_bytes[0] / descr->elsize};
+  int64_t strides_in_elements[] = {strides_in_bytes[2] / elsize, strides_in_bytes[1] / elsize,
+                                   strides_in_bytes[0] / elsize};
 
   meshing::OnDemandObjectMeshGenerator impl;
 
   Py_BEGIN_ALLOW_THREADS;
 
-  switch (descr->elsize) {
+  switch (elsize) {
     case 1:
       impl = meshing::OnDemandObjectMeshGenerator(static_cast<const uint8_t*>(PyArray_DATA(array)),
                                                   size_int64, strides_in_elements, voxel_size,

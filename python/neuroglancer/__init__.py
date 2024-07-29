@@ -74,7 +74,6 @@ from .viewer_state import (
     SplitSegmentsTool,  # noqa: F401
     SelectSegmentsTool,  # noqa: F401
     DimensionTool,  # noqa: F401
-    tool,  # noqa: F401
     SidePanelLocation,  # noqa: F401
     SelectedLayerState,  # noqa: F401
     StatisticsDisplayState,  # noqa: F401
@@ -96,6 +95,7 @@ from .viewer_state import (
     VisibleSegments,  # noqa: F401
     SegmentationLayer,  # noqa: F401
     SingleMeshLayer,  # noqa: F401
+    Annotation,  # noqa: F401
     PointAnnotation,  # noqa: F401
     LineAnnotation,  # noqa: F401
     AxisAlignedBoundingBoxAnnotation,  # noqa: F401

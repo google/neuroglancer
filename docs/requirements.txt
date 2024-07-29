@@ -1,0 +1,7 @@
+sphinx-immaterial[black,json]>=0.12.0
+sphinx>=7.4.0
+pyyaml
+jsonschema
+numpy
+tensorstore
+-r ../python/requirements.txt

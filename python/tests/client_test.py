@@ -23,7 +23,7 @@ import neuroglancer.webdriver
 import numpy as np
 import PIL.Image
 import pytest
-import pytest_html  # type: ignore[import-untyped]
+import pytest_html  # type: ignore[import-untyped,import]
 
 root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
 examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")
@@ -157,7 +157,12 @@ def expected_screenshot(request, webdriver_generic):
 
 EXAMPLE_DIRS = [
     f"examples/{bundler}/{bundler}-project-{package}"
-    for bundler in ["vite", "parcel", "webpack"]
+    for bundler in [
+        "vite",
+        # Disable parcel since it currently has "failed to resolve bundle" errors.
+        # "parcel",
+        "webpack",
+    ]
     for package in ["source", "built"]
 ]
 

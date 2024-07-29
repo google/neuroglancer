@@ -7,6 +7,9 @@
       "hosting": {
         "app": [
           "neuroglancer"
+        ],
+        "docs": [
+          "neuroglancer-docs"
         ]
       }
     }
