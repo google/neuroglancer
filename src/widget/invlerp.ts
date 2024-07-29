@@ -68,7 +68,7 @@ import { getShaderType } from "#src/webgl/shader_lib.js";
 import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
-import { AutoRangeFinder } from "#src/widget/auto_range_lerp.js";
+import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import { makeIcon } from "#src/widget/icon.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";

@@ -27,7 +27,7 @@ import {
 import { Uint64 } from "#src/util/uint64.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
-import "#src/widget/auto_range_lerp.css";
+import "#src/widget/invlerp_range_finder.css";
 
 const MAX_AUTO_RANGE_ITERATIONS = 16;
 

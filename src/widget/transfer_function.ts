@@ -69,7 +69,7 @@ import type { ShaderCodePart, ShaderProgram } from "#src/webgl/shader.js";
 import { ShaderBuilder } from "#src/webgl/shader.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
-import { AutoRangeFinder } from "#src/widget/auto_range_lerp.js";
+import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import { ColorWidget } from "#src/widget/color.js";
 import {
   getUpdatedRangeAndWindowParameters,
