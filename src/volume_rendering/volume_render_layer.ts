@@ -1128,13 +1128,12 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       };
       const determineNumHistogramInstances = (
         chunkDataSize: vec3,
-        numHistograms: number,
+        totalChunkSize: number,
       ) => {
-        const maxSamplesInChunk = Math.ceil(
-          chunkDataSize.reduce((a, b) => a * b, 1) / 2.0,
-        );
+        const chunkSizeProduct = chunkDataSize.reduce((a, b) => a * b, 1);
+        const maxSamplesInChunk = chunkSizeProduct / 2.0;
         const totalDesiredSamplesInChunk =
-          NUM_HISTOGRAM_SAMPLES / numHistograms;
+          NUM_HISTOGRAM_SAMPLES * totalChunkSize * chunkSizeProduct;
         const desiredSamples = Math.min(
           maxSamplesInChunk,
           totalDesiredSamplesInChunk,
@@ -1161,6 +1160,17 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       // Blending on to accumulate histograms.
       gl.enable(WebGL2RenderingContext.BLEND);
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+
+      let runningSum = 0;
+      shaderUniformsForSecondPass.forEach((uniforms) => {
+        const chunkSizeProduct = uniforms.uChunkDataSize.reduce(
+          (a, b) => a * b,
+          1,
+        );
+        runningSum += chunkSizeProduct;
+      });
+      const totalChunkSize = 1.0 / runningSum;
+
       for (let j = 0; j < presentCount; ++j) {
         newSource = true;
         const chunkInfo = chunkInfoForMultipass[j];
@@ -1209,7 +1219,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         // Draw each histogram
         const numInstances = determineNumHistogramInstances(
           uniforms.uChunkDataSize,
-          presentCount,
+          totalChunkSize,
         );
         for (let i = 0; i < numHistograms; ++i) {
           histogramFramebuffers[i].bind(256, 1);
