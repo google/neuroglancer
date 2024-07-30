@@ -69,7 +69,6 @@ import type { ShaderCodePart, ShaderProgram } from "#src/webgl/shader.js";
 import { ShaderBuilder } from "#src/webgl/shader.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
-import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import { ColorWidget } from "#src/widget/color.js";
 import {
   getUpdatedRangeAndWindowParameters,
@@ -78,6 +77,7 @@ import {
   createCDFLineShader,
   NUM_CDF_LINES,
 } from "#src/widget/invlerp.js";
+import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import type {
   LayerControlFactory,
   LayerControlTool,
