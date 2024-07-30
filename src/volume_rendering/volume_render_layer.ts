@@ -113,7 +113,6 @@ const HISTOGRAM_SAMPLES_PER_INSTANCE = 256;
 
 // Number of points to sample in computing the histogram.  Increasing this increases the precision
 // of the histogram but also slows down rendering.
-// Here, we use 4096 samples per chunk to compute the histogram.
 const NUM_HISTOGRAM_SAMPLES = 2 ** 14;
 const DEBUG_HISTOGRAMS = false;
 
@@ -160,7 +159,6 @@ interface StoredChunkDataForMultipass {
   fixedPositionWithinChunk: Uint32Array;
   chunkDisplayDimensionIndices: number[];
   channelToChunkDimensionIndices: readonly number[];
-  chunkDataDisplaySize: vec3;
   chunkFormat: ChunkFormat | null | undefined;
 }
 
@@ -1019,11 +1017,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               fixedPositionWithinChunk,
               chunkDisplayDimensionIndices,
               channelToChunkDimensionIndices,
-              chunkDataDisplaySize,
               chunkFormat: prevChunkFormat,
             });
-          }
-          if (needPickingPass) {
             const copiedDisplaySize = vec3.create();
             const copiedPosition = vec3.create();
             vec3.copy(copiedDisplaySize, chunkDataDisplaySize);
@@ -1169,6 +1164,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       for (let j = 0; j < presentCount; ++j) {
         newSource = true;
         const chunkInfo = chunkInfoForMultipass[j];
+        const uniforms = shaderUniformsForSecondPass[j];
         const chunkFormat = chunkInfo.chunkFormat;
         if (chunkFormat !== prevChunkFormat) {
           prevChunkFormat = chunkFormat;
@@ -1190,7 +1186,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         if (histogramShader === null) break;
         gl.uniform3fv(
           histogramShader.uniform("uChunkDataSize"),
-          chunkInfo.chunkDataDisplaySize,
+          uniforms.uChunkDataSize,
         );
         if (prevChunkFormat != null) {
           prevChunkFormat.bindChunk(
@@ -1212,7 +1208,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
         // Draw each histogram
         const numInstances = determineNumHistogramInstances(
-          chunkInfo.chunkDataDisplaySize,
+          uniforms.uChunkDataSize,
           presentCount,
         );
         for (let i = 0; i < numHistograms; ++i) {
