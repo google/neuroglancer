@@ -46,7 +46,7 @@ function getGlobusAuthCredentialsProvider(
   serverUrl: string,
   path: string
 ): SpecialProtocolCredentialsProvider {
-  console.log('here')
+  console.log('specialprotocol here')
   console.log(serverUrl)
   console.log(path)
   return credentialsManager.getCredentialsProvider(
@@ -129,7 +129,7 @@ export function parseSpecialUrl(
         return {
           credentialsProvider: getGlobusAuthCredentialsProvider(
             credentialsManager,
-            `https://${u.host}`,
+            `https://${u.host}${u.path}`,
             u.path,
           ),
           url: `https://${u.host}` + u.path,
