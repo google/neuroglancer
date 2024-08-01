@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import axios from 'axios';
-
 import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
 import {
   CredentialsProvider,
@@ -48,19 +46,6 @@ function openPopupCenter(url: string) {
 }
 
 
-async function getFinalUrl(initialUrl: string): Promise<string> {
-  try {
-    const response = await axios.get(initialUrl, {
-      maxRedirects: 5, // Adjust the number of redirects to follow if necessary
-      validateStatus: (status) => status >= 200 && status < 400 // Handle only successful responses
-    });
-    return response.request.res.responseUrl;
-  } catch (error) {
-    console.error('Error fetching the final URL:', error);
-    throw error;
-  }
-}
-
 async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
   const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
 
@@ -77,17 +62,6 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
           `Waiting for login`,
           "Retry",
         );
-
-        
-        const initialUrl = serverUrl;
-
-        getFinalUrl(initialUrl).then(finalUrl => {
-          console.log('Final URL after redirect:', finalUrl);
-        }).catch(error => {
-          console.error('Error:', error);
-        });
-
-
 
         const auth_popup = openPopupCenter(
           `${serverUrl}`,
@@ -115,7 +89,7 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
             clearInterval(checkClosed);
             window.removeEventListener("message", tokenListener);
             window.removeEventListener("beforeunload", closeAuthPopup);
-            closeAuthPopup();
+            // closeAuthPopup();
 
             verifyObject(ev.data);
             const accessToken = verifyObjectProperty(
