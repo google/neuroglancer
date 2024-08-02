@@ -33,7 +33,6 @@ export const kAxes = [
 export const kZeroVec = vec3.fromValues(0, 0, 0);
 export const kZeroVec4 = vec4.fromValues(0, 0, 0, 0);
 export const kOneVec = vec3.fromValues(1, 1, 1);
-export const kOneVec4 = vec4.fromValues(1, 1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 export const kIdentityQuat = quat.create();
 

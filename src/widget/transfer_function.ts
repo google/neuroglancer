@@ -35,7 +35,7 @@ import {
   EventActionMap,
   registerActionListener,
 } from "#src/util/event_action_map.js";
-import { kOneVec4, kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
+import {kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
@@ -207,7 +207,12 @@ export class SortedControlPoints {
   setDefaultControlPoints(controlPointRange: DataTypeInterval) {
     this.clear();
     this.addPoint(new ControlPoint(controlPointRange[0], kZeroVec4));
-    this.addPoint(new ControlPoint(controlPointRange[1], kOneVec4));
+    this.addPoint(
+      new ControlPoint(
+        controlPointRange[1],
+        vec4.fromValues(255, 255, 255, 255),
+      ),
+    );
   }
   clear() {
     this.controlPoints = [];
