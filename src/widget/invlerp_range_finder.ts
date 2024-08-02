@@ -65,11 +65,11 @@ export class AutoRangeFinder extends RefCounted {
     finishedLerpRange: null,
   };
   finished = new NullarySignal();
+  element: HTMLDivElement;
 
   constructor(public parent: ParentWidget) {
     super();
-    makeAutoRangeButtons(
-      this.parent.element,
+    this.makeAutoRangeButtons(
       () => this.autoComputeRange(0.0, 1.0),
       () => this.autoComputeRange(0.01, 0.99),
       () => this.autoComputeRange(0.05, 0.95),
@@ -225,36 +225,36 @@ export class AutoRangeFinder extends RefCounted {
       this.setTrackableValue(newRange, newRange);
     }
   }
-}
-
-export function makeAutoRangeButtons(
-  parent: HTMLDivElement,
-  minMaxHandler: () => void,
-  oneTo99Handler: () => void,
-  fiveTo95Handler: () => void,
-) {
-  const buttonContainer = document.createElement("div");
-  buttonContainer.classList.add("neuroglancer-auto-range-button-container");
-  parent.appendChild(buttonContainer);
-
-  const minMaxButton = document.createElement("button");
-  minMaxButton.textContent = "Min-Max";
-  minMaxButton.title = "Set range to the minimum and maximum values";
-  minMaxButton.classList.add("neuroglancer-auto-range-button");
-  minMaxButton.addEventListener("click", minMaxHandler);
-  buttonContainer.appendChild(minMaxButton);
-
-  const midButton = document.createElement("button");
-  midButton.textContent = "1-99%";
-  midButton.title = "Set range to the 1st and 99th percentiles";
-  midButton.classList.add("neuroglancer-auto-range-button");
-  midButton.addEventListener("click", oneTo99Handler);
-  buttonContainer.appendChild(midButton);
-
-  const highButton = document.createElement("button");
-  highButton.textContent = "5-95%";
-  highButton.title = "Set range to the 5th and 95th percentiles";
-  highButton.classList.add("neuroglancer-auto-range-button");
-  highButton.addEventListener("click", fiveTo95Handler);
-  buttonContainer.appendChild(highButton);
+  makeAutoRangeButtons(
+    minMaxHandler: () => void,
+    oneTo99Handler: () => void,
+    fiveTo95Handler: () => void,
+  ) {
+    const parent = this.parent.element;
+    this.element = document.createElement("div");
+    const buttonContainer = this.element;
+    buttonContainer.classList.add("neuroglancer-auto-range-button-container");
+    parent.appendChild(buttonContainer);
+  
+    const minMaxButton = document.createElement("button");
+    minMaxButton.textContent = "Min-Max";
+    minMaxButton.title = "Set range to the minimum and maximum values";
+    minMaxButton.classList.add("neuroglancer-auto-range-button");
+    minMaxButton.addEventListener("click", minMaxHandler);
+    buttonContainer.appendChild(minMaxButton);
+  
+    const midButton = document.createElement("button");
+    midButton.textContent = "1-99%";
+    midButton.title = "Set range to the 1st and 99th percentiles";
+    midButton.classList.add("neuroglancer-auto-range-button");
+    midButton.addEventListener("click", oneTo99Handler);
+    buttonContainer.appendChild(midButton);
+  
+    const highButton = document.createElement("button");
+    highButton.textContent = "5-95%";
+    highButton.title = "Set range to the 5th and 95th percentiles";
+    highButton.classList.add("neuroglancer-auto-range-button");
+    highButton.addEventListener("click", fiveTo95Handler);
+    buttonContainer.appendChild(highButton);
+  }
 }

@@ -35,7 +35,7 @@ import {
   EventActionMap,
   registerActionListener,
 } from "#src/util/event_action_map.js";
-import {kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
+import { kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
@@ -1619,37 +1619,16 @@ class TransferFunctionWidget extends Tab {
     element.appendChild(this.window.container);
     this.window.container.dispatchEvent(new Event("change"));
 
-    // Color picker element
-    const colorPickerDiv = document.createElement("div");
-    colorPickerDiv.classList.add("neuroglancer-transfer-function-color-picker");
-    const colorPicker = this.registerDisposer(
-      new ColorWidget(
-        makeCachedDerivedWatchableValue(
-          (x: TransferFunctionParameters) => x.defaultColor,
-          [trackable],
-        ),
-        () => vec3.fromValues(1, 1, 1),
-      ),
-    );
-    colorPicker.element.title = "Transfer Function Color Picker";
-    colorPicker.element.id = "neuroglancer-tf-color-widget";
-    colorPicker.element.addEventListener("change", () => {
-      trackable.value = {
-        ...this.trackable.value,
-        defaultColor: colorPicker.model.value,
-      };
-    });
-    colorPicker.element.addEventListener("input", () => {
-      trackable.value = {
-        ...this.trackable.value,
-        defaultColor: colorPicker.model.value,
-      };
-    });
-    colorPickerDiv.appendChild(colorPicker.element);
-
-    element.appendChild(colorPickerDiv);
+    // Bar for controls below the transfer function panel and window bounds
+    // const bar = document.createElement("div");
+    // bar.classList.add("neuroglancer-transfer-function-post-panel-bar");
+    // bar.appendChild(this.createClearButton());
+    // bar.appendChild(this.createColorPicker(trackable));
+    // element.appendChild(bar);
 
     this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
+    this.autoRangeFinder.element.appendChild(this.createClearButton());
+    this.autoRangeFinder.element.appendChild(this.createColorPicker(trackable));
     // If no points, set the default control points for the transfer function
     if (this.trackable.value.sortedControlPoints.length === 0) {
       this.autoRangeFinder.autoComputeRange(0, 1);
@@ -1676,6 +1655,53 @@ class TransferFunctionWidget extends Tab {
       }),
     );
   }
+  private createClearButton() {
+    const clearButton = document.createElement("button");
+    clearButton.classList.add("neuroglancer-transfer-function-clear-button");
+    clearButton.textContent = "Clear";
+    clearButton.title = "Clear all control points";
+    clearButton.addEventListener("click", () => {
+      this.clearPoints();
+    });
+    return clearButton;
+  }
+
+  private createColorPicker(
+    trackable: WatchableValueInterface<TransferFunctionParameters>,
+  ) {
+    const colorPickerDiv = document.createElement("div");
+    colorPickerDiv.classList.add(
+      "neuroglancer-transfer-function-color-picker-container",
+    );
+    const colorPicker = this.registerDisposer(
+      new ColorWidget(
+        makeCachedDerivedWatchableValue(
+          (x: TransferFunctionParameters) => x.defaultColor,
+          [trackable],
+        ),
+        () => vec3.fromValues(1, 1, 1),
+      ),
+    );
+    colorPicker.element.classList.add(
+      "neuroglancer-transfer-function-color-picker",
+    );
+    colorPicker.element.title = "Transfer function color picker";
+    colorPicker.element.addEventListener("change", () => {
+      trackable.value = {
+        ...this.trackable.value,
+        defaultColor: colorPicker.model.value,
+      };
+    });
+    colorPicker.element.addEventListener("input", () => {
+      trackable.value = {
+        ...this.trackable.value,
+        defaultColor: colorPicker.model.value,
+      };
+    });
+    colorPickerDiv.appendChild(colorPicker.element);
+    return colorPickerDiv;
+  }
+
   updateView() {
     for (let i = 0; i < 2; ++i) {
       updateInputBoundValue(
@@ -1708,6 +1734,11 @@ class TransferFunctionWidget extends Tab {
             computeLerp(window, this.dataType, 0.7),
           ] as DataTypeInterval);
     transferFunction.setDefaultControlPoints(controlPointRange);
+    this.updateControlPointsAndDraw();
+  }
+  clearPoints() {
+    this.transferFunctionPanel.transferFunction.sortedControlPoints.clear();
+    this.allowAutoPointUpdate = true;
     this.updateControlPointsAndDraw();
   }
 }
