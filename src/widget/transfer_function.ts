@@ -1843,7 +1843,7 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
         const position = context.registerDisposer(
           new Position(channelCoordinateSpaceCombiner.combined),
         );
-        const positiionWidget = context.registerDisposer(
+        const positionWidget = context.registerDisposer(
           new PositionWidget(position, channelCoordinateSpaceCombiner, {
             copyButton: false,
           }),
@@ -1871,7 +1871,7 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
         };
         updatePosition();
         context.registerDisposer(watchableValue.changed.add(updatePosition));
-        options.labelContainer.appendChild(positiionWidget.element);
+        options.labelContainer.appendChild(positionWidget.element);
       }
       const control = context.registerDisposer(
         new TransferFunctionWidget(
