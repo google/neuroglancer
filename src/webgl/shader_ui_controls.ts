@@ -34,7 +34,7 @@ import {
 } from "#src/util/color.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
+import {vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -46,7 +46,6 @@ import {
 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
-  computeLerp,
   convertDataTypeInterval,
   dataTypeIntervalToJson,
   defaultDataTypeRange,
@@ -602,7 +601,6 @@ function parseTransferFunctionDirective(
     [],
     dataType !== undefined ? dataType : DataType.FLOAT32,
   );
-  let specifedPoints = false;
   if (valueType !== "transferFunction") {
     errors.push("type must be transferFunction");
   }
@@ -629,7 +627,6 @@ function parseTransferFunctionDirective(
           break;
         }
         case "controlPoints": {
-          specifedPoints = true;
           if (dataType !== undefined) {
             sortedControlPoints = parseTransferFunctionControlPoints(
               value,
@@ -649,19 +646,6 @@ function parseTransferFunctionDirective(
 
   if (window === undefined) {
     window = sortedControlPoints.range;
-  }
-  // Set a simple black to white transfer function if no control points are specified.
-  if (
-    sortedControlPoints.length === 0 &&
-    !specifedPoints &&
-    dataType !== undefined
-  ) {
-    const startPoint = computeLerp(window, dataType, 0.4) as number;
-    const endPoint = computeLerp(window, dataType, 0.7) as number;
-    sortedControlPoints.addPoint(new ControlPoint(startPoint, kZeroVec4));
-    sortedControlPoints.addPoint(
-      new ControlPoint(endPoint, vec4.fromValues(255, 255, 255, 255)),
-    );
   }
   if (errors.length > 0) {
     return { errors };

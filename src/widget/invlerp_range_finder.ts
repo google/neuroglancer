@@ -24,6 +24,7 @@ import {
   dataTypeIntervalEqual,
   defaultDataTypeRange,
 } from "#src/util/lerp.js";
+import { NullarySignal } from "#src/util/signal.js";
 import { Uint64 } from "#src/util/uint64.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
@@ -37,6 +38,7 @@ interface AutoRangeData {
   lastComputedLerpRange: DataTypeInterval | null;
   numIterationsThisCompute: number;
   invertedInitialRange: boolean;
+  finishedLerpRange: DataTypeInterval | null;
 }
 
 interface ParentWidget {
@@ -60,7 +62,9 @@ export class AutoRangeFinder extends RefCounted {
     lastComputedLerpRange: null,
     numIterationsThisCompute: 0,
     invertedInitialRange: false,
+    finishedLerpRange: null,
   };
+  finished = new NullarySignal();
 
   constructor(public parent: ParentWidget) {
     super();
@@ -70,6 +74,10 @@ export class AutoRangeFinder extends RefCounted {
       () => this.autoComputeRange(0.01, 0.99),
       () => this.autoComputeRange(0.05, 0.95),
     );
+  }
+
+  get computedRange() {
+    return this.autoRangeData.finishedLerpRange;
   }
 
   private wasInputInverted() {
@@ -209,7 +217,9 @@ export class AutoRangeFinder extends RefCounted {
       autoRangeData.lastComputedLerpRange = null;
       autoRangeData.numIterationsThisCompute = 0;
       autoRangeData.invertedInitialRange = false;
+      autoRangeData.finishedLerpRange = newRange;
       this.setTrackableValue(newRange, newWindow);
+      this.finished.dispatch();
     } else {
       display.force3DHistogramForAutoRange = true;
       this.setTrackableValue(newRange, newRange);

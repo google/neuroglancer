@@ -35,7 +35,7 @@ import {
   EventActionMap,
   registerActionListener,
 } from "#src/util/event_action_map.js";
-import { kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
+import { kOneVec4, kZeroVec4, vec3, vec4 } from "#src/util/geom.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
@@ -203,6 +203,14 @@ export class SortedControlPoints {
   }
   get length() {
     return this.controlPoints.length;
+  }
+  setDefaultControlPoints(controlPointRange: DataTypeInterval) {
+    this.clear();
+    this.addPoint(new ControlPoint(controlPointRange[0], kZeroVec4));
+    this.addPoint(new ControlPoint(controlPointRange[1], kOneVec4));
+  }
+  clear() {
+    this.controlPoints = [];
   }
   addPoint(controlPoint: ControlPoint) {
     const { inputValue, outputColor } = controlPoint;
@@ -423,6 +431,9 @@ export class TransferFunction extends RefCounted {
   }
   addPoint(controlPoint: ControlPoint) {
     this.sortedControlPoints.addPoint(controlPoint);
+  }
+  setDefaultControlPoints(controlPointRange: DataTypeInterval) {
+    this.sortedControlPoints.setDefaultControlPoints(controlPointRange);
   }
   updatePoint(index: number, controlPoint: ControlPoint): number {
     return this.sortedControlPoints.updatePoint(index, controlPoint);
@@ -1576,6 +1587,7 @@ class TransferFunctionWidget extends Tab {
   );
   autoRangeFinder: AutoRangeFinder;
   window = createWindowBoundInputs(this.dataType, this.trackable);
+  private allowAutoPointUpdate: boolean = true;
 
   get texture() {
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
@@ -1633,6 +1645,15 @@ class TransferFunctionWidget extends Tab {
     element.appendChild(colorPickerDiv);
 
     this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
+    // If no points, set the default control points for the transfer function
+    if (this.trackable.value.sortedControlPoints.length === 0) {
+      this.autoRangeFinder.autoComputeRange(0, 1);
+    }
+    // Otherwise, mark that points should not auto update unless points are cleared
+    else {
+      this.allowAutoPointUpdate = false;
+    }
+
     this.updateControlPointsAndDraw();
     this.registerDisposer(
       this.trackable.changed.add(() => {
@@ -1642,6 +1663,11 @@ class TransferFunctionWidget extends Tab {
     this.registerDisposer(
       this.display.updateFinished.add(() => {
         this.autoRangeFinder.maybeAutoComputeRange();
+      }),
+    );
+    this.registerDisposer(
+      this.autoRangeFinder.finished.add(() => {
+        this.setDefaultControlPoints(this.autoRangeFinder.computedRange);
       }),
     );
   }
@@ -1657,6 +1683,27 @@ class TransferFunctionWidget extends Tab {
   updateControlPointsAndDraw() {
     this.transferFunctionPanel.update();
     this.updateView();
+  }
+  /**
+   * To help the user understand how to control the transfer function
+   * this sets a simple linear gradiant over a range of values
+   * to show the user how the transfer function works
+   */
+  setDefaultControlPoints(range: DataTypeInterval | null = null) {
+    if (!this.allowAutoPointUpdate) {
+      return;
+    }
+    const transferFunction = this.transferFunctionPanel.transferFunction;
+    const window = this.trackable.value.window;
+    const controlPointRange =
+      range !== null
+        ? range
+        : ([
+            computeLerp(window, this.dataType, 0.3),
+            computeLerp(window, this.dataType, 0.7),
+          ] as DataTypeInterval);
+    transferFunction.setDefaultControlPoints(controlPointRange);
+    this.updateControlPointsAndDraw();
   }
 }
 
