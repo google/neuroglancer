@@ -1126,9 +1126,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         totalChunkVolume: number,
       ) => {
         const chunkVolume = chunkDataSize.reduce((a, b) => a * b, 1);
-        const maxSamplesInChunk = chunkVolume / 2.0;
         const desiredChunkSamples =
           NUM_HISTOGRAM_SAMPLES * (chunkVolume / totalChunkVolume);
+        const maxSamplesInChunk = chunkVolume / 2.0;
         const clampedSamples = Math.min(maxSamplesInChunk, desiredChunkSamples);
         return Math.max(
           Math.round(clampedSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
