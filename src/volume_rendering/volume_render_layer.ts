@@ -1123,20 +1123,15 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       };
       const determineNumHistogramInstances = (
         chunkDataSize: vec3,
-        chunkVolumeSum: number,
+        totalChunkVolume: number,
       ) => {
-        const chunkSizeProduct = chunkDataSize.reduce((a, b) => a * b, 1);
-        const maxSamplesInChunk = chunkSizeProduct / 2.0;
-        const totalDesiredSamplesInChunk =
-          (NUM_HISTOGRAM_SAMPLES * chunkSizeProduct) / chunkVolumeSum;
-        const desiredSamples = Math.min(
-          maxSamplesInChunk,
-          totalDesiredSamplesInChunk,
-        );
-
-        // round to nearest multiple of NUM_HISTOGRAM_SAMPLES_PER_INSTANCE
+        const chunkVolume = chunkDataSize.reduce((a, b) => a * b, 1);
+        const maxSamplesInChunk = chunkVolume / 2.0;
+        const desiredChunkSamples =
+          NUM_HISTOGRAM_SAMPLES * (chunkVolume / totalChunkVolume);
+        const clampedSamples = Math.min(maxSamplesInChunk, desiredChunkSamples);
         return Math.max(
-          Math.round(desiredSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
+          Math.round(clampedSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
           1,
         );
       };
@@ -1156,7 +1151,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       gl.enable(WebGL2RenderingContext.BLEND);
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
 
-      const chunkVolumeSum = shaderUniformsForSecondPass.reduce(
+      const totalChunkVolume = shaderUniformsForSecondPass.reduce(
         (sum, uniforms) => {
           const chunkVolume = uniforms.uChunkDataSize.reduce(
             (a, b) => a * b,
@@ -1215,7 +1210,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         // Draw each histogram
         const numInstances = determineNumHistogramInstances(
           uniforms.uChunkDataSize,
-          chunkVolumeSum,
+          totalChunkVolume,
         );
         for (let i = 0; i < numHistograms; ++i) {
           histogramFramebuffers[i].bind(256, 1);
