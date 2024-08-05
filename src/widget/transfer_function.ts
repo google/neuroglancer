@@ -40,6 +40,7 @@ import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
   computeLerp,
+  dataTypeIntervalEqual,
   defaultDataTypeRange,
   getIntervalBoundsEffectiveFraction,
   parseDataTypeValue,
@@ -413,6 +414,7 @@ export class LookupTable {
  */
 export class TransferFunction extends RefCounted {
   lookupTable: LookupTable;
+  autoPointUpdateEnabled: boolean = true;
   constructor(
     public dataType: DataType,
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
@@ -1312,6 +1314,7 @@ class TransferFunctionController extends RefCounted {
         const nearestIndex = this.findControlPointIfNearCursor(mouseEvent);
         if (nearestIndex !== -1) {
           this.transferFunction.removePoint(nearestIndex);
+          this.disableAutoPointUpdate();
           this.updateValue({
             ...this.getModel(),
             sortedControlPoints:
@@ -1334,6 +1337,7 @@ class TransferFunctionController extends RefCounted {
             nearestIndex,
             colorInAbsoluteValue,
           );
+          this.disableAutoPointUpdate();
           this.updateValue({
             ...this.getModel(),
             sortedControlPoints:
@@ -1362,13 +1366,16 @@ class TransferFunctionController extends RefCounted {
           (1 - relativeX) * zoomAmount + relativeX,
         );
         if (newLower !== newUpper) {
-          this.setModel({
+          this.updateValue({
             ...model,
             window: [newLower, newUpper] as DataTypeInterval,
           });
         }
       },
     );
+  }
+  disableAutoPointUpdate() {
+    this.transferFunction.autoPointUpdateEnabled = false;
   }
   /**
    * Get fraction of distance in x along bounding rect for a MouseEvent.
@@ -1422,6 +1429,7 @@ class TransferFunctionController extends RefCounted {
       color[2],
       normalizedY,
     );
+    this.disableAutoPointUpdate();
     this.transferFunction.addPoint(
       new ControlPoint(
         this.convertPanelSpaceInputToAbsoluteValue(normalizedX),
@@ -1437,21 +1445,26 @@ class TransferFunctionController extends RefCounted {
     };
   }
   moveControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
-    if (this.currentGrabbedControlPointIndex !== -1) {
+    if (
+      this.currentGrabbedControlPointIndex !== -1 &&
+      this.currentGrabbedControlPointIndex <
+        this.transferFunction.sortedControlPoints.controlPoints.length
+    ) {
       const position = this.getControlPointPosition(event);
       if (position === undefined) return undefined;
       const { normalizedX, normalizedY } = position;
-      const newColor =
-        this.transferFunction.trackable.value.sortedControlPoints.controlPoints[
+      const selectedPoint =
+        this.transferFunction.sortedControlPoints.controlPoints[
           this.currentGrabbedControlPointIndex
-        ].outputColor;
+        ];
+      const newColor = vec4.clone(selectedPoint.outputColor);
       newColor[3] = Math.round(normalizedY * 255);
+      const newInputValue =
+        this.convertPanelSpaceInputToAbsoluteValue(normalizedX);
+      this.disableAutoPointUpdate();
       this.currentGrabbedControlPointIndex = this.transferFunction.updatePoint(
         this.currentGrabbedControlPointIndex,
-        new ControlPoint(
-          this.convertPanelSpaceInputToAbsoluteValue(normalizedX),
-          newColor,
-        ),
+        new ControlPoint(newInputValue, newColor),
       );
       return {
         ...this.getModel(),
@@ -1592,7 +1605,14 @@ class TransferFunctionWidget extends Tab {
   );
   autoRangeFinder: AutoRangeFinder;
   window = createWindowBoundInputs(this.dataType, this.trackable);
-  private allowAutoPointUpdate: boolean = true;
+
+  get autoPointUpdateEnabled() {
+    return this.transferFunctionPanel.transferFunction.autoPointUpdateEnabled;
+  }
+
+  set autoPointUpdateEnabled(value: boolean) {
+    this.transferFunctionPanel.transferFunction.autoPointUpdateEnabled = value;
+  }
 
   get texture() {
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
@@ -1629,18 +1649,26 @@ class TransferFunctionWidget extends Tab {
     this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
     this.autoRangeFinder.element.appendChild(this.createClearButton());
     this.autoRangeFinder.element.appendChild(this.createColorPicker(trackable));
-    // If no points, set the default control points for the transfer function
-    if (this.trackable.value.sortedControlPoints.length === 0) {
+    // If no points and no window set the default control points for the transfer function
+    const existingWindow = this.trackable.value.window;
+    const defaultWindow = defaultDataTypeRange[this.dataType];
+    const windowUnset = dataTypeIntervalEqual(
+      this.dataType,
+      existingWindow,
+      defaultWindow,
+    );
+    if (this.trackable.value.sortedControlPoints.length === 0 && windowUnset) {
       this.autoRangeFinder.autoComputeRange(0, 1);
     }
     // Otherwise, mark that points should not auto update unless points are cleared
     else {
-      this.allowAutoPointUpdate = false;
+      this.autoPointUpdateEnabled = false;
     }
 
     this.updateControlPointsAndDraw();
     this.registerDisposer(
       this.trackable.changed.add(() => {
+        this.setDefaultControlPoints();
         this.updateControlPointsAndDraw();
       }),
     );
@@ -1721,7 +1749,7 @@ class TransferFunctionWidget extends Tab {
    * to show the user how the transfer function works
    */
   setDefaultControlPoints(range: DataTypeInterval | null = null) {
-    if (!this.allowAutoPointUpdate) {
+    if (!this.autoPointUpdateEnabled) {
       return;
     }
     const transferFunction = this.transferFunctionPanel.transferFunction;
@@ -1734,12 +1762,19 @@ class TransferFunctionWidget extends Tab {
             computeLerp(window, this.dataType, 0.7),
           ] as DataTypeInterval);
     transferFunction.setDefaultControlPoints(controlPointRange);
-    this.updateControlPointsAndDraw();
+    this.trackable.value = {
+      ...this.trackable.value,
+      sortedControlPoints: transferFunction.sortedControlPoints,
+    };
   }
   clearPoints() {
     this.transferFunctionPanel.transferFunction.sortedControlPoints.clear();
-    this.allowAutoPointUpdate = true;
-    this.updateControlPointsAndDraw();
+    this.trackable.value = {
+      ...this.trackable.value,
+      sortedControlPoints:
+        this.transferFunctionPanel.transferFunction.sortedControlPoints,
+    };
+    this.autoPointUpdateEnabled = true;
   }
 }
 
