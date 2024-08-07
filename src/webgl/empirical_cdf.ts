@@ -209,8 +209,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       );
 
       if (DEBUG_HISTOGRAMS) {
-        const tempBuffer2 = copyHistogramToCPU(gl);
-        console.log("histogram", tempBuffer2.join(" "));
+        const tempBuffer = copyHistogramToCPU(gl);
+        console.log("histogram", tempBuffer.join(" "));
       }
     }
     gl.disable(WebGL2RenderingContext.BLEND);

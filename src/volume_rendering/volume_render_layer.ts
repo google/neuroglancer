@@ -608,16 +608,13 @@ ${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
               ),
             );
             builder.addVertexCode(`
-float getHistogramValue${i}(${getShaderType(dataType)} inputDataValue) {
-  return invlerpForHistogram${i}(inputDataValue);
-}
-${getShaderType(dataType)} getHistogramDataValue${i}() {
-  return ${getDataValueExpr};
+float getHistogramValue${i}() {
+  return invlerpForHistogram${i}(${getDataValueExpr});
 }
 `);
             histogramFetchCode += `
   case ${i}:
-    x = getHistogramValue${i}(getHistogramDataValue${i}());
+    x = getHistogramValue${i}();
     break;`;
           }
           histogramFetchCode += `

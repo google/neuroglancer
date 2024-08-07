@@ -23,9 +23,11 @@ import {
 } from "#src/util/lerp.js";
 import { Uint64 } from "#src/util/uint64.js";
 
-// The window is a little bit larger than the range, to allow easier modification.
+const BIN_SIZE_MULTIPLIER_FOR_WINDOW = 64;
+
 interface AutoRangeResult {
   range: DataTypeInterval;
+  /** The window is set a bit larger than the range */
   window: DataTypeInterval;
 }
 
@@ -44,22 +46,57 @@ function calculateEmpiricalCdf(histogram: Float32Array): Float32Array | null {
 
 function calculateBinSize(
   histogram: Float32Array,
-  previousRange: DataTypeInterval,
+  histogramRange: DataTypeInterval,
   inputDataType: DataType,
 ): number {
   const totalBins = histogram.length - 2; // Exclude the first and last bins.
   if (inputDataType === DataType.UINT64) {
     const numerator64 = new Uint64();
-    const denominator64 = Uint64.fromNumber(totalBins);
-    const min = previousRange[0] as Uint64;
-    const max = previousRange[1] as Uint64;
+    const min = histogramRange[0] as Uint64;
+    const max = histogramRange[1] as Uint64;
     Uint64.subtract(numerator64, max, min);
-    return numerator64.toNumber() / denominator64.toNumber();
+    return numerator64.toNumber() / totalBins;
   } else {
-    const min = previousRange[0] as number;
-    const max = previousRange[1] as number;
+    const min = histogramRange[0] as number;
+    const max = histogramRange[1] as number;
     return (max - min) / totalBins;
   }
+}
+
+function adjustBound(
+  bound: number | Uint64,
+  dataType: DataType,
+  change: number,
+  increase: boolean,
+): number | Uint64 {
+  // If the bound is already at the limit, don't adjust it.
+  if (dataType !== DataType.FLOAT32) {
+    const boundLimit = increase
+      ? defaultDataTypeRange[dataType][1]
+      : defaultDataTypeRange[dataType][0];
+    if (bound === boundLimit) {
+      return bound;
+    }
+  }
+
+  // Adjust the bound by the change amount up or down.
+  const delta = dataType === DataType.FLOAT32 ? change : Math.round(change);
+  const temp = new Uint64();
+  const adjustedBound =
+    dataType === DataType.UINT64
+      ? increase
+        ? Uint64.add(temp, bound as Uint64, Uint64.fromNumber(delta))
+        : Uint64.subtract(temp, bound as Uint64, Uint64.fromNumber(delta))
+      : increase
+        ? (bound as number) + delta
+        : (bound as number) - delta;
+
+  // Ensure the bound is within the data type's range.
+  if (dataType === DataType.FLOAT32) {
+    return adjustedBound;
+  }
+  const maxDataRange = defaultDataTypeRange[dataType];
+  return clampToInterval(maxDataRange, adjustedBound);
 }
 
 function decreaseBound(
@@ -67,23 +104,7 @@ function decreaseBound(
   dataType: DataType,
   change: number,
 ): number | Uint64 {
-  if (dataType !== DataType.FLOAT32) {
-    const minBound = defaultDataTypeRange[dataType][0];
-    if (minBound === bound) {
-      return bound;
-    }
-  }
-  const delta = dataType === DataType.FLOAT32 ? change : Math.round(change);
-  const temp = new Uint64();
-  const decreasedBound =
-    dataType === DataType.UINT64
-      ? Uint64.subtract(temp, bound as Uint64, Uint64.fromNumber(delta))
-      : (bound as number) - delta;
-  if (dataType === DataType.FLOAT32) {
-    return decreasedBound;
-  }
-  const maxDataRange = defaultDataTypeRange[dataType];
-  return clampToInterval(maxDataRange, decreasedBound);
+  return adjustBound(bound, dataType, change, false);
 }
 
 function increaseBound(
@@ -91,40 +112,24 @@ function increaseBound(
   dataType: DataType,
   change: number,
 ): number | Uint64 {
-  if (dataType !== DataType.FLOAT32) {
-    const maxBound = defaultDataTypeRange[dataType][1];
-    if (maxBound === bound) {
-      return bound;
-    }
-  }
-  const delta = dataType === DataType.FLOAT32 ? change : Math.round(change);
-  const temp = new Uint64();
-  const increasedBound =
-    dataType === DataType.UINT64
-      ? Uint64.add(temp, bound as Uint64, Uint64.fromNumber(delta))
-      : (bound as number) + delta;
-  if (dataType === DataType.FLOAT32) {
-    return increasedBound;
-  }
-  const maxDataRange = defaultDataTypeRange[dataType];
-  return clampToInterval(maxDataRange, increasedBound);
+  return adjustBound(bound, dataType, change, true);
 }
 
 export function computePercentilesFromEmpiricalHistogram(
   histogram: Float32Array,
   lowerPercentile: number = 0.05,
   upperPercentile: number = 0.95,
-  previousRange: DataTypeInterval,
+  histogramRange: DataTypeInterval,
   inputDataType: DataType,
 ): AutoRangeResult {
   // 256 bins total. First and last bin are below lower bound/above upper.
-  let lowerBound = previousRange[0];
-  let upperBound = previousRange[1];
+  let lowerBound = histogramRange[0];
+  let upperBound = histogramRange[1];
   const cdf = calculateEmpiricalCdf(histogram);
   if (cdf === null) {
-    return { range: previousRange, window: previousRange };
+    return { range: histogramRange, window: histogramRange };
   }
-  const binSize = calculateBinSize(histogram, previousRange, inputDataType);
+  const binSize = calculateBinSize(histogram, histogramRange, inputDataType);
 
   // Find the indices of the percentiles.
   let lowerIndex = 0;
@@ -134,11 +139,11 @@ export function computePercentilesFromEmpiricalHistogram(
       break;
     }
   }
-
   let upperIndex = cdf.findIndex((cdfValue) => cdfValue >= upperPercentile);
   upperIndex = upperIndex === -1 ? histogram.length - 1 : upperIndex;
 
-  // Find new bounds based on the indices, either by trimming or expanding.
+  // If the percentile is off the histogram to the left, the lower
+  // bound will be decreased to include more data.
   if (lowerIndex === 0) {
     let shiftAmount = binSize / 2;
     if (inputDataType === DataType.FLOAT32) {
@@ -149,6 +154,8 @@ export function computePercentilesFromEmpiricalHistogram(
     }
     lowerBound = decreaseBound(lowerBound, inputDataType, shiftAmount);
   } else {
+    // Otherwise, the lower bound is either exactly correct, and not moved
+    // or it could be moved to the right to include less data.
     const shiftAmount = lowerIndex - 1; // Exclude the first bin.
     lowerBound = increaseBound(
       lowerBound,
@@ -156,6 +163,9 @@ export function computePercentilesFromEmpiricalHistogram(
       binSize * shiftAmount,
     );
   }
+
+  // If the percentile is off the histogram to the right, the upper
+  // bound will be increased to include more data.
   if (upperIndex === histogram.length - 1) {
     let shiftAmount = binSize / 2;
     if (inputDataType === DataType.FLOAT32) {
@@ -166,6 +176,8 @@ export function computePercentilesFromEmpiricalHistogram(
     }
     upperBound = increaseBound(upperBound, inputDataType, shiftAmount);
   } else {
+    // Otherwise, the upper bound is either exactly correct, and not moved
+    // or it could be moved to the left to include less data
     const shiftAmount = histogram.length - 2 - upperIndex; // Exclude the first bin.
     upperBound = decreaseBound(
       upperBound,
@@ -175,11 +187,18 @@ export function computePercentilesFromEmpiricalHistogram(
   }
 
   const range = [lowerBound, upperBound] as DataTypeInterval;
-
   // Bump the window out a bit to make it easier to adjust.
   const window = [
-    decreaseBound(lowerBound, inputDataType, binSize * 64),
-    increaseBound(upperBound, inputDataType, binSize * 64),
+    decreaseBound(
+      lowerBound,
+      inputDataType,
+      binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW,
+    ),
+    increaseBound(
+      upperBound,
+      inputDataType,
+      binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW,
+    ),
   ] as DataTypeInterval;
 
   return { range, window };

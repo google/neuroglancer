@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-.neuroglancer-auto-range-button-container {
+.neuroglancer-invlerp-range-finder-button-container {
   display: flex;
   justify-content: flex-start;
   margin-top: 1px;
 }
 
-.neuroglancer-auto-range-button {
+.neuroglancer-invlerp-range-finder-button {
   font-size: 11pt;
   cursor: pointer;
   margin-right: 2px;

@@ -1614,22 +1614,17 @@ class TransferFunctionWidget extends Tab {
     element.appendChild(this.window.container);
     this.window.container.dispatchEvent(new Event("change"));
 
-    // Bar for controls below the transfer function panel and window bounds
-    // const bar = document.createElement("div");
-    // bar.classList.add("neuroglancer-transfer-function-post-panel-bar");
-    // bar.appendChild(this.createClearButton());
-    // bar.appendChild(this.createColorPicker(trackable));
-    // element.appendChild(bar);
-
+    // Container that sits at the bottom of the transfer function widget
     this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
     this.autoRangeFinder.element.appendChild(this.createClearButton());
     this.autoRangeFinder.element.appendChild(this.createColorPicker(trackable));
-    // If no points and no window set the default control points for the transfer function
-    const existingWindow = this.trackable.value.window;
+
+    // If no points and no window, set the default control points for the transfer function
+    const currentWindow = this.trackable.value.window;
     const defaultWindow = defaultDataTypeRange[this.dataType];
     const windowUnset = dataTypeIntervalEqual(
       this.dataType,
-      existingWindow,
+      currentWindow,
       defaultWindow,
     );
     if (this.trackable.value.sortedControlPoints.length === 0 && windowUnset) {
@@ -1776,21 +1771,25 @@ class TransferFunctionWidget extends Tab {
     this.transferFunctionPanel.update();
     this.updateView();
   }
+  updateTrackable(value: TransferFunctionParameters) {
+    this.trackable.value = value;
+  }
   generateDefaultControlPoints(range: DataTypeInterval | null = null) {
     const transferFunction = this.transferFunctionPanel.transferFunction;
     transferFunction.generateDefaultControlPoints(range);
-    this.trackable.value = {
+    this.updateTrackable({
       ...this.trackable.value,
       sortedControlPoints: transferFunction.sortedControlPoints,
-    };
+    });
   }
   clearPoints() {
-    this.transferFunctionPanel.transferFunction.sortedControlPoints.clear();
-    this.trackable.value = {
+    const sortedControlPoints =
+      this.transferFunctionPanel.transferFunction.sortedControlPoints;
+    sortedControlPoints.clear();
+    this.updateTrackable({
       ...this.trackable.value,
-      sortedControlPoints:
-        this.transferFunctionPanel.transferFunction.sortedControlPoints,
-    };
+      sortedControlPoints,
+    });
     this.autoPointUpdateEnabled = true;
   }
 }

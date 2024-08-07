@@ -40,7 +40,7 @@ interface AutoRangeData {
   finishedLerpRange: DataTypeInterval | null;
 }
 
-interface ParentWidget {
+interface ParentInvlerpWidget {
   trackable: {
     value: {
       range?: DataTypeInterval;
@@ -66,7 +66,7 @@ export class AutoRangeFinder extends RefCounted {
   finished = new NullarySignal();
   element: HTMLDivElement;
 
-  constructor(public parent: ParentWidget) {
+  constructor(public parent: ParentInvlerpWidget) {
     super();
     this.makeAutoRangeButtons(
       () => this.autoComputeRange(0.0, 1.0),
@@ -91,9 +91,7 @@ export class AutoRangeFinder extends RefCounted {
 
       // Reset the auto-compute state
       autoRangeData.inputPercentileBounds = [minPercentile, maxPercentile];
-      autoRangeData.lastComputedLerpRange = null;
-      autoRangeData.numIterationsThisCompute = 0;
-      autoRangeData.autoComputeInProgress = true;
+      this.resetAutoRangeData(autoRangeData);
       autoRangeData.invertedInitialRange = this.wasInputInverted();
       display.force3DHistogramForAutoRange = true;
 
@@ -103,11 +101,19 @@ export class AutoRangeFinder extends RefCounted {
         dataType === DataType.FLOAT32
           ? ([-65536, 65536] as [number, number])
           : defaultDataTypeRange[dataType];
-      trackable.value = {
-        ...trackable.value,
-        window: maxRange,
-        range: maxRange,
-      };
+      const hasRange = trackable.value.range !== undefined;
+      if (!hasRange) {
+        trackable.value = {
+          ...trackable.value,
+          window: maxRange,
+        };
+      } else {
+        trackable.value = {
+          ...trackable.value,
+          window: maxRange,
+          range: maxRange,
+        };
+      }
       display.scheduleRedraw();
     }
   }
@@ -131,7 +137,7 @@ export class AutoRangeFinder extends RefCounted {
     } else {
       this.parent.trackable.value = {
         ...this.parent.trackable.value,
-        window: ensureWindowBoundsNotEqual(window),
+        window: ensureWindowBoundsNotEqual([0, 0]),
       };
     }
   }
@@ -160,13 +166,14 @@ export class AutoRangeFinder extends RefCounted {
       histogramSpecifications.getFramebuffers(gl)[histogramIndex];
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
-    const { range: newRange, window: newWindow } = computePercentilesFromEmpiricalHistogram(
-      empiricalCdf,
-      autoRangeData.inputPercentileBounds[0],
-      autoRangeData.inputPercentileBounds[1],
-      range,
-      dataType,
-    );
+    const { range: newRange, window: newWindow } =
+      computePercentilesFromEmpiricalHistogram(
+        empiricalCdf,
+        autoRangeData.inputPercentileBounds[0],
+        autoRangeData.inputPercentileBounds[1],
+        range,
+        dataType,
+      );
 
     // If the range remains constant over two iterations
     // or if we've exceeded the maximum number of iterations, stop
@@ -185,10 +192,7 @@ export class AutoRangeFinder extends RefCounted {
       if (autoRangeData.invertedInitialRange) {
         newRange.reverse();
       }
-      autoRangeData.autoComputeInProgress = false;
-      autoRangeData.lastComputedLerpRange = null;
-      autoRangeData.numIterationsThisCompute = 0;
-      autoRangeData.invertedInitialRange = false;
+      this.resetAutoRangeData(autoRangeData, true /* finished */);
       autoRangeData.finishedLerpRange = newRange;
       this.setTrackableValue(newRange, newWindow);
       this.finished.dispatch();
@@ -197,6 +201,15 @@ export class AutoRangeFinder extends RefCounted {
       this.setTrackableValue(newRange, newRange);
     }
   }
+  private resetAutoRangeData(autoRangeData: AutoRangeData, finished: boolean = false) {
+    autoRangeData.autoComputeInProgress = !finished;
+    autoRangeData.lastComputedLerpRange = null;
+    autoRangeData.numIterationsThisCompute = 0;
+    if (finished) {
+      autoRangeData.invertedInitialRange = false;
+    }
+  }
+
   makeAutoRangeButtons(
     minMaxHandler: () => void,
     oneTo99Handler: () => void,
@@ -205,27 +218,29 @@ export class AutoRangeFinder extends RefCounted {
     const parent = this.parent.element;
     this.element = document.createElement("div");
     const buttonContainer = this.element;
-    buttonContainer.classList.add("neuroglancer-auto-range-button-container");
+    buttonContainer.classList.add(
+      "neuroglancer-invlerp-range-finder-button-container",
+    );
     parent.appendChild(buttonContainer);
 
     const minMaxButton = document.createElement("button");
     minMaxButton.textContent = "Min-Max";
     minMaxButton.title = "Set range to the minimum and maximum values";
-    minMaxButton.classList.add("neuroglancer-auto-range-button");
+    minMaxButton.classList.add("neuroglancer-invlerp-range-finder-button");
     minMaxButton.addEventListener("click", minMaxHandler);
     buttonContainer.appendChild(minMaxButton);
 
     const midButton = document.createElement("button");
     midButton.textContent = "1-99%";
     midButton.title = "Set range to the 1st and 99th percentiles";
-    midButton.classList.add("neuroglancer-auto-range-button");
+    midButton.classList.add("neuroglancer-invlerp-range-finder-button");
     midButton.addEventListener("click", oneTo99Handler);
     buttonContainer.appendChild(midButton);
 
     const highButton = document.createElement("button");
     highButton.textContent = "5-95%";
     highButton.title = "Set range to the 5th and 95th percentiles";
-    highButton.classList.add("neuroglancer-auto-range-button");
+    highButton.classList.add("neuroglancer-invlerp-range-finder-button");
     highButton.addEventListener("click", fiveTo95Handler);
     buttonContainer.appendChild(highButton);
   }
