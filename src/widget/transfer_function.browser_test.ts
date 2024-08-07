@@ -64,7 +64,7 @@ describe("Create default transfer function", () => {
         {
           sortedControlPoints: new SortedControlPoints([], dataType),
           window: defaultDataTypeRange[dataType],
-          defaultColor: vec3.fromValues(1, 1, 1),
+          defaultColor: vec3.fromValues(1, 0.2, 1),
           channel: [],
         },
         (x) => x,
@@ -81,9 +81,7 @@ describe("Create default transfer function", () => {
       expect(firstPoint.inputValue).toStrictEqual(actualFirstPoint);
       expect(lastPoint.inputValue).toStrictEqual(actualLastPoint);
       expect(firstPoint.outputColor).toEqual(vec4.fromValues(0, 0, 0, 0));
-      expect(lastPoint.outputColor).toEqual(
-        vec4.fromValues(255, 255, 255, 255),
-      );
+      expect(lastPoint.outputColor).toEqual(vec4.fromValues(255, 51, 255, 255));
     });
     it(`Creates two default transfer function points for ${DataType[dataType]} over a custom window`, () => {
       const window =
@@ -99,9 +97,7 @@ describe("Create default transfer function", () => {
       expect(firstPoint.inputValue).toStrictEqual(actualFirstPoint);
       expect(lastPoint.inputValue).toStrictEqual(actualLastPoint);
       expect(firstPoint.outputColor).toEqual(vec4.fromValues(0, 0, 0, 0));
-      expect(lastPoint.outputColor).toEqual(
-        vec4.fromValues(255, 255, 255, 255),
-      );
+      expect(lastPoint.outputColor).toEqual(vec4.fromValues(255, 51, 255, 255));
     });
     it(`Creates two default transfer function points for ${DataType[dataType]} with a defined range`, () => {
       const range =
@@ -115,9 +111,7 @@ describe("Create default transfer function", () => {
       expect(firstPoint.inputValue).toStrictEqual(range[0]);
       expect(lastPoint.inputValue).toStrictEqual(range[1]);
       expect(firstPoint.outputColor).toEqual(vec4.fromValues(0, 0, 0, 0));
-      expect(lastPoint.outputColor).toEqual(
-        vec4.fromValues(255, 255, 255, 255),
-      );
+      expect(lastPoint.outputColor).toEqual(vec4.fromValues(255, 51, 255, 255));
     });
   }
 });
