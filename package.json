@@ -28,8 +28,8 @@
     "build-package": "tsx ./build_tools/build-package.ts",
     "build-python": "tsx ./build_tools/cli.ts --python build",
     "build-python:watch": "tsx ./build_tools/cli.ts --python build --watch",
-    "test": "npx playwright install && vitest --run",
-    "test:watch": "npx playwright install && vitest watch",
+    "test": "vitest --run",
+    "test:watch": "vitest watch",
     "benchmark": "vitest bench --run",
     "benchmark:watch": "vitest bench",
     "lint:check": "eslint .",
@@ -40,6 +40,7 @@
     "version": "tsx ./build_tools/after-version-change.ts"
   },
   "devDependencies": {
+    "@playwright/browser-chromium": "^1.46.0",
     "@types/codemirror": "5.60.15",
     "@types/gl-matrix": "^2.4.5",
     "@types/lodash-es": "^4.17.12",
