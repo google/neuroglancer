@@ -40,9 +40,54 @@ export type GlobusAuthToken = {
 };
 
 function openPopupCenter(url: string) {
-  return window.open(
+  const newWindow = window.open(
     url,
   );
+
+  if (newWindow) {
+    newWindow.focus();
+  }
+  return newWindow;
+}
+
+const tokenEndpoint = 'https://auth.globus.org/v2/oauth2/token';
+
+const client_id = 'f5c12d62-94bb-4df6-b246-bade74cf8945';
+const redirect_uri = 'https://localhost:8080/token';
+const client_secret = 'xRyT0uNsImeEQkeO4LRpOLslTaX909oGqCi3kRuj3Z8=';
+
+
+  // Base64 encode client_id and client_secret
+  const credentials = `${client_id}:${client_secret}`;
+  const base64Credentials = btoa(credentials);
+
+async function exchangeAuthorizationCodeForToken() {
+  // Define headers
+  const headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Authorization': `Basic ${base64Credentials}`,  };
+  console.log('headers:', headers)
+  // Prepare request body
+  const requestBody = new URLSearchParams();
+  requestBody.append('grant_type', 'authorization_code');
+  requestBody.append('response_type', 'code');
+  requestBody.append('scope', 'openid');
+  requestBody.append('redirect_uri', redirect_uri);
+  requestBody.append('client_id', client_id);
+  console.log('requestBody:', requestBody)
+  try {
+    const response = await fetch(tokenEndpoint, {
+      method: 'Post',
+      headers: headers,
+      body: requestBody.toString(),
+    });
+
+    const data = await response.json();
+    console.log('Access Token:', data.access_token);
+    // Handle the token response here
+  } catch (error) {
+    console.error('Error exchanging authorization code:', error);
+  }
 }
 
 
@@ -56,15 +101,16 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
       button.textContent = buttonMessage;
       status.element.appendChild(button);
 
-      button.addEventListener("click", () => {
+      button.addEventListener("click", async () => {
         console.log('button clicked')
         writeLoginStatus(
           `Waiting for login`,
           "Retry",
         );
 
+        exchangeAuthorizationCodeForToken();
         const auth_popup = openPopupCenter(
-          `${serverUrl}`,
+          `https://auth.globus.org/v2/oauth2/authorize?scope=openid&redirect_uri=${redirect_uri}&response_type=code&client_id=${client_id}`,
         );
 
         const closeAuthPopup = () => {
