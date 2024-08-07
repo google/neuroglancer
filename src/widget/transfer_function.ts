@@ -205,15 +205,13 @@ export class SortedControlPoints {
   get length() {
     return this.controlPoints.length;
   }
-  setDefaultControlPoints(controlPointRange: DataTypeInterval) {
+  setDefaultControlPoints(
+    controlPointRange: DataTypeInterval,
+    finalColor: vec4,
+  ) {
     this.clear();
     this.addPoint(new ControlPoint(controlPointRange[0], kZeroVec4));
-    this.addPoint(
-      new ControlPoint(
-        controlPointRange[1],
-        vec4.fromValues(255, 255, 255, 255),
-      ),
-    );
+    this.addPoint(new ControlPoint(controlPointRange[1], finalColor));
   }
   clear() {
     this.controlPoints = [];
@@ -439,7 +437,16 @@ export class TransferFunction extends RefCounted {
   addPoint(controlPoint: ControlPoint) {
     this.sortedControlPoints.addPoint(controlPoint);
   }
-  setDefaultControlPoints(
+  /**
+   * Generate two default control points for the transfer function, from transparent to a full color.
+   * @param range The range of the two control points to interpolate between.
+   * If null, the data window will be used to generate the control points.
+   * @param window The window of the data in view. Control points are placed
+   * at 30% and 70% of the window if range is not provided.
+   * If the window is not provided, the current window of the transfer function
+   * will be used.
+   */
+  generateDefaultControlPoints(
     range: DataTypeInterval | null = null,
     window: DataTypeInterval | undefined = undefined,
   ) {
@@ -454,7 +461,17 @@ export class TransferFunction extends RefCounted {
             computeLerp(window, this.dataType, 0.3),
             computeLerp(window, this.dataType, 0.7),
           ] as DataTypeInterval);
-    this.sortedControlPoints.setDefaultControlPoints(controlPointRange);
+    const color = this.trackable.value.defaultColor;
+    const colorOpacity = vec4.fromValues(
+      Math.round(color[0] * 255),
+      Math.round(color[1] * 255),
+      Math.round(color[2] * 255),
+      255,
+    );
+    this.sortedControlPoints.setDefaultControlPoints(
+      controlPointRange,
+      colorOpacity,
+    );
   }
   updatePoint(index: number, controlPoint: ControlPoint): number {
     return this.sortedControlPoints.updatePoint(index, controlPoint);
@@ -1322,7 +1339,7 @@ class TransferFunctionController extends RefCounted {
         );
         if (newLower !== newUpper) {
           const newWindow = [newLower, newUpper] as DataTypeInterval;
-          this.transferFunction.setDefaultControlPoints(null, newWindow);
+          this.transferFunction.generateDefaultControlPoints(null, newWindow);
           this.updateValue({
             ...model,
             sortedControlPoints: this.transferFunction.sortedControlPoints,
@@ -1636,7 +1653,7 @@ class TransferFunctionWidget extends Tab {
     );
     this.registerDisposer(
       this.autoRangeFinder.finished.add(() => {
-        this.setDefaultControlPoints(this.autoRangeFinder.computedRange);
+        this.generateDefaultControlPoints(this.autoRangeFinder.computedRange);
       }),
     );
   }
@@ -1728,7 +1745,7 @@ class TransferFunctionWidget extends Tab {
           if (window[0] === window[1]) {
             throw new Error("Window bounds cannot be equal");
           }
-          this.transferFunctionPanel.transferFunction.setDefaultControlPoints(
+          this.transferFunctionPanel.transferFunction.generateDefaultControlPoints(
             null,
             window,
           );
@@ -1759,14 +1776,9 @@ class TransferFunctionWidget extends Tab {
     this.transferFunctionPanel.update();
     this.updateView();
   }
-  /**
-   * To help the user understand how to control the transfer function
-   * this sets a simple linear gradiant over a range of values
-   * to show the user how the transfer function works
-   */
-  setDefaultControlPoints(range: DataTypeInterval | null = null) {
+  generateDefaultControlPoints(range: DataTypeInterval | null = null) {
     const transferFunction = this.transferFunctionPanel.transferFunction;
-    transferFunction.setDefaultControlPoints(range);
+    transferFunction.generateDefaultControlPoints(range);
     this.trackable.value = {
       ...this.trackable.value,
       sortedControlPoints: transferFunction.sortedControlPoints,
