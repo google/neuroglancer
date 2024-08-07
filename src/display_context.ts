@@ -403,6 +403,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+  force3DHistogramForAutoRange = false;
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;

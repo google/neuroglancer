@@ -40,6 +40,7 @@ import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   computeInvlerp,
   computeLerp,
+  dataTypeIntervalEqual,
   defaultDataTypeRange,
   getIntervalBoundsEffectiveFraction,
   parseDataTypeValue,
@@ -77,6 +78,7 @@ import {
   createCDFLineShader,
   NUM_CDF_LINES,
 } from "#src/widget/invlerp.js";
+import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import type {
   LayerControlFactory,
   LayerControlTool,
@@ -202,6 +204,17 @@ export class SortedControlPoints {
   }
   get length() {
     return this.controlPoints.length;
+  }
+  setDefaultControlPoints(
+    controlPointRange: DataTypeInterval,
+    finalColor: vec4,
+  ) {
+    this.clear();
+    this.addPoint(new ControlPoint(controlPointRange[0], kZeroVec4));
+    this.addPoint(new ControlPoint(controlPointRange[1], finalColor));
+  }
+  clear() {
+    this.controlPoints = [];
   }
   addPoint(controlPoint: ControlPoint) {
     const { inputValue, outputColor } = controlPoint;
@@ -399,6 +412,7 @@ export class LookupTable {
  */
 export class TransferFunction extends RefCounted {
   lookupTable: LookupTable;
+  autoPointUpdateEnabled: boolean = true;
   constructor(
     public dataType: DataType,
     public trackable: WatchableValueInterface<TransferFunctionParameters>,
@@ -422,6 +436,42 @@ export class TransferFunction extends RefCounted {
   }
   addPoint(controlPoint: ControlPoint) {
     this.sortedControlPoints.addPoint(controlPoint);
+  }
+  /**
+   * Generate two default control points for the transfer function, from transparent to a full color.
+   * @param range The range of the two control points to interpolate between.
+   * If null, the data window will be used to generate the control points.
+   * @param window The window of the data in view. Control points are placed
+   * at 30% and 70% of the window if range is not provided.
+   * If the window is not provided, the current window of the transfer function
+   * will be used.
+   */
+  generateDefaultControlPoints(
+    range: DataTypeInterval | null = null,
+    window: DataTypeInterval | undefined = undefined,
+  ) {
+    if (!this.autoPointUpdateEnabled) {
+      return;
+    }
+    window = window !== undefined ? window : this.trackable.value.window;
+    const controlPointRange =
+      range !== null
+        ? range
+        : ([
+            computeLerp(window, this.dataType, 0.3),
+            computeLerp(window, this.dataType, 0.7),
+          ] as DataTypeInterval);
+    const color = this.trackable.value.defaultColor;
+    const colorOpacity = vec4.fromValues(
+      Math.round(color[0] * 255),
+      Math.round(color[1] * 255),
+      Math.round(color[2] * 255),
+      255,
+    );
+    this.sortedControlPoints.setDefaultControlPoints(
+      controlPointRange,
+      colorOpacity,
+    );
   }
   updatePoint(index: number, controlPoint: ControlPoint): number {
     return this.sortedControlPoints.updatePoint(index, controlPoint);
@@ -1195,65 +1245,6 @@ out_color = tempColor * alpha;
   }
 }
 
-/**
- * Create the bounds on the UI window inputs for the transfer function widget
- */
-function createWindowBoundInputs(
-  dataType: DataType,
-  model: WatchableValueInterface<TransferFunctionParameters>,
-) {
-  function createWindowBoundInput(endpoint: number): HTMLInputElement {
-    const e = document.createElement("input");
-    e.addEventListener("focus", () => {
-      e.select();
-    });
-    e.classList.add("neuroglancer-transfer-function-widget-bound");
-    e.type = "text";
-    e.spellcheck = false;
-    e.autocomplete = "off";
-    e.title = `${
-      endpoint === 0 ? "Lower" : "Upper"
-    } window for transfer function`;
-    return e;
-  }
-
-  const container = document.createElement("div");
-  container.classList.add("neuroglancer-transfer-function-window-bounds");
-  const inputs = [createWindowBoundInput(0), createWindowBoundInput(1)];
-  for (let endpointIndex = 0; endpointIndex < 2; ++endpointIndex) {
-    const input = inputs[endpointIndex];
-    input.addEventListener("input", () => {
-      updateInputBoundWidth(input);
-    });
-    input.addEventListener("change", () => {
-      const existingBounds = model.value.window;
-      const intervals = { range: existingBounds, window: existingBounds };
-      try {
-        const value = parseDataTypeValue(dataType, input.value);
-        const window = getUpdatedRangeAndWindowParameters(
-          intervals,
-          "window",
-          endpointIndex,
-          value,
-          /*fitRangeInWindow=*/ true,
-        ).window;
-        if (window[0] === window[1]) {
-          throw new Error("Window bounds cannot be equal");
-        }
-        model.value = { ...model.value, window };
-      } catch {
-        updateInputBoundValue(input, existingBounds[endpointIndex]);
-      }
-    });
-  }
-  container.appendChild(inputs[0]);
-  container.appendChild(inputs[1]);
-  return {
-    container,
-    inputs,
-  };
-}
-
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "add-or-drag-point" },
   "shift+dblclick0": { action: "remove-point" },
@@ -1295,6 +1286,7 @@ class TransferFunctionController extends RefCounted {
         const nearestIndex = this.findControlPointIfNearCursor(mouseEvent);
         if (nearestIndex !== -1) {
           this.transferFunction.removePoint(nearestIndex);
+          this.disableAutoPointUpdate();
           this.updateValue({
             ...this.getModel(),
             sortedControlPoints:
@@ -1317,6 +1309,7 @@ class TransferFunctionController extends RefCounted {
             nearestIndex,
             colorInAbsoluteValue,
           );
+          this.disableAutoPointUpdate();
           this.updateValue({
             ...this.getModel(),
             sortedControlPoints:
@@ -1345,13 +1338,19 @@ class TransferFunctionController extends RefCounted {
           (1 - relativeX) * zoomAmount + relativeX,
         );
         if (newLower !== newUpper) {
-          this.setModel({
+          const newWindow = [newLower, newUpper] as DataTypeInterval;
+          this.transferFunction.generateDefaultControlPoints(null, newWindow);
+          this.updateValue({
             ...model,
-            window: [newLower, newUpper] as DataTypeInterval,
+            sortedControlPoints: this.transferFunction.sortedControlPoints,
+            window: newWindow,
           });
         }
       },
     );
+  }
+  disableAutoPointUpdate() {
+    this.transferFunction.autoPointUpdateEnabled = false;
   }
   /**
    * Get fraction of distance in x along bounding rect for a MouseEvent.
@@ -1405,6 +1404,7 @@ class TransferFunctionController extends RefCounted {
       color[2],
       normalizedY,
     );
+    this.disableAutoPointUpdate();
     this.transferFunction.addPoint(
       new ControlPoint(
         this.convertPanelSpaceInputToAbsoluteValue(normalizedX),
@@ -1420,21 +1420,26 @@ class TransferFunctionController extends RefCounted {
     };
   }
   moveControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
-    if (this.currentGrabbedControlPointIndex !== -1) {
+    if (
+      this.currentGrabbedControlPointIndex !== -1 &&
+      this.currentGrabbedControlPointIndex <
+        this.transferFunction.sortedControlPoints.controlPoints.length
+    ) {
       const position = this.getControlPointPosition(event);
       if (position === undefined) return undefined;
       const { normalizedX, normalizedY } = position;
-      const newColor =
-        this.transferFunction.trackable.value.sortedControlPoints.controlPoints[
+      const selectedPoint =
+        this.transferFunction.sortedControlPoints.controlPoints[
           this.currentGrabbedControlPointIndex
-        ].outputColor;
+        ];
+      const newColor = vec4.clone(selectedPoint.outputColor);
       newColor[3] = Math.round(normalizedY * 255);
+      const newInputValue =
+        this.convertPanelSpaceInputToAbsoluteValue(normalizedX);
+      this.disableAutoPointUpdate();
       this.currentGrabbedControlPointIndex = this.transferFunction.updatePoint(
         this.currentGrabbedControlPointIndex,
-        new ControlPoint(
-          this.convertPanelSpaceInputToAbsoluteValue(normalizedX),
-          newColor,
-        ),
+        new ControlPoint(newInputValue, newColor),
       );
       return {
         ...this.getModel(),
@@ -1573,8 +1578,16 @@ class TransferFunctionWidget extends Tab {
   private transferFunctionPanel = this.registerDisposer(
     new TransferFunctionPanel(this),
   );
+  autoRangeFinder: AutoRangeFinder;
+  window = this.createWindowBoundInputs();
 
-  window = createWindowBoundInputs(this.dataType, this.trackable);
+  get autoPointUpdateEnabled() {
+    return this.transferFunctionPanel.transferFunction.autoPointUpdateEnabled;
+  }
+
+  set autoPointUpdateEnabled(value: boolean) {
+    this.transferFunctionPanel.transferFunction.autoPointUpdateEnabled = value;
+  }
 
   get texture() {
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
@@ -1601,9 +1614,62 @@ class TransferFunctionWidget extends Tab {
     element.appendChild(this.window.container);
     this.window.container.dispatchEvent(new Event("change"));
 
-    // Color picker element
+    // Container that sits at the bottom of the transfer function widget
+    this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
+    this.autoRangeFinder.element.appendChild(this.createClearButton());
+    this.autoRangeFinder.element.appendChild(this.createColorPicker(trackable));
+
+    // If no points and no window, set the default control points for the transfer function
+    const currentWindow = this.trackable.value.window;
+    const defaultWindow = defaultDataTypeRange[this.dataType];
+    const windowUnset = dataTypeIntervalEqual(
+      this.dataType,
+      currentWindow,
+      defaultWindow,
+    );
+    if (this.trackable.value.sortedControlPoints.length === 0 && windowUnset) {
+      this.autoRangeFinder.autoComputeRange(0, 1);
+    }
+    // Otherwise, mark that points should not auto update unless points are cleared
+    else {
+      this.autoPointUpdateEnabled = false;
+    }
+
+    this.updateControlPointsAndDraw();
+    this.registerDisposer(
+      this.trackable.changed.add(() => {
+        this.updateControlPointsAndDraw();
+      }),
+    );
+    this.registerDisposer(
+      this.display.updateFinished.add(() => {
+        this.autoRangeFinder.maybeAutoComputeRange();
+      }),
+    );
+    this.registerDisposer(
+      this.autoRangeFinder.finished.add(() => {
+        this.generateDefaultControlPoints(this.autoRangeFinder.computedRange);
+      }),
+    );
+  }
+  private createClearButton() {
+    const clearButton = document.createElement("button");
+    clearButton.classList.add("neuroglancer-transfer-function-clear-button");
+    clearButton.textContent = "Clear";
+    clearButton.title = "Clear all control points";
+    clearButton.addEventListener("click", () => {
+      this.clearPoints();
+    });
+    return clearButton;
+  }
+
+  private createColorPicker(
+    trackable: WatchableValueInterface<TransferFunctionParameters>,
+  ) {
     const colorPickerDiv = document.createElement("div");
-    colorPickerDiv.classList.add("neuroglancer-transfer-function-color-picker");
+    colorPickerDiv.classList.add(
+      "neuroglancer-transfer-function-color-picker-container",
+    );
     const colorPicker = this.registerDisposer(
       new ColorWidget(
         makeCachedDerivedWatchableValue(
@@ -1613,8 +1679,10 @@ class TransferFunctionWidget extends Tab {
         () => vec3.fromValues(1, 1, 1),
       ),
     );
-    colorPicker.element.title = "Transfer Function Color Picker";
-    colorPicker.element.id = "neuroglancer-tf-color-widget";
+    colorPicker.element.classList.add(
+      "neuroglancer-transfer-function-color-picker",
+    );
+    colorPicker.element.title = "Transfer function color picker";
     colorPicker.element.addEventListener("change", () => {
       trackable.value = {
         ...this.trackable.value,
@@ -1628,15 +1696,68 @@ class TransferFunctionWidget extends Tab {
       };
     });
     colorPickerDiv.appendChild(colorPicker.element);
-
-    element.appendChild(colorPickerDiv);
-    this.updateControlPointsAndDraw();
-    this.registerDisposer(
-      this.trackable.changed.add(() => {
-        this.updateControlPointsAndDraw();
-      }),
-    );
+    return colorPickerDiv;
   }
+
+  private createWindowBoundInputs() {
+    const dataType = this.dataType;
+    const model = this.trackable;
+    function createWindowBoundInput(endpoint: number): HTMLInputElement {
+      const e = document.createElement("input");
+      e.addEventListener("focus", () => {
+        e.select();
+      });
+      e.classList.add("neuroglancer-transfer-function-widget-bound");
+      e.type = "text";
+      e.spellcheck = false;
+      e.autocomplete = "off";
+      e.title = `${
+        endpoint === 0 ? "Lower" : "Upper"
+      } window for transfer function`;
+      return e;
+    }
+
+    const container = document.createElement("div");
+    container.classList.add("neuroglancer-transfer-function-window-bounds");
+    const inputs = [createWindowBoundInput(0), createWindowBoundInput(1)];
+    for (let endpointIndex = 0; endpointIndex < 2; ++endpointIndex) {
+      const input = inputs[endpointIndex];
+      input.addEventListener("input", () => {
+        updateInputBoundWidth(input);
+      });
+      input.addEventListener("change", () => {
+        const existingBounds = model.value.window;
+        const intervals = { range: existingBounds, window: existingBounds };
+        try {
+          const value = parseDataTypeValue(dataType, input.value);
+          const window = getUpdatedRangeAndWindowParameters(
+            intervals,
+            "window",
+            endpointIndex,
+            value,
+            /*fitRangeInWindow=*/ true,
+          ).window;
+          if (window[0] === window[1]) {
+            throw new Error("Window bounds cannot be equal");
+          }
+          this.transferFunctionPanel.transferFunction.generateDefaultControlPoints(
+            null,
+            window,
+          );
+          model.value = { ...model.value, window };
+        } catch {
+          updateInputBoundValue(input, existingBounds[endpointIndex]);
+        }
+      });
+    }
+    container.appendChild(inputs[0]);
+    container.appendChild(inputs[1]);
+    return {
+      container,
+      inputs,
+    };
+  }
+
   updateView() {
     for (let i = 0; i < 2; ++i) {
       updateInputBoundValue(
@@ -1649,6 +1770,27 @@ class TransferFunctionWidget extends Tab {
   updateControlPointsAndDraw() {
     this.transferFunctionPanel.update();
     this.updateView();
+  }
+  updateTrackable(value: TransferFunctionParameters) {
+    this.trackable.value = value;
+  }
+  generateDefaultControlPoints(range: DataTypeInterval | null = null) {
+    const transferFunction = this.transferFunctionPanel.transferFunction;
+    transferFunction.generateDefaultControlPoints(range);
+    this.updateTrackable({
+      ...this.trackable.value,
+      sortedControlPoints: transferFunction.sortedControlPoints,
+    });
+  }
+  clearPoints() {
+    const sortedControlPoints =
+      this.transferFunctionPanel.transferFunction.sortedControlPoints;
+    sortedControlPoints.clear();
+    this.updateTrackable({
+      ...this.trackable.value,
+      sortedControlPoints,
+    });
+    this.autoPointUpdateEnabled = true;
   }
 }
 
@@ -1788,7 +1930,7 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
         const position = context.registerDisposer(
           new Position(channelCoordinateSpaceCombiner.combined),
         );
-        const positiionWidget = context.registerDisposer(
+        const positionWidget = context.registerDisposer(
           new PositionWidget(position, channelCoordinateSpaceCombiner, {
             copyButton: false,
           }),
@@ -1816,7 +1958,7 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
         };
         updatePosition();
         context.registerDisposer(watchableValue.changed.add(updatePosition));
-        options.labelContainer.appendChild(positiionWidget.element);
+        options.labelContainer.appendChild(positionWidget.element);
       }
       const control = context.registerDisposer(
         new TransferFunctionWidget(
