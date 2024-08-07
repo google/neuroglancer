@@ -31,7 +31,7 @@ import {
   renderScaleHistogramBinSize,
 } from "#src/render_scale_statistics.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import { DataType, getNormalizedChunkLayout } from "#src/sliceview/base.js";
+import { getNormalizedChunkLayout } from "#src/sliceview/base.js";
 import type { FrontendTransformedSource } from "#src/sliceview/frontend.js";
 import {
   getVolumetricTransformedSources,

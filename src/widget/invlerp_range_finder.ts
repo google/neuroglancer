@@ -25,7 +25,6 @@ import {
   defaultDataTypeRange,
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import "#src/widget/invlerp_range_finder.css";
@@ -161,7 +160,7 @@ export class AutoRangeFinder extends RefCounted {
       histogramSpecifications.getFramebuffers(gl)[histogramIndex];
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
-    let { range: newRange, window: newWindow } = computeRangeForCdf(
+    const { range: newRange, window: newWindow } = computeRangeForCdf(
       empiricalCdf,
       autoRangeData.inputPercentileBounds[0],
       autoRangeData.inputPercentileBounds[1],
