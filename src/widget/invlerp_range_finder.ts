@@ -17,7 +17,7 @@
 import type { DisplayContext } from "#src/display_context.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { computeRangeForCdf } from "#src/util/empirical_cdf.js";
+import { computePercentilesFromEmpiricalHistogram } from "#src/util/empirical_cdf.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   dataTypeCompare,
@@ -160,7 +160,7 @@ export class AutoRangeFinder extends RefCounted {
       histogramSpecifications.getFramebuffers(gl)[histogramIndex];
     frameBuffer.bind(256, 1);
     const empiricalCdf = copyHistogramToCPU(gl);
-    const { range: newRange, window: newWindow } = computeRangeForCdf(
+    const { range: newRange, window: newWindow } = computePercentilesFromEmpiricalHistogram(
       empiricalCdf,
       autoRangeData.inputPercentileBounds[0],
       autoRangeData.inputPercentileBounds[1],

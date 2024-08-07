@@ -110,7 +110,7 @@ function increaseBound(
   return clampToInterval(maxDataRange, increasedBound);
 }
 
-export function computeRangeForCdf(
+export function computePercentilesFromEmpiricalHistogram(
   histogram: Float32Array,
   lowerPercentile: number = 0.05,
   upperPercentile: number = 0.95,
