@@ -113,32 +113,6 @@ export class AutoRangeFinder extends RefCounted {
     }
   }
 
-  /**
-   * Due to how the 3D histogram is computed, the lower bound of the range
-   * can sometimes be 1 unit away from the minimum value of the data type.
-   * This function checks if the lower bound is near the minimum value and
-   * adjusts the range accordingly.
-   */
-  correctLowerBound(range: DataTypeInterval) {
-    const { dataType } = this.parent;
-    if (dataType !== DataType.UINT64) {
-      const minRange = defaultDataTypeRange[dataType][0] as number;
-      const lowerBound = range[0] as number;
-      if (lowerBound === minRange + 1) {
-        return [minRange, range[1]] as [number, number];
-      }
-    } else {
-      const minRange = Uint64.ZERO;
-      const lowerBound = range[0] as Uint64;
-      const minRangePlusOne = new Uint64();
-      Uint64.increment(minRangePlusOne, minRange);
-      if (lowerBound === minRangePlusOne) {
-        return [minRange, range[1]] as [Uint64, Uint64];
-      }
-    }
-    return range;
-  }
-
   setTrackableValue(range: DataTypeInterval, window: DataTypeInterval) {
     const hasRange = this.parent.trackable.value.range !== undefined;
 
@@ -209,7 +183,6 @@ export class AutoRangeFinder extends RefCounted {
     autoRangeData.lastComputedLerpRange = newRange;
     ++autoRangeData.numIterationsThisCompute;
     if (foundRange || exceededMaxIterations) {
-      newRange = this.correctLowerBound(newRange);
       if (autoRangeData.invertedInitialRange) {
         newRange.reverse();
       }
