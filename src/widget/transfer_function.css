@@ -27,13 +27,12 @@
 .neuroglancer-transfer-function-color-picker {
   height: 24px;
   display: inline-block;
-  cursor: pointer;
 }
 
 .neuroglancer-transfer-function-clear-button {
-  font-size: 110%;
+  font-size: 11pt;
   cursor: pointer;
-  margin-right: 4px;
+  margin-right: 2px;
   margin-left: auto;
 }
 
