@@ -40,6 +40,7 @@
     "version": "tsx ./build_tools/after-version-change.ts"
   },
   "devDependencies": {
+    "@playwright/browser-chromium": "^1.46.0",
     "@types/codemirror": "5.60.15",
     "@types/gl-matrix": "^2.4.5",
     "@types/lodash-es": "^4.17.12",
@@ -63,13 +64,13 @@
     "glob": "^11.0.0",
     "html-webpack-plugin": "^5.6.0",
     "mini-css-extract-plugin": "^2.9.0",
+    "playwright": "^1.45.3",
     "prettier": "3.3.3",
     "style-loader": "^4.0.0",
     "svg-inline-loader": "^0.8.2",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4",
     "vitest": "^2.0.4",
-    "webdriverio": "^8.39.1",
     "webpack": "^5.93.0",
     "webpack-bundle-analyzer": "^4.10.2",
     "webpack-cli": "^5.1.4",
