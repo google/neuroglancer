@@ -87,7 +87,7 @@ export class AutoRangeFinder extends RefCounted {
   autoComputeRange(minPercentile: number, maxPercentile: number) {
     if (!this.autoRangeData.autoComputeInProgress) {
       const { autoRangeData } = this;
-      const { trackable, dataType, display } = this.parent;
+      const { dataType, display } = this.parent;
 
       // Reset the auto-compute state
       autoRangeData.inputPercentileBounds = [minPercentile, maxPercentile];
@@ -101,19 +101,7 @@ export class AutoRangeFinder extends RefCounted {
         dataType === DataType.FLOAT32
           ? ([-65536, 65536] as [number, number])
           : defaultDataTypeRange[dataType];
-      const hasRange = trackable.value.range !== undefined;
-      if (!hasRange) {
-        trackable.value = {
-          ...trackable.value,
-          window: maxRange,
-        };
-      } else {
-        trackable.value = {
-          ...trackable.value,
-          window: maxRange,
-          range: maxRange,
-        };
-      }
+      this.setTrackableValue(maxRange, maxRange);  
       display.scheduleRedraw();
     }
   }
