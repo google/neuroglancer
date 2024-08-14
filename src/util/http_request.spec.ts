@@ -14,44 +14,44 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect } from "vitest";
 
-import { parseUrl } from "#src/util/http_request.ts"
+import { parseUrl } from "#src/util/http_request.ts";
 
 describe("parseUrl", () => {
   it("parses http correctly", () => {
     expect(parseUrl("http://example.foo/bar")).toEqual({
       protcol: "http",
       host: "example.foo",
-      path: "/bar"
-    })
-  })
+      path: "/bar",
+    });
+  });
   it("parses http with port correctly", () => {
     expect(parseUrl("http://example.foo:8080/bar")).toEqual({
       protcol: "http",
       host: "example.foo:8080",
-      path: "/bar"
-    })
-  })
+      path: "/bar",
+    });
+  });
   it("parses https correctly", () => {
     expect(parseUrl("https://example.foo/bar")).toEqual({
       protcol: "https",
       host: "example.foo",
-      path: "/bar"
-    })
-  })
+      path: "/bar",
+    });
+  });
   it("parses blob correctly", () => {
     expect(parseUrl("blob:http://example.foo/bar")).toEqual({
       protcol: "http",
       host: "example.foo",
-      path: "/bar"
-    })
-  })
+      path: "/bar",
+    });
+  });
   it("parses blob with port correctly", () => {
     expect(parseUrl("blob:http://example.foo:8080/bar")).toEqual({
       protcol: "http",
       host: "example.foo:8080",
-      path: "/bar"
-    })
-  })
-})
+      path: "/bar",
+    });
+  });
+});
