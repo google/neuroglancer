@@ -195,12 +195,12 @@ export function parseUrl(url: string): {
   host: string;
   path: string;
 } {
-  const urlProtocolPattern = /^([^:/]+):\/\/([^/]+)((?:\/.*)?)$/;
+  const urlProtocolPattern = /^(blob:)?([^:/]+):\/\/([^/]+)((?:\/.*)?)$/;
   const match = url.match(urlProtocolPattern);
   if (match === null) {
     throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
   }
-  return { protocol: match[1], host: match[2], path: match[3] };
+  return { protocol: match[2], host: match[3], path: match[4] };
 }
 
 export function isNotFoundError(e: any) {
