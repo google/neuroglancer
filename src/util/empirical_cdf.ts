@@ -115,6 +115,20 @@ function increaseBound(
   return adjustBound(bound, dataType, change, true);
 }
 
+export function expandRange(
+  range: DataTypeInterval,
+  inputDataType: DataType,
+  expansionAmount: number = 0,
+): DataTypeInterval {
+  const lowerBound = range[0];
+  const upperBound = range[1];
+  const expandedRange = [
+    decreaseBound(lowerBound, inputDataType, expansionAmount),
+    increaseBound(upperBound, inputDataType, expansionAmount),
+  ] as DataTypeInterval;
+  return expandedRange;
+}
+
 export function computePercentilesFromEmpiricalHistogram(
   histogram: Float32Array,
   lowerPercentile: number = 0.05,
@@ -188,18 +202,10 @@ export function computePercentilesFromEmpiricalHistogram(
 
   const range = [lowerBound, upperBound] as DataTypeInterval;
   // Bump the window out a bit to make it easier to adjust.
-  const window = [
-    decreaseBound(
-      lowerBound,
-      inputDataType,
-      binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW,
-    ),
-    increaseBound(
-      upperBound,
-      inputDataType,
-      binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW,
-    ),
-  ] as DataTypeInterval;
-
+  const window = expandRange(
+    range,
+    inputDataType,
+    binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW,
+  );
   return { range, window };
 }
