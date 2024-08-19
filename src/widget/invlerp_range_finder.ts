@@ -125,7 +125,7 @@ export class AutoRangeFinder extends RefCounted {
     } else {
       this.parent.trackable.value = {
         ...this.parent.trackable.value,
-        window: ensureWindowBoundsNotEqual([0, 0]),
+        window: ensureWindowBoundsNotEqual(window),
       };
     }
   }
