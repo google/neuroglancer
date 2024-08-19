@@ -52,7 +52,7 @@ import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
-import { type HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
+import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   defineLerpShaderFunction,
   enableLerpShaderFunction,
