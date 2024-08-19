@@ -461,6 +461,11 @@ export class TransferFunction extends RefCounted {
             computeLerp(window, this.dataType, 0.3),
             computeLerp(window, this.dataType, 0.7),
           ] as DataTypeInterval);
+    // If the range ends up being equal, instead just use the window
+    if (controlPointRange[0] === controlPointRange[1]) {
+      controlPointRange[0] = window[0];
+      controlPointRange[1] = window[1];
+    }
     const color = this.trackable.value.defaultColor;
     const colorOpacity = vec4.fromValues(
       Math.round(color[0] * 255),
