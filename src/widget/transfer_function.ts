@@ -47,7 +47,7 @@ import {
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
-import type { Uint64 } from "#src/util/uint64.js";
+import { Uint64 } from "#src/util/uint64.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { Buffer } from "#src/webgl/buffer.js";
@@ -1488,6 +1488,7 @@ class TransferFunctionController extends RefCounted {
   findControlPointIfNearCursor(event: MouseEvent) {
     const { transferFunction } = this;
     const { window } = transferFunction.trackable.value;
+    const { dataType } = this;
     const numControlPoints =
       transferFunction.sortedControlPoints.controlPoints.length;
     function convertControlPointInputToPanelSpace(controlPointIndex: number) {
@@ -1509,6 +1510,27 @@ class TransferFunctionController extends RefCounted {
           .outputColor[3] / 255
       );
     }
+    function calculateControlPointGrabDistance() {
+      let windowSize = 0.0;
+      if (dataType == DataType.UINT64) {
+        const tempUint = new Uint64();
+        windowSize = Uint64.subtract(
+          tempUint,
+          window[1] as Uint64,
+          window[0] as Uint64,
+        ).toNumber();
+      } else if (dataType == DataType.FLOAT32) {
+        // Floating point data can have very small windows with many points
+        windowSize = 1.0 / CONTROL_POINT_X_GRAB_DISTANCE;
+      } else {
+        windowSize = (window[1] as number) - (window[0] as number);
+      }
+      const controlPointGrabDistance = Math.max(
+        CONTROL_POINT_X_GRAB_DISTANCE,
+        1.0 / windowSize,
+      );
+      return controlPointGrabDistance;
+    }
     const position = this.getControlPointPosition(event);
     if (position === undefined) return -1;
     const mouseXPosition = position.normalizedX;
@@ -1522,7 +1544,7 @@ class TransferFunctionController extends RefCounted {
       convertControlPointInputToPanelSpace(nearestControlPointIndex)!;
     if (
       Math.abs(mouseXPosition - nearestControlPointPanelPosition) >
-      CONTROL_POINT_X_GRAB_DISTANCE
+      calculateControlPointGrabDistance()
     ) {
       return -1;
     }
