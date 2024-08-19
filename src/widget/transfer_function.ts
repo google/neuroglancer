@@ -1437,10 +1437,25 @@ class TransferFunctionController extends RefCounted {
         this.transferFunction.sortedControlPoints.controlPoints[
           this.currentGrabbedControlPointIndex
         ];
+      let newInputValue =
+        this.convertPanelSpaceInputToAbsoluteValue(normalizedX);
+      // If the input value is the same as another control point keep the input value the same, don't use the new input value
+      for (
+        let i = 0;
+        i < this.transferFunction.sortedControlPoints.controlPoints.length;
+        i++
+      ) {
+        if (
+          this.transferFunction.sortedControlPoints.controlPoints[i]
+            .inputValue === newInputValue &&
+          i !== this.currentGrabbedControlPointIndex
+        ) {
+          newInputValue = selectedPoint.inputValue;
+        }
+      }
+
       const newColor = vec4.clone(selectedPoint.outputColor);
       newColor[3] = Math.round(normalizedY * 255);
-      const newInputValue =
-        this.convertPanelSpaceInputToAbsoluteValue(normalizedX);
       this.disableAutoPointUpdate();
       this.currentGrabbedControlPointIndex = this.transferFunction.updatePoint(
         this.currentGrabbedControlPointIndex,
