@@ -1506,6 +1506,7 @@ class TransferFunctionController extends RefCounted {
     const { dataType } = this;
     const numControlPoints =
       transferFunction.sortedControlPoints.controlPoints.length;
+
     function convertControlPointInputToPanelSpace(controlPointIndex: number) {
       if (controlPointIndex < 0 || controlPointIndex >= numControlPoints) {
         return null;
@@ -1516,6 +1517,7 @@ class TransferFunctionController extends RefCounted {
           .inputValue,
       );
     }
+
     function convertControlPointOpacityToPanelSpace(controlPointIndex: number) {
       if (controlPointIndex < 0 || controlPointIndex >= numControlPoints) {
         return null;
@@ -1525,6 +1527,7 @@ class TransferFunctionController extends RefCounted {
           .outputColor[3] / 255
       );
     }
+
     function calculateControlPointGrabDistance() {
       let windowSize = 0.0;
       if (dataType == DataType.UINT64) {
@@ -1546,6 +1549,31 @@ class TransferFunctionController extends RefCounted {
       );
       return controlPointGrabDistance;
     }
+
+    function findBestMatchingControlPoint() {
+      const possibleMatches: [number, number][] = [];
+      const totalControlPoints = transferFunction.sortedControlPoints.length;
+      for (let i = 0; i < totalControlPoints; i++) {
+        const currentPosition = convertControlPointInputToPanelSpace(i);
+        const currentDistance =
+          currentPosition !== null
+            ? Math.abs(currentPosition - mouseXPosition)
+            : Infinity;
+        if (currentDistance <= controlPointGrabDistance) {
+          const currentOpacity = convertControlPointOpacityToPanelSpace(i);
+          possibleMatches.push([
+            i,
+            Math.abs(currentOpacity! - mouseYPosition) + 10 * currentDistance,
+          ]);
+        }
+      }
+      const bestMatch =
+        possibleMatches.length === 0
+          ? nearestControlPointIndex
+          : possibleMatches.sort((a, b) => a[1] - b[1])[0][0];
+      return bestMatch;
+    }
+
     const position = this.getControlPointPosition(event);
     if (position === undefined) return -1;
     const mouseXPosition = position.normalizedX;
@@ -1557,59 +1585,15 @@ class TransferFunctionController extends RefCounted {
     }
     const nearestControlPointPanelPosition =
       convertControlPointInputToPanelSpace(nearestControlPointIndex)!;
+    const controlPointGrabDistance = calculateControlPointGrabDistance();
     if (
       Math.abs(mouseXPosition - nearestControlPointPanelPosition) >
-      calculateControlPointGrabDistance()
+      controlPointGrabDistance
     ) {
       return -1;
     }
-    // If points are nearby in X space, use Y space to break ties
-    const possibleMatches: [number, number][] = [
-      [
-        nearestControlPointIndex,
-        Math.abs(
-          convertControlPointOpacityToPanelSpace(nearestControlPointIndex)! -
-            mouseYPosition,
-        ),
-      ],
-    ];
-    const nextPosition = convertControlPointInputToPanelSpace(
-      nearestControlPointIndex + 1,
-    );
-    const nextDistance =
-      nextPosition !== null
-        ? Math.abs(nextPosition - mouseXPosition)
-        : Infinity;
-    if (nextDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
-      possibleMatches.push([
-        nearestControlPointIndex + 1,
-        Math.abs(
-          convertControlPointOpacityToPanelSpace(
-            nearestControlPointIndex + 1,
-          )! - mouseYPosition,
-        ),
-      ]);
-    }
-
-    const previousPosition = convertControlPointInputToPanelSpace(
-      nearestControlPointIndex - 1,
-    );
-    const previousDistance =
-      previousPosition !== null
-        ? Math.abs(previousPosition - mouseXPosition)
-        : Infinity;
-    if (previousDistance <= CONTROL_POINT_X_GRAB_DISTANCE) {
-      possibleMatches.push([
-        nearestControlPointIndex - 1,
-        Math.abs(
-          convertControlPointOpacityToPanelSpace(
-            nearestControlPointIndex - 1,
-          )! - mouseYPosition,
-        ),
-      ]);
-    }
-    const bestMatch = possibleMatches.sort((a, b) => a[1] - b[1])[0][0];
-    return bestMatch;
+    // If points are nearby in X space, use mouse distance in both X and Y to determine the best match
+    return findBestMatchingControlPoint();
   }
 }
 
