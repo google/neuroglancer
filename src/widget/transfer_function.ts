@@ -31,6 +31,7 @@ import {
 } from "#src/util/array.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
+import {expandRange} from "#src/util/empirical_cdf.js";
 import {
   EventActionMap,
   registerActionListener,
@@ -477,6 +478,14 @@ export class TransferFunction extends RefCounted {
       controlPointRange,
       colorOpacity,
     );
+  }
+  generateDefaultWindow(range: DataTypeInterval | null = null) {
+    const actualRange = range !== null ? range : this.sortedControlPoints.range;
+    const window = expandRange(actualRange, this.dataType);
+    this.trackable.value = {
+      ...this.trackable.value,
+      window,
+    };
   }
   updatePoint(index: number, controlPoint: ControlPoint): number {
     return this.sortedControlPoints.updatePoint(index, controlPoint);
@@ -1659,6 +1668,9 @@ class TransferFunctionWidget extends Tab {
     // Otherwise, mark that points should not auto update unless points are cleared
     else {
       this.autoPointUpdateEnabled = false;
+      if (this.trackable.value.sortedControlPoints.length > 0 && windowUnset) {
+        this.transferFunctionPanel.transferFunction.generateDefaultWindow();
+      }
     }
 
     this.updateControlPointsAndDraw();
