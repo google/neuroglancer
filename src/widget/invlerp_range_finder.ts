@@ -34,7 +34,7 @@ const MAX_AUTO_RANGE_ITERATIONS = 16;
 interface AutoRangeData {
   inputPercentileBounds: [number, number];
   autoComputeInProgress: boolean;
-  lastComputedLerpRange: DataTypeInterval | null;
+  previouslyComputedRanges: DataTypeInterval[];
   numIterationsThisCompute: number;
   invertedInitialRange: boolean;
   finishedLerpRange: DataTypeInterval | null;
@@ -58,7 +58,7 @@ export class AutoRangeFinder extends RefCounted {
   autoRangeData: AutoRangeData = {
     inputPercentileBounds: [0, 1],
     autoComputeInProgress: false,
-    lastComputedLerpRange: null,
+    previouslyComputedRanges: [],
     numIterationsThisCompute: 0,
     invertedInitialRange: false,
     finishedLerpRange: null,
@@ -101,7 +101,7 @@ export class AutoRangeFinder extends RefCounted {
         dataType === DataType.FLOAT32
           ? ([-65536, 65536] as [number, number])
           : defaultDataTypeRange[dataType];
-      this.setTrackableValue(maxRange, maxRange);  
+      this.setTrackableValue(maxRange, maxRange);
       display.scheduleRedraw();
     }
   }
@@ -165,16 +165,12 @@ export class AutoRangeFinder extends RefCounted {
 
     // If the range remains constant over two iterations
     // or if we've exceeded the maximum number of iterations, stop
-    const foundRange =
-      autoRangeData.lastComputedLerpRange !== null &&
-      dataTypeIntervalEqual(
-        dataType,
-        newRange,
-        autoRangeData.lastComputedLerpRange,
-      );
+    const foundRange = autoRangeData.previouslyComputedRanges.some(
+      (prevRange) => dataTypeIntervalEqual(dataType, prevRange, newRange),
+    );
     const exceededMaxIterations =
       autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
-    autoRangeData.lastComputedLerpRange = newRange;
+    autoRangeData.previouslyComputedRanges.push(newRange);
     ++autoRangeData.numIterationsThisCompute;
     if (foundRange || exceededMaxIterations) {
       if (autoRangeData.invertedInitialRange) {
@@ -189,9 +185,12 @@ export class AutoRangeFinder extends RefCounted {
       this.setTrackableValue(newRange, newRange);
     }
   }
-  private resetAutoRangeData(autoRangeData: AutoRangeData, finished: boolean = false) {
+  private resetAutoRangeData(
+    autoRangeData: AutoRangeData,
+    finished: boolean = false,
+  ) {
     autoRangeData.autoComputeInProgress = !finished;
-    autoRangeData.lastComputedLerpRange = null;
+    autoRangeData.previouslyComputedRanges = [];
     autoRangeData.numIterationsThisCompute = 0;
     if (finished) {
       autoRangeData.invertedInitialRange = false;
