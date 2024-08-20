@@ -1434,29 +1434,21 @@ class TransferFunctionController extends RefCounted {
     };
   }
   moveControlPoint(event: MouseEvent): TransferFunctionParameters | undefined {
+    const { controlPoints } = this.transferFunction.sortedControlPoints;
     if (
       this.currentGrabbedControlPointIndex !== -1 &&
-      this.currentGrabbedControlPointIndex <
-        this.transferFunction.sortedControlPoints.controlPoints.length
+      this.currentGrabbedControlPointIndex < controlPoints.length
     ) {
       const position = this.getControlPointPosition(event);
       if (position === undefined) return undefined;
       const { normalizedX, normalizedY } = position;
-      const selectedPoint =
-        this.transferFunction.sortedControlPoints.controlPoints[
-          this.currentGrabbedControlPointIndex
-        ];
+      const selectedPoint = controlPoints[this.currentGrabbedControlPointIndex];
       let newInputValue =
         this.convertPanelSpaceInputToAbsoluteValue(normalizedX);
       // If the input value is the same as another control point keep the input value the same, don't use the new input value
-      for (
-        let i = 0;
-        i < this.transferFunction.sortedControlPoints.controlPoints.length;
-        i++
-      ) {
+      for (let i = 0; i < controlPoints.length; i++) {
         if (
-          this.transferFunction.sortedControlPoints.controlPoints[i]
-            .inputValue === newInputValue &&
+          controlPoints[i].inputValue === newInputValue &&
           i !== this.currentGrabbedControlPointIndex
         ) {
           newInputValue = selectedPoint.inputValue;
@@ -1510,9 +1502,8 @@ class TransferFunctionController extends RefCounted {
    * distance in the Y direction is returned.
    */
   findControlPointIfNearCursor(event: MouseEvent) {
-    const { transferFunction } = this;
+    const { transferFunction, dataType } = this;
     const { window } = transferFunction.trackable.value;
-    const { dataType } = this;
     const numControlPoints =
       transferFunction.sortedControlPoints.controlPoints.length;
 
