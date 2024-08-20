@@ -1559,7 +1559,7 @@ class TransferFunctionController extends RefCounted {
       return controlPointGrabDistance;
     }
 
-    function findBestMatchingControlPoint() {
+    function findBestMatchingControlPoint(controlPointGrabDistance: number) {
       const possibleMatches: [number, number][] = [];
       const totalControlPoints = transferFunction.sortedControlPoints.length;
       for (let i = 0; i < totalControlPoints; i++) {
@@ -1602,7 +1602,7 @@ class TransferFunctionController extends RefCounted {
       return -1;
     }
     // If points are nearby in X space, use mouse distance in both X and Y to determine the best match
-    return findBestMatchingControlPoint();
+    return findBestMatchingControlPoint(controlPointGrabDistance);
   }
 }
 
