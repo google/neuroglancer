@@ -90,8 +90,8 @@ describe("Create default transfer function", () => {
     it(`Creates two default transfer function points for ${DataType[dataType]} over a custom window`, () => {
       const window =
         dataType === DataType.UINT64
-          ? ([0, 100] as [number, number])
-          : ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64]);
+          ? ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64])
+          : ([0, 100] as [number, number]);
       transferFunction.generateDefaultControlPoints(null, window);
       expect(transferFunction.sortedControlPoints.controlPoints.length).toBe(2);
       const firstPoint = transferFunction.sortedControlPoints.controlPoints[0];
@@ -106,8 +106,8 @@ describe("Create default transfer function", () => {
     it(`Creates two default transfer function points for ${DataType[dataType]} with a defined range`, () => {
       const range =
         dataType === DataType.UINT64
-          ? ([0, 100] as [number, number])
-          : ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64]);
+          ? ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64])
+          : ([0, 100] as [number, number]);
       transferFunction.generateDefaultControlPoints(range);
       expect(transferFunction.sortedControlPoints.controlPoints.length).toBe(2);
       const firstPoint = transferFunction.sortedControlPoints.controlPoints[0];
