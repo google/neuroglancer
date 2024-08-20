@@ -31,7 +31,7 @@ import {
 } from "#src/util/array.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import {expandRange} from "#src/util/empirical_cdf.js";
+import { expandRange } from "#src/util/empirical_cdf.js";
 import {
   EventActionMap,
   registerActionListener,
