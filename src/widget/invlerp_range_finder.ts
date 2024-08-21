@@ -164,15 +164,18 @@ export class AutoRangeFinder extends RefCounted {
       );
 
     // If the range remains constant over two iterations
+    // or the range is a single value,
     // or if we've exceeded the maximum number of iterations, stop
+    console.log(newRange, autoRangeData.previouslyComputedRanges);
     const foundRange = autoRangeData.previouslyComputedRanges.some(
       (prevRange) => dataTypeIntervalEqual(dataType, prevRange, newRange),
     );
+    const rangeBoundsEqual = dataTypeCompare(newRange[0], newRange[1]) === 0;
     const exceededMaxIterations =
       autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
     autoRangeData.previouslyComputedRanges.push(newRange);
     ++autoRangeData.numIterationsThisCompute;
-    if (foundRange || exceededMaxIterations) {
+    if (foundRange || exceededMaxIterations || rangeBoundsEqual) {
       if (autoRangeData.invertedInitialRange) {
         newRange.reverse();
       }

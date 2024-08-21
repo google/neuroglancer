@@ -202,10 +202,10 @@ export function computePercentilesFromEmpiricalHistogram(
 
   const range = [lowerBound, upperBound] as DataTypeInterval;
   // Bump the window out a bit to make it easier to adjust.
-  const window = expandRange(
-    range,
-    inputDataType,
-    binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW,
-  );
+  let expandAmount = binSize * BIN_SIZE_MULTIPLIER_FOR_WINDOW;
+  if (inputDataType !== DataType.FLOAT32) {
+    expandAmount = Math.max(1.0, expandAmount);
+  }
+  const window = expandRange(range, inputDataType, expandAmount);
   return { range, window };
 }
