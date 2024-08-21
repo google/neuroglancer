@@ -30,6 +30,7 @@ import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import "#src/widget/invlerp_range_finder.css";
 
 const MAX_AUTO_RANGE_ITERATIONS = 16;
+const FLOAT_EQUAL_TOLERANCE = 1e-3;
 
 interface AutoRangeData {
   inputPercentileBounds: [number, number];
@@ -167,9 +168,21 @@ export class AutoRangeFinder extends RefCounted {
     // or the range is a single value,
     // or if we've exceeded the maximum number of iterations, stop
     console.log(newRange, autoRangeData.previouslyComputedRanges);
-    const foundRange = autoRangeData.previouslyComputedRanges.some(
-      (prevRange) => dataTypeIntervalEqual(dataType, prevRange, newRange),
-    );
+    // For non-float32 data types we can exact match the range
+    let foundRange = false;
+    if (dataType !== DataType.FLOAT32) {
+      foundRange = autoRangeData.previouslyComputedRanges.some((prevRange) =>
+        dataTypeIntervalEqual(dataType, prevRange, newRange),
+      );
+    } else {
+      foundRange = autoRangeData.previouslyComputedRanges.some(
+        (prevRange) =>
+          Math.abs((prevRange[0] as number) - (newRange[0] as number)) <
+            FLOAT_EQUAL_TOLERANCE &&
+          Math.abs((prevRange[1] as number) - (newRange[1] as number)) <
+            FLOAT_EQUAL_TOLERANCE,
+      );
+    }
     const rangeBoundsEqual = dataTypeCompare(newRange[0], newRange[1]) === 0;
     const exceededMaxIterations =
       autoRangeData.numIterationsThisCompute > MAX_AUTO_RANGE_ITERATIONS;
