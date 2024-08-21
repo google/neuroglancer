@@ -17,8 +17,7 @@
 import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { computePercentilesFromEmpiricalHistogram } from "#src/util/empirical_cdf.js";
-import type {
-  DataTypeInterval} from "#src/util/lerp.js";
+import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   dataTypeCompare,
   dataTypeIntervalEqual,
@@ -107,8 +106,7 @@ describe("empirical_cdf", () => {
       if (typeof dataType === "string") continue;
       if (dataType === DataType.UINT8 || dataType === DataType.INT8) continue;
       it(`Calculates min and max for ${DataType[dataType]} on range ${dataRange}`, () => {
-        const tolerance =
-          (dataRange[1] - dataRange[0] + 1) / 254;
+        const tolerance = (dataRange[1] - dataRange[0] + 1) / 254;
         const range = findPercentilesFromIterativeHistogram(
           dataValues,
           dataType,

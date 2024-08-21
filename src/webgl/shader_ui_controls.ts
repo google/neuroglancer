@@ -34,7 +34,7 @@ import {
 } from "#src/util/color.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import {vec3, vec4 } from "#src/util/geom.js";
+import { vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
