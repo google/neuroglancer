@@ -82,7 +82,7 @@ export class AutoRangeFinder extends RefCounted {
 
   private wasInputInverted() {
     const { range } = this.parent.trackable.value;
-    return range !== undefined && range[0] > range[1];
+    return range !== undefined && dataTypeCompare(range[0], range[1]) > 0;
   }
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
@@ -167,7 +167,6 @@ export class AutoRangeFinder extends RefCounted {
     // If the range remains constant over two iterations
     // or the range is a single value,
     // or if we've exceeded the maximum number of iterations, stop
-    console.log(newRange, autoRangeData.previouslyComputedRanges);
     // For non-float32 data types we can exact match the range
     let foundRange = false;
     if (dataType !== DataType.FLOAT32) {

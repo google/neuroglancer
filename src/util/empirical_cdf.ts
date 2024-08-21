@@ -69,11 +69,11 @@ function adjustBound(
   change: number,
   increase: boolean,
 ): number | Uint64 {
+  const maxDataRange = defaultDataTypeRange[dataType];
+
   // If the bound is already at the limit, don't adjust it.
   if (dataType !== DataType.FLOAT32) {
-    const boundLimit = increase
-      ? defaultDataTypeRange[dataType][1]
-      : defaultDataTypeRange[dataType][0];
+    const boundLimit = increase ? maxDataRange[1] : maxDataRange[0];
     if (bound === boundLimit) {
       return bound;
     }
@@ -95,7 +95,6 @@ function adjustBound(
   if (dataType === DataType.FLOAT32) {
     return adjustedBound;
   }
-  const maxDataRange = defaultDataTypeRange[dataType];
   return clampToInterval(maxDataRange, adjustedBound);
 }
 
@@ -120,6 +119,9 @@ export function expandRange(
   inputDataType: DataType,
   expansionAmount: number = 0,
 ): DataTypeInterval {
+  if (inputDataType === DataType.UINT64 && expansionAmount !== 1) {
+    return range;
+  }
   const lowerBound = range[0];
   const upperBound = range[1];
   const expandedRange = [
