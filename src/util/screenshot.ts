@@ -44,7 +44,7 @@ export class ScreenshotFromViewer extends RefCounted {
       viewer.display.canvas.height = newSize.height;
     }
     this.screenshotId++;
-    viewer.display.tempIgnoreCanvasSize = true;
+    viewer.display.inScreenshotMode = true;
     if (!shouldResize) {
       viewer.display.scheduleRedraw();
     } else {
@@ -55,7 +55,7 @@ export class ScreenshotFromViewer extends RefCounted {
 
   resetCanvasSize() {
     const { viewer } = this;
-    viewer.display.tempIgnoreCanvasSize = false;
+    viewer.display.inScreenshotMode = false;
     ++viewer.display.resizeGeneration;
     viewer.display.resizeCallback();
   }
@@ -99,6 +99,6 @@ export class ScreenshotFromViewer extends RefCounted {
       }
     }
 
-    this.resetCanvasSize();
+    //this.resetCanvasSize();
   }
 }

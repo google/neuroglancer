@@ -139,12 +139,12 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    if (!viewer.isReady() && !viewer.display.tempIgnoreCanvasSize) {
+    if (!viewer.isReady() && !viewer.display.inScreenshotMode) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;
     }
-    if (!this.wasAlreadyVisible && !viewer.display.tempIgnoreCanvasSize) {
+    if (!this.wasAlreadyVisible && !viewer.display.inScreenshotMode) {
       this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();

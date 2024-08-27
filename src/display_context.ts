@@ -221,8 +221,7 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    // TODO this does not work for 2D panels
-    if (this.context.tempIgnoreCanvasSize) {
+    if (this.context.inScreenshotMode) {
       viewport.width = logicalWidth * screenToCanvasPixelScaleX;
       viewport.height = logicalHeight * screenToCanvasPixelScaleY;
       viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;
@@ -411,7 +410,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
-  tempIgnoreCanvasSize = false;
+  inScreenshotMode = false;
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;
@@ -584,7 +583,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
     const { canvas } = this;
-    if (!this.tempIgnoreCanvasSize) {
+    if (!this.inScreenshotMode) {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     }
