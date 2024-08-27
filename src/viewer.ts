@@ -71,7 +71,6 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import { overlaysOpen } from "#src/overlay.js";
-import type { ScreenshotActionState } from "#src/python_integration/screenshots.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
 import { StatusMessage } from "#src/status.js";
@@ -121,6 +120,7 @@ import {
   EventActionMap,
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
+import { ScreenshotFromViewer } from "#src/util/screenshot.js";
 import { NullarySignal } from "#src/util/signal.js";
 import {
   CompoundTrackable,
@@ -491,12 +491,12 @@ export class Viewer extends RefCounted implements ViewerState {
 
   resetInitiated = new NullarySignal();
 
-  private screenshotHandler = this.registerDisposer(
+  private screenshotActionHandler = this.registerDisposer(
     new ScreenshotHandler(this),
   );
-  private screenshotId: number | undefined;
-  private screenshotUrl: string | undefined;
-  screenshotScale: number = 1;
+  public screenshotHandler = this.registerDisposer(
+    new ScreenshotFromViewer(this),
+  );
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -577,16 +577,16 @@ export class Viewer extends RefCounted implements ViewerState {
       }, this.partialViewport),
     );
     this.registerDisposer(
-      this.screenshotHandler.sendScreenshotRequested.add((state) => {
-        this.saveScreenshot(state);
-        this.resetCanvasSize();
+      this.screenshotActionHandler.sendScreenshotRequested.add((state) => {
+        this.screenshotHandler.saveScreenshot(state);
       }),
     );
+    // TODO this is a bit clunky, but it works for now.
     this.registerDisposer(
       this.display.updateFinished.add(() => {
-        if (this.screenshotId !== undefined) {
-          this.screenshotHandler.requestState.value =
-            this.screenshotId.toString();
+        if (this.screenshotHandler.screenshotId >= 0) {
+          this.screenshotActionHandler.requestState.value =
+            this.screenshotHandler.screenshotId.toString();
         }
       }),
     );
@@ -1067,8 +1067,6 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    this.bindAction("help", () => this.screenshot());
-
     for (let i = 1; i <= 9; ++i) {
       this.bindAction(`toggle-layer-${i}`, () => {
         const layer = this.layerManager.getLayerByNonArchivedIndex(i - 1);
@@ -1177,81 +1175,6 @@ export class Viewer extends RefCounted implements ViewerState {
       value = !this.statisticsDisplayState.location.visible;
     }
     this.statisticsDisplayState.location.visible = value;
-  }
-
-  screenshot() {
-    const shouldResize = this.screenshotScale !== 1;
-    if (shouldResize) {
-      const oldSize = {
-        width: this.display.canvas.width,
-        height: this.display.canvas.height,
-      };
-      const newSize = {
-        width: Math.round(oldSize.width * this.screenshotScale),
-        height: Math.round(oldSize.height * this.screenshotScale),
-      };
-      this.display.canvas.width = newSize.width;
-      this.display.canvas.height = newSize.height;
-    }
-    if (this.screenshotId === undefined) {
-      this.screenshotId = 0;
-    } else {
-      this.screenshotId++;
-    }
-    this.display.tempIgnoreCanvasSize = true;
-    if (!shouldResize) {
-      this.display.scheduleRedraw();
-    } else {
-      ++this.display.resizeGeneration;
-      this.display.resizeCallback();
-    }
-  }
-
-  private resetCanvasSize() {
-    this.display.tempIgnoreCanvasSize = false;
-    ++this.display.resizeGeneration;
-    this.display.resizeCallback();
-  }
-
-  private saveScreenshot(actionState: ScreenshotActionState) {
-    function binaryStringToUint8Array(binaryString: string) {
-      const length = binaryString.length;
-      const bytes = new Uint8Array(length);
-      for (let i = 0; i < length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes;
-    }
-
-    function base64ToUint8Array(base64: string) {
-      const binaryString = window.atob(base64);
-      return binaryStringToUint8Array(binaryString);
-    }
-
-    const { screenshot } = actionState;
-    const { image, imageType, width, height } = screenshot;
-    const screenshotImage = new Blob([base64ToUint8Array(image)], {
-      type: imageType,
-    });
-    if (this.screenshotUrl !== undefined) {
-      URL.revokeObjectURL(this.screenshotUrl);
-    }
-    this.screenshotUrl = URL.createObjectURL(screenshotImage);
-
-    const a = document.createElement("a");
-    const url = this.screenshotUrl;
-    if (url !== undefined) {
-      let nowtime = new Date().toLocaleString();
-      nowtime = nowtime.replace(", ", "-");
-      a.href = url;
-      a.download = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
-      document.body.appendChild(a);
-      try {
-        a.click();
-      } finally {
-        document.body.removeChild(a);
-      }
-    }
   }
 
   get gl() {

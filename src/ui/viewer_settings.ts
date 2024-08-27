@@ -147,7 +147,7 @@ export class ViewerSettingsPanel extends SidePanel {
       button.addEventListener("click", callback);
       scroll.appendChild(button);
     };
-    addButton("Take screenshot", () => viewer.screenshot());
+    addButton("Take screenshot", () => viewer.screenshotHandler.screenshot());
 
     const addIntSlider = (
       label: string,
@@ -166,11 +166,11 @@ export class ViewerSettingsPanel extends SidePanel {
         callback(parseInt(slider.value));
       });
       labelElement.appendChild(slider);
-      slider.value = viewer.screenshotScale.toString();
+      slider.value = viewer.screenshotHandler.screenshotScale.toString();
       scroll.appendChild(labelElement);
     };
     addIntSlider("Screenshot resolution scale", 1, 8, (value) => {
-      viewer.screenshotScale = value;
+      viewer.screenshotHandler.screenshotScale = value;
     });
   }
 }
