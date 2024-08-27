@@ -17,6 +17,7 @@
 import "#src/viewer.css";
 import "#src/ui/layer_data_sources_tab.js";
 import "#src/noselect.css";
+import svg_camera from "ikonate/icons/camera.svg?raw";
 import svg_controls_alt from "ikonate/icons/controls-alt.svg?raw";
 import svg_layers from "ikonate/icons/layers.svg?raw";
 import svg_list from "ikonate/icons/list.svg?raw";
@@ -91,6 +92,7 @@ import {
 } from "#src/ui/layer_list_panel.js";
 import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
+import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
@@ -879,6 +881,14 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const button = makeIcon({ svg: svg_camera, title: "Screenshot" });
+      this.registerEventListener(button, "click", () => {
+        this.showScreenshotDialog();
+      });
+      topRow.appendChild(button);
+    }
+
+    {
       const { helpPanelState } = this;
       const button = this.registerDisposer(
         new CheckboxIcon(helpPanelState.location.watchableVisible, {
@@ -1156,6 +1166,10 @@ export class Viewer extends RefCounted implements ViewerState {
 
   editJsonState() {
     new StateEditorDialog(this);
+  }
+
+  showScreenshotDialog() {
+    new ScreenshotDialog(this);
   }
 
   showStatistics(value: boolean | undefined = undefined) {
