@@ -129,7 +129,7 @@ export class ScreenshotHandler extends RefCounted {
       this.throttledSendStatistics(requestState);
       return;
     }
-    if (!this.wasAlreadyVisible) {
+    if (!this.wasAlreadyVisible && !viewer.display.forceScreenshot) {
       this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();

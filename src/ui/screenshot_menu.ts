@@ -51,13 +51,14 @@ export class ScreenshotDialog extends Overlay {
     forceScreenshotButton.title =
       "Force a screenshot of the current view and save it to a png file";
     forceScreenshotButton.addEventListener("click", () => {
-      this.viewer.display.forceScreenshot = true;
+      this.forceScreenshot();
     });
 
     this.content.appendChild(closeButton);
     this.content.appendChild(this.createScaleRadioButtons());
     this.content.appendChild(nameInput);
     this.content.appendChild(saveButton);
+    this.content.appendChild(forceScreenshotButton);
   }
 
   private createScaleRadioButtons() {
@@ -70,7 +71,7 @@ export class ScreenshotDialog extends Overlay {
       input.type = "radio";
       input.name = "screenshot-scale";
       input.value = scale.toString();
-      input.checked = scale === 1;
+      input.checked = scale === this.viewer.screenshotHandler.screenshotScale;
       label.appendChild(input);
       label.appendChild(document.createTextNode(`Scale ${scale}x`));
       scaleRadioButtons.appendChild(label);
@@ -81,10 +82,15 @@ export class ScreenshotDialog extends Overlay {
     return scaleRadioButtons;
   }
 
+  private forceScreenshot() {
+    this.viewer.display.forceScreenshot = true;
+    this.viewer.display.scheduleRedraw();
+    this.dispose();
+  }
+
   private screenshot() {
     const filename = this.nameInput.value;
     this.viewer.screenshotHandler.screenshot(filename);
     this.viewer.display.forceScreenshot = false;
-    this.dispose();
   }
 }
