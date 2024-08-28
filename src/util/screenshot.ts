@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { PerspectivePanel } from "#src/perspective_view/panel.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { Viewer } from "#src/viewer.js";
 
@@ -26,10 +28,63 @@ interface ScreenshotResponse {
   height: number;
 }
 
-export interface ScreenshotActionState {
+interface ScreenshotActionState {
   viewerState: any;
   selectedValues: any;
   screenshot: ScreenshotResponse;
+}
+
+interface ScreenshotCanvasViewport {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+async function cropUint8Image(
+  image: Uint8Array,
+  crop: ScreenshotCanvasViewport,
+): Promise<Blob> {
+  const blob = new Blob([image], { type: "image/png" });
+  const img = new Image();
+  const loadImage = new Promise<HTMLImageElement>((resolve, reject) => {
+    img.onload = () => resolve(img);
+    img.onerror = (error) => reject(error);
+  });
+  img.src = URL.createObjectURL(blob);
+  const loadedImg = await loadImage;
+
+  const cropWidth = crop.right - crop.left;
+  const cropHeight = crop.bottom - crop.top;
+  const canvas = document.createElement("canvas");
+  canvas.width = cropWidth;
+  canvas.height = cropHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to get canvas context");
+  }
+
+  ctx.drawImage(
+    loadedImg,
+    crop.left,
+    crop.top, // Source image origin
+    cropWidth,
+    cropHeight, // Crop dimensions from the source image
+    0,
+    0, // Target canvas origin
+    cropWidth,
+    cropHeight, // Target canvas dimensions
+  );
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("Canvas toBlob failed"));
+      }
+    }, "image/png");
+  });
 }
 
 export class ScreenshotFromViewer extends RefCounted {
@@ -89,6 +144,34 @@ export class ScreenshotFromViewer extends RefCounted {
     return filename;
   }
 
+  calculateRenderLocation(): ScreenshotCanvasViewport {
+    const panels = this.viewer.display.panels;
+    const clippedPanel = {
+      left: Number.POSITIVE_INFINITY,
+      right: Number.NEGATIVE_INFINITY,
+      top: Number.POSITIVE_INFINITY,
+      bottom: Number.NEGATIVE_INFINITY,
+    };
+    for (const panel of panels) {
+      const isViewPanel =
+        panel instanceof SliceViewPanel || panel instanceof PerspectivePanel;
+      if (!isViewPanel) {
+        continue;
+      }
+      const viewport = panel.renderViewport;
+      const { width, height } = viewport;
+      const left = panel.canvasRelativeClippedLeft;
+      const top = panel.canvasRelativeClippedTop;
+      const right = left + width;
+      const bottom = top + height;
+      clippedPanel.left = Math.min(clippedPanel.left, left);
+      clippedPanel.right = Math.max(clippedPanel.right, right);
+      clippedPanel.top = Math.min(clippedPanel.top, top);
+      clippedPanel.bottom = Math.max(clippedPanel.bottom, bottom);
+    }
+    return clippedPanel;
+  }
+
   saveScreenshot(actionState: ScreenshotActionState) {
     function binaryStringToUint8Array(binaryString: string) {
       const length = binaryString.length;
@@ -105,27 +188,29 @@ export class ScreenshotFromViewer extends RefCounted {
     }
 
     const { screenshot } = actionState;
-    const { image, imageType, width, height } = screenshot;
-    const screenshotImage = new Blob([base64ToUint8Array(image)], {
-      type: imageType,
-    });
-    if (this.screenshotUrl !== undefined) {
-      URL.revokeObjectURL(this.screenshotUrl);
-    }
-    this.screenshotUrl = URL.createObjectURL(screenshotImage);
-
-    const a = document.createElement("a");
-    if (this.screenshotUrl !== undefined) {
-      a.href = this.screenshotUrl;
-      a.download = this.generateFilename(width, height);
-      document.body.appendChild(a);
-      try {
-        a.click();
-      } finally {
-        document.body.removeChild(a);
+    const { image } = screenshot;
+    const fullImage = base64ToUint8Array(image);
+    const renderLocation = this.calculateRenderLocation();
+    cropUint8Image(fullImage, renderLocation).then((croppedImage) => {
+      if (this.screenshotUrl !== undefined) {
+        URL.revokeObjectURL(this.screenshotUrl);
       }
-    }
+      this.screenshotUrl = URL.createObjectURL(croppedImage);
 
+      const a = document.createElement("a");
+      if (this.screenshotUrl !== undefined) {
+        a.href = this.screenshotUrl;
+        const width = renderLocation.right - renderLocation.left;
+        const height = renderLocation.bottom - renderLocation.top;
+        a.download = this.generateFilename(width, height);
+        document.body.appendChild(a);
+        try {
+          a.click();
+        } finally {
+          document.body.removeChild(a);
+        }
+      }
+    });
     this.resetCanvasSize();
   }
 }
