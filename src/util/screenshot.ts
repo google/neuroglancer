@@ -36,13 +36,14 @@ export class ScreenshotFromViewer extends RefCounted {
   public screenshotId: number = -1;
   private screenshotUrl: string | undefined;
   public screenshotScale: number = 1;
+  private filename: string = "";
 
   constructor(public viewer: Viewer) {
     super();
     this.viewer = viewer;
   }
 
-  screenshot() {
+  screenshot(filename: string = "") {
     const { viewer } = this;
     const shouldResize = this.screenshotScale !== 1;
     if (shouldResize) {
@@ -65,6 +66,7 @@ export class ScreenshotFromViewer extends RefCounted {
       ++viewer.display.resizeGeneration;
       viewer.display.resizeCallback();
     }
+    this.filename = filename;
   }
 
   resetCanvasSize() {
@@ -72,6 +74,19 @@ export class ScreenshotFromViewer extends RefCounted {
     viewer.display.inScreenshotMode = false;
     ++viewer.display.resizeGeneration;
     viewer.display.resizeCallback();
+  }
+
+  generateFilename(width: number, height: number): string {
+    let filename = this.filename;
+    if (filename.length === 0) {
+      let nowtime = new Date().toLocaleString();
+      nowtime = nowtime.replace(", ", "-");
+      filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
+    }
+    if (!filename.endsWith(".png")) {
+      filename += ".png";
+    }
+    return filename;
   }
 
   saveScreenshot(actionState: ScreenshotActionState) {
@@ -101,10 +116,8 @@ export class ScreenshotFromViewer extends RefCounted {
 
     const a = document.createElement("a");
     if (this.screenshotUrl !== undefined) {
-      let nowtime = new Date().toLocaleString();
-      nowtime = nowtime.replace(", ", "-");
       a.href = this.screenshotUrl;
-      a.download = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
+      a.download = this.generateFilename(width, height);
       document.body.appendChild(a);
       try {
         a.click();

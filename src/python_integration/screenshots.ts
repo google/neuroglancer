@@ -124,7 +124,7 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    if (!viewer.isReady()) {
+    if (!viewer.isReady() && !viewer.display.forceScreenshot) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;

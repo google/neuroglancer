@@ -20,38 +20,71 @@ import "#src/ui/screenshot_menu.css";
 import type { Viewer } from "#src/viewer.js";
 
 export class ScreenshotDialog extends Overlay {
-  filenameEditor: HTMLInputElement;
-  saveScreenshotButton: HTMLButtonElement;
+  nameInput: HTMLInputElement;
+  saveButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
+  forceScreenshotButton: HTMLButtonElement;
   constructor(public viewer: Viewer) {
     super();
 
     // TODO: this might be better as a menu, not a dialog.
     this.content.classList.add("neuroglancer-screenshot-dialog");
 
-    const buttonClose = (this.closeButton = document.createElement("button"));
-    buttonClose.classList.add("close-button");
-    buttonClose.textContent = "Close";
-    this.content.appendChild(buttonClose);
-    buttonClose.addEventListener("click", () => this.dispose());
+    const closeButton = (this.closeButton = document.createElement("button"));
+    closeButton.classList.add("close-button");
+    closeButton.textContent = "Close";
+    closeButton.addEventListener("click", () => this.dispose());
 
-    this.filenameEditor = document.createElement("input");
-    this.filenameEditor.type = "text";
-    this.filenameEditor.placeholder = "Enter filename...";
-    this.content.appendChild(this.filenameEditor);
+    const nameInput = (this.nameInput = document.createElement("input"));
+    nameInput.type = "text";
+    nameInput.placeholder = "Enter filename...";
 
-    const saveScreenshotButton = (this.saveScreenshotButton =
+    const saveButton = (this.saveButton = document.createElement("button"));
+    saveButton.textContent = "Take screenshot";
+    saveButton.title =
+      "Take a screenshot of the current view and save it to a png file";
+    saveButton.addEventListener("click", () => this.screenshot());
+
+    const forceScreenshotButton = (this.forceScreenshotButton =
       document.createElement("button"));
-    saveScreenshotButton.textContent = "Download";
-    saveScreenshotButton.title = "Download state as a JSON file";
-    this.content.appendChild(saveScreenshotButton);
-    saveScreenshotButton.addEventListener("click", () => this.screenshot());
+    forceScreenshotButton.textContent = "Force screenshot";
+    forceScreenshotButton.title =
+      "Force a screenshot of the current view and save it to a png file";
+    forceScreenshotButton.addEventListener("click", () => {
+      this.viewer.display.forceScreenshot = true;
+    });
+
+    this.content.appendChild(closeButton);
+    this.content.appendChild(this.createScaleRadioButtons());
+    this.content.appendChild(nameInput);
+    this.content.appendChild(saveButton);
   }
 
-  screenshot() {
-    const filename = this.filenameEditor.value;
-    filename;
-    //this.viewer.saveScreenshot(filename);
+  private createScaleRadioButtons() {
+    const scaleRadioButtons = document.createElement("div");
+    scaleRadioButtons.classList.add("scale-radio-buttons");
+    const scales = [1, 2, 4];
+    for (const scale of scales) {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "screenshot-scale";
+      input.value = scale.toString();
+      input.checked = scale === 1;
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(`Scale ${scale}x`));
+      scaleRadioButtons.appendChild(label);
+      input.addEventListener("change", () => {
+        this.viewer.screenshotHandler.screenshotScale = scale;
+      });
+    }
+    return scaleRadioButtons;
+  }
+
+  private screenshot() {
+    const filename = this.nameInput.value;
+    this.viewer.screenshotHandler.screenshot(filename);
+    this.viewer.display.forceScreenshot = false;
     this.dispose();
   }
 }
