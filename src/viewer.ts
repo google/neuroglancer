@@ -1067,6 +1067,8 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
+    this.bindAction("help", () => this.toggleHelpPanel());
+
     for (let i = 1; i <= 9; ++i) {
       this.bindAction(`toggle-layer-${i}`, () => {
         const layer = this.layerManager.getLayerByNonArchivedIndex(i - 1);
