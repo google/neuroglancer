@@ -14,9 +14,23 @@
  * limitations under the License.
  */
 
-import type { ScreenshotActionState } from "#src/python_integration/screenshots.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { Viewer } from "#src/viewer.js";
+
+interface ScreenshotResponse {
+  id: string;
+  image: string;
+  imageType: string;
+  depthData: string | undefined;
+  width: number;
+  height: number;
+}
+
+export interface ScreenshotActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshot: ScreenshotResponse;
+}
 
 export class ScreenshotFromViewer extends RefCounted {
   public screenshotId: number = -1;
@@ -99,6 +113,6 @@ export class ScreenshotFromViewer extends RefCounted {
       }
     }
 
-    //this.resetCanvasSize();
+    this.resetCanvasSize();
   }
 }

@@ -30,21 +30,6 @@ import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
 import type { Viewer } from "#src/viewer.js";
 
-interface ScreenshotResponse {
-  id: string;
-  image: string;
-  imageType: string;
-  depthData: string | undefined;
-  width: number;
-  height: number;
-}
-
-export interface ScreenshotActionState {
-  viewerState: any;
-  selectedValues: any;
-  screenshot: ScreenshotResponse;
-}
-
 export class ScreenshotHandler extends RefCounted {
   sendScreenshotRequested = new Signal<(state: any) => void>();
   sendStatisticsRequested = new Signal<(state: any) => void>();
@@ -139,12 +124,12 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    if (!viewer.isReady() && !viewer.display.inScreenshotMode) {
+    if (!viewer.isReady()) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;
     }
-    if (!this.wasAlreadyVisible && !viewer.display.inScreenshotMode) {
+    if (!this.wasAlreadyVisible) {
       this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();
