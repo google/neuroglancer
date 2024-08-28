@@ -114,14 +114,13 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
 }
 
 async function cropUint8Image(
-  image: Uint8Array,
+  viewer: Viewer,
   crop: ScreenshotCanvasViewport,
 ): Promise<Blob> {
-  const blob = new Blob([image], { type: "image/png" });
   const cropWidth = crop.right - crop.left;
   const cropHeight = crop.bottom - crop.top;
   const img = await createImageBitmap(
-    blob,
+    viewer.display.canvas,
     crop.left,
     crop.top,
     cropWidth,
@@ -183,30 +182,19 @@ export class ScreenshotFromViewer extends RefCounted {
   }
 
   async saveScreenshot(actionState: ScreenshotActionState) {
-    function binaryStringToUint8Array(binaryString: string) {
-      const length = binaryString.length;
-      const bytes = new Uint8Array(length);
-      for (let i = 0; i < length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes;
-    }
-
-    function base64ToUint8Array(base64: string) {
-      const binaryString = window.atob(base64);
-      return binaryStringToUint8Array(binaryString);
-    }
-
     const { screenshot } = actionState;
-    const { image } = screenshot;
-    const fullImage = base64ToUint8Array(image);
+    const { imageType } = screenshot;
+    if (imageType !== "image/png") {
+      console.error("Image type is not PNG");
+      return;
+    }
     const renderLocation = determineViewPanelArea(this.viewer.display.panels);
     try {
-      const croppedImage = await cropUint8Image(fullImage, renderLocation);
+      const croppedImage = await cropUint8Image(this.viewer, renderLocation);
       const filename = generateFilename(
         this.filename,
-        screenshot.width,
-        screenshot.height,
+        renderLocation.right - renderLocation.left,
+        renderLocation.bottom - renderLocation.top,
       );
       downloadFileForBlob(croppedImage, filename);
     } catch (error) {
