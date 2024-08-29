@@ -491,12 +491,8 @@ export class Viewer extends RefCounted implements ViewerState {
 
   resetInitiated = new NullarySignal();
 
-  private screenshotActionHandler = this.registerDisposer(
-    new ScreenshotHandler(this),
-  );
-  public screenshotHandler = this.registerDisposer(
-    new ScreenshotFromViewer(this),
-  );
+  screenshotActionHandler = this.registerDisposer(new ScreenshotHandler(this));
+  screenshotHandler = this.registerDisposer(new ScreenshotFromViewer(this));
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -576,21 +572,6 @@ export class Viewer extends RefCounted implements ViewerState {
         this.display.applyWindowedViewportToElement(element, value);
       }, this.partialViewport),
     );
-    this.registerDisposer(
-      this.screenshotActionHandler.sendScreenshotRequested.add((state) => {
-        this.screenshotHandler.saveScreenshot(state);
-      }),
-    );
-    // TODO this is a bit clunky, but it works for now.
-    this.registerDisposer(
-      this.display.updateFinished.add(() => {
-        if (this.screenshotHandler.screenshotId >= 0) {
-          this.screenshotActionHandler.requestState.value =
-            this.screenshotHandler.screenshotId.toString();
-        }
-      }),
-    );
-
     this.registerDisposer(() => removeFromParent(this.element));
 
     this.dataContext = this.registerDisposer(dataContext);

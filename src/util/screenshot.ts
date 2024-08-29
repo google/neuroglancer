@@ -146,6 +146,13 @@ export class ScreenshotFromViewer extends RefCounted {
   constructor(public viewer: Viewer) {
     super();
     this.viewer = viewer;
+    this.registerDisposer(
+      this.viewer.screenshotActionHandler.sendScreenshotRequested.add(
+        (state) => {
+          this.saveScreenshot(state);
+        },
+      ),
+    );
   }
 
   screenshot(filename: string = "") {
@@ -164,10 +171,10 @@ export class ScreenshotFromViewer extends RefCounted {
       viewer.display.canvas.height = newSize.height;
     }
     this.screenshotId++;
+    this.viewer.screenshotActionHandler.requestState.value =
+      this.screenshotId.toString();
     viewer.display.inScreenshotMode = true;
-    if (!shouldResize) {
-      viewer.display.scheduleRedraw();
-    } else {
+    if (shouldResize) {
       ++viewer.display.resizeGeneration;
       viewer.display.resizeCallback();
     }

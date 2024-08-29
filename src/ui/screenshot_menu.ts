@@ -21,15 +21,16 @@ import "#src/ui/screenshot_menu.css";
 import type { Viewer } from "#src/viewer.js";
 
 export class ScreenshotDialog extends Overlay {
-  nameInput: HTMLInputElement;
-  saveButton: HTMLButtonElement;
-  closeButton: HTMLButtonElement;
-  forceScreenshotButton: HTMLButtonElement;
-  inScreenshotMode: boolean;
+  private nameInput: HTMLInputElement;
+  private saveButton: HTMLButtonElement;
+  private closeButton: HTMLButtonElement;
+  private forceScreenshotButton: HTMLButtonElement;
+  private inScreenshotMode: boolean;
   constructor(public viewer: Viewer) {
     super();
 
     this.content.classList.add("neuroglancer-screenshot-dialog");
+    this.inScreenshotMode = this.viewer.display.inScreenshotMode;
 
     const closeButton = (this.closeButton = document.createElement("button"));
     closeButton.classList.add("close-button");
@@ -43,11 +44,9 @@ export class ScreenshotDialog extends Overlay {
     const saveButton = this.createSaveButton();
     const forceScreenshotButton = this.createForceScreenshotButton();
 
-    this.content.appendChild(closeButton);
+    this.content.appendChild(this.closeButton);
     this.content.appendChild(this.createScaleRadioButtons());
-    this.content.appendChild(nameInput);
-    this.inScreenshotMode = this.viewer.display.inScreenshotMode;
-
+    this.content.appendChild(this.nameInput);
     if (this.inScreenshotMode) {
       this.content.appendChild(forceScreenshotButton);
     } else {
