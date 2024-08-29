@@ -412,6 +412,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   boundsGeneration = -1;
   inScreenshotMode = false;
   forceScreenshot = false;
+  screenshotFinished = new NullarySignal();
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;

@@ -177,6 +177,7 @@ export class ScreenshotFromViewer extends RefCounted {
   resetCanvasSize() {
     const { viewer } = this;
     viewer.display.inScreenshotMode = false;
+    viewer.display.screenshotFinished.dispatch();
     ++viewer.display.resizeGeneration;
     viewer.display.resizeCallback();
   }

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import "#src/ui/screenshot_menu.css";
 
@@ -24,10 +25,10 @@ export class ScreenshotDialog extends Overlay {
   saveButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
   forceScreenshotButton: HTMLButtonElement;
+  inScreenshotMode: boolean;
   constructor(public viewer: Viewer) {
     super();
 
-    // TODO: this might be better as a menu, not a dialog.
     this.content.classList.add("neuroglancer-screenshot-dialog");
 
     const closeButton = (this.closeButton = document.createElement("button"));
@@ -39,12 +40,39 @@ export class ScreenshotDialog extends Overlay {
     nameInput.type = "text";
     nameInput.placeholder = "Enter filename...";
 
+    const saveButton = this.createSaveButton();
+    const forceScreenshotButton = this.createForceScreenshotButton();
+
+    this.content.appendChild(closeButton);
+    this.content.appendChild(this.createScaleRadioButtons());
+    this.content.appendChild(nameInput);
+    this.inScreenshotMode = this.viewer.display.inScreenshotMode;
+
+    if (this.inScreenshotMode) {
+      this.content.appendChild(forceScreenshotButton);
+    } else {
+      this.content.appendChild(saveButton);
+    }
+
+    this.registerDisposer(
+      this.viewer.display.screenshotFinished.add(() => {
+        this.debouncedShowSaveOrForceScreenshotButton();
+      }),
+    );
+  }
+
+  private createSaveButton() {
     const saveButton = (this.saveButton = document.createElement("button"));
     saveButton.textContent = "Take screenshot";
     saveButton.title =
       "Take a screenshot of the current view and save it to a png file";
-    saveButton.addEventListener("click", () => this.screenshot());
+    saveButton.addEventListener("click", () => {
+      this.screenshot();
+    });
+    return saveButton;
+  }
 
+  private createForceScreenshotButton() {
     const forceScreenshotButton = (this.forceScreenshotButton =
       document.createElement("button"));
     forceScreenshotButton.textContent = "Force screenshot";
@@ -53,12 +81,7 @@ export class ScreenshotDialog extends Overlay {
     forceScreenshotButton.addEventListener("click", () => {
       this.forceScreenshot();
     });
-
-    this.content.appendChild(closeButton);
-    this.content.appendChild(this.createScaleRadioButtons());
-    this.content.appendChild(nameInput);
-    this.content.appendChild(saveButton);
-    this.content.appendChild(forceScreenshotButton);
+    return forceScreenshotButton;
   }
 
   private createScaleRadioButtons() {
@@ -85,6 +108,7 @@ export class ScreenshotDialog extends Overlay {
   private forceScreenshot() {
     this.viewer.display.forceScreenshot = true;
     this.viewer.display.scheduleRedraw();
+    this.debouncedShowSaveOrForceScreenshotButton();
     this.dispose();
   }
 
@@ -92,5 +116,20 @@ export class ScreenshotDialog extends Overlay {
     const filename = this.nameInput.value;
     this.viewer.screenshotHandler.screenshot(filename);
     this.viewer.display.forceScreenshot = false;
+    this.debouncedShowSaveOrForceScreenshotButton();
+  }
+
+  private debouncedShowSaveOrForceScreenshotButton = debounce(() => {
+    this.showSaveOrForceScreenshotButton();
+  }, 200);
+
+  private showSaveOrForceScreenshotButton() {
+    if (this.viewer.display.inScreenshotMode && !this.inScreenshotMode) {
+      this.inScreenshotMode = true;
+      this.content.replaceChild(this.forceScreenshotButton, this.saveButton);
+    } else if (!this.viewer.display.inScreenshotMode && this.inScreenshotMode) {
+      this.inScreenshotMode = false;
+      this.content.replaceChild(this.saveButton, this.forceScreenshotButton);
+    }
   }
 }
