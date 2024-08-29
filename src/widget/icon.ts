@@ -28,10 +28,6 @@ export interface MakeHoverIconOptions extends MakeIconOptions {
   svgHover?: string;
 }
 
-function removeSVGTitles(element: HTMLElement) {
-  element.querySelectorAll("title").forEach((title) => title.remove());
-}
-
 export function makeHoverIcon(options: MakeHoverIconOptions): HTMLElement {
   const element = makeIcon(options);
   if (options.svgHover) {
@@ -62,12 +58,6 @@ export function makeIcon(options: MakeIconOptions): HTMLElement {
   element.className = "neuroglancer-icon";
   if (svg !== undefined) {
     element.innerHTML = svg;
-    if (
-      element instanceof HTMLDivElement &&
-      element.firstChild instanceof SVGElement
-    ) {
-      removeSVGTitles(element);
-    }
   }
   if (options.text !== undefined) {
     element.appendChild(document.createTextNode(options.text));
