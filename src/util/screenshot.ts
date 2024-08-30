@@ -35,6 +35,24 @@ interface ScreenshotActionState {
   screenshot: ScreenshotResponse;
 }
 
+export interface StatisticsActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshotStatistics: {
+    id: string;
+    chunkSources: any[];
+    total: {
+      downloadLatency: number;
+      visibleChunksDownloading: number;
+      visibleChunksFailed: number;
+      visibleChunksGpuMemory: number;
+      visibleChunksSystemMemory: number;
+      visibleChunksTotal: number;
+      visibleGpuMemory: number;
+    };
+  };
+}
+
 interface ScreenshotCanvasViewport {
   left: number;
   right: number;

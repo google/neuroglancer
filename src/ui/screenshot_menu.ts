@@ -18,6 +18,7 @@ import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import "#src/ui/screenshot_menu.css";
 
+import type { StatisticsActionState } from "#src/util/screenshot.js";
 import type { Viewer } from "#src/viewer.js";
 
 export class ScreenshotDialog extends Overlay {
@@ -25,6 +26,8 @@ export class ScreenshotDialog extends Overlay {
   private saveButton: HTMLButtonElement;
   private closeButton: HTMLButtonElement;
   private forceScreenshotButton: HTMLButtonElement;
+  private statisticsTable: HTMLTableElement;
+  private titleBar: HTMLDivElement;
   private inScreenshotMode: boolean;
   constructor(public viewer: Viewer) {
     super();
@@ -52,11 +55,19 @@ export class ScreenshotDialog extends Overlay {
     } else {
       this.content.appendChild(saveButton);
     }
+    this.content.appendChild(this.createStatisticsTable());
 
     this.registerDisposer(
       this.viewer.display.screenshotFinished.add(() => {
         this.debouncedShowSaveOrForceScreenshotButton();
       }),
+    );
+    this.registerDisposer(
+      this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
+        (actionState) => {
+          this.populateStatistics(actionState);
+        },
+      ),
     );
   }
 
@@ -104,6 +115,32 @@ export class ScreenshotDialog extends Overlay {
     return scaleRadioButtons;
   }
 
+  private createStatisticsTable() {
+    const titleBar = document.createElement("div");
+    this.titleBar = titleBar;
+    titleBar.classList.add("neuroglancer-screenshot-statistics-title");
+    this.content.appendChild(titleBar);
+    this.statisticsTable = document.createElement("table");
+    this.statisticsTable.classList.add(
+      "neuroglancer-screenshot-statistics-table",
+    );
+    this.statisticsTable.createTHead().insertRow().innerHTML =
+      "<th>Key</th><th>Value</th>";
+    this.statisticsTable.title = "Screenshot statistics";
+
+    this.setTitleBarText();
+    this.populateStatistics(undefined);
+    return titleBar;
+  }
+
+  private setTitleBarText() {
+    const titleBarText = this.inScreenshotMode
+      ? "Screenshot in progress with the following statistics:"
+      : "Start screenshot mode to see statistics";
+    this.titleBar.textContent = titleBarText;
+    this.titleBar.appendChild(this.statisticsTable);
+  }
+
   private forceScreenshot() {
     this.viewer.display.forceScreenshot = true;
     this.viewer.display.scheduleRedraw();
@@ -118,8 +155,46 @@ export class ScreenshotDialog extends Overlay {
     this.debouncedShowSaveOrForceScreenshotButton();
   }
 
+  private populateStatistics(actionState: StatisticsActionState | undefined) {
+    const nowtime = new Date().toLocaleString().replace(", ", "-");
+    let statsRow;
+    if (actionState === undefined) {
+      statsRow = {
+        time: nowtime,
+        visibleChunksGpuMemory: 0,
+        visibleChunksTotal: 0,
+        visibleGpuMemory: 0,
+        visibleChunksDownloading: 0,
+        downloadLatency: 0,
+      };
+    } else {
+      const total = actionState.screenshotStatistics.total;
+
+      statsRow = {
+        time: nowtime,
+        visibleChunksGpuMemory: total.visibleChunksGpuMemory,
+        visibleChunksTotal: total.visibleChunksTotal,
+        visibleGpuMemory: total.visibleGpuMemory,
+        visibleChunksDownloading: total.visibleChunksDownloading,
+        downloadLatency: total.downloadLatency,
+      };
+      while (this.statisticsTable.rows.length > 1) {
+        this.statisticsTable.deleteRow(1);
+      }
+    }
+
+    for (const key in statsRow) {
+      const row = this.statisticsTable.insertRow();
+      const keyCell = row.insertCell();
+      keyCell.textContent = key;
+      const valueCell = row.insertCell();
+      valueCell.textContent = String(statsRow[key as keyof typeof statsRow]);
+    }
+  }
+
   private debouncedShowSaveOrForceScreenshotButton = debounce(() => {
     this.showSaveOrForceScreenshotButton();
+    this.setTitleBarText();
   }, 200);
 
   private showSaveOrForceScreenshotButton() {
