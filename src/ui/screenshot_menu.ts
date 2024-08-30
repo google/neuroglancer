@@ -21,6 +21,14 @@ import "#src/ui/screenshot_menu.css";
 import type { StatisticsActionState } from "#src/util/screenshot.js";
 import type { Viewer } from "#src/viewer.js";
 
+// Warn after 5 seconds that the screenshot is likely stuck if no change in GPU chunks
+const SCREENSHOT_TIMEOUT = 5000;
+
+interface screenshotGpuStats {
+  numVisibleChunks: number;
+  timestamp: number;
+}
+
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
   private saveButton: HTMLButtonElement;
@@ -29,6 +37,11 @@ export class ScreenshotDialog extends Overlay {
   private statisticsTable: HTMLTableElement;
   private titleBar: HTMLDivElement;
   private inScreenshotMode: boolean;
+  private gpuStats: screenshotGpuStats = {
+    numVisibleChunks: 0,
+    timestamp: 0,
+  };
+  private lastUpdateTimestamp = 0;
   constructor(public viewer: Viewer) {
     super();
 
@@ -60,6 +73,7 @@ export class ScreenshotDialog extends Overlay {
     this.registerDisposer(
       this.viewer.display.screenshotFinished.add(() => {
         this.debouncedShowSaveOrForceScreenshotButton();
+        this.dispose();
       }),
     );
     this.registerDisposer(
@@ -68,6 +82,11 @@ export class ScreenshotDialog extends Overlay {
           this.populateStatistics(actionState);
         },
       ),
+    );
+    this.registerDisposer(
+      this.viewer.display.updateFinished.add(() => {
+        this.lastUpdateTimestamp = Date.now();
+      }),
     );
   }
 
@@ -181,6 +200,13 @@ export class ScreenshotDialog extends Overlay {
       while (this.statisticsTable.rows.length > 1) {
         this.statisticsTable.deleteRow(1);
       }
+      this.checkForStuckScreenshot(
+        {
+          numVisibleChunks: total.visibleChunksGpuMemory,
+          timestamp: Date.now(),
+        },
+        total.visibleChunksTotal,
+      );
     }
 
     for (const key in statsRow) {
@@ -196,6 +222,35 @@ export class ScreenshotDialog extends Overlay {
     this.showSaveOrForceScreenshotButton();
     this.setTitleBarText();
   }, 200);
+
+  /**
+   * Check if the screenshot is stuck by comparing the number of visible chunks
+   * in the GPU with the previous number of visible chunks. If the number of
+   * visible chunks has not changed after a certain timeout, and the display has not updated, force a screenshot.
+   */
+  private checkForStuckScreenshot(
+    newStats: screenshotGpuStats,
+    totalChunks: number,
+  ) {
+    const oldStats = this.gpuStats;
+    if (oldStats.timestamp === 0) {
+      this.gpuStats = newStats;
+      return;
+    }
+    if (oldStats.numVisibleChunks === newStats.numVisibleChunks) {
+      if (
+        newStats.timestamp - oldStats.timestamp > SCREENSHOT_TIMEOUT &&
+        Date.now() - this.lastUpdateTimestamp > SCREENSHOT_TIMEOUT
+      ) {
+        console.warn(
+          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${newStats.numVisibleChunks}/${totalChunks}`,
+        );
+        this.forceScreenshotButton.click();
+      }
+    } else {
+      this.gpuStats = newStats;
+    }
+  }
 
   private showSaveOrForceScreenshotButton() {
     if (this.viewer.display.inScreenshotMode && !this.inScreenshotMode) {
