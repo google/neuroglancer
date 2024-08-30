@@ -307,6 +307,10 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
   }
 
+  get isDataPanel() {
+    return true;
+  }
+
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
    * this.viewer.showSliceViews.value.

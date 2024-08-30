@@ -15,24 +15,29 @@
  */
 
 import type { RenderedPanel } from "#src/display_context.js";
-import { PerspectivePanel } from "#src/perspective_view/panel.js";
-import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
-interface ScreenshotResponse {
-  id: string;
-  image: string;
-  imageType: string;
-  depthData: string | undefined;
-  width: number;
-  height: number;
+// Warn after 5 seconds that the screenshot is likely stuck if no change in GPU chunks
+const SCREENSHOT_TIMEOUT = 5000;
+
+interface screenshotGpuStats {
+  numVisibleChunks: number;
+  timestamp: number;
 }
 
 interface ScreenshotActionState {
   viewerState: any;
   selectedValues: any;
-  screenshot: ScreenshotResponse;
+  screenshot: {
+    id: string;
+    image: string;
+    imageType: string;
+    depthData: string | undefined;
+    width: number;
+    height: number;
+  };
 }
 
 export interface StatisticsActionState {
@@ -72,23 +77,6 @@ function downloadFileForBlob(blob: Blob, filename: string) {
   }
 }
 
-function generateFilename(
-  inputFilename: string,
-  width: number,
-  height: number,
-): string {
-  let filename = inputFilename;
-  if (filename.length === 0) {
-    let nowtime = new Date().toLocaleString();
-    nowtime = nowtime.replace(", ", "-");
-    filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
-  }
-  if (!filename.endsWith(".png")) {
-    filename += ".png";
-  }
-  return filename;
-}
-
 function determineViewPanelArea(
   panels: Set<RenderedPanel>,
 ): ScreenshotCanvasViewport {
@@ -99,12 +87,7 @@ function determineViewPanelArea(
     bottom: Number.NEGATIVE_INFINITY,
   };
   for (const panel of panels) {
-    if (
-      !(panel instanceof SliceViewPanel) &&
-      !(panel instanceof PerspectivePanel)
-    ) {
-      continue;
-    }
+    if (!panel.isDataPanel) continue;
     const viewport = panel.renderViewport;
     const { width, height } = viewport;
     const left = panel.canvasRelativeClippedLeft;
@@ -131,7 +114,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
   });
 }
 
-async function cropUint8Image(
+async function cropViewsFromViewer(
   viewer: Viewer,
   crop: ScreenshotCanvasViewport,
 ): Promise<Blob> {
@@ -160,6 +143,11 @@ export class ScreenshotFromViewer extends RefCounted {
   public screenshotId: number = -1;
   public screenshotScale: number = 1;
   private filename: string = "";
+  private gpuStats: screenshotGpuStats = {
+    numVisibleChunks: 0,
+    timestamp: 0,
+  };
+  private lastUpdateTimestamp = 0;
 
   constructor(public viewer: Viewer) {
     super();
@@ -171,11 +159,38 @@ export class ScreenshotFromViewer extends RefCounted {
         },
       ),
     );
+    this.registerDisposer(
+      this.viewer.display.updateFinished.add(() => {
+        this.lastUpdateTimestamp = Date.now();
+      }),
+    );
+    this.registerDisposer(
+      this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
+        (actionState) => {
+          this.checkForStuckScreenshot(actionState);
+        },
+      ),
+    );
+    this.registerDisposer(
+      this.viewer.display.screenshotMode.changed.add(() => {
+        this.handleScreenshotModeChange();
+      }),
+    );
   }
 
   screenshot(filename: string = "") {
+    this.filename = filename;
+    this.viewer.display.screenshotMode.value = ScreenshotModes.ON;
+  }
+
+  private startScreenshot() {
     const { viewer } = this;
     const shouldResize = this.screenshotScale !== 1;
+    this.lastUpdateTimestamp = Date.now();
+    this.gpuStats = {
+      numVisibleChunks: 0,
+      timestamp: 0,
+    };
     if (shouldResize) {
       const oldSize = {
         width: viewer.display.canvas.width,
@@ -191,18 +206,14 @@ export class ScreenshotFromViewer extends RefCounted {
     this.screenshotId++;
     this.viewer.screenshotActionHandler.requestState.value =
       this.screenshotId.toString();
-    viewer.display.inScreenshotMode = true;
     if (shouldResize) {
       ++viewer.display.resizeGeneration;
       viewer.display.resizeCallback();
     }
-    this.filename = filename;
   }
 
   resetCanvasSize() {
     const { viewer } = this;
-    viewer.display.inScreenshotMode = false;
-    viewer.display.screenshotFinished.dispatch();
     ++viewer.display.resizeGeneration;
     viewer.display.resizeCallback();
   }
@@ -212,21 +223,115 @@ export class ScreenshotFromViewer extends RefCounted {
     const { imageType } = screenshot;
     if (imageType !== "image/png") {
       console.error("Image type is not PNG");
+      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
       return;
     }
-    const renderLocation = determineViewPanelArea(this.viewer.display.panels);
+    const renderingPanelArea = determineViewPanelArea(
+      this.viewer.display.panels,
+    );
     try {
-      const croppedImage = await cropUint8Image(this.viewer, renderLocation);
-      const filename = generateFilename(
-        this.filename,
-        renderLocation.right - renderLocation.left,
-        renderLocation.bottom - renderLocation.top,
+      const croppedImage = await cropViewsFromViewer(
+        this.viewer,
+        renderingPanelArea,
+      );
+      const filename = this.generateFilename(
+        renderingPanelArea.right - renderingPanelArea.left,
+        renderingPanelArea.bottom - renderingPanelArea.top,
       );
       downloadFileForBlob(croppedImage, filename);
     } catch (error) {
       console.error(error);
     } finally {
+      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
+    }
+  }
+
+  /**
+   * Check if the screenshot is stuck by comparing the number of visible chunks
+   * in the GPU with the previous number of visible chunks. If the number of
+   * visible chunks has not changed after a certain timeout, and the display has not updated, force a screenshot.
+   */
+  private checkForStuckScreenshot(actionState: StatisticsActionState) {
+    const total = actionState.screenshotStatistics.total;
+    const newStats = {
+      numVisibleChunks: total.visibleChunksGpuMemory,
+      timestamp: Date.now(),
+    };
+    const oldStats = this.gpuStats;
+    if (oldStats.timestamp === 0) {
+      this.gpuStats = newStats;
+      return;
+    }
+    if (oldStats.numVisibleChunks === newStats.numVisibleChunks) {
+      if (
+        newStats.timestamp - oldStats.timestamp > SCREENSHOT_TIMEOUT &&
+        Date.now() - this.lastUpdateTimestamp > SCREENSHOT_TIMEOUT
+      ) {
+        const totalChunks = total.visibleChunksTotal;
+        console.warn(
+          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${newStats.numVisibleChunks}/${totalChunks}`,
+        );
+        this.forceScreenshot();
+      }
+    } else {
+      this.gpuStats = newStats;
+    }
+  }
+
+  parseStatistics(actionState: StatisticsActionState | undefined) {
+    const nowtime = new Date().toLocaleString().replace(", ", "-");
+    let statsRow;
+    if (actionState === undefined) {
+      statsRow = {
+        time: nowtime,
+        visibleChunksGpuMemory: 0,
+        visibleChunksTotal: 0,
+        visibleGpuMemory: 0,
+        visibleChunksDownloading: 0,
+        downloadLatency: 0,
+      };
+    } else {
+      const total = actionState.screenshotStatistics.total;
+
+      statsRow = {
+        time: nowtime,
+        visibleChunksGpuMemory: total.visibleChunksGpuMemory,
+        visibleChunksTotal: total.visibleChunksTotal,
+        visibleGpuMemory: total.visibleGpuMemory,
+        visibleChunksDownloading: total.visibleChunksDownloading,
+        downloadLatency: total.downloadLatency,
+      };
+    }
+    return statsRow;
+  }
+
+  forceScreenshot() {
+    this.viewer.display.screenshotMode.value = ScreenshotModes.FORCE;
+  }
+
+  generateFilename(width: number, height: number): string {
+    let filename = this.filename;
+    if (filename.length === 0) {
+      let nowtime = new Date().toLocaleString();
+      nowtime = nowtime.replace(", ", "-");
+      filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
+    }
+    if (!filename.endsWith(".png")) {
+      filename += ".png";
+    }
+    return filename;
+  }
+
+  handleScreenshotModeChange() {
+    const { viewer } = this;
+    const { display } = viewer;
+    const { screenshotMode } = display;
+    if (screenshotMode.value === ScreenshotModes.OFF) {
       this.resetCanvasSize();
+    } else if (screenshotMode.value === ScreenshotModes.FORCE) {
+      display.scheduleRedraw();
+    } else if (screenshotMode.value === ScreenshotModes.ON) {
+      this.startScreenshot();
     }
   }
 }

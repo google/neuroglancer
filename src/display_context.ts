@@ -25,6 +25,11 @@ import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
 import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
+import type { TrackableScreenshotModeValue } from "#src/util/trackable_screenshot_mode.js";
+import {
+  ScreenshotModes,
+  trackableScreenshotModeValue,
+} from "#src/util/trackable_screenshot_mode.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
 import { initializeWebGL } from "#src/webgl/context.js";
@@ -221,7 +226,7 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    if (this.context.inScreenshotMode) {
+    if (this.context.screenshotMode.value !== ScreenshotModes.OFF) {
       viewport.width = logicalWidth * screenToCanvasPixelScaleX;
       viewport.height = logicalHeight * screenToCanvasPixelScaleY;
       viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;
@@ -305,6 +310,10 @@ export abstract class RenderedPanel extends RefCounted {
       return false;
     }
     return true;
+  }
+
+  get isDataPanel() {
+    return false;
   }
 
   // Returns a number that determine the order in which panels are drawn. This is used by CdfPanel
@@ -410,9 +419,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
-  inScreenshotMode = false;
-  forceScreenshot = false;
-  screenshotFinished = new NullarySignal();
+  screenshotMode: TrackableScreenshotModeValue = trackableScreenshotModeValue();
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;
@@ -585,7 +592,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
     const { canvas } = this;
-    if (!this.inScreenshotMode) {
+    if (this.screenshotMode.value === ScreenshotModes.OFF) {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     }
