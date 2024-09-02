@@ -23,6 +23,13 @@ import type { StatisticsActionState } from "#src/util/screenshot.js";
 import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
+const friendlyNameMap = {
+  time: "Current time",
+  visibleChunksGpuMemory: "Number of loaded chunks",
+  visibleGpuMemory: "Visible chunk GPU memory usage",
+  visibleChunksDownloading: "Number of downloading chunks",
+};
+
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
   private saveButton: HTMLButtonElement;
@@ -156,9 +163,6 @@ export class ScreenshotDialog extends Overlay {
     this.statisticsContainer.classList.add(
       "neuroglancer-screenshot-statistics-title",
     );
-    const titleBarText =
-      "Screenshot in progress with the following statistics:";
-    this.statisticsContainer.textContent = titleBarText;
 
     this.statisticsTable = document.createElement("table");
     this.statisticsTable.classList.add(
@@ -168,10 +172,10 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = this.statisticsTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Key";
+    keyHeader.textContent = "Screenshot in progress...";
     headerRow.appendChild(keyHeader);
     const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Value";
+    valueHeader.textContent = "";
     headerRow.appendChild(valueHeader);
 
     this.populateStatistics(undefined);
@@ -203,7 +207,8 @@ export class ScreenshotDialog extends Overlay {
       const row = this.statisticsTable.insertRow();
       const keyCell = row.insertCell();
       const valueCell = row.insertCell();
-      keyCell.textContent = key;
+      keyCell.textContent =
+        friendlyNameMap[key as keyof typeof friendlyNameMap];
       valueCell.textContent = String(statsRow[key as keyof typeof statsRow]);
     }
   }

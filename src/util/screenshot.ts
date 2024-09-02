@@ -279,27 +279,29 @@ export class ScreenshotFromViewer extends RefCounted {
   }
 
   parseStatistics(actionState: StatisticsActionState | undefined) {
-    const nowtime = new Date().toLocaleString().replace(", ", "-");
+    const nowtime = new Date().toLocaleTimeString();
     let statsRow;
     if (actionState === undefined) {
       statsRow = {
         time: nowtime,
-        visibleChunksGpuMemory: 0,
-        visibleChunksTotal: 0,
-        visibleGpuMemory: 0,
-        visibleChunksDownloading: 0,
-        downloadLatency: 0,
+        visibleChunksGpuMemory: "",
+        visibleGpuMemory: "",
+        visibleChunksDownloading: "",
       };
     } else {
       const total = actionState.screenshotStatistics.total;
 
+      const percentLoaded =
+        (100 * total.visibleChunksGpuMemory) / total.visibleChunksTotal;
+      const percentGpuUsage =
+        (100 * total.visibleGpuMemory) /
+        this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value;
+      const gpuMemoryUsageInMB = total.visibleGpuMemory / 1024 / 1024;
       statsRow = {
         time: nowtime,
-        visibleChunksGpuMemory: total.visibleChunksGpuMemory,
-        visibleChunksTotal: total.visibleChunksTotal,
-        visibleGpuMemory: total.visibleGpuMemory,
-        visibleChunksDownloading: total.visibleChunksDownloading,
-        downloadLatency: total.downloadLatency,
+        visibleChunksGpuMemory: `${total.visibleChunksGpuMemory} out of ${total.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
+        visibleGpuMemory: `${gpuMemoryUsageInMB}Mb (${percentGpuUsage.toFixed(2)}% of total)`,
+        visibleChunksDownloading: `${total.visibleChunksDownloading} at ${total.downloadLatency}ms`,
       };
     }
     return statsRow;
