@@ -29,7 +29,8 @@ export class ScreenshotDialog extends Overlay {
   private closeButton: HTMLButtonElement;
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
-  private titleBar: HTMLDivElement;
+  private statisticsContainer: HTMLDivElement;
+  private filenameAndButtonsContainer: HTMLDivElement;
   private screenshotMode: ScreenshotModes;
   constructor(public viewer: Viewer) {
     super();
@@ -53,11 +54,18 @@ export class ScreenshotDialog extends Overlay {
     this.forceScreenshotButton = this.createButton("Force screenshot", () =>
       this.forceScreenshot(),
     );
+    this.filenameAndButtonsContainer = document.createElement("div");
+    this.filenameAndButtonsContainer.classList.add(
+      "neuroglancer-screenshot-filename-and-buttons",
+    );
+    this.filenameAndButtonsContainer.appendChild(this.createNameInput());
+    this.filenameAndButtonsContainer.appendChild(
+      this.getScreenshotButtonBasedOnMode,
+    );
 
     this.content.appendChild(this.closeButton);
+    this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
-    this.content.appendChild(this.createNameInput());
-    this.content.appendChild(this.modeDependentScreenshotButton);
     this.content.appendChild(this.createStatisticsTable());
   }
 
@@ -81,10 +89,11 @@ export class ScreenshotDialog extends Overlay {
     const nameInput = document.createElement("input");
     nameInput.type = "text";
     nameInput.placeholder = "Enter filename...";
+    nameInput.classList.add("neuroglancer-screenshot-name-input");
     return (this.nameInput = nameInput);
   }
 
-  private get modeDependentScreenshotButton() {
+  private get getScreenshotButtonBasedOnMode() {
     return this.screenshotMode === ScreenshotModes.OFF
       ? this.saveButton
       : this.forceScreenshotButton;
@@ -104,8 +113,12 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private createScaleRadioButtons() {
-    const scaleRadioButtons = document.createElement("div");
-    scaleRadioButtons.classList.add("scale-radio-buttons");
+    const scaleMenu = document.createElement("div");
+    scaleMenu.classList.add("neuroglancer-screenshot-scale-menu");
+
+    const scaleLabel = document.createElement("label");
+    scaleLabel.textContent = "Screenshot scale factor:";
+    scaleMenu.appendChild(scaleLabel);
 
     const scales = [1, 2, 4];
     scales.forEach((scale) => {
@@ -119,40 +132,49 @@ export class ScreenshotDialog extends Overlay {
       input.classList.add("neuroglancer-screenshot-scale-radio");
 
       label.appendChild(input);
-      label.appendChild(document.createTextNode(`Scale ${scale}x`));
-      scaleRadioButtons.appendChild(label);
+      label.appendChild(document.createTextNode(`${scale}x`));
+
+      scaleMenu.appendChild(label);
 
       input.addEventListener("change", () => {
         this.screenshotHandler.screenshotScale = scale;
       });
     });
-    return scaleRadioButtons;
+    return scaleMenu;
   }
 
   private createStatisticsTable() {
-    this.titleBar = document.createElement("div");
-    this.titleBar.classList.add("neuroglancer-screenshot-statistics-title");
+    this.statisticsContainer = document.createElement("div");
+    this.statisticsContainer.classList.add(
+      "neuroglancer-screenshot-statistics-title",
+    );
 
     this.statisticsTable = document.createElement("table");
     this.statisticsTable.classList.add(
       "neuroglancer-screenshot-statistics-table",
     );
-    this.statisticsTable.createTHead().insertRow().innerHTML =
-      "<th>Key</th><th>Value</th>";
     this.statisticsTable.title = "Screenshot statistics";
+
+    const headerRow = this.statisticsTable.createTHead().insertRow();
+    const keyHeader = document.createElement("th");
+    keyHeader.textContent = "Key";
+    headerRow.appendChild(keyHeader);
+    const valueHeader = document.createElement("th");
+    valueHeader.textContent = "Value";
+    headerRow.appendChild(valueHeader);
 
     this.setTitleBarText();
     this.populateStatistics(undefined);
-    return this.titleBar;
+    return this.statisticsContainer;
   }
 
   private setTitleBarText() {
     const titleBarText =
       this.screenshotMode === ScreenshotModes.OFF
-        ? "Start screenshot mode to see statistics"
+        ? "Start a screenshot to update statistics:"
         : "Screenshot in progress with the following statistics:";
-    this.titleBar.textContent = titleBarText;
-    this.titleBar.appendChild(this.statisticsTable);
+    this.statisticsContainer.textContent = titleBarText;
+    this.statisticsContainer.appendChild(this.statisticsTable);
   }
 
   private forceScreenshot() {
@@ -191,9 +213,15 @@ export class ScreenshotDialog extends Overlay {
   private showSaveOrForceScreenshotButton() {
     if (this.viewer.display.screenshotMode.value !== this.screenshotMode) {
       if (this.viewer.display.screenshotMode.value === ScreenshotModes.OFF) {
-        this.content.replaceChild(this.saveButton, this.forceScreenshotButton);
+        this.filenameAndButtonsContainer.replaceChild(
+          this.saveButton,
+          this.forceScreenshotButton,
+        );
       } else {
-        this.content.replaceChild(this.forceScreenshotButton, this.saveButton);
+        this.filenameAndButtonsContainer.replaceChild(
+          this.forceScreenshotButton,
+          this.saveButton,
+        );
       }
       this.screenshotMode = this.viewer.display.screenshotMode.value;
     }
