@@ -72,7 +72,7 @@ export class ScreenshotDialog extends Overlay {
   private setupEventListeners() {
     this.registerDisposer(
       this.viewer.screenshotActionHandler.sendScreenshotRequested.add(() => {
-        this.debouncedShowSaveOrForceScreenshotButton();
+        this.debouncedUpdateUIElements();
         this.dispose();
       }),
     );
@@ -97,6 +97,14 @@ export class ScreenshotDialog extends Overlay {
     return this.screenshotMode === ScreenshotModes.OFF
       ? this.saveButton
       : this.forceScreenshotButton;
+  }
+
+  private updateStatisticsTableDisplayBasedOnMode() {
+    if (this.screenshotMode === ScreenshotModes.OFF) {
+      this.statisticsContainer.style.display = "none";
+    } else {
+      this.statisticsContainer.style.display = "block";
+    }
   }
 
   private createButton(
@@ -148,6 +156,9 @@ export class ScreenshotDialog extends Overlay {
     this.statisticsContainer.classList.add(
       "neuroglancer-screenshot-statistics-title",
     );
+    const titleBarText =
+      "Screenshot in progress with the following statistics:";
+    this.statisticsContainer.textContent = titleBarText;
 
     this.statisticsTable = document.createElement("table");
     this.statisticsTable.classList.add(
@@ -163,29 +174,21 @@ export class ScreenshotDialog extends Overlay {
     valueHeader.textContent = "Value";
     headerRow.appendChild(valueHeader);
 
-    this.setTitleBarText();
     this.populateStatistics(undefined);
-    return this.statisticsContainer;
-  }
-
-  private setTitleBarText() {
-    const titleBarText =
-      this.screenshotMode === ScreenshotModes.OFF
-        ? "Start a screenshot to update statistics:"
-        : "Screenshot in progress with the following statistics:";
-    this.statisticsContainer.textContent = titleBarText;
+    this.updateStatisticsTableDisplayBasedOnMode();
     this.statisticsContainer.appendChild(this.statisticsTable);
+    return this.statisticsContainer;
   }
 
   private forceScreenshot() {
     this.screenshotHandler.forceScreenshot();
-    this.debouncedShowSaveOrForceScreenshotButton();
+    this.debouncedUpdateUIElements();
   }
 
   private screenshot() {
     const filename = this.nameInput.value;
     this.screenshotHandler.screenshot(filename);
-    this.debouncedShowSaveOrForceScreenshotButton();
+    this.debouncedUpdateUIElements();
   }
 
   private populateStatistics(actionState: StatisticsActionState | undefined) {
@@ -205,9 +208,9 @@ export class ScreenshotDialog extends Overlay {
     }
   }
 
-  private debouncedShowSaveOrForceScreenshotButton = debounce(() => {
+  private debouncedUpdateUIElements = debounce(() => {
     this.showSaveOrForceScreenshotButton();
-    this.setTitleBarText();
+    this.updateStatisticsTableDisplayBasedOnMode();
   }, 200);
 
   private showSaveOrForceScreenshotButton() {
