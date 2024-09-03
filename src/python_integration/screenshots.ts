@@ -31,9 +31,46 @@ import { getCachedJson } from "#src/util/trackable.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
+export interface ScreenshotActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshot: {
+    id: string;
+    image: string;
+    imageType: string;
+    depthData: string | undefined;
+    width: number;
+    height: number;
+  };
+}
+
+export interface ScreenshotChunkStatistics {
+  downloadLatency: number;
+  visibleChunksDownloading: number;
+  visibleChunksFailed: number;
+  visibleChunksGpuMemory: number;
+  visibleChunksSystemMemory: number;
+  visibleChunksTotal: number;
+  visibleGpuMemory: number;
+}
+
+export interface StatisticsActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshotStatistics: {
+    id: string;
+    chunkSources: any[];
+    total: ScreenshotChunkStatistics;
+  };
+}
+
 export class ScreenshotHandler extends RefCounted {
-  sendScreenshotRequested = new Signal<(state: any) => void>();
-  sendStatisticsRequested = new Signal<(state: any) => void>();
+  sendScreenshotRequested = new Signal<
+    (state: ScreenshotActionState) => void
+  >();
+  sendStatisticsRequested = new Signal<
+    (state: StatisticsActionState) => void
+  >();
   requestState = new TrackableValue<string | undefined>(
     undefined,
     verifyOptionalString,

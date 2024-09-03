@@ -15,55 +15,22 @@
  */
 
 import type { RenderedPanel } from "#src/display_context.js";
+import type {
+  ScreenshotActionState,
+  StatisticsActionState,
+  ScreenshotChunkStatistics,
+} from "#src/python_integration/screenshots.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { RefCounted } from "#src/util/disposable.js";
-import {NullarySignal} from "#src/util/signal.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
 const SCREENSHOT_TIMEOUT = 5000;
 
-interface ScreenshotLoadStatistics {
-  numGpuLoadedVisibleChunks: number;
+export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
-}
-
-interface ScreenshotActionState {
-  viewerState: any;
-  selectedValues: any;
-  screenshot: {
-    id: string;
-    image: string;
-    imageType: string;
-    depthData: string | undefined;
-    width: number;
-    height: number;
-  };
-}
-
-export interface StatisticsActionState {
-  viewerState: any;
-  selectedValues: any;
-  screenshotStatistics: {
-    id: string;
-    chunkSources: any[];
-    total: {
-      downloadLatency: number;
-      visibleChunksDownloading: number;
-      visibleChunksFailed: number;
-      visibleChunksGpuMemory: number;
-      visibleChunksSystemMemory: number;
-      visibleChunksTotal: number;
-      visibleGpuMemory: number;
-    };
-  };
-}
-
-interface UIScreenshotStatistics {
-  timeElapsedString: string | null;
-  chunkUsageDescription: string;
-  gpuMemoryUsageDescription: string;
-  downloadSpeedDescription: string;
+  gpuMemoryCapacity: number;
 }
 
 interface ViewportBounds {
@@ -160,23 +127,15 @@ async function extractViewportScreenshot(
 }
 
 export class ScreenshotManager extends RefCounted {
-  public screenshotId: number = -1;
-  public screenshotScale: number = 1;
   private filename: string = "";
-  private screenshotLoadStats: ScreenshotLoadStatistics = {
-    numGpuLoadedVisibleChunks: 0,
-    timestamp: 0,
-  };
-  private lastUpdateTimestamp = 0;
-  private screenshotStartTime = 0;
-  private lastSavedStatistics: UIScreenshotStatistics = {
-    timeElapsedString: null,
-    chunkUsageDescription: "",
-    gpuMemoryUsageDescription: "",
-    downloadSpeedDescription: "",
-  };
+  private lastUpdateTimestamp: number = 0;
+  private gpuMemoryChangeTimestamp: number = 0;
+  screenshotId: number = -1;
+  screenshotScale: number = 1;
+  screenshotLoadStats: ScreenshotLoadStatistics | null = null;
+  screenshotStartTime = 0;
   screenshotMode: ScreenshotMode = ScreenshotMode.OFF;
-  statisticsUpdated = new NullarySignal();
+  statisticsUpdated = new Signal<(state: ScreenshotLoadStatistics) => void>();
   screenshotFinished = new NullarySignal();
 
   constructor(public viewer: Viewer) {
@@ -193,9 +152,15 @@ export class ScreenshotManager extends RefCounted {
     this.registerDisposer(
       this.viewer.screenshotHandler.sendStatisticsRequested.add(
         (actionState) => {
-          this.persistStatisticsData(actionState);
           this.checkAndHandleStalledScreenshot(actionState);
-          this.statisticsUpdated.dispatch();
+          this.screenshotLoadStats = {
+            ...actionState.screenshotStatistics.total,
+            timestamp: Date.now(),
+            gpuMemoryCapacity:
+              this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit
+                .value,
+          };
+          this.statisticsUpdated.dispatch(this.screenshotLoadStats);
         },
       ),
     );
@@ -220,19 +185,15 @@ export class ScreenshotManager extends RefCounted {
     this.viewer.display.screenshotMode.value = ScreenshotMode.FORCE;
   }
 
-  get screenshotStatistics(): UIScreenshotStatistics {
-    return this.lastSavedStatistics;
-  }
-
   private handleScreenshotStarted() {
     const { viewer } = this;
     const shouldIncreaseCanvasSize = this.screenshotScale !== 1;
 
-    this.screenshotStartTime = this.lastUpdateTimestamp = Date.now();
-    this.screenshotLoadStats = {
-      numGpuLoadedVisibleChunks: 0,
-      timestamp: 0,
-    };
+    this.screenshotStartTime =
+      this.lastUpdateTimestamp =
+      this.gpuMemoryChangeTimestamp =
+        Date.now();
+    this.screenshotLoadStats = null;
 
     if (shouldIncreaseCanvasSize) {
       const oldSize = {
@@ -282,31 +243,33 @@ export class ScreenshotManager extends RefCounted {
    * visible chunks has not changed after a certain timeout, and the display has not updated, force a screenshot.
    */
   private checkAndHandleStalledScreenshot(actionState: StatisticsActionState) {
-    const total = actionState.screenshotStatistics.total;
-    const newStats: ScreenshotLoadStatistics = {
-      numGpuLoadedVisibleChunks: total.visibleChunksGpuMemory,
-      timestamp: Date.now(),
-    };
-    if (this.screenshotLoadStats.timestamp === 0) {
-      this.screenshotLoadStats = newStats;
+    if (this.screenshotLoadStats === null) {
       return;
     }
+    const total = actionState.screenshotStatistics.total;
+    const newStats = {
+      visibleChunksGpuMemory: total.visibleChunksGpuMemory,
+      timestamp: Date.now(),
+      totalGpuMemory:
+        this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value,
+    };
     const oldStats = this.screenshotLoadStats;
     if (
-      oldStats.numGpuLoadedVisibleChunks === newStats.numGpuLoadedVisibleChunks
+      oldStats.visibleChunksGpuMemory === newStats.visibleChunksGpuMemory &&
+      oldStats.gpuMemoryCapacity === newStats.totalGpuMemory
     ) {
       if (
-        newStats.timestamp - oldStats.timestamp > SCREENSHOT_TIMEOUT &&
+        newStats.timestamp - this.gpuMemoryChangeTimestamp >
+          SCREENSHOT_TIMEOUT &&
         Date.now() - this.lastUpdateTimestamp > SCREENSHOT_TIMEOUT
       ) {
-        const totalChunks = total.visibleChunksTotal;
         console.warn(
-          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${newStats.numGpuLoadedVisibleChunks}/${totalChunks}`,
+          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${total.visibleChunksGpuMemory}/${total.visibleChunksTotal}`,
         );
         this.forceScreenshot();
       }
     } else {
-      this.screenshotLoadStats = newStats;
+      this.gpuMemoryChangeTimestamp = newStats.timestamp;
     }
   }
 
@@ -359,39 +322,7 @@ export class ScreenshotManager extends RefCounted {
   }
 
   private resetStatistics() {
-    this.lastSavedStatistics = {
-      timeElapsedString: null,
-      chunkUsageDescription: "",
-      gpuMemoryUsageDescription: "",
-      downloadSpeedDescription: "",
-    };
-  }
-
-  private persistStatisticsData(actionState: StatisticsActionState) {
-    const nowtime = Date.now();
-    const total = actionState.screenshotStatistics.total;
-    const maxGpuMemory =
-      this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value;
-
-    const percentLoaded =
-      total.visibleChunksTotal === 0
-        ? 0
-        : (100 * total.visibleChunksGpuMemory) / total.visibleChunksTotal;
-    const percentGpuUsage = (100 * total.visibleGpuMemory) / maxGpuMemory;
-    const gpuMemoryUsageInMB = total.visibleGpuMemory / 1000000;
-    const totalMemoryInMB = maxGpuMemory / 1000000;
-    const latency = isNaN(total.downloadLatency) ? 0 : total.downloadLatency;
-    const passedTimeInSeconds = (
-      (nowtime - this.screenshotStartTime) /
-      1000
-    ).toFixed(0);
-
-    this.lastSavedStatistics = {
-      timeElapsedString: passedTimeInSeconds,
-      chunkUsageDescription: `${total.visibleChunksGpuMemory} out of ${total.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
-      gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
-      downloadSpeedDescription: `${total.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`,
-    };
+    this.screenshotLoadStats = null;
   }
 
   private generateFilename(width: number, height: number): string {

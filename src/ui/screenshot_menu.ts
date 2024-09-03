@@ -18,10 +18,21 @@ import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import "#src/ui/screenshot_menu.css";
 
-import type { ScreenshotManager } from "#src/util/screenshot.js";
+import type {
+  ScreenshotLoadStatistics,
+  ScreenshotManager,
+} from "#src/util/screenshot.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 
+interface UIScreenshotStatistics {
+  timeElapsedString: string | null;
+  chunkUsageDescription: string;
+  gpuMemoryUsageDescription: string;
+  downloadSpeedDescription: string;
+}
+
 const statisticsNamesForUI = {
+  timeElapsedString: "Screenshot duration",
   chunkUsageDescription: "Number of loaded chunks",
   gpuMemoryUsageDescription: "Visible chunk GPU memory usage",
   downloadSpeedDescription: "Number of downloading chunks",
@@ -155,24 +166,26 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = this.statisticsTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Screenshot in progress";
+    keyHeader.textContent = "Screenshot statistics";
     headerRow.appendChild(keyHeader);
     const valueHeader = document.createElement("th");
     valueHeader.textContent = "";
     headerRow.appendChild(valueHeader);
 
     // Populate inital table elements with placeholder text
-    const statsRow = this.screenshotManager.screenshotStatistics;
-    for (const key in statsRow) {
-      if (key === "timeElapsedString") {
-        continue;
-      }
+    const orderedStatsRow: UIScreenshotStatistics = {
+      chunkUsageDescription: "Loading...",
+      gpuMemoryUsageDescription: "Loading...",
+      downloadSpeedDescription: "Loading...",
+      timeElapsedString: "Loading...",
+    };
+    for (const key in orderedStatsRow) {
       const row = this.statisticsTable.insertRow();
       const keyCell = row.insertCell();
       const valueCell = row.insertCell();
       keyCell.textContent =
         statisticsNamesForUI[key as keyof typeof statisticsNamesForUI];
-      valueCell.textContent = "Loading...";
+      valueCell.textContent = orderedStatsRow[key as keyof typeof orderedStatsRow];
       this.statisticsKeyToCellMap.set(key, valueCell);
     }
 
@@ -203,24 +216,52 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private populateStatistics() {
-    const statsRow = this.screenshotManager.screenshotStatistics;
+    const statsRow = this.parseStatistics(
+      this.screenshotManager.screenshotLoadStats,
+    );
 
     for (const key in statsRow) {
-      if (key === "timeElapsedString") {
-        const headerRow = this.statisticsTable.rows[0];
-        const keyHeader = headerRow.cells[0];
-        const time = statsRow[key];
-        if (time === null) {
-          keyHeader.textContent = "Screenshot in progress (statistics loading)";
-        } else {
-          keyHeader.textContent = `Screenshot in progress for ${statsRow[key]}s`;
-        }
-        continue;
-      }
       this.statisticsKeyToCellMap.get(key)!.textContent = String(
         statsRow[key as keyof typeof statsRow],
       );
     }
+  }
+
+  private parseStatistics(
+    currentStatistics: ScreenshotLoadStatistics | null,
+  ): UIScreenshotStatistics {
+    const nowtime = Date.now();
+    if (currentStatistics === null) {
+      return {
+        timeElapsedString: "Loading...",
+        chunkUsageDescription: "Loading...",
+        gpuMemoryUsageDescription: "Loading...",
+        downloadSpeedDescription: "Loading...",
+      };
+    }
+
+    const percentLoaded =
+      currentStatistics.visibleChunksTotal === 0
+        ? 0
+        : (100 * currentStatistics.visibleChunksGpuMemory) /
+          currentStatistics.visibleChunksTotal;
+    const percentGpuUsage =
+      (100 * currentStatistics.visibleGpuMemory) /
+      currentStatistics.gpuMemoryCapacity;
+    const gpuMemoryUsageInMB = currentStatistics.visibleGpuMemory / 1000000;
+    const totalMemoryInMB = currentStatistics.gpuMemoryCapacity / 1000000;
+    const latency = isNaN(currentStatistics.downloadLatency)
+      ? 0
+      : currentStatistics.downloadLatency;
+    const passedTimeInSeconds =
+      (nowtime - this.screenshotManager.screenshotStartTime) / 1000;
+
+    return {
+      timeElapsedString: `${passedTimeInSeconds.toFixed(0)} seconds`,
+      chunkUsageDescription: `${currentStatistics.visibleChunksGpuMemory} out of ${currentStatistics.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
+      gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
+      downloadSpeedDescription: `${currentStatistics.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`,
+    };
   }
 
   private debouncedUpdateUIElements = debounce(() => {
