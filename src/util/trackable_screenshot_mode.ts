@@ -16,16 +16,14 @@
 
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 
-export enum ScreenshotModes {
+export enum ScreenshotMode {
   OFF = 0, // Default mode
   ON = 1, // Screenshot modek
   FORCE = 2, // Force screenshot mode - used when the screenshot is stuck
 }
 
-export type TrackableScreenshotModeValue = TrackableEnum<ScreenshotModes>;
-
-export function trackableScreenshotModeValue(
-  initialValue = ScreenshotModes.OFF,
-) {
-  return new TrackableEnum(ScreenshotModes, initialValue);
+export class TrackableScreenshotMode extends TrackableEnum<ScreenshotMode> {
+  constructor(value: ScreenshotMode, defaultValue: ScreenshotMode = value) {
+    super(ScreenshotMode, value, defaultValue);
+  }
 }

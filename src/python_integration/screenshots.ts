@@ -28,7 +28,7 @@ import { convertEndian32, Endianness } from "#src/util/endian.js";
 import { verifyOptionalString } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
-import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
+import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
 export class ScreenshotHandler extends RefCounted {
@@ -126,7 +126,7 @@ export class ScreenshotHandler extends RefCounted {
     }
     const { viewer } = this;
     const forceScreenshot =
-      this.viewer.display.screenshotMode.value === ScreenshotModes.FORCE;
+      this.viewer.display.screenshotMode.value === ScreenshotMode.FORCE;
     if (!viewer.isReady() && !forceScreenshot) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);

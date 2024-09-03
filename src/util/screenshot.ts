@@ -16,7 +16,7 @@
 
 import type { RenderedPanel } from "#src/display_context.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
+import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
 const SCREENSHOT_TIMEOUT = 5000;
@@ -206,11 +206,11 @@ export class ScreenshotFromViewer extends RefCounted {
 
   takeScreenshot(filename: string = "") {
     this.filename = filename;
-    this.viewer.display.screenshotMode.value = ScreenshotModes.ON;
+    this.viewer.display.screenshotMode.value = ScreenshotMode.ON;
   }
 
   forceScreenshot() {
-    this.viewer.display.screenshotMode.value = ScreenshotModes.FORCE;
+    this.viewer.display.screenshotMode.value = ScreenshotMode.FORCE;
   }
 
   get screenshotStatistics(): UIScreenshotStatistics {
@@ -255,14 +255,14 @@ export class ScreenshotFromViewer extends RefCounted {
   private handleScreenshotModeChange() {
     const { display } = this.viewer;
     switch (display.screenshotMode.value) {
-      case ScreenshotModes.OFF:
+      case ScreenshotMode.OFF:
         this.resetCanvasSize();
         this.resetStatistics();
         break;
-      case ScreenshotModes.FORCE:
+      case ScreenshotMode.FORCE:
         display.scheduleRedraw();
         break;
-      case ScreenshotModes.ON:
+      case ScreenshotMode.ON:
         this.handleScreenshotStarted();
         break;
     }
@@ -307,7 +307,7 @@ export class ScreenshotFromViewer extends RefCounted {
     const { imageType } = screenshot;
     if (imageType !== "image/png") {
       console.error("Image type is not PNG");
-      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
+      this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
       return;
     }
     const renderingPanelArea = calculateViewportBounds(
@@ -327,7 +327,7 @@ export class ScreenshotFromViewer extends RefCounted {
       console.error("Failed to save screenshot:", error);
     } finally {
       this.saveScreenshotLog(actionState);
-      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
+      this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
     }
   }
 

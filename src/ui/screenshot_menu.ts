@@ -18,7 +18,7 @@ import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import "#src/ui/screenshot_menu.css";
 
-import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
+import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
 const friendlyNameMap = {
@@ -36,7 +36,7 @@ export class ScreenshotDialog extends Overlay {
   private statisticsContainer: HTMLDivElement;
   private scaleSelectContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
-  private screenshotMode: ScreenshotModes;
+  private screenshotMode: ScreenshotMode;
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   constructor(public viewer: Viewer) {
     super();
@@ -99,7 +99,7 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private updateStatisticsTableDisplayBasedOnMode() {
-    if (this.screenshotMode === ScreenshotModes.OFF) {
+    if (this.screenshotMode === ScreenshotMode.OFF) {
       this.statisticsContainer.style.display = "none";
     } else {
       this.statisticsContainer.style.display = "block";
@@ -232,7 +232,7 @@ export class ScreenshotDialog extends Overlay {
 
   private updateSetupUIVisibility() {
     this.screenshotMode = this.viewer.display.screenshotMode.value;
-    if (this.screenshotMode === ScreenshotModes.OFF) {
+    if (this.screenshotMode === ScreenshotMode.OFF) {
       this.forceScreenshotButton.style.display = "none";
       this.filenameAndButtonsContainer.style.display = "block";
       this.scaleSelectContainer.style.display = "block";

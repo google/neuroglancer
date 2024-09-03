@@ -25,10 +25,9 @@ import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
 import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
-import type { TrackableScreenshotModeValue } from "#src/util/trackable_screenshot_mode.js";
 import {
-  ScreenshotModes,
-  trackableScreenshotModeValue,
+  TrackableScreenshotMode,
+  ScreenshotMode,
 } from "#src/util/trackable_screenshot_mode.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
@@ -226,7 +225,7 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    if (this.context.screenshotMode.value !== ScreenshotModes.OFF) {
+    if (this.context.screenshotMode.value !== ScreenshotMode.OFF) {
       viewport.width = logicalWidth * screenToCanvasPixelScaleX;
       viewport.height = logicalHeight * screenToCanvasPixelScaleY;
       viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;
@@ -419,7 +418,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
-  screenshotMode: TrackableScreenshotModeValue = trackableScreenshotModeValue();
+  screenshotMode: TrackableScreenshotMode = new TrackableScreenshotMode(
+    ScreenshotMode.OFF,
+  );
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;
@@ -592,7 +593,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
     const { canvas } = this;
-    if (this.screenshotMode.value === ScreenshotModes.OFF) {
+    if (this.screenshotMode.value === ScreenshotMode.OFF) {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     }
