@@ -158,7 +158,7 @@ async function extractViewportScreenshot(
   return croppedBlob;
 }
 
-export class ScreenshotFromViewer extends RefCounted {
+export class ScreenshotManager extends RefCounted {
   public screenshotId: number = -1;
   public screenshotScale: number = 1;
   private filename: string = "";
@@ -179,14 +179,14 @@ export class ScreenshotFromViewer extends RefCounted {
     super();
     this.viewer = viewer;
     this.registerDisposer(
-      this.viewer.screenshotActionHandler.sendScreenshotRequested.add(
+      this.viewer.screenshotHandler.sendScreenshotRequested.add(
         (actionState) => {
           this.saveScreenshot(actionState);
         },
       ),
     );
     this.registerDisposer(
-      this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
+      this.viewer.screenshotHandler.sendStatisticsRequested.add(
         (actionState) => {
           this.persistStatisticsData(actionState);
           this.checkAndHandleStalledScreenshot(actionState);
@@ -243,7 +243,7 @@ export class ScreenshotFromViewer extends RefCounted {
 
     // Pass a new screenshot ID to the viewer to trigger a new screenshot.
     this.screenshotId++;
-    this.viewer.screenshotActionHandler.requestState.value =
+    this.viewer.screenshotHandler.requestState.value =
       this.screenshotId.toString();
 
     // Force handling the canvas size change

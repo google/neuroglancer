@@ -120,7 +120,7 @@ import {
   EventActionMap,
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
-import { ScreenshotFromViewer } from "#src/util/screenshot.js";
+import { ScreenshotManager } from "#src/util/screenshot.js";
 import { NullarySignal } from "#src/util/signal.js";
 import {
   CompoundTrackable,
@@ -491,8 +491,8 @@ export class Viewer extends RefCounted implements ViewerState {
 
   resetInitiated = new NullarySignal();
 
-  screenshotActionHandler = this.registerDisposer(new ScreenshotHandler(this));
-  screenshotHandler = this.registerDisposer(new ScreenshotFromViewer(this));
+  screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
+  screenshotManager = this.registerDisposer(new ScreenshotManager(this));
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -572,6 +572,7 @@ export class Viewer extends RefCounted implements ViewerState {
         this.display.applyWindowedViewportToElement(element, value);
       }, this.partialViewport),
     );
+
     this.registerDisposer(() => removeFromParent(this.element));
 
     this.dataContext = this.registerDisposer(dataContext);
