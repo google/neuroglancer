@@ -83,6 +83,18 @@ function saveBlobToFile(blob: Blob, filename: string) {
   }
 }
 
+function setExtension(filename: string, extension: string = ".png"): string {
+  function replaceExtension(filename: string): string {
+    const lastDot = filename.lastIndexOf(".");
+    if (lastDot === -1) {
+      return filename + extension;
+    }
+    return `${filename.substring(0, lastDot)}${extension}`;
+  }
+
+  return filename.endsWith(extension) ? filename : replaceExtension(filename);
+}
+
 function calculateViewportBounds(
   panels: ReadonlySet<RenderedPanel>,
 ): ViewportBounds {
@@ -306,16 +318,28 @@ export class ScreenshotFromViewer extends RefCounted {
         this.viewer,
         renderingPanelArea,
       );
-      const filename = this.generateFilename(
+      this.generateFilename(
         renderingPanelArea.right - renderingPanelArea.left,
         renderingPanelArea.bottom - renderingPanelArea.top,
       );
-      saveBlobToFile(croppedImage, filename);
+      saveBlobToFile(croppedImage, this.filename);
     } catch (error) {
       console.error("Failed to save screenshot:", error);
     } finally {
+      this.saveScreenshotLog(actionState);
       this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
     }
+  }
+
+  private saveScreenshotLog(actionState: ScreenshotActionState) {
+    const { viewerState } = actionState;
+    const stateString = JSON.stringify(viewerState);
+    this.downloadState(stateString);
+  }
+
+  private downloadState(state: string) {
+    const blob = new Blob([state], { type: "text/json" });
+    saveBlobToFile(blob, setExtension(this.filename, "_state.json"));
   }
 
   private resetCanvasSize() {
@@ -365,10 +389,9 @@ export class ScreenshotFromViewer extends RefCounted {
   private generateFilename(width: number, height: number): string {
     if (!this.filename) {
       const nowtime = new Date().toLocaleString().replace(", ", "-");
-      this.filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
+      this.filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}`;
     }
-    return this.filename.endsWith(".png")
-      ? this.filename
-      : this.filename + ".png";
+    this.filename = setExtension(this.filename);
+    return this.filename;
   }
 }
