@@ -167,15 +167,10 @@ export class ScreenshotFromViewer extends RefCounted {
     this.viewer = viewer;
     this.registerDisposer(
       this.viewer.screenshotActionHandler.sendScreenshotRequested.add(
-        (state) => {
-          this.saveScreenshot(state);
+        (actionState) => {
+          this.saveScreenshot(actionState);
         },
       ),
-    );
-    this.registerDisposer(
-      this.viewer.display.updateFinished.add(() => {
-        this.lastUpdateTimestamp = Date.now();
-      }),
     );
     this.registerDisposer(
       this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
@@ -184,6 +179,11 @@ export class ScreenshotFromViewer extends RefCounted {
           this.checkAndHandleStalledScreenshot(actionState);
         },
       ),
+    );
+    this.registerDisposer(
+      this.viewer.display.updateFinished.add(() => {
+        this.lastUpdateTimestamp = Date.now();
+      }),
     );
     this.registerDisposer(
       this.viewer.display.screenshotMode.changed.add(() => {
