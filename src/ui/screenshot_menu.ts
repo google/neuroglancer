@@ -24,10 +24,9 @@ import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
 const friendlyNameMap = {
-  time: "Current time",
-  visibleChunksGpuMemory: "Number of loaded chunks",
-  visibleGpuMemory: "Visible chunk GPU memory usage",
-  visibleChunksDownloading: "Number of downloading chunks",
+  chunkUsageDescription: "Number of loaded chunks",
+  gpuMemoryUsageDescription: "Visible chunk GPU memory usage",
+  downloadSpeedDescription: "Number of downloading chunks",
 };
 
 export class ScreenshotDialog extends Overlay {
@@ -37,6 +36,7 @@ export class ScreenshotDialog extends Overlay {
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
   private statisticsContainer: HTMLDivElement;
+  private scaleSelectContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
   private screenshotMode: ScreenshotModes;
   constructor(public viewer: Viewer) {
@@ -61,19 +61,20 @@ export class ScreenshotDialog extends Overlay {
     this.forceScreenshotButton = this.createButton("Force screenshot", () =>
       this.forceScreenshot(),
     );
+    this.forceScreenshotButton.title =
+      "Force a screenshot even if the viewer is not ready";
     this.filenameAndButtonsContainer = document.createElement("div");
     this.filenameAndButtonsContainer.classList.add(
       "neuroglancer-screenshot-filename-and-buttons",
     );
     this.filenameAndButtonsContainer.appendChild(this.createNameInput());
-    this.filenameAndButtonsContainer.appendChild(
-      this.getScreenshotButtonBasedOnMode,
-    );
+    this.filenameAndButtonsContainer.appendChild(this.saveButton);
 
     this.content.appendChild(this.closeButton);
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
     this.content.appendChild(this.createStatisticsTable());
+    this.updateSetupUIVisibility();
   }
 
   private setupEventListeners() {
@@ -95,15 +96,9 @@ export class ScreenshotDialog extends Overlay {
   private createNameInput(): HTMLInputElement {
     const nameInput = document.createElement("input");
     nameInput.type = "text";
-    nameInput.placeholder = "Enter filename...";
+    nameInput.placeholder = "Enter optional filename...";
     nameInput.classList.add("neuroglancer-screenshot-name-input");
     return (this.nameInput = nameInput);
-  }
-
-  private get getScreenshotButtonBasedOnMode() {
-    return this.screenshotMode === ScreenshotModes.OFF
-      ? this.saveButton
-      : this.forceScreenshotButton;
   }
 
   private updateStatisticsTableDisplayBasedOnMode() {
@@ -128,7 +123,8 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private createScaleRadioButtons() {
-    const scaleMenu = document.createElement("div");
+    const scaleMenu = (this.scaleSelectContainer =
+      document.createElement("div"));
     scaleMenu.classList.add("neuroglancer-screenshot-scale-menu");
 
     const scaleLabel = document.createElement("label");
@@ -163,6 +159,7 @@ export class ScreenshotDialog extends Overlay {
     this.statisticsContainer.classList.add(
       "neuroglancer-screenshot-statistics-title",
     );
+    this.statisticsContainer.appendChild(this.forceScreenshotButton);
 
     this.statisticsTable = document.createElement("table");
     this.statisticsTable.classList.add(
@@ -172,13 +169,13 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = this.statisticsTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Screenshot in progress...";
+    keyHeader.textContent = "Screenshot in progress";
     headerRow.appendChild(keyHeader);
     const valueHeader = document.createElement("th");
     valueHeader.textContent = "";
     headerRow.appendChild(valueHeader);
 
-    this.populateStatistics(undefined);
+    this.populateStatistics();
     this.updateStatisticsTableDisplayBasedOnMode();
     this.statisticsContainer.appendChild(this.statisticsTable);
     return this.statisticsContainer;
@@ -195,15 +192,28 @@ export class ScreenshotDialog extends Overlay {
     this.debouncedUpdateUIElements();
   }
 
-  private populateStatistics(actionState: StatisticsActionState | undefined) {
+  private populateStatistics(
+    actionState: StatisticsActionState | undefined = undefined,
+  ) {
     if (actionState !== undefined) {
       while (this.statisticsTable.rows.length > 1) {
         this.statisticsTable.deleteRow(1);
       }
     }
-    const statsRow = this.screenshotHandler.parseStatistics(actionState);
+    const statsRow = this.screenshotHandler.screenshotStatistics;
 
     for (const key in statsRow) {
+      if (key === "timeElapsedString") {
+        const headerRow = this.statisticsTable.rows[0];
+        const keyHeader = headerRow.cells[0];
+        const time = statsRow[key];
+        if (time === null) {
+          keyHeader.textContent = "Screenshot in progress (statistics loading)";
+        } else {
+          keyHeader.textContent = `Screenshot in progress for ${statsRow[key]}s`;
+        }
+        continue;
+      }
       const row = this.statisticsTable.insertRow();
       const keyCell = row.insertCell();
       const valueCell = row.insertCell();
@@ -214,24 +224,20 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private debouncedUpdateUIElements = debounce(() => {
-    this.showSaveOrForceScreenshotButton();
+    this.updateSetupUIVisibility();
     this.updateStatisticsTableDisplayBasedOnMode();
   }, 200);
 
-  private showSaveOrForceScreenshotButton() {
-    if (this.viewer.display.screenshotMode.value !== this.screenshotMode) {
-      if (this.viewer.display.screenshotMode.value === ScreenshotModes.OFF) {
-        this.filenameAndButtonsContainer.replaceChild(
-          this.saveButton,
-          this.forceScreenshotButton,
-        );
-      } else {
-        this.filenameAndButtonsContainer.replaceChild(
-          this.forceScreenshotButton,
-          this.saveButton,
-        );
-      }
-      this.screenshotMode = this.viewer.display.screenshotMode.value;
+  private updateSetupUIVisibility() {
+    this.screenshotMode = this.viewer.display.screenshotMode.value;
+    if (this.screenshotMode === ScreenshotModes.OFF) {
+      this.forceScreenshotButton.style.display = "none";
+      this.filenameAndButtonsContainer.style.display = "block";
+      this.scaleSelectContainer.style.display = "block";
+    } else {
+      this.forceScreenshotButton.style.display = "block";
+      this.filenameAndButtonsContainer.style.display = "none";
+      this.scaleSelectContainer.style.display = "none";
     }
   }
 

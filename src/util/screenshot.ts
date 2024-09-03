@@ -58,6 +58,13 @@ export interface StatisticsActionState {
   };
 }
 
+interface UIScreenshotStatistics {
+  timeElapsedString: string | null;
+  chunkUsageDescription: string;
+  gpuMemoryUsageDescription: string;
+  downloadSpeedDescription: string;
+}
+
 interface ScreenshotCanvasViewport {
   left: number;
   right: number;
@@ -148,6 +155,13 @@ export class ScreenshotFromViewer extends RefCounted {
     timestamp: 0,
   };
   private lastUpdateTimestamp = 0;
+  private screenshotStartTime = 0;
+  private lastSavedStatistics: UIScreenshotStatistics = {
+    timeElapsedString: null,
+    chunkUsageDescription: "",
+    gpuMemoryUsageDescription: "",
+    downloadSpeedDescription: "",
+  };
 
   constructor(public viewer: Viewer) {
     super();
@@ -167,6 +181,7 @@ export class ScreenshotFromViewer extends RefCounted {
     this.registerDisposer(
       this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
         (actionState) => {
+          this.parseAndSaveStatistics(actionState);
           this.checkForStuckScreenshot(actionState);
         },
       ),
@@ -178,6 +193,10 @@ export class ScreenshotFromViewer extends RefCounted {
     );
   }
 
+  get screenshotStatistics(): UIScreenshotStatistics {
+    return this.lastSavedStatistics;
+  }
+
   screenshot(filename: string = "") {
     this.filename = filename;
     this.viewer.display.screenshotMode.value = ScreenshotModes.ON;
@@ -185,8 +204,8 @@ export class ScreenshotFromViewer extends RefCounted {
 
   private startScreenshot() {
     const { viewer } = this;
+    this.screenshotStartTime = this.lastUpdateTimestamp = Date.now();
     const shouldResize = this.screenshotScale !== 1;
-    this.lastUpdateTimestamp = Date.now();
     this.gpuStats = {
       numVisibleChunks: 0,
       timestamp: 0,
@@ -278,32 +297,40 @@ export class ScreenshotFromViewer extends RefCounted {
     }
   }
 
-  parseStatistics(actionState: StatisticsActionState | undefined) {
-    const nowtime = new Date().toLocaleTimeString();
-    let statsRow;
+  parseAndSaveStatistics(
+    actionState: StatisticsActionState | undefined,
+  ): UIScreenshotStatistics {
     if (actionState === undefined) {
-      statsRow = {
-        time: nowtime,
-        visibleChunksGpuMemory: "",
-        visibleGpuMemory: "",
-        visibleChunksDownloading: "",
-      };
-    } else {
-      const total = actionState.screenshotStatistics.total;
-
-      const percentLoaded =
-        (100 * total.visibleChunksGpuMemory) / total.visibleChunksTotal;
-      const percentGpuUsage =
-        (100 * total.visibleGpuMemory) /
-        this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value;
-      const gpuMemoryUsageInMB = total.visibleGpuMemory / 1024 / 1024;
-      statsRow = {
-        time: nowtime,
-        visibleChunksGpuMemory: `${total.visibleChunksGpuMemory} out of ${total.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
-        visibleGpuMemory: `${gpuMemoryUsageInMB}Mb (${percentGpuUsage.toFixed(2)}% of total)`,
-        visibleChunksDownloading: `${total.visibleChunksDownloading} at ${total.downloadLatency}ms`,
-      };
+      return this.lastSavedStatistics;
     }
+    const nowtime = Date.now();
+    const total = actionState.screenshotStatistics.total;
+
+    const percentLoaded =
+      total.visibleChunksTotal === 0
+        ? 0
+        : (100 * total.visibleChunksGpuMemory) / total.visibleChunksTotal;
+    const percentGpuUsage =
+      (100 * total.visibleGpuMemory) /
+      this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value;
+    const gpuMemoryUsageInMB = (total.visibleGpuMemory / 1000000).toFixed(0);
+    const totalMemoryInMB = (
+      this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value /
+      1000000
+    ).toFixed(0);
+    const latency = isNaN(total.downloadLatency)
+      ? 0
+      : total.downloadLatency.toFixed(0);
+    const passedTimeInSeconds = (
+      (nowtime - this.screenshotStartTime) /
+      1000
+    ).toFixed(0);
+    const statsRow = (this.lastSavedStatistics = {
+      timeElapsedString: passedTimeInSeconds,
+      chunkUsageDescription: `${total.visibleChunksGpuMemory} out of ${total.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
+      gpuMemoryUsageDescription: `${gpuMemoryUsageInMB}Mb / ${totalMemoryInMB}Mb (${percentGpuUsage.toFixed(2)}% of total)`,
+      downloadSpeedDescription: `${total.visibleChunksDownloading} at ${latency}ms latency`,
+    });
     return statsRow;
   }
 
@@ -330,6 +357,12 @@ export class ScreenshotFromViewer extends RefCounted {
     const { screenshotMode } = display;
     if (screenshotMode.value === ScreenshotModes.OFF) {
       this.resetCanvasSize();
+      this.lastSavedStatistics = {
+        timeElapsedString: null,
+        chunkUsageDescription: "",
+        gpuMemoryUsageDescription: "",
+        downloadSpeedDescription: "",
+      };
     } else if (screenshotMode.value === ScreenshotModes.FORCE) {
       display.scheduleRedraw();
     } else if (screenshotMode.value === ScreenshotModes.ON) {
