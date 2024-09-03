@@ -19,11 +19,10 @@ import { RefCounted } from "#src/util/disposable.js";
 import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
-// Warn after 5 seconds that the screenshot is likely stuck if no change in GPU chunks
 const SCREENSHOT_TIMEOUT = 5000;
 
-interface screenshotGpuStats {
-  numVisibleChunks: number;
+interface ScreenshotLoadStatistics {
+  numGpuLoadedVisibleChunks: number;
   timestamp: number;
 }
 
@@ -65,14 +64,14 @@ interface UIScreenshotStatistics {
   downloadSpeedDescription: string;
 }
 
-interface ScreenshotCanvasViewport {
+interface ViewportBounds {
   left: number;
   right: number;
   top: number;
   bottom: number;
 }
 
-function downloadFileForBlob(blob: Blob, filename: string) {
+function saveBlobToFile(blob: Blob, filename: string) {
   const a = document.createElement("a");
   const url = URL.createObjectURL(blob);
   a.href = url;
@@ -84,10 +83,10 @@ function downloadFileForBlob(blob: Blob, filename: string) {
   }
 }
 
-function determineViewPanelArea(
-  panels: Set<RenderedPanel>,
-): ScreenshotCanvasViewport {
-  const clippedPanel = {
+function calculateViewportBounds(
+  panels: ReadonlySet<RenderedPanel>,
+): ViewportBounds {
+  const viewportBounds = {
     left: Number.POSITIVE_INFINITY,
     right: Number.NEGATIVE_INFINITY,
     top: Number.POSITIVE_INFINITY,
@@ -97,16 +96,16 @@ function determineViewPanelArea(
     if (!panel.isDataPanel) continue;
     const viewport = panel.renderViewport;
     const { width, height } = viewport;
-    const left = panel.canvasRelativeClippedLeft;
-    const top = panel.canvasRelativeClippedTop;
-    const right = left + width;
-    const bottom = top + height;
-    clippedPanel.left = Math.min(clippedPanel.left, left);
-    clippedPanel.right = Math.max(clippedPanel.right, right);
-    clippedPanel.top = Math.min(clippedPanel.top, top);
-    clippedPanel.bottom = Math.max(clippedPanel.bottom, bottom);
+    const panelLeft = panel.canvasRelativeClippedLeft;
+    const panelTop = panel.canvasRelativeClippedTop;
+    const panelRight = panelLeft + width;
+    const panelBottom = panelTop + height;
+    viewportBounds.left = Math.min(viewportBounds.left, panelLeft);
+    viewportBounds.right = Math.max(viewportBounds.right, panelRight);
+    viewportBounds.top = Math.min(viewportBounds.top, panelTop);
+    viewportBounds.bottom = Math.max(viewportBounds.bottom, panelBottom);
   }
-  return clippedPanel;
+  return viewportBounds;
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
@@ -121,28 +120,28 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
   });
 }
 
-async function cropViewsFromViewer(
+async function extractViewportScreenshot(
   viewer: Viewer,
-  crop: ScreenshotCanvasViewport,
+  viewportBounds: ViewportBounds,
 ): Promise<Blob> {
-  const cropWidth = crop.right - crop.left;
-  const cropHeight = crop.bottom - crop.top;
+  const cropWidth = viewportBounds.right - viewportBounds.left;
+  const cropHeight = viewportBounds.bottom - viewportBounds.top;
   const img = await createImageBitmap(
     viewer.display.canvas,
-    crop.left,
-    crop.top,
+    viewportBounds.left,
+    viewportBounds.top,
     cropWidth,
     cropHeight,
   );
 
-  const canvas = document.createElement("canvas");
-  canvas.width = cropWidth;
-  canvas.height = cropHeight;
-  const ctx = canvas.getContext("2d");
+  const screenshotCanvas = document.createElement("canvas");
+  screenshotCanvas.width = cropWidth;
+  screenshotCanvas.height = cropHeight;
+  const ctx = screenshotCanvas.getContext("2d");
   if (!ctx) throw new Error("Failed to get canvas context");
   ctx.drawImage(img, 0, 0);
 
-  const croppedBlob = await canvasToBlob(canvas, "image/png");
+  const croppedBlob = await canvasToBlob(screenshotCanvas, "image/png");
   return croppedBlob;
 }
 
@@ -150,8 +149,8 @@ export class ScreenshotFromViewer extends RefCounted {
   public screenshotId: number = -1;
   public screenshotScale: number = 1;
   private filename: string = "";
-  private gpuStats: screenshotGpuStats = {
-    numVisibleChunks: 0,
+  private screenshotLoadStats: ScreenshotLoadStatistics = {
+    numGpuLoadedVisibleChunks: 0,
     timestamp: 0,
   };
   private lastUpdateTimestamp = 0;
@@ -181,8 +180,8 @@ export class ScreenshotFromViewer extends RefCounted {
     this.registerDisposer(
       this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
         (actionState) => {
-          this.parseAndSaveStatistics(actionState);
-          this.checkForStuckScreenshot(actionState);
+          this.persistStatisticsData(actionState);
+          this.checkAndHandleStalledScreenshot(actionState);
         },
       ),
     );
@@ -193,24 +192,30 @@ export class ScreenshotFromViewer extends RefCounted {
     );
   }
 
-  get screenshotStatistics(): UIScreenshotStatistics {
-    return this.lastSavedStatistics;
-  }
-
-  screenshot(filename: string = "") {
+  takeScreenshot(filename: string = "") {
     this.filename = filename;
     this.viewer.display.screenshotMode.value = ScreenshotModes.ON;
   }
 
-  private startScreenshot() {
+  forceScreenshot() {
+    this.viewer.display.screenshotMode.value = ScreenshotModes.FORCE;
+  }
+
+  get screenshotStatistics(): UIScreenshotStatistics {
+    return this.lastSavedStatistics;
+  }
+
+  private handleScreenshotStarted() {
     const { viewer } = this;
+    const shouldIncreaseCanvasSize = this.screenshotScale !== 1;
+
     this.screenshotStartTime = this.lastUpdateTimestamp = Date.now();
-    const shouldResize = this.screenshotScale !== 1;
-    this.gpuStats = {
-      numVisibleChunks: 0,
+    this.screenshotLoadStats = {
+      numGpuLoadedVisibleChunks: 0,
       timestamp: 0,
     };
-    if (shouldResize) {
+
+    if (shouldIncreaseCanvasSize) {
       const oldSize = {
         width: viewer.display.canvas.width,
         height: viewer.display.canvas.height,
@@ -222,46 +227,32 @@ export class ScreenshotFromViewer extends RefCounted {
       viewer.display.canvas.width = newSize.width;
       viewer.display.canvas.height = newSize.height;
     }
+
+    // Pass a new screenshot ID to the viewer to trigger a new screenshot.
     this.screenshotId++;
     this.viewer.screenshotActionHandler.requestState.value =
       this.screenshotId.toString();
-    if (shouldResize) {
+
+    // Force handling the canvas size change
+    if (shouldIncreaseCanvasSize) {
       ++viewer.display.resizeGeneration;
       viewer.display.resizeCallback();
     }
   }
 
-  resetCanvasSize() {
-    const { viewer } = this;
-    ++viewer.display.resizeGeneration;
-    viewer.display.resizeCallback();
-  }
-
-  async saveScreenshot(actionState: ScreenshotActionState) {
-    const { screenshot } = actionState;
-    const { imageType } = screenshot;
-    if (imageType !== "image/png") {
-      console.error("Image type is not PNG");
-      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
-      return;
-    }
-    const renderingPanelArea = determineViewPanelArea(
-      this.viewer.display.panels,
-    );
-    try {
-      const croppedImage = await cropViewsFromViewer(
-        this.viewer,
-        renderingPanelArea,
-      );
-      const filename = this.generateFilename(
-        renderingPanelArea.right - renderingPanelArea.left,
-        renderingPanelArea.bottom - renderingPanelArea.top,
-      );
-      downloadFileForBlob(croppedImage, filename);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
+  private handleScreenshotModeChange() {
+    const { display } = this.viewer;
+    switch (display.screenshotMode.value) {
+      case ScreenshotModes.OFF:
+        this.resetCanvasSize();
+        this.resetStatistics();
+        break;
+      case ScreenshotModes.FORCE:
+        display.scheduleRedraw();
+        break;
+      case ScreenshotModes.ON:
+        this.handleScreenshotStarted();
+        break;
     }
   }
 
@@ -270,103 +261,114 @@ export class ScreenshotFromViewer extends RefCounted {
    * in the GPU with the previous number of visible chunks. If the number of
    * visible chunks has not changed after a certain timeout, and the display has not updated, force a screenshot.
    */
-  private checkForStuckScreenshot(actionState: StatisticsActionState) {
+  private checkAndHandleStalledScreenshot(actionState: StatisticsActionState) {
     const total = actionState.screenshotStatistics.total;
-    const newStats = {
-      numVisibleChunks: total.visibleChunksGpuMemory,
+    const newStats: ScreenshotLoadStatistics = {
+      numGpuLoadedVisibleChunks: total.visibleChunksGpuMemory,
       timestamp: Date.now(),
     };
-    const oldStats = this.gpuStats;
-    if (oldStats.timestamp === 0) {
-      this.gpuStats = newStats;
+    if (this.screenshotLoadStats.timestamp === 0) {
+      this.screenshotLoadStats = newStats;
       return;
     }
-    if (oldStats.numVisibleChunks === newStats.numVisibleChunks) {
+    const oldStats = this.screenshotLoadStats;
+    if (
+      oldStats.numGpuLoadedVisibleChunks === newStats.numGpuLoadedVisibleChunks
+    ) {
       if (
         newStats.timestamp - oldStats.timestamp > SCREENSHOT_TIMEOUT &&
         Date.now() - this.lastUpdateTimestamp > SCREENSHOT_TIMEOUT
       ) {
         const totalChunks = total.visibleChunksTotal;
         console.warn(
-          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${newStats.numVisibleChunks}/${totalChunks}`,
+          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${newStats.numGpuLoadedVisibleChunks}/${totalChunks}`,
         );
         this.forceScreenshot();
       }
     } else {
-      this.gpuStats = newStats;
+      this.screenshotLoadStats = newStats;
     }
   }
 
-  parseAndSaveStatistics(
-    actionState: StatisticsActionState | undefined,
-  ): UIScreenshotStatistics {
-    if (actionState === undefined) {
-      return this.lastSavedStatistics;
+  private async saveScreenshot(actionState: ScreenshotActionState) {
+    const { screenshot } = actionState;
+    const { imageType } = screenshot;
+    if (imageType !== "image/png") {
+      console.error("Image type is not PNG");
+      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
+      return;
     }
+    const renderingPanelArea = calculateViewportBounds(
+      this.viewer.display.panels,
+    );
+    try {
+      const croppedImage = await extractViewportScreenshot(
+        this.viewer,
+        renderingPanelArea,
+      );
+      const filename = this.generateFilename(
+        renderingPanelArea.right - renderingPanelArea.left,
+        renderingPanelArea.bottom - renderingPanelArea.top,
+      );
+      saveBlobToFile(croppedImage, filename);
+    } catch (error) {
+      console.error("Failed to save screenshot:", error);
+    } finally {
+      this.viewer.display.screenshotMode.value = ScreenshotModes.OFF;
+    }
+  }
+
+  private resetCanvasSize() {
+    // Reset the canvas size to the original size
+    // No need to manually pass the correct sizes, the viewer will handle it
+    const { viewer } = this;
+    ++viewer.display.resizeGeneration;
+    viewer.display.resizeCallback();
+  }
+
+  private resetStatistics() {
+    this.lastSavedStatistics = {
+      timeElapsedString: null,
+      chunkUsageDescription: "",
+      gpuMemoryUsageDescription: "",
+      downloadSpeedDescription: "",
+    };
+  }
+
+  private persistStatisticsData(actionState: StatisticsActionState) {
     const nowtime = Date.now();
     const total = actionState.screenshotStatistics.total;
+    const maxGpuMemory =
+      this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value;
 
     const percentLoaded =
       total.visibleChunksTotal === 0
         ? 0
         : (100 * total.visibleChunksGpuMemory) / total.visibleChunksTotal;
-    const percentGpuUsage =
-      (100 * total.visibleGpuMemory) /
-      this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value;
-    const gpuMemoryUsageInMB = (total.visibleGpuMemory / 1000000).toFixed(0);
-    const totalMemoryInMB = (
-      this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value /
-      1000000
-    ).toFixed(0);
-    const latency = isNaN(total.downloadLatency)
-      ? 0
-      : total.downloadLatency.toFixed(0);
+    const percentGpuUsage = (100 * total.visibleGpuMemory) / maxGpuMemory;
+    const gpuMemoryUsageInMB = total.visibleGpuMemory / 1000000;
+    const totalMemoryInMB = maxGpuMemory / 1000000;
+    const latency = isNaN(total.downloadLatency) ? 0 : total.downloadLatency;
     const passedTimeInSeconds = (
       (nowtime - this.screenshotStartTime) /
       1000
     ).toFixed(0);
-    const statsRow = (this.lastSavedStatistics = {
+
+    this.lastSavedStatistics = {
       timeElapsedString: passedTimeInSeconds,
       chunkUsageDescription: `${total.visibleChunksGpuMemory} out of ${total.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
-      gpuMemoryUsageDescription: `${gpuMemoryUsageInMB}Mb / ${totalMemoryInMB}Mb (${percentGpuUsage.toFixed(2)}% of total)`,
-      downloadSpeedDescription: `${total.visibleChunksDownloading} at ${latency}ms latency`,
-    });
-    return statsRow;
+      gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
+      downloadSpeedDescription: `${total.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`,
+    };
   }
 
-  forceScreenshot() {
-    this.viewer.display.screenshotMode.value = ScreenshotModes.FORCE;
-  }
-
-  generateFilename(width: number, height: number): string {
-    let filename = this.filename;
-    if (filename.length === 0) {
-      let nowtime = new Date().toLocaleString();
-      nowtime = nowtime.replace(", ", "-");
-      filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
+  private generateFilename(width: number, height: number): string {
+    if (!this.filename) {
+      const nowtime = new Date().toLocaleString().replace(", ", "-");
+      this.filename = `neuroglancer-screenshot-w${width}px-h${height}px-at-${nowtime}.png`;
     }
-    if (!filename.endsWith(".png")) {
-      filename += ".png";
-    }
-    return filename;
-  }
-
-  handleScreenshotModeChange() {
-    const { viewer } = this;
-    const { display } = viewer;
-    const { screenshotMode } = display;
-    if (screenshotMode.value === ScreenshotModes.OFF) {
-      this.resetCanvasSize();
-      this.lastSavedStatistics = {
-        timeElapsedString: null,
-        chunkUsageDescription: "",
-        gpuMemoryUsageDescription: "",
-        downloadSpeedDescription: "",
-      };
-    } else if (screenshotMode.value === ScreenshotModes.FORCE) {
-      display.scheduleRedraw();
-    } else if (screenshotMode.value === ScreenshotModes.ON) {
-      this.startScreenshot();
-    }
+    return this.filename.endsWith(".png")
+      ? this.filename
+      : this.filename + ".png";
   }
 }

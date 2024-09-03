@@ -61,7 +61,7 @@ export class ScreenshotDialog extends Overlay {
       this.forceScreenshot(),
     );
     this.forceScreenshotButton.title =
-      "Force a screenshot even if the viewer is not ready";
+      "Force a screenshot of the current view without waiting for all data to be loaded and rendered";
     this.filenameAndButtonsContainer = document.createElement("div");
     this.filenameAndButtonsContainer.classList.add(
       "neuroglancer-screenshot-filename-and-buttons",
@@ -200,7 +200,7 @@ export class ScreenshotDialog extends Overlay {
 
   private screenshot() {
     const filename = this.nameInput.value;
-    this.screenshotHandler.screenshot(filename);
+    this.screenshotHandler.takeScreenshot(filename);
     this.debouncedUpdateUIElements();
   }
 
