@@ -18,8 +18,8 @@ import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import "#src/ui/screenshot_menu.css";
 
+import type { ScreenshotManager } from "#src/util/screenshot.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
-import type { Viewer } from "#src/viewer.js";
 
 const statisticsNamesForUI = {
   chunkUsageDescription: "Number of loaded chunks",
@@ -36,11 +36,9 @@ export class ScreenshotDialog extends Overlay {
   private statisticsContainer: HTMLDivElement;
   private scaleSelectContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
-  private screenshotMode: ScreenshotMode;
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
-  constructor(public viewer: Viewer) {
+  constructor(private screenshotManager: ScreenshotManager) {
     super();
-    this.screenshotMode = this.viewer.display.screenshotMode.value;
 
     this.initializeUI();
     this.setupEventListeners();
@@ -78,13 +76,12 @@ export class ScreenshotDialog extends Overlay {
 
   private setupEventListeners() {
     this.registerDisposer(
-      this.viewer.screenshotHandler.sendScreenshotRequested.add(() => {
-        this.debouncedUpdateUIElements();
+      this.screenshotManager.screenshotFinished.add(() => {
         this.dispose();
       }),
     );
     this.registerDisposer(
-      this.viewer.screenshotHandler.sendStatisticsRequested.add(() => {
+      this.screenshotManager.statisticsUpdated.add(() => {
         this.populateStatistics();
       }),
     );
@@ -128,7 +125,7 @@ export class ScreenshotDialog extends Overlay {
       input.type = "radio";
       input.name = "screenshot-scale";
       input.value = scale.toString();
-      input.checked = scale === this.viewer.screenshotManager.screenshotScale;
+      input.checked = scale === this.screenshotManager.screenshotScale;
       input.classList.add("neuroglancer-screenshot-scale-radio");
 
       label.appendChild(input);
@@ -137,7 +134,7 @@ export class ScreenshotDialog extends Overlay {
       scaleMenu.appendChild(label);
 
       input.addEventListener("change", () => {
-        this.viewer.screenshotManager.screenshotScale = scale;
+        this.screenshotManager.screenshotScale = scale;
       });
     });
     return scaleMenu;
@@ -165,7 +162,7 @@ export class ScreenshotDialog extends Overlay {
     headerRow.appendChild(valueHeader);
 
     // Populate inital table elements with placeholder text
-    const statsRow = this.viewer.screenshotManager.screenshotStatistics;
+    const statsRow = this.screenshotManager.screenshotStatistics;
     for (const key in statsRow) {
       if (key === "timeElapsedString") {
         continue;
@@ -186,13 +183,14 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private forceScreenshot() {
-    this.viewer.screenshotManager.forceScreenshot();
-    this.debouncedUpdateUIElements();
+    this.screenshotManager.forceScreenshot();
   }
 
   private screenshot() {
     const filename = this.nameInput.value;
-    this.viewer.screenshotManager.takeScreenshot(filename);
+    this.screenshotManager.takeScreenshot(filename);
+    // Delay the update because sometimes the screenshot is immediately taken
+    // And the UI is disposed before the update can happen
     this.debouncedUpdateUIElements();
   }
 
@@ -205,7 +203,7 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private populateStatistics() {
-    const statsRow = this.viewer.screenshotManager.screenshotStatistics;
+    const statsRow = this.screenshotManager.screenshotStatistics;
 
     for (const key in statsRow) {
       if (key === "timeElapsedString") {
@@ -228,10 +226,9 @@ export class ScreenshotDialog extends Overlay {
   private debouncedUpdateUIElements = debounce(() => {
     this.updateSetupUIVisibility();
     this.updateStatisticsTableDisplayBasedOnMode();
-  }, 200);
+  }, 100);
 
   private updateSetupUIVisibility() {
-    this.screenshotMode = this.viewer.display.screenshotMode.value;
     if (this.screenshotMode === ScreenshotMode.OFF) {
       this.forceScreenshotButton.style.display = "none";
       this.filenameAndButtonsContainer.style.display = "block";
@@ -241,5 +238,9 @@ export class ScreenshotDialog extends Overlay {
       this.filenameAndButtonsContainer.style.display = "none";
       this.scaleSelectContainer.style.display = "none";
     }
+  }
+
+  get screenshotMode() {
+    return this.screenshotManager.screenshotMode;
   }
 }

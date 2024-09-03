@@ -1151,7 +1151,7 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   showScreenshotDialog() {
-    new ScreenshotDialog(this);
+    new ScreenshotDialog(this.screenshotManager);
   }
 
   showStatistics(value: boolean | undefined = undefined) {

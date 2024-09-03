@@ -17,6 +17,7 @@
 import type { RenderedPanel } from "#src/display_context.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { RefCounted } from "#src/util/disposable.js";
+import {NullarySignal} from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
@@ -174,6 +175,9 @@ export class ScreenshotManager extends RefCounted {
     gpuMemoryUsageDescription: "",
     downloadSpeedDescription: "",
   };
+  screenshotMode: ScreenshotMode = ScreenshotMode.OFF;
+  statisticsUpdated = new NullarySignal();
+  screenshotFinished = new NullarySignal();
 
   constructor(public viewer: Viewer) {
     super();
@@ -181,6 +185,7 @@ export class ScreenshotManager extends RefCounted {
     this.registerDisposer(
       this.viewer.screenshotHandler.sendScreenshotRequested.add(
         (actionState) => {
+          this.screenshotFinished.dispatch();
           this.saveScreenshot(actionState);
         },
       ),
@@ -190,6 +195,7 @@ export class ScreenshotManager extends RefCounted {
         (actionState) => {
           this.persistStatisticsData(actionState);
           this.checkAndHandleStalledScreenshot(actionState);
+          this.statisticsUpdated.dispatch();
         },
       ),
     );
@@ -255,7 +261,8 @@ export class ScreenshotManager extends RefCounted {
 
   private handleScreenshotModeChange() {
     const { display } = this.viewer;
-    switch (display.screenshotMode.value) {
+    this.screenshotMode = display.screenshotMode.value;
+    switch (this.screenshotMode) {
       case ScreenshotMode.OFF:
         this.resetCanvasSize();
         this.resetStatistics();
