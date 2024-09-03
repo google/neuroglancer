@@ -125,14 +125,14 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    const forceScreenshot =
+    const shouldForceScreenshot =
       this.viewer.display.screenshotMode.value === ScreenshotMode.FORCE;
-    if (!viewer.isReady() && !forceScreenshot) {
+    if (!viewer.isReady() && !shouldForceScreenshot) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;
     }
-    if (!this.wasAlreadyVisible && !forceScreenshot) {
+    if (!this.wasAlreadyVisible && !shouldForceScreenshot) {
       this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();
