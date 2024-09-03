@@ -15,6 +15,7 @@
  */
 
 import type { RenderedPanel } from "#src/display_context.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
@@ -105,7 +106,7 @@ function calculateViewportBounds(
     bottom: Number.NEGATIVE_INFINITY,
   };
   for (const panel of panels) {
-    if (!panel.isDataPanel) continue;
+    if (!(panel instanceof RenderedDataPanel)) continue;
     const viewport = panel.renderViewport;
     const { width, height } = viewport;
     const panelLeft = panel.canvasRelativeClippedLeft;

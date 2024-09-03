@@ -311,10 +311,6 @@ export abstract class RenderedPanel extends RefCounted {
     return true;
   }
 
-  get isDataPanel() {
-    return false;
-  }
-
   // Returns a number that determine the order in which panels are drawn. This is used by CdfPanel
   // to ensure it is drawn after other panels that update the histogram.
   //

@@ -129,9 +129,6 @@ export class SliceViewPanel extends RenderedDataPanel {
   get rpcId() {
     return this.sliceView.rpcId!;
   }
-  get isDataPanel() {
-    return true;
-  }
 
   private offscreenFramebuffer = this.registerDisposer(
     new FramebufferConfiguration(this.gl, {
