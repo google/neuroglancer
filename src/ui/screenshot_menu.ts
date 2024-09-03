@@ -18,8 +18,6 @@ import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import "#src/ui/screenshot_menu.css";
 
-import type { StatisticsActionState } from "#src/util/screenshot.js";
-
 import { ScreenshotModes } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
@@ -39,6 +37,7 @@ export class ScreenshotDialog extends Overlay {
   private scaleSelectContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
   private screenshotMode: ScreenshotModes;
+  private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   constructor(public viewer: Viewer) {
     super();
     this.screenshotMode = this.viewer.display.screenshotMode.value;
@@ -85,11 +84,9 @@ export class ScreenshotDialog extends Overlay {
       }),
     );
     this.registerDisposer(
-      this.viewer.screenshotActionHandler.sendStatisticsRequested.add(
-        (actionState) => {
-          this.populateStatistics(actionState);
-        },
-      ),
+      this.viewer.screenshotActionHandler.sendStatisticsRequested.add(() => {
+        this.populateStatistics();
+      }),
     );
   }
 
@@ -175,6 +172,21 @@ export class ScreenshotDialog extends Overlay {
     valueHeader.textContent = "";
     headerRow.appendChild(valueHeader);
 
+    // Populate inital table elements with placeholder text
+    const statsRow = this.screenshotHandler.screenshotStatistics;
+    for (const key in statsRow) {
+      if (key === "timeElapsedString") {
+        continue;
+      }
+      const row = this.statisticsTable.insertRow();
+      const keyCell = row.insertCell();
+      const valueCell = row.insertCell();
+      keyCell.textContent =
+        friendlyNameMap[key as keyof typeof friendlyNameMap];
+      valueCell.textContent = "Loading...";
+      this.statisticsKeyToCellMap.set(key, valueCell);
+    }
+
     this.populateStatistics();
     this.updateStatisticsTableDisplayBasedOnMode();
     this.statisticsContainer.appendChild(this.statisticsTable);
@@ -192,14 +204,7 @@ export class ScreenshotDialog extends Overlay {
     this.debouncedUpdateUIElements();
   }
 
-  private populateStatistics(
-    actionState: StatisticsActionState | undefined = undefined,
-  ) {
-    if (actionState !== undefined) {
-      while (this.statisticsTable.rows.length > 1) {
-        this.statisticsTable.deleteRow(1);
-      }
-    }
+  private populateStatistics() {
     const statsRow = this.screenshotHandler.screenshotStatistics;
 
     for (const key in statsRow) {
@@ -214,12 +219,9 @@ export class ScreenshotDialog extends Overlay {
         }
         continue;
       }
-      const row = this.statisticsTable.insertRow();
-      const keyCell = row.insertCell();
-      const valueCell = row.insertCell();
-      keyCell.textContent =
-        friendlyNameMap[key as keyof typeof friendlyNameMap];
-      valueCell.textContent = String(statsRow[key as keyof typeof statsRow]);
+      this.statisticsKeyToCellMap.get(key)!.textContent = String(
+        statsRow[key as keyof typeof statsRow],
+      );
     }
   }
 
