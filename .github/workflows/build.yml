@@ -48,9 +48,12 @@ jobs:
       - run: npm publish --dry-run
         working-directory: dist/package
       - uses: ./.github/actions/setup-firefox
+      - name: Install playwright
+        run: |
+          npm install -D @playwright/test@latest
+          npx playwright install-deps chromium
       - name: Run JavaScript tests (including WebGL)
         run: npm test
-        if: ${{ runner.os != 'macOS' }}
       - name: Run JavaScript tests (excluding WebGL)
         run: npm test -- --project node
         if: ${{ runner.os == 'macOS' }}

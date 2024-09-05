@@ -20,10 +20,10 @@ export default defineWorkspace([
         include: [],
       },
       browser: {
-        provider: "webdriverio",
+        provider: "playwright",
         enabled: true,
         headless: true,
-        name: "chrome",
+        name: "chromium",
       },
     },
   },
