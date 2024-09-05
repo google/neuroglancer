@@ -48,10 +48,10 @@ jobs:
       - run: npm publish --dry-run
         working-directory: dist/package
       - uses: ./.github/actions/setup-firefox
-      - name: Installd playwright
-        run: npx playwright install
-      - name: Install dependencies
-        run: npx playwright install-deps chromium
+      - name: Install playwright
+        run: |
+          npm install -D @playwright/test@latest
+          npx playwright install-deps chromium
       - name: Run JavaScript tests (including WebGL)
         run: npm test
       - name: Run JavaScript tests (excluding WebGL)
