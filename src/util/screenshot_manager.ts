@@ -193,6 +193,21 @@ export class ScreenshotManager extends RefCounted {
     this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
   }
 
+  // Scales the screenshot by the given factor, and calculates the cropped area
+  calculatedScaledAndClippedSize() {
+    const renderingPanelArea = calculateViewportBounds(
+      this.viewer.display.panels,
+    );
+    return {
+      width:
+        Math.round(renderingPanelArea.right - renderingPanelArea.left) *
+        this.screenshotScale,
+      height:
+        Math.round(renderingPanelArea.bottom - renderingPanelArea.top) *
+        this.screenshotScale,
+    };
+  }
+
   private handleScreenshotStarted() {
     const { viewer } = this;
     const shouldIncreaseCanvasSize = this.screenshotScale !== 1;

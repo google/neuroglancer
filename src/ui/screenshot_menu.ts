@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
+import "#src/ui/screenshot_menu.css";
 import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
-import "#src/ui/screenshot_menu.css";
-
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
+
+const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 
 interface UIScreenshotStatistics {
   timeElapsedString: string | null;
@@ -40,13 +41,14 @@ const statisticsNamesForUI = {
 
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
-  private saveButton: HTMLButtonElement;
-  private cancelButton: HTMLButtonElement;
+  private takeScreenshotButton: HTMLButtonElement;
+  private cancelScreenshotButton: HTMLButtonElement;
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
   private statisticsContainer: HTMLDivElement;
-  private scaleSelectContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
+  private screenshotSizeText: HTMLDivElement;
+  private warningElement: HTMLDivElement;
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   constructor(private screenshotManager: ScreenshotManager) {
     super();
@@ -58,31 +60,30 @@ export class ScreenshotDialog extends Overlay {
   private initializeUI() {
     this.content.classList.add("neuroglancer-screenshot-dialog");
 
-    this.cancelButton = this.createButton(
+    this.cancelScreenshotButton = this.createButton(
       "Cancel",
       () => this.cancelScreenshot(),
       "neuroglancer-screenshot-close-button",
     );
-    this.saveButton = this.createButton("Take screenshot", () =>
+    this.takeScreenshotButton = this.createButton("Take screenshot", () =>
       this.screenshot(),
     );
     this.forceScreenshotButton = this.createButton("Force screenshot", () =>
       this.forceScreenshot(),
     );
-    this.forceScreenshotButton.title =
-      "Force a screenshot of the current view without waiting for all data to be loaded and rendered";
     this.filenameAndButtonsContainer = document.createElement("div");
     this.filenameAndButtonsContainer.classList.add(
       "neuroglancer-screenshot-filename-and-buttons",
     );
     this.filenameAndButtonsContainer.appendChild(this.createNameInput());
-    this.filenameAndButtonsContainer.appendChild(this.saveButton);
+    this.filenameAndButtonsContainer.appendChild(this.takeScreenshotButton);
+    this.filenameAndButtonsContainer.appendChild(this.forceScreenshotButton);
 
-    this.content.appendChild(this.cancelButton);
+    this.content.appendChild(this.cancelScreenshotButton);
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
     this.content.appendChild(this.createStatisticsTable());
-    this.updateSetupUIVisibility();
+    this.updateUIBasedOnMode();
   }
 
   private setupEventListeners() {
@@ -120,13 +121,20 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private createScaleRadioButtons() {
-    const scaleMenu = (this.scaleSelectContainer =
-      document.createElement("div"));
+    const scaleMenu = document.createElement("div");
     scaleMenu.classList.add("neuroglancer-screenshot-scale-menu");
+
+    this.screenshotSizeText = document.createElement("div");
+    this.screenshotSizeText.classList.add("neuroglancer-screenshot-size-text");
+    scaleMenu.appendChild(this.screenshotSizeText);
 
     const scaleLabel = document.createElement("label");
     scaleLabel.textContent = "Screenshot scale factor:";
     scaleMenu.appendChild(scaleLabel);
+
+    this.warningElement = document.createElement("div");
+    this.warningElement.classList.add("neuroglancer-screenshot-warning");
+    this.warningElement.textContent = "";
 
     const scales = [1, 2, 4];
     scales.forEach((scale) => {
@@ -146,9 +154,24 @@ export class ScreenshotDialog extends Overlay {
 
       input.addEventListener("change", () => {
         this.screenshotManager.screenshotScale = scale;
+        this.handleScreenshotResize();
       });
     });
+    scaleMenu.appendChild(this.warningElement);
+    this.handleScreenshotResize();
     return scaleMenu;
+  }
+
+  private handleScreenshotResize() {
+    const screenshotSize =
+      this.screenshotManager.calculatedScaledAndClippedSize();
+    if (screenshotSize.width * screenshotSize.height > LARGE_SCREENSHOT_SIZE) {
+      this.warningElement.textContent =
+        "Warning: large screenshots (bigger than 4096x4096) may fail";
+    } else {
+      this.warningElement.textContent = "";
+    }
+    this.screenshotSizeText.textContent = `Screenshot size: ${screenshotSize.width}px, ${screenshotSize.height}px`;
   }
 
   private createStatisticsTable() {
@@ -156,7 +179,6 @@ export class ScreenshotDialog extends Overlay {
     this.statisticsContainer.classList.add(
       "neuroglancer-screenshot-statistics-title",
     );
-    this.statisticsContainer.appendChild(this.forceScreenshotButton);
 
     this.statisticsTable = document.createElement("table");
     this.statisticsTable.classList.add(
@@ -174,10 +196,10 @@ export class ScreenshotDialog extends Overlay {
 
     // Populate inital table elements with placeholder text
     const orderedStatsRow: UIScreenshotStatistics = {
-      chunkUsageDescription: "Loading...",
-      gpuMemoryUsageDescription: "Loading...",
-      downloadSpeedDescription: "Loading...",
-      timeElapsedString: "Loading...",
+      chunkUsageDescription: "",
+      gpuMemoryUsageDescription: "",
+      downloadSpeedDescription: "",
+      timeElapsedString: "",
     };
     for (const key in orderedStatsRow) {
       const row = this.statisticsTable.insertRow();
@@ -191,7 +213,6 @@ export class ScreenshotDialog extends Overlay {
     }
 
     this.populateStatistics();
-    this.updateStatisticsTableDisplayBasedOnMode();
     this.statisticsContainer.appendChild(this.statisticsTable);
     return this.statisticsContainer;
   }
@@ -214,23 +235,16 @@ export class ScreenshotDialog extends Overlay {
     this.debouncedUpdateUIElements();
   }
 
-  private updateStatisticsTableDisplayBasedOnMode() {
-    if (this.screenshotMode === ScreenshotMode.OFF) {
-      this.statisticsContainer.style.display = "none";
-    } else {
-      this.statisticsContainer.style.display = "block";
-    }
-    if (this.screenshotMode === ScreenshotMode.ON) {
-      this.cancelButton.textContent = "Cancel";
-    } else {
-      this.cancelButton.textContent = "Close";
-    }
-  }
-
   private populateStatistics() {
+    if (this.screenshotMode === ScreenshotMode.OFF) {
+      return;
+    }
     const statsRow = this.parseStatistics(
       this.screenshotManager.screenshotLoadStats,
     );
+    if (statsRow === null) {
+      return;
+    }
 
     for (const key in statsRow) {
       this.statisticsKeyToCellMap.get(key)!.textContent = String(
@@ -241,15 +255,10 @@ export class ScreenshotDialog extends Overlay {
 
   private parseStatistics(
     currentStatistics: ScreenshotLoadStatistics | null,
-  ): UIScreenshotStatistics {
+  ): UIScreenshotStatistics | null {
     const nowtime = Date.now();
     if (currentStatistics === null) {
-      return {
-        timeElapsedString: "Loading...",
-        chunkUsageDescription: "Loading...",
-        gpuMemoryUsageDescription: "Loading...",
-        downloadSpeedDescription: "Loading...",
-      };
+      return null;
     }
 
     const percentLoaded =
@@ -277,19 +286,24 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private debouncedUpdateUIElements = debounce(() => {
-    this.updateSetupUIVisibility();
-    this.updateStatisticsTableDisplayBasedOnMode();
+    this.updateUIBasedOnMode();
   }, 100);
 
-  private updateSetupUIVisibility() {
+  private updateUIBasedOnMode() {
     if (this.screenshotMode === ScreenshotMode.OFF) {
-      this.forceScreenshotButton.style.display = "none";
-      this.filenameAndButtonsContainer.style.display = "block";
-      this.scaleSelectContainer.style.display = "block";
+      this.forceScreenshotButton.disabled = true;
+      this.takeScreenshotButton.disabled = false;
+      this.forceScreenshotButton.title = "";
     } else {
-      this.forceScreenshotButton.style.display = "block";
-      this.filenameAndButtonsContainer.style.display = "none";
-      this.scaleSelectContainer.style.display = "none";
+      this.forceScreenshotButton.disabled = false;
+      this.takeScreenshotButton.disabled = true;
+      this.forceScreenshotButton.title =
+        "Force a screenshot of the current view without waiting for all data to be loaded and rendered";
+    }
+    if (this.screenshotMode === ScreenshotMode.ON) {
+      this.cancelScreenshotButton.textContent = "Cancel";
+    } else {
+      this.cancelScreenshotButton.textContent = "Close";
     }
   }
 

@@ -38,6 +38,7 @@
 
 .neuroglancer-screenshot-button {
     cursor: pointer;
+    margin: 2px;
 }
 
 .neuroglancer-screenshot-close-button {
@@ -66,4 +67,8 @@
     background-color: #f8f8f8;
     font-weight: bold;
     color: #555;
+}
+
+.neuroglancer-screenshot-warning {
+    color: red;
 }
