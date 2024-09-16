@@ -41,7 +41,7 @@ const statisticsNamesForUI = {
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
   private saveButton: HTMLButtonElement;
-  private closeButton: HTMLButtonElement;
+  private cancelButton: HTMLButtonElement;
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
   private statisticsContainer: HTMLDivElement;
@@ -58,9 +58,9 @@ export class ScreenshotDialog extends Overlay {
   private initializeUI() {
     this.content.classList.add("neuroglancer-screenshot-dialog");
 
-    this.closeButton = this.createButton(
-      "Close",
-      () => this.dispose(),
+    this.cancelButton = this.createButton(
+      "Cancel",
+      () => this.cancelScreenshot(),
       "neuroglancer-screenshot-close-button",
     );
     this.saveButton = this.createButton("Take screenshot", () =>
@@ -78,7 +78,7 @@ export class ScreenshotDialog extends Overlay {
     this.filenameAndButtonsContainer.appendChild(this.createNameInput());
     this.filenameAndButtonsContainer.appendChild(this.saveButton);
 
-    this.content.appendChild(this.closeButton);
+    this.content.appendChild(this.cancelButton);
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
     this.content.appendChild(this.createStatisticsTable());
@@ -185,7 +185,8 @@ export class ScreenshotDialog extends Overlay {
       const valueCell = row.insertCell();
       keyCell.textContent =
         statisticsNamesForUI[key as keyof typeof statisticsNamesForUI];
-      valueCell.textContent = orderedStatsRow[key as keyof typeof orderedStatsRow];
+      valueCell.textContent =
+        orderedStatsRow[key as keyof typeof orderedStatsRow];
       this.statisticsKeyToCellMap.set(key, valueCell);
     }
 
@@ -197,6 +198,12 @@ export class ScreenshotDialog extends Overlay {
 
   private forceScreenshot() {
     this.screenshotManager.forceScreenshot();
+    this.dispose();
+  }
+
+  private cancelScreenshot() {
+    this.screenshotManager.cancelScreenshot();
+    this.dispose();
   }
 
   private screenshot() {
@@ -212,6 +219,11 @@ export class ScreenshotDialog extends Overlay {
       this.statisticsContainer.style.display = "none";
     } else {
       this.statisticsContainer.style.display = "block";
+    }
+    if (this.screenshotMode === ScreenshotMode.ON) {
+      this.cancelButton.textContent = "Cancel";
+    } else {
+      this.cancelButton.textContent = "Close";
     }
   }
 

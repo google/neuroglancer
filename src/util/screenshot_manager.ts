@@ -185,6 +185,14 @@ export class ScreenshotManager extends RefCounted {
     this.viewer.display.screenshotMode.value = ScreenshotMode.FORCE;
   }
 
+  cancelScreenshot() {
+    // Decrement the screenshot ID since the screenshot was cancelled
+    if (this.screenshotMode === ScreenshotMode.ON) {
+      this.screenshotId--;
+    }
+    this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
+  }
+
   private handleScreenshotStarted() {
     const { viewer } = this;
     const shouldIncreaseCanvasSize = this.screenshotScale !== 1;
@@ -227,6 +235,7 @@ export class ScreenshotManager extends RefCounted {
       case ScreenshotMode.OFF:
         this.resetCanvasSize();
         this.resetStatistics();
+        this.viewer.screenshotHandler.requestState.value = undefined;
         break;
       case ScreenshotMode.FORCE:
         display.scheduleRedraw();
