@@ -21,7 +21,7 @@ import "#src/ui/screenshot_menu.css";
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
-} from "#src/util/screenshot.js";
+} from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 
 interface UIScreenshotStatistics {

@@ -120,7 +120,7 @@ import {
   EventActionMap,
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
-import { ScreenshotManager } from "#src/util/screenshot.js";
+import { ScreenshotManager } from "#src/util/screenshot_manager.js";
 import { NullarySignal } from "#src/util/signal.js";
 import {
   CompoundTrackable,
