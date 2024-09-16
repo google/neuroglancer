@@ -1146,11 +1146,17 @@ export class Viewer extends RefCounted implements ViewerState {
     this.globalToolBinder.activate(uppercase);
   }
 
+  deactivateTools() {
+    this.globalToolBinder.deactivate();
+  }
+
   editJsonState() {
+    this.deactivateTools();
     new StateEditorDialog(this);
   }
 
   showScreenshotDialog() {
+    this.deactivateTools();
     new ScreenshotDialog(this.screenshotManager);
   }
 
