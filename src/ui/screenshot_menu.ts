@@ -17,11 +17,14 @@
 import "#src/ui/screenshot_menu.css";
 import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
+import { RenderLayerRole } from "#src/renderlayer.js";
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
+import { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
+import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 
@@ -55,6 +58,7 @@ export class ScreenshotDialog extends Overlay {
 
     this.initializeUI();
     this.setupEventListeners();
+    this.parseLayerStatistics();
   }
 
   private initializeUI() {
@@ -283,6 +287,31 @@ export class ScreenshotDialog extends Overlay {
       gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
       downloadSpeedDescription: `${currentStatistics.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`,
     };
+  }
+
+  private parseLayerStatistics() {
+    const layers =
+      this.screenshotManager.viewer.layerManager.visibleRenderLayers;
+    for (const layer of layers) {
+      if (layer.role === RenderLayerRole.DATA) {
+        console.log("Layer: ", layer);
+        if (layer instanceof ImageRenderLayer) {
+          // Use refCount to see if it is in any panels?
+          console.log("ImageRenderLayer: ", layer);
+          const sliceResolution = layer.renderScaleTarget.value;
+          console.log("Slice Resolution: ", sliceResolution);
+        }
+        if (layer instanceof VolumeRenderingRenderLayer) {
+          console.log("VolumeRenderingRenderLayer: ", layer);
+          const volumeResolution = layer.depthSamplesTarget.value;
+          console.log("Volume Resolution: ", volumeResolution);
+          const physicalSpacing = layer.physicalSpacing;
+          console.log("Physical Spacing: ", physicalSpacing);
+          const resolutionIndex = layer.selectedDataResolution;
+          console.log("Resolution Index: ", resolutionIndex);
+        }
+      }
+    }
   }
 
   private debouncedUpdateUIElements = debounce(() => {
