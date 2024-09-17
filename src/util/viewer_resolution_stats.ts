@@ -61,7 +61,6 @@ export function getViewerLayerResolutions(
   return map;
 }
 
-// TODO needs screenshotFactor
 export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
   function resolutionsEqual(resolution1: any[], resolution2: any[]) {
     if (resolution1.length !== resolution2.length) {

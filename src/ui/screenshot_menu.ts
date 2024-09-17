@@ -291,8 +291,15 @@ export class ScreenshotDialog extends Overlay {
     function formatResolution(key: any, value: any) {
       const type = key[1];
       const resolution: number = value.resolution;
-      const unit = type === "VolumeRenderingRenderLayer" ? " Z samples" : "px";
-      const roundingLevel = type === "VolumeRenderingRenderLayer" ? 0 : 2;
+      const unit = type === "VolumeRenderingRenderLayer" ? "Z samples" : "px";
+
+      let roundingLevel = 0;
+      if (
+        type === "VolumeRenderingRenderLayer" ||
+        (type === "ImageRenderLayer" && resolution > 1)
+      ) {
+        roundingLevel = 0;
+      }
 
       return `${resolution.toFixed(roundingLevel)} ${unit}`;
     }
@@ -311,6 +318,7 @@ export class ScreenshotDialog extends Overlay {
     valueHeader.textContent = "Resolution";
     headerRow.appendChild(valueHeader);
 
+    // TODO needs populate with debounce as sometimes the viewer is not ready
     const resolutionMap = getViewerLayerResolutions(
       this.screenshotManager.viewer,
     );
