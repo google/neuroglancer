@@ -14,15 +14,21 @@
  * limitations under the License.
  */
 
+import type { RenderedPanel } from "#src/display_context.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { MultiscaleMeshLayer } from "#src/mesh/frontend.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
+import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import type { Viewer } from "#src/viewer.js";
 import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 
-export function getViewerResolutionState(viewer: Viewer) {
+export function getViewerLayerResolutions(
+  viewer: Viewer,
+): Map<[string, string], any> {
   const layers = viewer.layerManager.visibleRenderLayers;
   const map = new Map();
   for (const layer of layers) {
@@ -30,31 +36,121 @@ export function getViewerResolutionState(viewer: Viewer) {
       const layer_name = layer.userLayer!.managedLayer.name;
       if (layer instanceof ImageRenderLayer) {
         const type = "ImageRenderLayer";
-        const sliceResolution = layer.renderScaleTarget.value;
-        map.set([layer_name, type], { sliceResolution });
+        const resolution = layer.renderScaleTarget.value;
+        map.set([layer_name, type], { resolution });
       } else if (layer instanceof VolumeRenderingRenderLayer) {
         const type = "VolumeRenderingRenderLayer";
-        const volumeResolution = layer.depthSamplesTarget.value;
-        const physicalSpacing = layer.physicalSpacing;
-        const resolutionIndex = layer.selectedDataResolution;
+        const resolution = layer.depthSamplesTarget.value;
         map.set([layer_name, type], {
-          volumeResolution,
-          physicalSpacing,
-          resolutionIndex,
+          resolution,
         });
       } else if (layer instanceof SegmentationRenderLayer) {
         const type = "SegmentationRenderLayer";
-        const segmentationResolution = layer.renderScaleTarget.value;
+        const resolution = layer.renderScaleTarget.value;
         map.set([layer_name, type], {
-          sliceResolution: segmentationResolution,
+          resolution,
         });
       } else if (layer instanceof MultiscaleMeshLayer) {
         const type = "MultiscaleMeshLayer";
         const userLayer = layer.userLayer as SegmentationUserLayer;
-        const meshResolution = userLayer.displayState.renderScaleTarget.value;
-        map.set([layer_name, type], { meshResolution });
+        const resolution = userLayer.displayState.renderScaleTarget.value;
+        map.set([layer_name, type], { resolution });
       }
     }
   }
   return map;
+}
+
+// TODO needs screenshotFactor
+export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
+  function resolutionsEqual(resolution1: any[], resolution2: any[]) {
+    if (resolution1.length !== resolution2.length) {
+      return false;
+    }
+    for (let i = 0; i < resolution1.length; ++i) {
+      if (resolution1[i].textContent !== resolution2[i].textContent) {
+        return false;
+      }
+      if (resolution1[i].panelType !== resolution2[i].panelType) {
+        return false;
+      }
+      if (resolution1[i].name !== resolution2[i].name) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  const resolutions: any[] = [];
+  for (const panel of panels) {
+    if (!(panel instanceof RenderedDataPanel)) continue;
+    const panel_resolution = [];
+    const displayDimensionUnit = panel instanceof SliceViewPanel ? "px" : "vh";
+    const panelType = panel instanceof SliceViewPanel ? "Slice" : "3D";
+    const { navigationState } = panel;
+    const {
+      displayDimensionIndices,
+      canonicalVoxelFactors,
+      displayDimensionUnits,
+      displayDimensionScales,
+      globalDimensionNames,
+    } = navigationState.displayDimensionRenderInfo.value;
+    const { factors } = navigationState.relativeDisplayScales.value;
+    const zoom = navigationState.zoomFactor.value;
+    // Check if all units and factors are the same.
+    const firstDim = displayDimensionIndices[0];
+    let singleScale = true;
+    if (firstDim !== -1) {
+      const unit = displayDimensionUnits[0];
+      const factor = factors[firstDim];
+      for (let i = 1; i < 3; ++i) {
+        const dim = displayDimensionIndices[i];
+        if (dim === -1) continue;
+        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
+          singleScale = false;
+          break;
+        }
+      }
+    }
+    for (let i = 0; i < 3; ++i) {
+      const dim = displayDimensionIndices[i];
+      if (dim !== -1) {
+        const totalScale =
+          (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
+        let textContent;
+        const name = globalDimensionNames[dim];
+        if (i === 0 || !singleScale) {
+          const formattedScale = formatScaleWithUnitAsString(
+            totalScale,
+            displayDimensionUnits[i],
+            { precision: 2, elide1: false },
+          );
+          textContent = `${formattedScale}/${displayDimensionUnit}`;
+          if (singleScale) {
+            panel_resolution.push({ panelType, textContent, name: "All_" });
+          } else {
+            panel_resolution.push({ panelType, textContent, name });
+          }
+        } else {
+          textContent = "";
+        }
+      }
+    }
+    resolutions.push(panel_resolution);
+  }
+
+  const uniqueResolutions: any[] = [];
+  for (const resolution of resolutions) {
+    let found = false;
+    for (const uniqueResolution of uniqueResolutions) {
+      if (resolutionsEqual(resolution, uniqueResolution)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      uniqueResolutions.push(resolution);
+    }
+  }
+  return uniqueResolutions;
 }

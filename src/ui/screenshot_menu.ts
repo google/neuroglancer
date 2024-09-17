@@ -22,8 +22,14 @@ import type {
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
-import { getViewerResolutionState } from "#src/util/viewer_resolution_stats.js";
+import {
+  getViewerLayerResolutions,
+  getViewerPanelResolutions,
+} from "#src/util/viewer_resolution_stats.js";
 
+// If true, the menu can be closed by clicking the close button
+// Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
+const DEBUG_ALLOW_MENU_CLOSE = false;
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 
 interface UIScreenshotStatistics {
@@ -90,7 +96,8 @@ export class ScreenshotDialog extends Overlay {
     this.content.appendChild(this.cancelScreenshotButton);
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
-    this.content.appendChild(this.createResolutionTable());
+    this.content.appendChild(this.createPanelResolutionTable());
+    this.content.appendChild(this.createLayerResolutionTable());
     this.content.appendChild(this.createStatisticsTable());
     this.updateUIBasedOnMode();
   }
@@ -226,7 +233,61 @@ export class ScreenshotDialog extends Overlay {
     return this.statisticsContainer;
   }
 
-  private createResolutionTable() {
+  private createPanelResolutionTable() {
+    function formatResolution(resolution: any) {
+      const first_resolution = resolution[0];
+      if (first_resolution.name === "All_") {
+        return {
+          type: first_resolution.panelType,
+          resolution: first_resolution.textContent,
+        };
+      } else {
+        let text = "";
+        for (const res of resolution) {
+          text += `${res.name}: ${res.textContent}, `;
+        }
+        return {
+          type: first_resolution.panelType,
+          resolution: text,
+        };
+      }
+    }
+
+    const resolutionTable = document.createElement("table");
+    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
+    resolutionTable.title = "Viewer resolution statistics";
+
+    const headerRow = resolutionTable.createTHead().insertRow();
+    const keyHeader = document.createElement("th");
+    keyHeader.textContent = "Panel type";
+    headerRow.appendChild(keyHeader);
+    const valueHeader = document.createElement("th");
+    valueHeader.textContent = "Resolution";
+    headerRow.appendChild(valueHeader);
+
+    const resolutions = getViewerPanelResolutions(
+      this.screenshotManager.viewer.display.panels,
+    );
+    for (const resolution of resolutions) {
+      const resolutionStrings = formatResolution(resolution);
+      const row = resolutionTable.insertRow();
+      const keyCell = row.insertCell();
+      const valueCell = row.insertCell();
+      keyCell.textContent = resolutionStrings.type;
+      valueCell.textContent = resolutionStrings.resolution;
+    }
+    return resolutionTable;
+  }
+
+  private createLayerResolutionTable() {
+    function formatResolution(key: any, value: any) {
+      const type = key[1];
+      const resolution: number = value.resolution;
+      const unit = type === "VolumeRenderingRenderLayer" ? " Z samples" : "px";
+      const roundingLevel = type === "VolumeRenderingRenderLayer" ? 0 : 2;
+
+      return `${resolution.toFixed(roundingLevel)} ${unit}`;
+    }
     const resolutionTable = document.createElement("table");
     resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
     resolutionTable.title = "Viewer resolution statistics";
@@ -242,7 +303,7 @@ export class ScreenshotDialog extends Overlay {
     valueHeader.textContent = "Resolution";
     headerRow.appendChild(valueHeader);
 
-    const resolutionMap = getViewerResolutionState(
+    const resolutionMap = getViewerLayerResolutions(
       this.screenshotManager.viewer,
     );
     for (const [key, value] of resolutionMap) {
@@ -254,7 +315,7 @@ export class ScreenshotDialog extends Overlay {
       keyCell.textContent = name;
       typeCell.textContent =
         layerNamesForUI[key[1] as keyof typeof layerNamesForUI];
-      valueCell.textContent = JSON.stringify(value);
+      valueCell.textContent = formatResolution(key, value);
     }
     return resolutionTable;
   }
@@ -265,6 +326,11 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private cancelScreenshot() {
+    if (DEBUG_ALLOW_MENU_CLOSE) {
+      this.dispose();
+      return;
+    }
+
     this.screenshotManager.cancelScreenshot();
     this.dispose();
   }
