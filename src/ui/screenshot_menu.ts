@@ -56,6 +56,7 @@ const layerNamesForUI = {
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
   private takeScreenshotButton: HTMLButtonElement;
+  private closeMenuButton: HTMLButtonElement;
   private cancelScreenshotButton: HTMLButtonElement;
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
@@ -74,10 +75,13 @@ export class ScreenshotDialog extends Overlay {
   private initializeUI() {
     this.content.classList.add("neuroglancer-screenshot-dialog");
 
-    this.cancelScreenshotButton = this.createButton(
-      "Cancel",
-      () => this.cancelScreenshot(),
+    this.closeMenuButton = this.createButton(
+      "Close",
+      () => this.dispose(),
       "neuroglancer-screenshot-close-button",
+    );
+    this.cancelScreenshotButton = this.createButton("Cancel screenshot", () =>
+      this.cancelScreenshot(),
     );
     this.takeScreenshotButton = this.createButton("Take screenshot", () =>
       this.screenshot(),
@@ -93,6 +97,7 @@ export class ScreenshotDialog extends Overlay {
     this.filenameAndButtonsContainer.appendChild(this.takeScreenshotButton);
     this.filenameAndButtonsContainer.appendChild(this.forceScreenshotButton);
 
+    this.content.appendChild(this.closeMenuButton);
     this.content.appendChild(this.cancelScreenshotButton);
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
@@ -400,18 +405,17 @@ export class ScreenshotDialog extends Overlay {
   private updateUIBasedOnMode() {
     if (this.screenshotMode === ScreenshotMode.OFF) {
       this.forceScreenshotButton.disabled = true;
+      this.cancelScreenshotButton.disabled = true;
       this.takeScreenshotButton.disabled = false;
+      this.closeMenuButton.disabled = false;
       this.forceScreenshotButton.title = "";
     } else {
       this.forceScreenshotButton.disabled = false;
+      this.cancelScreenshotButton.disabled = false;
       this.takeScreenshotButton.disabled = true;
+      this.closeMenuButton.disabled = true;
       this.forceScreenshotButton.title =
         "Force a screenshot of the current view without waiting for all data to be loaded and rendered";
-    }
-    if (this.screenshotMode === ScreenshotMode.ON) {
-      this.cancelScreenshotButton.textContent = "Cancel";
-    } else {
-      this.cancelScreenshotButton.textContent = "Close";
     }
   }
 
