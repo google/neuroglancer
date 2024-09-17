@@ -33,14 +33,12 @@ const DEBUG_ALLOW_MENU_CLOSE = false;
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 
 interface UIScreenshotStatistics {
-  timeElapsedString: string | null;
   chunkUsageDescription: string;
   gpuMemoryUsageDescription: string;
   downloadSpeedDescription: string;
 }
 
 const statisticsNamesForUI = {
-  timeElapsedString: "Screenshot duration",
   chunkUsageDescription: "Number of loaded chunks",
   gpuMemoryUsageDescription: "Visible chunk GPU memory usage",
   downloadSpeedDescription: "Number of downloading chunks",
@@ -70,6 +68,7 @@ export class ScreenshotDialog extends Overlay {
 
     this.initializeUI();
     this.setupEventListeners();
+    this.screenshotManager.throttledSendStatistics();
   }
 
   private initializeUI() {
@@ -114,8 +113,13 @@ export class ScreenshotDialog extends Overlay {
       }),
     );
     this.registerDisposer(
-      this.screenshotManager.statisticsUpdated.add(() => {
-        this.populateStatistics();
+      this.screenshotManager.statisticsUpdated.add((screenshotLoadStats) => {
+        this.populateStatistics(screenshotLoadStats);
+      }),
+    );
+    this.registerDisposer(
+      this.screenshotManager.viewer.display.updateFinished.add(() => {
+        this.screenshotManager.throttledSendStatistics();
       }),
     );
   }
@@ -220,7 +224,6 @@ export class ScreenshotDialog extends Overlay {
       chunkUsageDescription: "",
       gpuMemoryUsageDescription: "",
       downloadSpeedDescription: "",
-      timeElapsedString: "",
     };
     for (const key in orderedStatsRow) {
       const row = this.statisticsTable.insertRow();
@@ -233,7 +236,7 @@ export class ScreenshotDialog extends Overlay {
       this.statisticsKeyToCellMap.set(key, valueCell);
     }
 
-    this.populateStatistics();
+    this.populateStatistics(this.screenshotManager.screenshotLoadStats);
     this.statisticsContainer.appendChild(this.statisticsTable);
     return this.statisticsContainer;
   }
@@ -343,13 +346,10 @@ export class ScreenshotDialog extends Overlay {
     this.debouncedUpdateUIElements();
   }
 
-  private populateStatistics() {
-    if (this.screenshotMode === ScreenshotMode.OFF) {
-      return;
-    }
-    const statsRow = this.parseStatistics(
-      this.screenshotManager.screenshotLoadStats,
-    );
+  private populateStatistics(
+    screenshotLoadStats: ScreenshotLoadStatistics | null,
+  ) {
+    const statsRow = this.parseStatistics(screenshotLoadStats);
     if (statsRow === null) {
       return;
     }
@@ -364,7 +364,6 @@ export class ScreenshotDialog extends Overlay {
   private parseStatistics(
     currentStatistics: ScreenshotLoadStatistics | null,
   ): UIScreenshotStatistics | null {
-    const nowtime = Date.now();
     if (currentStatistics === null) {
       return null;
     }
@@ -382,11 +381,8 @@ export class ScreenshotDialog extends Overlay {
     const latency = isNaN(currentStatistics.downloadLatency)
       ? 0
       : currentStatistics.downloadLatency;
-    const passedTimeInSeconds =
-      (nowtime - this.screenshotManager.screenshotStartTime) / 1000;
 
     return {
-      timeElapsedString: `${passedTimeInSeconds.toFixed(0)} seconds`,
       chunkUsageDescription: `${currentStatistics.visibleChunksGpuMemory} out of ${currentStatistics.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
       gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
       downloadSpeedDescription: `${currentStatistics.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`,

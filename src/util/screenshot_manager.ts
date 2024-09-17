@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { throttle } from "lodash-es";
+import { numChunkStatistics } from "#src/chunk_manager/base.js";
 import type { RenderedPanel } from "#src/display_context.js";
 import type {
   ScreenshotActionState,
@@ -21,6 +23,11 @@ import type {
   ScreenshotChunkStatistics,
 } from "#src/python_integration/screenshots.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
+import {
+  columnSpecifications,
+  getChunkSourceIdentifier,
+  getFormattedNames,
+} from "#src/ui/statistics.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
@@ -127,9 +134,6 @@ async function extractViewportScreenshot(
 }
 
 export class ScreenshotManager extends RefCounted {
-  private filename: string = "";
-  private lastUpdateTimestamp: number = 0;
-  private gpuMemoryChangeTimestamp: number = 0;
   screenshotId: number = -1;
   screenshotScale: number = 1;
   screenshotLoadStats: ScreenshotLoadStatistics | null = null;
@@ -137,6 +141,49 @@ export class ScreenshotManager extends RefCounted {
   screenshotMode: ScreenshotMode = ScreenshotMode.OFF;
   statisticsUpdated = new Signal<(state: ScreenshotLoadStatistics) => void>();
   screenshotFinished = new NullarySignal();
+  private filename: string = "";
+  private lastUpdateTimestamp: number = 0;
+  private gpuMemoryChangeTimestamp: number = 0;
+  throttledSendStatistics = this.registerCancellable(
+    throttle(
+      async () => {
+        const map = await this.viewer.chunkQueueManager.getStatistics();
+        if (this.wasDisposed) return;
+        const formattedNames = getFormattedNames(
+          Array.from(map, (x) => getChunkSourceIdentifier(x[0])),
+        );
+        let i = 0;
+        const rows: any[] = [];
+        const sumStatistics = new Float64Array(numChunkStatistics);
+        for (const [source, statistics] of map) {
+          for (let i = 0; i < numChunkStatistics; ++i) {
+            sumStatistics[i] += statistics[i];
+          }
+          const row: any = {};
+          row.id = getChunkSourceIdentifier(source);
+          row.distinctId = formattedNames[i];
+          for (const column of columnSpecifications) {
+            row[column.key] = column.getter(statistics);
+          }
+          ++i;
+          rows.push(row);
+        }
+        const total: any = {};
+        for (const column of columnSpecifications) {
+          total[column.key] = column.getter(sumStatistics);
+        }
+        const screenshotLoadStats = {
+          ...total,
+          timestamp: Date.now(),
+          gpuMemoryCapacity:
+            this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value,
+        };
+        this.statisticsUpdated.dispatch(screenshotLoadStats);
+      },
+      1000,
+      { leading: false, trailing: true },
+    ),
+  );
 
   constructor(public viewer: Viewer) {
     super();
