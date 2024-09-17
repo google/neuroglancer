@@ -299,7 +299,7 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Name";
+    keyHeader.textContent = "Layer name";
     headerRow.appendChild(keyHeader);
     const typeHeader = document.createElement("th");
     typeHeader.textContent = "Type";
@@ -331,13 +331,8 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private cancelScreenshot() {
-    if (DEBUG_ALLOW_MENU_CLOSE) {
-      this.dispose();
-      return;
-    }
-
     this.screenshotManager.cancelScreenshot();
-    this.dispose();
+    this.updateUIBasedOnMode();
   }
 
   private screenshot() {
@@ -416,6 +411,9 @@ export class ScreenshotDialog extends Overlay {
       this.closeMenuButton.disabled = true;
       this.forceScreenshotButton.title =
         "Force a screenshot of the current view without waiting for all data to be loaded and rendered";
+    }
+    if (DEBUG_ALLOW_MENU_CLOSE) {
+      this.closeMenuButton.disabled = false;
     }
   }
 
