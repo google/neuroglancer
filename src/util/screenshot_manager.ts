@@ -33,7 +33,7 @@ import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
-const SCREENSHOT_TIMEOUT = 5000;
+const SCREENSHOT_TIMEOUT = 1000;
 
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
@@ -199,15 +199,15 @@ export class ScreenshotManager extends RefCounted {
     this.registerDisposer(
       this.viewer.screenshotHandler.sendStatisticsRequested.add(
         (actionState) => {
-          this.checkAndHandleStalledScreenshot(actionState);
-          this.screenshotLoadStats = {
+          const newLoadStats = {
             ...actionState.screenshotStatistics.total,
             timestamp: Date.now(),
             gpuMemoryCapacity:
               this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit
                 .value,
           };
-          this.statisticsUpdated.dispatch(this.screenshotLoadStats);
+          this.checkAndHandleStalledScreenshot(actionState, newLoadStats);
+          this.screenshotLoadStats = newLoadStats;
         },
       ),
     );
@@ -313,7 +313,10 @@ export class ScreenshotManager extends RefCounted {
    * in the GPU with the previous number of visible chunks. If the number of
    * visible chunks has not changed after a certain timeout, and the display has not updated, force a screenshot.
    */
-  private checkAndHandleStalledScreenshot(actionState: StatisticsActionState) {
+  private checkAndHandleStalledScreenshot(
+    actionState: StatisticsActionState,
+    fullStats: ScreenshotLoadStatistics,
+  ) {
     if (this.screenshotLoadStats === null) {
       return;
     }
@@ -334,6 +337,7 @@ export class ScreenshotManager extends RefCounted {
           SCREENSHOT_TIMEOUT &&
         Date.now() - this.lastUpdateTimestamp > SCREENSHOT_TIMEOUT
       ) {
+        this.statisticsUpdated.dispatch(fullStats);
         console.warn(
           `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${total.visibleChunksGpuMemory}/${total.visibleChunksTotal}`,
         );
