@@ -15,7 +15,7 @@
  */
 
 import "#src/ui/screenshot_menu.css";
-import { debounce } from "lodash-es";
+import { debounce, throttle } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
 import type {
   ScreenshotLoadStatistics,
@@ -58,11 +58,21 @@ export class ScreenshotDialog extends Overlay {
   private cancelScreenshotButton: HTMLButtonElement;
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
+  private panelResolutionTable: HTMLTableElement;
+  private layerResolutionTable: HTMLTableElement;
   private statisticsContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
   private screenshotSizeText: HTMLDivElement;
   private warningElement: HTMLDivElement;
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
+  private layerResolutionKeyToCellMap: Map<string, HTMLTableCellElement> =
+    new Map();
+
+  private throttledUpdateLayerResolutionTable = this.registerCancellable(
+    throttle(() => {
+      this.populateLayerResolutionTable();
+    }, 1000),
+  );
   constructor(private screenshotManager: ScreenshotManager) {
     super();
 
@@ -104,6 +114,8 @@ export class ScreenshotDialog extends Overlay {
     this.content.appendChild(this.createLayerResolutionTable());
     this.content.appendChild(this.createStatisticsTable());
     this.updateUIBasedOnMode();
+    this.populatePanelResolutionTable();
+    this.throttledUpdateLayerResolutionTable();
   }
 
   private setupEventListeners() {
@@ -120,6 +132,7 @@ export class ScreenshotDialog extends Overlay {
     this.registerDisposer(
       this.screenshotManager.viewer.display.updateFinished.add(() => {
         this.screenshotManager.throttledSendStatistics();
+        this.throttledUpdateLayerResolutionTable();
       }),
     );
   }
@@ -242,6 +255,23 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private createPanelResolutionTable() {
+    const resolutionTable = (this.panelResolutionTable =
+      document.createElement("table"));
+    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
+    resolutionTable.title = "Viewer resolution statistics";
+
+    const headerRow = resolutionTable.createTHead().insertRow();
+    const keyHeader = document.createElement("th");
+    keyHeader.textContent = "Panel type";
+    headerRow.appendChild(keyHeader);
+    const valueHeader = document.createElement("th");
+    valueHeader.textContent = "Resolution";
+    headerRow.appendChild(valueHeader);
+    return resolutionTable;
+  }
+
+  private populatePanelResolutionTable() {
+    const resolutionTable = this.panelResolutionTable;
     function formatResolution(resolution: any) {
       const first_resolution = resolution[0];
       if (first_resolution.name === "All_") {
@@ -260,19 +290,6 @@ export class ScreenshotDialog extends Overlay {
         };
       }
     }
-
-    const resolutionTable = document.createElement("table");
-    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
-    resolutionTable.title = "Viewer resolution statistics";
-
-    const headerRow = resolutionTable.createTHead().insertRow();
-    const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Panel type";
-    headerRow.appendChild(keyHeader);
-    const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Resolution";
-    headerRow.appendChild(valueHeader);
-
     const resolutions = getViewerPanelResolutions(
       this.screenshotManager.viewer.display.panels,
     );
@@ -288,6 +305,26 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private createLayerResolutionTable() {
+    const resolutionTable = (this.layerResolutionTable =
+      document.createElement("table"));
+    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
+    resolutionTable.title = "Viewer resolution statistics";
+
+    const headerRow = resolutionTable.createTHead().insertRow();
+    const keyHeader = document.createElement("th");
+    keyHeader.textContent = "Layer name";
+    headerRow.appendChild(keyHeader);
+    const typeHeader = document.createElement("th");
+    typeHeader.textContent = "Type";
+    headerRow.appendChild(typeHeader);
+    const valueHeader = document.createElement("th");
+    valueHeader.textContent = "Resolution";
+    headerRow.appendChild(valueHeader);
+    return resolutionTable;
+  }
+
+  private populateLayerResolutionTable() {
+    console.log("populateLayerResolutionTable");
     function formatResolution(key: any, value: any) {
       const type = key[1];
       const resolution: number = value.resolution;
@@ -303,37 +340,29 @@ export class ScreenshotDialog extends Overlay {
 
       return `${resolution.toFixed(roundingLevel)} ${unit}`;
     }
-    const resolutionTable = document.createElement("table");
-    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
-    resolutionTable.title = "Viewer resolution statistics";
-
-    const headerRow = resolutionTable.createTHead().insertRow();
-    const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Layer name";
-    headerRow.appendChild(keyHeader);
-    const typeHeader = document.createElement("th");
-    typeHeader.textContent = "Type";
-    headerRow.appendChild(typeHeader);
-    const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Resolution";
-    headerRow.appendChild(valueHeader);
-
-    // TODO needs populate with debounce as sometimes the viewer is not ready
+    const resolutionTable = this.layerResolutionTable;
     const resolutionMap = getViewerLayerResolutions(
       this.screenshotManager.viewer,
     );
     for (const [key, value] of resolutionMap) {
-      const row = resolutionTable.insertRow();
-      const keyCell = row.insertCell();
-      const typeCell = row.insertCell();
-      const valueCell = row.insertCell();
-      const name = key[0];
-      keyCell.textContent = name;
-      typeCell.textContent =
-        layerNamesForUI[key[1] as keyof typeof layerNamesForUI];
-      valueCell.textContent = formatResolution(key, value);
+      const stringKey = key.join(",");
+      const resolution = formatResolution(key, value);
+      let valueCell = this.layerResolutionKeyToCellMap.get(stringKey);
+      console.log("valueCell", valueCell);
+      if (valueCell === undefined) {
+        const row = resolutionTable.insertRow();
+        const keyCell = row.insertCell();
+        const typeCell = row.insertCell();
+        valueCell = row.insertCell();
+        const name = key[0];
+        keyCell.textContent = name;
+        typeCell.textContent =
+          layerNamesForUI[key[1] as keyof typeof layerNamesForUI];
+        this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
+      }
+      console.log(resolution)
+      valueCell.textContent = resolution;
     }
-    return resolutionTable;
   }
 
   private forceScreenshot() {
