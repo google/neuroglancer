@@ -324,7 +324,6 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private populateLayerResolutionTable() {
-    console.log("populateLayerResolutionTable");
     function formatResolution(key: any, value: any) {
       const type = key[1];
       const resolution: number = value.resolution;
@@ -348,7 +347,6 @@ export class ScreenshotDialog extends Overlay {
       const stringKey = key.join(",");
       const resolution = formatResolution(key, value);
       let valueCell = this.layerResolutionKeyToCellMap.get(stringKey);
-      console.log("valueCell", valueCell);
       if (valueCell === undefined) {
         const row = resolutionTable.insertRow();
         const keyCell = row.insertCell();
@@ -360,7 +358,6 @@ export class ScreenshotDialog extends Overlay {
           layerNamesForUI[key[1] as keyof typeof layerNamesForUI];
         this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
       }
-      console.log(resolution)
       valueCell.textContent = resolution;
     }
   }

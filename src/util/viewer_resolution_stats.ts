@@ -30,27 +30,51 @@ export function getViewerLayerResolutions(
   viewer: Viewer,
 ): Map<[string, string], any> {
   const layers = viewer.layerManager.visibleRenderLayers;
+  const panels = viewer.display.panels;
   const map = new Map();
+
+  // Get all the layers in at least one panel.
+  for (const panel of panels) {
+    if (!(panel instanceof RenderedDataPanel)) continue;
+  }
+
   for (const layer of layers) {
+    //const isLayerInAnyPanel =
     if (layer.role === RenderLayerRole.DATA) {
       const layer_name = layer.userLayer!.managedLayer.name;
       if (layer instanceof ImageRenderLayer) {
+        const isVisble = layer.visibleSourcesList.length > 0;
+        if (!isVisble) {
+          continue;
+        }
         const type = "ImageRenderLayer";
         const resolution = layer.renderScaleTarget.value;
         map.set([layer_name, type], { resolution });
       } else if (layer instanceof VolumeRenderingRenderLayer) {
+        const isVisble = layer.visibility.visible;
+        if (!isVisble) {
+          continue;
+        }
         const type = "VolumeRenderingRenderLayer";
         const resolution = layer.depthSamplesTarget.value;
         map.set([layer_name, type], {
           resolution,
         });
       } else if (layer instanceof SegmentationRenderLayer) {
+        const isVisble = layer.visibleSourcesList.length > 0;
+        if (!isVisble) {
+          continue;
+        }
         const type = "SegmentationRenderLayer";
         const resolution = layer.renderScaleTarget.value;
         map.set([layer_name, type], {
           resolution,
         });
       } else if (layer instanceof MultiscaleMeshLayer) {
+        const isVisble = layer.visibility.visible;
+        if (!isVisble) {
+          continue;
+        }
         const type = "MultiscaleMeshLayer";
         const userLayer = layer.userLayer as SegmentationUserLayer;
         const resolution = userLayer.displayState.renderScaleTarget.value;
