@@ -131,7 +131,6 @@ export class ScreenshotDialog extends Overlay {
     );
     this.registerDisposer(
       this.screenshotManager.viewer.display.updateFinished.add(() => {
-        this.screenshotManager.throttledSendStatistics();
         this.throttledUpdateLayerResolutionTable();
       }),
     );
@@ -416,10 +415,15 @@ export class ScreenshotDialog extends Overlay {
       ? 0
       : currentStatistics.downloadLatency;
 
+    const downloadString =
+      currentStatistics.visibleChunksDownloading == 0
+        ? "0"
+        : `${currentStatistics.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`;
+
     return {
       chunkUsageDescription: `${currentStatistics.visibleChunksGpuMemory} out of ${currentStatistics.visibleChunksTotal} (${percentLoaded.toFixed(2)}%)`,
       gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
-      downloadSpeedDescription: `${currentStatistics.visibleChunksDownloading} at ${latency.toFixed(0)}ms latency`,
+      downloadSpeedDescription: downloadString,
     };
   }
 

@@ -145,44 +145,40 @@ export class ScreenshotManager extends RefCounted {
   private lastUpdateTimestamp: number = 0;
   private gpuMemoryChangeTimestamp: number = 0;
   throttledSendStatistics = this.registerCancellable(
-    throttle(
-      async () => {
-        const map = await this.viewer.chunkQueueManager.getStatistics();
-        if (this.wasDisposed) return;
-        const formattedNames = getFormattedNames(
-          Array.from(map, (x) => getChunkSourceIdentifier(x[0])),
-        );
-        let i = 0;
-        const rows: any[] = [];
-        const sumStatistics = new Float64Array(numChunkStatistics);
-        for (const [source, statistics] of map) {
-          for (let i = 0; i < numChunkStatistics; ++i) {
-            sumStatistics[i] += statistics[i];
-          }
-          const row: any = {};
-          row.id = getChunkSourceIdentifier(source);
-          row.distinctId = formattedNames[i];
-          for (const column of columnSpecifications) {
-            row[column.key] = column.getter(statistics);
-          }
-          ++i;
-          rows.push(row);
+    throttle(async () => {
+      const map = await this.viewer.chunkQueueManager.getStatistics();
+      if (this.wasDisposed) return;
+      const formattedNames = getFormattedNames(
+        Array.from(map, (x) => getChunkSourceIdentifier(x[0])),
+      );
+      let i = 0;
+      const rows: any[] = [];
+      const sumStatistics = new Float64Array(numChunkStatistics);
+      for (const [source, statistics] of map) {
+        for (let i = 0; i < numChunkStatistics; ++i) {
+          sumStatistics[i] += statistics[i];
         }
-        const total: any = {};
+        const row: any = {};
+        row.id = getChunkSourceIdentifier(source);
+        row.distinctId = formattedNames[i];
         for (const column of columnSpecifications) {
-          total[column.key] = column.getter(sumStatistics);
+          row[column.key] = column.getter(statistics);
         }
-        const screenshotLoadStats = {
-          ...total,
-          timestamp: Date.now(),
-          gpuMemoryCapacity:
-            this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value,
-        };
-        this.statisticsUpdated.dispatch(screenshotLoadStats);
-      },
-      1000,
-      { leading: false, trailing: true },
-    ),
+        ++i;
+        rows.push(row);
+      }
+      const total: any = {};
+      for (const column of columnSpecifications) {
+        total[column.key] = column.getter(sumStatistics);
+      }
+      const screenshotLoadStats = {
+        ...total,
+        timestamp: Date.now(),
+        gpuMemoryCapacity:
+          this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value,
+      };
+      this.statisticsUpdated.dispatch(screenshotLoadStats);
+    }, 1000),
   );
 
   constructor(public viewer: Viewer) {
@@ -214,6 +210,7 @@ export class ScreenshotManager extends RefCounted {
     this.registerDisposer(
       this.viewer.display.updateFinished.add(() => {
         this.lastUpdateTimestamp = Date.now();
+        this.throttledSendStatistics();
       }),
     );
     this.registerDisposer(
@@ -326,11 +323,13 @@ export class ScreenshotManager extends RefCounted {
       timestamp: Date.now(),
       totalGpuMemory:
         this.viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit.value,
+      numDownloadingChunks: total.visibleChunksDownloading,
     };
     const oldStats = this.screenshotLoadStats;
     if (
       oldStats.visibleChunksGpuMemory === newStats.visibleChunksGpuMemory &&
-      oldStats.gpuMemoryCapacity === newStats.totalGpuMemory
+      (oldStats.gpuMemoryCapacity === newStats.totalGpuMemory ||
+        newStats.numDownloadingChunks == 0)
     ) {
       if (
         newStats.timestamp - this.gpuMemoryChangeTimestamp >
