@@ -867,6 +867,7 @@ export const annotationTypeHandlers: Record<
         ),
       );
     },
+    // TODO need to pull the count into this
     serializedBytes: (rank) => 4 * rank,
     serialize: (
       buffer: DataView,
