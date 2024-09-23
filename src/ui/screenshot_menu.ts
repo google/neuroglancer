@@ -328,7 +328,7 @@ export class ScreenshotDialog extends Overlay {
       const resolution: number = value.resolution;
       const unit = type === "VolumeRenderingRenderLayer" ? "Z samples" : "px";
 
-      let roundingLevel = 0;
+      let roundingLevel = 2;
       if (
         type === "VolumeRenderingRenderLayer" ||
         (type === "ImageRenderLayer" && resolution > 1)
