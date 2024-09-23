@@ -1565,7 +1565,9 @@ function serializeAnnotations(
 }
 
 export class AnnotationSerializer {
-  annotations: [Point[], Line[], AxisAlignedBoundingBox[], Ellipsoid[]] = [
+  annotations: [Point[], Line[], AxisAlignedBoundingBox[], Ellipsoid[], Polyline[], Polygon[]] = [
+    [],
+    [],
     [],
     [],
     [],
