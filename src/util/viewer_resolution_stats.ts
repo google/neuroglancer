@@ -17,6 +17,7 @@
 import type { RenderedPanel } from "#src/display_context.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { MultiscaleMeshLayer } from "#src/mesh/frontend.js";
+import { PerspectivePanel } from "#src/perspective_view/panel.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
@@ -108,8 +109,22 @@ export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
   for (const panel of panels) {
     if (!(panel instanceof RenderedDataPanel)) continue;
     const panel_resolution = [];
-    const displayDimensionUnit = panel instanceof SliceViewPanel ? "px" : "vh";
-    const panelType = panel instanceof SliceViewPanel ? "Slice" : "3D";
+    const isOrtographicProjection =
+      panel instanceof PerspectivePanel &&
+      panel.viewer.orthographicProjection.value;
+
+    const displayDimensionUnit =
+      panel instanceof SliceViewPanel || isOrtographicProjection ? "px" : "vh";
+    let panelType: string;
+    if (panel instanceof SliceViewPanel) {
+      panelType = "Slice view";
+    } else if (isOrtographicProjection) {
+      panelType = "Orthographic view";
+    } else if (panel instanceof PerspectivePanel) {
+      panelType = "Perspective view";
+    } else {
+      panelType = "Unknown";
+    }
     const { navigationState } = panel;
     const {
       displayDimensionIndices,
