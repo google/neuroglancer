@@ -1517,6 +1517,11 @@ registerLegacyTool(
   (layer, options) =>
     new PlaceEllipsoidTool(<UserLayerWithAnnotations>layer, options),
 );
+registerLegacyTool(
+  ANNOTATE_POLYLINE_TOOL_ID,
+  (layer, options) =>
+    new PlacePolylineTool(<UserLayerWithAnnotations>layer, options),
+);
 
 const newRelatedSegmentKeyMap = EventActionMap.fromObject({
   enter: { action: "commit" },
