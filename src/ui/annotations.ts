@@ -31,6 +31,7 @@ import type {
   AxisAlignedBoundingBox,
   Ellipsoid,
   Line,
+  Polyline,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -445,7 +446,7 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(ellipsoidButton);
-  
+
     const polylineButton = makeIcon({
       text: annotationTypeHandlers[AnnotationType.POLYLINE].icon,
       title: "Annotate polyline",
@@ -455,14 +456,14 @@ export class AnnotationLayerView extends Tab {
     });
     mutableControls.appendChild(polylineButton);
 
-    const polygonButton = makeIcon({
-      text: annotationTypeHandlers[AnnotationType.POLYGON].icon,
-      title: "Annotate polygon",
-      onClick: () => {
-        this.layer.tool.value = new PlacePolygonTool(this.layer, {});
-      },
-    });
-    mutableControls.appendChild(polygonButton);
+    // const polygonButton = makeIcon({
+    //   text: annotationTypeHandlers[AnnotationType.POLYGON].icon,
+    //   title: "Annotate polygon",
+    //   onClick: () => {
+    //     this.layer.tool.value = new PlacePolygonTool(this.layer, {});
+    //   },
+    // });
+    // mutableControls.appendChild(polygonButton);
 
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
@@ -1046,7 +1047,7 @@ const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
-const ANNOTATE_POLYGON_TOOL_ID = "annotatePolygon";
+//const ANNOTATE_POLYGON_TOOL_ID = "annotatePolygon";
 
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
@@ -1108,6 +1109,83 @@ function getMousePositionInAnnotationCoordinates(
     return undefined;
   }
   return chunkPosition;
+}
+
+abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
+  inProgressAnnotation: WatchableValue<
+    | {
+        annotationLayer: AnnotationLayerState;
+        reference: AnnotationReference;
+        disposer: () => void;
+      }
+    | undefined
+  > = new WatchableValue(undefined);
+
+  abstract getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation;
+  abstract getUpdatedAnnotation(
+    oldAnnotation: Annotation,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation;
+
+  trigger(mouseState: MouseSelectionState) {
+    const { annotationLayer, inProgressAnnotation } = this;
+    if (annotationLayer === undefined) {
+      // Not yet ready.
+      return;
+    }
+
+    if (mouseState.updateUnconditionally()) {
+      const updateNextPoint = () => {
+        const state = inProgressAnnotation.value!;
+        const reference = state.reference;
+        const newAnnotation = this.getUpdatedAnnotation(
+          reference.value!,
+          mouseState,
+          annotationLayer,
+        );
+        if (
+          JSON.stringify(
+            annotationToJson(newAnnotation, annotationLayer.source),
+          ) ===
+          JSON.stringify(
+            annotationToJson(reference.value!, annotationLayer.source),
+          )
+        ) {
+          return;
+        }
+        state.annotationLayer.source.update(reference, newAnnotation);
+        this.layer.selectAnnotation(annotationLayer, reference.id, true);
+      };
+
+      if (inProgressAnnotation.value === undefined) {
+        const reference = annotationLayer.source.add(
+          this.getInitialAnnotation(mouseState, annotationLayer),
+          /*commit=*/ false,
+        );
+        this.layer.selectAnnotation(annotationLayer, reference.id, true);
+        const mouseDisposer = mouseState.changed.add(updateNextPoint);
+        const disposer = () => {
+          mouseDisposer();
+          reference.dispose();
+        };
+        inProgressAnnotation.value = {
+          annotationLayer,
+          reference,
+          disposer,
+        };
+      } else {
+        updateNextPoint();
+        const state = inProgressAnnotation.value;
+        state.annotationLayer.source.commit(state.reference);
+        state.disposer();
+        inProgressAnnotation.value = undefined;
+      }
+    }
+  }
 }
 
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
@@ -1325,6 +1403,49 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
   }
 }
 PlaceLineTool.prototype.annotationType = AnnotationType.LINE;
+
+class PlacePolylineTool extends MultiStepAnnotationTool {
+  getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation {
+    const point = getMousePositionInAnnotationCoordinates(
+      mouseState,
+      annotationLayer,
+    );
+    return <Polyline>{
+      type: AnnotationType.POLYLINE,
+      id: "",
+      description: "",
+      segments: getSelectedAssociatedSegments(annotationLayer),
+      points: [point],
+      properties: annotationLayer.source.properties.map((x) => x.default),
+    };
+  }
+
+  getUpdatedAnnotation(
+    oldAnnotation: Polyline,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ) {
+    const point = getMousePositionInAnnotationCoordinates(
+      mouseState,
+      annotationLayer,
+    );
+    if (point === undefined) return oldAnnotation;
+    return <Polyline>{
+      ...oldAnnotation,
+      points: [...oldAnnotation.points, point],
+    };
+  }
+  get description() {
+    return "annotate polyline";
+  }
+
+  toJSON() {
+    return ANNOTATE_POLYLINE_TOOL_ID;
+  }
+}
 
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
   getInitialAnnotation(
