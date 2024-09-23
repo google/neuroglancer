@@ -29,6 +29,9 @@ import {
 
 // If true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
+// Setting this to true, and setting the SCREENSHOT_MENU_CLOSE_TIMEOUT in screenshot_manager.ts
+// to a high value can be useful for debugging canvas handling of the resize
+
 const DEBUG_ALLOW_MENU_CLOSE = false;
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 
