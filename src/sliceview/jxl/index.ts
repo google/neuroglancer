@@ -30,7 +30,7 @@ function getJxlModulePromise() {
     getJxlModulePromise = (async () => {
       const m = (
         await WebAssembly.instantiateStreaming(
-          fetch(new URL("./libjxl.wasm", import.meta.url)),
+          fetch(new URL("./jxl_decoder.wasm", import.meta.url)),
           {
             env: libraryEnv,
             wasi_snapshot_preview1: libraryEnv,
@@ -53,7 +53,6 @@ const magicSpec = [
   'J'.charCodeAt(0), 'X'.charCodeAt(0), 'L'.charCodeAt(0), ' '.charCodeAt(0),
   0xD, 0xA, 0x87, 0xA
 ];
-const validHeaderCode = ["I", "H", "D", "R"];
 
 // not a full implementation of read header, just the parts we need
 // References:
@@ -86,47 +85,21 @@ export async function decompressJxl(
   
   checkHeader(buffer);
 
-  // if (
-  //   (width !== undefined && sx !== width) ||
-  //   (height !== undefined && sy !== height) ||
-  //   (numComponents !== undefined && numComponents !== numChannels) ||
-  //   bytesPerPixel !== dataWidth
-  // ) {
-  //   throw new Error(
-  //     `png: Image decode parameters did not match expected chunk parameters.
-  //        Expected: width: ${width} height: ${height} channels: ${numComponents} bytes per pixel: ${bytesPerPixel} 
-  //        Decoded:  width: ${sx} height: ${sy} channels: ${numChannels} bytes per pixel: ${dataWidth}
-  //        Convert to Grayscale? ${convertToGrayscale}
-  //       `,
-  //   );
-  // }
-
   let dataWidth = 1; // uint8
-
   const nbytes = width * height * dataWidth * numComponents;
-  // if (nbytes <= 0) {
-  //   throw new Error(
-  //     `jxl: Failed to decode jxl image size. image size: ${nbytes}`,
-  //   );
-  // }
 
-  // heap must be referenced after creating bufPtr and imagePtr because
-  // memory growth can detatch the buffer.
-  const bufPtr = (m.exports.malloc as Function)(buffer.byteLength);
+  const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
   const imagePtr = (m.exports.malloc as Function)(nbytes);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
-  heap.set(buffer, bufPtr);
+  heap.set(buffer, jxlImagePtr);
 
-  const code = (m.exports.jxl_decompress as Function)(
-    bufPtr,
-    buffer.byteLength,
-    imagePtr,
-    nbytes,
-  );
+  // SDR = Standard Dynamic Range vs. HDR = High Dynamic Range (we're working with grayscale here)
+  let decoder = (m.exports._jxlCreateInstance as Function)(/*wantSdr=*/true, /*displayNits=*/100);
+  let code = (m.exports._jxlProcessInput as Function)(decoder, jxlImagePtr, buffer.byteLength);
 
   try {
     if (code !== 0) {
-      throw new Error(`png: Failed to decode png image. decoder code: ${code}`);
+      throw new Error(`jxl: Failed to decode jxl image. decoder code: ${code}`);
     }
 
     // Likewise, we reference memory.buffer instead of heap.buffer
@@ -146,7 +119,8 @@ export async function decompressJxl(
       uint8Array: image.slice(0),
     };
   } finally {
-    (m.exports.free as Function)(bufPtr);
+    (m.exports.free as Function)(jxlImagePtr);
     (m.exports.free as Function)(imagePtr);
+    (m.exports._jxlDestroyInstance as Function)(img.decoder);
   }
 }
