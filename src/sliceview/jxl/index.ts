@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 William Silvermsith
+ * Copyright 2024 William Silvermsith
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { DecodedImage } from "#src/async_computation/decode_jxl_request.js";
+import type { DecodedImage } from "#src/async_computation/decode_png_request.js";
 
 const libraryEnv = {
   emscripten_notify_memory_growth: () => {},
@@ -23,11 +23,11 @@ const libraryEnv = {
   },
 };
 
-let getJxlModulePromise: Promise<WebAssembly.Instance> | undefined;
+let jxlModulePromise: Promise<WebAssembly.Instance> | undefined;
 
 function getJxlModulePromise() {
-  if (getJxlModulePromise === undefined) {
-    getJxlModulePromise = (async () => {
+  if (jxlModulePromise === undefined) {
+    jxlModulePromise = (async () => {
       const m = (
         await WebAssembly.instantiateStreaming(
           fetch(new URL("./jxl_decoder.wasm", import.meta.url)),
@@ -41,7 +41,7 @@ function getJxlModulePromise() {
       return m;
     })();
   }
-  return getJxlModulePromise;
+  return jxlModulePromise;
 }
 
 
@@ -85,8 +85,11 @@ export async function decompressJxl(
   
   checkHeader(buffer);
 
-  let dataWidth = 1; // uint8
-  const nbytes = width * height * dataWidth * numComponents;
+  width ||= 0;
+  height ||= 0;
+  numComponents ||= 1;
+
+  const nbytes = width * height * bytesPerPixel * numComponents;
 
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
   const imagePtr = (m.exports.malloc as Function)(nbytes);
@@ -94,8 +97,8 @@ export async function decompressJxl(
   heap.set(buffer, jxlImagePtr);
 
   // SDR = Standard Dynamic Range vs. HDR = High Dynamic Range (we're working with grayscale here)
-  let decoder = (m.exports._jxlCreateInstance as Function)(/*wantSdr=*/true, /*displayNits=*/100);
-  let code = (m.exports._jxlProcessInput as Function)(decoder, jxlImagePtr, buffer.byteLength);
+  const decoder = (m.exports._jxlCreateInstance as Function)(/*wantSdr=*/true, /*displayNits=*/100);
+  const code = (m.exports._jxlProcessInput as Function)(decoder, jxlImagePtr, buffer.byteLength);
 
   try {
     if (code !== 0) {
@@ -113,14 +116,14 @@ export async function decompressJxl(
     // copy the array so it can be memory managed by JS
     // and we can free the emscripten buffer
     return {
-      width: sx,
-      height: sy,
-      numComponents: numChannels,
+      width: width || 0,
+      height: height || 0,
+      numComponents: numComponents || 1,
       uint8Array: image.slice(0),
     };
   } finally {
     (m.exports.free as Function)(jxlImagePtr);
     (m.exports.free as Function)(imagePtr);
-    (m.exports._jxlDestroyInstance as Function)(img.decoder);
+    (m.exports._jxlDestroyInstance as Function)(decoder);
   }
 }

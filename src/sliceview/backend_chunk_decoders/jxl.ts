@@ -34,7 +34,7 @@ export async function decodeJxlChunk(
     chunkDataSize[0],
     chunkDataSize[1] * chunkDataSize[2],
     chunkDataSize[3] || 1,
-    false,
+    1, // bytesPerPixel
   );
   await postProcessRawData(chunk, cancellationToken, decoded);
 }
