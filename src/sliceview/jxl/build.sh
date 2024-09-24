@@ -1,6 +1,6 @@
 #!/bin/bash -xve
 
-# This script builds `libpng.wasm` using emsdk in a docker container.
+# This script builds `jxl_decoder.wasm` using emsdk in a docker container.
 
 cd "$(dirname "$0")"
 

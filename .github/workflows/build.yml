@@ -296,5 +296,6 @@ jobs:
       - run: ./src/mesh/draco/build.sh
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh
+      - run: ./src/sliceview/jxl/build.sh
       # Check that there are no differences.
       - run: git diff --exit-code
