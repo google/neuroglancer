@@ -32,6 +32,7 @@ import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 
 const SCREENSHOT_TIMEOUT = 1000;
 
@@ -135,12 +136,14 @@ async function extractViewportScreenshot(
 
 export class ScreenshotManager extends RefCounted {
   screenshotId: number = -1;
-  screenshotScale: number = 1;
   screenshotLoadStats: ScreenshotLoadStatistics | null = null;
   screenshotStartTime = 0;
   screenshotMode: ScreenshotMode = ScreenshotMode.OFF;
   statisticsUpdated = new Signal<(state: ScreenshotLoadStatistics) => void>();
+  zoomMaybeChanged = new NullarySignal();
   screenshotFinished = new NullarySignal();
+  private _shouldKeepSliceViewFOVFixed: boolean = true;
+  private _screenshotScale: number = 1;
   private filename: string = "";
   private lastUpdateTimestamp: number = 0;
   private gpuMemoryChangeTimestamp: number = 0;
@@ -218,6 +221,29 @@ export class ScreenshotManager extends RefCounted {
         this.handleScreenshotModeChange();
       }),
     );
+  }
+
+  public get screenshotScale() {
+    return this._screenshotScale;
+  }
+
+  public set screenshotScale(scale: number) {
+    this.handleScreenshotZoom(scale);
+    this._screenshotScale = scale;
+  }
+
+  public get shouldKeepSliceViewFOVFixed() {
+    return this._shouldKeepSliceViewFOVFixed;
+  }
+
+  public set shouldKeepSliceViewFOVFixed(enableFixedFOV: boolean) {
+    const wasInFixedFOVMode = this.shouldKeepSliceViewFOVFixed;
+    this._shouldKeepSliceViewFOVFixed = enableFixedFOV;
+    if (!enableFixedFOV && wasInFixedFOVMode) {
+      this.handleScreenshotZoom(1 / this.screenshotScale, true /* resetZoom */);
+    } else if (enableFixedFOV && !wasInFixedFOVMode) {
+      this.handleScreenshotZoom(this.screenshotScale, true /* resetZoom */);
+    }
   }
 
   takeScreenshot(filename: string = "") {
@@ -302,6 +328,23 @@ export class ScreenshotManager extends RefCounted {
       case ScreenshotMode.ON:
         this.handleScreenshotStarted();
         break;
+    }
+  }
+
+  private handleScreenshotZoom(scale: number, resetZoom: boolean = false) {
+    const oldScale = this.screenshotScale;
+    const scaleFactor = resetZoom ? scale : oldScale / scale;
+
+    if (this.shouldKeepSliceViewFOVFixed || resetZoom) {
+      const { navigationState } = this.viewer;
+      for (const panel of this.viewer.display.panels) {
+        if (panel instanceof SliceViewPanel) {
+          const zoom = navigationState.zoomFactor.value;
+          navigationState.zoomFactor.value = zoom * scaleFactor;
+          break;
+        }
+      }
+      this.zoomMaybeChanged.dispatch();
     }
   }
 

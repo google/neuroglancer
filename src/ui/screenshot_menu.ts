@@ -101,7 +101,7 @@ export class ScreenshotDialog extends Overlay {
   private throttledUpdateLayerResolutionTable = this.registerCancellable(
     throttle(() => {
       this.populateLayerResolutionTable();
-    }, 1000),
+    }, 500),
   );
   constructor(private screenshotManager: ScreenshotManager) {
     super();
@@ -109,6 +109,13 @@ export class ScreenshotDialog extends Overlay {
     this.initializeUI();
     this.setupEventListeners();
     this.screenshotManager.throttledSendStatistics();
+  }
+
+  dispose(): void {
+    super.dispose();
+    if (!DEBUG_ALLOW_MENU_CLOSE) {
+      this.screenshotManager.screenshotScale = 1;
+    }
   }
 
   private initializeUI() {
@@ -162,6 +169,11 @@ export class ScreenshotDialog extends Overlay {
     this.registerDisposer(
       this.screenshotManager.viewer.display.updateFinished.add(() => {
         this.throttledUpdateLayerResolutionTable();
+      }),
+    );
+    this.registerDisposer(
+      this.screenshotManager.zoomMaybeChanged.add(() => {
+        this.populatePanelResolutionTable();
       }),
     );
   }
@@ -225,6 +237,24 @@ export class ScreenshotDialog extends Overlay {
       });
     });
     scaleMenu.appendChild(this.warningElement);
+
+    const keepSliceFOVFixedDiv = document.createElement("div");
+    keepSliceFOVFixedDiv.textContent = "Keep slice FOV fixed with scale change";
+
+    const keepSliceFOVFixedCheckbox = document.createElement("input");
+    keepSliceFOVFixedCheckbox.classList.add(
+      "neuroglancer-screenshot-keep-slice-fov-checkbox",
+    );
+    keepSliceFOVFixedCheckbox.type = "checkbox";
+    keepSliceFOVFixedCheckbox.checked =
+      this.screenshotManager.shouldKeepSliceViewFOVFixed;
+    keepSliceFOVFixedCheckbox.addEventListener("change", () => {
+      this.screenshotManager.shouldKeepSliceViewFOVFixed =
+        keepSliceFOVFixedCheckbox.checked;
+    });
+    keepSliceFOVFixedDiv.appendChild(keepSliceFOVFixedCheckbox);
+    scaleMenu.appendChild(keepSliceFOVFixedDiv);
+
     this.handleScreenshotResize();
     return scaleMenu;
   }
@@ -300,6 +330,10 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private populatePanelResolutionTable() {
+    // Clear the table before populating it
+    while (this.panelResolutionTable.rows.length > 1) {
+      this.panelResolutionTable.deleteRow(1);
+    }
     const resolutionTable = this.panelResolutionTable;
     const resolutions = getViewerPanelResolutions(
       this.screenshotManager.viewer.display.panels,
