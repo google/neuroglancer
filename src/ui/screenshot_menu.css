@@ -14,31 +14,30 @@
  * limitations under the License.
  */
 
-
-.neuroglancer-screenshot-dialog{
-    width: 60%;
+.neuroglancer-screenshot-dialog {
+  width: 60%;
 }
 
 .neuroglancer-screenshot-scale-radio {
-    display: inline-block;
-    width: 20px;
-    margin-right: -2px;
-    cursor: pointer;
+  display: inline-block;
+  width: 20px;
+  margin-right: -2px;
+  cursor: pointer;
 }
 
 .neuroglancer-screenshot-filename-and-buttons {
-    margin-bottom: 5px;
+  margin-bottom: 5px;
 }
 
 .neuroglancer-screenshot-name-input {
-    width: 50%;
-    margin-right: 10px;
-    border: 1px solid #ccc;
+  width: 50%;
+  margin-right: 10px;
+  border: 1px solid #ccc;
 }
 
 .neuroglancer-screenshot-button {
-    cursor: pointer;
-    margin: 2px;
+  cursor: pointer;
+  margin: 2px;
 }
 
 .neuroglancer-screenshot-close-button {
@@ -47,28 +46,28 @@
 }
 
 .neuroglancer-screenshot-statistics-title {
-    margin-top: 5px;
+  margin-top: 5px;
 }
 
 .neuroglancer-screenshot-statistics-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 5px;
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 5px;
 }
 
 .neuroglancer-screenshot-statistics-table th,
 .neuroglancer-screenshot-statistics-table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
 }
 
 .neuroglancer-screenshot-statistics-table th {
-    background-color: #f8f8f8;
-    font-weight: bold;
-    color: #555;
+  background-color: #f8f8f8;
+  font-weight: bold;
+  color: #555;
 }
 
 .neuroglancer-screenshot-warning {
-    color: red;
+  color: red;
 }
