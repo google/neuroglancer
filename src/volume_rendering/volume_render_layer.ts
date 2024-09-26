@@ -223,8 +223,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private modeOverride: TrackableVolumeRenderingModeValue;
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
-  private physicalSpacingForDepthSamples: number;
   private dataResolutionIndex: number;
+  public highestResolutionLoadedVoxelSize: Float32Array | undefined;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
@@ -248,10 +248,6 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
 
   get isVolumeRendering() {
     return true;
-  }
-
-  get physicalSpacing() {
-    return this.physicalSpacingForDepthSamples;
   }
 
   get selectedDataResolution() {
@@ -768,6 +764,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       ShaderControlsBuilderState,
       VolumeRenderingShaderParameters
     >;
+    let physicalSpacingForOptimalSamples = 0;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
 
@@ -836,7 +833,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           },
         );
         renderScaleHistogram.add(
-          this.physicalSpacingForDepthSamples,
+          physicalSpacingForOptimalSamples,
           curOptimalSamples,
           presentCount,
           notPresentCount,
@@ -890,7 +887,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       ) => {
         ignored1;
         ignored2;
-        this.physicalSpacingForDepthSamples = physicalSpacing;
+        this.highestResolutionLoadedVoxelSize =
+          transformedSource.effectiveVoxelSize;
+        physicalSpacingForOptimalSamples = physicalSpacing;
         curOptimalSamples = optimalSamples;
         curHistogramInformation = histogramInformation;
         this.dataResolutionIndex = histogramInformation.activeIndex;

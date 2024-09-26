@@ -15,8 +15,6 @@
  */
 
 import type { RenderedPanel } from "#src/display_context.js";
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { MultiscaleMeshLayer } from "#src/mesh/frontend.js";
 import { PerspectivePanel } from "#src/perspective_view/panel.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
@@ -27,60 +25,94 @@ import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import type { Viewer } from "#src/viewer.js";
 import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 
+export interface DimensionResolutionStats {
+  parentType: string;
+  dimensionName: string;
+  resolutionWithUnit: string;
+}
+
+interface LayerIdentifier {
+  name: string;
+  type: string;
+}
+
 export function getViewerLayerResolutions(
   viewer: Viewer,
-): Map<[string, string], any> {
-  const layers = viewer.layerManager.visibleRenderLayers;
-  const panels = viewer.display.panels;
-  const map = new Map();
+): Map<LayerIdentifier, DimensionResolutionStats[]> {
+  function formatResolution(
+    resolution: Float32Array | undefined,
+    parentType: string,
+  ): DimensionResolutionStats[] {
+    if (resolution === undefined) return [];
 
-  // Get all the layers in at least one panel.
-  for (const panel of panels) {
-    if (!(panel instanceof RenderedDataPanel)) continue;
+    const resolution_stats: DimensionResolutionStats[] = [];
+    const {
+      globalDimensionNames,
+      displayDimensionUnits,
+      displayDimensionIndices,
+    } = viewer.navigationState.displayDimensionRenderInfo.value;
+
+    // Check if all units and factors are the same.
+    const firstDim = displayDimensionIndices[0];
+    let singleScale = true;
+    if (firstDim !== -1) {
+      const unit = displayDimensionUnits[0];
+      const factor = resolution[0];
+      for (let i = 1; i < 3; ++i) {
+        const dim = displayDimensionIndices[i];
+        if (dim === -1) continue;
+        if (displayDimensionUnits[i] !== unit || factor !== resolution[i]) {
+          singleScale = false;
+          break;
+        }
+      }
+    }
+
+    for (let i = 0; i < 3; ++i) {
+      const dim = displayDimensionIndices[i];
+      if (dim !== -1) {
+        const dimensionName = globalDimensionNames[dim];
+        if (i === 0 || !singleScale) {
+          const formattedScale = formatScaleWithUnitAsString(
+            resolution[i],
+            displayDimensionUnits[i],
+            { precision: 2, elide1: false },
+          );
+          resolution_stats.push({
+            parentType: parentType,
+            resolutionWithUnit: `${formattedScale}`,
+            dimensionName: singleScale ? "All_" : dimensionName,
+          });
+        }
+      }
+    }
+    return resolution_stats;
   }
 
+  const layers = viewer.layerManager.visibleRenderLayers;
+  const map = new Map<LayerIdentifier, DimensionResolutionStats[]>();
+
   for (const layer of layers) {
-    //const isLayerInAnyPanel =
     if (layer.role === RenderLayerRole.DATA) {
-      const layer_name = layer.userLayer!.managedLayer.name;
+      let isVisble = false;
+      const name = layer.userLayer!.managedLayer.name;
+      let type: string = "";
+      let resolution: Float32Array | undefined;
       if (layer instanceof ImageRenderLayer) {
-        const isVisble = layer.visibleSourcesList.length > 0;
-        if (!isVisble) {
-          continue;
-        }
-        const type = "ImageRenderLayer";
-        const resolution = layer.renderScaleTarget.value;
-        map.set([layer_name, type], { resolution });
+        type = "ImageRenderLayer";
+        isVisble = layer.visibleSourcesList.length > 0;
+        resolution = layer.highestResolutionLoadedVoxelSize;
       } else if (layer instanceof VolumeRenderingRenderLayer) {
-        const isVisble = layer.visibility.visible;
-        if (!isVisble) {
-          continue;
-        }
-        const type = "VolumeRenderingRenderLayer";
-        const resolution = layer.depthSamplesTarget.value;
-        map.set([layer_name, type], {
-          resolution,
-        });
+        type = "VolumeRenderingRenderLayer";
+        isVisble = layer.visibility.visible;
+        resolution = layer.highestResolutionLoadedVoxelSize;
       } else if (layer instanceof SegmentationRenderLayer) {
-        const isVisble = layer.visibleSourcesList.length > 0;
-        if (!isVisble) {
-          continue;
-        }
-        const type = "SegmentationRenderLayer";
-        const resolution = layer.renderScaleTarget.value;
-        map.set([layer_name, type], {
-          resolution,
-        });
-      } else if (layer instanceof MultiscaleMeshLayer) {
-        const isVisble = layer.visibility.visible;
-        if (!isVisble) {
-          continue;
-        }
-        const type = "MultiscaleMeshLayer";
-        const userLayer = layer.userLayer as SegmentationUserLayer;
-        const resolution = userLayer.displayState.renderScaleTarget.value;
-        map.set([layer_name, type], { resolution });
+        type = "SegmentationRenderLayer";
+        isVisble = layer.visibleSourcesList.length > 0;
+        resolution = layer.highestResolutionLoadedVoxelSize;
       }
+      if (!isVisble) continue;
+      map.set({ name, type }, formatResolution(resolution, type));
     }
   }
   return map;
@@ -105,7 +137,7 @@ export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
     return true;
   }
 
-  const resolutions: any[] = [];
+  const resolutions: DimensionResolutionStats[][] = [];
   for (const panel of panels) {
     if (!(panel instanceof RenderedDataPanel)) continue;
     const panel_resolution = [];
@@ -113,7 +145,7 @@ export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
       panel instanceof PerspectivePanel &&
       panel.viewer.orthographicProjection.value;
 
-    const displayDimensionUnit =
+    const panelDimensionUnit =
       panel instanceof SliceViewPanel || isOrtographicProjection ? "px" : "vh";
     let panelType: string;
     if (panel instanceof SliceViewPanel) {
@@ -155,29 +187,25 @@ export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
       if (dim !== -1) {
         const totalScale =
           (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
-        let textContent;
-        const name = globalDimensionNames[dim];
+        const dimensionName = globalDimensionNames[dim];
         if (i === 0 || !singleScale) {
           const formattedScale = formatScaleWithUnitAsString(
             totalScale,
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          textContent = `${formattedScale}/${displayDimensionUnit}`;
-          if (singleScale) {
-            panel_resolution.push({ panelType, textContent, name: "All_" });
-          } else {
-            panel_resolution.push({ panelType, textContent, name });
-          }
-        } else {
-          textContent = "";
+          panel_resolution.push({
+            parentType: panelType,
+            resolutionWithUnit: `${formattedScale}/${panelDimensionUnit}`,
+            dimensionName: singleScale ? "All_" : dimensionName,
+          });
         }
       }
     }
     resolutions.push(panel_resolution);
   }
 
-  const uniqueResolutions: any[] = [];
+  const uniqueResolutions: DimensionResolutionStats[][] = [];
   for (const resolution of resolutions) {
     let found = false;
     for (const uniqueResolution of uniqueResolutions) {

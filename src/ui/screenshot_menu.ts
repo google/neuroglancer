@@ -22,6 +22,7 @@ import type {
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
+import type { DimensionResolutionStats } from "#src/util/viewer_resolution_stats.js";
 import {
   getViewerLayerResolutions,
   getViewerPanelResolutions,
@@ -48,11 +49,37 @@ const statisticsNamesForUI = {
 };
 
 const layerNamesForUI = {
-  ImageRenderLayer: "Image",
-  VolumeRenderingRenderLayer: "Volume",
-  SegmentationRenderLayer: "Segmentation",
-  MultiscaleMeshLayer: "Mesh",
+  ImageRenderLayer: "Image slice (2D)",
+  VolumeRenderingRenderLayer: "Volume rendering (3D)",
+  SegmentationRenderLayer: "Segmentation slice (2D)",
 };
+
+function formatResolution(resolution: DimensionResolutionStats[]) {
+  if (resolution.length === 0) {
+    return {
+      type: "Loading...",
+      resolution: "Loading...",
+    };
+  }
+  const first_resolution = resolution[0];
+  // If the resolution is the same for all dimensions, display it as a single line
+  if (first_resolution.dimensionName === "All_") {
+    return {
+      type: first_resolution.parentType,
+      resolution: ` ${first_resolution.resolutionWithUnit}`,
+    };
+  } else {
+    let text = "";
+    for (const res of resolution) {
+      text += `${res.dimensionName}: ${res.resolutionWithUnit}, `;
+    }
+    text = text.slice(0, -2);
+    return {
+      type: first_resolution.parentType,
+      resolution: text,
+    };
+  }
+}
 
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
@@ -274,24 +301,6 @@ export class ScreenshotDialog extends Overlay {
 
   private populatePanelResolutionTable() {
     const resolutionTable = this.panelResolutionTable;
-    function formatResolution(resolution: any) {
-      const first_resolution = resolution[0];
-      if (first_resolution.name === "All_") {
-        return {
-          type: first_resolution.panelType,
-          resolution: first_resolution.textContent,
-        };
-      } else {
-        let text = "";
-        for (const res of resolution) {
-          text += `${res.name}: ${res.textContent}, `;
-        }
-        return {
-          type: first_resolution.panelType,
-          resolution: text,
-        };
-      }
-    }
     const resolutions = getViewerPanelResolutions(
       this.screenshotManager.viewer.display.panels,
     );
@@ -326,41 +335,28 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private populateLayerResolutionTable() {
-    function formatResolution(key: any, value: any) {
-      const type = key[1];
-      const resolution: number = value.resolution;
-      const unit = type === "VolumeRenderingRenderLayer" ? "Z samples" : "px";
-
-      let roundingLevel = 2;
-      if (
-        type === "VolumeRenderingRenderLayer" ||
-        (type === "ImageRenderLayer" && resolution > 1)
-      ) {
-        roundingLevel = 0;
-      }
-
-      return `${resolution.toFixed(roundingLevel)} ${unit}`;
-    }
     const resolutionTable = this.layerResolutionTable;
     const resolutionMap = getViewerLayerResolutions(
       this.screenshotManager.viewer,
     );
     for (const [key, value] of resolutionMap) {
-      const stringKey = key.join(",");
-      const resolution = formatResolution(key, value);
+      const { name, type } = key;
+      if (type === "MultiscaleMeshLayer") {
+        continue;
+      }
+      const stringKey = `{${name}--${type}}`;
       let valueCell = this.layerResolutionKeyToCellMap.get(stringKey);
       if (valueCell === undefined) {
         const row = resolutionTable.insertRow();
         const keyCell = row.insertCell();
         const typeCell = row.insertCell();
         valueCell = row.insertCell();
-        const name = key[0];
         keyCell.textContent = name;
         typeCell.textContent =
-          layerNamesForUI[key[1] as keyof typeof layerNamesForUI];
+          layerNamesForUI[type as keyof typeof layerNamesForUI];
         this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
       }
-      valueCell.textContent = resolution;
+      valueCell.textContent = formatResolution(value).resolution;
     }
   }
 
