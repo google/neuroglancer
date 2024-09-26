@@ -89,6 +89,7 @@ export class ScreenshotDialog extends Overlay {
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
   private panelResolutionTable: HTMLTableElement;
+  private panelPixelSizeTable: HTMLTableElement;
   private layerResolutionTable: HTMLTableElement;
   private statisticsContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
@@ -101,6 +102,8 @@ export class ScreenshotDialog extends Overlay {
   private throttledUpdateLayerResolutionTable = this.registerCancellable(
     throttle(() => {
       this.populateLayerResolutionTable();
+      this.populatePanelPixelSizeTable();
+      this.handleScreenshotResize();
     }, 500),
   );
   constructor(private screenshotManager: ScreenshotManager) {
@@ -148,10 +151,12 @@ export class ScreenshotDialog extends Overlay {
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
     this.content.appendChild(this.createPanelResolutionTable());
+    this.content.appendChild(this.createPanelPixelSizeTable());
     this.content.appendChild(this.createLayerResolutionTable());
     this.content.appendChild(this.createStatisticsTable());
     this.updateUIBasedOnMode();
     this.populatePanelResolutionTable();
+    this.populatePanelPixelSizeTable();
     this.throttledUpdateLayerResolutionTable();
   }
 
@@ -347,6 +352,39 @@ export class ScreenshotDialog extends Overlay {
       valueCell.textContent = resolutionStrings.resolution;
     }
     return resolutionTable;
+  }
+
+  private createPanelPixelSizeTable() {
+    const resolutionTable = (this.panelPixelSizeTable =
+      document.createElement("table"));
+    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
+    resolutionTable.title = "Viewer resolution statistics";
+
+    const headerRow = resolutionTable.createTHead().insertRow();
+    const keyHeader = document.createElement("th");
+    keyHeader.textContent = "Panel type";
+    headerRow.appendChild(keyHeader);
+    const valueHeader = document.createElement("th");
+    valueHeader.textContent = "Resolution";
+    headerRow.appendChild(valueHeader);
+    return resolutionTable;
+  }
+
+  private populatePanelPixelSizeTable() {
+    // Clear the table before populating it
+    while (this.panelPixelSizeTable.rows.length > 1) {
+      this.panelPixelSizeTable.deleteRow(1);
+    }
+    const pixelSizeTable = this.panelPixelSizeTable;
+    const panelPixelSizes =
+      this.screenshotManager.calculateUniqueScaledPanelViewportSizes();
+    for (const value of panelPixelSizes) {
+      const row = pixelSizeTable.insertRow();
+      const keyCell = row.insertCell();
+      const valueCell = row.insertCell();
+      keyCell.textContent = value.type;
+      valueCell.textContent = `${value.width}x${value.height} px`;
+    }
   }
 
   private createLayerResolutionTable() {

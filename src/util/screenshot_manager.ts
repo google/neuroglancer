@@ -46,6 +46,12 @@ interface ViewportBounds {
   right: number;
   top: number;
   bottom: number;
+  panelType: string;
+}
+
+interface CanvasSizeStatistics {
+  totalRenderPanelViewport: ViewportBounds;
+  individualRenderPanelViewports: ViewportBounds[];
 }
 
 function saveBlobToFile(blob: Blob, filename: string) {
@@ -74,13 +80,15 @@ function setExtension(filename: string, extension: string = ".png"): string {
 
 function calculateViewportBounds(
   panels: ReadonlySet<RenderedPanel>,
-): ViewportBounds {
+): CanvasSizeStatistics {
   const viewportBounds = {
     left: Number.POSITIVE_INFINITY,
     right: Number.NEGATIVE_INFINITY,
     top: Number.POSITIVE_INFINITY,
     bottom: Number.NEGATIVE_INFINITY,
+    panelType: "All",
   };
+  const allPanelViewports: ViewportBounds[] = [];
   for (const panel of panels) {
     if (!(panel instanceof RenderedDataPanel)) continue;
     const viewport = panel.renderViewport;
@@ -93,8 +101,18 @@ function calculateViewportBounds(
     viewportBounds.right = Math.max(viewportBounds.right, panelRight);
     viewportBounds.top = Math.min(viewportBounds.top, panelTop);
     viewportBounds.bottom = Math.max(viewportBounds.bottom, panelBottom);
+    allPanelViewports.push({
+      left: panelLeft,
+      right: panelRight,
+      top: panelTop,
+      bottom: panelBottom,
+      panelType: panel instanceof SliceViewPanel ? "SliceView" : "Rendered",
+    });
   }
-  return viewportBounds;
+  return {
+    totalRenderPanelViewport: viewportBounds,
+    individualRenderPanelViewports: allPanelViewports,
+  };
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
@@ -266,7 +284,7 @@ export class ScreenshotManager extends RefCounted {
   calculatedScaledAndClippedSize() {
     const renderingPanelArea = calculateViewportBounds(
       this.viewer.display.panels,
-    );
+    ).totalRenderPanelViewport;
     return {
       width:
         Math.round(renderingPanelArea.right - renderingPanelArea.left) *
@@ -275,6 +293,23 @@ export class ScreenshotManager extends RefCounted {
         Math.round(renderingPanelArea.bottom - renderingPanelArea.top) *
         this.screenshotScale,
     };
+  }
+
+  calculateUniqueScaledPanelViewportSizes() {
+    const panelAreas = calculateViewportBounds(
+      this.viewer.display.panels,
+    ).individualRenderPanelViewports;
+    const scaledPanelAreas = panelAreas.map((panelArea) => ({
+      width:
+        Math.round(panelArea.right - panelArea.left) * this.screenshotScale,
+      height:
+        Math.round(panelArea.bottom - panelArea.top) * this.screenshotScale,
+      type: panelArea.panelType,
+    }));
+    const uniquePanelAreas = Array.from(
+      new Set(scaledPanelAreas.map((area) => JSON.stringify(area))),
+    ).map((area) => JSON.parse(area));
+    return uniquePanelAreas;
   }
 
   private handleScreenshotStarted() {
@@ -399,7 +434,7 @@ export class ScreenshotManager extends RefCounted {
     }
     const renderingPanelArea = calculateViewportBounds(
       this.viewer.display.panels,
-    );
+    ).totalRenderPanelViewport;
     try {
       const croppedImage = await extractViewportScreenshot(
         this.viewer,

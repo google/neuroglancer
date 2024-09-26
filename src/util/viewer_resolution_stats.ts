@@ -119,18 +119,23 @@ export function getViewerLayerResolutions(
 }
 
 export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
-  function resolutionsEqual(resolution1: any[], resolution2: any[]) {
+  function resolutionsEqual(
+    resolution1: DimensionResolutionStats[],
+    resolution2: DimensionResolutionStats[],
+  ) {
     if (resolution1.length !== resolution2.length) {
       return false;
     }
     for (let i = 0; i < resolution1.length; ++i) {
-      if (resolution1[i].textContent !== resolution2[i].textContent) {
+      if (
+        resolution1[i].resolutionWithUnit !== resolution2[i].resolutionWithUnit
+      ) {
         return false;
       }
-      if (resolution1[i].panelType !== resolution2[i].panelType) {
+      if (resolution1[i].parentType !== resolution2[i].parentType) {
         return false;
       }
-      if (resolution1[i].name !== resolution2[i].name) {
+      if (resolution1[i].dimensionName !== resolution2[i].dimensionName) {
         return false;
       }
     }
