@@ -23,6 +23,7 @@ import type {
   ScreenshotChunkStatistics,
 } from "#src/python_integration/screenshots.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import {
   columnSpecifications,
   getChunkSourceIdentifier,
@@ -32,7 +33,6 @@ import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
-import { SliceViewPanel } from "#src/sliceview/panel.js";
 
 const SCREENSHOT_TIMEOUT = 1000;
 
@@ -190,7 +190,6 @@ export class ScreenshotManager extends RefCounted {
     this.registerDisposer(
       this.viewer.screenshotHandler.sendScreenshotRequested.add(
         (actionState) => {
-          this.screenshotFinished.dispatch();
           this.saveScreenshot(actionState);
         },
       ),
@@ -415,6 +414,7 @@ export class ScreenshotManager extends RefCounted {
       console.error("Failed to save screenshot:", error);
     } finally {
       this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
+      this.screenshotFinished.dispatch();
     }
   }
 
