@@ -371,20 +371,8 @@ export class ScreenshotManager extends RefCounted {
     } catch (error) {
       console.error("Failed to save screenshot:", error);
     } finally {
-      this.saveScreenshotLog(actionState);
       this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
     }
-  }
-
-  private saveScreenshotLog(actionState: ScreenshotActionState) {
-    const { viewerState } = actionState;
-    const stateString = JSON.stringify(viewerState);
-    this.downloadState(stateString);
-  }
-
-  private downloadState(state: string) {
-    const blob = new Blob([state], { type: "text/json" });
-    saveBlobToFile(blob, setExtension(this.filename, "_state.json"));
   }
 
   private resetCanvasSize() {
