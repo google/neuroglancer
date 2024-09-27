@@ -36,6 +36,23 @@ interface LayerIdentifier {
   type: string;
 }
 
+/**
+ * For each visible data layer, returns the resolution of the voxels
+ * in physical units for the most detailed resolution of the data for
+ * which any data is actually loaded.
+ *
+ * The resolution is for loaded data, so may be lower than the resolution requested
+ * for the layer, such as when there are memory constraints.
+ *
+ * The key for the returned map is the layer name and type.
+ * A single layer name can have multiple types, such as ImageRenderLayer and
+ * VolumeRenderingRenderLayer from the same named layer.
+ *
+ * As the dimensions of the voxels can be the same in each dimension, the
+ * function will return a single resolution if all dimensions in the layer are the
+ * same, with the name "All_". Otherwise, it will return the resolution for
+ * each dimension, with the name of the dimension as per the global viewer dim names.
+ */
 export function getViewerLayerResolutions(
   viewer: Viewer,
 ): Map<LayerIdentifier, DimensionResolutionStats[]> {
@@ -118,8 +135,25 @@ export function getViewerLayerResolutions(
   return map;
 }
 
+/**
+ * For each viewer panel, returns the scale in each dimension for that panel.
+ *
+ * It is quite common for all dimensions to have the same scale, so the function
+ * will return a single resolution for a panel if all dimensions in the panel are
+ * the same, with the name "All_". Otherwise, it will return the resolution for
+ * each dimension, with the name of the dimension as per the global dimension names.
+ *
+ * For orthographic projections or slice views, the scale is in pixels, otherwise it is in vh.
+ *
+ * @param panels The set of panels to get the resolutions for. E.g. viewer.display.panels
+ * @param onlyUniqueResolutions If true, only return panels with unique resolutions.
+ * It is quite common for all slice view panels to have the same resolution.
+ * 
+ * @returns An array of resolutions for each panel.
+ */
 export function getViewerPanelResolutions(
   panels: ReadonlySet<RenderedPanel>,
+  onlyUniqueResolutions = true,
 ): DimensionResolutionStats[][] {
   function resolutionsEqual(
     resolution1: DimensionResolutionStats[],
@@ -212,6 +246,9 @@ export function getViewerPanelResolutions(
     resolutions.push(panel_resolution);
   }
 
+  if (!onlyUniqueResolutions) {
+    return resolutions;
+  }
   const uniqueResolutions: DimensionResolutionStats[][] = [];
   for (const resolution of resolutions) {
     let found = false;
