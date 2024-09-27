@@ -99,7 +99,7 @@ export class ScreenshotDialog extends Overlay {
   private layerResolutionKeyToCellMap: Map<string, HTMLTableCellElement> =
     new Map();
 
-  private throttledUpdateLayerResolutionTable = this.registerCancellable(
+  private throttledUpdateTableStatistics = this.registerCancellable(
     throttle(() => {
       this.populateLayerResolutionTable();
       this.populatePanelPixelSizeTable();
@@ -157,7 +157,7 @@ export class ScreenshotDialog extends Overlay {
     this.updateUIBasedOnMode();
     this.populatePanelResolutionTable();
     this.populatePanelPixelSizeTable();
-    this.throttledUpdateLayerResolutionTable();
+    this.throttledUpdateTableStatistics();
   }
 
   private setupEventListeners() {
@@ -173,7 +173,7 @@ export class ScreenshotDialog extends Overlay {
     );
     this.registerDisposer(
       this.screenshotManager.viewer.display.updateFinished.add(() => {
-        this.throttledUpdateLayerResolutionTable();
+        this.throttledUpdateTableStatistics();
       }),
     );
     this.registerDisposer(
@@ -262,18 +262,6 @@ export class ScreenshotDialog extends Overlay {
 
     this.handleScreenshotResize();
     return scaleMenu;
-  }
-
-  private handleScreenshotResize() {
-    const screenshotSize =
-      this.screenshotManager.calculatedScaledAndClippedSize();
-    if (screenshotSize.width * screenshotSize.height > LARGE_SCREENSHOT_SIZE) {
-      this.warningElement.textContent =
-        "Warning: large screenshots (bigger than 4096x4096) may fail";
-    } else {
-      this.warningElement.textContent = "";
-    }
-    this.screenshotSizeText.textContent = `Screenshot size: ${screenshotSize.width}px, ${screenshotSize.height}px`;
   }
 
   private createStatisticsTable() {
@@ -463,6 +451,18 @@ export class ScreenshotDialog extends Overlay {
         statsRow[key as keyof typeof statsRow],
       );
     }
+  }
+
+  private handleScreenshotResize() {
+    const screenshotSize =
+      this.screenshotManager.calculatedScaledAndClippedSize();
+    if (screenshotSize.width * screenshotSize.height > LARGE_SCREENSHOT_SIZE) {
+      this.warningElement.textContent =
+        "Warning: large screenshots (bigger than 4096x4096) may fail";
+    } else {
+      this.warningElement.textContent = "";
+    }
+    this.screenshotSizeText.textContent = `Screenshot size: ${screenshotSize.width}px, ${screenshotSize.height}px`;
   }
 
   private parseStatistics(

@@ -118,7 +118,9 @@ export function getViewerLayerResolutions(
   return map;
 }
 
-export function getViewerPanelResolutions(panels: ReadonlySet<RenderedPanel>) {
+export function getViewerPanelResolutions(
+  panels: ReadonlySet<RenderedPanel>,
+): DimensionResolutionStats[][] {
   function resolutionsEqual(
     resolution1: DimensionResolutionStats[],
     resolution2: DimensionResolutionStats[],

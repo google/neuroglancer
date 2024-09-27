@@ -341,8 +341,8 @@ export abstract class SliceViewVolumeRenderLayer<
   >;
   private tempChunkPosition: Float32Array;
   shaderParameters: WatchableValueInterface<ShaderParameters>;
+  highestResolutionLoadedVoxelSize: Float32Array | undefined;
   private vertexIdHelper: VertexIdHelper;
-  public highestResolutionLoadedVoxelSize: Float32Array | undefined;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
