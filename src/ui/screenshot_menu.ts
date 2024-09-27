@@ -131,6 +131,7 @@ export class ScreenshotDialog extends Overlay {
     throttle(() => {
       this.populateLayerResolutionTable();
       this.handleScreenshotResize();
+      this.populatePanelResolutionTable();
     }, 500),
   );
   constructor(private screenshotManager: ScreenshotManager) {

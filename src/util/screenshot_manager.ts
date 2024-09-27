@@ -119,8 +119,8 @@ export class ScreenshotManager extends RefCounted {
   screenshotStartTime = 0;
   screenshotMode: ScreenshotMode = ScreenshotMode.OFF;
   statisticsUpdated = new Signal<(state: ScreenshotLoadStatistics) => void>();
-  zoomMaybeChanged = new NullarySignal();
   screenshotFinished = new NullarySignal();
+  zoomMaybeChanged = new NullarySignal();
   private _shouldKeepSliceViewFOVFixed: boolean = true;
   private _screenshotScale: number = 1;
   private filename: string = "";
@@ -208,6 +208,7 @@ export class ScreenshotManager extends RefCounted {
   public set screenshotScale(scale: number) {
     this.handleScreenshotZoom(scale);
     this._screenshotScale = scale;
+    this.zoomMaybeChanged.dispatch();
   }
 
   public get shouldKeepSliceViewFOVFixed() {
@@ -219,8 +220,10 @@ export class ScreenshotManager extends RefCounted {
     this._shouldKeepSliceViewFOVFixed = enableFixedFOV;
     if (!enableFixedFOV && wasInFixedFOVMode) {
       this.handleScreenshotZoom(1 / this.screenshotScale, true /* resetZoom */);
+      this.zoomMaybeChanged.dispatch();
     } else if (enableFixedFOV && !wasInFixedFOVMode) {
       this.handleScreenshotZoom(this.screenshotScale, true /* resetZoom */);
+      this.zoomMaybeChanged.dispatch();
     }
   }
 
@@ -322,7 +325,6 @@ export class ScreenshotManager extends RefCounted {
           break;
         }
       }
-      this.zoomMaybeChanged.dispatch();
     }
   }
 
