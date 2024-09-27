@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @file UI menu for taking screenshots from the viewer.
  */
 
 import "#src/ui/screenshot_menu.css";
@@ -28,7 +30,7 @@ import {
   getViewerPanelResolutions,
 } from "#src/util/viewer_resolution_stats.js";
 
-// If true, the menu can be closed by clicking the close button
+// If DEBUG_ALLOW_MENU_CLOSE is true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
 // Setting this to true, and setting the SCREENSHOT_MENU_CLOSE_TIMEOUT in screenshot_manager.ts
 // to a high value can be useful for debugging canvas handling of the resize
@@ -54,6 +56,9 @@ const layerNamesForUI = {
   SegmentationRenderLayer: "Segmentation slice (2D)",
 };
 
+/**
+ * Combine the resolution of all dimensions into a single string for UI display
+ */
 function formatResolution(resolution: DimensionResolutionStats[]) {
   if (resolution.length === 0) {
     return {
@@ -81,6 +86,27 @@ function formatResolution(resolution: DimensionResolutionStats[]) {
   }
 }
 
+/**
+ * This menu allows the user to take a screenshot of the current view, with options to
+ * set the filename, scale, and force the screenshot to be taken immediately.
+ * Once a screenshot is initiated, the user is locked into the menu until the
+ * screenshot is taken or cancelled, to prevent
+ * the user from interacting with the viewer while the screenshot is being taken.
+ *
+ * The menu displays statistics about the current view, such as the number of loaded
+ * chunks, GPU memory usage, and download speed. These are to inform the user about the
+ * progress of the screenshot, as it may take some time to load all the data.
+ *
+ * The menu also displays the resolution of each panel in the viewer, as well as the resolution
+ * of the voxels loaded for each Image, Volume, and Segmentation layer.
+ * This is to inform the user about the the physical units of the data and panels,
+ * and to help them decide on the scale of the screenshot.
+ * 
+ * The screenshot menu supports keeping the slice view FOV fixed when changing the scale of the screenshot.
+ * This will cause the viewer to zoom in or out to keep the same FOV in the slice view.
+ * For example, an x2 scale will cause the viewer in slice views to zoom in by a factor of 2
+ * such that when the number of pixels in the slice view is doubled, the FOV remains the same.
+ */
 export class ScreenshotDialog extends Overlay {
   private nameInput: HTMLInputElement;
   private takeScreenshotButton: HTMLButtonElement;
@@ -317,7 +343,7 @@ export class ScreenshotDialog extends Overlay {
     keyHeader.textContent = "Panel type";
     headerRow.appendChild(keyHeader);
     const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Resolution";
+    valueHeader.textContent = "Physical resolution";
     headerRow.appendChild(valueHeader);
     return resolutionTable;
   }
@@ -353,7 +379,7 @@ export class ScreenshotDialog extends Overlay {
     keyHeader.textContent = "Panel type";
     headerRow.appendChild(keyHeader);
     const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Resolution";
+    valueHeader.textContent = "Pixel resolution";
     headerRow.appendChild(valueHeader);
     return resolutionTable;
   }
@@ -389,7 +415,7 @@ export class ScreenshotDialog extends Overlay {
     typeHeader.textContent = "Type";
     headerRow.appendChild(typeHeader);
     const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Resolution";
+    valueHeader.textContent = "Physical voxel resolution";
     headerRow.appendChild(valueHeader);
     return resolutionTable;
   }

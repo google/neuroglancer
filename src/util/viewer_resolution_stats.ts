@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @file Helper functions to get the resolution of the viewer layers and panels.
  */
 
 import type { RenderedPanel } from "#src/display_context.js";
@@ -34,6 +36,19 @@ export interface DimensionResolutionStats {
 interface LayerIdentifier {
   name: string;
   type: string;
+}
+
+export interface PanelViewport {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  panelType: string;
+}
+
+interface CanvasSizeStatistics {
+  totalRenderPanelViewport: PanelViewport;
+  individualRenderPanelViewports: PanelViewport[];
 }
 
 /**
@@ -148,7 +163,7 @@ export function getViewerLayerResolutions(
  * @param panels The set of panels to get the resolutions for. E.g. viewer.display.panels
  * @param onlyUniqueResolutions If true, only return panels with unique resolutions.
  * It is quite common for all slice view panels to have the same resolution.
- * 
+ *
  * @returns An array of resolutions for each panel.
  */
 export function getViewerPanelResolutions(
@@ -182,22 +197,11 @@ export function getViewerPanelResolutions(
   for (const panel of panels) {
     if (!(panel instanceof RenderedDataPanel)) continue;
     const panel_resolution = [];
-    const isOrtographicProjection =
-      panel instanceof PerspectivePanel &&
-      panel.viewer.orthographicProjection.value;
-
-    const panelDimensionUnit =
-      panel instanceof SliceViewPanel || isOrtographicProjection ? "px" : "vh";
-    let panelType: string;
-    if (panel instanceof SliceViewPanel) {
-      panelType = "Slice view";
-    } else if (isOrtographicProjection) {
-      panelType = "Orthographic view";
-    } else if (panel instanceof PerspectivePanel) {
-      panelType = "Perspective view";
-    } else {
-      panelType = "Unknown";
-    }
+    const {
+      panelType,
+      panelDimensionUnit,
+    }: { panelType: string; panelDimensionUnit: string } =
+      determinePanelTypeAndUnit(panel);
     const { navigationState } = panel;
     const {
       displayDimensionIndices,
@@ -263,4 +267,70 @@ export function getViewerPanelResolutions(
     }
   }
   return uniqueResolutions;
+}
+
+function determinePanelTypeAndUnit(panel: RenderedDataPanel) {
+  const isOrtographicProjection =
+    panel instanceof PerspectivePanel &&
+    panel.viewer.orthographicProjection.value;
+
+  const panelDimensionUnit =
+    panel instanceof SliceViewPanel || isOrtographicProjection ? "px" : "vh";
+  let panelType: string;
+  if (panel instanceof SliceViewPanel) {
+    panelType = "Slice view (2D)";
+  } else if (isOrtographicProjection) {
+    panelType = "Orthographic projection (3D)";
+  } else if (panel instanceof PerspectivePanel) {
+    panelType = "Perspective projection (3D)";
+  } else {
+    panelType = "Unknown";
+  }
+  return { panelType, panelDimensionUnit };
+}
+
+/**
+ * Calculates the viewport bounds of the viewer render data panels individually.
+ * And also calculates the total viewport bounds of all the render data panels combined.
+ *
+ * The total bounds can contain some non-panel areas, such as the layer bar if
+ * the panels have been duplicated so that the layer bar sits in the middle
+ * of the visible rendered panels.
+ */
+export function calculatePanelViewportBounds(
+  panels: ReadonlySet<RenderedPanel>,
+): CanvasSizeStatistics {
+  const viewportBounds = {
+    left: Number.POSITIVE_INFINITY,
+    right: Number.NEGATIVE_INFINITY,
+    top: Number.POSITIVE_INFINITY,
+    bottom: Number.NEGATIVE_INFINITY,
+    panelType: "All",
+  };
+  const allPanelViewports: PanelViewport[] = [];
+  for (const panel of panels) {
+    if (!(panel instanceof RenderedDataPanel)) continue;
+    const viewport = panel.renderViewport;
+    const { width, height } = viewport;
+    const panelLeft = panel.canvasRelativeClippedLeft;
+    const panelTop = panel.canvasRelativeClippedTop;
+    const panelRight = panelLeft + width;
+    const panelBottom = panelTop + height;
+    viewportBounds.left = Math.min(viewportBounds.left, panelLeft);
+    viewportBounds.right = Math.max(viewportBounds.right, panelRight);
+    viewportBounds.top = Math.min(viewportBounds.top, panelTop);
+    viewportBounds.bottom = Math.max(viewportBounds.bottom, panelBottom);
+
+    allPanelViewports.push({
+      left: panelLeft,
+      right: panelRight,
+      top: panelTop,
+      bottom: panelBottom,
+      panelType: determinePanelTypeAndUnit(panel).panelType,
+    });
+  }
+  return {
+    totalRenderPanelViewport: viewportBounds,
+    individualRenderPanelViewports: allPanelViewports,
+  };
 }

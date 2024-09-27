@@ -12,17 +12,17 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @file Builds upon the Python screenshot tool to allow viewer screenshots to be taken and saved.
  */
 
 import { throttle } from "lodash-es";
 import { numChunkStatistics } from "#src/chunk_manager/base.js";
-import type { RenderedPanel } from "#src/display_context.js";
 import type {
   ScreenshotActionState,
   StatisticsActionState,
   ScreenshotChunkStatistics,
 } from "#src/python_integration/screenshots.js";
-import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
 import {
   columnSpecifications,
@@ -32,6 +32,10 @@ import {
 import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
+import {
+  calculatePanelViewportBounds,
+  type PanelViewport,
+} from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
 const SCREENSHOT_TIMEOUT = 1000;
@@ -39,19 +43,6 @@ const SCREENSHOT_TIMEOUT = 1000;
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
   gpuMemoryCapacity: number;
-}
-
-interface ViewportBounds {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  panelType: string;
-}
-
-interface CanvasSizeStatistics {
-  totalRenderPanelViewport: ViewportBounds;
-  individualRenderPanelViewports: ViewportBounds[];
 }
 
 function saveBlobToFile(blob: Blob, filename: string) {
@@ -78,43 +69,6 @@ function setExtension(filename: string, extension: string = ".png"): string {
   return filename.endsWith(extension) ? filename : replaceExtension(filename);
 }
 
-function calculateViewportBounds(
-  panels: ReadonlySet<RenderedPanel>,
-): CanvasSizeStatistics {
-  const viewportBounds = {
-    left: Number.POSITIVE_INFINITY,
-    right: Number.NEGATIVE_INFINITY,
-    top: Number.POSITIVE_INFINITY,
-    bottom: Number.NEGATIVE_INFINITY,
-    panelType: "All",
-  };
-  const allPanelViewports: ViewportBounds[] = [];
-  for (const panel of panels) {
-    if (!(panel instanceof RenderedDataPanel)) continue;
-    const viewport = panel.renderViewport;
-    const { width, height } = viewport;
-    const panelLeft = panel.canvasRelativeClippedLeft;
-    const panelTop = panel.canvasRelativeClippedTop;
-    const panelRight = panelLeft + width;
-    const panelBottom = panelTop + height;
-    viewportBounds.left = Math.min(viewportBounds.left, panelLeft);
-    viewportBounds.right = Math.max(viewportBounds.right, panelRight);
-    viewportBounds.top = Math.min(viewportBounds.top, panelTop);
-    viewportBounds.bottom = Math.max(viewportBounds.bottom, panelBottom);
-    allPanelViewports.push({
-      left: panelLeft,
-      right: panelRight,
-      top: panelTop,
-      bottom: panelBottom,
-      panelType: panel instanceof SliceViewPanel ? "SliceView" : "Rendered",
-    });
-  }
-  return {
-    totalRenderPanelViewport: viewportBounds,
-    individualRenderPanelViewports: allPanelViewports,
-  };
-}
-
 function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -129,7 +83,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
 
 async function extractViewportScreenshot(
   viewer: Viewer,
-  viewportBounds: ViewportBounds,
+  viewportBounds: PanelViewport,
 ): Promise<Blob> {
   const cropWidth = viewportBounds.right - viewportBounds.left;
   const cropHeight = viewportBounds.bottom - viewportBounds.top;
@@ -282,7 +236,7 @@ export class ScreenshotManager extends RefCounted {
 
   // Scales the screenshot by the given factor, and calculates the cropped area
   calculatedScaledAndClippedSize() {
-    const renderingPanelArea = calculateViewportBounds(
+    const renderingPanelArea = calculatePanelViewportBounds(
       this.viewer.display.panels,
     ).totalRenderPanelViewport;
     return {
@@ -296,7 +250,7 @@ export class ScreenshotManager extends RefCounted {
   }
 
   calculateUniqueScaledPanelViewportSizes() {
-    const panelAreas = calculateViewportBounds(
+    const panelAreas = calculatePanelViewportBounds(
       this.viewer.display.panels,
     ).individualRenderPanelViewports;
     const scaledPanelAreas = panelAreas.map((panelArea) => ({
@@ -432,7 +386,7 @@ export class ScreenshotManager extends RefCounted {
       this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
       return;
     }
-    const renderingPanelArea = calculateViewportBounds(
+    const renderingPanelArea = calculatePanelViewportBounds(
       this.viewer.display.panels,
     ).totalRenderPanelViewport;
     try {
