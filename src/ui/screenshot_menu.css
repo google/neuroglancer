@@ -71,3 +71,13 @@
 .neuroglancer-screenshot-warning {
   color: red;
 }
+
+.neuroglancer-screenshot-tooltip {
+  user-select: none;
+  text-align: center;
+  padding: 0.1em;
+  border: 0.1em solid black;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 100%;
+}

@@ -149,6 +149,22 @@ export class ScreenshotDialog extends Overlay {
     }
   }
 
+  private setupHelpTooltips() {
+    const generalSettingsTooltip = document.createElement("div");
+    generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    generalSettingsTooltip.title =
+      "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotations (yellow bounding box)";
+    generalSettingsTooltip.textContent = "?";
+
+    const orthographicSettingsTooltip = document.createElement("div");
+    orthographicSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    orthographicSettingsTooltip.title =
+      "In the main viewer, press 'o' to toggle between perspective and orthographic views";
+    orthographicSettingsTooltip.textContent = "?";
+
+    return { generalSettingsTooltip, orthographicSettingsTooltip };
+  }
+
   private initializeUI() {
     this.content.classList.add("neuroglancer-screenshot-dialog");
 
@@ -174,10 +190,20 @@ export class ScreenshotDialog extends Overlay {
     this.filenameAndButtonsContainer.appendChild(this.takeScreenshotButton);
     this.filenameAndButtonsContainer.appendChild(this.forceScreenshotButton);
 
-    this.content.appendChild(this.closeMenuButton);
+    const tooltip = this.setupHelpTooltips();
+
+    const closeAndHelpContainer = document.createElement("div");
+    closeAndHelpContainer.classList.add(
+      "neuroglancer-screenshot-close-and-help",
+    );
+    closeAndHelpContainer.appendChild(tooltip.generalSettingsTooltip);
+    closeAndHelpContainer.appendChild(this.closeMenuButton);
+
+    this.content.appendChild(closeAndHelpContainer);
     this.content.appendChild(this.cancelScreenshotButton);
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
+    this.content.appendChild(tooltip.orthographicSettingsTooltip);
     this.content.appendChild(this.createPanelResolutionTable());
     this.content.appendChild(this.createLayerResolutionTable());
     this.content.appendChild(this.createStatisticsTable());
