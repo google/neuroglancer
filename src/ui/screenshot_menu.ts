@@ -24,7 +24,10 @@ import type {
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
-import type { DimensionResolutionStats } from "#src/util/viewer_resolution_stats.js";
+import type {
+  DimensionResolutionStats,
+  PanelViewport,
+} from "#src/util/viewer_resolution_stats.js";
 import {
   getViewerLayerResolutions,
   getViewerPanelResolutions,
@@ -59,7 +62,7 @@ const layerNamesForUI = {
 /**
  * Combine the resolution of all dimensions into a single string for UI display
  */
-function formatResolution(resolution: DimensionResolutionStats[]) {
+function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   if (resolution.length === 0) {
     return {
       type: "Loading...",
@@ -101,7 +104,7 @@ function formatResolution(resolution: DimensionResolutionStats[]) {
  * of the voxels loaded for each Image, Volume, and Segmentation layer.
  * This is to inform the user about the the physical units of the data and panels,
  * and to help them decide on the scale of the screenshot.
- * 
+ *
  * The screenshot menu supports keeping the slice view FOV fixed when changing the scale of the screenshot.
  * This will cause the viewer to zoom in or out to keep the same FOV in the slice view.
  * For example, an x2 scale will cause the viewer in slice views to zoom in by a factor of 2
@@ -115,7 +118,6 @@ export class ScreenshotDialog extends Overlay {
   private forceScreenshotButton: HTMLButtonElement;
   private statisticsTable: HTMLTableElement;
   private panelResolutionTable: HTMLTableElement;
-  private panelPixelSizeTable: HTMLTableElement;
   private layerResolutionTable: HTMLTableElement;
   private statisticsContainer: HTMLDivElement;
   private filenameAndButtonsContainer: HTMLDivElement;
@@ -128,7 +130,6 @@ export class ScreenshotDialog extends Overlay {
   private throttledUpdateTableStatistics = this.registerCancellable(
     throttle(() => {
       this.populateLayerResolutionTable();
-      this.populatePanelPixelSizeTable();
       this.handleScreenshotResize();
     }, 500),
   );
@@ -177,12 +178,10 @@ export class ScreenshotDialog extends Overlay {
     this.content.appendChild(this.filenameAndButtonsContainer);
     this.content.appendChild(this.createScaleRadioButtons());
     this.content.appendChild(this.createPanelResolutionTable());
-    this.content.appendChild(this.createPanelPixelSizeTable());
     this.content.appendChild(this.createLayerResolutionTable());
     this.content.appendChild(this.createStatisticsTable());
     this.updateUIBasedOnMode();
     this.populatePanelResolutionTable();
-    this.populatePanelPixelSizeTable();
     this.throttledUpdateTableStatistics();
   }
 
@@ -342,13 +341,23 @@ export class ScreenshotDialog extends Overlay {
     const keyHeader = document.createElement("th");
     keyHeader.textContent = "Panel type";
     headerRow.appendChild(keyHeader);
-    const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Physical resolution";
-    headerRow.appendChild(valueHeader);
+    const physicalValueHeader = document.createElement("th");
+    physicalValueHeader.textContent = "Physical resolution";
+    headerRow.appendChild(physicalValueHeader);
+    const pixelValueHeader = document.createElement("th");
+    pixelValueHeader.textContent = "Pixel resolution";
+    headerRow.appendChild(pixelValueHeader);
     return resolutionTable;
   }
 
   private populatePanelResolutionTable() {
+    function formatPixelResolution(panelArea: PanelViewport, scale: number) {
+      const width = Math.round(panelArea.right - panelArea.left) * scale;
+      const height = Math.round(panelArea.bottom - panelArea.top) * scale;
+      const type = panelArea.panelType;
+      return { width, height, type };
+    }
+
     // Clear the table before populating it
     while (this.panelResolutionTable.rows.length > 1) {
       this.panelResolutionTable.deleteRow(1);
@@ -358,47 +367,22 @@ export class ScreenshotDialog extends Overlay {
       this.screenshotManager.viewer.display.panels,
     );
     for (const resolution of resolutions) {
-      const resolutionStrings = formatResolution(resolution);
+      const physicalResolution = formatPhysicalResolution(
+        resolution.physicalResolution,
+      );
+      const pixelResolution = formatPixelResolution(
+        resolution.pixelResolution,
+        this.screenshotManager.screenshotScale,
+      );
       const row = resolutionTable.insertRow();
       const keyCell = row.insertCell();
-      const valueCell = row.insertCell();
-      keyCell.textContent = resolutionStrings.type;
-      valueCell.textContent = resolutionStrings.resolution;
+      const physicalValueCell = row.insertCell();
+      keyCell.textContent = physicalResolution.type;
+      physicalValueCell.textContent = physicalResolution.resolution;
+      const pixelValueCell = row.insertCell();
+      pixelValueCell.textContent = `${pixelResolution.width}x${pixelResolution.height} px`;
     }
     return resolutionTable;
-  }
-
-  private createPanelPixelSizeTable() {
-    const resolutionTable = (this.panelPixelSizeTable =
-      document.createElement("table"));
-    resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
-    resolutionTable.title = "Viewer resolution statistics";
-
-    const headerRow = resolutionTable.createTHead().insertRow();
-    const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Panel type";
-    headerRow.appendChild(keyHeader);
-    const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Pixel resolution";
-    headerRow.appendChild(valueHeader);
-    return resolutionTable;
-  }
-
-  private populatePanelPixelSizeTable() {
-    // Clear the table before populating it
-    while (this.panelPixelSizeTable.rows.length > 1) {
-      this.panelPixelSizeTable.deleteRow(1);
-    }
-    const pixelSizeTable = this.panelPixelSizeTable;
-    const panelPixelSizes =
-      this.screenshotManager.calculateUniqueScaledPanelViewportSizes();
-    for (const value of panelPixelSizes) {
-      const row = pixelSizeTable.insertRow();
-      const keyCell = row.insertCell();
-      const valueCell = row.insertCell();
-      keyCell.textContent = value.type;
-      valueCell.textContent = `${value.width}x${value.height} px`;
-    }
   }
 
   private createLayerResolutionTable() {
@@ -442,7 +426,7 @@ export class ScreenshotDialog extends Overlay {
           layerNamesForUI[type as keyof typeof layerNamesForUI];
         this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
       }
-      valueCell.textContent = formatResolution(value).resolution;
+      valueCell.textContent = formatPhysicalResolution(value).resolution;
     }
   }
 

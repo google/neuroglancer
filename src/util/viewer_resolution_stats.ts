@@ -46,6 +46,11 @@ export interface PanelViewport {
   panelType: string;
 }
 
+export interface PanelResolutionStats {
+  pixelResolution: PanelViewport;
+  physicalResolution: DimensionResolutionStats[];
+}
+
 interface CanvasSizeStatistics {
   totalRenderPanelViewport: PanelViewport;
   individualRenderPanelViewports: PanelViewport[];
@@ -164,44 +169,78 @@ export function getViewerLayerResolutions(
  * @param onlyUniqueResolutions If true, only return panels with unique resolutions.
  * It is quite common for all slice view panels to have the same resolution.
  *
- * @returns An array of resolutions for each panel.
+ * @returns An array of resolutions for each panel, both in physical units and pixel units.
  */
 export function getViewerPanelResolutions(
   panels: ReadonlySet<RenderedPanel>,
   onlyUniqueResolutions = true,
-): DimensionResolutionStats[][] {
+): PanelResolutionStats[] {
   function resolutionsEqual(
-    resolution1: DimensionResolutionStats[],
-    resolution2: DimensionResolutionStats[],
+    panelResolution1: PanelResolutionStats,
+    panelResolution2: PanelResolutionStats,
   ) {
-    if (resolution1.length !== resolution2.length) {
+    const physicalResolution1 = panelResolution1.physicalResolution;
+    const physicalResolution2 = panelResolution2.physicalResolution;
+    if (physicalResolution1.length !== physicalResolution2.length) {
       return false;
     }
-    for (let i = 0; i < resolution1.length; ++i) {
+    for (let i = 0; i < physicalResolution1.length; ++i) {
       if (
-        resolution1[i].resolutionWithUnit !== resolution2[i].resolutionWithUnit
+        physicalResolution1[i].resolutionWithUnit !==
+        physicalResolution2[i].resolutionWithUnit
       ) {
         return false;
       }
-      if (resolution1[i].parentType !== resolution2[i].parentType) {
+      if (
+        physicalResolution1[i].parentType !== physicalResolution2[i].parentType
+      ) {
         return false;
       }
-      if (resolution1[i].dimensionName !== resolution2[i].dimensionName) {
+      if (
+        physicalResolution1[i].dimensionName !==
+        physicalResolution2[i].dimensionName
+      ) {
         return false;
       }
     }
+    const pixelResolution1 = panelResolution1.pixelResolution;
+    const pixelResolution2 = panelResolution2.pixelResolution;
+    const width1 = pixelResolution1.right - pixelResolution1.left;
+    const width2 = pixelResolution2.right - pixelResolution2.left;
+    const height1 = pixelResolution1.bottom - pixelResolution1.top;
+    const height2 = pixelResolution2.bottom - pixelResolution2.top;
+    if (width1 !== width2 || height1 !== height2) {
+      return false;
+    }
+
     return true;
   }
 
-  const resolutions: DimensionResolutionStats[][] = [];
+  const resolutions: PanelResolutionStats[] = [];
   for (const panel of panels) {
     if (!(panel instanceof RenderedDataPanel)) continue;
-    const panel_resolution = [];
+    const viewport = panel.renderViewport;
+    const { width, height } = viewport;
+    const panelLeft = panel.canvasRelativeClippedLeft;
+    const panelTop = panel.canvasRelativeClippedTop;
+    const panelRight = panelLeft + width;
+    const panelBottom = panelTop + height;
     const {
       panelType,
       panelDimensionUnit,
     }: { panelType: string; panelDimensionUnit: string } =
       determinePanelTypeAndUnit(panel);
+    const panel_resolution: PanelResolutionStats = {
+      pixelResolution: {
+        left: panelLeft,
+        right: panelRight,
+        top: panelTop,
+        bottom: panelBottom,
+        panelType,
+      },
+      physicalResolution: [],
+    };
+    const { physicalResolution } = panel_resolution;
     const { navigationState } = panel;
     const {
       displayDimensionIndices,
@@ -239,7 +278,7 @@ export function getViewerPanelResolutions(
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          panel_resolution.push({
+          physicalResolution.push({
             parentType: panelType,
             resolutionWithUnit: `${formattedScale}/${panelDimensionUnit}`,
             dimensionName: singleScale ? "All_" : dimensionName,
@@ -253,7 +292,7 @@ export function getViewerPanelResolutions(
   if (!onlyUniqueResolutions) {
     return resolutions;
   }
-  const uniqueResolutions: DimensionResolutionStats[][] = [];
+  const uniqueResolutions: PanelResolutionStats[] = [];
   for (const resolution of resolutions) {
     let found = false;
     for (const uniqueResolution of uniqueResolutions) {

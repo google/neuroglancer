@@ -108,7 +108,7 @@ async function extractViewportScreenshot(
 
 /**
  * Manages the screenshot functionality from the viewer viewer.
- * 
+ *
  * Responsible for linking up the Python screenshot tool with the viewer, and handling the screenshot process.
  * The screenshot manager provides information about updates in the screenshot process, and allows for the screenshot to be taken and saved.
  * The screenshot UI menu listens to the signals emitted by the screenshot manager to update the UI.
@@ -254,23 +254,6 @@ export class ScreenshotManager extends RefCounted {
         Math.round(renderingPanelArea.bottom - renderingPanelArea.top) *
         this.screenshotScale,
     };
-  }
-
-  calculateUniqueScaledPanelViewportSizes() {
-    const panelAreas = calculatePanelViewportBounds(
-      this.viewer.display.panels,
-    ).individualRenderPanelViewports;
-    const scaledPanelAreas = panelAreas.map((panelArea) => ({
-      width:
-        Math.round(panelArea.right - panelArea.left) * this.screenshotScale,
-      height:
-        Math.round(panelArea.bottom - panelArea.top) * this.screenshotScale,
-      type: panelArea.panelType,
-    }));
-    const uniquePanelAreas = Array.from(
-      new Set(scaledPanelAreas.map((area) => JSON.stringify(area))),
-    ).map((area) => JSON.parse(area));
-    return uniquePanelAreas;
   }
 
   private handleScreenshotStarted() {
