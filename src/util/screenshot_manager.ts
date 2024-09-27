@@ -106,6 +106,13 @@ async function extractViewportScreenshot(
   return croppedBlob;
 }
 
+/**
+ * Manages the screenshot functionality from the viewer viewer.
+ * 
+ * Responsible for linking up the Python screenshot tool with the viewer, and handling the screenshot process.
+ * The screenshot manager provides information about updates in the screenshot process, and allows for the screenshot to be taken and saved.
+ * The screenshot UI menu listens to the signals emitted by the screenshot manager to update the UI.
+ */
 export class ScreenshotManager extends RefCounted {
   screenshotId: number = -1;
   screenshotLoadStats: ScreenshotLoadStatistics | null = null;
