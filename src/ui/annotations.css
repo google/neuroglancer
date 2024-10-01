@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.neuroglancer-annotations-tab {
+.neuroglancer-annotations-tab, .neuroglancer-annotation-layer-view, .neuroglancer-tags-tab {
   display: flex;
   align-items: stretch;
   flex: 1;
@@ -42,13 +42,6 @@
 
 .neuroglancer-annotation-position {
   display: contents;
-}
-
-.neuroglancer-annotation-layer-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  align-items: stretch;
 }
 
 .neuroglancer-annotation-list-header {
