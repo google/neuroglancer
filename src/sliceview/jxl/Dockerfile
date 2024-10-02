@@ -25,5 +25,7 @@ RUN cd /usr/src/ninja-build/ && mkdir build-cmake && cd build-cmake && cmake .. 
 
 RUN /usr/src/libjxl/deps.sh
 
-RUN mkdir -p /usr/src/libjxl/build-cmake/ && cd /usr/src/libjxl/build-cmake && cmake ..  -G Ninja -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DBUILD_SHARED_LIBS=OFF -DJXL_ENABLE_WASM=ON && ninja
+RUN mkdir -p /usr/src/libjxl/build-cmake/ && cd /usr/src/libjxl/build-cmake && cmake ..  -G Ninja -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DBUILD_SHARED_LIBS=OFF -DJPEGXL_ENABLE_WASM_THREADS=OFF -DCMAKE_C_FLAGS="-g2 -O0" -DCMAKE_CXX_FLAGS="-g2 -O0" && ninja --verbose
+
+
 

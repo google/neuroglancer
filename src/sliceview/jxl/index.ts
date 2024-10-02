@@ -21,11 +21,14 @@ const libraryEnv = {
   proc_exit: (code: number) => {
     throw `proc exit: ${code}`;
   },
+  fd_close: () => {},
+  fd_seek: () => {},
+  fd_write: () => {},
 };
 
 let jxlModulePromise: Promise<WebAssembly.Instance> | undefined;
 
-function getJxlModulePromise() {
+async function getJxlModulePromise() {
   if (jxlModulePromise === undefined) {
     jxlModulePromise = (async () => {
       const m = (
@@ -63,10 +66,28 @@ function checkHeader(buffer: Uint8Array) {
     return a.every((val: number, idx: number) => val === b[idx]);
   }
 
-  if (buffer.length < 8 + 4) {
-    throw new Error(`jxl: Invalid image size: ${buffer.length}`);
+  const len = buffer.length;
+  const kCodestreamMarker = 0x0A;
+
+  if (len < 8 + 4) {
+    throw new Error(`jxl: Invalid image size: ${len}`);
   }
 
+  // JPEG XL codestream: 0xff 0x0a
+  if (len >= 1 && buffer[0] == 0xff) {
+    if (len < 2) {
+      throw new Error(`jxl: Not enough bytes. Got: ${len}`);
+    }
+    else if (buffer[1] == kCodestreamMarker) {
+      // valid codestream
+      return;
+    }
+    else {
+      throw new Error(`jxl: Invalid codestream.`);
+    }
+  }
+
+  // JPEG XL container
   // check for header for magic sequence
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
   if (!validMagic) {
@@ -81,8 +102,9 @@ export async function decompressJxl(
   numComponents: number | undefined,
   bytesPerPixel: number,
 ): Promise<DecodedImage> {
+
   const m = await getJxlModulePromise();
-  
+
   checkHeader(buffer);
 
   width ||= 0;
@@ -91,14 +113,21 @@ export async function decompressJxl(
 
   const nbytes = width * height * bytesPerPixel * numComponents;
 
+  const res = (m.exports.jxlTest as Function)();
+
+  console.log(res);
+
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
+
+  console.log(jxlImagePtr);
   const imagePtr = (m.exports.malloc as Function)(nbytes);
+  console.log(imagePtr, nbytes);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, jxlImagePtr);
 
   // SDR = Standard Dynamic Range vs. HDR = High Dynamic Range (we're working with grayscale here)
-  const decoder = (m.exports._jxlCreateInstance as Function)(/*wantSdr=*/true, /*displayNits=*/100);
-  const code = (m.exports._jxlProcessInput as Function)(decoder, jxlImagePtr, buffer.byteLength);
+  const decoder = (m.exports.jxlCreateInstance as Function)(/*wantSdr=*/true, /*displayNits=*/100);
+  const code = (m.exports.jxlProcessInput as Function)(decoder, jxlImagePtr, buffer.byteLength);
 
   try {
     if (code !== 0) {
@@ -117,13 +146,13 @@ export async function decompressJxl(
     // and we can free the emscripten buffer
     return {
       width: width || 0,
-      height: height || 0,
+      height: height || 0, 
       numComponents: numComponents || 1,
       uint8Array: image.slice(0),
     };
   } finally {
     (m.exports.free as Function)(jxlImagePtr);
     (m.exports.free as Function)(imagePtr);
-    (m.exports._jxlDestroyInstance as Function)(decoder);
+    (m.exports.jxlDestroyInstance as Function)(decoder);
   }
 }
