@@ -936,6 +936,26 @@ export class AnnotationLayerView extends Tab {
       description.textContent = annotation.description;
       element.appendChild(description);
     }
+    const {
+      properties: { value: properties },
+    } = state.source;
+    const activeTags: string[] = [];
+    for (let i = 0, count = properties.length; i < count; ++i) {
+      const property = properties[i];
+      const value = annotation.properties[i];
+      activeTags;
+      if (isAnnotationTagPropertySpec(property) && property.tag) {
+        if (value !== 0) {
+          activeTags.push(property.tag);
+        }
+      }
+    }
+    if (activeTags.length) {
+      const tags = document.createElement("div");
+      tags.classList.add("neuroglancer-annotation-tags");
+      tags.textContent = activeTags.map((x) => `#${x}`).join(" ");
+      element.appendChild(tags);
+    }
     icon.style.gridRow = `span ${numRows}`;
     if (deleteButton !== undefined) {
       deleteButton.style.gridRow = `span ${numRows}`;
