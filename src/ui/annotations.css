@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.neuroglancer-annotations-tab {
+.neuroglancer-annotations-tab, .neuroglancer-annotation-layer-view, .neuroglancer-tags-tab {
   display: flex;
   align-items: stretch;
   flex: 1;
@@ -44,13 +44,6 @@
   display: contents;
 }
 
-.neuroglancer-annotation-layer-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  align-items: stretch;
-}
-
 .neuroglancer-annotation-list-header {
   grid-auto-rows: min-content;
   display: grid;
@@ -68,7 +61,7 @@
   padding-right: 5px;
 }
 
-.neuroglancer-annotation-description {
+.neuroglancer-annotation-description, .neuroglancer-annotation-tags {
   grid-column: dim / -1;
   text-overflow: ellipsis;
   overflow: hidden;
