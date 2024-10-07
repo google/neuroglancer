@@ -28,7 +28,7 @@ import type { Annotation } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
   annotationTypeHandlers,
-  annotationTypes,
+  oldAnnotationTypes,
 } from "#src/annotation/index.js";
 import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
@@ -103,6 +103,8 @@ import {
   zorder3LessThan,
 } from "#src/util/zorder.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
+
+const annotationTypes = oldAnnotationTypes;
 
 // Set to true to validate the multiscale index.
 const DEBUG_MULTISCALE_INDEX = false;

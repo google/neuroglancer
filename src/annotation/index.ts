@@ -90,6 +90,13 @@ export const annotationTypes = [
   // AnnotationType.POLYGON,
 ];
 
+export const oldAnnotationTypes = [
+  AnnotationType.POINT,
+  AnnotationType.LINE,
+  AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
+  AnnotationType.ELLIPSOID,
+];
+
 export interface AnnotationPropertySpecBase {
   identifier: string;
   description: string | undefined;
