@@ -14,25 +14,167 @@
  * limitations under the License.
  */
 
+* {
+  box-sizing: border-box;
+  outline: 0;
+}
+:root {
+  --blue: #1e90ff;
+  --white: #ffffff;
+  --gray300: #D0D5DD;
+  --gray600: #141415;
+  --gray500: #F7F7F7;
+  --gray100: #EBEBEB;
+  --gray50: #E6E6E6;
+  --gray800: #344054;
+  --gray700: rgba(20, 20, 21, 0.60);
+  --gray400: rgba(20, 20, 21, 0.40);
+  --gray200: rgba(20, 20, 21, 0.80);
+}
+.overlay {
+  overflow: auto;
+}
 .neuroglancer-screenshot-dialog {
-  width: 60%;
+  width: 46.875rem;
+  padding: 0;
+  margin: 1.25rem auto;
+  overflow: hidden;
+  position: relative;
+  transform: none;
+  left: auto;
+  top: auto;
+  border-radius: 0.5rem;
+}
+.neuroglancer-screenshot-dialog * {
+  font-family: sans-serif;
+}
+.neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-and-help {
+  border-bottom: 1px solid var(--gray50);
+  background: #FFF;
+  display: flex;
+  color: var(--gray600);
+  align-items: center;
+  display: flex;
+  padding: 0.75rem 1rem;
+  align-items: center;
+  gap: 10px;
+}
+.neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-and-help .neuroglancer-screenshot-tooltip {
+  position: absolute;
+  right: 0.875rem;
+  top: 4.4rem;
+}
+.neuroglancer-screenshot-dialog .metacell-theme-title-heading {
+  font-size: 0.938rem;
+  font-weight: 590;
+  margin: 0;
+}
+.neuroglancer-screenshot-scale-menu {
+  padding: 0 1rem;
+  display: flex;
+  flex-wrap: wrap;
+}
+.neuroglancer-screenshot-scale-menu label {
+  color: var(--gray700);
+  font-size: 0.75rem;
+  margin-right: 2.125rem;
+}
+.neuroglancer-screenshot-scale-menu .neuroglancer-screenshot-scale-radio {
+  -webkit-appearance: none;
+  margin: 0 0.188rem 0 0;
+}
+.neuroglancer-screenshot-scale-menu .neuroglancer-screenshot-scale-radio::after {
+  content: "";
+  background: url('../../src/ui/images/radio_base.svg') no-repeat;
+  width: 1rem;
+  height: 1rem;
+  display: block;
+  cursor: pointer;
+  position: relative;
+  top: 0.25rem;
+}
+.neuroglancer-screenshot-scale-menu .neuroglancer-screenshot-scale-radio:checked::after {
+  background: url('../../src/ui/images/radio_active.svg') no-repeat;
+}
+.neuroglancer-screenshot-keep-slice-fov-checkbox {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.neuroglancer-screenshot-keep-slice-fov-checkbox::after {
+  content: "";
+  background: url('../../src/ui/images/checkbox_base.svg') no-repeat;
+  width: 1rem;
+  height: 1rem;
+  display: block;
+  top: 0;
+  left: 0;
+  cursor: pointer;
 }
 
+.neuroglancer-screenshot-keep-slice-fov-checkbox:checked::after {
+  background: url('../../src/ui/images/checkbox_active.svg') no-repeat;
+}
+.neuroglancer-screenshot-size-text,
+.metacell-keep-slice-label,
+.neuroglancer-screenshot-scale-menu .metacell-scale-factor {
+  font-size: 0.813rem;
+  color: var(--gray200);
+  font-weight: 590;
+}
+.metacell-scale-factor {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+.neuroglancer-screenshot-tooltip.metacell-screenshot-tooltip {
+  position: absolute;
+  top: 10.688rem;
+  left: 10.375rem;
+}
+.metacell-keep-slice-label {
+  display: flex;
+  flex-direction: row-reverse;
+  margin: 2rem 0;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+.neuroglancer-screenshot-filename-and-buttons .metacell-theme-title-subheading {
+  font-size: 0.938rem;
+  font-weight: 590;
+  margin: 0;
+}
+.neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-button {
+  background: url('../../src/ui/images/close.svg') no-repeat;
+  text-indent: -9999px;
+  border: 0;
+}
 .neuroglancer-screenshot-scale-radio {
   display: inline-block;
-  width: 20px;
-  margin-right: -2px;
   cursor: pointer;
 }
 
 .neuroglancer-screenshot-filename-and-buttons {
-  margin-bottom: 5px;
+  padding: 1.5rem 1rem 1.25rem;
 }
 
 .neuroglancer-screenshot-name-input {
-  width: 50%;
+  width: 100%;
   margin-right: 10px;
-  border: 1px solid #ccc;
+  border-radius: 8px;
+  border: 1px solid var(--gray300);
+  background: var(--gray500);
+  font-size: 0.813rem;
+  font-style: normal;
+  padding: 8px 12px;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  color: var(--gray400);
+  box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  margin: 1rem 0 0;
+}
+.neuroglancer-screenshot-name-input::placeholder {
+  color: var(--gray400);
 }
 
 .neuroglancer-screenshot-button {
@@ -41,43 +183,96 @@
 }
 
 .neuroglancer-screenshot-close-button {
-  position: absolute;
-  right: 15px;
+  margin-left: auto;
 }
 
 .neuroglancer-screenshot-statistics-title {
-  margin-top: 5px;
+  padding: 1.5rem 1rem;
 }
 
 .neuroglancer-screenshot-statistics-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 5px;
 }
 
 .neuroglancer-screenshot-statistics-table th,
 .neuroglancer-screenshot-statistics-table td {
-  padding: 12px 15px;
   text-align: left;
-  border-bottom: 1px solid #ddd;
 }
-
+.neuroglancer-screenshot-statistics-table td {
+  color: var(--gray200);
+  font-size: 0.813rem;
+  font-weight: 590;
+  padding: 0.5rem 0;
+}
+.neuroglancer-screenshot-statistics-table td:last-child {
+  color: var(--gray700);
+  font-weight: 400;
+}
 .neuroglancer-screenshot-statistics-table th {
-  background-color: #f8f8f8;
-  font-weight: bold;
-  color: #555;
+  font-size: 0.938rem;
+  font-weight: 590;
+  margin: 0;
+  color: var(--gray600);
+  padding: 0 0 0.5rem;
+}
+.neuroglancer-screenshot-resolution-table {
+  border-top: 1px solid var(--gray50);
+  background: var(--gray500);
+  width: 100%;
+  border-collapse: collapse;
+}
+.neuroglancer-screenshot-resolution-table + .neuroglancer-screenshot-resolution-table {
+  border: 0;
+}
+.neuroglancer-screenshot-resolution-table th {
+  text-align: left;
+  color: var(--gray200);
+  font-size: 0.813rem;
+  font-style: normal;
+  font-weight: 590;
+  width: 33.33%;
+  background: var(--gray100);
+  padding: 0.25rem 0;
+}
+.neuroglancer-screenshot-resolution-table td {
+  font-size: 0.813rem;
+  color: var(--gray700);
+  width: 33.33%;
+  padding: 0.25rem 0;
 }
 
 .neuroglancer-screenshot-warning {
   color: red;
+  width: 100%;
 }
 
 .neuroglancer-screenshot-tooltip {
   user-select: none;
-  text-align: center;
-  padding: 0.1em;
-  border: 0.1em solid black;
-  width: 1.1em;
-  height: 1.1em;
-  border-radius: 100%;
+  background: url('../../src/ui/images/help_outline.svg') no-repeat;
+  text-indent: -9999px;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  background-size: contain;
+}
+.metacell-theme-screenshot-footer-container {
+  margin: 0;
+  display: flex;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--gray50);
+}
+.metacell-theme-screenshot-footer-container .metacell-theme-progress-text {
+  margin: 0;
+  flex: 1;
+}
+.metacell-theme-screenshot-footer-container .neuroglancer-screenshot-button {
+  border-radius: 0.5rem;
+  border: 1px solid var(--gray300);
+  background: white;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.813rem;
+  font-weight: 590;
+  color: var(--gray800);
+  margin: 0 0 0 0.25rem;
 }
