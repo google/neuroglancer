@@ -67,7 +67,7 @@
   right: 0.875rem;
   top: 4.4rem;
 }
-.neuroglancer-screenshot-dialog .metacell-theme-title-heading {
+.neuroglancer-screenshot-dialog .screenshot-title-heading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -118,25 +118,25 @@
   background: url('../../src/ui/images/checkbox_active.svg') no-repeat;
 }
 .neuroglancer-screenshot-size-text,
-.metacell-keep-slice-label,
-.neuroglancer-screenshot-scale-menu .metacell-scale-factor {
+.screenshot-keep-slice-label,
+.neuroglancer-screenshot-scale-menu .screenshot-scale-factor {
   font-size: 0.813rem;
   color: var(--gray200);
   font-weight: 590;
 }
-.metacell-scale-factor {
+.screenshot-scale-factor {
   width: 100%;
   margin-bottom: 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.15rem;
 }
-.neuroglancer-screenshot-tooltip.metacell-screenshot-tooltip {
+.neuroglancer-screenshot-tooltip.screenshot-tooltip {
   position: absolute;
   top: 10.688rem;
   left: 10.375rem;
 }
-.metacell-keep-slice-label {
+.screenshot-keep-slice-label {
   display: flex;
   flex-direction: row-reverse;
   margin: 2rem 0;
@@ -144,7 +144,7 @@
   align-items: center;
   gap: 0.5rem;
 }
-.neuroglancer-screenshot-filename-and-buttons .metacell-theme-title-subheading {
+.neuroglancer-screenshot-filename-and-buttons .screenshot-title-subheading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -258,26 +258,26 @@
   color: var(--gray600);
   padding: 0 0 0.5rem;
 }
-.metacell-theme-resolution-preview-container {
+.screenshot-resolution-preview-container {
   border-top: 1px solid var(--gray50);
   border-bottom: 1px solid var(--gray50);
   background: var(--gray500);
   width: 100%;
   padding: 1.5rem 1rem;
 }
-.metacell-theme-resolution-preview-container h2 {
+.screenshot-resolution-preview-container h2 {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
   color: var(--gray600);
 }
-.metacell-theme-resolution-table {
+.screenshot-resolution-table {
   border-radius: 0.375rem;
   border: 1px solid var(--gray50);
   margin: 1rem 0 0;
   padding: 0.75rem 0.75rem 0.1rem;
 }
-.metacell-theme-resolution-table h3 {
+.screenshot-resolution-table h3 {
   text-align: left;
   color: var(--gray200);
   font-size: 0.813rem;
@@ -350,13 +350,13 @@
   height: 1rem;
   background-size: contain;
 }
-.metacell-theme-screenshot-footer-container {
+.screenshot-footer-container {
   margin: 0;
   display: flex;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--gray50);
 }
-.metacell-theme-screenshot-footer-container .metacell-theme-progress-text {
+.screenshot-footer-container .screenshot-progress-text {
   margin: 0;
   flex: 1;
   font-weight: 590;
@@ -366,7 +366,7 @@
   align-self: center;
   color: var(--primary700);
 }
-.metacell-theme-screenshot-footer-container .neuroglancer-screenshot-button {
+.screenshot-footer-container .neuroglancer-screenshot-button {
   border-radius: 0.5rem;
   border: 1px solid var(--gray300);
   background: white;
@@ -376,7 +376,7 @@
   color: var(--gray800);
   margin: 0 0 0 0.25rem;
 }
-.metacell-theme-screenshot-footer-container .neuroglancer-screenshot-button:disabled {
+.screenshot-footer-container .neuroglancer-screenshot-button:disabled {
   display: none;
 }
 
@@ -433,13 +433,13 @@
   visibility: visible;
 }
 
-.metacell-theme-copy-icon {
+.screenshot-copy-icon {
   position: relative;
   cursor: pointer;
 }
 
 
-.metacell-theme-copy-icon::after {
+.screenshot-copy-icon::after {
   content: attr(data-tooltip);
   position: absolute;
   left: 50%;
@@ -465,7 +465,7 @@
   transition: opacity 0.3s ease;
   pointer-events: none; /* Prevent the tooltip from blocking interaction */
 }
-.metacell-theme-copy-icon::before {
+.screenshot-copy-icon::before {
   content: "";
   position: absolute;
   top: 100%; /* Adjust this to move the arrow closer to the tooltip */
@@ -481,8 +481,8 @@
   pointer-events: none;
 }
 
-.metacell-theme-copy-icon:hover::after,
-.metacell-theme-copy-icon:hover::before {
+.screenshot-copy-icon:hover::after,
+.screenshot-copy-icon:hover::before {
   opacity: 1;
   visibility: visible;
 }

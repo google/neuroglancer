@@ -181,7 +181,7 @@ export class ScreenshotDialog extends Overlay {
 
     const titleText = document.createElement("h2");
     titleText.classList.add(
-      "metacell-theme-title-heading",
+      "screenshot-title-heading",
     );
     titleText.textContent = "Screenshot";
 
@@ -205,7 +205,7 @@ export class ScreenshotDialog extends Overlay {
     );
     const menuText = document.createElement("h3");
     menuText.classList.add(
-      "metacell-theme-title-subheading",
+      "screenshot-title-subheading",
     );
     menuText.textContent = "Settings";
     const tooltip = this.setupHelpTooltips();
@@ -233,11 +233,11 @@ export class ScreenshotDialog extends Overlay {
 
     const previewContainer = document.createElement("div");
     previewContainer.classList.add(
-      "metacell-theme-resolution-preview-container",
+      "screenshot-resolution-preview-container",
     );
     const settingsPreview = document.createElement("div");
     settingsPreview.classList.add(
-      "metacell-theme-resolution-table",
+      "screenshot-resolution-table",
     );
     const previewLabel = document.createElement("h2");
     previewLabel.textContent="Preview";
@@ -249,7 +249,7 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotSelectedValues = document.createElement("span");
     this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}pxpx`;
     const screenshotCopyBtn = document.createElement("button");
-    screenshotCopyBtn.classList.add("metacell-theme-copy-icon");
+    screenshotCopyBtn.classList.add("screenshot-copy-icon");
     screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
@@ -266,11 +266,11 @@ export class ScreenshotDialog extends Overlay {
 
     this.footerScreenshotActionBtnsContainer = document.createElement("div");
     this.footerScreenshotActionBtnsContainer.classList.add(
-      "metacell-theme-screenshot-footer-container",
+      "screenshot-footer-container",
     );
     this.progressText = document.createElement("p");
     this.progressText.classList.add(
-      "metacell-theme-progress-text",
+      "screenshot-progress-text",
     );
     this.footerScreenshotActionBtnsContainer.appendChild(this.progressText);
     this.footerScreenshotActionBtnsContainer.appendChild(this.cancelScreenshotButton);
@@ -333,7 +333,7 @@ export class ScreenshotDialog extends Overlay {
     // scaleMenu.appendChild(this.screenshotSizeText);
 
     const scaleLabel = document.createElement("label");
-    scaleLabel.classList.add('metacell-scale-factor')
+    scaleLabel.classList.add('screenshot-scale-factor')
     scaleLabel.textContent = "Screenshot scale factor";
 
     const tooltip = this.setupHelpTooltips();
@@ -370,7 +370,7 @@ export class ScreenshotDialog extends Overlay {
     scaleMenu.appendChild(this.warningElement);
 
     const keepSliceFOVFixedDiv = document.createElement("div");
-    keepSliceFOVFixedDiv.classList.add('metacell-keep-slice-label');
+    keepSliceFOVFixedDiv.classList.add('screenshot-keep-slice-label');
     keepSliceFOVFixedDiv.textContent = "Keep slice FOV fixed with scale change";
 
     const keepSliceFOVFixedCheckbox = document.createElement("input");
