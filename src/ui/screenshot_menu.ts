@@ -17,8 +17,10 @@
  */
 
 import "#src/ui/screenshot_menu.css";
+import svg_help from "ikonate/icons/help.svg?raw";
 import { debounce, throttle } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
+import svg_close from "#src/ui/images/close.svg?raw";
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
@@ -32,6 +34,8 @@ import {
   getViewerLayerResolutions,
   getViewerPanelResolutions,
 } from "#src/util/viewer_resolution_stats.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { makeIcon } from "#src/widget/icon.js";
 
 // If DEBUG_ALLOW_MENU_CLOSE is true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
@@ -155,23 +159,24 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private setupHelpTooltips() {
-    const generalSettingsTooltip = document.createElement("div");
-    generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    generalSettingsTooltip.setAttribute("data-tooltip",
-      "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotations (yellow bounding box)");
-    generalSettingsTooltip.textContent = "?";
-
-    const orthographicSettingsTooltip = document.createElement("div");
-    orthographicSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    orthographicSettingsTooltip.setAttribute("data-tooltip",
+    const generalSettingsTooltip = makeIcon({ svg: svg_help });
+    // const generalSettingsTooltip = document.createElement("div");
+    // generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    generalSettingsTooltip.setAttribute("title",
+       "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotations (yellow bounding box)");
+    // generalSettingsTooltip.textContent = "?";
+    const orthographicSettingsTooltip = makeIcon({ svg: svg_help });
+    // const orthographicSettingsTooltip = document.createElement("div");
+    // orthographicSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    orthographicSettingsTooltip.setAttribute("title",
       "In the main viewer, press 'o' to toggle between perspective and orthographic views");
-    orthographicSettingsTooltip.textContent = "?";
+    // orthographicSettingsTooltip.textContent = "?";
 
-    const scaleFactorHelpTooltip = document.createElement("div");
-    scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    scaleFactorHelpTooltip.setAttribute("data-tooltip",
+    const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
+    // scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    scaleFactorHelpTooltip.setAttribute("title",
       "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the setting and scale factor.");
-    scaleFactorHelpTooltip.textContent = "?";
+    // scaleFactorHelpTooltip.textContent = "?";
     
     return { generalSettingsTooltip, orthographicSettingsTooltip, scaleFactorHelpTooltip };
   }
@@ -181,15 +186,18 @@ export class ScreenshotDialog extends Overlay {
 
     const titleText = document.createElement("h2");
     titleText.classList.add(
-      "screenshot-title-heading",
+      "neuroglancer-screenshot-title-heading",
     );
     titleText.textContent = "Screenshot";
 
     this.closeMenuButton = this.createButton(
-      "Close",
+      null,
       () => this.dispose(),
       "neuroglancer-screenshot-close-button",
+      svg_close,
+      "Close",
     );
+    
     this.cancelScreenshotButton = this.createButton("Cancel screenshot", () =>
       this.cancelScreenshot(),
     );
@@ -205,7 +213,7 @@ export class ScreenshotDialog extends Overlay {
     );
     const menuText = document.createElement("h3");
     menuText.classList.add(
-      "screenshot-title-subheading",
+      "neuroglancer-screenshot-title-subheading",
     );
     menuText.textContent = "Settings";
     const tooltip = this.setupHelpTooltips();
@@ -233,11 +241,11 @@ export class ScreenshotDialog extends Overlay {
 
     const previewContainer = document.createElement("div");
     previewContainer.classList.add(
-      "screenshot-resolution-preview-container",
+      "neuroglancer-screenshot-resolution-preview-container",
     );
     const settingsPreview = document.createElement("div");
     settingsPreview.classList.add(
-      "screenshot-resolution-table",
+      "neuroglancer-screenshot-resolution-table",
     );
     const previewLabel = document.createElement("h2");
     previewLabel.textContent="Preview";
@@ -247,10 +255,17 @@ export class ScreenshotDialog extends Overlay {
     const screenshotLabel = document.createElement("h3");
     screenshotLabel.textContent="Screenshot size";
     this.screenshotSelectedValues = document.createElement("span");
-    this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}pxpx`;
-    const screenshotCopyBtn = document.createElement("button");
-    screenshotCopyBtn.classList.add("screenshot-copy-icon");
-    screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
+    this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}px`;
+
+    const screenshotCopyBtn = makeCopyButton({
+      title: "Copy to clipboard",
+      onClick: () => {
+      }
+    });
+    // const screenshotCopyBtn = document.createElement("button");
+    // screenshotCopyBtn.classList.add("neuroglancer-screenshot-copy-icon");
+    // screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
+
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
     this.screenshotSizeText.appendChild(screenshotCopyBtn);
@@ -266,11 +281,11 @@ export class ScreenshotDialog extends Overlay {
 
     this.footerScreenshotActionBtnsContainer = document.createElement("div");
     this.footerScreenshotActionBtnsContainer.classList.add(
-      "screenshot-footer-container",
+      "neuroglancer-screenshot-footer-container",
     );
     this.progressText = document.createElement("p");
     this.progressText.classList.add(
-      "screenshot-progress-text",
+      "neuroglancer-screenshot-progress-text",
     );
     this.footerScreenshotActionBtnsContainer.appendChild(this.progressText);
     this.footerScreenshotActionBtnsContainer.appendChild(this.cancelScreenshotButton);
@@ -315,12 +330,21 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private createButton(
-    text: string,
+    text: string | null,
     onClick: () => void,
     cssClass: string = "",
+    svgUrl: string | null = null,
+    svgAlt: string = ''
   ): HTMLButtonElement {
     const button = document.createElement("button");
-    button.textContent = text;
+    if (svgUrl) {
+      const img = document.createElement("img");
+      img.src = svgUrl;
+      img.alt = svgAlt;
+      button.appendChild(img);
+    } else if (text) {
+      button.textContent = text;
+    }
     button.classList.add("neuroglancer-screenshot-button");
     if (cssClass) button.classList.add(cssClass);
     button.addEventListener("click", onClick);
@@ -333,7 +357,7 @@ export class ScreenshotDialog extends Overlay {
     // scaleMenu.appendChild(this.screenshotSizeText);
 
     const scaleLabel = document.createElement("label");
-    scaleLabel.classList.add('screenshot-scale-factor')
+    scaleLabel.classList.add('neuroglancer-screenshot-scale-factor')
     scaleLabel.textContent = "Screenshot scale factor";
 
     const tooltip = this.setupHelpTooltips();
@@ -370,7 +394,7 @@ export class ScreenshotDialog extends Overlay {
     scaleMenu.appendChild(this.warningElement);
 
     const keepSliceFOVFixedDiv = document.createElement("div");
-    keepSliceFOVFixedDiv.classList.add('screenshot-keep-slice-label');
+    keepSliceFOVFixedDiv.classList.add('neuroglancer-screenshot-keep-slice-label');
     keepSliceFOVFixedDiv.textContent = "Keep slice FOV fixed with scale change";
 
     const keepSliceFOVFixedCheckbox = document.createElement("input");
@@ -401,7 +425,6 @@ export class ScreenshotDialog extends Overlay {
     this.statisticsTable.classList.add(
       "neuroglancer-screenshot-statistics-table",
     );
-    this.statisticsTable.title = "Screenshot progress";
 
     const headerRow = this.statisticsTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
@@ -417,10 +440,11 @@ export class ScreenshotDialog extends Overlay {
     
     descriptionkeyHeader.textContent = "Screenshot will take when all the chunks are loaded. If GPU memory is full, screenshot will only take the successfully loaded chunks.";
     
-    const descriptionLearnMoreLink = document.createElement("a");
-    descriptionLearnMoreLink.text = "Learn more";
+    // It can be used to point to a docs page when complete
+    // const descriptionLearnMoreLink = document.createElement("a");
+    // descriptionLearnMoreLink.text = "Learn more";
     
-    descriptionkeyHeader.appendChild(descriptionLearnMoreLink);
+    // descriptionkeyHeader.appendChild(descriptionLearnMoreLink);
     descriptionRow.appendChild(descriptionkeyHeader);
 
     // Populate inital table elements with placeholder text

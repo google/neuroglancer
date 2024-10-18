@@ -67,7 +67,7 @@
   right: 0.875rem;
   top: 4.4rem;
 }
-.neuroglancer-screenshot-dialog .screenshot-title-heading {
+.neuroglancer-screenshot-dialog .neuroglancer-screenshot-title-heading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -118,13 +118,13 @@
   background: url('../../src/ui/images/checkbox_active.svg') no-repeat;
 }
 .neuroglancer-screenshot-size-text,
-.screenshot-keep-slice-label,
-.neuroglancer-screenshot-scale-menu .screenshot-scale-factor {
+.neuroglancer-screenshot-keep-slice-label,
+.neuroglancer-screenshot-scale-menu .neuroglancer-screenshot-scale-factor {
   font-size: 0.813rem;
   color: var(--gray200);
   font-weight: 590;
 }
-.screenshot-scale-factor {
+.neuroglancer-screenshot-scale-factor {
   width: 100%;
   margin-bottom: 0.5rem;
   display: flex;
@@ -136,7 +136,7 @@
   top: 10.688rem;
   left: 10.375rem;
 }
-.screenshot-keep-slice-label {
+.neuroglancer-screenshot-keep-slice-label {
   display: flex;
   flex-direction: row-reverse;
   margin: 2rem 0;
@@ -144,7 +144,7 @@
   align-items: center;
   gap: 0.5rem;
 }
-.neuroglancer-screenshot-filename-and-buttons .screenshot-title-subheading {
+.neuroglancer-screenshot-filename-and-buttons .neuroglancer-screenshot-title-subheading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -258,26 +258,26 @@
   color: var(--gray600);
   padding: 0 0 0.5rem;
 }
-.screenshot-resolution-preview-container {
+.neuroglancer-screenshot-resolution-preview-container {
   border-top: 1px solid var(--gray50);
   border-bottom: 1px solid var(--gray50);
   background: var(--gray500);
   width: 100%;
   padding: 1.5rem 1rem;
 }
-.screenshot-resolution-preview-container h2 {
+.neuroglancer-screenshot-resolution-preview-container h2 {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
   color: var(--gray600);
 }
-.screenshot-resolution-table {
+.neuroglancer-screenshot-resolution-table {
   border-radius: 0.375rem;
   border: 1px solid var(--gray50);
   margin: 1rem 0 0;
   padding: 0.75rem 0.75rem 0.1rem;
 }
-.screenshot-resolution-table h3 {
+.neuroglancer-screenshot-resolution-table h3 {
   text-align: left;
   color: var(--gray200);
   font-size: 0.813rem;
@@ -311,6 +311,9 @@
   width: 1rem;
   height: 1rem;
   margin-left: auto;
+}
+.neuroglancer-screenshot-size-text .neuroglancer-icon {
+  background-color:red;
 }
 .neuroglancer-screenshot-resolution-table + .neuroglancer-screenshot-resolution-table {
   border: 0;
@@ -350,13 +353,13 @@
   height: 1rem;
   background-size: contain;
 }
-.screenshot-footer-container {
+.neuroglancer-screenshot-footer-container {
   margin: 0;
   display: flex;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--gray50);
 }
-.screenshot-footer-container .screenshot-progress-text {
+.neuroglancer-screenshot-footer-container .neuroglancer-screenshot-progress-text {
   margin: 0;
   flex: 1;
   font-weight: 590;
@@ -366,7 +369,7 @@
   align-self: center;
   color: var(--primary700);
 }
-.screenshot-footer-container .neuroglancer-screenshot-button {
+.neuroglancer-screenshot-footer-container .neuroglancer-screenshot-button {
   border-radius: 0.5rem;
   border: 1px solid var(--gray300);
   background: white;
@@ -376,7 +379,7 @@
   color: var(--gray800);
   margin: 0 0 0 0.25rem;
 }
-.screenshot-footer-container .neuroglancer-screenshot-button:disabled {
+.neuroglancer-screenshot-footer-container .neuroglancer-screenshot-button:disabled {
   display: none;
 }
 
@@ -433,13 +436,13 @@
   visibility: visible;
 }
 
-.screenshot-copy-icon {
+.neuroglancer-screenshot-copy-icon {
   position: relative;
   cursor: pointer;
 }
 
 
-.screenshot-copy-icon::after {
+.neuroglancer-screenshot-copy-icon::after {
   content: attr(data-tooltip);
   position: absolute;
   left: 50%;
@@ -465,7 +468,7 @@
   transition: opacity 0.3s ease;
   pointer-events: none; /* Prevent the tooltip from blocking interaction */
 }
-.screenshot-copy-icon::before {
+.neuroglancer-screenshot-copy-icon::before {
   content: "";
   position: absolute;
   top: 100%; /* Adjust this to move the arrow closer to the tooltip */
@@ -481,8 +484,8 @@
   pointer-events: none;
 }
 
-.screenshot-copy-icon:hover::after,
-.screenshot-copy-icon:hover::before {
+.neuroglancer-screenshot-copy-icon:hover::after,
+.neuroglancer-screenshot-copy-icon:hover::before {
   opacity: 1;
   visibility: visible;
 }
