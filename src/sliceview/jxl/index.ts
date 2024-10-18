@@ -25,7 +25,7 @@ async function getJxlModulePromise() {
     jxlModulePromise = (async () => {
       const m = (
         await WebAssembly.instantiateStreaming(
-          fetch(new URL("./jxl_wasm.wasm", import.meta.url)),
+          fetch(new URL("./jxl_decoder.wasm", import.meta.url)),
           {
             env: libraryEnv,
             wasi_snapshot_preview1: libraryEnv,
@@ -107,6 +107,10 @@ export async function decompressJxl(
 
   try {
     imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength);
+
+    if (imagePtr === 0) {
+      throw new Error("jxl: Decoding failed. Null pointer returned.");
+    }
 
     // Likewise, we reference memory.buffer instead of heap.buffer
     // because memory growth during decompress could have detached

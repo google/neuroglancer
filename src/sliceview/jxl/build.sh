@@ -10,4 +10,4 @@ docker run \
        -v ${PWD}:/src \
        -u $(id -u):$(id -g) \
        $(docker build -q .) \
-       ./build_wasm.sh
+       /src/build_wasm.sh

@@ -1,8 +1,6 @@
 #!/bin/bash -xve
 
-WASMDEMO=/usr/src/libjxl/build-cmake/tools/wasm_demo
-
-cp $WASMDEMO/jxl_decoder.wasm /src
-cp $WASMDEMO/jxl_decoder.js /src
-
-
+cd /src
+cargo build --target wasm32-unknown-unknown --release
+cp /src/target/wasm32-unknown-unknown/release/jxl_wasm.wasm /src/jxl_decoder.wasm
+rm -r target
