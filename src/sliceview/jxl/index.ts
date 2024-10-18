@@ -16,15 +16,7 @@
 
 import type { DecodedImage } from "#src/async_computation/decode_png_request.js";
 
-const libraryEnv = {
-  emscripten_notify_memory_growth: () => {},
-  proc_exit: (code: number) => {
-    throw `proc exit: ${code}`;
-  },
-  fd_close: () => {},
-  fd_seek: () => {},
-  fd_write: () => {},
-};
+const libraryEnv = {};
 
 let jxlModulePromise: Promise<WebAssembly.Instance> | undefined;
 
@@ -33,24 +25,22 @@ async function getJxlModulePromise() {
     jxlModulePromise = (async () => {
       const m = (
         await WebAssembly.instantiateStreaming(
-          fetch(new URL("./jxl_decoder.wasm", import.meta.url)),
+          fetch(new URL("./jxl_wasm.wasm", import.meta.url)),
           {
             env: libraryEnv,
             wasi_snapshot_preview1: libraryEnv,
           },
         )
       ).instance;
-      (m.exports._initialize as Function)();
       return m;
     })();
   }
   return jxlModulePromise;
 }
 
-
 // header constants
 // obtained from 
-// https://github.com/libjxl/libjxl/blob/8f22cb1fb98ed27ceee59887bd291ef4d277c89d/lib/jxl/decode.cc#L118-L130
+// // https://github.com/libjxl/libjxl/blob/8f22cb1fb98ed27ceee59887bd291ef4d277c89d/lib/jxl/decode.cc#L118-L130
 const magicSpec = [
   0, 0, 0, 0xC, 
   'J'.charCodeAt(0), 'X'.charCodeAt(0), 'L'.charCodeAt(0), ' '.charCodeAt(0),
@@ -58,9 +48,6 @@ const magicSpec = [
 ];
 
 // not a full implementation of read header, just the parts we need
-// References:
-// 1. Overall PNG structure: http://www.libpng.org/pub/png/spec/1.2/PNG-Structure.html
-// 2. Header structure: http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
 function checkHeader(buffer: Uint8Array) {
   function arrayEqualTrucated(a: any, b: any): boolean {
     return a.every((val: number, idx: number) => val === b[idx]);
@@ -104,7 +91,6 @@ export async function decompressJxl(
 ): Promise<DecodedImage> {
 
   const m = await getJxlModulePromise();
-
   checkHeader(buffer);
 
   width ||= 0;
@@ -113,26 +99,14 @@ export async function decompressJxl(
 
   const nbytes = width * height * bytesPerPixel * numComponents;
 
-  const res = (m.exports.jxlTest as Function)();
-
-  console.log(res);
-
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
-
-  console.log(jxlImagePtr);
-  const imagePtr = (m.exports.malloc as Function)(nbytes);
-  console.log(imagePtr, nbytes);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, jxlImagePtr);
 
-  // SDR = Standard Dynamic Range vs. HDR = High Dynamic Range (we're working with grayscale here)
-  const decoder = (m.exports.jxlCreateInstance as Function)(/*wantSdr=*/true, /*displayNits=*/100);
-  const code = (m.exports.jxlProcessInput as Function)(decoder, jxlImagePtr, buffer.byteLength);
+  let imagePtr = null;
 
   try {
-    if (code !== 0) {
-      throw new Error(`jxl: Failed to decode jxl image. decoder code: ${code}`);
-    }
+    imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength);
 
     // Likewise, we reference memory.buffer instead of heap.buffer
     // because memory growth during decompress could have detached
@@ -142,17 +116,19 @@ export async function decompressJxl(
       imagePtr,
       nbytes,
     );
+
     // copy the array so it can be memory managed by JS
     // and we can free the emscripten buffer
     return {
       width: width || 0,
-      height: height || 0, 
+      height: height || 0,
       numComponents: numComponents || 1,
       uint8Array: image.slice(0),
     };
   } finally {
-    (m.exports.free as Function)(jxlImagePtr);
-    (m.exports.free as Function)(imagePtr);
-    (m.exports.jxlDestroyInstance as Function)(decoder);
+    (m.exports.free as Function)(jxlImagePtr, buffer.byteLength);
+    if (imagePtr) {
+      (m.exports.free as Function)(imagePtr, nbytes);
+    }
   }
 }
