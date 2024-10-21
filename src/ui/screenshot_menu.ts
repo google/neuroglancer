@@ -160,29 +160,29 @@ export class ScreenshotDialog extends Overlay {
 
   private setupHelpTooltips() {
     const generalSettingsTooltip = makeIcon({ svg: svg_help });
-    // const generalSettingsTooltip = document.createElement("div");
-    // generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    generalSettingsTooltip.setAttribute("title",
+    generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    generalSettingsTooltip.setAttribute("data-tooltip",
        "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotations (yellow bounding box)");
-    // generalSettingsTooltip.textContent = "?";
+
     const orthographicSettingsTooltip = makeIcon({ svg: svg_help });
-    // const orthographicSettingsTooltip = document.createElement("div");
-    // orthographicSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    orthographicSettingsTooltip.setAttribute("title",
+    orthographicSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    orthographicSettingsTooltip.setAttribute("data-tooltip",
       "In the main viewer, press 'o' to toggle between perspective and orthographic views");
-    // orthographicSettingsTooltip.textContent = "?";
 
     const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
-    // scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    scaleFactorHelpTooltip.setAttribute("title",
+    scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    scaleFactorHelpTooltip.setAttribute("data-tooltip",
       "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the setting and scale factor.");
-    // scaleFactorHelpTooltip.textContent = "?";
     
     return { generalSettingsTooltip, orthographicSettingsTooltip, scaleFactorHelpTooltip };
   }
 
   private initializeUI() {
     this.content.classList.add("neuroglancer-screenshot-dialog");
+    const parentElement = this.content.parentElement;
+    if (parentElement) {
+      parentElement.classList.add("neuroglancer-screenshot-overlay");
+    }
 
     const titleText = document.createElement("h2");
     titleText.classList.add(
@@ -262,9 +262,8 @@ export class ScreenshotDialog extends Overlay {
       onClick: () => {
       }
     });
-    // const screenshotCopyBtn = document.createElement("button");
-    // screenshotCopyBtn.classList.add("neuroglancer-screenshot-copy-icon");
-    // screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
+    screenshotCopyBtn.classList.add("neuroglancer-screenshot-copy-icon");
+    screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
