@@ -46,8 +46,9 @@ chunkDecoders.set(
       cancellationToken,
       [response],
       new Uint8Array(response),
-      chunkDataSize[0],
-      chunkDataSize[1] * chunkDataSize[2],
+      undefined,
+      undefined,
+      chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
       3,
       true,
     );

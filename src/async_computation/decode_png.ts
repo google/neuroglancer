@@ -24,6 +24,8 @@ registerAsyncComputation(
     data: Uint8Array,
     width: number | undefined,
     height: number | undefined,
+    // Expected width * height
+    area: number | undefined,
     numComponents: number | undefined,
     bytesPerPixel: number,
     convertToGrayscale: boolean,
@@ -32,6 +34,7 @@ registerAsyncComputation(
       data,
       width,
       height,
+      area,
       numComponents,
       bytesPerPixel,
       convertToGrayscale,
