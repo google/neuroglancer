@@ -25,13 +25,13 @@ pub fn free(ptr: *mut u8, size: usize) {
 }
 
 #[no_mangle]
-pub fn decode(ptr: *mut u8, size: usize) -> *const u8 {
-    if ptr.is_null() || size == 0 {
+pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 {
+    if ptr.is_null() || input_size == 0 || output_size == 0 {
         return ptr::null();
     }
 
     let data: &[u8] = unsafe {
-        slice::from_raw_parts(ptr, size)
+        slice::from_raw_parts(ptr, input_size)
     };
 
     let image = match JxlImage::builder().read(data) {
@@ -39,7 +39,7 @@ pub fn decode(ptr: *mut u8, size: usize) -> *const u8 {
         Err(_image) => return std::ptr::null_mut(),
     };
 
-    let mut output_buffer = Vec::new();
+    let mut output_buffer = Vec::with_capacity(output_size);
 
     for keyframe_idx in 0..image.num_loaded_keyframes() {
         let frame = match image.render_frame(keyframe_idx) {

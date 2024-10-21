@@ -106,7 +106,7 @@ export async function decompressJxl(
   let imagePtr = null;
 
   try {
-    imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength);
+    imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength, nbytes);
 
     if (imagePtr === 0) {
       throw new Error("jxl: Decoding failed. Null pointer returned.");
