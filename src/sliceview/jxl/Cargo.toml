@@ -13,3 +13,6 @@ jxl-oxide = "0.9.1"
 
 [profile.release]
 lto = true
+
+[package.metadata.wasm-opt]
+memory = { initial = 10, maximum = 100 }  # Set initial and max memory in MiB
