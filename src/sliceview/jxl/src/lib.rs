@@ -40,17 +40,16 @@ pub fn decode(ptr: *mut u8, size: usize) -> *const u8 {
     };
 
     let mut output_buffer = Vec::new();
-    let mut renderer = image.renderer();
 
     loop {
-        let result = match renderer.render_next_frame() {
+        let result = match image.render_next_frame() {
             Ok(result) => result,
             Err(_result) => return std::ptr::null_mut(),
         };
         match result {
             jxl_oxide::RenderResult::Done(frame) => {
                 let fb = frame.image();
-                match renderer.pixel_format() {
+                match image.pixel_format() {
                     PixelFormat::Gray => {
                         for pixel in fb.buf() {
                             let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
