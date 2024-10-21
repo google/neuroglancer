@@ -2,7 +2,7 @@ use std::ptr;
 use std::alloc::{alloc, dealloc, Layout};
 use std::slice;
 
-use jxl_oxide::{JxlImage, PixelFormat};
+use jxl_oxide::{FrameBuffer, JxlImage, PixelFormat};
 
 #[no_mangle]
 pub fn malloc(size: usize) -> *mut u8 {
@@ -47,7 +47,14 @@ pub fn decode(ptr: *mut u8, size: usize) -> *const u8 {
             Err(_frame) => return std::ptr::null_mut(),
         };
 
-        let fb = frame.image();
+        let mut stream = frame.stream();
+        let mut fb = FrameBuffer::new(
+            stream.width() as usize,
+            stream.height() as usize,
+            stream.channels() as usize,
+        );
+        stream.write_to_buffer(fb.buf_mut());
+
         match image.pixel_format() {
             PixelFormat::Gray => {
                 for pixel in fb.buf() {
