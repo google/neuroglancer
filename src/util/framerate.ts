@@ -94,8 +94,7 @@ export class FramerateMonitor {
       }
     }
     for (let i = deletedQueryIndices.length - 1; i >= 0; i--) {
-      const index = deletedQueryIndices[i];
-      this.timeElapsedQueries.splice(index, 1);
+      this.timeElapsedQueries.splice(i, 1);
     }
     if (this.storedTimeDeltas.length > this.numStoredTimes) {
       this.storedTimeDeltas = this.storedTimeDeltas.slice(-this.numStoredTimes);
