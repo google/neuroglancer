@@ -450,7 +450,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
 
 
 def typed_set(wrapped_type: Callable[[Any], T]):
-    def wrapper(x, _readonly=False) -> Callable[[Any], Union[set[T], frozenset[T]]]:
+    def wrapper(x, _readonly=False) -> Union[set[T], frozenset[T]]:
         set_type = frozenset if _readonly else set
         kwargs: dict[str, Any] = dict()
         if hasattr(wrapped_type, "supports_readonly"):
