@@ -34,7 +34,7 @@ pub fn decode(ptr: *mut u8, size: usize) -> *const u8 {
         slice::from_raw_parts(ptr, size)
     };
 
-    let image = match JxlImage::from_reader(data) {
+    let image = match JxlImage::builder().read(data) {
         Ok(image) => image,
         Err(_image) => return std::ptr::null_mut(),
     };
