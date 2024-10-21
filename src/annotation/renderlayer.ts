@@ -45,7 +45,7 @@ import type {
 import {
   AnnotationSerializer,
   AnnotationSource,
-  oldAnnotationTypes,
+  annotationTypes,
   formatAnnotationPropertyValue,
 } from "#src/annotation/index.js";
 import type {
@@ -138,8 +138,6 @@ import type {
 } from "#src/webgl/shader.js";
 import type { SharedObject } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
-
-const annotationTypes = oldAnnotationTypes;
 
 const tempMat = mat4.create();
 
