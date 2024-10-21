@@ -9,7 +9,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-jxl-oxide = "0.4.0"
+jxl-oxide = "0.5.2"
 
 [profile.release]
 lto = true

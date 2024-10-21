@@ -34,46 +34,41 @@ pub fn decode(ptr: *mut u8, size: usize) -> *const u8 {
         slice::from_raw_parts(ptr, size)
     };
 
-    let mut image = match JxlImage::from_reader(data) {
+    let image = match JxlImage::from_reader(data) {
         Ok(image) => image,
         Err(_image) => return std::ptr::null_mut(),
     };
 
     let mut output_buffer = Vec::new();
 
-    loop {
-        let result = match image.render_next_frame() {
-            Ok(result) => result,
-            Err(_result) => return std::ptr::null_mut(),
+    for keyframe_idx in 0..image.num_loaded_keyframes() {
+        let frame = match image.render_frame(keyframe_idx) {
+            Ok(frame) => frame,
+            Err(_frame) => return std::ptr::null_mut(),
         };
-        match result {
-            jxl_oxide::RenderResult::Done(frame) => {
-                let fb = frame.image();
-                match image.pixel_format() {
-                    PixelFormat::Gray => {
-                        for pixel in fb.buf() {
-                            let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
-                            output_buffer.push(value);
-                        }
-                    },
-                    PixelFormat::Rgb => {
-                        for pixel in fb.buf() {
-                            let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
-                            output_buffer.push(value);
-                        }
-                    }
-                    PixelFormat::Rgba => {
-                        for pixel in fb.buf() {
-                            let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
-                            output_buffer.push(value);
-                            output_buffer.push(255);  // Alpha channel set to fully opaque
-                        }
-                    }
-                    _ => return std::ptr::null_mut(),
+
+        let fb = frame.image();
+        match image.pixel_format() {
+            PixelFormat::Gray => {
+                for pixel in fb.buf() {
+                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    output_buffer.push(value);
+                }
+            },
+            PixelFormat::Rgb => {
+                for pixel in fb.buf() {
+                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    output_buffer.push(value);
                 }
             }
-            jxl_oxide::RenderResult::NeedMoreData => return std::ptr::null_mut(),
-            jxl_oxide::RenderResult::NoMoreFrames => break,
+            PixelFormat::Rgba => {
+                for pixel in fb.buf() {
+                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    output_buffer.push(value);
+                    output_buffer.push(255);  // Alpha channel set to fully opaque
+                }
+            }
+            _ => return std::ptr::null_mut(),
         }
     }
 
