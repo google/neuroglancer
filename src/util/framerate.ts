@@ -20,15 +20,8 @@ export enum FrameTimingMethod {
   MAX = 2,
 }
 
-interface QueryInfo {
-  glQuery: WebGLQuery;
-  frameNumber: number;
-  wasStarted: boolean;
-  wasEnded: boolean;
-}
-
 export class FramerateMonitor {
-  private timeElapsedQueries: QueryInfo[] = [];
+  private timeElapsedQueries: (WebGLQuery | null)[] = [];
   private warnedAboutMissingExtension = false;
   private storedTimeDeltas: number[] = [];
 
@@ -55,88 +48,47 @@ export class FramerateMonitor {
     return ext;
   }
 
-  getOldestQueryIndexByFrameNumber() {
-    if (this.timeElapsedQueries.length === 0) {
-      return undefined;
-    }
-    let oldestQueryIndex = 0;
-    for (let i = 1; i < this.timeElapsedQueries.length; i++) {
-      const oldestQuery = this.timeElapsedQueries[oldestQueryIndex];
-      if (this.timeElapsedQueries[i].frameNumber < oldestQuery.frameNumber) {
-        oldestQueryIndex = i;
-      }
-    }
-    return oldestQueryIndex;
-  }
-
-  startFrameTimeQuery(
-    gl: WebGL2RenderingContext,
-    ext: any,
-    frameNumber: number,
-  ) {
+  startFrameTimeQuery(gl: WebGL2RenderingContext, ext: any) {
     if (ext === null) {
       return null;
     }
     const query = gl.createQuery();
-    const currentQuery =
-      this.timeElapsedQueries[this.timeElapsedQueries.length - 1];
-    if (query !== null && currentQuery !== query) {
+    if (query !== null) {
       gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
-      if (this.timeElapsedQueries.length >= this.queryPoolSize) {
-        const oldestQueryIndex = this.getOldestQueryIndexByFrameNumber();
-        if (oldestQueryIndex !== undefined) {
-          const oldestQuery = this.timeElapsedQueries.splice(
-            oldestQueryIndex,
-            1,
-          )[0];
-          gl.deleteQuery(oldestQuery.glQuery);
-        }
-      }
-      const queryInfo: QueryInfo = {
-        glQuery: query,
-        frameNumber: frameNumber,
-        wasStarted: true,
-        wasEnded: false,
-      };
-      this.timeElapsedQueries.push(queryInfo);
     }
     return query;
   }
 
-  endLastTimeQuery(gl: WebGL2RenderingContext, ext: any) {
-    if (ext !== null) {
-      const currentQuery =
-        this.timeElapsedQueries[this.timeElapsedQueries.length - 1];
-      if (!currentQuery.wasEnded && currentQuery.wasStarted) {
-        gl.endQuery(ext.TIME_ELAPSED_EXT);
-        currentQuery.wasEnded = true;
+  endFrameTimeQuery(
+    gl: WebGL2RenderingContext,
+    ext: any,
+    query: WebGLQuery | null,
+  ) {
+    if (ext !== null && query !== null) {
+      gl.endQuery(ext.TIME_ELAPSED_EXT);
+    }
+    if (this.timeElapsedQueries.length >= this.queryPoolSize) {
+      const oldestQuery = this.timeElapsedQueries.shift();
+      if (oldestQuery !== null && oldestQuery !== undefined) {
+        gl.deleteQuery(oldestQuery);
       }
     }
+    this.timeElapsedQueries.push(query);
   }
 
   grabAnyFinishedQueryResults(gl: WebGL2RenderingContext) {
     const deletedQueryIndices: number[] = [];
     for (let i = 0; i < this.timeElapsedQueries.length; i++) {
       const query = this.timeElapsedQueries[i];
-      // Error checking: if the query was not started or ended, just delete it.
-      // This can happen from errors in the rendering
-      if (!query.wasEnded || !query.wasStarted) {
-        gl.deleteQuery(query.glQuery);
-        deletedQueryIndices.push(i);
-      } else {
+      if (query !== null) {
         const available = gl.getQueryParameter(
-          query.glQuery,
+          query,
           gl.QUERY_RESULT_AVAILABLE,
         );
-        // If the result is null, then something went wrong and we should just delete the query.
-        if (available === null) {
-          gl.deleteQuery(query.glQuery);
-          deletedQueryIndices.push(i);
-        } else if (available) {
-          const result =
-            gl.getQueryParameter(query.glQuery, gl.QUERY_RESULT) / 1e6;
+        if (available) {
+          const result = gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6;
           this.storedTimeDeltas.push(result);
-          gl.deleteQuery(query.glQuery);
+          gl.deleteQuery(query);
           deletedQueryIndices.push(i);
         }
       }
