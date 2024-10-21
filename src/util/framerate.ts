@@ -27,10 +27,15 @@ interface QueryInfo {
   wasEnded: boolean;
 }
 
+interface FrameDeltaInfo {
+  frameDelta: number;
+  frameNumber: number;
+}
+
 export class FramerateMonitor {
   private timeElapsedQueries: QueryInfo[] = [];
   private warnedAboutMissingExtension = false;
-  private storedTimeDeltas: number[] = [];
+  private storedTimeDeltas: FrameDeltaInfo[] = [];
 
   constructor(
     private numStoredTimes: number = 10,
@@ -135,7 +140,10 @@ export class FramerateMonitor {
         } else if (available) {
           const result =
             gl.getQueryParameter(query.glQuery, gl.QUERY_RESULT) / 1e6;
-          this.storedTimeDeltas.push(result);
+          this.storedTimeDeltas.push({
+            frameDelta: result,
+            frameNumber: query.frameNumber,
+          });
           gl.deleteQuery(query.glQuery);
           deletedQueryIndices.push(i);
         }
@@ -151,7 +159,9 @@ export class FramerateMonitor {
   }
 
   getLastFrameTimesInMs(numberOfFrames: number = 10) {
-    return this.storedTimeDeltas.slice(-numberOfFrames);
+    return this.storedTimeDeltas
+      .slice(-numberOfFrames)
+      .map((frameDeltaInfo) => frameDeltaInfo.frameDelta);
   }
 
   getQueries() {
