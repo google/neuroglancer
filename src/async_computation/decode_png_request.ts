@@ -22,14 +22,15 @@ export interface DecodedImage {
   uint8Array: Uint8Array;
 }
 
-export const decodePng =
-  asyncComputation<
-    (
-      data: Uint8Array,
-      width: number | undefined,
-      height: number | undefined,
-      numComponents: number | undefined,
-      bytesPerPixel: number,
-      convertToGrayscale: boolean,
-    ) => DecodedImage
-  >("decodePng");
+export const decodePng = asyncComputation<
+  (
+    data: Uint8Array,
+    width: number | undefined,
+    height: number | undefined,
+    // Expected width * height
+    area: number | undefined,
+    numComponents: number | undefined,
+    bytesPerPixel: number,
+    convertToGrayscale: boolean,
+  ) => DecodedImage
+>("decodePng");
