@@ -25,3 +25,5 @@ export const SEGMENT_DEFAULT_COLOR_JSON_KEY = "segmentDefaultColor";
 export const ANCHOR_SEGMENT_JSON_KEY = "anchorSegment";
 export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID =
   "skeletonShaderControl";
+export const TIMESTAMP_JSON_KEY = "timestamp";
+export const TIMESTAMP_OWNER_JSON_KEY = "timestampOwner";
