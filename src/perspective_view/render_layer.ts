@@ -67,6 +67,12 @@ export interface PerspectiveViewRenderContext
   isContinuousCameraMotionInProgress: boolean;
 
   /**
+   * Usually, the histogram in 3D is disabled during camera movement
+   * This flag is used to force 3D histogram rendering during camera movement
+   */
+  force3DHistogramForAutoRange: boolean;
+
+  /**
    * Specifices how to bind the max projection buffer
    */
   bindMaxProjectionBuffer?: () => void | undefined;
