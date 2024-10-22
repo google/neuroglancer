@@ -300,7 +300,7 @@ export class VirtualList extends RefCounted {
   private debouncedUpdateView = this.registerCancellable(
     animationFrameDebounce(() => this.updateView()),
   );
-  private resizeObserver = new ResizeObserver(() => this.updateView());
+  private resizeObserver = new ResizeObserver(() => this.debouncedUpdateView());
 
   constructor(options: {
     source: VirtualListSource;
