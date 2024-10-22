@@ -39,7 +39,7 @@ export interface OmeMultiscaleMetadata {
   coordinateSpace: CoordinateSpace;
 }
 
-const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev"]);
+const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
 
 const OME_UNITS = new Map<string, { unit: string; scale: number }>([
   ["angstrom", { unit: "m", scale: 1e-10 }],
@@ -266,7 +266,9 @@ export function parseOmeMetadata(
   url: string,
   attrs: any,
 ): OmeMultiscaleMetadata | undefined {
-  const multiscales = attrs.multiscales;
+  const ome = attrs.ome;
+  const multiscales = (ome == undefined) ? attrs.multiscales : ome.multiscales; // >0.4
+
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
   for (const multiscale of multiscales) {
@@ -278,7 +280,9 @@ export function parseOmeMetadata(
       // Not valid OME multiscale spec.
       return undefined;
     }
-    const version = multiscale.version;
+
+    const version = (ome == undefined) ? multiscale.version : ome.version; // >0.4
+
     if (version === undefined) return undefined;
     if (!SUPPORTED_OME_MULTISCALE_VERSIONS.has(version)) {
       errors.push(
