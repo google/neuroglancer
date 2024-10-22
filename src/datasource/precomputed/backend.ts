@@ -74,6 +74,7 @@ import { decodeCompressedSegmentationChunk } from "#src/sliceview/backend_chunk_
 import { decodeCompressoChunk } from "#src/sliceview/backend_chunk_decoders/compresso.js";
 import type { ChunkDecoder } from "#src/sliceview/backend_chunk_decoders/index.js";
 import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
+import { decodeJxlChunk } from "#src/sliceview/backend_chunk_decoders/jxl.js";
 import { decodePngChunk } from "#src/sliceview/backend_chunk_decoders/png.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
@@ -380,6 +381,7 @@ chunkDecoders.set(
 );
 chunkDecoders.set(VolumeChunkEncoding.COMPRESSO, decodeCompressoChunk);
 chunkDecoders.set(VolumeChunkEncoding.PNG, decodePngChunk);
+chunkDecoders.set(VolumeChunkEncoding.JXL, decodeJxlChunk);
 
 @registerSharedObject()
 export class PrecomputedVolumeChunkSource extends WithParameters(
