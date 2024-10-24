@@ -28,11 +28,49 @@ import { convertEndian32, Endianness } from "#src/util/endian.js";
 import { verifyOptionalString } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
+import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type { Viewer } from "#src/viewer.js";
 
+export interface ScreenshotActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshot: {
+    id: string;
+    image: string;
+    imageType: string;
+    depthData: string | undefined;
+    width: number;
+    height: number;
+  };
+}
+
+export interface ScreenshotChunkStatistics {
+  downloadLatency: number;
+  visibleChunksDownloading: number;
+  visibleChunksFailed: number;
+  visibleChunksGpuMemory: number;
+  visibleChunksSystemMemory: number;
+  visibleChunksTotal: number;
+  visibleGpuMemory: number;
+}
+
+export interface StatisticsActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshotStatistics: {
+    id: string;
+    chunkSources: any[];
+    total: ScreenshotChunkStatistics;
+  };
+}
+
 export class ScreenshotHandler extends RefCounted {
-  sendScreenshotRequested = new Signal<(state: any) => void>();
-  sendStatisticsRequested = new Signal<(state: any) => void>();
+  sendScreenshotRequested = new Signal<
+    (state: ScreenshotActionState) => void
+  >();
+  sendStatisticsRequested = new Signal<
+    (state: StatisticsActionState) => void
+  >();
   requestState = new TrackableValue<string | undefined>(
     undefined,
     verifyOptionalString,
@@ -124,12 +162,14 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    if (!viewer.isReady()) {
+    const shouldForceScreenshot =
+      this.viewer.display.screenshotMode.value === ScreenshotMode.FORCE;
+    if (!viewer.isReady() && !shouldForceScreenshot) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;
     }
-    if (!this.wasAlreadyVisible) {
+    if (!this.wasAlreadyVisible && !shouldForceScreenshot) {
       this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();
