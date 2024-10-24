@@ -135,6 +135,7 @@ export function responseArrayBuffer(response: Response): Promise<ArrayBuffer> {
 }
 
 export function responseJson(response: Response): Promise<any> {
+  console.log(response)
   return response.json();
 }
 

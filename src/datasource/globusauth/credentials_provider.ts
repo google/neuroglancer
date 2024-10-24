@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+
+import pkceChallenge from "pkce-challenge";
+
 import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
 import {
   CredentialsProvider,
@@ -21,12 +25,13 @@ import {
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { StatusMessage } from "#src/status.js";
 import {  responseJson } from "#src/util/http_request.js";
-import {
-  verifyObject,
-  verifyObjectProperty,
-  verifyString,
-  verifyStringArray
-} from "#src/util/json.js";
+// import {
+//   verifyObject,
+//   verifyObjectProperty,
+//   verifyString,
+//   verifyStringArray
+// } from "#src/util/json.js";
+
 
 export interface Credentials {
   token: string;
@@ -36,7 +41,7 @@ export type GlobusAuthToken = {
   tokenType: string;
   accessToken: string;
   url: string;
-  appUrls: string[];
+  // appUrls: string[];
 };
 
 function openPopupCenter(url: string) {
@@ -50,67 +55,37 @@ function openPopupCenter(url: string) {
   return newWindow;
 }
 
-const tokenEndpoint = 'https://auth.globus.org/v2/oauth2/token';
-
-const client_id = 'f5c12d62-94bb-4df6-b246-bade74cf8945';
-const redirect_uri = 'https://localhost:8080/token';
-const client_secret = 'xRyT0uNsImeEQkeO4LRpOLslTaX909oGqCi3kRuj3Z8=';
-
-
-  // Base64 encode client_id and client_secret
-  const credentials = `${client_id}:${client_secret}`;
-  const base64Credentials = btoa(credentials);
-
-async function exchangeAuthorizationCodeForToken() {
-  // Define headers
-  const headers = {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'Authorization': `Basic ${base64Credentials}`,  };
-  console.log('headers:', headers)
-  // Prepare request body
-  const requestBody = new URLSearchParams();
-  requestBody.append('grant_type', 'authorization_code');
-  requestBody.append('response_type', 'code');
-  requestBody.append('scope', 'openid');
-  requestBody.append('redirect_uri', redirect_uri);
-  requestBody.append('client_id', client_id);
-  console.log('requestBody:', requestBody)
-  try {
-    const response = await fetch(tokenEndpoint, {
-      method: 'Post',
-      headers: headers,
-      body: requestBody.toString(),
-    });
-
-    const data = await response.json();
-    console.log('Access Token:', data.access_token);
-    // Handle the token response here
-  } catch (error) {
-    console.error('Error exchanging authorization code:', error);
-  }
-}
-
+const client_id = '9305520c-8b3b-47fb-9346-e38a7eeb0b26';
 
 async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
   const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
 
+  const code_challenge = await pkceChallenge();
+
   const res: Promise<GlobusAuthToken> = new Promise((f) => {
     function writeLoginStatus(message: string, buttonMessage: string) {
       status.element.textContent = message + " ";
-      const button = document.createElement("button");
-      button.textContent = buttonMessage;
-      status.element.appendChild(button);
+      const login_button = document.createElement("button");
+      const submit_button = document.createElement("button");
+      const token_text = document.createElement("textarea");
+      login_button.textContent = buttonMessage;
+      submit_button.textContent = "Submit token";
+      status.element.appendChild(login_button);
+      status.element.appendChild(submit_button);
+      status.element.appendChild(token_text);
+      
 
-      button.addEventListener("click", async () => {
-        console.log('button clicked')
+      login_button.addEventListener("click", async () => {
+        console.log('Login button clicked')
         writeLoginStatus(
           `Waiting for login`,
           "Retry",
         );
 
-        exchangeAuthorizationCodeForToken();
+        const collection_scope = 'https://auth.globus.org/scopes/05d2c76a-e867-4f67-aa57-76edeb0beda0/data_access+https://auth.globus.org/scopes/05d2c76a-e867-4f67-aa57-76edeb0beda0/https+openid+profile'
+
         const auth_popup = openPopupCenter(
-          `https://auth.globus.org/v2/oauth2/authorize?scope=openid&redirect_uri=${redirect_uri}&response_type=code&client_id=${client_id}`,
+          `https://auth.globus.org/v2/oauth2/authorize?scope=${collection_scope}&code_challenge=${code_challenge.code_challenge}&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&response_type=code&client_id=${client_id}`,
         );
 
         const closeAuthPopup = () => {
@@ -127,43 +102,32 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
             );
           }
         }, 1000);
-
-        const tokenListener = async (ev: MessageEvent) => {
-          console.log('tokenListener')
-          console.log(ev)
-          if (ev.source === auth_popup) {
-            clearInterval(checkClosed);
-            window.removeEventListener("message", tokenListener);
-            window.removeEventListener("beforeunload", closeAuthPopup);
-            // closeAuthPopup();
-
-            verifyObject(ev.data);
-            const accessToken = verifyObjectProperty(
-              ev.data,
-              "token",
-              verifyString,
-            );
-            const appUrls = verifyObjectProperty(
-              ev.data,
-              "app_urls",
-              verifyStringArray,
-            );
+      });
+      
+      submit_button.addEventListener("click", async () => {
+        console.log('Submit clicked')
+            const accessCode = token_text.value
+            
+            const response = await fetch(`https://auth.globus.org/v2/oauth2/token?grant_type=authorization_code&code=${accessCode}&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&code_verifier=${code_challenge.code_verifier}&client_id=${client_id}`, {
+              method: 'POST',
+              // headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'} 
+              });
+            
+            // TODO: Add some error handling
+            const asJSON = await response.json()
+            const accessToken = asJSON.access_token
 
             const token: GlobusAuthToken = {
               tokenType: "Bearer",
               accessToken,
               url: serverUrl,
-              appUrls,
+              // appUrls,
             };
             f(token);
-          }
-        };
-
-        window.addEventListener("message", tokenListener);
       });
     }
 
-    writeLoginStatus(`Globus login required.`, "Login");
+    writeLoginStatus(`Globus login required. Please click the login button and paste the resulting token below.`, "Login");
   });
 
   try {
@@ -172,68 +136,6 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
     status.dispose();
   }
 }
-
-// async function waitForLogin(serverUrl: string): Promise<Credentials> {
-//   const status = new StatusMessage(/*delay=*/ false);
-//   function writeLoginStatus(message: string, buttonMessage: string) {
-//     status.element.textContent = message + " ";
-//     const button = document.createElement("button");
-//     button.textContent = buttonMessage;
-//     status.element.appendChild(button);
-//     button.addEventListener("click", () => {
-//       console.log('button clicked')
-//       window.open(
-//         `${serverUrl}`,
-//       );
-      
-//       writeLoginStatus(
-//         `Waiting for login to globusauth server.`,
-//         "Retry",
-//       );
-//     });
-//   }
-
-
-
-//   const messagePromise = new Promise<string>((resolve, reject) => {
-//     function messageHandler(event: MessageEvent) {
-//       console.log('HA')
-//       console.log(event)
-//       const eventOrigin =
-//         event.origin || (<MessageEvent>(<any>event).originalEvent).origin;
-//       if (eventOrigin !== '*globus*') {
-//         console.log('HE')
-//         return;
-//       }
-//       const removeListener = () => {
-//         window.removeEventListener("message", messageHandler, false);
-//       };
-//       const { data } = event;
-//       if (event.data === "badorigin") {
-//         removeListener();
-//         reject(makeOriginError(serverUrl));
-//       }
-//       try {
-//         verifyObject(data);
-//         const token = verifyObjectProperty(data, "token", verifyString);
-//         removeListener();
-//         resolve(token);
-//       } catch (e) {
-//         console.log(
-//           "globusauth: Received unexpected message from ${serverUrl}",
-//           event,
-//         );
-//       }
-//     }
-//     window.addEventListener("message", messageHandler, false);
-//   });
-//   writeLoginStatus(`globusauth login required.`, "Login");
-//   try {
-//     return { token: await messagePromise };
-//   } finally {
-//     status.dispose();
-//   }
-// }
 
 export class GlobusAuthCredentialsProvider extends CredentialsProvider<GlobusAuthToken> {
   constructor(public serverUrl: string) {
@@ -245,29 +147,6 @@ export class GlobusAuthCredentialsProvider extends CredentialsProvider<GlobusAut
     return token;
   });
 }
-
-// export class GlobusAuthCredentialsProvider extends CredentialsProvider<GlobusAuthToken> {
-//   constructor(public serverUrl: string) {
-//     super();
-//   }
-//   get = makeCredentialsGetter(async () => {
-//     const response = await fetch(`${this.serverUrl}`);
-//     console.log(response)
-//     switch (response.status) {
-//       case 200:
-//         return { token: await response.text() };
-//       case 401:
-//         console.log('401')
-//         return await waitForLogin(this.serverUrl);
-//       case 403:
-//         throw makeOriginError(this.serverUrl);
-//       default:
-//         throw HttpError.fromResponse(response);
-//     }
-//   });
-// }
-
-
 
 export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<OAuth2Credentials> {
   constructor(
