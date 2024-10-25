@@ -31,8 +31,9 @@ export async function decodeJpegChunk(
     cancellationToken,
     [response],
     new Uint8Array(response),
-    chunkDataSize[0],
-    chunkDataSize[1] * chunkDataSize[2],
+    undefined,
+    undefined,
+    chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
     chunkDataSize[3] || 1,
     false,
   );

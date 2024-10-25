@@ -113,7 +113,6 @@ const HISTOGRAM_SAMPLES_PER_INSTANCE = 256;
 
 // Number of points to sample in computing the histogram.  Increasing this increases the precision
 // of the histogram but also slows down rendering.
-// Here, we use 4096 samples per chunk to compute the histogram.
 const NUM_HISTOGRAM_SAMPLES = 2 ** 14;
 const DEBUG_HISTOGRAMS = false;
 
@@ -160,7 +159,6 @@ interface StoredChunkDataForMultipass {
   fixedPositionWithinChunk: Uint32Array;
   chunkDisplayDimensionIndices: number[];
   channelToChunkDimensionIndices: readonly number[];
-  chunkDataDisplaySize: vec3;
   chunkFormat: ChunkFormat | null | undefined;
 }
 
@@ -630,15 +628,10 @@ float getHistogramValue${i}() {
     simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 20.0, 15.0 + float(gl_InstanceID))));
   chunkSamplePosition = rand3val * (uChunkDataSize - 1.0);
 ${histogramFetchCode}
-  if (x == 0.0) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-  }
-  else {
-    if (x < 0.0) x = 0.0;
-    else if (x > 1.0) x = 1.0;
-    else x = (1.0 + x * 253.0) / 255.0;
-    gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
-  }
+  if (x < 0.0) x = 0.0;
+  else if (x > 1.0) x = 1.0;
+  else x = (1.0 + x * 253.0) / 255.0;
+  gl_Position = vec4(2.0 * (x * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
   gl_PointSize = 1.0;`);
           builder.setFragmentMain(`
 outputValue = vec4(1.0, 1.0, 1.0, 1.0);
@@ -1019,11 +1012,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               fixedPositionWithinChunk,
               chunkDisplayDimensionIndices,
               channelToChunkDimensionIndices,
-              chunkDataDisplaySize,
               chunkFormat: prevChunkFormat,
             });
-          }
-          if (needPickingPass) {
             const copiedDisplaySize = vec3.create();
             const copiedPosition = vec3.create();
             vec3.copy(copiedDisplaySize, chunkDataDisplaySize);
@@ -1133,21 +1123,15 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       };
       const determineNumHistogramInstances = (
         chunkDataSize: vec3,
-        numHistograms: number,
+        totalChunkVolume: number,
       ) => {
-        const maxSamplesInChunk = Math.ceil(
-          chunkDataSize.reduce((a, b) => a * b, 1) / 2.0,
-        );
-        const totalDesiredSamplesInChunk =
-          NUM_HISTOGRAM_SAMPLES / numHistograms;
-        const desiredSamples = Math.min(
-          maxSamplesInChunk,
-          totalDesiredSamplesInChunk,
-        );
-
-        // round to nearest multiple of NUM_HISTOGRAM_SAMPLES_PER_INSTANCE
+        const chunkVolume = chunkDataSize.reduce((a, b) => a * b, 1);
+        const desiredChunkSamples =
+          NUM_HISTOGRAM_SAMPLES * (chunkVolume / totalChunkVolume);
+        const maxSamplesInChunk = chunkVolume / 2.0;
+        const clampedSamples = Math.min(maxSamplesInChunk, desiredChunkSamples);
         return Math.max(
-          Math.round(desiredSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
+          Math.round(clampedSamples / HISTOGRAM_SAMPLES_PER_INSTANCE),
           1,
         );
       };
@@ -1166,9 +1150,22 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       // Blending on to accumulate histograms.
       gl.enable(WebGL2RenderingContext.BLEND);
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+
+      const totalChunkVolume = shaderUniformsForSecondPass.reduce(
+        (sum, uniforms) => {
+          const chunkVolume = uniforms.uChunkDataSize.reduce(
+            (a, b) => a * b,
+            1,
+          );
+          return sum + chunkVolume;
+        },
+        0,
+      );
+
       for (let j = 0; j < presentCount; ++j) {
         newSource = true;
         const chunkInfo = chunkInfoForMultipass[j];
+        const uniforms = shaderUniformsForSecondPass[j];
         const chunkFormat = chunkInfo.chunkFormat;
         if (chunkFormat !== prevChunkFormat) {
           prevChunkFormat = chunkFormat;
@@ -1190,7 +1187,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         if (histogramShader === null) break;
         gl.uniform3fv(
           histogramShader.uniform("uChunkDataSize"),
-          chunkInfo.chunkDataDisplaySize,
+          uniforms.uChunkDataSize,
         );
         if (prevChunkFormat != null) {
           prevChunkFormat.bindChunk(
@@ -1212,8 +1209,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
         // Draw each histogram
         const numInstances = determineNumHistogramInstances(
-          chunkInfo.chunkDataDisplaySize,
-          presentCount,
+          uniforms.uChunkDataSize,
+          totalChunkVolume,
         );
         for (let i = 0; i < numHistograms; ++i) {
           histogramFramebuffers[i].bind(256, 1);

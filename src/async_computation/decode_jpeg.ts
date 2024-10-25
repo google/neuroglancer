@@ -25,6 +25,7 @@ registerAsyncComputation(
     data: Uint8Array,
     width: number | undefined,
     height: number | undefined,
+    area: number | undefined,
     numComponents: number | undefined,
     convertToGrayscale: boolean,
   ) => {
@@ -32,14 +33,14 @@ registerAsyncComputation(
     parser.parse(data);
     // Just check that the total number pixels matches the expected value.
     if (
-      width !== undefined &&
-      height !== undefined &&
-      parser.width * parser.height !== width * height
+      (width !== undefined && width !== parser.width) ||
+      (height !== undefined && height !== parser.height) ||
+      (area !== undefined && parser.width * parser.height !== area)
     ) {
       throw new Error(
         "JPEG data does not have the expected dimensions: " +
           `width=${parser.width}, height=${parser.height}, ` +
-          `expected width=${width}, expected height=${height}`,
+          `expected width=${width}, expected height=${height}, expected area=${area}`,
       );
     }
     width = parser.width;
