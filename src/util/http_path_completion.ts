@@ -21,9 +21,9 @@ import type {
   Completion,
   CompletionWithDescription,
 } from "#src/util/completion.js";
-import { getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
+import { emptyCompletionResult, getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
 import { getGcsPathCompletions } from "#src/util/gcs_bucket_listing.js";
-import { getGlobusPathCompletions } from "#src/util/globus_listing.js";
+// import { getGlobusPathCompletions } from "#src/util/globus_listing.js";
 import { parseUrl } from "#src/util/http_request.js";
 import { getS3PathCompletions } from "#src/util/s3.js";
 import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
@@ -51,6 +51,7 @@ export async function getHtmlDirectoryListing(
     }),
     cancellationToken,
   );
+  console.log('here');
   if (contentType === null || /\btext\/html\b/i.exec(contentType) === null) {
     return [];
   }
@@ -78,7 +79,6 @@ export async function getHtmlPathCompletions(
   cancellationToken: CancellationToken,
   credentialsProvider?: SpecialProtocolCredentialsProvider,
 ): Promise<BasicCompletionResult> {
-  console.log("getHtmlPathCompletions");
   const m = url.match(/^([a-z]+:\/\/.*\/)([^/?#]*)$/);
   if (m === null) throw null;
   const entries = await getHtmlDirectoryListing(
@@ -92,6 +92,7 @@ export async function getHtmlPathCompletions(
     if (!entry.startsWith(url)) continue;
     matches.push({ value: entry.substring(offset) });
   }
+  console.log(url);
   return {
     offset,
     completions: matches,
@@ -128,7 +129,10 @@ export async function completeHttpPath(
   url: string,
   cancellationToken: CancellationToken,
 ): Promise<BasicCompletionResult<Completion>> {
+  console.log('PathCompletion with url ', url);
+  
   if (!url.includes("://")) {
+    console.log('BBB');
     return {
       offset: 0,
       completions: getPrefixMatchesWithDescriptions(
@@ -151,6 +155,7 @@ export async function completeHttpPath(
     throw null;
   }
   const { protocol, host, path } = result;
+  console.log('ere',result);
   const completions = await (async () => {
     if (protocol === "gs+xml" && path.length > 0) {
       return await getS3CompatiblePathCompletions(
@@ -171,12 +176,13 @@ export async function completeHttpPath(
       );
     }
     if (protocol === "globus" && path.length > 0) {
-      return await getGlobusPathCompletions(
-        credentialsProvider,
-        `${protocol}://${host}`,
-        path,
-        cancellationToken,
-      );
+      return emptyCompletionResult;
+      // return await getGlobusPathCompletions(
+      //   credentialsProvider,
+      //   `${protocol}://${host}`,
+      //   path,
+      //   cancellationToken,
+      // );
     }
     if (protocol === "s3" && path.length > 0) {
       return await getS3PathCompletions(host, path, cancellationToken);
@@ -194,6 +200,7 @@ export async function completeHttpPath(
       );
     }
     if ((protocol === "http" || protocol === "https") && path.length > 0) {
+      console.log('decidedtousehttp')
       return await getHtmlPathCompletions(
         parsedUrl,
         cancellationToken,

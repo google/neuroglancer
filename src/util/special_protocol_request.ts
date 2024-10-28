@@ -44,11 +44,8 @@ function getMiddleAuthCredentialsProvider(
 function getGlobusAuthCredentialsProvider(
   credentialsManager: CredentialsManager,
   serverUrl: string,
-  path: string
+  // path: string
 ): SpecialProtocolCredentialsProvider {
-  console.log('specialprotocol here')
-  console.log(serverUrl)
-  console.log(path)
   return credentialsManager.getCredentialsProvider(
     "globusauthapp",
     { serverUrl: new URL(serverUrl) }
@@ -76,8 +73,10 @@ export function parseSpecialUrl(
   credentialsManager: CredentialsManager,
 ): { url: string; credentialsProvider: SpecialProtocolCredentialsProvider } {
   const u = parseUrl(url);
-  console.log(url)
-  console.log(u)
+  console.log('I am a special request');
+  console.log(url);
+  console.log(u);
+  console.log(u.protocol);  
   switch (u.protocol) {
     case "gs":
     case "gs+xml":
@@ -126,13 +125,13 @@ export function parseSpecialUrl(
         url: "gs+xml:/" + u.path,
       };
     case "globus":
+        console.log('I am a globus request');
         return {
           credentialsProvider: getGlobusAuthCredentialsProvider(
             credentialsManager,
             `https://${u.host}${u.path}`,
-            u.path,
           ),
-          url: `https://${u.host}` + u.path,
+          url: `https://${u.host}${u.path}` 
         };
     case "middleauth+https":
       url = url.substr("middleauth+".length);
@@ -164,6 +163,7 @@ export async function cancellableFetchSpecialOk<T>(
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
   const u = parseUrl(url);
+  console.log('cancelableFetchSpecialOk', url, init, transformResponse,cancellationToken, u);
   switch (u.protocol) {
     case "gs":
       // Include random query string parameter (ignored by GCS) to bypass GCS cache and ensure a

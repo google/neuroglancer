@@ -22,22 +22,29 @@ import {
 } from "#src/datasource/globusauth/credentials_provider.js";
 
 defaultCredentialsManager.register(
-  "globus",
+  "globusauth",
   (serverUrl) => new GlobusAuthCredentialsProvider(serverUrl),
 );
 
 defaultCredentialsManager.register(
   "globusauthapp",
-  (
-    parameters: { serverUrl: string},
-    credentialsManager: CredentialsManager,
-  ) => {
-    return new GlobusAuthAppCredentialsProvider(
-      credentialsManager.getCredentialsProvider(
-        "globus",
-        parameters.serverUrl,
-      ),
-      parameters.serverUrl,
-    );
-  },
+  (serverUrl: string, credentialsManager: CredentialsManager) =>
+    new GlobusAuthAppCredentialsProvider(serverUrl, credentialsManager),
 );
+
+
+// defaultCredentialsManager.register(
+//   "globusauthapp",
+//   (
+//     parameters: { serverUrl: string},
+//     credentialsManager: CredentialsManager,
+//   ) => {
+//     return new GlobusAuthAppCredentialsProvider(
+//       credentialsManager.getCredentialsProvider(
+//         "globus",
+//         parameters.serverUrl,
+//       ),
+//       parameters.serverUrl,
+//     );
+//   },
+// );

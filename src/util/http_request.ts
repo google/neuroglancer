@@ -135,7 +135,6 @@ export function responseArrayBuffer(response: Response): Promise<ArrayBuffer> {
 }
 
 export function responseJson(response: Response): Promise<any> {
-  console.log(response)
   return response.json();
 }
 
@@ -156,6 +155,7 @@ export async function cancellableFetchOk<T>(
   transformResponse: ResponseTransform<T>,
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
+  console.log('cancelableFetchOk', input, init, cancellationToken); 
   if (cancellationToken === uncancelableToken) {
     const response = await fetchOk(input, init);
     return await transformResponse(response);
@@ -164,6 +164,7 @@ export async function cancellableFetchOk<T>(
   const unregisterCancellation = cancellationToken.add(() =>
     abortController.abort(),
   );
+
   try {
     const response = await fetchOk(input, {
       ...init,

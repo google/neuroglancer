@@ -85,7 +85,8 @@
     "lodash-es": "^4.17.21",
     "nifti-reader-js": "^0.6.8",
     "numcodecs": "^0.3.2",
-    "pako": "^2.1.0"
+    "pako": "^2.1.0",
+    "pkce-challenge": "^4.1.0"
   },
   "overrides": {
     "@puppeteer/browsers": ">=2"
