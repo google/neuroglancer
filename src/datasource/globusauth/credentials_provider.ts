@@ -80,26 +80,9 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
         const collection_scope = 'https://auth.globus.org/scopes/05d2c76a-e867-4f67-aa57-76edeb0beda0/data_access+https://auth.globus.org/scopes/05d2c76a-e867-4f67-aa57-76edeb0beda0/https'
         
 
-        // const auth_popup = 
         openPopupCenter(
           `https://auth.globus.org/v2/oauth2/authorize?scope=${collection_scope}&code_challenge=${code_challenge.code_challenge}&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&response_type=code&client_id=${client_id}`,
         );
-
-        // don't need this
-        // const closeAuthPopup = () => {
-        //   auth_popup?.close();
-        // };
-
-        // window.addEventListener("beforeunload", closeAuthPopup);
-        // const checkClosed = setInterval(() => {
-        //   if (auth_popup?.closed) {
-        //     clearInterval(checkClosed);
-        //     writeLoginStatus(
-        //       `Login window closed for auth server.`,
-        //       "Retry",
-        //     );
-        //   }
-        // }, 1000);
       });
       
       submit_button.addEventListener("click", async () => {
@@ -108,15 +91,10 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
             
             const response = await fetch(`https://auth.globus.org/v2/oauth2/token?grant_type=authorization_code&code=${accessCode}&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&code_verifier=${code_challenge.code_verifier}&client_id=${client_id}`, {
               method: 'POST',
-              // headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'} 
               });
             
             const asJSON = await response.json();
             const accessToken = asJSON.access_token;
-
-            console.log('i am a globus response');
-            console.log(response);    
-
             const token: GlobusAuthToken = {
               tokenType: "Bearer",
               accessToken,
@@ -135,13 +113,42 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
   }
 }
 
+const LOCAL_STORAGE_AUTH_KEY = "auth_token_v2";
+
+function getAuthTokenFromLocalStorage(authURL: string) {
+  const token = localStorage.getItem(`${LOCAL_STORAGE_AUTH_KEY}_${authURL}`);
+  if (token) {
+    return <GlobusAuthToken>JSON.parse(token);
+  }
+  return null;
+}
+
+function saveAuthTokenToLocalStorage(authURL: string, value: GlobusAuthToken) {
+  localStorage.setItem(
+    `${LOCAL_STORAGE_AUTH_KEY}_${authURL}`,
+    JSON.stringify(value),
+  );
+}
 export class GlobusAuthCredentialsProvider extends CredentialsProvider<GlobusAuthToken> {
+  alreadyTriedLocalStorage = false;
+
   constructor(public serverUrl: string) {
     super();
   }
   get = makeCredentialsGetter(async () => {
     let token = undefined;
-    token = await waitForLogin(this.serverUrl);
+
+    if (!this.alreadyTriedLocalStorage) {
+      this.alreadyTriedLocalStorage = true;
+      token = getAuthTokenFromLocalStorage(this.serverUrl);
+    }
+
+    if (!token) {
+      token = await waitForLogin(this.serverUrl);
+      saveAuthTokenToLocalStorage(this.serverUrl, token);
+    }
+
+    // token = await waitForLogin(this.serverUrl);
     return token;
   });
 }
@@ -163,36 +170,10 @@ export class GlobusAuthAppCredentialsProvider extends CredentialsProvider<OAuth2
       "globusauth",
       this.serverUrl,
     ) as GlobusAuthCredentialsProvider;
-    console.log('GlobusAuthAppCredentialsProvider', provider);
 
     this.credentials = await provider.get(this.credentials);
     console.log('GlobusAuthAppCredentialsProvider', this.credentials);
     return this.credentials.credentials;
 
-
-    // const response = await fetchWithCredentials(
-    //   this.globusauthCredentialsProvider,
-    //   `${this.serverUrl}`,
-    //   { method: "POST" },
-    //   responseJson,
-    //   (credentials, init) => {
-    //     return {
-    //       ...init,
-    //       body: JSON.stringify({
-    //         token: credentials.token,
-    //       }),
-    //     };
-    //   },
-    //   (error) => {
-    //     const { status } = error;
-    //     if (status === 401) {
-    //       return "refresh";
-    //     }
-    //     throw error;
-    //   },
-    // );
-    // console.log('GlobusAuthAppCredentialsProvider-2');
-    // console.log(response);
-    // return { tokenType: "Bearer", accessToken: response.token };
   });
 }
