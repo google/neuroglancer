@@ -1369,8 +1369,6 @@ export class PrecomputedDataSource extends DataSourceProvider {
     const { url: providerUrl, parameters } = parseProviderUrl(
       options.providerUrl,
     );
-    console.log("InsidePrecomputed");
-    console.log( providerUrl, parameters);
     return options.chunkManager.memoize.getUncounted(
       { type: "precomputed:get", providerUrl, parameters },
       async (): Promise<DataSource> => {

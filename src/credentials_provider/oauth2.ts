@@ -45,7 +45,6 @@ export function fetchWithOAuth2Credentials<T>(
       cancellationToken,
     );
   }
-
   return fetchWithCredentials(
     credentialsProvider,
     input,

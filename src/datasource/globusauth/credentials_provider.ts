@@ -88,7 +88,8 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
       submit_button.addEventListener("click", async () => {
         console.log('Submit clicked')
             const accessCode = token_text.value
-            
+  
+
             const response = await fetch(`https://auth.globus.org/v2/oauth2/token?grant_type=authorization_code&code=${accessCode}&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&code_verifier=${code_challenge.code_verifier}&client_id=${client_id}`, {
               method: 'POST',
               });

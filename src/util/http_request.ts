@@ -164,7 +164,6 @@ export async function cancellableFetchOk<T>(
   const unregisterCancellation = cancellationToken.add(() =>
     abortController.abort(),
   );
-
   try {
     const response = await fetchOk(input, {
       ...init,

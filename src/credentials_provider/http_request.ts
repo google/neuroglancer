@@ -42,7 +42,6 @@ export async function fetchWithCredentials<Credentials, T>(
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
-  console.log('I am fetch with credentials', credentialsProvider, credentials);  
   for (let credentialsAttempt = 0; ; ) {
     throwIfCanceled(cancellationToken);
     if (credentialsAttempt > 1) {

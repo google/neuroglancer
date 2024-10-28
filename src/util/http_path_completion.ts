@@ -51,7 +51,6 @@ export async function getHtmlDirectoryListing(
     }),
     cancellationToken,
   );
-  console.log('here');
   if (contentType === null || /\btext\/html\b/i.exec(contentType) === null) {
     return [];
   }
@@ -92,7 +91,6 @@ export async function getHtmlPathCompletions(
     if (!entry.startsWith(url)) continue;
     matches.push({ value: entry.substring(offset) });
   }
-  console.log(url);
   return {
     offset,
     completions: matches,
@@ -128,11 +126,8 @@ export async function completeHttpPath(
   credentialsManager: CredentialsManager,
   url: string,
   cancellationToken: CancellationToken,
-): Promise<BasicCompletionResult<Completion>> {
-  console.log('PathCompletion with url ', url);
-  
+): Promise<BasicCompletionResult<Completion>> {  
   if (!url.includes("://")) {
-    console.log('BBB');
     return {
       offset: 0,
       completions: getPrefixMatchesWithDescriptions(
@@ -155,7 +150,6 @@ export async function completeHttpPath(
     throw null;
   }
   const { protocol, host, path } = result;
-  console.log('ere',result);
   const completions = await (async () => {
     if (protocol === "gs+xml" && path.length > 0) {
       return await getS3CompatiblePathCompletions(
@@ -177,12 +171,6 @@ export async function completeHttpPath(
     }
     if (protocol === "globus" && path.length > 0) {
       return emptyCompletionResult;
-      // return await getGlobusPathCompletions(
-      //   credentialsProvider,
-      //   `${protocol}://${host}`,
-      //   path,
-      //   cancellationToken,
-      // );
     }
     if (protocol === "s3" && path.length > 0) {
       return await getS3PathCompletions(host, path, cancellationToken);
