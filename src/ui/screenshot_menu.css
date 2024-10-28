@@ -184,6 +184,7 @@ button {
 .neuroglancer-screenshot-button {
   cursor: pointer;
   margin: 2px;
+  padding: 0;
 }
 
 .neuroglancer-screenshot-close-button {
