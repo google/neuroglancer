@@ -140,8 +140,6 @@ button {
 }
 
 .neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-button {
-  background: url("../../src/ui/images/close.svg") no-repeat;
-  text-indent: -9999px;
   border: 0;
 }
 .neuroglancer-screenshot-scale-radio {
@@ -190,6 +188,7 @@ button {
 
 .neuroglancer-screenshot-close-button {
   margin-left: auto;
+  background-color: transparent;
 }
 
 .neuroglancer-screenshot-statistics-title {
@@ -287,8 +286,7 @@ button {
   padding: 0.25rem;
   font-weight: 400;
 }
-.neuroglancer-screenshot-size-text button {
-  background: url("../../src/ui/images/content_copy.svg") no-repeat;
+.neuroglancer-screenshot-copy-icon {
   outline: 0;
   border: 0;
   cursor: pointer;

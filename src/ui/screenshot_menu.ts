@@ -17,10 +17,10 @@
  */
 
 import "#src/ui/screenshot_menu.css";
+import svg_close from "ikonate/icons/close.svg?raw";
 import svg_help from "ikonate/icons/help.svg?raw";
 import { debounce, throttle } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
-import svg_close from "#src/ui/images/close.svg?raw";
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
@@ -205,7 +205,6 @@ export class ScreenshotDialog extends Overlay {
       () => this.dispose(),
       "neuroglancer-screenshot-close-button",
       svg_close,
-      "Close",
     );
 
     this.cancelScreenshotButton = this.createButton("Cancel screenshot", () =>
@@ -264,7 +263,6 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}px`;
 
     const screenshotCopyBtn = makeCopyButton({
-      title: "Copy to clipboard",
       onClick: () => {},
     });
     screenshotCopyBtn.classList.add("neuroglancer-screenshot-copy-icon");
@@ -342,14 +340,11 @@ export class ScreenshotDialog extends Overlay {
     onClick: () => void,
     cssClass: string = "",
     svgUrl: string | null = null,
-    svgAlt: string = "",
   ): HTMLButtonElement {
     const button = document.createElement("button");
     if (svgUrl) {
-      const img = document.createElement("img");
-      img.src = svgUrl;
-      img.alt = svgAlt;
-      button.appendChild(img);
+      const icon = makeIcon({ svg: svgUrl });
+      button.appendChild(icon);
     } else if (text) {
       button.textContent = text;
     }
