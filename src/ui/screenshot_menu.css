@@ -333,7 +333,7 @@
   display: inline-block;
   margin-left: 0.25rem;
   position: relative;
-  top: 0.13rem;
+  vertical-align: top;
 }
 .neuroglancer-screenshot-resolution-table td {
   font-size: 0.813rem;
