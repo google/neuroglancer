@@ -482,12 +482,12 @@ export class ScreenshotDialog extends Overlay {
     keyHeader.appendChild(tooltip.orthographicSettingsTooltip);
 
     headerRow.appendChild(keyHeader);
-    const physicalValueHeader = document.createElement("th");
-    physicalValueHeader.textContent = "Physical resolution";
-    headerRow.appendChild(physicalValueHeader);
     const pixelValueHeader = document.createElement("th");
     pixelValueHeader.textContent = "Pixel resolution";
     headerRow.appendChild(pixelValueHeader);
+    const physicalValueHeader = document.createElement("th");
+    physicalValueHeader.textContent = "Physical resolution";
+    headerRow.appendChild(physicalValueHeader);
     return resolutionTable;
   }
 
