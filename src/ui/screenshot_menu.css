@@ -14,27 +14,47 @@
  * limitations under the License.
  */
 
-
- :root {
+:root {
   --blue: #1e90ff;
   --white: #ffffff;
-  --gray300: #D0D5DD;
+  --gray300: #d0d5dd;
   --gray600: #141415;
-  --gray500: #F7F7F7;
-  --gray100: #EBEBEB;
-  --gray50: #E6E6E6;
+  --gray500: #f7f7f7;
+  --gray100: #ebebeb;
+  --gray50: #e6e6e6;
   --gray800: #344054;
-  --primary500: #0069EB;
-  --primary700: #0474FF;
-  --gray700: rgba(20, 20, 21, 0.60);
-  --gray400: rgba(20, 20, 21, 0.40);
-  --gray200: rgba(20, 20, 21, 0.80);
+  --primary500: #0069eb;
+  --primary700: #0474ff;
+  --gray700: rgba(20, 20, 21, 0.6);
+  --gray400: rgba(20, 20, 21, 0.4);
+  --gray200: rgba(20, 20, 21, 0.8);
 }
 .neuroglancer-screenshot-overlay {
   overflow-x: hidden;
   overflow-y: auto;
 }
-.neuroglancer-screenshot-overlay div, span, a, img, h1, h2, h3, h4, h5, h6, p, form, input, textarea, select, strong, table, tr, td, th, tbody, button {
+.neuroglancer-screenshot-overlay div,
+span,
+a,
+img,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+form,
+input,
+textarea,
+select,
+strong,
+table,
+tr,
+td,
+th,
+tbody,
+button {
   box-sizing: border-box;
   outline: 0;
 }
@@ -108,7 +128,8 @@
   align-items: center;
   gap: 0.5rem;
 }
-.neuroglancer-screenshot-filename-and-buttons .neuroglancer-screenshot-title-subheading {
+.neuroglancer-screenshot-filename-and-buttons
+  .neuroglancer-screenshot-title-subheading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -119,7 +140,7 @@
 }
 
 .neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-button {
-  background: url('../../src/ui/images/close.svg') no-repeat;
+  background: url("../../src/ui/images/close.svg") no-repeat;
   text-indent: -9999px;
   border: 0;
 }
@@ -153,7 +174,6 @@
   font-weight: 400;
   color: var(--gray700);
   box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
-
 }
 .neuroglancer-screenshot-name-input:disabled {
   background: var(--gray500);
@@ -227,7 +247,7 @@
   border-bottom: 1px solid var(--gray50);
   background: var(--gray500);
   width: 100%;
-  padding:1rem;
+  padding: 1rem;
 }
 .neuroglancer-screenshot-resolution-preview-container h2 {
   font-size: 0.938rem;
@@ -268,7 +288,7 @@
   font-weight: 400;
 }
 .neuroglancer-screenshot-size-text button {
-  background: url('../../src/ui/images/content_copy.svg') no-repeat;
+  background: url("../../src/ui/images/content_copy.svg") no-repeat;
   outline: 0;
   border: 0;
   cursor: pointer;
@@ -291,7 +311,8 @@
 .neuroglancer-screenshot-dialog .neuroglancer-icon:hover {
   background: none;
 }
-.neuroglancer-screenshot-resolution-table + .neuroglancer-screenshot-resolution-table {
+.neuroglancer-screenshot-resolution-table
+  + .neuroglancer-screenshot-resolution-table {
   border: 0;
 }
 .neuroglancer-screenshot-resolution-table th {
@@ -392,7 +413,8 @@
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--gray50);
 }
-.neuroglancer-screenshot-footer-container .neuroglancer-screenshot-progress-text {
+.neuroglancer-screenshot-footer-container
+  .neuroglancer-screenshot-progress-text {
   margin: 0;
   flex: 1;
   font-weight: 590;
@@ -412,11 +434,10 @@
   color: var(--gray800);
   margin: 0 0 0 0.25rem;
 }
-.neuroglancer-screenshot-footer-container .neuroglancer-screenshot-button:disabled {
+.neuroglancer-screenshot-footer-container
+  .neuroglancer-screenshot-button:disabled {
   display: none;
 }
-
-
 
 .neuroglancer-screenshot-copy-icon {
   position: relative;
@@ -424,7 +445,6 @@
   width: 33.33% !important;
   justify-content: flex-end;
 }
-
 
 .neuroglancer-screenshot-copy-icon::after {
   content: attr(data-tooltip);
@@ -455,7 +475,7 @@
   content: "";
   position: absolute;
   top: 100%; /* Adjust this to move the arrow closer to the tooltip */
-  left:88%;
+  left: 88%;
   margin-top: -0.375rem;
   transform: translateX(100%);
   border-width: 0.375rem;
