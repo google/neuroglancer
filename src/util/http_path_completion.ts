@@ -23,7 +23,6 @@ import type {
 } from "#src/util/completion.js";
 import { emptyCompletionResult, getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
 import { getGcsPathCompletions } from "#src/util/gcs_bucket_listing.js";
-// import { getGlobusPathCompletions } from "#src/util/globus_listing.js";
 import { parseUrl } from "#src/util/http_request.js";
 import { getS3PathCompletions } from "#src/util/s3.js";
 import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
@@ -78,6 +77,7 @@ export async function getHtmlPathCompletions(
   cancellationToken: CancellationToken,
   credentialsProvider?: SpecialProtocolCredentialsProvider,
 ): Promise<BasicCompletionResult> {
+  console.log("getHtmlPathCompletions");
   const m = url.match(/^([a-z]+:\/\/.*\/)([^/?#]*)$/);
   if (m === null) throw null;
   const entries = await getHtmlDirectoryListing(

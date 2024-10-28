@@ -44,7 +44,6 @@ function getMiddleAuthCredentialsProvider(
 function getGlobusAuthCredentialsProvider(
   credentialsManager: CredentialsManager,
   serverUrl: string,
-  // path: string
 ): SpecialProtocolCredentialsProvider {
   return credentialsManager.getCredentialsProvider(
     "globusauthapp",
