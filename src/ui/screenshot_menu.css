@@ -311,6 +311,10 @@
 .neuroglancer-screenshot-dialog .neuroglancer-icon:hover {
   background: none;
 }
+.neuroglancer-screenshot-size-text
+  + .neuroglancer-screenshot-resolution-table {
+  border: 0;
+}
 .neuroglancer-screenshot-resolution-table
   + .neuroglancer-screenshot-resolution-table {
   border: 0;
