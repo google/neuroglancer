@@ -263,6 +263,8 @@
   border: 1px solid var(--gray50);
   margin: 1rem 0 0;
   padding: 0.75rem 0.75rem 0.1rem;
+  width: 100%;
+  border-collapse: collapse;
 }
 .neuroglancer-screenshot-resolution-table h3 {
   text-align: left;
@@ -273,10 +275,6 @@
   width: 33.33%;
   padding: 0;
   margin: 0 0;
-}
-.neuroglancer-screenshot-resolution-table {
-  width: 100%;
-  border-collapse: collapse;
 }
 .neuroglancer-screenshot-size-text {
   margin: 0 0 0.75rem;
