@@ -33,28 +33,31 @@
   overflow-x: hidden;
   overflow-y: auto;
 }
-.neuroglancer-screenshot-overlay div,
-span,
-a,
-img,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-p,
-form,
-input,
-textarea,
-select,
-strong,
-table,
-tr,
-td,
-th,
-tbody,
-button {
+.neuroglancer-screenshot-overlay
+  :is(
+    div,
+    span,
+    a,
+    img,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    form,
+    input,
+    textarea,
+    select,
+    strong,
+    table,
+    tr,
+    td,
+    th,
+    tbody,
+    button
+  ) {
   box-sizing: border-box;
   outline: 0;
 }
