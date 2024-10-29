@@ -85,6 +85,8 @@
   gap: 10px;
 }
 
+/* TODO implement proper scroll - this is to ensure div class is setup right */
+/* TODO Make tooltips work with this */
 .neuroglancer-screenshot-main-body-container {
   height: auto !important;
   max-height: calc(100vh - 200px) !important;
@@ -505,5 +507,5 @@
 }
 
 .neuroglancer-screenshot-dimension {
-  color: orange; /* TODO add exact color */
+  color:black; /* TODO add exact color */
 }

@@ -36,6 +36,8 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
+import { setClipboard } from "#src/util/clipboard.js";
+import { StatusMessage } from "#src/status.js";
 
 // If DEBUG_ALLOW_MENU_CLOSE is true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
@@ -44,6 +46,16 @@ import { makeIcon } from "#src/widget/icon.js";
 
 const DEBUG_ALLOW_MENU_CLOSE = false;
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
+const PANEL_TABLE_HEADER_STRINGS = {
+  type: "Panel type",
+  pixelResolution: "Pixel resolution",
+  physicalResolution: "Physical resolution",
+};
+const LAYER_TABLE_HEADER_STRINGS = {
+  name: "Layer name",
+  type: "Type",
+  resolution: "Physical voxel resolution",
+};
 
 interface UIScreenshotStatistics {
   chunkUsageDescription: string;
@@ -71,6 +83,7 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
     return {
       type: "Loading...",
       resolution: "Loading...",
+      resolutionText: "Loading...",
     };
   }
   const first_resolution = resolution[0];
@@ -78,19 +91,31 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   if (first_resolution.dimensionName === "All_") {
     return {
       type: first_resolution.parentType,
-      resolution: ` ${first_resolution.resolutionWithUnit}`,
+      resolution: first_resolution.resolutionWithUnit,
+      resolutionText: first_resolution.resolutionWithUnit,
     };
   } else {
+    let innerHtml = "";
     let text = "";
     for (const res of resolution) {
-      text += `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit} `;
+      innerHtml += `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit} `;
+      text += `${res.dimensionName} ${res.resolutionWithUnit} `;
     }
+    innerHtml = innerHtml.slice(0, -1);
     text = text.slice(0, -1);
     return {
       type: first_resolution.parentType,
-      resolution: text,
+      resolution: innerHtml,
+      resolutionText: text,
     };
   }
+}
+
+function formatPixelResolution(panelArea: PanelViewport, scale: number) {
+  const width = Math.round(panelArea.right - panelArea.left) * scale;
+  const height = Math.round(panelArea.bottom - panelArea.top) * scale;
+  const type = panelArea.panelType;
+  return { width, height, type };
 }
 
 /**
@@ -267,7 +292,14 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}px`;
 
     const screenshotCopyButton = makeCopyButton({
-      onClick: () => {},
+      onClick: () => {
+        const result = setClipboard(this.getResolutionText());
+        StatusMessage.showTemporaryMessage(
+          result
+            ? "Resolution table copied to clipboard"
+            : "Failed to copy resolution table to clipboard",
+        );
+      },
     });
     screenshotCopyButton.classList.add("neuroglancer-screenshot-copy-icon");
     screenshotCopyButton.setAttribute("data-tooltip", "Copy to clipboard");
@@ -487,29 +519,23 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Panel type";
+    keyHeader.textContent = PANEL_TABLE_HEADER_STRINGS.type;
 
     const tooltip = this.setupHelpTooltips();
     keyHeader.appendChild(tooltip.orthographicSettingsTooltip);
 
     headerRow.appendChild(keyHeader);
     const pixelValueHeader = document.createElement("th");
-    pixelValueHeader.textContent = "Pixel resolution";
+    pixelValueHeader.textContent = PANEL_TABLE_HEADER_STRINGS.pixelResolution;
     headerRow.appendChild(pixelValueHeader);
     const physicalValueHeader = document.createElement("th");
-    physicalValueHeader.textContent = "Physical resolution";
+    physicalValueHeader.textContent =
+      PANEL_TABLE_HEADER_STRINGS.physicalResolution;
     headerRow.appendChild(physicalValueHeader);
     return resolutionTable;
   }
 
   private populatePanelResolutionTable() {
-    function formatPixelResolution(panelArea: PanelViewport, scale: number) {
-      const width = Math.round(panelArea.right - panelArea.left) * scale;
-      const height = Math.round(panelArea.bottom - panelArea.top) * scale;
-      const type = panelArea.panelType;
-      return { width, height, type };
-    }
-
     // Clear the table before populating it
     while (this.panelResolutionTable.rows.length > 1) {
       this.panelResolutionTable.deleteRow(1);
@@ -545,13 +571,13 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Layer name";
+    keyHeader.textContent = LAYER_TABLE_HEADER_STRINGS.name;
     headerRow.appendChild(keyHeader);
     const typeHeader = document.createElement("th");
-    typeHeader.textContent = "Type";
+    typeHeader.textContent = LAYER_TABLE_HEADER_STRINGS.type;
     headerRow.appendChild(typeHeader);
     const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Physical voxel resolution";
+    valueHeader.textContent = LAYER_TABLE_HEADER_STRINGS.resolution;
     headerRow.appendChild(valueHeader);
     return resolutionTable;
   }
@@ -670,9 +696,45 @@ export class ScreenshotDialog extends Overlay {
     };
   }
 
-  private copyResolutionToClipboard() {
-    const resolutionText = `${this.screenshotWidth}x${this.screenshotHeight}`;
-    navigator.clipboard.writeText(resolutionText);
+  /**
+  Private function to copy the resolution of the screenshot to the clipboard
+  This will be in tsv format, with the width and height separated by an 'x'
+    */
+  private getResolutionText() {
+    // Processing the Screenshot size
+    const screenshotSizeText = `Screenshot size \t${this.screenshotWidth}x${this.screenshotHeight} px\n`;
+
+    // Process the panel resolution table
+    const panelResolution = getViewerPanelResolutions(
+      this.screenshotManager.viewer.display.panels,
+    );
+    let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type} \t${PANEL_TABLE_HEADER_STRINGS.pixelResolution} \t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
+    for (const resolution of panelResolution) {
+      const physicalResolution = formatPhysicalResolution(
+        resolution.physicalResolution,
+      );
+      const pixelResolution = formatPixelResolution(
+        resolution.pixelResolution,
+        this.screenshotManager.screenshotScale,
+      );
+      panelResolutionText += `${physicalResolution.type} \t${pixelResolution.width}x${pixelResolution.height} px \t${physicalResolution.resolutionText}\n`;
+    }
+
+    // Process the layer resolution table
+    const layerResolution = getViewerLayerResolutions(
+      this.screenshotManager.viewer,
+    );
+    let layerResolutionText = `${LAYER_TABLE_HEADER_STRINGS.name} \t${LAYER_TABLE_HEADER_STRINGS.type} \t${LAYER_TABLE_HEADER_STRINGS.resolution}\n`;
+    for (const [key, value] of layerResolution) {
+      const { name, type } = key;
+      if (type === "MultiscaleMeshLayer") {
+        continue;
+      }
+      const physicalResolution = formatPhysicalResolution(value);
+      layerResolutionText += `${name} \t${layerNamesForUI[type as keyof typeof layerNamesForUI]} \t${physicalResolution.resolutionText}\n`;
+    }
+
+    return `${screenshotSizeText}${panelResolutionText}${layerResolutionText}`;
   }
 
   private debouncedUpdateUIElements = debounce(() => {
