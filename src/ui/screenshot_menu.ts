@@ -83,9 +83,9 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   } else {
     let text = "";
     for (const res of resolution) {
-      text += `${res.dimensionName}: ${res.resolutionWithUnit}, `;
+      text += `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit} `;
     }
-    text = text.slice(0, -2);
+    text = text.slice(0, -1);
     return {
       type: first_resolution.parentType,
       resolution: text,
@@ -528,11 +528,11 @@ export class ScreenshotDialog extends Overlay {
       );
       const row = resolutionTable.insertRow();
       const keyCell = row.insertCell();
-      const physicalValueCell = row.insertCell();
-      keyCell.textContent = physicalResolution.type;
-      physicalValueCell.textContent = physicalResolution.resolution;
       const pixelValueCell = row.insertCell();
       pixelValueCell.textContent = `${pixelResolution.width}x${pixelResolution.height} px`;
+      const physicalValueCell = row.insertCell();
+      keyCell.textContent = physicalResolution.type;
+      physicalValueCell.innerHTML = physicalResolution.resolution;
     }
     return resolutionTable;
   }
@@ -578,7 +578,7 @@ export class ScreenshotDialog extends Overlay {
           layerNamesForUI[type as keyof typeof layerNamesForUI];
         this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
       }
-      valueCell.textContent = formatPhysicalResolution(value).resolution;
+      valueCell.innerHTML = formatPhysicalResolution(value).resolution;
     }
   }
 

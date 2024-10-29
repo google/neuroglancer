@@ -503,3 +503,7 @@
   opacity: 1;
   visibility: visible;
 }
+
+.neuroglancer-screenshot-dimension {
+  color: orange; /* TODO add exact color */
+}
