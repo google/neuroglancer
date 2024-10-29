@@ -77,10 +77,7 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
       status.element.appendChild(login_button);
       status.element.appendChild(submit_button);
       status.element.appendChild(token_text);
-      
-      
-      
-
+  
       login_button.addEventListener("click", async () => {
         console.log('Login button clicked')
         writeLoginStatus(
@@ -92,7 +89,8 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
         if (ep_id === '') {
           ep_id = "05d2c76a-e867-4f67-aa57-76edeb0beda0";
           }
-        const collection_scope = `https://auth.globus.org/scopes/${ep_id}/data_access+https://auth.globus.org/scopes/${ep_id}/https`
+          //https://auth.globus.org/scopes/${ep_id}/data_access+
+        const collection_scope = `https://auth.globus.org/scopes/${ep_id}/https`
 
         openPopupCenter(
           `https://auth.globus.org/v2/oauth2/authorize?scope=${collection_scope}&code_challenge=${code_challenge.code_challenge}&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&response_type=code&client_id=${client_id}`,
