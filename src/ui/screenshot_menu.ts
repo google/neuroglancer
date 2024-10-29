@@ -618,7 +618,6 @@ export class ScreenshotDialog extends Overlay {
 
   private forceScreenshot() {
     this.screenshotManager.forceScreenshot();
-    this.dispose();
   }
 
   private cancelScreenshot() {
