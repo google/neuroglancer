@@ -266,15 +266,15 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotSelectedValues = document.createElement("span");
     this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}px`;
 
-    const screenshotCopyBtn = makeCopyButton({
+    const screenshotCopyButton = makeCopyButton({
       onClick: () => {},
     });
-    screenshotCopyBtn.classList.add("neuroglancer-screenshot-copy-icon");
-    screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
+    screenshotCopyButton.classList.add("neuroglancer-screenshot-copy-icon");
+    screenshotCopyButton.setAttribute("data-tooltip", "Copy to clipboard");
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
-    this.screenshotSizeText.appendChild(screenshotCopyBtn);
+    this.screenshotSizeText.appendChild(screenshotCopyButton);
 
     previewContainer.appendChild(previewLabel);
     previewContainer.appendChild(settingsPreview);
@@ -668,6 +668,11 @@ export class ScreenshotDialog extends Overlay {
       gpuMemoryUsageDescription: `${gpuMemoryUsageInMB.toFixed(0)}MB / ${totalMemoryInMB.toFixed(0)}MB (${percentGpuUsage.toFixed(2)}% of total)`,
       downloadSpeedDescription: downloadString,
     };
+  }
+
+  private copyResolutionToClipboard() {
+    const resolutionText = `${this.screenshotWidth}x${this.screenshotHeight}`;
+    navigator.clipboard.writeText(resolutionText);
   }
 
   private debouncedUpdateUIElements = debounce(() => {
