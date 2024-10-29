@@ -85,6 +85,13 @@
   gap: 10px;
 }
 
+.neuroglancer-screenshot-main-body-container {
+  height: auto !important;
+  max-height: calc(100vh - 200px) !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .neuroglancer-screenshot-dialog .neuroglancer-screenshot-title-heading {
   font-size: 0.938rem;
   font-weight: 590;

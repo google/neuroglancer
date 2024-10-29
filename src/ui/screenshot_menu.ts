@@ -240,11 +240,15 @@ export class ScreenshotDialog extends Overlay {
     closeAndHelpContainer.appendChild(titleText);
     closeAndHelpContainer.appendChild(this.closeMenuButton);
 
+    // This is the header
     this.content.appendChild(closeAndHelpContainer);
 
-    this.content.appendChild(this.filenameAndButtonsContainer);
-    this.content.appendChild(this.createScaleRadioButtons());
-    // this.content.appendChild(tooltip.orthographicSettingsTooltip);
+    const mainBody = document.createElement("div");
+    mainBody.classList.add("neuroglancer-screenshot-main-body-container");
+    this.content.appendChild(mainBody);
+
+    mainBody.appendChild(this.filenameAndButtonsContainer);
+    mainBody.appendChild(this.createScaleRadioButtons());
 
     const previewContainer = document.createElement("div");
     previewContainer.classList.add(
@@ -278,8 +282,8 @@ export class ScreenshotDialog extends Overlay {
     settingsPreview.appendChild(this.createPanelResolutionTable());
     settingsPreview.appendChild(this.createLayerResolutionTable());
 
-    this.content.appendChild(previewContainer);
-    this.content.appendChild(this.createStatisticsTable());
+    mainBody.appendChild(previewContainer);
+    mainBody.appendChild(this.createStatisticsTable());
 
     this.footerScreenshotActionBtnsContainer = document.createElement("div");
     this.footerScreenshotActionBtnsContainer.classList.add(
