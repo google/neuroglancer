@@ -87,7 +87,7 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
 
         let ep_id = ep_text.value
         if (ep_id === '') {
-          ep_id = "05d2c76a-e867-4f67-aa57-76edeb0beda0";
+          ep_id = "aa12ebd6-d442-47ab-b630-54e18044c8bd";
           }
           //https://auth.globus.org/scopes/${ep_id}/data_access+
         const collection_scope = `https://auth.globus.org/scopes/${ep_id}/https`
