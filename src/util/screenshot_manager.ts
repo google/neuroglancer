@@ -38,7 +38,7 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
-const SCREENSHOT_TIMEOUT = 1000;
+const SCREENSHOT_TIMEOUT = 5000;
 
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
@@ -245,17 +245,18 @@ export class ScreenshotManager extends RefCounted {
   }
 
   // Scales the screenshot by the given factor, and calculates the cropped area
-  calculatedScaledAndClippedSize() {
+  calculatedScaledAndClippedSize(scale: number): {
+    width: number;
+    height: number;
+  } {
     const renderingPanelArea = calculatePanelViewportBounds(
       this.viewer.display.panels,
     ).totalRenderPanelViewport;
     return {
       width:
-        Math.round(renderingPanelArea.right - renderingPanelArea.left) *
-        this.screenshotScale,
+        Math.round(renderingPanelArea.right - renderingPanelArea.left) * scale,
       height:
-        Math.round(renderingPanelArea.bottom - renderingPanelArea.top) *
-        this.screenshotScale,
+        Math.round(renderingPanelArea.bottom - renderingPanelArea.top) * scale,
     };
   }
 

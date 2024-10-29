@@ -19,8 +19,10 @@
 import "#src/ui/screenshot_menu.css";
 import svg_close from "ikonate/icons/close.svg?raw";
 import svg_help from "ikonate/icons/help.svg?raw";
-import { debounce, throttle } from "lodash-es";
+import { throttle } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
+import { StatusMessage } from "#src/status.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
@@ -36,8 +38,6 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
-import { setClipboard } from "#src/util/clipboard.js";
-import { StatusMessage } from "#src/status.js";
 
 // If DEBUG_ALLOW_MENU_CLOSE is true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
@@ -154,6 +154,8 @@ export class ScreenshotDialog extends Overlay {
   private warningElement: HTMLDivElement;
   private footerScreenshotActionBtnsContainer: HTMLDivElement;
   private progressText: HTMLParagraphElement;
+  private scaleRadioButtonsContainer: HTMLDivElement;
+  private keepSliceFOVFixedCheckbox: HTMLInputElement;
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   private layerResolutionKeyToCellMap: Map<string, HTMLTableCellElement> =
     new Map();
@@ -393,7 +395,6 @@ export class ScreenshotDialog extends Overlay {
   private createScaleRadioButtons() {
     const scaleMenu = document.createElement("div");
     scaleMenu.classList.add("neuroglancer-screenshot-scale-menu");
-    // scaleMenu.appendChild(this.screenshotSizeText);
 
     const scaleLabel = document.createElement("label");
     scaleLabel.classList.add("neuroglancer-screenshot-scale-factor");
@@ -403,6 +404,12 @@ export class ScreenshotDialog extends Overlay {
     scaleLabel.appendChild(tooltip.scaleFactorHelpTooltip);
 
     scaleMenu.appendChild(scaleLabel);
+
+    this.scaleRadioButtonsContainer = document.createElement("div");
+    this.scaleRadioButtonsContainer.classList.add(
+      "neuroglancer-screenshot-scale-radio-container",
+    );
+    scaleMenu.appendChild(this.scaleRadioButtonsContainer);
 
     this.warningElement = document.createElement("div");
     this.warningElement.classList.add("neuroglancer-screenshot-warning");
@@ -423,7 +430,7 @@ export class ScreenshotDialog extends Overlay {
 
       label.appendChild(document.createTextNode(`${scale}x`));
 
-      scaleMenu.appendChild(label);
+      this.scaleRadioButtonsContainer.appendChild(label);
 
       input.addEventListener("change", () => {
         this.screenshotManager.screenshotScale = scale;
@@ -449,6 +456,7 @@ export class ScreenshotDialog extends Overlay {
       this.screenshotManager.shouldKeepSliceViewFOVFixed =
         keepSliceFOVFixedCheckbox.checked;
     });
+    this.keepSliceFOVFixedCheckbox = keepSliceFOVFixedCheckbox;
     keepSliceFOVFixedDiv.appendChild(keepSliceFOVFixedCheckbox);
     scaleMenu.appendChild(keepSliceFOVFixedDiv);
 
@@ -550,7 +558,7 @@ export class ScreenshotDialog extends Overlay {
       );
       const pixelResolution = formatPixelResolution(
         resolution.pixelResolution,
-        this.screenshotManager.screenshotScale,
+        this.getResolutionScaleMultiplier(),
       );
       const row = resolutionTable.insertRow();
       const keyCell = row.insertCell();
@@ -621,9 +629,7 @@ export class ScreenshotDialog extends Overlay {
   private screenshot() {
     const filename = this.nameInput.value;
     this.screenshotManager.takeScreenshot(filename);
-    // Delay the update because sometimes the screenshot is immediately taken
-    // And the UI is disposed before the update can happen
-    this.debouncedUpdateUIElements();
+    this.updateUIBasedOnMode();
   }
 
   private populateStatistics(
@@ -643,7 +649,9 @@ export class ScreenshotDialog extends Overlay {
 
   private handleScreenshotResize() {
     const screenshotSize =
-      this.screenshotManager.calculatedScaledAndClippedSize();
+      this.screenshotManager.calculatedScaledAndClippedSize(
+        this.getResolutionScaleMultiplier(),
+      );
     if (screenshotSize.width * screenshotSize.height > LARGE_SCREENSHOT_SIZE) {
       this.warningElement.textContent =
         "Warning: large screenshots (bigger than 4096x4096) may fail";
@@ -654,7 +662,6 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotHeight = screenshotSize.height;
     // Update the screenshot size display whenever dimensions change
     this.updateScreenshotSizeDisplay();
-    // this.screenshotSizeText.textContent = `Screenshot size: ${screenshotSize.width}px, ${screenshotSize.height}px`;
   }
 
   private updateScreenshotSizeDisplay() {
@@ -715,7 +722,7 @@ export class ScreenshotDialog extends Overlay {
       );
       const pixelResolution = formatPixelResolution(
         resolution.pixelResolution,
-        this.screenshotManager.screenshotScale,
+        this.getResolutionScaleMultiplier(),
       );
       panelResolutionText += `${physicalResolution.type} \t${pixelResolution.width}x${pixelResolution.height} px \t${physicalResolution.resolutionText}\n`;
     }
@@ -737,12 +744,28 @@ export class ScreenshotDialog extends Overlay {
     return `${screenshotSizeText}${panelResolutionText}${layerResolutionText}`;
   }
 
-  private debouncedUpdateUIElements = debounce(() => {
-    this.updateUIBasedOnMode();
-  }, 100);
+  /**
+   * While the screenshot is not in progress, the user can change the scale of the screenshot
+   * We want to give a preview of the screenshot size to the user
+   * During the screenshot, the user is locked into the menu and cannot change the scale
+   * And the viewer canvas pixels have been resized to the screenshot size
+   * So the preview is not necessary
+   */
+  private getResolutionScaleMultiplier() {
+    return this.screenshotMode === ScreenshotMode.OFF
+      ? this.screenshotManager.screenshotScale
+      : 1;
+  }
 
   private updateUIBasedOnMode() {
     if (this.screenshotMode === ScreenshotMode.OFF) {
+      this.nameInput.disabled = false;
+      for (const radio of this.scaleRadioButtonsContainer.children) {
+        for (const child of (radio as HTMLElement).children) {
+          if (child instanceof HTMLInputElement) child.disabled = false;
+        }
+      }
+      this.keepSliceFOVFixedCheckbox.disabled = false;
       this.forceScreenshotButton.disabled = true;
       this.cancelScreenshotButton.disabled = true;
       this.takeScreenshotButton.disabled = false;
@@ -750,6 +773,13 @@ export class ScreenshotDialog extends Overlay {
       this.closeMenuButton.disabled = false;
       this.forceScreenshotButton.title = "";
     } else {
+      this.nameInput.disabled = true;
+      for (const radio of this.scaleRadioButtonsContainer.children) {
+        for (const child of (radio as HTMLElement).children) {
+          if (child instanceof HTMLInputElement) child.disabled = true;
+        }
+      }
+      this.keepSliceFOVFixedCheckbox.disabled = true;
       this.forceScreenshotButton.disabled = false;
       this.cancelScreenshotButton.disabled = false;
       this.takeScreenshotButton.disabled = true;
