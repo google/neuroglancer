@@ -18,6 +18,7 @@ import "#src/annotation/bounding_box.js";
 import "#src/annotation/line.js";
 import "#src/annotation/point.js";
 import "#src/annotation/ellipsoid.js";
+import "#src/annotation/polyline.js";
 
 import type {
   AnnotationLayerState,
