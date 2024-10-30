@@ -51,82 +51,17 @@ function openPopupCenter(url: string) {
 
 const client_id = '9305520c-8b3b-47fb-9346-e38a7eeb0b26';
 
-async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
-  const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
+const LOCAL_STORAGE_AUTH_KEY = "globus_auth_token_v2";
+const LOCAL_EP_UUID = "globus_ep_uuid";
 
-  const code_challenge = await pkceChallenge();
-
-  const res: Promise<GlobusAuthToken> = new Promise((f) => {
-    function writeLoginStatus(message: string, buttonMessage: string) {
-
-      const login_button = document.createElement("button");
-      const submit_button = document.createElement("button");
-      const ep_text = document.createElement("textarea");
-      const token_text = document.createElement("textarea");
-
-      login_button.textContent = buttonMessage;
-      submit_button.textContent = "Submit token";
-
-      status.element.textContent = message;
-      status.element.appendChild(document.createElement("br"));
-      status.element.textContent = "Endpoint ID: ";
-      status.element.appendChild(ep_text);
-      status.element.appendChild(document.createElement("br"));
-      
-      status.element.appendChild(document.createElement("br"));
-      status.element.appendChild(login_button);
-      status.element.appendChild(submit_button);
-      status.element.appendChild(token_text);
-  
-      login_button.addEventListener("click", async () => {
-        console.log('Login button clicked')
-        writeLoginStatus(
-          `Waiting for login`,
-          "Retry",
-        );
-
-        let ep_id = ep_text.value
-        if (ep_id === '') {
-          ep_id = "aa12ebd6-d442-47ab-b630-54e18044c8bd";
-          }
-          //https://auth.globus.org/scopes/${ep_id}/data_access+
-        const collection_scope = `https://auth.globus.org/scopes/${ep_id}/https`
-
-        openPopupCenter(
-          `https://auth.globus.org/v2/oauth2/authorize?scope=${collection_scope}&code_challenge=${code_challenge.code_challenge}&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&response_type=code&client_id=${client_id}`,
-        );
-      });
-      
-      submit_button.addEventListener("click", async () => {
-        console.log('Submit clicked')
-            const accessCode = token_text.value
-            
-
-            const response = await fetch(`https://auth.globus.org/v2/oauth2/token?grant_type=authorization_code&code=${accessCode}&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&code_verifier=${code_challenge.code_verifier}&client_id=${client_id}`, {
-              method: 'POST',
-              });
-            
-            const asJSON = await response.json();
-            const accessToken = asJSON.access_token;
-            const token: GlobusAuthToken = {
-              tokenType: "Bearer",
-              accessToken,
-              url: serverUrl,
-            };
-            f(token);
-      });
-    }
-    writeLoginStatus(`Globus login required. Please click the login button and paste the resulting token below.`, "Login");
-  });
-
-  try {
-    return await res;
-  } finally {
-    status.dispose();
-  }
+function getEpValueFromLocalStorage(serverUrl: string) {
+  const epValue = localStorage.getItem(`${LOCAL_EP_UUID}_${serverUrl}`);
+  return epValue ? epValue : "";
 }
 
-const LOCAL_STORAGE_AUTH_KEY = "auth_token_v2";
+function saveEpValueToLocalStorage(serverUrl: string, epValue: string) {
+  localStorage.setItem(`${LOCAL_EP_UUID}_${serverUrl}`, epValue);
+}
 
 function getAuthTokenFromLocalStorage(authURL: string) {
   const token = localStorage.getItem(`${LOCAL_STORAGE_AUTH_KEY}_${authURL}`);
@@ -142,6 +77,104 @@ function saveAuthTokenToLocalStorage(authURL: string, value: GlobusAuthToken) {
     JSON.stringify(value),
   );
 }
+
+async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
+  const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
+
+  const code_challenge = await pkceChallenge();
+
+  const res: Promise<GlobusAuthToken> = new Promise((f) => {
+    let firstLoginAttempt = true;
+
+    function writeLoginStatus(message: string) {
+      // Clear the status element to avoid repetition
+      status.element.innerHTML = '';
+
+      const container = document.createElement("div");
+      container.style.display = "flex";
+      container.style.flexDirection = "column";
+      container.style.gap = "10px";
+
+      const login_button = document.createElement("button");
+      const submit_button = document.createElement("button");
+      const ep_text = document.createElement("textarea");
+      const token_text = document.createElement("textarea");
+
+      login_button.textContent = "Globus Login";
+      submit_button.textContent = "Submit token";
+
+      const messageElement = document.createElement("div");
+      messageElement.textContent = message;
+
+      const epLabel = document.createElement("label");
+      epLabel.textContent = "Endpoint ID: ";
+      ep_text.style.width = "100%";
+      ep_text.value = getEpValueFromLocalStorage(serverUrl); // Auto-populate if known
+      epLabel.appendChild(ep_text);
+
+      container.appendChild(messageElement);
+      container.appendChild(epLabel);
+      container.appendChild(login_button);
+
+      if (!firstLoginAttempt) {
+        login_button.textContent = "Retry Globus Login";
+        const tokenLabel = document.createElement("label");
+        tokenLabel.textContent = "Token: ";
+        token_text.style.width = "100%";
+        tokenLabel.appendChild(token_text);
+        container.appendChild(tokenLabel);
+        container.appendChild(submit_button);
+      }
+
+      status.element.appendChild(container);
+
+      login_button.addEventListener("click", async () => {
+        console.log('Login button clicked');
+        firstLoginAttempt = false;
+        writeLoginStatus(`Waiting for login`);
+
+        let ep_id = ep_text.value;
+        if (ep_id === '') {
+          ep_id = "aa12ebd6-d442-47ab-b630-54e18044c8bd";
+        } else {
+          saveEpValueToLocalStorage(serverUrl, ep_id); // Save the ep_value
+        }
+        const collection_scope = `https://auth.globus.org/scopes/${ep_id}/https`;
+
+        openPopupCenter(
+          `https://auth.globus.org/v2/oauth2/authorize?scope=${collection_scope}&code_challenge=${code_challenge.code_challenge}&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&response_type=code&client_id=${client_id}`,
+        );
+      });
+
+      submit_button.addEventListener("click", async () => {
+        console.log('Submit clicked');
+        const accessCode = token_text.value;
+
+        const response = await fetch(`https://auth.globus.org/v2/oauth2/token?grant_type=authorization_code&code=${accessCode}&redirect_uri=https%3A%2F%2Fauth.globus.org%2Fv2%2Fweb%2Fauth-code&code_verifier=${code_challenge.code_verifier}&client_id=${client_id}`, {
+          method: 'POST',
+        });
+
+        const asJSON = await response.json();
+        const accessToken = asJSON.access_token;
+        const token: GlobusAuthToken = {
+          tokenType: "Bearer",
+          accessToken,
+          url: serverUrl,
+        };
+        f(token);
+      });
+    }
+
+    writeLoginStatus(`Globus login required. Please add the endpoint UUID amd click the login button to get an auth code.`);
+  });
+
+  try {
+    return await res;
+  } finally {
+    status.dispose();
+  }
+}
+
 export class GlobusAuthCredentialsProvider extends CredentialsProvider<GlobusAuthToken> {
   alreadyTriedLocalStorage = false;
 
