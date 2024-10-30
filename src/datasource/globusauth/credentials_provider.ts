@@ -85,6 +85,7 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
 
   const res: Promise<GlobusAuthToken> = new Promise((f) => {
     let firstLoginAttempt = true;
+    let ep_id = getEpValueFromLocalStorage(serverUrl); // Initialize with stored value if available
 
     function writeLoginStatus(message: string) {
       // Clear the status element to avoid repetition
@@ -109,7 +110,7 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
       const epLabel = document.createElement("label");
       epLabel.textContent = "Endpoint ID: ";
       ep_text.style.width = "100%";
-      ep_text.value = getEpValueFromLocalStorage(serverUrl); // Auto-populate if known
+      ep_text.value = ep_id; // Auto-populate with the current value
       epLabel.appendChild(ep_text);
 
       container.appendChild(messageElement);
@@ -131,14 +132,12 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
       login_button.addEventListener("click", async () => {
         console.log('Login button clicked');
         firstLoginAttempt = false;
-        writeLoginStatus(`Waiting for login`);
-
-        let ep_id = ep_text.value;
-        if (ep_id === '') {
-          ep_id = "aa12ebd6-d442-47ab-b630-54e18044c8bd";
-        } else {
+        ep_id = ep_text.value; // Update the ep_id with the current input value
+        if (ep_id !== '') {
           saveEpValueToLocalStorage(serverUrl, ep_id); // Save the ep_value
         }
+        writeLoginStatus(`Waiting for login`);
+
         const collection_scope = `https://auth.globus.org/scopes/${ep_id}/https`;
 
         openPopupCenter(
@@ -161,11 +160,18 @@ async function waitForLogin(serverUrl: string): Promise<GlobusAuthToken> {
           accessToken,
           url: serverUrl,
         };
+
+        // Show success message
+        status.element.innerHTML = '';
+        const successMessage = document.createElement("div");
+        successMessage.textContent = "Login successful!";
+        status.element.appendChild(successMessage);
+
         f(token);
       });
     }
 
-    writeLoginStatus(`Globus login required. Please add the endpoint UUID amd click the login button to get an auth code.`);
+    writeLoginStatus(`Globus login required. Please click the login button and paste the resulting token below.`);
   });
 
   try {
