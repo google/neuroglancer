@@ -1139,9 +1139,11 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
     }
 
     if (mouseState.updateUnconditionally()) {
+      //console.log(mouseState); // TODO uset this
       const updateNextPoint = () => {
         const state = inProgressAnnotation.value!;
         const reference = state.reference;
+        // TODO change whether new or not based on state
         const newAnnotation = this.getUpdatedAnnotation(
           reference.value!,
           mouseState,
@@ -1178,12 +1180,27 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
           disposer,
         };
       } else {
+        // TODO change whether to end or not based on state
         updateNextPoint();
         const state = inProgressAnnotation.value;
         state.annotationLayer.source.commit(state.reference);
         state.disposer();
         inProgressAnnotation.value = undefined;
       }
+    }
+  }
+
+  disposed() {
+    this.deactivate();
+    super.disposed();
+  }
+
+  deactivate() {
+    const state = this.inProgressAnnotation.value;
+    if (state !== undefined) {
+      state.annotationLayer.source.delete(state.reference);
+      state.disposer();
+      this.inProgressAnnotation.value = undefined;
     }
   }
 }
@@ -1427,12 +1444,19 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
     oldAnnotation: Polyline,
     mouseState: MouseSelectionState,
     annotationLayer: AnnotationLayerState,
+    createNewPoint = false,
   ) {
     const point = getMousePositionInAnnotationCoordinates(
       mouseState,
       annotationLayer,
     );
     if (point === undefined) return oldAnnotation;
+    if (!createNewPoint) {
+      return <Polyline>{
+        ...oldAnnotation,
+        points: [...oldAnnotation.points.slice(0, -1), point],
+      };
+    }
     return <Polyline>{
       ...oldAnnotation,
       points: [...oldAnnotation.points, point],

@@ -219,7 +219,6 @@ emitAnnotation(color);
   }
 
   draw(context: AnnotationRenderContext) {
-    console.log(context);
     this.drawEdges(context);
     this.drawEndpoints(context);
   }
