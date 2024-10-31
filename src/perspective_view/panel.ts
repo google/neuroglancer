@@ -95,6 +95,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  hideTransparentPerspectiveSliceViews: TrackableBoolean;
   rpc: RPC;
 }
 
@@ -322,7 +323,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper = this.registerDisposer(
-    SliceViewRenderHelper.get(this.gl, perspectivePanelEmit),
+    SliceViewRenderHelper.get(this.gl, perspectivePanelEmit, this.viewer),
   );
 
   protected offscreenFramebuffer = this.registerDisposer(

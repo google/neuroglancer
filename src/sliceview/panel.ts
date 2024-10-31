@@ -105,7 +105,7 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   private sliceViewRenderHelper = this.registerDisposer(
-    SliceViewRenderHelper.get(this.gl, sliceViewPanelEmitColor),
+    SliceViewRenderHelper.get(this.gl, sliceViewPanelEmitColor, this.viewer),
   );
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private pickIDs = new PickIDManager();
