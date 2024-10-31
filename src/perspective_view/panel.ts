@@ -323,7 +323,12 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper = this.registerDisposer(
-    SliceViewRenderHelper.get(this.gl, perspectivePanelEmit, this.viewer),
+    SliceViewRenderHelper.get(
+      this.gl,
+      perspectivePanelEmit,
+      this.viewer,
+      true /*perspectivePanel*/,
+    ),
   );
 
   protected offscreenFramebuffer = this.registerDisposer(

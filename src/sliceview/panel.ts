@@ -105,7 +105,12 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   private sliceViewRenderHelper = this.registerDisposer(
-    SliceViewRenderHelper.get(this.gl, sliceViewPanelEmitColor, this.viewer),
+    SliceViewRenderHelper.get(
+      this.gl,
+      sliceViewPanelEmitColor,
+      this.viewer,
+      false /*sliceViewPanel*/,
+    ),
   );
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private pickIDs = new PickIDManager();
@@ -169,7 +174,9 @@ export class SliceViewPanel extends RenderedDataPanel {
   ) {
     super(context, element, viewer);
     viewer.wireFrame.changed.add(() => this.scheduleRedraw());
-    viewer.hideTransparentPerspectiveSliceViews.changed.add(() => this.scheduleRedraw());
+    viewer.hideTransparentPerspectiveSliceViews.changed.add(() =>
+      this.scheduleRedraw(),
+    );
     registerActionListener(
       element,
       "rotate-via-mouse-drag",
