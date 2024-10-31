@@ -581,6 +581,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(
       viewer.wireFrame.changed.add(() => this.scheduleRedraw()),
     );
+    this.registerDisposer(
+      viewer.hideTransparentPerspectiveSliceViews.changed.add(() =>
+        this.scheduleRedraw(),
+      ),
+    );
     this.sliceViews.changed.add(() => this.scheduleRedraw());
   }
 

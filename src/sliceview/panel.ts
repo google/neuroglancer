@@ -169,6 +169,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   ) {
     super(context, element, viewer);
     viewer.wireFrame.changed.add(() => this.scheduleRedraw());
+    viewer.hideTransparentPerspectiveSliceViews.changed.add(() => this.scheduleRedraw());
     registerActionListener(
       element,
       "rotate-via-mouse-drag",
