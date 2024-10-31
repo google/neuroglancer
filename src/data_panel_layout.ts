@@ -100,6 +100,7 @@ export interface ViewerUIState
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  hideTransparentPerspectiveSliceViews: TrackableBoolean;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -180,6 +181,8 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
     scaleBarOptions: viewer.scaleBarOptions,
+    hideTransparentPerspectiveSliceViews:
+      viewer.hideTransparentPerspectiveSliceViews,
   };
 }
 

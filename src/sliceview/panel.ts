@@ -66,6 +66,7 @@ export interface SliceViewerState extends RenderedDataViewerState {
   wireFrame: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
+  hideTransparentPerspectiveSliceViews: TrackableBoolean;
 }
 
 export enum OffscreenTextures {

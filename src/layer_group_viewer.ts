@@ -105,6 +105,7 @@ export interface LayerGroupViewerState {
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  hideTransparentPerspectiveSliceViews: TrackableBoolean;
 }
 
 export interface LayerGroupViewerOptions {
@@ -359,6 +360,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get enableAdaptiveDownsampling() {
     return this.viewerState.enableAdaptiveDownsampling;
+  }
+  get hideTransparentPerspectiveSliceViews() {
+    return this.viewerState.hideTransparentPerspectiveSliceViews;
   }
   get showScaleBar() {
     return this.viewerState.showScaleBar;
