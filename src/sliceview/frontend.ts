@@ -63,7 +63,10 @@ import {
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import {
+  makeCachedDerivedWatchableValue,
+  type WatchableValueInterface,
+} from "#src/trackable_value.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
 import { uncancelableToken } from "#src/util/cancellation.js";
 import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";
@@ -75,6 +78,11 @@ import { getObjectId } from "#src/util/object_id.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
+import type {
+  ParameterizedContextDependentShaderGetter} from "#src/webgl/dynamic_shader.js";
+import {
+  parameterizedContextDependentShaderGetter,
+} from "#src/webgl/dynamic_shader.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { TextureHistogramGenerator } from "#src/webgl/empirical_cdf.js";
 import type { TextureBuffer } from "#src/webgl/offscreen.js";
@@ -83,8 +91,7 @@ import {
   FramebufferConfiguration,
   makeTextureBuffers,
 } from "#src/webgl/offscreen.js";
-import type { ShaderModule } from "#src/webgl/shader.js";
-import { ShaderBuilder } from "#src/webgl/shader.js";
+import type { ShaderModule , ShaderBuilder } from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
@@ -718,6 +725,10 @@ export class SliceViewChunk extends Chunk {
 export class SliceViewRenderHelper extends RefCounted {
   private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
   private textureCoordinateAdjustment = new Float32Array(4);
+  private shaderGetter: ParameterizedContextDependentShaderGetter<
+    { emitter: ShaderModule },
+    { hideTransparent: boolean; isProjection: boolean }
+  >;
 
   defineShader(
     builder: ShaderBuilder,
@@ -739,12 +750,14 @@ export class SliceViewRenderHelper extends RefCounted {
 vec4 sampledColor = texture(uSampler, vTexCoord);
 if (sampledColor.a == 0.0) {`;
     let glsl_fragmentMainEnd: string;
-    if (hideTransparent && !isProjection) {
+    // TODO temp, isProjection should be checked later
+    if (hideTransparent && isProjection) {
       glsl_fragmentMainEnd = `
   discard;
 }
 else {
   emit(sampledColor * uColorFactor, 0u);
+}
 `;
     } else {
       glsl_fragmentMainEnd = `
@@ -761,30 +774,43 @@ gl_Position = uProjectionMatrix * aVertexPosition;
 `);
   }
 
-  getNewShader(
-    memoizeKey: string,
-    hideTransparent: boolean,
-    isProjection: boolean,
-    emitter: ShaderModule,
-  ) {
-    const key = JSON.stringify({
-      id: memoizeKey,
-      hideTransparent,
-      isProjection,
-    });
-    return this.gl.memoize.get(key, () => {
-      const builder = new ShaderBuilder(this.gl);
-      this.defineShader(builder, hideTransparent, isProjection, emitter);
-      return builder.build();
-    });
-  }
-
   constructor(
     public gl: GL,
     private emitter: ShaderModule,
     private viewer: SliceViewerState | PerspectiveViewerState,
   ) {
     super();
+
+    const parameters = this.registerDisposer(
+      makeCachedDerivedWatchableValue(
+        (hide: boolean, hidea: boolean) => ({
+          hideTransparent: hide,
+          isProjection: hidea,
+        }),
+        [
+          this.viewer.hideTransparentPerspectiveSliceViews,
+          this.viewer.hideTransparentPerspectiveSliceViews,
+        ],
+      ),
+    );
+
+    this.shaderGetter = parameterizedContextDependentShaderGetter(
+      this,
+      this.gl,
+      {
+        memoizeKey: "sliceview/SliceViewRenderHelper",
+        parameters,
+        getContextKey: (emitter) => `${getObjectId(emitter)}`,
+        defineShader: (builder, context, { hideTransparent, isProjection }) => {
+          this.defineShader(
+            builder,
+            hideTransparent,
+            isProjection,
+            context.emitter,
+          );
+        },
+      },
+    );
   }
 
   draw(
@@ -802,13 +828,11 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     textureCoordinateAdjustment[1] = yStart;
     textureCoordinateAdjustment[2] = xEnd - xStart;
     textureCoordinateAdjustment[3] = yEnd - yStart;
-    const shader = this.getNewShader(
-      "sliceview/SliceViewRenderHelper",
-      this.viewer.hideTransparentPerspectiveSliceViews.value,
-      this.viewer.hideTransparentPerspectiveSliceViews.value,
-      this.emitter,
-    );
-    console.log(shader);
+    const shaderResult = this.shaderGetter({ emitter: this.emitter });
+    const shader = shaderResult.shader;
+    if (shader === null) {
+      throw new Error("Shader compilation failed in SliceViewRenderHelper.");
+    }
     shader.bind();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
