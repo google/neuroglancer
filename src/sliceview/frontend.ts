@@ -720,7 +720,7 @@ export class SliceViewRenderHelper extends RefCounted {
   private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
   private textureCoordinateAdjustment = new Float32Array(4);
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-    { emitter: ShaderModule;isProjection: boolean },
+    { emitter: ShaderModule; isProjection: boolean },
     boolean
   >;
 
@@ -771,7 +771,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     public gl: GL,
     private emitter: ShaderModule,
     private viewer: SliceViewerState | PerspectiveViewerState,
-    privateisProjection: boolean,
+    private isProjection: boolean,
   ) {
     super();
 
@@ -781,13 +781,13 @@ gl_Position = uProjectionMatrix * aVertexPosition;
       {
         memoizeKey: "sliceview/SliceViewRenderHelper",
         parameters: this.viewer.hideTransparentPerspectiveSliceViews,
-        getContextKey: ({ emitter,isProjection }) =>
-          `${getObjectId(emitter)}${isPerspective}`,
+        getContextKey: ({ emitter, isProjection }) =>
+          `${getObjectId(emitter)}${isProjection}`,
         defineShader: (builder, context, hideTransparent) => {
           this.defineShader(
             builder,
             hideTransparent,
-            context.isPerspective,
+            context.isProjection,
             context.emitter,
           );
         },
@@ -812,7 +812,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     textureCoordinateAdjustment[3] = yEnd - yStart;
     const shaderResult = this.shaderGetter({
       emitter: this.emitter,
-     isProjection: this.isPerspective,
+      isProjection: this.isProjection,
     });
     const shader = shaderResult.shader;
     if (shader === null) {
@@ -850,11 +850,11 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl: GL,
     emitter: ShaderModule,
     viewer: SliceViewerState | PerspectiveViewerState,
-   isProjection: boolean,
+    isProjection: boolean,
   ) {
     return gl.memoize.get(
       `sliceview/SliceViewRenderHelper:${getObjectId(emitter)}`,
-      () => new SliceViewRenderHelper(gl, emitter, viewer,isProjection),
+      () => new SliceViewRenderHelper(gl, emitter, viewer, isProjection),
     );
   }
 }
