@@ -63,7 +63,7 @@ import {
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
-import { type WatchableValueInterface } from "#src/trackable_value.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
 import { uncancelableToken } from "#src/util/cancellation.js";
 import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";

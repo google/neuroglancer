@@ -300,7 +300,10 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
-    this.add("hideTransparentPerspectiveSliceViews", viewer.hideTransparentPerspectiveSliceViews);
+    this.add(
+      "hideTransparentPerspectiveSliceViews",
+      viewer.hideTransparentPerspectiveSliceViews,
+    );
     this.add(
       "gpuMemoryLimit",
       viewer.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit,
