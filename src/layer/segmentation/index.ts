@@ -1261,9 +1261,28 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
+  get layerBarColor () {
+    if (this.displayState.segmentDefaultColor.value) {
+      const [r, g, b] = this.displayState.segmentDefaultColor.value;
+      return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;
+    }
+
+    const visibleSegments = this.displayState.segmentationGroupState.value.visibleSegments;
+    if (visibleSegments.size === 1) {
+      console.log("Only 1 segment visible and random seed")
+    }
+
+    return "#00FF00";
+  }
+
+  get layerBarColorWatchableProperty() {
+    return this.displayState.segmentDefaultColor
+  }
+
   static type = "segmentation";
   static typeAbbreviation = "seg";
   static supportsPickOption = true;
+  static supportsLayerBarColorSyncOption = true;
 }
 
 registerLayerControls(SegmentationUserLayer);

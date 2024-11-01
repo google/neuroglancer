@@ -84,6 +84,7 @@ import { LocalToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
+import type { vec3 } from "#src/util/geom.js";
 import {
   emptyToUndefined,
   parseArray,
@@ -185,12 +186,23 @@ export class UserLayer extends RefCounted {
   }
 
   static supportsPickOption = false;
+  static supportsLayerBarColorSyncOption = false;
 
   pick = new TrackableBoolean(true, true);
 
   selectionState: UserLayerSelectionState;
 
   messages = new MessageList();
+
+  layerBarColorSync = new TrackableBoolean(false, false);
+
+  get layerBarColor() {
+    return ""
+  }
+
+  get layerBarColorWatchableProperty(): WatchableValueInterface<vec3 | undefined> | undefined {
+    return undefined;
+  }
 
   initializeSelectionState(state: this["selectionState"]) {
     state.generation = -1;
@@ -737,6 +749,40 @@ export class ManagedUserLayer extends RefCounted {
     ) {
       userLayer.pick.value = value;
     }
+  }
+
+  get layerBarColorSyncEnabled() {
+    const userLayer = this.layer;
+    return (
+      userLayer !== null &&
+      (userLayer.constructor as typeof UserLayer).supportsLayerBarColorSyncOption &&
+      userLayer.layerBarColorSync.value
+    );
+  }
+
+  set layerBarColorSyncEnabled(value: boolean) {
+    const userLayer = this.layer
+    if (userLayer !== null && (userLayer.constructor as typeof UserLayer).supportsLayerBarColorSyncOption) {
+      userLayer.layerBarColorSync.value = value
+    }
+  }
+
+  get layerBarColor() {
+    const userLayer = this.layer;
+    return userLayer?.layerBarColor;
+  }
+
+  get layerBarColorSync() {
+    const userLayer = this.layer;
+    return userLayer?.layerBarColorSync;
+  }
+
+  get supportsLayerBarColorSyncOption() {
+    const userLayer = this.layer;
+    return (
+      userLayer !== null &&
+      (userLayer.constructor as typeof UserLayer).supportsLayerBarColorSyncOption
+    );
   }
 
   /**

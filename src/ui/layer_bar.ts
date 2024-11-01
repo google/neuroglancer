@@ -21,7 +21,7 @@ import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { observeWatchable, type WatchableValueInterface } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -32,6 +32,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
@@ -47,6 +48,14 @@ class LayerWidget extends RefCounted {
   valueElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
+
+  get backgroundColor() {
+    return this.element.style.backgroundColor;
+  }
+
+  set backgroundColor(value: string | undefined) {
+    this.element.style.backgroundColor = value || '';
+  }
 
   constructor(
     public layer: ManagedUserLayer,
@@ -103,9 +112,27 @@ class LayerWidget extends RefCounted {
       deleteLayer(this.layer);
       event.stopPropagation();
     });
+    const { element: syncColorsElement } = new CheckboxIcon(this.layer.layerBarColorSync!, {
+      text: "#",
+      backgroundScheme: "dark",
+      enableTitle: "Enable color sync",
+      disableTitle: "Disable color sync",
+    });
+    syncColorsElement.addEventListener("click", (event: MouseEvent) => {
+      this.updateBackgroundColor();
+      event.stopPropagation();
+    });
+    if (this.layer?.layer?.layerBarColorWatchableProperty) {
+      this.layer.registerDisposer(observeWatchable(() => {
+        this.updateBackgroundColor();
+      }, this.layer.layer.layerBarColorWatchableProperty))
+    }
+
+    // Compose the layer's title bar
     element.appendChild(layerNumberElement);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
+    buttonContainer.appendChild(syncColorsElement);
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
@@ -173,6 +200,10 @@ class LayerWidget extends RefCounted {
   disposed() {
     this.element.remove();
     super.disposed();
+  }
+
+  updateBackgroundColor() {
+    this.backgroundColor = this.layer.layerBarColorSyncEnabled ? this.layer.layerBarColor : "";
   }
 }
 
