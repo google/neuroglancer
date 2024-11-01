@@ -84,8 +84,6 @@ function checkHeader(buffer: Uint8Array) {
 
 export async function decompressJxl(
   buffer: Uint8Array,
-  width: number | undefined,
-  height: number | undefined,
   area: number | undefined,
   numComponents: number | undefined,
   bytesPerPixel: number,
@@ -94,20 +92,10 @@ export async function decompressJxl(
   const m = await getJxlModulePromise();
   checkHeader(buffer);
 
-  width ||= 0;
-  height ||= 0;
+  area ||= 0;
   numComponents ||= 1;
 
-  if (
-    width !== undefined 
-    && height !== undefined
-    && area !== undefined
-    && width * height !== area
-  ) {
-    throw new Error(`jxl: Expected width and height (${width} x ${height}) to match area: ${area}.`);
-  }
-
-  const nbytes = width * height * bytesPerPixel * numComponents;
+  const nbytes = area * bytesPerPixel * numComponents;
 
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
@@ -116,6 +104,20 @@ export async function decompressJxl(
   let imagePtr = null;
 
   try {
+    const width = (m.exports.width as Function)(jxlImagePtr, buffer.byteLength, nbytes);
+    const height = (m.exports.height as Function)(jxlImagePtr, buffer.byteLength, nbytes);
+
+    if (width <= 0 || height <= 0) {
+      throw new Error(`jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`);
+    }
+    
+    if (
+      area !== undefined
+      && (width * height) !== area
+    ) {
+      throw new Error(`jxl: Expected width and height (${width} x ${height}, ${width*height}) to match area: ${area}.`);
+    }
+
     imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength, nbytes);
 
     if (imagePtr === 0) {

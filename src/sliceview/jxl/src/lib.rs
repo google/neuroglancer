@@ -25,6 +25,62 @@ pub fn free(ptr: *mut u8, size: usize) {
 }
 
 #[no_mangle]
+pub fn width(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
+    if ptr.is_null() || input_size == 0 || output_size == 0 {
+        return -1;
+    }
+
+    let data: &[u8] = unsafe {
+        slice::from_raw_parts(ptr, input_size)
+    };
+
+    let image = match JxlImage::builder().read(data) {
+        Ok(image) => image,
+        Err(_image) => return -2,
+    };
+
+    for keyframe_idx in 0..image.num_loaded_keyframes() {
+        let frame = match image.render_frame(keyframe_idx) {
+            Ok(frame) => frame,
+            Err(_frame) => return -3,
+        };
+
+        let stream = frame.stream();
+        return stream.width() as i32;
+    }
+
+    -4 as i32
+}
+
+#[no_mangle]
+pub fn height(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
+    if ptr.is_null() || input_size == 0 || output_size == 0 {
+        return -1;
+    }
+
+    let data: &[u8] = unsafe {
+        slice::from_raw_parts(ptr, input_size)
+    };
+
+    let image = match JxlImage::builder().read(data) {
+        Ok(image) => image,
+        Err(_image) => return -2,
+    };
+
+    for keyframe_idx in 0..image.num_loaded_keyframes() {
+        let frame = match image.render_frame(keyframe_idx) {
+            Ok(frame) => frame,
+            Err(_frame) => return -3,
+        };
+
+        let stream = frame.stream();
+        return stream.height() as i32;
+    }
+
+    -4 as i32
+}
+
+#[no_mangle]
 pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 {
     if ptr.is_null() || input_size == 0 || output_size == 0 {
         return ptr::null();
