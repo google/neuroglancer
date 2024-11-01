@@ -33,6 +33,7 @@ export async function decodeJxlChunk(
     new Uint8Array(response),
     chunkDataSize[0],
     chunkDataSize[1] * chunkDataSize[2],
+    chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
     chunkDataSize[3] || 1,
     1, // bytesPerPixel
   );

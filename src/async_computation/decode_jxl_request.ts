@@ -22,6 +22,7 @@ export const decodeJxl =
       data: Uint8Array,
       width: number | undefined,
       height: number | undefined,
+      area: number | undefined,
       numComponents: number | undefined,
       bytesPerPixel: number,
     ) => DecodedImage

@@ -24,6 +24,7 @@ registerAsyncComputation(
     data: Uint8Array,
     width: number | undefined,
     height: number | undefined,
+    area: number | undefined,
     numComponents: number | undefined,
     bytesPerPixel: number,
   ) => {
@@ -31,6 +32,7 @@ registerAsyncComputation(
       data,
       width,
       height,
+      area,
       numComponents,
       bytesPerPixel,
     );

@@ -86,6 +86,7 @@ export async function decompressJxl(
   buffer: Uint8Array,
   width: number | undefined,
   height: number | undefined,
+  area: number | undefined,
   numComponents: number | undefined,
   bytesPerPixel: number,
 ): Promise<DecodedImage> {
@@ -96,6 +97,15 @@ export async function decompressJxl(
   width ||= 0;
   height ||= 0;
   numComponents ||= 1;
+
+  if (
+    width !== undefined 
+    && height !== undefined
+    && area !== undefined
+    && width * height !== area
+  ) {
+    throw new Error(`jxl: Expected width and height (${width} x ${height}) to match area: ${area}.`);
+  }
 
   const nbytes = width * height * bytesPerPixel * numComponents;
 
