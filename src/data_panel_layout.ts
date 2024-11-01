@@ -100,7 +100,7 @@ export interface ViewerUIState
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
-  hideTransparentPerspectiveSliceViews: TrackableBoolean;
+  hideCrossSectionBackgroundIn3D: TrackableBoolean;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -181,8 +181,8 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
     scaleBarOptions: viewer.scaleBarOptions,
-    hideTransparentPerspectiveSliceViews:
-      viewer.hideTransparentPerspectiveSliceViews,
+    hideCrossSectionBackgroundIn3D:
+      viewer.hideCrossSectionBackgroundIn3D,
   };
 }
 

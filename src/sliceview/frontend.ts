@@ -780,7 +780,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
       this.gl,
       {
         memoizeKey: "sliceview/SliceViewRenderHelper",
-        parameters: this.viewer.hideTransparentPerspectiveSliceViews,
+        parameters: this.viewer.hideCrossSectionBackgroundIn3D,
         getContextKey: ({ emitter, isProjection }) =>
           `${getObjectId(emitter)}${isProjection}`,
         defineShader: (builder, context, hideTransparent) => {

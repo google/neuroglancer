@@ -66,7 +66,7 @@ export interface SliceViewerState extends RenderedDataViewerState {
   wireFrame: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
-  hideTransparentPerspectiveSliceViews: TrackableBoolean;
+  hideCrossSectionBackgroundIn3D: TrackableBoolean;
 }
 
 export enum OffscreenTextures {
@@ -174,7 +174,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   ) {
     super(context, element, viewer);
     viewer.wireFrame.changed.add(() => this.scheduleRedraw());
-    viewer.hideTransparentPerspectiveSliceViews.changed.add(() =>
+    viewer.hideCrossSectionBackgroundIn3D.changed.add(() =>
       this.scheduleRedraw(),
     );
     registerActionListener(

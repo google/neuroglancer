@@ -301,8 +301,8 @@ class TrackableViewerState extends CompoundTrackable {
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
     this.add(
-      "hideTransparentPerspectiveSliceViews",
-      viewer.hideTransparentPerspectiveSliceViews,
+      "hideCrossSectionBackgroundIn3D",
+      viewer.hideCrossSectionBackgroundIn3D,
     );
     this.add(
       "gpuMemoryLimit",
@@ -466,7 +466,7 @@ export class Viewer extends RefCounted implements ViewerState {
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
-  hideTransparentPerspectiveSliceViews = new TrackableBoolean(false, false);
+  hideCrossSectionBackgroundIn3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(
@@ -1099,6 +1099,9 @@ export class Viewer extends RefCounted implements ViewerState {
       this.showPerspectiveSliceViews.toggle(),
     );
     this.bindAction("toggle-show-statistics", () => this.showStatistics());
+    this.bindAction("toggle-hide-cross-section-background-3d", () =>
+      this.hideCrossSectionBackgroundIn3D.toggle(),
+    );
   }
 
   toggleHelpPanel() {
