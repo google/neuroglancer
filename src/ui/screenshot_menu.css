@@ -94,6 +94,26 @@
   overflow-x: hidden;
 }
 
+.neuroglancer-screenshot-main-body-container::-webkit-scrollbar {
+  width: 1rem;
+}
+
+.neuroglancer-screenshot-main-body-container::-webkit-scrollbar-track {
+  background: #FFF;
+  border-radius: 100vw;
+  margin-block: 0.5em;
+}
+
+.neuroglancer-screenshot-main-body-container::-webkit-scrollbar-thumb {
+  background: rgba(20, 20, 21, 0.20);
+  border: 0.25rem solid #FFF;
+  border-radius: 0.5rem;
+}
+
+.neuroglancer-screenshot-main-body-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 20, 21, 0.50);
+}
+
 .neuroglancer-screenshot-dialog .neuroglancer-screenshot-title-heading {
   font-size: 0.938rem;
   font-weight: 590;
@@ -184,6 +204,7 @@
   font-weight: 400;
   color: var(--gray700);
   box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  line-height: 20px;
 }
 .neuroglancer-screenshot-name-input:disabled {
   background: var(--gray500);
