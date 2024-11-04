@@ -15,6 +15,8 @@
  */
 
 import "#src/layer/image/style.css";
+import svgClosedEye from "ikonate/icons/eye-closed.svg?raw";
+import svgOpenedEye from "ikonate/icons/eye.svg?raw";
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
@@ -82,6 +84,7 @@ import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.j
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
+import { makeIcon } from "#src/widget/icon.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import {
   addLayerControlToOptionsTab,
@@ -540,6 +543,38 @@ class RenderingOptionsTab extends Tab {
     topRow.className = "neuroglancer-image-dropdown-top-row";
     topRow.appendChild(document.createTextNode("Shader"));
     topRow.appendChild(spacer);
+
+    const managedLayer = this.layer.managedLayer;
+    const codeVisibilityControl = makeIcon({
+      title: managedLayer.codeVisible ? "Hide code": "Show code",
+      svg: managedLayer.codeVisible ? svgOpenedEye : svgClosedEye,
+      onClick: () => {
+        const button = codeVisibilityControl as HTMLDivElement;
+        managedLayer.setCodeVisible(!managedLayer.codeVisible)
+        if (managedLayer.codeVisible) {
+          button.title = "Hide code";
+          button.innerHTML = svgOpenedEye
+          this.codeWidget.element.style.display = "block";
+        } else {
+          button.title = "Show code";
+          button.innerHTML = svgClosedEye
+          this.codeWidget.element.style.display = "none";
+        }
+    }});
+    // managedLayer.layerChanged.add(() => {
+    //   const button = codeVisibilityControl as HTMLDivElement;
+    //   if (managedLayer.codeVisible) {
+    //     button.title = "Hide code";
+    //     button.innerHTML = svgOpenedEye
+    //     this.codeWidget.element.style.display = "block";
+    //   } else {
+    //     button.title = "Show code";
+    //     button.innerHTML = svgClosedEye
+    //     this.codeWidget.element.style.display = "none";
+    //   }
+    // });
+
+    topRow.appendChild(codeVisibilityControl);
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
@@ -561,6 +596,8 @@ class RenderingOptionsTab extends Tab {
         new ChannelDimensionsWidget(layer.channelCoordinateSpaceCombiner),
       ).element,
     );
+
+    this.codeWidget.element.style.display = managedLayer.codeVisible ? "block" : "none";
     element.appendChild(this.codeWidget.element);
     element.appendChild(
       this.registerDisposer(
