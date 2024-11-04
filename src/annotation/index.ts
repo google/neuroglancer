@@ -1458,6 +1458,7 @@ export class LocalAnnotationSource extends AnnotationSource {
     };
 
     for (const annotation of this.annotationMap.values()) {
+      // TODO (SKM) properly handle polyline annotation
       switch (annotation.type) {
         case AnnotationType.POINT:
           annotation.point = mapVector(annotation.point);
@@ -1466,6 +1467,9 @@ export class LocalAnnotationSource extends AnnotationSource {
         case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
           annotation.pointA = mapVector(annotation.pointA);
           annotation.pointB = mapVector(annotation.pointB);
+          break;
+        case AnnotationType.POLYLINE:
+          annotation.points = annotation.points.map(mapVector);
           break;
         case AnnotationType.ELLIPSOID:
           annotation.center = mapVector(annotation.center);
