@@ -15,7 +15,7 @@
  */
 
 /**
- * @file Support for rendering line annotations.
+ * @file Support for rendering polyline annotations.
  */
 
 import type { Polyline } from "#src/annotation/index.js";
@@ -125,7 +125,7 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
   );
 
   private endpointShaderGetter = this.getDependentShader(
-    "annotation/line/endpoint",
+    "annotation/polyline/endpoint",
     (builder: ShaderBuilder) => {
       const { rank } = this;
       this.defineShader(builder);
