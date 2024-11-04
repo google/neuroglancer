@@ -1129,7 +1129,8 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
     oldAnnotation: Annotation,
     mouseState: MouseSelectionState,
     annotationLayer: AnnotationLayerState,
-  ): Annotation;
+    triggered: boolean,
+  ): { newAnnotation: Annotation; finished: boolean };
 
   trigger(mouseState: MouseSelectionState) {
     const { annotationLayer, inProgressAnnotation } = this;
@@ -1139,16 +1140,16 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
     }
 
     if (mouseState.updateUnconditionally()) {
-      //console.log(mouseState); // TODO uset this
-      const updateNextPoint = () => {
+      const updateNextPoint = (triggered: boolean = false) => {
         const state = inProgressAnnotation.value!;
         const reference = state.reference;
-        // TODO change whether new or not based on state
-        const newAnnotation = this.getUpdatedAnnotation(
+        const annotationState = this.getUpdatedAnnotation(
           reference.value!,
           mouseState,
           annotationLayer,
+          triggered,
         );
+        const { newAnnotation, finished } = annotationState;
         if (
           JSON.stringify(
             annotationToJson(newAnnotation, annotationLayer.source),
@@ -1157,10 +1158,11 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
             annotationToJson(reference.value!, annotationLayer.source),
           )
         ) {
-          return;
+          return finished;
         }
         state.annotationLayer.source.update(reference, newAnnotation);
         this.layer.selectAnnotation(annotationLayer, reference.id, true);
+        return finished;
       };
 
       if (inProgressAnnotation.value === undefined) {
@@ -1180,12 +1182,13 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
           disposer,
         };
       } else {
-        // TODO change whether to end or not based on state
-        updateNextPoint();
-        const state = inProgressAnnotation.value;
-        state.annotationLayer.source.commit(state.reference);
-        state.disposer();
-        inProgressAnnotation.value = undefined;
+        const finished = updateNextPoint(true);
+        if (finished) {
+          const state = inProgressAnnotation.value;
+          state.annotationLayer.source.commit(state.reference);
+          state.disposer();
+          inProgressAnnotation.value = undefined;
+        }
       }
     }
   }
@@ -1435,7 +1438,7 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       id: "",
       description: "",
       segments: getSelectedAssociatedSegments(annotationLayer),
-      points: [point],
+      points: [point, point],
       properties: annotationLayer.source.properties.map((x) => x.default),
     };
   }
@@ -1444,22 +1447,60 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
     oldAnnotation: Polyline,
     mouseState: MouseSelectionState,
     annotationLayer: AnnotationLayerState,
-    createNewPoint = false,
+    triggered: boolean,
   ) {
+    function annotationWithoutLastPoint(annotation: Polyline) {
+      return <Polyline>{
+        ...annotation,
+        points: annotation.points.slice(0, -1),
+      };
+    }
+    function annotationWithUpdatedLastPoint(
+      annotation: Polyline,
+      point: Float32Array,
+    ) {
+      return <Polyline>{
+        ...annotation,
+        points: [...annotation.points.slice(0, -1), point],
+      };
+    }
+    function annotationWithNewPoint(annotation: Polyline, point: Float32Array) {
+      return <Polyline>{
+        ...annotation,
+        points: [...annotation.points, point],
+      };
+    }
+
     const point = getMousePositionInAnnotationCoordinates(
       mouseState,
       annotationLayer,
     );
-    if (point === undefined) return oldAnnotation;
-    if (!createNewPoint) {
-      return <Polyline>{
-        ...oldAnnotation,
-        points: [...oldAnnotation.points.slice(0, -1), point],
+    if (point === undefined)
+      return { newAnnotation: oldAnnotation, finished: false };
+  
+    // 1. Show a preview of the point being added until a click is triggered.
+    if (!triggered) {
+      return {
+        newAnnotation: annotationWithUpdatedLastPoint(oldAnnotation, point),
+        finished: false,
       };
     }
-    return <Polyline>{
-      ...oldAnnotation,
-      points: [...oldAnnotation.points, point],
+    // 2. Check if the point is the same as the last point, if so, don't add it.
+    // Instead, finish the annotation.
+    const lastPoint = oldAnnotation.points[oldAnnotation.points.length - 1];
+    const secondLastPoint =
+      oldAnnotation.points[oldAnnotation.points.length - 2];
+    const finished = arraysEqual(lastPoint, secondLastPoint);
+    if (finished) {
+      return {
+        newAnnotation: annotationWithoutLastPoint(oldAnnotation),
+        finished: true,
+      };
+    }
+    // 3. Add the point to the annotation.
+    return {
+      newAnnotation: annotationWithNewPoint(oldAnnotation, point),
+      finished: finished,
     };
   }
   get description() {
