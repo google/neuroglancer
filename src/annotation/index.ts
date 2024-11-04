@@ -859,12 +859,12 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.POLYLINE]: {
     icon: "⤤",
     description: "Polyline",
-    toJSON: (annotation: Polyline) => {
+    toJSON(annotation: Polyline) {
       return {
         points: annotation.points.map((point) => Array.from(point)),
       };
     },
-    restoreState: (annotation: Polyline, obj: any, rank: number) => {
+    restoreState(annotation: Polyline, obj: any, rank: number) {
       annotation.points = verifyObjectProperty(obj, "points", (points) =>
         parseArray(points, (point) =>
           parseFixedLengthArray(
@@ -876,14 +876,16 @@ export const annotationTypeHandlers: Record<
       );
     },
     // TODO need to pull the count into this
-    serializedBytes: (rank) => 4 * 2 * rank,
-    serialize: (
+    serializedBytes(rank: number) {
+      return 4 * 2 * rank;
+    },
+    serialize(
       buffer: DataView,
       offset: number,
       isLittleEndian: boolean,
       rank: number,
       annotation: Polyline,
-    ) => {
+    ) {
       for (const point of annotation.points) {
         offset = serializeFloatVector(
           buffer,
@@ -894,13 +896,13 @@ export const annotationTypeHandlers: Record<
         );
       }
     },
-    deserialize: (
+    deserialize(
       buffer: DataView,
       offset: number,
       isLittleEndian: boolean,
       rank: number,
       id: string,
-    ): Polyline => {
+    ): Polyline {
       const points = new Array<Float32Array>(2);
       deserializeManyFloatVectors(buffer, offset, isLittleEndian, rank, points);
       return { type: AnnotationType.POLYLINE, points, id, properties: [] };
