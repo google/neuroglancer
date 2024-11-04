@@ -785,6 +785,7 @@ function deserializeManyFloatVectors(
   rank: number,
   vectors: Float32Array[],
 ) {
+  // TODO bring count into this
   for (const vec of vectors) {
     offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vec);
   }
@@ -875,7 +876,7 @@ export const annotationTypeHandlers: Record<
       );
     },
     // TODO need to pull the count into this
-    serializedBytes: (rank) => 4 * rank,
+    serializedBytes: (rank) => 4 * 2 * rank,
     serialize: (
       buffer: DataView,
       offset: number,
@@ -900,7 +901,7 @@ export const annotationTypeHandlers: Record<
       rank: number,
       id: string,
     ): Polyline => {
-      const points = new Array<Float32Array>();
+      const points = new Array<Float32Array>(2);
       deserializeManyFloatVectors(buffer, offset, isLittleEndian, rank, points);
       return { type: AnnotationType.POLYLINE, points, id, properties: [] };
     },
