@@ -24,6 +24,7 @@
     "build": "tsx ./build_tools/cli.ts build",
     "build:watch": "tsx ./build_tools/cli.ts build --watch",
     "dev-server": "tsx ./build_tools/cli.ts serve",
+    "dev-server-web": "webpack serve --allowed-hosts cels.anl.gov",
     "dev-server-python": "tsx ./build_tools/cli.ts --python serve",
     "build-package": "tsx ./build_tools/build-package.ts",
     "build-python": "tsx ./build_tools/cli.ts --python build",
