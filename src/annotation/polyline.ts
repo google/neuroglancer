@@ -277,18 +277,18 @@ registerAnnotationTypeRenderHandler<Polyline>(AnnotationType.POLYLINE, {
     );
   },
   updateViaRepresentativePoint(oldAnnotation, position, partIndex) {
+    position;
     const baseLine = { ...oldAnnotation };
     //const rank = position.length;
     switch (partIndex) {
       case FULL_OBJECT_PICK_OFFSET: {
         // TODO - implement this
-        const { points } = oldAnnotation;
-        return { ...oldAnnotation, ...points};
+        return oldAnnotation;
       }
       case FULL_OBJECT_PICK_OFFSET + 1:
-        return { ...oldAnnotation, pointA: new Float32Array(position) };
+        return oldAnnotation;
       case FULL_OBJECT_PICK_OFFSET + 2:
-        return { ...oldAnnotation, pointB: new Float32Array(position) };
+        return oldAnnotation;
     }
     return baseLine;
   },
