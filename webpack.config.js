@@ -5,7 +5,6 @@ import MiniCssExtractPlugin from "mini-css-extract-plugin";
 import webpack from "webpack";
 import StartupChunkDependenciesPlugin from "webpack/lib/runtime/StartupChunkDependenciesPlugin.js";
 import { normalizeConfigurationWithDefine } from "./build_tools/webpack/configuration_with_define.js";
-// import { hostname } from "node:os";
 
 export default (env, args) => {
   const mode = args.mode === "production" ? "production" : "development";
@@ -82,21 +81,12 @@ export default (env, args) => {
     },
     devServer: {
       client: {
-        webSocketURL:{
-          hostname: 'gladier.cels.anl.gov',
-          pathname: '/ng/',
-          protocol: 'https',
-        },
-        
         overlay: {
           // Prevent intrusive notification spam.
           runtimeErrors: false,
         },
       },
       hot: false,
-      allowedHosts: [
-        'cels.anl.gov',
-      ],
     },
     plugins: [
       // Fixes esm output with splitChunks
@@ -116,7 +106,6 @@ export default (env, args) => {
     ],
     output: {
       path: path.resolve(import.meta.dirname, "dist", "client"),
-      publicPath: "/ng/",
       filename: "[name].[chunkhash].js",
       chunkFilename: "[name].[contenthash].js",
       chunkLoading: "import",
