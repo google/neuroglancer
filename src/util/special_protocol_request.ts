@@ -157,7 +157,6 @@ export async function cancellableFetchSpecialOk<T>(
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
   const u = parseUrl(url);
-  console.log('cancelableFetchSpecialOk',  u);
   switch (u.protocol) {
     case "gs":
       // Include random query string parameter (ignored by GCS) to bypass GCS cache and ensure a

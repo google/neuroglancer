@@ -155,7 +155,6 @@ export async function cancellableFetchOk<T>(
   transformResponse: ResponseTransform<T>,
   cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<T> {
-  console.log('cancelableFetchOk', input, init, cancellationToken); 
   if (cancellationToken === uncancelableToken) {
     const response = await fetchOk(input, init);
     return await transformResponse(response);

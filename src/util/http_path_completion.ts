@@ -126,7 +126,7 @@ export async function completeHttpPath(
   credentialsManager: CredentialsManager,
   url: string,
   cancellationToken: CancellationToken,
-): Promise<BasicCompletionResult<Completion>> {  
+): Promise<BasicCompletionResult<Completion>> {
   if (!url.includes("://")) {
     return {
       offset: 0,
@@ -188,7 +188,6 @@ export async function completeHttpPath(
       );
     }
     if ((protocol === "http" || protocol === "https") && path.length > 0) {
-      console.log('decidedtousehttp')
       return await getHtmlPathCompletions(
         parsedUrl,
         cancellationToken,

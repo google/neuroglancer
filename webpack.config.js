@@ -150,4 +150,4 @@ export default (env, args) => {
   return env.NEUROGLANCER_CLI
     ? config
     : normalizeConfigurationWithDefine(config);
-};
+}; 
