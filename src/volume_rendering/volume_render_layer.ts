@@ -844,7 +844,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       this.getDataHistogramCount() > 0 &&
       !renderContext.wireFrame &&
       !renderContext.sliceViewsPresent &&
-      !renderContext.isContinuousCameraMotionInProgress;
+      (!renderContext.isContinuousCameraMotionInProgress ||
+        renderContext.force3DHistogramForAutoRange);
     const needPickingPass =
       !isProjectionMode(this.mode.value) &&
       !renderContext.isContinuousCameraMotionInProgress &&
