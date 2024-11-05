@@ -283,6 +283,8 @@ export class ScreenshotDialog extends Overlay {
     );
     const settingsPreview = document.createElement("div");
     settingsPreview.classList.add("neuroglancer-screenshot-resolution-table");
+    const previewTopContainer = document.createElement("div");
+    previewTopContainer.classList.add("neuroglancer-screenshot-resolution-preview-top-container")
     const previewLabel = document.createElement("h2");
     previewLabel.textContent = "Preview";
 
@@ -308,11 +310,12 @@ export class ScreenshotDialog extends Overlay {
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
-    this.screenshotSizeText.appendChild(screenshotCopyButton);
 
-    previewContainer.appendChild(previewLabel);
+    previewContainer.appendChild(previewTopContainer);
+    previewTopContainer.appendChild(previewLabel);
+    previewTopContainer.appendChild(screenshotCopyButton);
+    previewContainer.appendChild(this.screenshotSizeText);
     previewContainer.appendChild(settingsPreview);
-    settingsPreview.appendChild(this.screenshotSizeText);
     settingsPreview.appendChild(this.createPanelResolutionTable());
     settingsPreview.appendChild(this.createLayerResolutionTable());
 
