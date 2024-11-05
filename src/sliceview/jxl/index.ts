@@ -39,12 +39,21 @@ async function getJxlModulePromise() {
 }
 
 // header constants
-// obtained from 
+// obtained from
 // // https://github.com/libjxl/libjxl/blob/8f22cb1fb98ed27ceee59887bd291ef4d277c89d/lib/jxl/decode.cc#L118-L130
 const magicSpec = [
-  0, 0, 0, 0xC, 
-  'J'.charCodeAt(0), 'X'.charCodeAt(0), 'L'.charCodeAt(0), ' '.charCodeAt(0),
-  0xD, 0xA, 0x87, 0xA
+  0,
+  0,
+  0,
+  0xc,
+  "J".charCodeAt(0),
+  "X".charCodeAt(0),
+  "L".charCodeAt(0),
+  " ".charCodeAt(0),
+  0xd,
+  0xa,
+  0x87,
+  0xa,
 ];
 
 // not a full implementation of read header, just the parts we need
@@ -54,7 +63,7 @@ function checkHeader(buffer: Uint8Array) {
   }
 
   const len = buffer.length;
-  const kCodestreamMarker = 0x0A;
+  const kCodestreamMarker = 0x0a;
 
   if (len < 8 + 4) {
     throw new Error(`jxl: Invalid image size: ${len}`);
@@ -64,12 +73,10 @@ function checkHeader(buffer: Uint8Array) {
   if (len >= 1 && buffer[0] == 0xff) {
     if (len < 2) {
       throw new Error(`jxl: Not enough bytes. Got: ${len}`);
-    }
-    else if (buffer[1] == kCodestreamMarker) {
+    } else if (buffer[1] == kCodestreamMarker) {
       // valid codestream
       return;
-    }
-    else {
+    } else {
       throw new Error(`jxl: Invalid codestream.`);
     }
   }
@@ -78,7 +85,7 @@ function checkHeader(buffer: Uint8Array) {
   // check for header for magic sequence
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
   if (!validMagic) {
-    throw new Error(`jxl: didn't match magic numbers: ${buffer.slice(0,12)}`);
+    throw new Error(`jxl: didn't match magic numbers: ${buffer.slice(0, 12)}`);
   }
 }
 
@@ -88,7 +95,6 @@ export async function decompressJxl(
   numComponents: number | undefined,
   bytesPerPixel: number,
 ): Promise<DecodedImage> {
-
   const m = await getJxlModulePromise();
   checkHeader(buffer);
 
@@ -104,21 +110,34 @@ export async function decompressJxl(
   let imagePtr = null;
 
   try {
-    const width = (m.exports.width as Function)(jxlImagePtr, buffer.byteLength, nbytes);
-    const height = (m.exports.height as Function)(jxlImagePtr, buffer.byteLength, nbytes);
+    const width = (m.exports.width as Function)(
+      jxlImagePtr,
+      buffer.byteLength,
+      nbytes,
+    );
+    const height = (m.exports.height as Function)(
+      jxlImagePtr,
+      buffer.byteLength,
+      nbytes,
+    );
 
     if (width <= 0 || height <= 0) {
-      throw new Error(`jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`);
-    }
-    
-    if (
-      area !== undefined
-      && (width * height) !== area
-    ) {
-      throw new Error(`jxl: Expected width and height (${width} x ${height}, ${width*height}) to match area: ${area}.`);
+      throw new Error(
+        `jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`,
+      );
     }
 
-    imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength, nbytes);
+    if (area !== undefined && width * height !== area) {
+      throw new Error(
+        `jxl: Expected width and height (${width} x ${height}, ${width * height}) to match area: ${area}.`,
+      );
+    }
+
+    imagePtr = (m.exports.decode as Function)(
+      jxlImagePtr,
+      buffer.byteLength,
+      nbytes,
+    );
 
     if (imagePtr === 0) {
       throw new Error("jxl: Decoding failed. Null pointer returned.");

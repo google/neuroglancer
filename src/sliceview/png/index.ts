@@ -77,7 +77,7 @@ function readHeader(buffer: Uint8Array): {
   // check for header for magic sequence
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
   if (!validMagic) {
-    throw new Error(`png: didn't match magic numbers: ${buffer.slice(0,8)}`);
+    throw new Error(`png: didn't match magic numbers: ${buffer.slice(0, 8)}`);
   }
 
   // offset into IHDR chunk so we can read more naturally
