@@ -70,10 +70,10 @@ function checkHeader(buffer: Uint8Array) {
   }
 
   // JPEG XL codestream: 0xff 0x0a
-  if (len >= 1 && buffer[0] == 0xff) {
+  if (len >= 1 && buffer[0] === 0xff) {
     if (len < 2) {
       throw new Error(`jxl: Not enough bytes. Got: ${len}`);
-    } else if (buffer[1] == kCodestreamMarker) {
+    } else if (buffer[1] === kCodestreamMarker) {
       // valid codestream
       return;
     } else {
