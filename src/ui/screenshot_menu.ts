@@ -17,10 +17,12 @@
  */
 
 import "#src/ui/screenshot_menu.css";
+import svg_close from "ikonate/icons/close.svg?raw";
 import svg_help from "ikonate/icons/help.svg?raw";
-import { debounce, throttle } from "lodash-es";
+import { throttle } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
-import svg_close from "#src/ui/images/close.svg?raw";
+import { StatusMessage } from "#src/status.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
@@ -44,6 +46,16 @@ import { makeIcon } from "#src/widget/icon.js";
 
 const DEBUG_ALLOW_MENU_CLOSE = false;
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
+const PANEL_TABLE_HEADER_STRINGS = {
+  type: "Panel type",
+  pixelResolution: "Pixel resolution",
+  physicalResolution: "Physical resolution",
+};
+const LAYER_TABLE_HEADER_STRINGS = {
+  name: "Layer name",
+  type: "Type",
+  resolution: "Physical voxel resolution",
+};
 
 interface UIScreenshotStatistics {
   chunkUsageDescription: string;
@@ -71,6 +83,7 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
     return {
       type: "Loading...",
       resolution: "Loading...",
+      resolutionText: "Loading...",
     };
   }
   const first_resolution = resolution[0];
@@ -78,19 +91,31 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   if (first_resolution.dimensionName === "All_") {
     return {
       type: first_resolution.parentType,
-      resolution: ` ${first_resolution.resolutionWithUnit}`,
+      resolution: first_resolution.resolutionWithUnit,
+      resolutionText: first_resolution.resolutionWithUnit,
     };
   } else {
+    let innerHtml = "";
     let text = "";
     for (const res of resolution) {
-      text += `${res.dimensionName}: ${res.resolutionWithUnit}, `;
+      innerHtml += `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit} `;
+      text += `${res.dimensionName} ${res.resolutionWithUnit} `;
     }
-    text = text.slice(0, -2);
+    innerHtml = innerHtml.slice(0, -1);
+    text = text.slice(0, -1);
     return {
       type: first_resolution.parentType,
-      resolution: text,
+      resolution: innerHtml,
+      resolutionText: text,
     };
   }
+}
+
+function formatPixelResolution(panelArea: PanelViewport, scale: number) {
+  const width = Math.round(panelArea.right - panelArea.left) * scale;
+  const height = Math.round(panelArea.bottom - panelArea.top) * scale;
+  const type = panelArea.panelType;
+  return { width, height, type };
 }
 
 /**
@@ -129,6 +154,8 @@ export class ScreenshotDialog extends Overlay {
   private warningElement: HTMLDivElement;
   private footerScreenshotActionBtnsContainer: HTMLDivElement;
   private progressText: HTMLParagraphElement;
+  private scaleRadioButtonsContainer: HTMLDivElement;
+  private keepSliceFOVFixedCheckbox: HTMLInputElement;
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   private layerResolutionKeyToCellMap: Map<string, HTMLTableCellElement> =
     new Map();
@@ -205,7 +232,6 @@ export class ScreenshotDialog extends Overlay {
       () => this.dispose(),
       "neuroglancer-screenshot-close-button",
       svg_close,
-      "Close",
     );
 
     this.cancelScreenshotButton = this.createButton("Cancel screenshot", () =>
@@ -241,11 +267,15 @@ export class ScreenshotDialog extends Overlay {
     closeAndHelpContainer.appendChild(titleText);
     closeAndHelpContainer.appendChild(this.closeMenuButton);
 
+    // This is the header
     this.content.appendChild(closeAndHelpContainer);
 
-    this.content.appendChild(this.filenameAndButtonsContainer);
-    this.content.appendChild(this.createScaleRadioButtons());
-    // this.content.appendChild(tooltip.orthographicSettingsTooltip);
+    const mainBody = document.createElement("div");
+    mainBody.classList.add("neuroglancer-screenshot-main-body-container");
+    this.content.appendChild(mainBody);
+
+    mainBody.appendChild(this.filenameAndButtonsContainer);
+    mainBody.appendChild(this.createScaleRadioButtons());
 
     const previewContainer = document.createElement("div");
     previewContainer.classList.add(
@@ -253,6 +283,10 @@ export class ScreenshotDialog extends Overlay {
     );
     const settingsPreview = document.createElement("div");
     settingsPreview.classList.add("neuroglancer-screenshot-resolution-table");
+    const previewTopContainer = document.createElement("div");
+    previewTopContainer.classList.add(
+      "neuroglancer-screenshot-resolution-preview-top-container",
+    );
     const previewLabel = document.createElement("h2");
     previewLabel.textContent = "Preview";
 
@@ -263,25 +297,32 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotSelectedValues = document.createElement("span");
     this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}px`;
 
-    const screenshotCopyBtn = makeCopyButton({
-      title: "Copy to clipboard",
-      onClick: () => {},
+    const screenshotCopyButton = makeCopyButton({
+      onClick: () => {
+        const result = setClipboard(this.getResolutionText());
+        StatusMessage.showTemporaryMessage(
+          result
+            ? "Resolution table copied to clipboard"
+            : "Failed to copy resolution table to clipboard",
+        );
+      },
     });
-    screenshotCopyBtn.classList.add("neuroglancer-screenshot-copy-icon");
-    screenshotCopyBtn.setAttribute("data-tooltip", "Copy to clipboard");
+    screenshotCopyButton.classList.add("neuroglancer-screenshot-copy-icon");
+    screenshotCopyButton.setAttribute("data-tooltip", "Copy to clipboard");
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
-    this.screenshotSizeText.appendChild(screenshotCopyBtn);
 
-    previewContainer.appendChild(previewLabel);
+    previewContainer.appendChild(previewTopContainer);
+    previewTopContainer.appendChild(previewLabel);
+    previewTopContainer.appendChild(screenshotCopyButton);
+    previewContainer.appendChild(this.screenshotSizeText);
     previewContainer.appendChild(settingsPreview);
-    settingsPreview.appendChild(this.screenshotSizeText);
     settingsPreview.appendChild(this.createPanelResolutionTable());
     settingsPreview.appendChild(this.createLayerResolutionTable());
 
-    this.content.appendChild(previewContainer);
-    this.content.appendChild(this.createStatisticsTable());
+    mainBody.appendChild(previewContainer);
+    mainBody.appendChild(this.createStatisticsTable());
 
     this.footerScreenshotActionBtnsContainer = document.createElement("div");
     this.footerScreenshotActionBtnsContainer.classList.add(
@@ -342,14 +383,11 @@ export class ScreenshotDialog extends Overlay {
     onClick: () => void,
     cssClass: string = "",
     svgUrl: string | null = null,
-    svgAlt: string = "",
   ): HTMLButtonElement {
     const button = document.createElement("button");
     if (svgUrl) {
-      const img = document.createElement("img");
-      img.src = svgUrl;
-      img.alt = svgAlt;
-      button.appendChild(img);
+      const icon = makeIcon({ svg: svgUrl });
+      button.appendChild(icon);
     } else if (text) {
       button.textContent = text;
     }
@@ -362,7 +400,6 @@ export class ScreenshotDialog extends Overlay {
   private createScaleRadioButtons() {
     const scaleMenu = document.createElement("div");
     scaleMenu.classList.add("neuroglancer-screenshot-scale-menu");
-    // scaleMenu.appendChild(this.screenshotSizeText);
 
     const scaleLabel = document.createElement("label");
     scaleLabel.classList.add("neuroglancer-screenshot-scale-factor");
@@ -372,6 +409,12 @@ export class ScreenshotDialog extends Overlay {
     scaleLabel.appendChild(tooltip.scaleFactorHelpTooltip);
 
     scaleMenu.appendChild(scaleLabel);
+
+    this.scaleRadioButtonsContainer = document.createElement("div");
+    this.scaleRadioButtonsContainer.classList.add(
+      "neuroglancer-screenshot-scale-radio-container",
+    );
+    scaleMenu.appendChild(this.scaleRadioButtonsContainer);
 
     this.warningElement = document.createElement("div");
     this.warningElement.classList.add("neuroglancer-screenshot-warning");
@@ -392,7 +435,7 @@ export class ScreenshotDialog extends Overlay {
 
       label.appendChild(document.createTextNode(`${scale}x`));
 
-      scaleMenu.appendChild(label);
+      this.scaleRadioButtonsContainer.appendChild(label);
 
       input.addEventListener("change", () => {
         this.screenshotManager.screenshotScale = scale;
@@ -418,6 +461,7 @@ export class ScreenshotDialog extends Overlay {
       this.screenshotManager.shouldKeepSliceViewFOVFixed =
         keepSliceFOVFixedCheckbox.checked;
     });
+    this.keepSliceFOVFixedCheckbox = keepSliceFOVFixedCheckbox;
     keepSliceFOVFixedDiv.appendChild(keepSliceFOVFixedCheckbox);
     scaleMenu.appendChild(keepSliceFOVFixedDiv);
 
@@ -449,7 +493,7 @@ export class ScreenshotDialog extends Overlay {
     descriptionkeyHeader.colSpan = 2;
 
     descriptionkeyHeader.textContent =
-      "Screenshot will take when all the chunks are loaded. If GPU memory is full, screenshot will only take the successfully loaded chunks.";
+      "The screenshot will take when all the chunks are loaded. If GPU memory is full, the screenshot will only capture the successfully loaded chunks. A screenshot scale larger than 1 may cause new chunks to be downloaded once the screenshot is in progress.";
 
     // It can be used to point to a docs page when complete
     // const descriptionLearnMoreLink = document.createElement("a");
@@ -488,29 +532,23 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Panel type";
+    keyHeader.textContent = PANEL_TABLE_HEADER_STRINGS.type;
 
     const tooltip = this.setupHelpTooltips();
     keyHeader.appendChild(tooltip.orthographicSettingsTooltip);
 
     headerRow.appendChild(keyHeader);
     const pixelValueHeader = document.createElement("th");
-    pixelValueHeader.textContent = "Pixel resolution";
+    pixelValueHeader.textContent = PANEL_TABLE_HEADER_STRINGS.pixelResolution;
     headerRow.appendChild(pixelValueHeader);
     const physicalValueHeader = document.createElement("th");
-    physicalValueHeader.textContent = "Physical resolution";
+    physicalValueHeader.textContent =
+      PANEL_TABLE_HEADER_STRINGS.physicalResolution;
     headerRow.appendChild(physicalValueHeader);
     return resolutionTable;
   }
 
   private populatePanelResolutionTable() {
-    function formatPixelResolution(panelArea: PanelViewport, scale: number) {
-      const width = Math.round(panelArea.right - panelArea.left) * scale;
-      const height = Math.round(panelArea.bottom - panelArea.top) * scale;
-      const type = panelArea.panelType;
-      return { width, height, type };
-    }
-
     // Clear the table before populating it
     while (this.panelResolutionTable.rows.length > 1) {
       this.panelResolutionTable.deleteRow(1);
@@ -525,15 +563,15 @@ export class ScreenshotDialog extends Overlay {
       );
       const pixelResolution = formatPixelResolution(
         resolution.pixelResolution,
-        this.screenshotManager.screenshotScale,
+        this.getResolutionScaleMultiplier(),
       );
       const row = resolutionTable.insertRow();
       const keyCell = row.insertCell();
-      const physicalValueCell = row.insertCell();
-      keyCell.textContent = physicalResolution.type;
-      physicalValueCell.textContent = physicalResolution.resolution;
       const pixelValueCell = row.insertCell();
       pixelValueCell.textContent = `${pixelResolution.width}x${pixelResolution.height} px`;
+      const physicalValueCell = row.insertCell();
+      keyCell.textContent = physicalResolution.type;
+      physicalValueCell.innerHTML = physicalResolution.resolution;
     }
     return resolutionTable;
   }
@@ -546,13 +584,13 @@ export class ScreenshotDialog extends Overlay {
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
-    keyHeader.textContent = "Layer name";
+    keyHeader.textContent = LAYER_TABLE_HEADER_STRINGS.name;
     headerRow.appendChild(keyHeader);
     const typeHeader = document.createElement("th");
-    typeHeader.textContent = "Type";
+    typeHeader.textContent = LAYER_TABLE_HEADER_STRINGS.type;
     headerRow.appendChild(typeHeader);
     const valueHeader = document.createElement("th");
-    valueHeader.textContent = "Physical voxel resolution";
+    valueHeader.textContent = LAYER_TABLE_HEADER_STRINGS.resolution;
     headerRow.appendChild(valueHeader);
     return resolutionTable;
   }
@@ -579,13 +617,12 @@ export class ScreenshotDialog extends Overlay {
           layerNamesForUI[type as keyof typeof layerNamesForUI];
         this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
       }
-      valueCell.textContent = formatPhysicalResolution(value).resolution;
+      valueCell.innerHTML = formatPhysicalResolution(value).resolution;
     }
   }
 
   private forceScreenshot() {
     this.screenshotManager.forceScreenshot();
-    this.dispose();
   }
 
   private cancelScreenshot() {
@@ -596,9 +633,7 @@ export class ScreenshotDialog extends Overlay {
   private screenshot() {
     const filename = this.nameInput.value;
     this.screenshotManager.takeScreenshot(filename);
-    // Delay the update because sometimes the screenshot is immediately taken
-    // And the UI is disposed before the update can happen
-    this.debouncedUpdateUIElements();
+    this.updateUIBasedOnMode();
   }
 
   private populateStatistics(
@@ -618,7 +653,9 @@ export class ScreenshotDialog extends Overlay {
 
   private handleScreenshotResize() {
     const screenshotSize =
-      this.screenshotManager.calculatedScaledAndClippedSize();
+      this.screenshotManager.calculatedScaledAndClippedSize(
+        this.getResolutionScaleMultiplier(),
+      );
     if (screenshotSize.width * screenshotSize.height > LARGE_SCREENSHOT_SIZE) {
       this.warningElement.textContent =
         "Warning: large screenshots (bigger than 4096x4096) may fail";
@@ -629,7 +666,6 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotHeight = screenshotSize.height;
     // Update the screenshot size display whenever dimensions change
     this.updateScreenshotSizeDisplay();
-    // this.screenshotSizeText.textContent = `Screenshot size: ${screenshotSize.width}px, ${screenshotSize.height}px`;
   }
 
   private updateScreenshotSizeDisplay() {
@@ -671,12 +707,69 @@ export class ScreenshotDialog extends Overlay {
     };
   }
 
-  private debouncedUpdateUIElements = debounce(() => {
-    this.updateUIBasedOnMode();
-  }, 100);
+  /**
+  Private function to copy the resolution of the screenshot to the clipboard
+  This will be in tsv format, with the width and height separated by an 'x'
+    */
+  private getResolutionText() {
+    // Processing the Screenshot size
+    const screenshotSizeText = `Screenshot size \t${this.screenshotWidth}x${this.screenshotHeight} px\n`;
+
+    // Process the panel resolution table
+    const panelResolution = getViewerPanelResolutions(
+      this.screenshotManager.viewer.display.panels,
+    );
+    let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type} \t${PANEL_TABLE_HEADER_STRINGS.pixelResolution} \t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
+    for (const resolution of panelResolution) {
+      const physicalResolution = formatPhysicalResolution(
+        resolution.physicalResolution,
+      );
+      const pixelResolution = formatPixelResolution(
+        resolution.pixelResolution,
+        this.getResolutionScaleMultiplier(),
+      );
+      panelResolutionText += `${physicalResolution.type} \t${pixelResolution.width}x${pixelResolution.height} px \t${physicalResolution.resolutionText}\n`;
+    }
+
+    // Process the layer resolution table
+    const layerResolution = getViewerLayerResolutions(
+      this.screenshotManager.viewer,
+    );
+    let layerResolutionText = `${LAYER_TABLE_HEADER_STRINGS.name} \t${LAYER_TABLE_HEADER_STRINGS.type} \t${LAYER_TABLE_HEADER_STRINGS.resolution}\n`;
+    for (const [key, value] of layerResolution) {
+      const { name, type } = key;
+      if (type === "MultiscaleMeshLayer") {
+        continue;
+      }
+      const physicalResolution = formatPhysicalResolution(value);
+      layerResolutionText += `${name} \t${layerNamesForUI[type as keyof typeof layerNamesForUI]} \t${physicalResolution.resolutionText}\n`;
+    }
+
+    return `${screenshotSizeText}${panelResolutionText}${layerResolutionText}`;
+  }
+
+  /**
+   * While the screenshot is not in progress, the user can change the scale of the screenshot
+   * We want to give a preview of the screenshot size to the user
+   * During the screenshot, the user is locked into the menu and cannot change the scale
+   * And the viewer canvas pixels have been resized to the screenshot size
+   * So the preview is not necessary
+   */
+  private getResolutionScaleMultiplier() {
+    return this.screenshotMode === ScreenshotMode.OFF
+      ? this.screenshotManager.screenshotScale
+      : 1;
+  }
 
   private updateUIBasedOnMode() {
     if (this.screenshotMode === ScreenshotMode.OFF) {
+      this.nameInput.disabled = false;
+      for (const radio of this.scaleRadioButtonsContainer.children) {
+        for (const child of (radio as HTMLElement).children) {
+          if (child instanceof HTMLInputElement) child.disabled = false;
+        }
+      }
+      this.keepSliceFOVFixedCheckbox.disabled = false;
       this.forceScreenshotButton.disabled = true;
       this.cancelScreenshotButton.disabled = true;
       this.takeScreenshotButton.disabled = false;
@@ -684,6 +777,13 @@ export class ScreenshotDialog extends Overlay {
       this.closeMenuButton.disabled = false;
       this.forceScreenshotButton.title = "";
     } else {
+      this.nameInput.disabled = true;
+      for (const radio of this.scaleRadioButtonsContainer.children) {
+        for (const child of (radio as HTMLElement).children) {
+          if (child instanceof HTMLInputElement) child.disabled = true;
+        }
+      }
+      this.keepSliceFOVFixedCheckbox.disabled = true;
       this.forceScreenshotButton.disabled = false;
       this.cancelScreenshotButton.disabled = false;
       this.takeScreenshotButton.disabled = true;
