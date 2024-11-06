@@ -96,8 +96,12 @@ const keyMap = EventActionMap.fromObject({
   escape: { action: "cancel", preventDefault: false, stopPropagation: false },
 });
 
+export interface CompletionRequest {
+  value: string;
+  selectionRange?: { begin: number; end: number } | undefined;
+}
 export type Completer = (
-  value: string,
+  request: CompletionRequest,
   cancellationToken: CancellationToken,
 ) => Promise<CompletionResult> | null;
 
@@ -231,7 +235,13 @@ export class AutocompleteTextInput extends RefCounted {
         const cancellationToken = (this.activeCompletionCancellationToken =
           new CancellationTokenSource());
         const activeCompletionPromise = (this.activeCompletionPromise =
-          this.completer(this.value, cancellationToken));
+          this.completer(
+            {
+              value: this.value,
+              selectionRange: this.getSelectionRange(),
+            },
+            cancellationToken,
+          ));
         if (activeCompletionPromise !== null) {
           activeCompletionPromise.then((completionResult) => {
             if (this.activeCompletionPromise === activeCompletionPromise) {

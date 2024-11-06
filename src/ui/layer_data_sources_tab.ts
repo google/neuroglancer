@@ -53,6 +53,7 @@ import type { MessageList } from "#src/util/message_list.js";
 import { MessageSeverity } from "#src/util/message_list.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { CoordinateSpaceTransformWidget } from "#src/widget/coordinate_transform.js";
+import type { Completer } from "#src/widget/multiline_autocomplete.js";
 import {
   AutocompleteTextInput,
   makeCompletionElementWithDescription,
@@ -64,8 +65,8 @@ class SourceUrlAutocomplete extends AutocompleteTextInput {
   dirty: WatchableValueInterface<boolean>;
   constructor(dataSourceView: DataSourceView) {
     const { manager } = dataSourceView.source.layer;
-    const sourceCompleter = (
-      value: string,
+    const sourceCompleter: Completer = (
+      { value },
       cancellationToken: CancellationToken,
     ) =>
       manager.dataSourceProviderRegistry

@@ -24,6 +24,7 @@ import type {
   CoordinateSpace,
   CoordinateSpaceCombiner,
   DimensionId,
+  TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import {
   clampAndRoundCoordinateToVoxelCenter,
@@ -44,6 +45,7 @@ import {
   makeCachedDerivedWatchableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
+import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
 import type { LocalToolBinder, ToolActivation } from "#src/ui/tool.js";
 import {
   makeToolActivationStatusMessage,
@@ -51,6 +53,8 @@ import {
   registerTool,
   Tool,
 } from "#src/ui/tool.js";
+import type { ToolDragSource } from "#src/ui/tool_drag_and_drop.js";
+import { beginToolDrag, endToolDrag } from "#src/ui/tool_drag_and_drop.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, binarySearch } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
@@ -233,15 +237,17 @@ class DimensionWidget {
     );
 
     if (allowFocus) {
-      nameContainer.addEventListener("dblclick", () => {
+      nameContainer.addEventListener("dblclick", (event) => {
         nameElement.disabled = false;
         nameElement.focus();
         nameElement.select();
+        event.stopPropagation();
       });
-      scaleContainer.addEventListener("dblclick", () => {
+      scaleContainer.addEventListener("dblclick", (event) => {
         scaleElement.disabled = false;
         scaleElement.focus();
         scaleElement.select();
+        event.stopPropagation();
       });
       coordinate.addEventListener("focus", () => {
         coordinate.select();
@@ -296,6 +302,7 @@ export class PositionWidget extends RefCounted {
   private getToolBinder: (() => LocalToolBinder | undefined) | undefined;
   private allowFocus: boolean;
   private showPlayback: boolean;
+  private showDropdown: boolean;
 
   private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
   private dimensionWidgetList: DimensionWidget[] = [];
@@ -473,11 +480,11 @@ export class PositionWidget extends RefCounted {
       dropdown.appendChild(entryElement);
       entries.push({ entryElement, coordinateElement, labelElement });
     }
-    // const dropdownOwner = widget.dropdownOwner!;
   }
 
   private openDropdown(widget: DimensionWidget) {
     if (widget.dropdownOwner !== undefined) return;
+    if (!this.showDropdown) return;
     const dimensionIndex = this.getDimensionIndex(widget.id);
     if (dimensionIndex === -1) return;
     this.closeDropdown();
@@ -594,13 +601,43 @@ export class PositionWidget extends RefCounted {
       coordinateSpace,
       id,
       initialDimensionIndex,
-      { allowFocus: this.allowFocus, showPlayback: this.showPlayback },
+      {
+        allowFocus: this.allowFocus,
+        showPlayback: this.showPlayback,
+      },
     );
+    let toolDragSource: ToolDragSource | undefined;
+    const localBinder = this.getToolBinder?.();
+    if (localBinder !== undefined) {
+      const self = this;
+      toolDragSource = {
+        localBinder,
+        get toolJson() {
+          return {
+            type: DIMENSION_TOOL_ID,
+            dimension:
+              self.position.coordinateSpace.value.names[
+                self.getDimensionIndex(id)
+              ],
+          };
+        },
+      };
+    }
     if (this.singleDimensionId === undefined) {
       widget.container.addEventListener("dragstart", (event: DragEvent) => {
         this.dragSource = widget;
         event.stopPropagation();
         event.dataTransfer!.setData("neuroglancer-dimension", "");
+        pushDragStatus(
+          event,
+          widget.container,
+          "drag",
+          "Drag to reorder dimensions, to an existing tool palette, or to the " +
+            "left/right/top/bottom of another panel to create a new tool palette",
+        );
+        if (toolDragSource !== undefined) {
+          beginToolDrag(toolDragSource);
+        }
       });
       widget.container.addEventListener("dragenter", (event: DragEvent) => {
         const { dragSource } = this;
@@ -613,9 +650,12 @@ export class PositionWidget extends RefCounted {
         this.reorderDimensionTo(targetIndex, sourceIndex);
       });
       widget.container.addEventListener("dragend", (event: DragEvent) => {
-        event;
         if (this.dragSource === widget) {
           this.dragSource = undefined;
+        }
+        popDragStatus(event, widget.container, "drag");
+        if (toolDragSource !== undefined) {
+          endToolDrag(toolDragSource);
         }
       });
     }
@@ -999,6 +1039,7 @@ export class PositionWidget extends RefCounted {
       getToolBinder = undefined,
       allowFocus = true,
       showPlayback = true,
+      showDropdown = true,
     }: {
       copyButton?: boolean;
       velocity?: CoordinateSpacePlaybackVelocity;
@@ -1006,6 +1047,7 @@ export class PositionWidget extends RefCounted {
       getToolBinder?: (() => LocalToolBinder | undefined) | undefined;
       allowFocus?: boolean;
       showPlayback?: boolean;
+      showDropdown?: boolean;
     } = {},
   ) {
     super();
@@ -1015,6 +1057,7 @@ export class PositionWidget extends RefCounted {
     this.getToolBinder = getToolBinder;
     this.allowFocus = allowFocus;
     this.showPlayback = showPlayback;
+    this.showDropdown = showDropdown;
     this.registerDisposer(
       position.coordinateSpace.changed.add(
         this.registerCancellable(
@@ -1340,26 +1383,12 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
   activate(activation: ToolActivation<this>) {
     const { viewer } = this;
     const { content } = makeToolActivationStatusMessage(activation);
-    content.classList.add("neuroglancer-position-tool");
+    const { positionWidget } = this.makeTool(
+      activation,
+      content,
+      /*inPalette=*/ false,
+    );
     activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
-    const positionWidget = new PositionWidget(
-      viewer.position,
-      viewer.coordinateSpaceCombiner,
-      {
-        velocity: viewer.velocity,
-        singleDimensionId: this.dimensionId,
-        copyButton: false,
-        allowFocus: false,
-        showPlayback: false,
-      },
-    );
-    positionWidget.element.style.userSelect = "none";
-    content.appendChild(activation.registerDisposer(positionWidget).element);
-    const plot = activation.registerDisposer(
-      new PositionPlot(viewer.position, this.dimensionId, "row"),
-    );
-    plot.element.style.flex = "1";
-    content.appendChild(plot.element);
     activation.bindAction<WheelEvent>(
       "adjust-position-via-wheel",
       (actionEvent) => {
@@ -1375,6 +1404,56 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         );
       },
     );
+    activation.bindAction<WheelEvent>(
+      "adjust-velocity-via-wheel",
+      (actionEvent) => {
+        actionEvent.stopPropagation();
+        const factor = getWheelZoomAmount(actionEvent.detail);
+        viewer.velocity.multiplyVelocity(this.dimensionId, factor);
+      },
+    );
+    activation.bindAction<WheelEvent>("toggle-playback", (event) => {
+      event.stopPropagation();
+      viewer.velocity.togglePlayback(this.dimensionId);
+    });
+  }
+
+  renderInPalette(context: RefCounted) {
+    const content = document.createElement("div");
+    this.makeTool(context, content, /*inPalette=*/ true);
+    return content;
+  }
+
+  private makeTool(
+    activation: RefCounted,
+    content: HTMLElement,
+    inPalette: boolean,
+  ) {
+    const { viewer } = this;
+    if (inPalette) {
+      content.classList.add("neuroglancer-position-tool-in-palette");
+    } else {
+      content.classList.add("neuroglancer-position-tool");
+    }
+    const positionWidget = new PositionWidget(
+      viewer.position,
+      viewer.coordinateSpaceCombiner,
+      {
+        velocity: viewer.velocity,
+        singleDimensionId: this.dimensionId,
+        copyButton: false,
+        allowFocus: inPalette,
+        showPlayback: false,
+        showDropdown: false,
+      },
+    );
+    positionWidget.element.style.userSelect = "none";
+    content.appendChild(activation.registerDisposer(positionWidget).element);
+    const plot = activation.registerDisposer(
+      new PositionPlot(viewer.position, this.dimensionId, "row"),
+    );
+    plot.element.style.flex = "1";
+    content.appendChild(plot.element);
 
     const watchableVelocity = this.velocity.dimensionVelocity(
       activation,
@@ -1478,50 +1557,39 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         }),
       ).element,
     );
+    return { positionWidget };
+  }
 
-    activation.bindAction<WheelEvent>(
-      "adjust-velocity-via-wheel",
-      (actionEvent) => {
-        actionEvent.stopPropagation();
-        const factor = getWheelZoomAmount(actionEvent.detail);
-        viewer.velocity.multiplyVelocity(this.dimensionId, factor);
-      },
-    );
-    activation.bindAction<WheelEvent>("toggle-playback", (event) => {
-      event.stopPropagation();
-      viewer.velocity.togglePlayback(this.dimensionId);
-    });
+  private savedDimensionName: string = "";
+
+  get dimensionName(): string | undefined {
+    const { dimensionId } = this;
+    const coordinateSpace = this.coordinateSpace.value;
+    const i = coordinateSpace.ids.indexOf(dimensionId);
+    if (i === -1) return undefined;
+    return coordinateSpace.names[i];
   }
 
   get description() {
     return `dim ${this.dimensionName}`;
   }
 
-  dimensionIndex: number;
-  dimensionName: string;
-
   constructor(
     public viewer: SupportsDimensionTool<Viewer>,
     public dimensionId: DimensionId,
   ) {
     super(viewer.toolBinder);
-    const coordinateSpace = this.coordinateSpace.value;
-    const i = (this.dimensionIndex = coordinateSpace.ids.indexOf(dimensionId));
-    this.dimensionName = coordinateSpace.names[i];
+    this.savedDimensionName = this.dimensionName!;
     this.registerDisposer(
       this.coordinateSpace.changed.add(() => {
-        const coordinateSpace = this.coordinateSpace.value;
-        const i = (this.dimensionIndex =
-          this.coordinateSpace.value.ids.indexOf(dimensionId));
-        if (i === -1) {
+        const dimensionName = this.dimensionName;
+        if (dimensionName === undefined) {
           this.unbind();
           return;
         }
-        const newName = coordinateSpace.names[i];
-        if (this.dimensionName !== newName) {
-          this.dimensionName = newName;
-          this.changed.dispatch();
-        }
+        if (dimensionName === this.savedDimensionName) return;
+        this.savedDimensionName = dimensionName;
+        this.changed.dispatch();
       }),
     );
   }
@@ -1544,34 +1612,56 @@ function makeDimensionTool(viewer: SupportsDimensionTool, obj: unknown) {
   return new DimensionTool(viewer, coordinateSpace.ids[dimensionIndex]);
 }
 
+function listDimensionTools(
+  coordinateSpace: TrackableCoordinateSpace,
+  onChange?: () => void,
+) {
+  if (onChange !== undefined) {
+    coordinateSpace.changed.addOnce(onChange);
+  }
+  return coordinateSpace.value.names.map((name) => ({
+    type: DIMENSION_TOOL_ID,
+    dimension: name,
+  }));
+}
+
 export function registerDimensionToolForViewer(contextType: typeof Viewer) {
-  registerTool(contextType, DIMENSION_TOOL_ID, (viewer, obj) =>
-    makeDimensionTool(
-      {
-        position: viewer.position,
-        velocity: viewer.velocity,
-        coordinateSpaceCombiner:
-          viewer.layerSpecification.coordinateSpaceCombiner,
-        toolBinder: viewer.toolBinder,
-      },
-      obj,
-    ),
+  registerTool(
+    contextType,
+    DIMENSION_TOOL_ID,
+    (viewer, obj) =>
+      makeDimensionTool(
+        {
+          position: viewer.position,
+          velocity: viewer.velocity,
+          coordinateSpaceCombiner:
+            viewer.layerSpecification.coordinateSpaceCombiner,
+          toolBinder: viewer.toolBinder,
+        },
+        obj,
+      ),
+    (viewer, onChange) => listDimensionTools(viewer.coordinateSpace, onChange),
   );
 }
 
 export function registerDimensionToolForUserLayer(
   contextType: typeof UserLayer,
 ) {
-  registerTool(contextType, DIMENSION_TOOL_ID, (layer, obj) =>
-    makeDimensionTool(
-      {
-        position: layer.localPosition,
-        velocity: layer.localVelocity,
-        coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
-        toolBinder: layer.toolBinder,
-      },
-      obj,
-    ),
+  registerTool(
+    contextType,
+    DIMENSION_TOOL_ID,
+    (layer, obj) =>
+      makeDimensionTool(
+        {
+          position: layer.localPosition,
+          velocity: layer.localVelocity,
+          coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
+          toolBinder: layer.toolBinder,
+        },
+        obj,
+      ),
+    (layer, onChange) =>
+      listDimensionTools(layer.localCoordinateSpace, onChange),
   );
 }
 

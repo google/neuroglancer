@@ -80,7 +80,7 @@ import {
   TrackableSidePanelLocation,
 } from "#src/ui/side_panel_location.js";
 import type { GlobalToolBinder } from "#src/ui/tool.js";
-import { LocalToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
+import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
@@ -350,7 +350,7 @@ export class UserLayer extends RefCounted {
   panels = new UserLayerSidePanelsState(this);
   tool = this.registerDisposer(new SelectedLegacyTool(this));
   toolBinder = this.registerDisposer(
-    new LocalToolBinder(this, this.manager.root.toolBinder),
+    new LayerToolBinder(this, this.manager.root.toolBinder),
   );
 
   dataSourcesChanged = new NullarySignal();

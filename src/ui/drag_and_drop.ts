@@ -28,6 +28,7 @@ const dragStatusStack: {
   target: EventTarget;
   operation: DragStatusType;
   status: DragStatusRenderer;
+  leaveHandler?: () => void;
 }[] = [];
 
 function getStatusElement() {
@@ -46,9 +47,21 @@ function clearStatus() {
   }
 }
 
-function applyStatus(status: DragStatusRenderer) {
+function applyStatus(event: MouseEvent, status: DragStatusRenderer) {
   const element = getStatusElement();
   removeChildren(element);
+  if (event.clientX === 0 && event.clientY === 0) {
+    // Probably an invalid position due to dragging outside the window.
+  } else {
+    if (event.clientX < window.innerWidth / 2) {
+      element.style.left = "auto";
+      element.style.right = "0px";
+    } else {
+      element.style.right = "auto";
+      element.style.left = "0px";
+    }
+  }
+
   if (typeof status === "string") {
     element.appendChild(document.createTextNode(status));
   } else {
@@ -58,23 +71,32 @@ function applyStatus(status: DragStatusRenderer) {
 }
 
 function removeDragStatus(target: EventTarget, operation: DragStatusType) {
-  filterArrayInplace(
-    dragStatusStack,
-    (entry) => !(entry.target === target && entry.operation === operation),
-  );
+  filterArrayInplace(dragStatusStack, (entry) => {
+    if (entry.target === target && entry.operation === operation) {
+      entry.leaveHandler?.();
+      return false;
+    }
+    return true;
+  });
 }
 
 export function pushDragStatus(
+  event: MouseEvent,
   target: EventTarget,
   operation: DragStatusType,
   status: DragStatusRenderer,
+  leaveHandler?: () => void,
 ) {
   removeDragStatus(target, operation);
-  dragStatusStack.push({ target, operation, status });
-  applyStatus(status);
+  dragStatusStack.push({ target, operation, status, leaveHandler });
+  applyStatus(event, status);
 }
 
-export function popDragStatus(target: EventTarget, operation: DragStatusType) {
+export function popDragStatus(
+  event: MouseEvent,
+  target: EventTarget,
+  operation: DragStatusType,
+) {
   removeDragStatus(target, operation);
   const entry =
     dragStatusStack.length === 0
@@ -83,6 +105,6 @@ export function popDragStatus(target: EventTarget, operation: DragStatusType) {
   if (entry === undefined) {
     clearStatus();
   } else {
-    applyStatus(entry.status);
+    applyStatus(event, entry.status);
   }
 }

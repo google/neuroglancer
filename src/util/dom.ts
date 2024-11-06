@@ -73,7 +73,7 @@ export function isInputTextTarget(target: EventTarget | null) {
   ) {
     return true;
   }
-  return false;
+  return target.closest(".neuroglancer-sticky-focus") !== null;
 }
 
 export function measureElementClone(element: HTMLElement) {

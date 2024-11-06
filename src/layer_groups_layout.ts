@@ -475,8 +475,8 @@ function setupDropZone(
     }
     dropZone.classList.add("neuroglancer-drag-over");
   });
-  dropZone.addEventListener("dragleave", () => {
-    popDragStatus(dropZone, "drop");
+  dropZone.addEventListener("dragleave", (event) => {
+    popDragStatus(event, dropZone, "drop");
     dropZone.classList.remove("neuroglancer-drag-over");
   });
   dropZone.addEventListener("dragover", (event: DragEvent) => {
@@ -485,7 +485,7 @@ function setupDropZone(
       message: string,
     ) => {
       if (info.dropEffectMessage) message += ` (${info.dropEffectMessage})`;
-      pushDragStatus(dropZone, "drop", message);
+      pushDragStatus(event, dropZone, "drop", message);
       event.stopPropagation();
       event.preventDefault();
     };
@@ -511,7 +511,7 @@ function setupDropZone(
   });
   dropZone.addEventListener("drop", (event: DragEvent) => {
     dropZone.classList.remove("neuroglancer-drag-over");
-    popDragStatus(dropZone, "drop");
+    popDragStatus(event, dropZone, "drop");
     let dropLayers: DropLayers | undefined;
     let layoutSpec: any;
     if (hasViewerDrag(event)) {
@@ -606,6 +606,7 @@ export class StackLayoutComponent
       event.preventDefault();
       const updateMessage = () => {
         pushDragStatus(
+          event,
           dropZone,
           "drag",
           `Drag to resize, current ${
@@ -640,8 +641,8 @@ export class StackLayoutComponent
             Math.round((1 - firstFraction) * existingFlexSum * 100) / 100;
           updateMessage();
         },
-        () => {
-          popDragStatus(dropZone, "drag");
+        (event) => {
+          popDragStatus(event, dropZone, "drag");
         },
       );
     });
