@@ -62,6 +62,7 @@ export function positionDropdown(
     const distanceToBottom = viewportHeight - rect.bottom - bottomMargin;
     dropdownElement.style.left = `${rect.left}px`;
     dropdownElement.style.width = `${rect.width}px`;
+    dropdownElement.style.maxWidth = `${rect.width}px`;
     if (distanceToTop > distanceToBottom * 3) {
       dropdownElement.style.top = "";
       dropdownElement.style.bottom = `${viewportHeight - rect.top}px`;
@@ -75,5 +76,37 @@ export function positionDropdown(
         dropdownElement.style.maxHeight = distanceToBottom + "px";
       }
     }
+  }
+}
+
+export function positionRelativeDropdown(
+  dropdown: HTMLElement,
+  parent: HTMLElement,
+) {
+  const rect = parent.getBoundingClientRect();
+  const topMargin = 6;
+  const bottomMargin = 6;
+
+  const { clientHeight: viewportWidth, clientWidth: viewportHeight } =
+    dropdown.ownerDocument!.documentElement!;
+  const distanceToTop = rect.top - topMargin;
+  const distanceToBottom = viewportHeight - rect.bottom - bottomMargin;
+
+  if (rect.left < viewportWidth - rect.right) {
+    dropdown.style.left = "0px";
+    dropdown.style.right = "";
+  } else {
+    dropdown.style.right = "0px";
+    dropdown.style.left = "";
+  }
+  dropdown.style.maxWidth = `${rect.width}px`;
+  if (distanceToTop > distanceToBottom * 3) {
+    dropdown.style.top = "";
+    dropdown.style.bottom = `${viewportHeight - rect.top}px`;
+    dropdown.style.maxHeight = distanceToTop + "px";
+  } else {
+    dropdown.style.top = `${rect.bottom}px`;
+    dropdown.style.bottom = "";
+    dropdown.style.maxHeight = distanceToBottom + "px";
   }
 }
