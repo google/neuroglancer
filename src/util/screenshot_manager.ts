@@ -24,6 +24,7 @@ import type {
   ScreenshotChunkStatistics,
 } from "#src/python_integration/screenshots.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
+import { StatusMessage } from "#src/status.js";
 import {
   columnSpecifications,
   getChunkSourceIdentifier,
@@ -38,7 +39,7 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
-const SCREENSHOT_TIMEOUT = 1000;
+const SCREENSHOT_TIMEOUT = 5000;
 
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
@@ -245,17 +246,18 @@ export class ScreenshotManager extends RefCounted {
   }
 
   // Scales the screenshot by the given factor, and calculates the cropped area
-  calculatedScaledAndClippedSize() {
+  calculatedScaledAndClippedSize(scale: number): {
+    width: number;
+    height: number;
+  } {
     const renderingPanelArea = calculatePanelViewportBounds(
       this.viewer.display.panels,
     ).totalRenderPanelViewport;
     return {
       width:
-        Math.round(renderingPanelArea.right - renderingPanelArea.left) *
-        this.screenshotScale,
+        Math.round(renderingPanelArea.right - renderingPanelArea.left) * scale,
       height:
-        Math.round(renderingPanelArea.bottom - renderingPanelArea.top) *
-        this.screenshotScale,
+        Math.round(renderingPanelArea.bottom - renderingPanelArea.top) * scale,
     };
   }
 
@@ -360,9 +362,9 @@ export class ScreenshotManager extends RefCounted {
         Date.now() - this.lastUpdateTimestamp > SCREENSHOT_TIMEOUT
       ) {
         this.statisticsUpdated.dispatch(fullStats);
-        console.warn(
-          `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${total.visibleChunksGpuMemory}/${total.visibleChunksTotal}`,
-        );
+        const message = `Forcing screenshot: screenshot is likely stuck, no change in GPU chunks after ${SCREENSHOT_TIMEOUT}ms. Last visible chunks: ${total.visibleChunksGpuMemory}/${total.visibleChunksTotal}`;
+        console.warn(message);
+        StatusMessage.showTemporaryMessage(message, 5000);
         this.forceScreenshot();
       }
     } else {
