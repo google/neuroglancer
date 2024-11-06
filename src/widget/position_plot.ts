@@ -177,6 +177,7 @@ export class PositionPlot extends RefCounted {
         this.visible = false;
         return;
       }
+      this.element.style.display = "";
       this.visible = true;
 
       const { lowerBound, upperBound } = normalizedDimensionBounds;
