@@ -85,33 +85,11 @@
   gap: 10px;
 }
 
-/* TODO implement proper scroll - this is to ensure div class is setup right */
-/* TODO Make tooltips work with this */
 .neuroglancer-screenshot-main-body-container {
   height: auto !important;
   max-height: calc(100vh - 200px) !important;
   overflow-y: auto;
   overflow-x: hidden;
-}
-
-.neuroglancer-screenshot-main-body-container::-webkit-scrollbar {
-  width: 1rem;
-}
-
-.neuroglancer-screenshot-main-body-container::-webkit-scrollbar-track {
-  background: #FFF;
-  border-radius: 100vw;
-  margin-block: 0.5em;
-}
-
-.neuroglancer-screenshot-main-body-container::-webkit-scrollbar-thumb {
-  background: rgba(20, 20, 21, 0.20);
-  border: 0.25rem solid #FFF;
-  border-radius: 0.5rem;
-}
-
-.neuroglancer-screenshot-main-body-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(20, 20, 21, 0.50);
 }
 
 .neuroglancer-screenshot-dialog .neuroglancer-screenshot-title-heading {
@@ -295,7 +273,7 @@
 
 .neuroglancer-screenshot-resolution-table table {
   padding: 4px 2px 2px 2px;
-  background-color: #E6E6E6;
+  background-color: #e6e6e6;
   border-radius: 6px;
   margin-bottom: 0.75rem;
 }
@@ -404,15 +382,23 @@
   cursor: pointer;
 }
 
-.neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip:hover::after,
-.neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip:hover::before,
-.neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip:hover::after,
-.neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip:hover::before {
+.neuroglancer-screenshot-resolution-table
+  th
+  .neuroglancer-screenshot-tooltip:hover::after,
+.neuroglancer-screenshot-resolution-table
+  th
+  .neuroglancer-screenshot-tooltip:hover::before,
+.neuroglancer-screenshot-scale-factor
+  .neuroglancer-screenshot-tooltip:hover::after,
+.neuroglancer-screenshot-scale-factor
+  .neuroglancer-screenshot-tooltip:hover::before {
   opacity: 1;
   visibility: visible;
 }
 
-.neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip::after,
+.neuroglancer-screenshot-resolution-table
+  th
+  .neuroglancer-screenshot-tooltip::after,
 .neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -426,7 +412,9 @@
   left: 160%;
 }
 
-.neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip::before,
+.neuroglancer-screenshot-resolution-table
+  th
+  .neuroglancer-screenshot-tooltip::before,
 .neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip::before {
   content: "";
   position: absolute;
@@ -597,5 +585,5 @@
 }
 
 .neuroglancer-screenshot-dimension {
-  color: black; /* TODO add exact color */
+  color: var(--gray600);
 }
