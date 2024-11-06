@@ -190,7 +190,7 @@ export class ScreenshotDialog extends Overlay {
     generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
     generalSettingsTooltip.setAttribute(
       "data-tooltip",
-      "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotations (yellow bounding box)",
+      "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotation yellow bounding box.",
     );
 
     const orthographicSettingsTooltip = makeIcon({ svg: svg_help });
@@ -199,14 +199,14 @@ export class ScreenshotDialog extends Overlay {
     );
     orthographicSettingsTooltip.setAttribute(
       "data-tooltip",
-      "In the main viewer, press 'o' to toggle between perspective and orthographic views",
+      "In the main viewer, press 'o' to toggle between perspective and orthographic views.",
     );
 
     const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
     scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
     scaleFactorHelpTooltip.setAttribute(
       "data-tooltip",
-      "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the setting and scale factor.",
+      "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep the slice FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the scale factor.",
     );
 
     return {
@@ -308,7 +308,7 @@ export class ScreenshotDialog extends Overlay {
       },
     });
     screenshotCopyButton.classList.add("neuroglancer-screenshot-copy-icon");
-    screenshotCopyButton.setAttribute("data-tooltip", "Copy to clipboard");
+    screenshotCopyButton.setAttribute("data-tooltip", "Copy table to clipboard");
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
@@ -528,7 +528,6 @@ export class ScreenshotDialog extends Overlay {
     const resolutionTable = (this.panelResolutionTable =
       document.createElement("table"));
     resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
-    resolutionTable.title = "Viewer resolution statistics";
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
@@ -580,7 +579,6 @@ export class ScreenshotDialog extends Overlay {
     const resolutionTable = (this.layerResolutionTable =
       document.createElement("table"));
     resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
-    resolutionTable.title = "Viewer resolution statistics";
 
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
