@@ -783,12 +783,16 @@ function deserializeManyFloatVectors(
   offset: number,
   isLittleEndian: boolean,
   rank: number,
-  vectors: Float32Array[],
+  points: Float32Array[],
 ) {
-  // TODO bring count into this
-  for (const vec of vectors) {
+  // The buffer contains a sequence of vectors, each of length `rank`.
+  // Each vector is stored as a sequence of `rank` 32-bit floats.
+  while (offset < buffer.byteLength) {
+    const vec = new Float32Array(rank);
     offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vec);
+    points.push(vec);
   }
+
   return offset;
 }
 
@@ -903,7 +907,7 @@ export const annotationTypeHandlers: Record<
       rank: number,
       id: string,
     ): Polyline {
-      const points = new Array<Float32Array>(2);
+      const points = new Array<Float32Array>();
       deserializeManyFloatVectors(buffer, offset, isLittleEndian, rank, points);
       return { type: AnnotationType.POLYLINE, points, id, properties: [] };
     },
