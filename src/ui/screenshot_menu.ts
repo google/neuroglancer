@@ -283,6 +283,10 @@ export class ScreenshotDialog extends Overlay {
     );
     const settingsPreview = document.createElement("div");
     settingsPreview.classList.add("neuroglancer-screenshot-resolution-table");
+    const previewTopContainer = document.createElement("div");
+    previewTopContainer.classList.add(
+      "neuroglancer-screenshot-resolution-preview-top-container",
+    );
     const previewLabel = document.createElement("h2");
     previewLabel.textContent = "Preview";
 
@@ -308,11 +312,12 @@ export class ScreenshotDialog extends Overlay {
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
-    this.screenshotSizeText.appendChild(screenshotCopyButton);
 
-    previewContainer.appendChild(previewLabel);
+    previewContainer.appendChild(previewTopContainer);
+    previewTopContainer.appendChild(previewLabel);
+    previewTopContainer.appendChild(screenshotCopyButton);
+    previewContainer.appendChild(this.screenshotSizeText);
     previewContainer.appendChild(settingsPreview);
-    settingsPreview.appendChild(this.screenshotSizeText);
     settingsPreview.appendChild(this.createPanelResolutionTable());
     settingsPreview.appendChild(this.createLayerResolutionTable());
 
@@ -488,7 +493,7 @@ export class ScreenshotDialog extends Overlay {
     descriptionkeyHeader.colSpan = 2;
 
     descriptionkeyHeader.textContent =
-      "Screenshot will take when all the chunks are loaded. If GPU memory is full, screenshot will only take the successfully loaded chunks.";
+      "The screenshot will take when all the chunks are loaded. If GPU memory is full, the screenshot will only capture the successfully loaded chunks. A screenshot scale larger than 1 may cause new chunks to be downloaded once the screenshot is in progress.";
 
     // It can be used to point to a docs page when complete
     // const descriptionLearnMoreLink = document.createElement("a");
