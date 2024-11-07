@@ -30,12 +30,12 @@ import type {
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type {
   DimensionResolutionStats,
-  PanelViewport,
-} from "#src/util/viewer_resolution_stats.js";
+  PanelViewport} from "#src/util/viewer_resolution_stats.js";
 import {
+  getViewerResolutionMetadata,
+
   getViewerLayerResolutions,
-  getViewerPanelResolutions,
-} from "#src/util/viewer_resolution_stats.js";
+  getViewerPanelResolutions} from "#src/util/viewer_resolution_stats.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -83,32 +83,30 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
     return {
       type: "Loading...",
       resolution: "Loading...",
-      resolutionText: "Loading...",
     };
   }
-  const first_resolution = resolution[0];
-  // If the resolution is the same for all dimensions, display it as a single line
-  if (first_resolution.dimensionName === "All_") {
+
+  const firstResolution = resolution[0];
+  const type = firstResolution.parentType;
+
+  if (firstResolution.dimensionName === "All_") {
     return {
-      type: first_resolution.parentType,
-      resolution: first_resolution.resolutionWithUnit,
-      resolutionText: first_resolution.resolutionWithUnit,
-    };
-  } else {
-    let innerHtml = "";
-    let text = "";
-    for (const res of resolution) {
-      innerHtml += `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit} `;
-      text += `${res.dimensionName} ${res.resolutionWithUnit} `;
-    }
-    innerHtml = innerHtml.slice(0, -1);
-    text = text.slice(0, -1);
-    return {
-      type: first_resolution.parentType,
-      resolution: innerHtml,
-      resolutionText: text,
+      type,
+      resolution: firstResolution.resolutionWithUnit,
     };
   }
+
+  const resolutionHtml = resolution
+    .map(
+      (res) =>
+        `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit}`
+    )
+    .join(" ");
+
+  return {
+    type,
+    resolution: resolutionHtml,
+  };
 }
 
 function formatPixelResolution(panelArea: PanelViewport, scale: number) {
@@ -308,7 +306,10 @@ export class ScreenshotDialog extends Overlay {
       },
     });
     screenshotCopyButton.classList.add("neuroglancer-screenshot-copy-icon");
-    screenshotCopyButton.setAttribute("data-tooltip", "Copy table to clipboard");
+    screenshotCopyButton.setAttribute(
+      "data-tooltip",
+      "Copy table to clipboard",
+    );
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
@@ -711,36 +712,24 @@ export class ScreenshotDialog extends Overlay {
     */
   private getResolutionText() {
     // Processing the Screenshot size
-    const screenshotSizeText = `Screenshot size \t${this.screenshotWidth}x${this.screenshotHeight} px\n`;
+    const screenshotSizeText = `Screenshot size\t${this.screenshotWidth}x${this.screenshotHeight} px\n`;
 
     // Process the panel resolution table
-    const panelResolution = getViewerPanelResolutions(
-      this.screenshotManager.viewer.display.panels,
-    );
-    let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type} \t${PANEL_TABLE_HEADER_STRINGS.pixelResolution} \t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
-    for (const resolution of panelResolution) {
-      const physicalResolution = formatPhysicalResolution(
-        resolution.physicalResolution,
-      );
-      const pixelResolution = formatPixelResolution(
-        resolution.pixelResolution,
+    const { panelResolutionData, layerResolutionData } =
+      getViewerResolutionMetadata(
+        this.screenshotManager.viewer,
         this.getResolutionScaleMultiplier(),
       );
-      panelResolutionText += `${physicalResolution.type} \t${pixelResolution.width}x${pixelResolution.height} px \t${physicalResolution.resolutionText}\n`;
+
+    let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type}\t${PANEL_TABLE_HEADER_STRINGS.pixelResolution}\t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
+    for (const resolution of panelResolutionData) {
+      panelResolutionText += `${resolution.type}\t${resolution.width}x${resolution.height} px\t${resolution.resolution}\n`;
     }
 
     // Process the layer resolution table
-    const layerResolution = getViewerLayerResolutions(
-      this.screenshotManager.viewer,
-    );
-    let layerResolutionText = `${LAYER_TABLE_HEADER_STRINGS.name} \t${LAYER_TABLE_HEADER_STRINGS.type} \t${LAYER_TABLE_HEADER_STRINGS.resolution}\n`;
-    for (const [key, value] of layerResolution) {
-      const { name, type } = key;
-      if (type === "MultiscaleMeshLayer") {
-        continue;
-      }
-      const physicalResolution = formatPhysicalResolution(value);
-      layerResolutionText += `${name} \t${layerNamesForUI[type as keyof typeof layerNamesForUI]} \t${physicalResolution.resolutionText}\n`;
+    let layerResolutionText = `${LAYER_TABLE_HEADER_STRINGS.name}\t${LAYER_TABLE_HEADER_STRINGS.type}\t${LAYER_TABLE_HEADER_STRINGS.resolution}\n`;
+    for (const resolution of layerResolutionData) {
+      layerResolutionText += `${resolution.name}\t${layerNamesForUI[resolution.type as keyof typeof layerNamesForUI]}\t${resolution.resolution}\n`;
     }
 
     return `${screenshotSizeText}${panelResolutionText}${layerResolutionText}`;

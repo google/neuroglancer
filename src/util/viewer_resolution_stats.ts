@@ -373,3 +373,90 @@ export function calculatePanelViewportBounds(
     individualRenderPanelViewports: allPanelViewports,
   };
 }
+
+/**
+ * Combine the resolution of all dimensions into a single string for UI display
+ */
+function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
+  if (resolution.length === 0) return null;
+  const firstResolution = resolution[0];
+  // If the resolution is the same for all dimensions, display it as a single line
+  if (firstResolution.dimensionName === "All_") {
+    return {
+      type: firstResolution.parentType,
+      resolution: firstResolution.resolutionWithUnit,
+    };
+  } else {
+    const resolutionText = resolution
+      .map((res) => `${res.dimensionName} ${res.resolutionWithUnit}`)
+      .join(" ");
+    return {
+      type: firstResolution.parentType,
+      resolution: resolutionText,
+    };
+  }
+}
+
+function formatPixelResolution(panelArea: PanelViewport, scale: number) {
+  const width = Math.round(panelArea.right - panelArea.left) * scale;
+  const height = Math.round(panelArea.bottom - panelArea.top) * scale;
+  const type = panelArea.panelType;
+  return { width, height, type };
+}
+
+/**
+ * Convenience function to extract resolution metadata from the viewer.
+ * Returns the resolution of the viewer layers and panels.
+ * The resolution is displayed in the following format:
+ * For panel resolution:
+ * Panel type, width, height, resolution
+ * For layer resolution:
+ * Layer name, layer type, resolution
+ */
+export function getViewerResolutionMetadata(
+  viewer: Viewer,
+  sliceViewScaleFactor: number = 1,
+) {
+  // Process the panel resolution table
+  const panelResolution = getViewerPanelResolutions(viewer.display.panels);
+  const panelResolutionData = [];
+  for (const resolution of panelResolution) {
+    const physicalResolution = formatPhysicalResolution(
+      resolution.physicalResolution,
+    );
+    if (physicalResolution === null) {
+      continue;
+    }
+    const pixelResolution = formatPixelResolution(
+      resolution.pixelResolution,
+      sliceViewScaleFactor,
+    );
+    panelResolutionData.push({
+      type: physicalResolution.type,
+      width: pixelResolution.width,
+      height: pixelResolution.height,
+      resolution: physicalResolution.resolution,
+    });
+  }
+
+  // Process the layer resolution table
+  const layerResolution = getViewerLayerResolutions(viewer);
+  const layerResolutionData = [];
+  for (const [key, value] of layerResolution) {
+    const { name, type } = key;
+    if (type === "MultiscaleMeshLayer") {
+      continue;
+    }
+    const physicalResolution = formatPhysicalResolution(value);
+    if (physicalResolution === null) {
+      continue;
+    }
+    layerResolutionData.push({
+      name,
+      type,
+      resolution: physicalResolution.resolution,
+    });
+  }
+
+  return { panelResolutionData, layerResolutionData };
+}
