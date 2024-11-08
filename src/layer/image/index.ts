@@ -563,8 +563,8 @@ class RenderingOptionsTab extends Tab {
         }
         this.codeWidget.setVisible(managedLayer.codeVisible);
     }});
-
     topRow.appendChild(codeVisibilityControl);
+
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
