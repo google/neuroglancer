@@ -44,7 +44,7 @@ import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transfo
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import type { TrackableBoolean } from "#src/trackable_boolean.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import { ElementVisibilityFromTrackableBoolean, TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
@@ -67,6 +67,7 @@ import {
   verifyStringArray,
 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { ColorWidget } from "#src/widget/color.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
@@ -776,6 +777,22 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
+
+    const colorPicker = this.registerDisposer(
+      new ColorWidget(layer.annotationDisplayState.color),
+    );
+    colorPicker.element.title = "Change annotation display color";
+    this.registerDisposer(
+      new ElementVisibilityFromTrackableBoolean(
+        makeCachedLazyDerivedWatchableValue(
+          (shader) => shader.match(/\bdefaultColor\b/) !== null,
+          layer.annotationDisplayState.shaderControls.processedFragmentMain,
+        ),
+        colorPicker.element,
+      ),
+    );
+    element.appendChild(colorPicker.element);
+
     const topRow = document.createElement("div");
     topRow.className =
       "neuroglancer-segmentation-dropdown-skeleton-shader-header";

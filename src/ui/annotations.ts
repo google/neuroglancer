@@ -63,7 +63,6 @@ import {
   registerCallbackWhenSegmentationDisplayStateChanged,
   SegmentWidgetFactory,
 } from "#src/segmentation_display_state/frontend.js";
-import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
@@ -101,7 +100,6 @@ import { NullarySignal, Signal } from "#src/util/signal.js";
 import { Uint64 } from "#src/util/uint64.js";
 import * as vector from "#src/util/vector.js";
 import { makeAddButton } from "#src/widget/add_button.js";
-import { ColorWidget } from "#src/widget/color.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
@@ -394,20 +392,6 @@ export class AnnotationLayerView extends Tab {
     toolbox.className = "neuroglancer-annotation-toolbox";
 
     layer.initializeAnnotationLayerViewTab(this);
-    const colorPicker = this.registerDisposer(
-      new ColorWidget(this.displayState.color),
-    );
-    colorPicker.element.title = "Change annotation display color";
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        makeCachedLazyDerivedWatchableValue(
-          (shader) => shader.match(/\bdefaultColor\b/) !== null,
-          displayState.shaderControls.processedFragmentMain,
-        ),
-        colorPicker.element,
-      ),
-    );
-    toolbox.appendChild(colorPicker.element);
     const { mutableControls } = this;
     const pointButton = makeIcon({
       text: annotationTypeHandlers[AnnotationType.POINT].icon,
