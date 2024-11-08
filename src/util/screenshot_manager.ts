@@ -219,11 +219,12 @@ export class ScreenshotManager extends RefCounted {
   public set shouldKeepSliceViewFOVFixed(enableFixedFOV: boolean) {
     const wasInFixedFOVMode = this.shouldKeepSliceViewFOVFixed;
     this._shouldKeepSliceViewFOVFixed = enableFixedFOV;
+    console.log("Fixed FOV mode enabled:", enableFixedFOV, "was:", wasInFixedFOVMode);
     if (!enableFixedFOV && wasInFixedFOVMode) {
-      this.handleScreenshotZoom(1 / this.screenshotScale, true /* resetZoom */);
+      this.handleScreenshotZoom(this.screenshotScale, true /* resetZoom */);
       this.zoomMaybeChanged.dispatch();
     } else if (enableFixedFOV && !wasInFixedFOVMode) {
-      this.handleScreenshotZoom(this.screenshotScale, true /* resetZoom */);
+      this.handleScreenshotZoom(1 / this.screenshotScale, true /* resetZoom */);
       this.zoomMaybeChanged.dispatch();
     }
   }

@@ -179,6 +179,7 @@ export class ScreenshotDialog extends Overlay {
   dispose(): void {
     super.dispose();
     if (!DEBUG_ALLOW_MENU_CLOSE) {
+      this.screenshotManager.shouldKeepSliceViewFOVFixed = true;
       this.screenshotManager.screenshotScale = 1;
     }
   }
