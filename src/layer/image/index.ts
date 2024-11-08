@@ -545,34 +545,24 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(spacer);
 
     const managedLayer = this.layer.managedLayer;
+    const codeVisible = managedLayer.codeVisible;
+    this.codeWidget.element.style.display = managedLayer.codeVisible ? "block" : "none";
+    this.codeWidget.setVisible(codeVisible);
     const codeVisibilityControl = makeIcon({
-      title: managedLayer.codeVisible ? "Hide code": "Show code",
-      svg: managedLayer.codeVisible ? svgOpenedEye : svgClosedEye,
+      title: codeVisible ? "Hide code": "Show code",
+      svg: codeVisible ? svgOpenedEye : svgClosedEye,
       onClick: () => {
         const button = codeVisibilityControl as HTMLDivElement;
         managedLayer.setCodeVisible(!managedLayer.codeVisible)
         if (managedLayer.codeVisible) {
           button.title = "Hide code";
           button.innerHTML = svgOpenedEye
-          this.codeWidget.element.style.display = "block";
         } else {
           button.title = "Show code";
           button.innerHTML = svgClosedEye
-          this.codeWidget.element.style.display = "none";
         }
+        this.codeWidget.setVisible(managedLayer.codeVisible);
     }});
-    // managedLayer.layerChanged.add(() => {
-    //   const button = codeVisibilityControl as HTMLDivElement;
-    //   if (managedLayer.codeVisible) {
-    //     button.title = "Hide code";
-    //     button.innerHTML = svgOpenedEye
-    //     this.codeWidget.element.style.display = "block";
-    //   } else {
-    //     button.title = "Show code";
-    //     button.innerHTML = svgClosedEye
-    //     this.codeWidget.element.style.display = "none";
-    //   }
-    // });
 
     topRow.appendChild(codeVisibilityControl);
     topRow.appendChild(
@@ -597,7 +587,6 @@ class RenderingOptionsTab extends Tab {
       ).element,
     );
 
-    this.codeWidget.element.style.display = managedLayer.codeVisible ? "block" : "none";
     element.appendChild(this.codeWidget.element);
     element.appendChild(
       this.registerDisposer(
