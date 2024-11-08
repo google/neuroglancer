@@ -53,7 +53,7 @@ const PANEL_TABLE_HEADER_STRINGS = {
 };
 const LAYER_TABLE_HEADER_STRINGS = {
   name: "Layer name",
-  type: "Type",
+  type: "Data type",
   resolution: "Physical voxel resolution",
 };
 
@@ -733,7 +733,7 @@ export class ScreenshotDialog extends Overlay {
       layerResolutionText += `${resolution.name}\t${layerNamesForUI[resolution.type as keyof typeof layerNamesForUI]}\t${resolution.resolution}\n`;
     }
 
-    return `${screenshotSizeText}${panelResolutionText}${layerResolutionText}`;
+    return `${screenshotSizeText}\n${panelResolutionText}\n${layerResolutionText}`;
   }
 
   /**
