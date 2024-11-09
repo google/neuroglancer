@@ -491,11 +491,12 @@ export class CoordinateSpacePlaybackVelocity extends RefCounted {
       velocities[index] = newVelocity;
       this.changed.dispatch();
     };
-    const prevVelocity = getVelocity();
+    let prevVelocity = getVelocity();
     owner.registerDisposer(
       this.changed.add(() => {
         const curVelocity = getVelocity();
         if (curVelocity !== prevVelocity) {
+          prevVelocity = curVelocity;
           changed.dispatch();
         }
       }),
