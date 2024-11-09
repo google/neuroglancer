@@ -151,6 +151,8 @@ class DimensionWidget {
   draggingPosition = false;
   hasFocus = false;
 
+  dimensionIndex: number;
+
   constructor(
     public coordinateSpace: CoordinateSpace,
     public id: DimensionId,
@@ -175,6 +177,7 @@ class DimensionWidget {
       container.draggable = true;
       container.tabIndex = -1;
     }
+    this.dimensionIndex = initialDimensionIndex;
     container.appendChild(nameContainer);
     container.appendChild(scaleElement);
     nameContainer.appendChild(nameElement);
@@ -860,6 +863,7 @@ export class PositionWidget extends RefCounted {
         widget.maxPositionWidthSeen = maxPositionWidth;
       } else {
         widget.coordinateSpace = coordinateSpace;
+        widget.dimensionIndex = i;
       }
       widget.maxPositionWidth = maxPositionWidth;
       const name = names[i];
@@ -969,12 +973,14 @@ export class PositionWidget extends RefCounted {
 
   private updateNameValidity() {
     const { dimensionWidgetList } = this;
-    const names = dimensionWidgetList.map((w) => w.nameElement.value);
-    const rank = names.length;
+    const names = Array.from(this.position.coordinateSpace.value.names);
+    for (const widget of dimensionWidgetList) {
+      names[widget.dimensionIndex] = widget.nameElement.value;
+    }
     const isValid = this.combiner.getRenameValidity(names);
-    for (let i = 0; i < rank; ++i) {
-      dimensionWidgetList[i].nameElement.dataset.isValid =
-        isValid[i] === false ? "false" : "true";
+    for (const widget of dimensionWidgetList) {
+      widget.nameElement.dataset.isValid =
+        isValid[widget.dimensionIndex] === false ? "false" : "true";
     }
   }
 
@@ -1117,15 +1123,13 @@ export class PositionWidget extends RefCounted {
 
   private updatePosition() {
     if (!this.allowFocus) return;
-    const { dimensionWidgetList } = this;
     const { position } = this;
     const { value: voxelCoordinates } = position;
     const coordinateSpace = position.coordinateSpace.value;
     if (voxelCoordinates === undefined) return;
-    const rank = dimensionWidgetList.length;
     let modified = false;
-    for (let i = 0; i < rank; ++i) {
-      const widget = dimensionWidgetList[i];
+    for (const widget of this.dimensionWidgetList) {
+      const { dimensionIndex } = widget;
       if (!widget.modified) continue;
       widget.modified = false;
       modified = true;
@@ -1137,11 +1141,11 @@ export class PositionWidget extends RefCounted {
         Number.isInteger(value) &&
         !valueString.includes(".") &&
         coordinateSpace !== undefined &&
-        !coordinateSpace.bounds.voxelCenterAtIntegerCoordinates[i]
+        !coordinateSpace.bounds.voxelCenterAtIntegerCoordinates[dimensionIndex]
       ) {
         value += 0.5;
       }
-      voxelCoordinates[i] = value;
+      voxelCoordinates[dimensionIndex] = value;
     }
     if (modified) {
       position.value = voxelCoordinates;
@@ -1155,7 +1159,10 @@ export class PositionWidget extends RefCounted {
       position: { coordinateSpace },
     } = this;
     const existing = coordinateSpace.value;
-    const names = dimensionWidgetList.map((x) => x.nameElement.value);
+    const names = Array.from(existing.names);
+    for (const widget of dimensionWidgetList) {
+      names[widget.dimensionIndex] = widget.nameElement.value;
+    }
     if (this.combiner.getRenameValidity(names).includes(false)) return false;
     const existingNames = existing.names;
     if (arraysEqual(existingNames, names)) return false;
@@ -1174,17 +1181,18 @@ export class PositionWidget extends RefCounted {
       position: { coordinateSpace },
     } = this;
     const existing = coordinateSpace.value;
-    const scalesAndUnits = dimensionWidgetList.map((x) =>
-      parseScale(x.scaleElement.value),
-    );
-    if (scalesAndUnits.includes(undefined)) {
+    const { scales, units } = existing;
+    const newScales = Float64Array.from(scales);
+    const newUnits = Array.from(units);
+    for (const { dimensionIndex, scaleElement } of dimensionWidgetList) {
+      const result = parseScale(scaleElement.value);
+      if (result === undefined) return false;
+      newScales[dimensionIndex] = result.scale;
+      newUnits[dimensionIndex] = result.unit;
+    }
+    if (arraysEqual(scales, newScales) && arraysEqual(units, newUnits)) {
       return false;
     }
-    const newScales = Float64Array.from(scalesAndUnits, (x) => x!.scale);
-    const newUnits = Array.from(scalesAndUnits, (x) => x!.unit);
-    const { scales, units } = existing;
-    if (arraysEqual(scales, newScales) && arraysEqual(units, newUnits))
-      return false;
     const timestamps = existing.timestamps.map((t, i) =>
       newScales[i] === scales[i] && newUnits[i] === units[i] ? t : Date.now(),
     );
@@ -1215,22 +1223,23 @@ export class PositionWidget extends RefCounted {
     this.updateDimensions();
     const {
       position: { value: voxelCoordinates },
-      dimensionWidgetList,
     } = this;
-    const rank = dimensionWidgetList.length;
     if (voxelCoordinates === undefined) {
       return;
     }
     const coordinateSpace = this.coordinateSpace!;
     const { velocity } = this;
-    for (let i = 0; i < rank; ++i) {
-      const widget = dimensionWidgetList[i];
+    for (const widget of this.dimensionWidgetList) {
+      const { dimensionIndex } = widget;
       const inputElement = widget.coordinate;
-      const newCoord = Math.floor(voxelCoordinates[i]);
+      const newCoord = Math.floor(voxelCoordinates[dimensionIndex]);
       const newValue = newCoord.toString();
       updateCoordinateFieldWidth(widget, newValue);
       inputElement.value = newValue;
-      const coordinateArray = getCoordinateArray(coordinateSpace, i);
+      const coordinateArray = getCoordinateArray(
+        coordinateSpace,
+        dimensionIndex,
+      );
       let label = "";
       if (coordinateArray != null) {
         const { coordinates } = coordinateArray;
@@ -1242,7 +1251,7 @@ export class PositionWidget extends RefCounted {
       const labelElement = widget.coordinateLabel;
       labelElement.textContent = label;
       if (this.showPlayback) {
-        const velocityInfo = velocity?.value?.[i];
+        const velocityInfo = velocity?.value?.[dimensionIndex];
         if (velocityInfo !== undefined) {
           const paused = velocityInfo.paused;
           widget.playButton.style.display = paused ? "" : "none";
