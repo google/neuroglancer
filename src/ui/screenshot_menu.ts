@@ -30,12 +30,13 @@ import type {
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type {
   DimensionResolutionStats,
-  PanelViewport} from "#src/util/viewer_resolution_stats.js";
+  PanelViewport,
+} from "#src/util/viewer_resolution_stats.js";
 import {
   getViewerResolutionMetadata,
-
   getViewerLayerResolutions,
-  getViewerPanelResolutions} from "#src/util/viewer_resolution_stats.js";
+  getViewerPanelResolutions,
+} from "#src/util/viewer_resolution_stats.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -43,8 +44,9 @@ import { makeIcon } from "#src/widget/icon.js";
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
 // Setting this to true, and setting the SCREENSHOT_MENU_CLOSE_TIMEOUT in screenshot_manager.ts
 // to a high value can be useful for debugging canvas handling of the resize
-
 const DEBUG_ALLOW_MENU_CLOSE = false;
+
+// For easy access to UI elements
 const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 const PANEL_TABLE_HEADER_STRINGS = {
   type: "Panel type",
@@ -55,6 +57,16 @@ const LAYER_TABLE_HEADER_STRINGS = {
   name: "Layer name",
   type: "Data type",
   resolution: "Physical voxel resolution",
+};
+const TOOLTIPS = {
+  generalSettingsTooltip:
+    "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotation yellow bounding box.",
+  orthographicSettingsTooltip:
+    "In the main viewer, press 'o' to toggle between perspective and orthographic views.",
+  layerDataTooltip:
+    "The highest loaded resolution of 2D image slices, 3D volume renderings, and 2D segmentation slices are shown here. Other layers are not shown.",
+  scaleFactorHelpTooltip:
+    "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep the slice FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the scale factor.",
 };
 
 interface UIScreenshotStatistics {
@@ -99,7 +111,7 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   const resolutionHtml = resolution
     .map(
       (res) =>
-        `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit}`
+        `<span class="neuroglancer-screenshot-dimension">${res.dimensionName}</span> ${res.resolutionWithUnit}`,
     )
     .join(" ");
 
@@ -195,7 +207,7 @@ export class ScreenshotDialog extends Overlay {
     generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
     generalSettingsTooltip.setAttribute(
       "data-tooltip",
-      "In the main viewer, see the settings (cog icon, top right) for options to turn off the axis line indicators, the scale bar, and the default annotation yellow bounding box.",
+      TOOLTIPS.generalSettingsTooltip,
     );
 
     const orthographicSettingsTooltip = makeIcon({ svg: svg_help });
@@ -204,29 +216,26 @@ export class ScreenshotDialog extends Overlay {
     );
     orthographicSettingsTooltip.setAttribute(
       "data-tooltip",
-      "In the main viewer, press 'o' to toggle between perspective and orthographic views.",
+      TOOLTIPS.orthographicSettingsTooltip,
     );
 
     const layerDataTooltip = makeIcon({ svg: svg_help });
     layerDataTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    layerDataTooltip.setAttribute(
-      "data-tooltip",
-      "The highest loaded resolution of 2D image slices, 3D volume renderings, and 2D segmentation slices are shown here. Other layers are not shown.",
-    );
+    layerDataTooltip.setAttribute("data-tooltip", TOOLTIPS.layerDataTooltip);
 
     const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
     scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
     scaleFactorHelpTooltip.setAttribute(
       "data-tooltip",
-      "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep the slice FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the scale factor.",
+      TOOLTIPS.scaleFactorHelpTooltip,
     );
 
-    return this.helpTooltips = {
+    return (this.helpTooltips = {
       generalSettingsTooltip,
       orthographicSettingsTooltip,
       layerDataTooltip,
       scaleFactorHelpTooltip,
-    };
+    });
   }
 
   private initializeUI() {

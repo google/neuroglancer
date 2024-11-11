@@ -363,13 +363,6 @@
   background: #e6e6e6;
   padding: 0.25rem 0.375rem;
 }
-.neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip,
-.neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip {
-  display: inline-block;
-  margin-left: 0.25rem;
-  position: relative;
-  vertical-align: top;
-}
 
 .neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip,
 .neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip {
@@ -379,7 +372,10 @@
   height: 1rem;
   background-size: contain;
   position: relative;
-  cursor: pointer;
+  display: inline-block;
+  margin-left: 0.25rem;
+  position: relative;
+  vertical-align: top;
 }
 
 .neuroglancer-screenshot-resolution-table
