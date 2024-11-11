@@ -211,7 +211,7 @@ export class ScreenshotDialog extends Overlay {
     layerDataTooltip.classList.add("neuroglancer-screenshot-tooltip");
     layerDataTooltip.setAttribute(
       "data-tooltip",
-      "The most detailed loaded resolution of 2D image slices, 3D volume renderings, and 2D segmentation slices are shown here. Other layers are not shown.",
+      "The highest loaded resolution of 2D image slices, 3D volume renderings, and 2D segmentation slices are shown here. Other layers are not shown.",
     );
 
     const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
@@ -547,7 +547,6 @@ export class ScreenshotDialog extends Overlay {
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
     keyHeader.textContent = PANEL_TABLE_HEADER_STRINGS.type;
-
     keyHeader.appendChild(this.helpTooltips.orthographicSettingsTooltip);
 
     headerRow.appendChild(keyHeader);
@@ -597,6 +596,8 @@ export class ScreenshotDialog extends Overlay {
     const headerRow = resolutionTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
     keyHeader.textContent = LAYER_TABLE_HEADER_STRINGS.name;
+    keyHeader.appendChild(this.helpTooltips.layerDataTooltip);
+
     headerRow.appendChild(keyHeader);
     const typeHeader = document.createElement("th");
     typeHeader.textContent = LAYER_TABLE_HEADER_STRINGS.type;
