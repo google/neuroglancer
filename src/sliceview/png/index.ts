@@ -172,6 +172,7 @@ export async function decompressPng(
   buffer: Uint8Array,
   width: number | undefined,
   height: number | undefined,
+  area: number | undefined,
   numComponents: number | undefined,
   bytesPerPixel: number,
   convertToGrayscale: boolean,
@@ -187,15 +188,17 @@ export async function decompressPng(
   if (
     (width !== undefined && sx !== width) ||
     (height !== undefined && sy !== height) ||
+    (area !== undefined && sx * sy !== area) ||
     (numComponents !== undefined && numComponents !== numChannels) ||
     bytesPerPixel !== dataWidth
   ) {
     throw new Error(
-      `png: Image decode parameters did not match expected chunk parameters.
-         Expected: width: ${width} height: ${height} channels: ${numComponents} bytes per pixel: ${bytesPerPixel} 
-         Decoded:  width: ${sx} height: ${sy} channels: ${numChannels} bytes per pixel: ${dataWidth}
-         Convert to Grayscale? ${convertToGrayscale}
-        `,
+      `png: Image decode parameters did not match expected chunk parameters.  ` +
+        `Expected: width: ${width} height: ${height} area: ${area} ` +
+        `channels: ${numComponents} bytes per pixel: ${bytesPerPixel}.  ` +
+        `Decoded:  width: ${sx} height: ${sy} channels: ${numChannels} ` +
+        `bytes per pixel: ${dataWidth}.  ` +
+        `Convert to Grayscale? ${convertToGrayscale}`,
     );
   }
 

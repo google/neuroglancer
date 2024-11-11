@@ -82,6 +82,7 @@ export class UrlHashBinding extends RefCounted {
     const throttledSetUrlHash = debounce(
       () => this.setUrlHash(),
       updateDelayMilliseconds,
+      { maxWait: updateDelayMilliseconds * 2 },
     );
     this.registerDisposer(root.changed.add(throttledSetUrlHash));
     this.registerDisposer(() => throttledSetUrlHash.cancel());
