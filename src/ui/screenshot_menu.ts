@@ -154,6 +154,12 @@ export class ScreenshotDialog extends Overlay {
   private progressText: HTMLParagraphElement;
   private scaleRadioButtonsContainer: HTMLDivElement;
   private keepSliceFOVFixedCheckbox: HTMLInputElement;
+  private helpTooltips: {
+    generalSettingsTooltip: HTMLElement;
+    orthographicSettingsTooltip: HTMLElement;
+    layerDataTooltip: HTMLElement;
+    scaleFactorHelpTooltip: HTMLElement;
+  };
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   private layerResolutionKeyToCellMap: Map<string, HTMLTableCellElement> =
     new Map();
@@ -201,6 +207,13 @@ export class ScreenshotDialog extends Overlay {
       "In the main viewer, press 'o' to toggle between perspective and orthographic views.",
     );
 
+    const layerDataTooltip = makeIcon({ svg: svg_help });
+    layerDataTooltip.classList.add("neuroglancer-screenshot-tooltip");
+    layerDataTooltip.setAttribute(
+      "data-tooltip",
+      "The most detailed loaded resolution of 2D image slices, 3D volume renderings, and 2D segmentation slices are shown here. Other layers are not shown.",
+    );
+
     const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
     scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
     scaleFactorHelpTooltip.setAttribute(
@@ -208,14 +221,16 @@ export class ScreenshotDialog extends Overlay {
       "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep the slice FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the scale factor.",
     );
 
-    return {
+    return this.helpTooltips = {
       generalSettingsTooltip,
       orthographicSettingsTooltip,
+      layerDataTooltip,
       scaleFactorHelpTooltip,
     };
   }
 
   private initializeUI() {
+    const tooltips = this.setupHelpTooltips();
     this.content.classList.add("neuroglancer-screenshot-dialog");
     const parentElement = this.content.parentElement;
     if (parentElement) {
@@ -249,8 +264,7 @@ export class ScreenshotDialog extends Overlay {
     const menuText = document.createElement("h3");
     menuText.classList.add("neuroglancer-screenshot-title-subheading");
     menuText.textContent = "Settings";
-    const tooltip = this.setupHelpTooltips();
-    menuText.appendChild(tooltip.generalSettingsTooltip);
+    menuText.appendChild(tooltips.generalSettingsTooltip);
     this.filenameAndButtonsContainer.appendChild(menuText);
 
     const nameInputLabel = document.createElement("label");
@@ -407,8 +421,7 @@ export class ScreenshotDialog extends Overlay {
     scaleLabel.classList.add("neuroglancer-screenshot-scale-factor");
     scaleLabel.textContent = "Screenshot scale factor";
 
-    const tooltip = this.setupHelpTooltips();
-    scaleLabel.appendChild(tooltip.scaleFactorHelpTooltip);
+    scaleLabel.appendChild(this.helpTooltips.scaleFactorHelpTooltip);
 
     scaleMenu.appendChild(scaleLabel);
 
@@ -535,8 +548,7 @@ export class ScreenshotDialog extends Overlay {
     const keyHeader = document.createElement("th");
     keyHeader.textContent = PANEL_TABLE_HEADER_STRINGS.type;
 
-    const tooltip = this.setupHelpTooltips();
-    keyHeader.appendChild(tooltip.orthographicSettingsTooltip);
+    keyHeader.appendChild(this.helpTooltips.orthographicSettingsTooltip);
 
     headerRow.appendChild(keyHeader);
     const pixelValueHeader = document.createElement("th");
