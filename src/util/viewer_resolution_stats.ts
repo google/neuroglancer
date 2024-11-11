@@ -28,7 +28,7 @@ import type { Viewer } from "#src/viewer.js";
 import { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 
 export interface DimensionResolutionStats {
-  parentType: string;
+  panelType: string;
   dimensionName: string;
   resolutionWithUnit: string;
 }
@@ -116,7 +116,7 @@ export function getViewerLayerResolutions(
             { precision: 2, elide1: false },
           );
           resolution_stats.push({
-            parentType: parentType,
+            panelType: parentType,
             resolutionWithUnit: `${formattedScale}`,
             dimensionName: singleScale ? "All_" : dimensionName,
           });
@@ -175,47 +175,46 @@ export function getViewerPanelResolutions(
   panels: ReadonlySet<RenderedPanel>,
   onlyUniqueResolutions = true,
 ): PanelResolutionStats[] {
-  function resolutionsEqual(
+  /**
+   * Two panels are equivalent if they have the same physical and pixel resolution.
+   */
+  function arePanelsEquivalent(
     panelResolution1: PanelResolutionStats,
     panelResolution2: PanelResolutionStats,
   ) {
+    // Step 1 - Check if the physical resolution is the same.
     const physicalResolution1 = panelResolution1.physicalResolution;
     const physicalResolution2 = panelResolution2.physicalResolution;
+
+    // E.g., if one panel has X, Y, Z the same (length 1) and the other
+    // has X, Y, Z different (length 3), they are not the same.
     if (physicalResolution1.length !== physicalResolution2.length) {
       return false;
     }
+    // Compare the units and values of the physical resolution dims.
     for (let i = 0; i < physicalResolution1.length; ++i) {
+      const res1 = physicalResolution1[i];
+      const res2 = physicalResolution2[i];
       if (
-        physicalResolution1[i].resolutionWithUnit !==
-        physicalResolution2[i].resolutionWithUnit
-      ) {
-        return false;
-      }
-      if (
-        physicalResolution1[i].parentType !== physicalResolution2[i].parentType
-      ) {
-        return false;
-      }
-      if (
-        physicalResolution1[i].dimensionName !==
-        physicalResolution2[i].dimensionName
+        res1.resolutionWithUnit !== res2.resolutionWithUnit ||
+        res1.panelType !== res2.panelType ||
+        res1.dimensionName !== res2.dimensionName
       ) {
         return false;
       }
     }
     const pixelResolution1 = panelResolution1.pixelResolution;
     const pixelResolution2 = panelResolution2.pixelResolution;
-    const width1 = pixelResolution1.right - pixelResolution1.left;
-    const width2 = pixelResolution2.right - pixelResolution2.left;
-    const height1 = pixelResolution1.bottom - pixelResolution1.top;
-    const height2 = pixelResolution2.bottom - pixelResolution2.top;
-    if (width1 !== width2 || height1 !== height2) {
-      return false;
-    }
-
-    return true;
+    // In some cases, the pixel resolution can be a floating point number - round.
+    // Particularly prevalent on high pixel density displays.
+    const width1 = Math.round(pixelResolution1.right - pixelResolution1.left);
+    const width2 = Math.round(pixelResolution2.right - pixelResolution2.left);
+    const height1 = Math.round(pixelResolution1.bottom - pixelResolution1.top);
+    const height2 = Math.round(pixelResolution2.bottom - pixelResolution2.top);
+    return width1 === width2 && height1 === height2;
   }
 
+  // Gather the physical and pixel resolutions for each panel.
   const resolutions: PanelResolutionStats[] = [];
   for (const panel of panels) {
     if (!(panel instanceof RenderedDataPanel)) continue;
@@ -279,7 +278,7 @@ export function getViewerPanelResolutions(
             { precision: 2, elide1: false },
           );
           physicalResolution.push({
-            parentType: panelType,
+            panelType: panelType,
             resolutionWithUnit: `${formattedScale}/${panelDimensionUnit}`,
             dimensionName: singleScale ? "All_" : dimensionName,
           });
@@ -289,6 +288,7 @@ export function getViewerPanelResolutions(
     resolutions.push(panel_resolution);
   }
 
+  // Filter out panels with the same resolution if onlyUniqueResolutions is true.
   if (!onlyUniqueResolutions) {
     return resolutions;
   }
@@ -296,7 +296,7 @@ export function getViewerPanelResolutions(
   for (const resolution of resolutions) {
     let found = false;
     for (const uniqueResolution of uniqueResolutions) {
-      if (resolutionsEqual(resolution, uniqueResolution)) {
+      if (arePanelsEquivalent(resolution, uniqueResolution)) {
         found = true;
         break;
       }
@@ -355,10 +355,14 @@ export function calculatePanelViewportBounds(
     const panelTop = panel.canvasRelativeClippedTop;
     const panelRight = panelLeft + width;
     const panelBottom = panelTop + height;
-    viewportBounds.left = Math.min(viewportBounds.left, panelLeft);
-    viewportBounds.right = Math.max(viewportBounds.right, panelRight);
-    viewportBounds.top = Math.min(viewportBounds.top, panelTop);
-    viewportBounds.bottom = Math.max(viewportBounds.bottom, panelBottom);
+    viewportBounds.left = Math.floor(Math.min(viewportBounds.left, panelLeft));
+    viewportBounds.right = Math.ceil(
+      Math.max(viewportBounds.right, panelRight),
+    );
+    viewportBounds.top = Math.ceil(Math.min(viewportBounds.top, panelTop));
+    viewportBounds.bottom = Math.floor(
+      Math.max(viewportBounds.bottom, panelBottom),
+    );
 
     allPanelViewports.push({
       left: panelLeft,
@@ -383,7 +387,7 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   // If the resolution is the same for all dimensions, display it as a single line
   if (firstResolution.dimensionName === "All_") {
     return {
-      type: firstResolution.parentType,
+      type: firstResolution.panelType,
       resolution: firstResolution.resolutionWithUnit,
     };
   } else {
@@ -391,7 +395,7 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
       .map((res) => `${res.dimensionName} ${res.resolutionWithUnit}`)
       .join(" ");
     return {
-      type: firstResolution.parentType,
+      type: firstResolution.panelType,
       resolution: resolutionText,
     };
   }

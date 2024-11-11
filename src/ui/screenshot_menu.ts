@@ -99,7 +99,7 @@ function formatPhysicalResolution(resolution: DimensionResolutionStats[]) {
   }
 
   const firstResolution = resolution[0];
-  const type = firstResolution.parentType;
+  const type = firstResolution.panelType;
 
   if (firstResolution.dimensionName === "All_") {
     return {
