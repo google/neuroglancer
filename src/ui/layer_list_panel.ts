@@ -103,6 +103,30 @@ class LayerVisibilityWidget extends RefCounted {
   }
 }
 
+class LayerColorWidget extends RefCounted {
+  element = document.createElement("div");
+  constructor(public layer: ManagedUserLayer) {
+    super();
+    const { element } = this;
+    element.className = "neuroglancer-layer-color-value";
+
+    this.layer.layer?.registerColorWatcher(() => {
+      if (! this.layer.layerBarColorSyncEnabled) {
+        element.style.background = "none";
+        element.style.backgroundColor = "";
+        return;
+      }
+      const color = this.layer.layerBarColor;
+      if (color) {
+        element.style.background = "none";
+        element.style.backgroundColor = color;
+      } else {
+        element.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
+      }
+    })
+  }
+}
+
 function makeSelectedLayerSidePanelCheckboxIcon(layer: ManagedUserLayer) {
   const { selectedLayer } = layer.manager.root;
   const icon = new CheckboxIcon(
@@ -166,6 +190,9 @@ class LayerListItem extends RefCounted {
     element.appendChild(numberElement);
     element.appendChild(
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
+    );
+    element.appendChild(
+      this.registerDisposer(new LayerColorWidget(layer)).element,
     );
     element.appendChild(
       this.registerDisposer(new LayerNameWidget(layer)).element,

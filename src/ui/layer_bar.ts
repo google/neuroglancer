@@ -106,7 +106,7 @@ class LayerWidget extends RefCounted {
     });
 
     const layerColorWidget = document.createElement("div");
-    layerColorWidget.className = "neuroglancer-layer-color-value-container";
+    layerColorWidget.className = "neuroglancer-layer-color-value";
 
     const updateLayerColorWidget = () => {
       if (! this.layer.layerBarColorSyncEnabled) {
@@ -133,9 +133,7 @@ class LayerWidget extends RefCounted {
       event.stopPropagation();
     });
 
-    this.layer?.layer?.registerColorWatcher((value) => {
-      console.log("Color changed", value)
-      console.log("Computed", this.layer.layerBarColor)
+    this.layer?.layer?.registerColorWatcher(() => {
       updateLayerColorWidget();
     })
 
