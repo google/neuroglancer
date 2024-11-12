@@ -70,7 +70,7 @@ import type {
   WatchableSet,
   WatchableValueInterface,
 } from "#src/trackable_value.js";
-import { registerNested, WatchableValue } from "#src/trackable_value.js";
+import { observeWatchable, registerNested, WatchableValue } from "#src/trackable_value.js";
 import {
   SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION,
   UserLayerSidePanelsState,
@@ -82,9 +82,9 @@ import {
 import type { GlobalToolBinder } from "#src/ui/tool.js";
 import { LocalToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
+import { TrackableOptionalRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
-import type { vec3 } from "#src/util/geom.js";
 import {
   emptyToUndefined,
   parseArray,
@@ -194,14 +194,23 @@ export class UserLayer extends RefCounted {
 
   messages = new MessageList();
 
-  layerBarColorSync = new TrackableBoolean(false, false);
+  layerBarColorSync = new TrackableBoolean(true, true);
 
-  get layerBarColor() {
+  layerBarUserDefinedColor = new TrackableOptionalRGB();
+
+  registerColorWatcher(callback: ((value: any) => void)) {
+    observeWatchable(callback, this.layerBarUserDefinedColor);
+  }
+
+  get automaticLayerBarColor(): string | undefined {
     return ""
   }
 
-  get layerBarColorWatchableProperty(): WatchableValueInterface<vec3 | undefined> | undefined {
-    return undefined;
+  get layerBarColor(): string | undefined {
+    if (this.layerBarUserDefinedColor.value) {
+      return this.layerBarUserDefinedColor.toJSON()
+    }
+    return this.automaticLayerBarColor;
   }
 
   initializeSelectionState(state: this["selectionState"]) {
@@ -767,7 +776,7 @@ export class ManagedUserLayer extends RefCounted {
     }
   }
 
-  get layerBarColor() {
+  get layerBarColor(): string | undefined {
     const userLayer = this.layer;
     return userLayer?.layerBarColor;
   }

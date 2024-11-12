@@ -21,7 +21,7 @@ import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
-import { observeWatchable, type WatchableValueInterface } from "#src/trackable_value.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -48,14 +48,6 @@ class LayerWidget extends RefCounted {
   valueElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
-
-  get backgroundColor() {
-    return this.element.style.backgroundColor;
-  }
-
-  set backgroundColor(value: string | undefined) {
-    this.element.style.backgroundColor = value || '';
-  }
 
   constructor(
     public layer: ManagedUserLayer,
@@ -112,6 +104,24 @@ class LayerWidget extends RefCounted {
       deleteLayer(this.layer);
       event.stopPropagation();
     });
+
+    const layerColorWidget = document.createElement("div");
+    layerColorWidget.className = "neuroglancer-layer-color-value-container";
+
+    const updateLayerColorWidget = () => {
+      if (! this.layer.layerBarColorSyncEnabled) {
+        layerColorWidget.style.background = "none";
+        layerColorWidget.style.backgroundColor = "";
+        return;
+      }
+      const color = this.layer.layerBarColor;
+      if (color) {
+        layerColorWidget.style.background = "none";
+        layerColorWidget.style.backgroundColor = color;
+      } else {
+        layerColorWidget.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
+      }
+    }
     const { element: syncColorsElement } = new CheckboxIcon(this.layer.layerBarColorSync!, {
       text: "#",
       backgroundScheme: "dark",
@@ -119,14 +129,15 @@ class LayerWidget extends RefCounted {
       disableTitle: "Disable color sync",
     });
     syncColorsElement.addEventListener("click", (event: MouseEvent) => {
-      this.updateBackgroundColor();
+      updateLayerColorWidget();
       event.stopPropagation();
     });
-    if (this.layer?.layer?.layerBarColorWatchableProperty) {
-      this.layer.registerDisposer(observeWatchable(() => {
-        this.updateBackgroundColor();
-      }, this.layer.layer.layerBarColorWatchableProperty))
-    }
+
+    this.layer?.layer?.registerColorWatcher((value) => {
+      console.log("Color changed", value)
+      console.log("Computed", this.layer.layerBarColor)
+      updateLayerColorWidget();
+    })
 
     // Compose the layer's title bar
     element.appendChild(layerNumberElement);
@@ -136,6 +147,7 @@ class LayerWidget extends RefCounted {
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
+    element.appendChild(layerColorWidget);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
       new PositionWidget(
@@ -200,10 +212,6 @@ class LayerWidget extends RefCounted {
   disposed() {
     this.element.remove();
     super.disposed();
-  }
-
-  updateBackgroundColor() {
-    this.backgroundColor = this.layer.layerBarColorSyncEnabled ? this.layer.layerBarColor : "";
   }
 }
 

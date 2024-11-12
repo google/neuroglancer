@@ -134,6 +134,13 @@
   align-items: center;
 }
 
+.neuroglancer-layer-color-value-container {
+  border-radius: 50%;
+  height: 15px;
+  width: 15px;
+  margin: 7.5px;
+}
+
 .neuroglancer-layer-item-value {
   grid-row: 1;
   grid-column: 1;

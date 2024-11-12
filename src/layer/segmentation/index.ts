@@ -95,6 +95,7 @@ import {
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
   registerNestedSync,
   TrackableValue,
   WatchableValue,
@@ -1261,7 +1262,12 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
-  get layerBarColor () {
+  registerColorWatcher(callback: ((value: any) => void)) {
+    super.registerColorWatcher(callback);
+    observeWatchable(callback, this.displayState.segmentDefaultColor);
+  }
+
+  get automaticLayerBarColor () {
     if (this.displayState.segmentDefaultColor.value) {
       const [r, g, b] = this.displayState.segmentDefaultColor.value;
       return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;
@@ -1272,11 +1278,7 @@ export class SegmentationUserLayer extends Base {
       console.log("Only 1 segment visible and random seed")
     }
 
-    return "#00FF00";
-  }
-
-  get layerBarColorWatchableProperty() {
-    return this.displayState.segmentDefaultColor
+    return undefined;
   }
 
   static type = "segmentation";
