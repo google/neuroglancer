@@ -135,10 +135,22 @@
 }
 
 .neuroglancer-layer-color-value {
+  position: relative;
   border-radius: 50%;
   height: 12px;
   width: 12px;
   margin: 5px;
+}
+
+.neuroglancer-layer-color-value.cross::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 1px;
+  background-color: rgb(255, 255, 255);
+  transform: translate(-50%, -50%) rotate(135deg);
 }
 
 .neuroglancer-layer-item-value {

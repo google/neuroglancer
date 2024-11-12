@@ -121,7 +121,7 @@ class LayerWidget extends RefCounted {
       } else {
         layerColorWidget.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
       }
-    }
+    };
     const { element: syncColorsElement } = new CheckboxIcon(this.layer.layerBarColorSync!, {
       text: "#",
       backgroundScheme: "dark",
@@ -136,6 +136,14 @@ class LayerWidget extends RefCounted {
     this.layer?.layer?.registerColorWatcher(() => {
       updateLayerColorWidget();
     })
+
+    this.registerDisposer(layer.layerChanged.add(() => {
+      if (!this.layer.visible) {
+        layerColorWidget.classList.add("cross");
+      } else {
+        layerColorWidget.classList.remove("cross");
+      }
+    }));
 
     // Compose the layer's title bar
     element.appendChild(layerNumberElement);

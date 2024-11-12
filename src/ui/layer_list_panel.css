@@ -45,6 +45,25 @@
   display: inline-block;
 }
 
+.neuroglancer-layer-list-panel-color-value {
+  position: relative;
+  border-radius: 50%;
+  height: 12px;
+  width: 12px;
+  margin: 3px;
+}
+
+.neuroglancer-layer-list-panel-color-value.cross::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 1px;
+  background-color: rgb(255, 255, 255);
+  transform: translate(-50%, -50%) rotate(135deg);
+}
+
 .neuroglancer-layer-list-panel-item:not(:hover)
   > .neuroglancer-layer-list-panel-item-delete {
   display: none;

@@ -108,7 +108,7 @@ class LayerColorWidget extends RefCounted {
   constructor(public layer: ManagedUserLayer) {
     super();
     const { element } = this;
-    element.className = "neuroglancer-layer-color-value";
+    element.className = "neuroglancer-layer-list-panel-color-value";
 
     this.layer.layer?.registerColorWatcher(() => {
       if (! this.layer.layerBarColorSyncEnabled) {
@@ -123,7 +123,15 @@ class LayerColorWidget extends RefCounted {
       } else {
         element.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
       }
-    })
+    });
+
+    this.registerDisposer(this.layer.layerChanged.add(() => {
+      if (!this.layer.visible) {
+        element.classList.add("cross");
+      } else {
+        element.classList.remove("cross");
+      }
+    }));
   }
 }
 
