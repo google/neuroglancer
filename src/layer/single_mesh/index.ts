@@ -15,6 +15,8 @@
  */
 
 import "#src/layer/single_mesh/style.css";
+import svgClosedEye from "ikonate/icons/eye-closed.svg?raw";
+import svgOpenedEye from "ikonate/icons/eye.svg?raw";
 
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import {
@@ -37,6 +39,7 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, removeFromParent } from "#src/util/dom.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
+import { makeIcon } from "#src/widget/icon.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
 import {
@@ -207,6 +210,28 @@ class DisplayOptionsTab extends Tab {
     spacer.style.flex = "1";
 
     topRow.appendChild(spacer);
+
+    const managedLayer = this.layer.managedLayer;
+    const codeVisible = managedLayer.codeVisible;
+    this.codeWidget.element.style.display = managedLayer.codeVisible ? "block" : "none";
+    this.codeWidget.setVisible(codeVisible);
+    const codeVisibilityControl = makeIcon({
+      title: codeVisible ? "Hide code": "Show code",
+      svg: codeVisible ? svgOpenedEye : svgClosedEye,
+      onClick: () => {
+        const button = codeVisibilityControl as HTMLDivElement;
+        managedLayer.setCodeVisible(!managedLayer.codeVisible)
+        if (managedLayer.codeVisible) {
+          button.title = "Hide code";
+          button.innerHTML = svgOpenedEye
+        } else {
+          button.title = "Show code";
+          button.innerHTML = svgClosedEye
+        }
+        this.codeWidget.setVisible(managedLayer.codeVisible);
+    }});
+    topRow.appendChild(codeVisibilityControl);
+
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
