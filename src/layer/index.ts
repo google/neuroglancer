@@ -765,7 +765,9 @@ export class ManagedUserLayer extends RefCounted {
     }
     const layerSpec = userLayer.toJSON();
     layerSpec.name = this.name;
-    layerSpec.codeVisible = this.codeVisible;
+    if (!this.codeVisible) {
+      layerSpec.codeVisible = false;
+    }
     if (!this.visible) {
       if (this.archived) {
         layerSpec.archived = true;
