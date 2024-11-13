@@ -110,7 +110,7 @@ class LayerColorWidget extends RefCounted {
     const { element } = this;
     element.className = "neuroglancer-layer-list-panel-color-value";
 
-    this.layer.layer?.registerColorWatcher(() => {
+    this.registerDisposer(this.layer.observeLayerColor(() => {
       if (! this.layer.layerBarColorSyncEnabled) {
         element.style.background = "none";
         element.style.backgroundColor = "";
@@ -123,7 +123,7 @@ class LayerColorWidget extends RefCounted {
       } else {
         element.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
       }
-    });
+    }));
 
     this.registerDisposer(this.layer.layerChanged.add(() => {
       if (!this.layer.visible) {

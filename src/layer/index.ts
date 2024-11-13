@@ -198,8 +198,8 @@ export class UserLayer extends RefCounted {
 
   layerBarUserDefinedColor = new TrackableOptionalRGB();
 
-  registerColorWatcher(callback: ((value: any) => void)) {
-    observeWatchable(callback, this.layerBarUserDefinedColor);
+  observeLayerColor(callback: ((value: any) => void)): () => void {
+    return observeWatchable(callback, this.layerBarUserDefinedColor);
   }
 
   get automaticLayerBarColor(): string | undefined {
@@ -784,6 +784,14 @@ export class ManagedUserLayer extends RefCounted {
   get layerBarColorSync() {
     const userLayer = this.layer;
     return userLayer?.layerBarColorSync;
+  }
+
+  observeLayerColor(callback: ((value: any) => void)): () => void {
+    const userLayer = this.layer;
+    if (userLayer !== null) {
+      return userLayer.observeLayerColor(callback);
+    }
+    return () => {};
   }
 
   get supportsLayerBarColorSyncOption() {

@@ -46,6 +46,7 @@ class LayerWidget extends RefCounted {
   prefetchProgress = document.createElement("div");
   labelElementText = document.createTextNode("");
   valueElement = document.createElement("div");
+  layerColorElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
 
@@ -62,6 +63,7 @@ class LayerWidget extends RefCounted {
       visibleProgress,
       prefetchProgress,
       labelElementText,
+      layerColorElement,
     } = this;
     element.className = "neuroglancer-layer-item neuroglancer-noselect";
     element.appendChild(visibleProgress);
@@ -105,21 +107,20 @@ class LayerWidget extends RefCounted {
       event.stopPropagation();
     });
 
-    const layerColorWidget = document.createElement("div");
-    layerColorWidget.className = "neuroglancer-layer-color-value";
+    layerColorElement.className = "neuroglancer-layer-color-value";
 
     const updateLayerColorWidget = () => {
       if (! this.layer.layerBarColorSyncEnabled) {
-        layerColorWidget.style.background = "none";
-        layerColorWidget.style.backgroundColor = "";
+        layerColorElement.style.background = "none";
+        layerColorElement.style.backgroundColor = "";
         return;
       }
       const color = this.layer.layerBarColor;
       if (color) {
-        layerColorWidget.style.background = "none";
-        layerColorWidget.style.backgroundColor = color;
+        layerColorElement.style.background = "none";
+        layerColorElement.style.backgroundColor = color;
       } else {
-        layerColorWidget.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
+        layerColorElement.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
       }
     };
     const { element: syncColorsElement } = new CheckboxIcon(this.layer.layerBarColorSync!, {
@@ -133,15 +134,15 @@ class LayerWidget extends RefCounted {
       event.stopPropagation();
     });
 
-    this.layer?.layer?.registerColorWatcher(() => {
+    this.registerDisposer(layer.observeLayerColor(() => {
       updateLayerColorWidget();
-    })
+    }));
 
     this.registerDisposer(layer.layerChanged.add(() => {
       if (!this.layer.visible) {
-        layerColorWidget.classList.add("cross");
+        layerColorElement.classList.add("cross");
       } else {
-        layerColorWidget.classList.remove("cross");
+        layerColorElement.classList.remove("cross");
       }
     }));
 
@@ -153,7 +154,7 @@ class LayerWidget extends RefCounted {
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
-    element.appendChild(layerColorWidget);
+    element.appendChild(layerColorElement);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
       new PositionWidget(

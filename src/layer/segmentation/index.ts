@@ -1262,9 +1262,13 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
-  registerColorWatcher(callback: ((value: any) => void)) {
-    super.registerColorWatcher(callback);
-    observeWatchable(callback, this.displayState.segmentDefaultColor);
+  observeLayerColor(callback: ((value: any) => void)) {
+    const disposer = super.observeLayerColor(callback);
+    const subDisposer = observeWatchable(callback, this.displayState.segmentDefaultColor);
+    return () => {
+      disposer();
+      subDisposer();
+    }
   }
 
   get automaticLayerBarColor () {
