@@ -1792,7 +1792,7 @@ export class LayerReference extends RefCounted implements Trackable {
     super();
     this.registerDisposer(layerManager);
     this.registerDisposer(
-      layerManager.specificationChanged.add(() => {
+      layerManager.layersChanged.add(() => {
         const { layer_ } = this;
         if (layer_ !== undefined) {
           if (!this.layerManager.layerSet.has(layer_) || !this.filter(layer_)) {
