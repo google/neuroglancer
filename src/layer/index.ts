@@ -955,6 +955,7 @@ export class LayerManager extends RefCounted {
     // Also notify the root LayerManager, to ensures the layer is removed if this is the last direct
     // reference.
     managedLayer.manager.rootLayers.layersChanged.dispatch();
+    managedLayer.manager.rootLayers.specificationChanged.dispatch();
     managedLayer.dispose();
   }
 
