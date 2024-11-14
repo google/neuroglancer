@@ -743,42 +743,42 @@ class RenderingOptionsTab extends Tab {
     super();
     const { element } = this;
     element.classList.add("neuroglancer-annotation-rendering-tab");
-    element.appendChild(
-      this.registerDisposer(
-        new DependentViewWidget(
-          layer.annotationDisplayState.annotationProperties,
-          (properties, parent) => {
-            if (properties === undefined || properties.length === 0) return;
-            const propertyList = document.createElement("div");
-            parent.appendChild(propertyList);
-            propertyList.classList.add(
-              "neuroglancer-annotation-shader-property-list",
+    const shaderProperties = this.registerDisposer(
+      new DependentViewWidget(
+        layer.annotationDisplayState.annotationProperties,
+        (properties, parent) => {
+          if (properties === undefined || properties.length === 0) return;
+          const propertyList = document.createElement("div");
+          parent.appendChild(propertyList);
+          propertyList.classList.add(
+            "neuroglancer-annotation-shader-property-list",
+          );
+          for (const property of properties) {
+            const div = document.createElement("div");
+            div.classList.add("neuroglancer-annotation-shader-property");
+            const typeElement = document.createElement("span");
+            typeElement.classList.add(
+              "neuroglancer-annotation-shader-property-type",
             );
-            for (const property of properties) {
-              const div = document.createElement("div");
-              div.classList.add("neuroglancer-annotation-shader-property");
-              const typeElement = document.createElement("span");
-              typeElement.classList.add(
-                "neuroglancer-annotation-shader-property-type",
-              );
-              typeElement.textContent = property.type;
-              const nameElement = document.createElement("span");
-              nameElement.classList.add(
-                "neuroglancer-annotation-shader-property-identifier",
-              );
-              nameElement.textContent = `prop_${property.identifier}`;
-              div.appendChild(typeElement);
-              div.appendChild(nameElement);
-              const { description } = property;
-              if (description !== undefined) {
-                div.title = description;
-              }
-              propertyList.appendChild(div);
+            typeElement.textContent = property.type;
+            const nameElement = document.createElement("span");
+            nameElement.classList.add(
+              "neuroglancer-annotation-shader-property-identifier",
+            );
+            nameElement.textContent = `prop_${property.identifier}`;
+            div.appendChild(typeElement);
+            div.appendChild(nameElement);
+            const { description } = property;
+            if (description !== undefined) {
+              div.title = description;
             }
-          },
-        ),
-      ).element,
-    );
+            propertyList.appendChild(div);
+          }
+        },
+      ),
+    ).element;
+
+    element.appendChild(shaderProperties);
     const topRow = document.createElement("div");
     topRow.className =
       "neuroglancer-segmentation-dropdown-skeleton-shader-header";
@@ -788,9 +788,10 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(label);
 
     const managedLayer = this.layer.managedLayer;
+    shaderProperties.style.display = managedLayer.codeVisible ? "block" : "none";
     const codeVisible = managedLayer.codeVisible;
-    this.codeWidget.element.style.display = managedLayer.codeVisible ? "block" : "none";
     this.codeWidget.setVisible(codeVisible);
+
     const codeVisibilityControl = makeIcon({
       title: codeVisible ? "Hide code": "Show code",
       svg: codeVisible ? svgOpenedEye : svgClosedEye,
@@ -799,10 +800,12 @@ class RenderingOptionsTab extends Tab {
         managedLayer.setCodeVisible(!managedLayer.codeVisible)
         if (managedLayer.codeVisible) {
           button.title = "Hide code";
-          button.innerHTML = svgOpenedEye
+          button.innerHTML = svgOpenedEye;
+          shaderProperties.style.display = "block";
         } else {
           button.title = "Show code";
-          button.innerHTML = svgClosedEye
+          button.innerHTML = svgClosedEye;
+          shaderProperties.style.display = "none";
         }
         this.codeWidget.setVisible(managedLayer.codeVisible);
     }});

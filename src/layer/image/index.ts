@@ -546,7 +546,6 @@ class RenderingOptionsTab extends Tab {
 
     const managedLayer = this.layer.managedLayer;
     const codeVisible = managedLayer.codeVisible;
-    this.codeWidget.element.style.display = managedLayer.codeVisible ? "block" : "none";
     this.codeWidget.setVisible(codeVisible);
     const codeVisibilityControl = makeIcon({
       title: codeVisible ? "Hide code": "Show code",
