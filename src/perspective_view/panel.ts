@@ -1010,6 +1010,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       sliceViewsPresent: this.sliceViews.size > 0,
       isContinuousCameraMotionInProgress:
         this.isContinuousCameraMotionInProgress,
+      force3DHistogramForAutoRange: this.context.force3DHistogramForAutoRange,
     };
 
     mat4.copy(

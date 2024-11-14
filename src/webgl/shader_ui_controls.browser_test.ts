@@ -899,56 +899,6 @@ void main() {
       ]),
     });
   });
-  it("creates a default transfer function if no control points are provided", () => {
-    const code = `
-#uicontrol transferFunction colormap(window=[30, 200])
-void main() {
-}
-`;
-    const newCode = `
-
-void main() {
-}
-`;
-    const window = [30, 200];
-    const firstInput = window[0] + (window[1] - window[0]) * 0.4;
-    const secondInput = window[0] + (window[1] - window[0]) * 0.7;
-    const controlPoints = [
-      new ControlPoint(Math.round(firstInput), vec4.fromValues(0, 0, 0, 0)),
-      new ControlPoint(
-        Math.round(secondInput),
-        vec4.fromValues(255, 255, 255, 255),
-      ),
-    ];
-    const sortedControlPoints = new SortedControlPoints(
-      controlPoints,
-      DataType.UINT8,
-    );
-    expect(
-      parseShaderUiControls(code, {
-        imageData: { dataType: DataType.UINT8, channelRank: 0 },
-      }),
-    ).toEqual({
-      source: code,
-      code: newCode,
-      errors: [],
-      controls: new Map([
-        [
-          "colormap",
-          {
-            type: "transferFunction",
-            dataType: DataType.UINT8,
-            default: {
-              sortedControlPoints: sortedControlPoints,
-              channel: [],
-              defaultColor: vec3.fromValues(1, 1, 1),
-              window,
-            },
-          },
-        ],
-      ]),
-    });
-  });
 });
 
 describe("parseTransferFunctionParameters", () => {

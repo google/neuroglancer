@@ -101,7 +101,7 @@ jobs:
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
       - name: Install Python packaging/test tools
-        run: pip install --upgrade pip tox nox wheel numpy -r python/requirements-test.txt
+        run: pip install tox nox wheel numpy -r python/requirements-test.txt
       - uses: ./.github/actions/setup-firefox
       - run: nox -s lint format mypy
       - name: Check for dirty working directory

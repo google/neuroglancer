@@ -69,6 +69,7 @@ import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
 import { makeIcon } from "#src/widget/icon.js";
+import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
@@ -734,6 +735,7 @@ export class InvlerpWidget extends Tab {
     window: createRangeBoundInputs("window", this.dataType, this.trackable),
   };
   invertArrows: HTMLElement[];
+  autoRangeFinder: AutoRangeFinder;
   get texture() {
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
       this.histogramIndex
@@ -776,6 +778,7 @@ export class InvlerpWidget extends Tab {
     element.appendChild(this.cdfPanel.element);
     element.classList.add("neuroglancer-invlerp-widget");
     element.appendChild(boundElements.window.container);
+    this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
     this.updateView();
     this.registerDisposer(
       trackable.changed.add(
@@ -783,6 +786,11 @@ export class InvlerpWidget extends Tab {
           animationFrameDebounce(() => this.updateView()),
         ),
       ),
+    );
+    this.registerDisposer(
+      this.display.updateFinished.add(() => {
+        this.autoRangeFinder.maybeAutoComputeRange();
+      }),
     );
   }
 
