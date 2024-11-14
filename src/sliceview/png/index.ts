@@ -71,13 +71,13 @@ function readHeader(buffer: Uint8Array): {
   }
 
   if (buffer.length < 8 + 4) {
-    throw new Error("png: Invalid image size: {buffer.length}");
+    throw new Error(`png: Invalid image size: ${buffer.length}`);
   }
 
   // check for header for magic sequence
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
   if (!validMagic) {
-    throw new Error(`png: didn't match magic numbers: {buffer.slice(0,8)}`);
+    throw new Error(`png: didn't match magic numbers: ${buffer.slice(0, 8)}`);
   }
 
   // offset into IHDR chunk so we can read more naturally
@@ -86,7 +86,7 @@ function readHeader(buffer: Uint8Array): {
   const chunkHeaderLength = 12; // len (4), code (4), CRC (4)
 
   if (buffer.length < magicSpec.length + chunkLength + chunkHeaderLength) {
-    throw new Error("png: Invalid image size: {buffer.length}");
+    throw new Error(`png: Invalid image size: ${buffer.length}`);
   }
 
   const chunkCode = [4, 5, 6, 7].map((i) =>
