@@ -443,7 +443,7 @@ export class LocalToolBinder<
   }
 
   removeJsonString(toolJsonString: string) {
-    const key = this.jsonToKey.get(toolJsonString);
+    const key = this.jsonToKey.get(toolJsonString) || this.jsonToKey.get(JSON.stringify(toolJsonString));
     if (key === undefined) return;
     this.set(key, undefined);
   }
