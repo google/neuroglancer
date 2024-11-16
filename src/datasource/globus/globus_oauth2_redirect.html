@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Globus OAuth Redirect</title>
+    <script>
+      const data = Object.fromEntries(
+        new URLSearchParams(location.search).entries(),
+      );
+      const target = window.opener || window.parent;
+      if (target === window) {
+        console.error("No opener/parent to receive successful oauth2 response");
+      } else {
+        console.log("Posting!", data, window.location.origin);
+        target.postMessage(data, window.location.origin);
+      }
+    </script>
+  </head>
+  <body>
+    <p>Globus authentication successful.</p>
+    <p><button onclick="window.close()">Close</button></p>
+  </body>
+</html>

@@ -55,9 +55,9 @@ export default (env, args) => {
           type: "asset/source",
         },
         // Needed for .html assets used for auth redirect pages for the
-        // brainmaps and bossDB data sources.
+        // brainmaps, globus, and bossDB data sources.
         {
-          test: /(bossauth|google_oauth2_redirect)\.html$/,
+          test: /(bossauth|google_oauth2_redirect|globus_oauth2_redirect)\.html$/,
           type: "asset/resource",
           generator: {
             // Filename must be preserved since exact redirect URLs must be allowlisted.
