@@ -33,11 +33,6 @@ export interface DimensionResolutionStats {
   resolutionWithUnit: string;
 }
 
-interface LayerIdentifier {
-  name: string;
-  type: string;
-}
-
 export interface PanelViewport {
   left: number;
   right: number;
@@ -46,7 +41,30 @@ export interface PanelViewport {
   panelType: string;
 }
 
-export interface PanelResolutionStats {
+export interface ResolutionMetadata {
+  panelResolutionData: PanelResolutionData[];
+  layerResolutionData: LayerResolutionData[];
+}
+
+interface PanelResolutionData {
+  type: string;
+  width: number;
+  height: number;
+  resolution: string;
+}
+
+interface LayerResolutionData {
+  name: string;
+  type: string;
+  resolution: string;
+}
+
+interface LayerIdentifier {
+  name: string;
+  type: string;
+}
+
+interface PanelResolutionStats {
   pixelResolution: PanelViewport;
   physicalResolution: DimensionResolutionStats[];
 }
@@ -420,10 +438,10 @@ function formatPixelResolution(panelArea: PanelViewport, scale: number) {
 export function getViewerResolutionMetadata(
   viewer: Viewer,
   sliceViewScaleFactor: number = 1,
-) {
+): ResolutionMetadata {
   // Process the panel resolution table
   const panelResolution = getViewerPanelResolutions(viewer.display.panels);
-  const panelResolutionData = [];
+  const panelResolutionData: PanelResolutionData[] = [];
   for (const resolution of panelResolution) {
     const physicalResolution = formatPhysicalResolution(
       resolution.physicalResolution,
@@ -445,7 +463,7 @@ export function getViewerResolutionMetadata(
 
   // Process the layer resolution table
   const layerResolution = getViewerLayerResolutions(viewer);
-  const layerResolutionData = [];
+  const layerResolutionData: LayerResolutionData[] = [];
   for (const [key, value] of layerResolution) {
     const { name, type } = key;
     if (type === "MultiscaleMeshLayer") {
