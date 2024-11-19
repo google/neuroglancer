@@ -51,7 +51,7 @@ const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 const PANEL_TABLE_HEADER_STRINGS = {
   type: "Panel type",
   pixelResolution: "Pixel resolution",
-  physicalResolution: "Physical resolution",
+  physicalResolution: "Physical scale",
 };
 const LAYER_TABLE_HEADER_STRINGS = {
   name: "Layer name",
@@ -185,7 +185,7 @@ export class ScreenshotDialog extends Overlay {
   );
   private screenshotWidth: number = 0;
   private screenshotHeight: number = 0;
-  private screenshotSelectedValues: HTMLElement;
+  private screenshotPixelSize: HTMLElement;
   constructor(private screenshotManager: ScreenshotManager) {
     super();
 
@@ -316,8 +316,7 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotSizeText.classList.add("neuroglancer-screenshot-size-text");
     const screenshotLabel = document.createElement("h3");
     screenshotLabel.textContent = "Screenshot size";
-    this.screenshotSelectedValues = document.createElement("span");
-    this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px, ${this.screenshotHeight}px`;
+    this.screenshotPixelSize = document.createElement("span");
 
     const screenshotCopyButton = makeCopyButton({
       onClick: () => {
@@ -336,7 +335,7 @@ export class ScreenshotDialog extends Overlay {
     );
 
     this.screenshotSizeText.appendChild(screenshotLabel);
-    this.screenshotSizeText.appendChild(this.screenshotSelectedValues);
+    this.screenshotSizeText.appendChild(this.screenshotPixelSize);
 
     previewContainer.appendChild(previewTopContainer);
     previewTopContainer.appendChild(previewLabel);
@@ -456,9 +455,7 @@ export class ScreenshotDialog extends Overlay {
       input.classList.add("neuroglancer-screenshot-scale-radio");
 
       label.appendChild(input);
-
       label.appendChild(document.createTextNode(`${scale}x`));
-
       this.scaleRadioButtonsContainer.appendChild(label);
 
       input.addEventListener("change", () => {
@@ -589,7 +586,7 @@ export class ScreenshotDialog extends Overlay {
       const row = resolutionTable.insertRow();
       const keyCell = row.insertCell();
       const pixelValueCell = row.insertCell();
-      pixelValueCell.textContent = `${pixelResolution.width}x${pixelResolution.height} px`;
+      pixelValueCell.textContent = `${pixelResolution.width} x ${pixelResolution.height}px`;
       const physicalValueCell = row.insertCell();
       keyCell.textContent = physicalResolution.type;
       physicalValueCell.innerHTML = physicalResolution.resolution;
@@ -691,8 +688,8 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private updateScreenshotSizeDisplay() {
-    if (this.screenshotSelectedValues) {
-      this.screenshotSelectedValues.textContent = `${this.screenshotWidth}px x ${this.screenshotHeight}px`;
+    if (this.screenshotPixelSize) {
+      this.screenshotPixelSize.textContent = `${this.screenshotWidth} x ${this.screenshotHeight}px`;
     }
   }
 
@@ -735,7 +732,7 @@ export class ScreenshotDialog extends Overlay {
     */
   private getResolutionText() {
     // Processing the Screenshot size
-    const screenshotSizeText = `Screenshot size\t${this.screenshotWidth}x${this.screenshotHeight} px\n`;
+    const screenshotSizeText = `Screenshot size\t${this.screenshotWidth} x ${this.screenshotHeight}px\n`;
 
     // Process the panel resolution table
     const { panelResolutionData, layerResolutionData } =
@@ -746,7 +743,7 @@ export class ScreenshotDialog extends Overlay {
 
     let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type}\t${PANEL_TABLE_HEADER_STRINGS.pixelResolution}\t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
     for (const resolution of panelResolutionData) {
-      panelResolutionText += `${resolution.type}\t${resolution.width}x${resolution.height} px\t${resolution.resolution}\n`;
+      panelResolutionText += `${resolution.type}\t${resolution.width} x ${resolution.height}px\t${resolution.resolution}\n`;
     }
 
     // Process the layer resolution table
