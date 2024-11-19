@@ -29,19 +29,24 @@ import { verifyOptionalString } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
+import type { ResolutionMetadata } from "#src/util/viewer_resolution_stats.js";
+import { getViewerResolutionMetadata } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
+
+export interface ScreenshotResult {
+  id: string;
+  image: string;
+  imageType: string;
+  depthData: string | undefined;
+  width: number;
+  height: number;
+  resolutionMetadata: ResolutionMetadata;
+}
 
 export interface ScreenshotActionState {
   viewerState: any;
   selectedValues: any;
-  screenshot: {
-    id: string;
-    image: string;
-    imageType: string;
-    depthData: string | undefined;
-    width: number;
-    height: number;
-  };
+  screenshot: ScreenshotResult;
 }
 
 export interface ScreenshotChunkStatistics {
@@ -180,6 +185,7 @@ export class ScreenshotHandler extends RefCounted {
     this.throttledSendStatistics.cancel();
     viewer.display.draw();
     const screenshotData = viewer.display.canvas.toDataURL();
+    const resolutionMetadata = getViewerResolutionMetadata(viewer);
     const { width, height } = viewer.display.canvas;
     const prefix = "data:image/png;base64,";
     let imageType: string;
@@ -209,6 +215,7 @@ export class ScreenshotHandler extends RefCounted {
         depthData,
         width,
         height,
+        resolutionMetadata,
       },
     };
 
