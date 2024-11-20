@@ -39,7 +39,7 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
-const SCREENSHOT_TIMEOUT = 5000;
+const SCREENSHOT_TIMEOUT = 3000;
 
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
@@ -207,7 +207,7 @@ export class ScreenshotManager extends RefCounted {
   }
 
   public set screenshotScale(scale: number) {
-    this.handleScreenshotZoom(scale);
+    this.handleScreenshotZoomAndResize(scale);
     this._screenshotScale = scale;
     this.zoomMaybeChanged.dispatch();
   }
@@ -220,12 +220,22 @@ export class ScreenshotManager extends RefCounted {
     const wasInFixedFOVMode = this.shouldKeepSliceViewFOVFixed;
     this._shouldKeepSliceViewFOVFixed = enableFixedFOV;
     if (!enableFixedFOV && wasInFixedFOVMode) {
-      this.handleScreenshotZoom(this.screenshotScale, true /* resetZoom */);
+      this.handleScreenshotZoomAndResize(
+        this.screenshotScale,
+        true /* resetZoom */,
+      );
       this.zoomMaybeChanged.dispatch();
     } else if (enableFixedFOV && !wasInFixedFOVMode) {
-      this.handleScreenshotZoom(1 / this.screenshotScale, true /* resetZoom */);
+      this.handleScreenshotZoomAndResize(
+        1 / this.screenshotScale,
+        true /* resetZoom */,
+      );
       this.zoomMaybeChanged.dispatch();
     }
+  }
+
+  previewScreenshot() {
+    this.viewer.display.screenshotMode.value = ScreenshotMode.PREVIEW;
   }
 
   takeScreenshot(filename: string = "") {
@@ -237,16 +247,19 @@ export class ScreenshotManager extends RefCounted {
     this.viewer.display.screenshotMode.value = ScreenshotMode.FORCE;
   }
 
-  cancelScreenshot() {
+  cancelScreenshot(shouldStayInPreview: boolean = false) {
     // Decrement the screenshot ID since the screenshot was cancelled
     if (this.screenshotMode === ScreenshotMode.ON) {
       this.screenshotId--;
     }
-    this.viewer.display.screenshotMode.value = ScreenshotMode.OFF;
+    const newMode = shouldStayInPreview
+      ? ScreenshotMode.PREVIEW
+      : ScreenshotMode.OFF;
+    this.viewer.display.screenshotMode.value = newMode;
   }
 
-  // Scales the screenshot by the given factor, and calculates the cropped area
-  calculatedScaledAndClippedSize(scale: number): {
+  // Calculates the cropped area of the viewport panels
+  calculatedClippedViewportSize(): {
     width: number;
     height: number;
   } {
@@ -254,43 +267,38 @@ export class ScreenshotManager extends RefCounted {
       this.viewer.display.panels,
     ).totalRenderPanelViewport;
     return {
-      width:
-        Math.round(renderingPanelArea.right - renderingPanelArea.left) * scale,
-      height:
-        Math.round(renderingPanelArea.bottom - renderingPanelArea.top) * scale,
+      width: Math.round(renderingPanelArea.right - renderingPanelArea.left),
+      height: Math.round(renderingPanelArea.bottom - renderingPanelArea.top),
     };
   }
 
   private handleScreenshotStarted() {
-    const { viewer } = this;
-    const shouldIncreaseCanvasSize = this.screenshotScale !== 1;
-
     this.screenshotStartTime =
       this.lastUpdateTimestamp =
       this.gpuMemoryChangeTimestamp =
         Date.now();
     this.screenshotLoadStats = null;
 
-    if (shouldIncreaseCanvasSize) {
+    // Pass a new screenshot ID to the viewer to trigger a new screenshot.
+    this.screenshotId++;
+    this.viewer.screenshotHandler.requestState.value =
+      this.screenshotId.toString();
+  }
+
+  private resizeCanvasIfNeeded(scale: number = this.screenshotScale) {
+    const shouldChangeCanvasSize = scale !== 1;
+    const { viewer } = this;
+    if (shouldChangeCanvasSize) {
       const oldSize = {
         width: viewer.display.canvas.width,
         height: viewer.display.canvas.height,
       };
       const newSize = {
-        width: Math.round(oldSize.width * this.screenshotScale),
-        height: Math.round(oldSize.height * this.screenshotScale),
+        width: Math.round(oldSize.width * scale),
+        height: Math.round(oldSize.height * scale),
       };
       viewer.display.canvas.width = newSize.width;
       viewer.display.canvas.height = newSize.height;
-    }
-
-    // Pass a new screenshot ID to the viewer to trigger a new screenshot.
-    this.screenshotId++;
-    this.viewer.screenshotHandler.requestState.value =
-      this.screenshotId.toString();
-
-    // Force handling the canvas size change
-    if (shouldIncreaseCanvasSize) {
       ++viewer.display.resizeGeneration;
       viewer.display.resizeCallback();
     }
@@ -298,6 +306,8 @@ export class ScreenshotManager extends RefCounted {
 
   private handleScreenshotModeChange() {
     const { display } = this.viewer;
+    // If moving straight from OFF to ON, need to resize the canvas to the correct size
+    const mayNeedCanvasResize = this.screenshotMode === ScreenshotMode.OFF;
     this.screenshotMode = display.screenshotMode.value;
     switch (this.screenshotMode) {
       case ScreenshotMode.OFF:
@@ -309,25 +319,49 @@ export class ScreenshotManager extends RefCounted {
         display.scheduleRedraw();
         break;
       case ScreenshotMode.ON:
+        // If moving straight from OFF to ON, may need to resize the canvas to the correct size
+        // Going from PREVIEW to ON does not require a resize
+        if (mayNeedCanvasResize) {
+          this.resizeCanvasIfNeeded();
+        }
         this.handleScreenshotStarted();
+        break;
+      case ScreenshotMode.PREVIEW:
+        // Do nothing, included for completeness
         break;
     }
   }
 
-  private handleScreenshotZoom(scale: number, resetZoom: boolean = false) {
+  /**
+   * Handles the zooming of the screenshot in fixed FOV mode.
+   * This supports:
+   * 1. Updating the zoom level of the viewer to match the screenshot scale.
+   * 2. Resetting the zoom level of the slice views to the original level.
+   * 3. Resizing the canvas to match the new scale.
+   * @param scale - The scale factor to apply to the screenshot.
+   * @param resetZoom - If true, the zoom resets to the original level.
+   */
+  private handleScreenshotZoomAndResize(
+    scale: number,
+    resetZoom: boolean = false,
+  ) {
     const oldScale = this.screenshotScale;
-    const scaleFactor = resetZoom ? scale : oldScale / scale;
+    const zoomScaleFactor = resetZoom ? scale : oldScale / scale;
+    const canvasScaleFactor = resetZoom ? 1 : scale / oldScale;
 
     if (this.shouldKeepSliceViewFOVFixed || resetZoom) {
+      // Scale the zoom factor of each slice view panel
       const { navigationState } = this.viewer;
       for (const panel of this.viewer.display.panels) {
         if (panel instanceof SliceViewPanel) {
           const zoom = navigationState.zoomFactor.value;
-          navigationState.zoomFactor.value = zoom * scaleFactor;
+          navigationState.zoomFactor.value = zoom * zoomScaleFactor;
           break;
         }
       }
     }
+
+    this.resizeCanvasIfNeeded(canvasScaleFactor);
   }
 
   /**

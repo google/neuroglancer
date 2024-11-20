@@ -139,7 +139,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract isReady(): boolean;
 
-  ensureBoundsUpdated() {
+  ensureBoundsUpdated(canScaleForScreenshot: boolean = false) {
     const { context } = this;
     context.ensureBoundsUpdated();
     const { boundsGeneration } = context;
@@ -225,7 +225,10 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    if (this.context.screenshotMode.value !== ScreenshotMode.OFF) {
+    if (
+      this.context.screenshotMode.value !== ScreenshotMode.OFF &&
+      canScaleForScreenshot
+    ) {
       viewport.width = logicalWidth * screenToCanvasPixelScaleX;
       viewport.height = logicalHeight * screenToCanvasPixelScaleY;
       viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;

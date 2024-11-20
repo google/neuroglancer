@@ -18,8 +18,9 @@ import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export enum ScreenshotMode {
   OFF = 0, // Default mode
-  ON = 1, // Screenshot modek
+  ON = 1, // Screenshot mode
   FORCE = 2, // Force screenshot mode - used when the screenshot is stuck
+  PREVIEW = 3, // Preview mode - used while the user is in the screenshot menu
 }
 
 export class TrackableScreenshotMode extends TrackableEnum<ScreenshotMode> {
