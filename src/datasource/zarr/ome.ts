@@ -267,9 +267,8 @@ export function parseOmeMetadata(
   attrs: any,
   zarrVersion: number,
 ): OmeMultiscaleMetadata | undefined {
-
   const ome = attrs.ome;
-  const multiscales = (zarrVersion === 2) ? attrs.multiscales : ome.multiscales; // >0.4
+  const multiscales = (ome == undefined) ? attrs.multiscales : ome.multiscales; // >0.4
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
@@ -283,7 +282,7 @@ export function parseOmeMetadata(
       return undefined;
     }
 
-    const version = (zarrVersion === 2) ? multiscale.version : ome.version; // >0.4
+    const version = (ome == undefined) ? multiscale.version : ome.version; // >0.4
 
     if (version === undefined) return undefined;
     if (!SUPPORTED_OME_MULTISCALE_VERSIONS.has(version)) {
@@ -294,7 +293,15 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    return parseOmeMultiscale(url, multiscale, zarrVersion);
+    if (version === "0.5" && zarrVersion !== 3) {
+      errors.push(
+        `OME multiscale metadata version ${JSON.stringify(
+          version,
+        )} is not supported for zarr v${zarrVersion}`,
+      );
+      continue;
+    }
+    return parseOmeMultiscale(url, multiscale);
   }
   if (errors.length !== 0) {
     throw new Error(errors[0]);
