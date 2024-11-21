@@ -123,34 +123,40 @@ class LayerWidget extends RefCounted {
         layerColorElement.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
       }
     };
-    const { element: syncColorsElement } = new CheckboxIcon(this.layer.layerBarColorSync!, {
-      text: "#",
-      backgroundScheme: "dark",
-      enableTitle: "Enable color sync",
-      disableTitle: "Disable color sync",
-    });
-    syncColorsElement.addEventListener("click", (event: MouseEvent) => {
-      updateLayerColorWidget();
-      event.stopPropagation();
-    });
+    let syncColorsElement = null;
+    if (this.layer.supportsLayerBarColorSyncOption) {
+      const { element } = new CheckboxIcon(this.layer.layerBarColorSync!, {
+        text: "#",
+        backgroundScheme: "dark",
+        enableTitle: "Enable color sync",
+        disableTitle: "Disable color sync",
+      });
+      syncColorsElement = element
+      syncColorsElement.addEventListener("click", (event: MouseEvent) => {
+        updateLayerColorWidget();
+        event.stopPropagation();
+      });
 
-    this.registerDisposer(layer.observeLayerColor(() => {
-      updateLayerColorWidget();
-    }));
+      this.registerDisposer(layer.observeLayerColor(() => {
+        updateLayerColorWidget();
+      }));
 
-    this.registerDisposer(layer.layerChanged.add(() => {
-      if (!this.layer.visible) {
-        layerColorElement.classList.add("cross");
-      } else {
-        layerColorElement.classList.remove("cross");
-      }
-    }));
+      this.registerDisposer(layer.layerChanged.add(() => {
+        if (!this.layer.visible) {
+          layerColorElement.classList.add("cross");
+        } else {
+          layerColorElement.classList.remove("cross");
+        }
+      }));
+    }
 
     // Compose the layer's title bar
     element.appendChild(layerNumberElement);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
-    buttonContainer.appendChild(syncColorsElement);
+    if (this.layer.supportsLayerBarColorSyncOption) {
+      buttonContainer.appendChild(syncColorsElement!);
+    }
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);

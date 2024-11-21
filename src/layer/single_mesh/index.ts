@@ -32,7 +32,7 @@ import {
   SingleMeshLayer,
 } from "#src/single_mesh/frontend.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { WatchableValue } from "#src/trackable_value.js";
+import { observeWatchable, WatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, removeFromParent } from "#src/util/dom.js";
