@@ -15,8 +15,7 @@
  */
 
 import "#src/layer/image/style.css";
-import svgClosedEye from "ikonate/icons/eye-closed.svg?raw";
-import svgOpenedEye from "ikonate/icons/eye.svg?raw";
+import svgCode from "ikonate/icons/code.svg?raw";
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
@@ -549,19 +548,20 @@ class RenderingOptionsTab extends Tab {
     this.codeWidget.setVisible(codeVisible);
     const codeVisibilityControl = makeIcon({
       title: codeVisible ? "Hide code": "Show code",
-      svg: codeVisible ? svgOpenedEye : svgClosedEye,
+      svg: svgCode,
       onClick: () => {
         const button = codeVisibilityControl as HTMLDivElement;
         managedLayer.setCodeVisible(!managedLayer.codeVisible)
         if (managedLayer.codeVisible) {
           button.title = "Hide code";
-          button.innerHTML = svgOpenedEye
+          button.style.backgroundColor = "rgba(255, 255, 255, 0.2)";
         } else {
           button.title = "Show code";
-          button.innerHTML = svgClosedEye
+          button.style.backgroundColor = "";
         }
         this.codeWidget.setVisible(managedLayer.codeVisible);
     }});
+    codeVisibilityControl.style.backgroundColor = codeVisible ? "rgba(255, 255, 255, 0.2)" : "";
     topRow.appendChild(codeVisibilityControl);
 
     topRow.appendChild(
