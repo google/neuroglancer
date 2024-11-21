@@ -455,7 +455,41 @@ export class AnnotationLayerView extends Tab {
     this.virtualList.element.addEventListener("mouseleave", () => {
       this.displayState.hoverState.value = undefined;
     });
-
+    const changeSelectedIndex = (offset: number) => {
+      const selectedIndex = this.getSelectedAnnotationIndex();
+      if (selectedIndex === undefined) return;
+      const nextAnnotation = this.listElements[selectedIndex + offset];
+      if (nextAnnotation) {
+        const { state, annotation } = nextAnnotation;
+        this.layer.selectAnnotation(state, annotation.id, true);
+        this.moveToAnnotation(annotation, state);
+      }
+    };
+    this.registerDisposer(
+      this.layer.registerLayerEvent("select-previous", () => {
+        // if (this.layer.panels.panels[0].selectedTab.value === "annotations") {
+        if (this.element.checkVisibility()) {
+          changeSelectedIndex(-1);
+        }
+      }),
+    );
+    this.registerDisposer(
+      this.layer.registerLayerEvent("select-next", () => {
+        if (this.element.checkVisibility()) {
+          changeSelectedIndex(1);
+        }
+      }),
+    );
+    // this.element.addEventListener("select-previous", (event) => {
+    //   event.stopPropagation();
+    //   event.preventDefault();
+    //   changeSelectedIndex(-1);
+    // });
+    // this.element.addEventListener("select-next", (event) => {
+    //   event.stopPropagation();
+    //   event.preventDefault();
+    //   changeSelectedIndex(1);
+    // });
     const bindings = getDefaultAnnotationListBindings();
     this.registerDisposer(
       new MouseEventBinder(this.virtualList.element, bindings),
@@ -484,6 +518,37 @@ export class AnnotationLayerView extends Tab {
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
     this.updateSelectionView();
+  }
+
+  private getSelectedAnnotationIndex() {
+    const { previousSelectedState: state } = this;
+    if (state === undefined) return;
+    const { annotationLayerState, annotationId } = state;
+    const attached = this.attachedAnnotationStates.get(annotationLayerState);
+    if (attached === undefined) return;
+    const index = attached.idToIndex.get(annotationId);
+    if (index === undefined) return;
+    return attached.listOffset + index;
+  }
+
+  private moveToAnnotation(
+    annotation: Annotation,
+    state: AnnotationLayerState,
+  ) {
+    const chunkTransform = state.chunkTransform
+      .value as ChunkTransformParameters;
+    const { layerRank } = chunkTransform;
+    const chunkPosition = new Float32Array(layerRank);
+    const layerPosition = new Float32Array(layerRank);
+    getCenterPosition(chunkPosition, annotation);
+    matrix.transformPoint(
+      layerPosition,
+      chunkTransform.chunkToLayerTransform,
+      layerRank + 1,
+      chunkPosition,
+      layerRank,
+    );
+    setLayerPosition(this.layer, chunkTransform, layerPosition);
   }
 
   private getRenderedAnnotationListElement(
@@ -940,18 +1005,7 @@ export class AnnotationLayerView extends Tab {
     element.addEventListener("action:move-to-annotation", (event) => {
       event.stopPropagation();
       event.preventDefault();
-      const { layerRank } = chunkTransform;
-      const chunkPosition = new Float32Array(layerRank);
-      const layerPosition = new Float32Array(layerRank);
-      getCenterPosition(chunkPosition, annotation);
-      matrix.transformPoint(
-        layerPosition,
-        chunkTransform.chunkToLayerTransform,
-        layerRank + 1,
-        chunkPosition,
-        layerRank,
-      );
-      setLayerPosition(this.layer, chunkTransform, layerPosition);
+      this.moveToAnnotation(annotation, state);
     });
 
     const selectionState = this.selectedAnnotationState.value;
