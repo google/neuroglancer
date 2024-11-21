@@ -15,7 +15,7 @@
  */
 
 import "#src/layer/image/style.css";
-import svgCode from "ikonate/icons/code.svg?raw";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {

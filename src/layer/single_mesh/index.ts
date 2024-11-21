@@ -15,7 +15,7 @@
  */
 
 import "#src/layer/single_mesh/style.css";
-import svgCode from "ikonate/icons/code.svg?raw";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import {
