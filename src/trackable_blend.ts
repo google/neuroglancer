@@ -31,7 +31,7 @@ export const BLEND_FUNCTIONS = new Map([
   [
     BLEND_MODES.ADDITIVE,
     (gl: WebGL2RenderingContext) => {
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      gl.blendEquation(gl.FUNC_ADD);
     },
   ],
 ]);
