@@ -55,6 +55,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
   registerNested,
   WatchableValue,
 } from "#src/trackable_value.js";
@@ -80,10 +81,10 @@ import {
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
-import { makeIcon } from "#src/widget/icon.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import {
   addLayerControlToOptionsTab,
@@ -544,25 +545,19 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(spacer);
 
     const managedLayer = this.layer.managedLayer;
-    const codeVisible = managedLayer.codeVisible;
-    this.codeWidget.setVisible(codeVisible);
-    const codeVisibilityControl = makeIcon({
-      title: codeVisible ? "Hide code": "Show code",
+    this.registerDisposer(
+      observeWatchable((visible) => {
+        this.codeWidget.setVisible(visible);
+      }, managedLayer.codeVisible),
+    );
+
+    const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
+      enableTitle: "Hide code",
+      disableTitle: "Show code",
+      backgroundScheme: "dark",
       svg: svgCode,
-      onClick: () => {
-        const button = codeVisibilityControl as HTMLDivElement;
-        managedLayer.setCodeVisible(!managedLayer.codeVisible)
-        if (managedLayer.codeVisible) {
-          button.title = "Hide code";
-          button.style.backgroundColor = "rgba(255, 255, 255, 0.2)";
-        } else {
-          button.title = "Show code";
-          button.style.backgroundColor = "";
-        }
-        this.codeWidget.setVisible(managedLayer.codeVisible);
-    }});
-    codeVisibilityControl.style.backgroundColor = codeVisible ? "rgba(255, 255, 255, 0.2)" : "";
-    topRow.appendChild(codeVisibilityControl);
+    });
+    topRow.appendChild(codeVisibilityControl.element);
 
     topRow.appendChild(
       makeMaximizeButton({
