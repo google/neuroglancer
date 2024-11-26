@@ -268,7 +268,7 @@ export function parseOmeMetadata(
   zarrVersion: number,
 ): OmeMultiscaleMetadata | undefined {
   const ome = attrs.ome;
-  const multiscales = (ome == undefined) ? attrs.multiscales : ome.multiscales; // >0.4
+  const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
@@ -282,7 +282,7 @@ export function parseOmeMetadata(
       return undefined;
     }
 
-    const version = (ome == undefined) ? multiscale.version : ome.version; // >0.4
+    const version = ome == undefined ? multiscale.version : ome.version; // >0.4
 
     if (version === undefined) return undefined;
     if (!SUPPORTED_OME_MULTISCALE_VERSIONS.has(version)) {
