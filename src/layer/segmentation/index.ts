@@ -1262,24 +1262,28 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
-  observeLayerColor(callback: ((value: any) => void)) {
+  observeLayerColor(callback: (value: any) => void) {
     const disposer = super.observeLayerColor(callback);
-    const subDisposer = observeWatchable(callback, this.displayState.segmentDefaultColor);
+    const subDisposer = observeWatchable(
+      callback,
+      this.displayState.segmentDefaultColor,
+    );
     return () => {
       disposer();
       subDisposer();
-    }
+    };
   }
 
-  get automaticLayerBarColor () {
+  get automaticLayerBarColor() {
     if (this.displayState.segmentDefaultColor.value) {
       const [r, g, b] = this.displayState.segmentDefaultColor.value;
       return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;
     }
 
-    const visibleSegments = this.displayState.segmentationGroupState.value.visibleSegments;
-    if (visibleSegments.size === 1) {
-      console.log("Only 1 segment visible and random seed")
+    const visibleSegments =
+      this.displayState.segmentationGroupState.value.visibleSegments;
+    if (visibleSegments.value.size === 1) {
+      console.log("Only 1 segment visible and random seed");
     }
 
     return undefined;

@@ -110,7 +110,7 @@ class LayerWidget extends RefCounted {
     layerColorElement.className = "neuroglancer-layer-color-value";
 
     const updateLayerColorWidget = () => {
-      if (! this.layer.layerBarColorSyncEnabled) {
+      if (!this.layer.layerBarColorSyncEnabled) {
         layerColorElement.style.background = "none";
         layerColorElement.style.backgroundColor = "";
         return;
@@ -120,7 +120,8 @@ class LayerWidget extends RefCounted {
         layerColorElement.style.background = "none";
         layerColorElement.style.backgroundColor = color;
       } else {
-        layerColorElement.style.background = "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
+        layerColorElement.style.background =
+          "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
       }
     };
     let syncColorsElement = null;
@@ -131,23 +132,27 @@ class LayerWidget extends RefCounted {
         enableTitle: "Enable color sync",
         disableTitle: "Disable color sync",
       });
-      syncColorsElement = element
+      syncColorsElement = element;
       syncColorsElement.addEventListener("click", (event: MouseEvent) => {
         updateLayerColorWidget();
         event.stopPropagation();
       });
 
-      this.registerDisposer(layer.observeLayerColor(() => {
-        updateLayerColorWidget();
-      }));
+      this.registerDisposer(
+        layer.observeLayerColor(() => {
+          updateLayerColorWidget();
+        }),
+      );
 
-      this.registerDisposer(layer.layerChanged.add(() => {
-        if (!this.layer.visible) {
-          layerColorElement.classList.add("cross");
-        } else {
-          layerColorElement.classList.remove("cross");
-        }
-      }));
+      this.registerDisposer(
+        layer.layerChanged.add(() => {
+          if (!this.layer.visible) {
+            layerColorElement.classList.add("cross");
+          } else {
+            layerColorElement.classList.remove("cross");
+          }
+        }),
+      );
     }
 
     // Compose the layer's title bar

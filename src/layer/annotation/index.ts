@@ -45,7 +45,10 @@ import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import type { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
-import { makeCachedLazyDerivedWatchableValue, observeWatchable } from "#src/trackable_value.js";
+import {
+  makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
+} from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -713,16 +716,19 @@ export class AnnotationUserLayer extends Base {
     return x;
   }
 
-  observeLayerColor(callback: ((value: any) => void)) {
+  observeLayerColor(callback: (value: any) => void) {
     const disposer = super.observeLayerColor(callback);
-    const subDisposer = observeWatchable(callback, this.annotationDisplayState.color);
+    const subDisposer = observeWatchable(
+      callback,
+      this.annotationDisplayState.color,
+    );
     return () => {
       disposer();
       subDisposer();
-    }
+    };
   }
 
-  get automaticLayerBarColor () {
+  get automaticLayerBarColor() {
     if (this.annotationDisplayState.color) {
       const [r, g, b] = this.annotationDisplayState.color.value;
       return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;

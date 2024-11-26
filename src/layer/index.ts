@@ -70,7 +70,11 @@ import type {
   WatchableSet,
   WatchableValueInterface,
 } from "#src/trackable_value.js";
-import { observeWatchable, registerNested, WatchableValue } from "#src/trackable_value.js";
+import {
+  observeWatchable,
+  registerNested,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import {
   SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION,
   UserLayerSidePanelsState,
@@ -198,17 +202,17 @@ export class UserLayer extends RefCounted {
 
   layerBarUserDefinedColor = new TrackableOptionalRGB();
 
-  observeLayerColor(callback: ((value: any) => void)): () => void {
+  observeLayerColor(callback: (value: any) => void): () => void {
     return observeWatchable(callback, this.layerBarUserDefinedColor);
   }
 
   get automaticLayerBarColor(): string | undefined {
-    return ""
+    return "";
   }
 
   get layerBarColor(): string | undefined {
     if (this.layerBarUserDefinedColor.value) {
-      return this.layerBarUserDefinedColor.toJSON()
+      return this.layerBarUserDefinedColor.toJSON();
     }
     return this.automaticLayerBarColor;
   }
@@ -764,15 +768,20 @@ export class ManagedUserLayer extends RefCounted {
     const userLayer = this.layer;
     return (
       userLayer !== null &&
-      (userLayer.constructor as typeof UserLayer).supportsLayerBarColorSyncOption &&
+      (userLayer.constructor as typeof UserLayer)
+        .supportsLayerBarColorSyncOption &&
       userLayer.layerBarColorSync.value
     );
   }
 
   set layerBarColorSyncEnabled(value: boolean) {
-    const userLayer = this.layer
-    if (userLayer !== null && (userLayer.constructor as typeof UserLayer).supportsLayerBarColorSyncOption) {
-      userLayer.layerBarColorSync.value = value
+    const userLayer = this.layer;
+    if (
+      userLayer !== null &&
+      (userLayer.constructor as typeof UserLayer)
+        .supportsLayerBarColorSyncOption
+    ) {
+      userLayer.layerBarColorSync.value = value;
     }
   }
 
@@ -786,7 +795,7 @@ export class ManagedUserLayer extends RefCounted {
     return userLayer?.layerBarColorSync;
   }
 
-  observeLayerColor(callback: ((value: any) => void)): () => void {
+  observeLayerColor(callback: (value: any) => void): () => void {
     const userLayer = this.layer;
     if (userLayer !== null) {
       return userLayer.observeLayerColor(callback);
@@ -798,7 +807,8 @@ export class ManagedUserLayer extends RefCounted {
     const userLayer = this.layer;
     return (
       userLayer !== null &&
-      (userLayer.constructor as typeof UserLayer).supportsLayerBarColorSyncOption
+      (userLayer.constructor as typeof UserLayer)
+        .supportsLayerBarColorSyncOption
     );
   }
 
