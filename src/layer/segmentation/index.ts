@@ -1264,13 +1264,18 @@ export class SegmentationUserLayer extends Base {
 
   observeLayerColor(callback: (value: any) => void) {
     const disposer = super.observeLayerColor(callback);
-    const subDisposer = observeWatchable(
+    const defaultColorDisposer = observeWatchable(
       callback,
       this.displayState.segmentDefaultColor,
     );
+    const visibleSegmentDisposer =
+      this.displayState.segmentationGroupState.value.visibleSegments.changed.add(
+        callback,
+      );
     return () => {
       disposer();
-      subDisposer();
+      defaultColorDisposer();
+      visibleSegmentDisposer();
     };
   }
 
@@ -1282,8 +1287,13 @@ export class SegmentationUserLayer extends Base {
 
     const visibleSegments =
       this.displayState.segmentationGroupState.value.visibleSegments;
-    if (visibleSegments.value.size === 1) {
-      console.log("Only 1 segment visible and random seed");
+    if (visibleSegments.size === 1) {
+      const id = [...visibleSegments][0];
+      const color =
+        this.displayState.segmentationColorGroupState.value.segmentColorHash.computeCssColor(
+          id,
+        );
+      return color;
     }
 
     return undefined;
