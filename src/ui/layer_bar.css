@@ -159,7 +159,7 @@
   width: 135%;
   height: 135%;
   background: conic-gradient(from 0deg, hsl(0, 100%, 50%), hsl(60, 100%, 50%), hsl(120, 100%, 50%), hsl(180, 100%, 50%), hsl(240, 100%, 50%), hsl(300, 100%, 50%), hsl(360, 100%, 50%));
-  filter: blur(2.7px);
+  filter: blur(1px);
   transform: scale(1.35);
 }
 
