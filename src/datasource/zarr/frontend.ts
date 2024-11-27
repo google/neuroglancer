@@ -501,7 +501,11 @@ export class ZarrDataSource extends DataSourceProvider {
         let multiscaleInfo: ZarrMultiscaleInfo;
         if (metadata.nodeType === "group") {
           // May be an OME-zarr multiscale dataset.
-          const multiscale = parseOmeMetadata(url, metadata.userAttributes);
+          const multiscale = parseOmeMetadata(
+            url,
+            metadata.userAttributes,
+            metadata.zarrVersion,
+          );
           if (multiscale === undefined) {
             throw new Error("Neithre array nor OME multiscale metadata found");
           }
