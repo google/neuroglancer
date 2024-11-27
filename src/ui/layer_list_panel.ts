@@ -130,7 +130,7 @@ class LayerColorWidget extends RefCounted {
 
     this.registerDisposer(
       this.layer.layerChanged.add(() => {
-        if (!this.layer.visible) {
+        if (!this.layer.visible && this.layer.layerBarColorSync!.value) {
           element.classList.add("cross");
         } else {
           element.classList.remove("cross");

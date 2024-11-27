@@ -135,6 +135,7 @@ class LayerWidget extends RefCounted {
       syncColorsElement = element;
       syncColorsElement.addEventListener("click", (event: MouseEvent) => {
         updateLayerColorWidget();
+        this.layer.layerChanged.dispatch();
         event.stopPropagation();
       });
 
@@ -146,7 +147,7 @@ class LayerWidget extends RefCounted {
 
       this.registerDisposer(
         layer.layerChanged.add(() => {
-          if (!this.layer.visible) {
+          if (!this.layer.visible && this.layer.layerBarColorSync!.value) {
             layerColorElement.classList.add("cross");
           } else {
             layerColorElement.classList.remove("cross");

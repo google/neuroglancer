@@ -1262,7 +1262,7 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
-  observeLayerColor(callback: (value: any) => void) {
+  observeLayerColor(callback: () => void) {
     const disposer = super.observeLayerColor(callback);
     const defaultColorDisposer = observeWatchable(
       callback,

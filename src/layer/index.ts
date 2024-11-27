@@ -203,8 +203,17 @@ export class UserLayer extends RefCounted {
 
   layerBarUserDefinedColor = new TrackableOptionalRGB();
 
-  observeLayerColor(callback: (value: any) => void): () => void {
-    return observeWatchable(callback, this.layerBarUserDefinedColor);
+  observeLayerColor(callback: () => void): () => void {
+    const userDefinedColorDisposer = observeWatchable(
+      callback,
+      this.layerBarUserDefinedColor,
+    );
+    const layerBarColorSyncDisposer =
+      this.layerBarColorSync.changed.add(callback);
+    return () => {
+      userDefinedColorDisposer();
+      layerBarColorSyncDisposer();
+    };
   }
 
   get automaticLayerBarColor(): string | undefined {
@@ -397,6 +406,7 @@ export class UserLayer extends RefCounted {
     this.localPosition.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.layersChanged.dispatch);
+    this.layerBarColorSync.changed.add(this.specificationChanged.dispatch);
     this.layerBarColorSync.changed.add(this.layersChanged.dispatch);
     this.dataSourcesChanged.add(this.specificationChanged.dispatch);
     this.dataSourcesChanged.add(() => this.updateDataSubsourceActivations());
@@ -805,7 +815,7 @@ export class ManagedUserLayer extends RefCounted {
     return userLayer?.layerBarColorSync;
   }
 
-  observeLayerColor(callback: (value: any) => void): () => void {
+  observeLayerColor(callback: () => void): () => void {
     const userLayer = this.layer;
     if (userLayer !== null) {
       return userLayer.observeLayerColor(callback);
