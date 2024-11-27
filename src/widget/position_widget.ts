@@ -835,7 +835,7 @@ export class PositionWidget extends RefCounted {
         coordinateSpace: { value: coordinateSpace },
       },
     } = this;
-    if (!coordinateSpace.valid) {
+    if (!coordinateSpace.valid && this.singleDimensionId === undefined) {
       coordinateSpace = emptyInvalidCoordinateSpace;
     }
     this.coordinateSpace = coordinateSpace;
