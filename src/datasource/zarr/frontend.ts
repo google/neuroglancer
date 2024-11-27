@@ -504,7 +504,8 @@ export class ZarrDataSource extends DataSourceProvider {
           const multiscale = parseOmeMetadata(
             url,
             metadata.userAttributes,
-            metadata.zarrVersion);
+            metadata.zarrVersion,
+          );
           if (multiscale === undefined) {
             throw new Error("Neithre array nor OME multiscale metadata found");
           }
