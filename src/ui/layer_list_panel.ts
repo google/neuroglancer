@@ -122,8 +122,7 @@ class LayerColorWidget extends RefCounted {
           element.style.background = "none";
           element.style.backgroundColor = color;
         } else {
-          element.style.background =
-            "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
+          element.className = "neuroglancer-layer-list-panel-rainbow-color-value"
         }
       }),
     );

@@ -48,9 +48,30 @@
 .neuroglancer-layer-list-panel-color-value {
   position: relative;
   border-radius: 50%;
-  height: 12px;
-  width: 12px;
-  margin: 3px;
+  height: 10px;
+  width: 10px;
+  margin: 5px;
+}
+
+.neuroglancer-layer-list-panel-rainbow-color-value {
+  position: relative;
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+  margin: 5px;
+  overflow: hidden;
+}
+
+.neuroglancer-layer-list-panel-rainbow-color-value::before {
+  content: '';
+  position: absolute;
+  top: -17.5%;
+  left: -17.5%;
+  width: 135%;
+  height: 135%;
+  background: conic-gradient(from 0deg, hsl(0, 100%, 50%), hsl(60, 100%, 50%), hsl(120, 100%, 50%), hsl(180, 100%, 50%), hsl(240, 100%, 50%), hsl(300, 100%, 50%), hsl(360, 100%, 50%));
+  filter: blur(1px);
+  transform: scale(1.35);
 }
 
 .neuroglancer-layer-list-panel-color-value.cross::before {
