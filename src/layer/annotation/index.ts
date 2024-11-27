@@ -716,7 +716,7 @@ export class AnnotationUserLayer extends Base {
     return x;
   }
 
-  observeLayerColor(callback: (value: any) => void) {
+  observeLayerColor(callback: () => void) {
     const disposer = super.observeLayerColor(callback);
     const subDisposer = observeWatchable(
       callback,
