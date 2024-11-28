@@ -124,8 +124,8 @@ packageJson.imports = imports;
 
 packageJson.exports = {
   ".": "./src/main_module.ts",
-  "./*.js": "./src/*.ts",
-  "./*": "./src/*",
+  "./unstable/*.js": "./src/*.ts",
+  "./unstable/*": "./src/*",
 };
 
 const tempPackageJsonPath = packageJsonPath + ".tmp";

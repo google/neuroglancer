@@ -15,7 +15,6 @@
  */
 
 import { decodeBlosc } from "#src/async_computation/decode_blosc_request.js";
-import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
 import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
@@ -29,6 +28,7 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
 import { Endianness } from "#src/util/endian.js";
+import { decodeGzip } from "#src/util/gzip.js";
 import {
   isNotFoundError,
   responseArrayBuffer,
@@ -62,12 +62,7 @@ async function decodeChunk(
   let buffer = new Uint8Array(response, offset);
   switch (encoding) {
     case VolumeChunkEncoding.GZIP:
-      buffer = await requestAsyncComputation(
-        decodeGzip,
-        cancellationToken,
-        [buffer.buffer],
-        buffer,
-      );
+      buffer = new Uint8Array(await decodeGzip(buffer));
       break;
     case VolumeChunkEncoding.BLOSC:
       buffer = await requestAsyncComputation(
