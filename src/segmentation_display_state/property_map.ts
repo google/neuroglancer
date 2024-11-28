@@ -697,7 +697,7 @@ export function parseSegmentQuery(
       continue;
     }
     const constraintMatch = word.match(
-      /^([a-zA-Z][a-zA-Z0-9_]*)(<|<=|=|>=|>)([0-9.].*)$/,
+      /^([a-zA-Z][a-zA-Z0-9_]*)(<|<=|=|>=|>)(-?[0-9.].*)$/,
     );
     if (constraintMatch !== null) {
       let fieldId = constraintMatch[1].toLowerCase();
