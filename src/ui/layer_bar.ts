@@ -107,7 +107,12 @@ class LayerWidget extends RefCounted {
       event.stopPropagation();
     });
 
+    const layerColorElementWrapper = document.createElement("div");
+    layerColorElementWrapper.className = "neuroglancer-layer-color-value-wrapper"
+
     layerColorElement.className = "neuroglancer-layer-color-value";
+
+    layerColorElementWrapper.appendChild(layerColorElement);
 
     const updateLayerColorWidget = () => {
       if (!this.layer.layerBarColorSyncEnabled) {
@@ -148,9 +153,9 @@ class LayerWidget extends RefCounted {
       this.registerDisposer(
         layer.layerChanged.add(() => {
           if (!this.layer.visible && this.layer.layerBarColorSync!.value) {
-            layerColorElement.classList.add("cross");
+            layerColorElementWrapper.classList.add("cross");
           } else {
-            layerColorElement.classList.remove("cross");
+            layerColorElementWrapper.classList.remove("cross");
           }
         }),
       );
@@ -166,7 +171,7 @@ class LayerWidget extends RefCounted {
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
-    element.appendChild(layerColorElement);
+    element.appendChild(layerColorElementWrapper);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
       new PositionWidget(
