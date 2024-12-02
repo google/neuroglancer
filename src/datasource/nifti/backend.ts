@@ -16,8 +16,6 @@
 
 import type { NIFTI2 } from "nifti-reader-js";
 import { isCompressed, NIFTI1, readHeader, readImage } from "nifti-reader-js";
-import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
-import { requestAsyncComputation } from "#src/async_computation/request.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { ChunkPriorityTier } from "#src/chunk_manager/base.js";
@@ -44,6 +42,7 @@ import {
   translationRotationScaleZReflectionToMat4,
   vec3,
 } from "#src/util/geom.js";
+import { decodeGzip } from "#src/util/gzip.js";
 import * as matrix from "#src/util/matrix.js";
 import type {
   SpecialProtocolCredentials,
@@ -59,17 +58,10 @@ export class NiftiFileData {
 
 async function decodeNiftiFile(
   buffer: ArrayBuffer,
-  cancellationToken: CancellationToken,
+  _cancellationToken: CancellationToken,
 ) {
   if (isCompressed(buffer)) {
-    buffer = (
-      await requestAsyncComputation(
-        decodeGzip,
-        cancellationToken,
-        [buffer],
-        new Uint8Array(buffer),
-      )
-    ).buffer;
+    buffer = await decodeGzip(buffer);
   }
   const data = new NiftiFileData();
   data.uncompressedData = buffer;

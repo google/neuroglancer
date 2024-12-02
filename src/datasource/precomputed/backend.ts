@@ -30,8 +30,6 @@ import {
   annotationTypeHandlers,
   annotationTypes,
 } from "#src/annotation/index.js";
-import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
-import { requestAsyncComputation } from "#src/async_computation/request.js";
 import type { Chunk, ChunkManager } from "#src/chunk_manager/backend.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
@@ -84,6 +82,7 @@ import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { convertEndian32, Endianness } from "#src/util/endian.js";
 import { vec3 } from "#src/util/geom.js";
+import { decodeGzip } from "#src/util/gzip.js";
 import { murmurHash3_x86_128Hash64Bits } from "#src/util/hash.js";
 import {
   isNotFoundError,
@@ -219,14 +218,7 @@ function getMinishardIndexDataSource(
           cancellationToken,
         );
         if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
-          minishardIndexResponse = (
-            await requestAsyncComputation(
-              decodeGzip,
-              cancellationToken,
-              [minishardIndexResponse],
-              new Uint8Array(minishardIndexResponse),
-            )
-          ).buffer;
+          minishardIndexResponse = await decodeGzip(minishardIndexResponse);
         }
         if (minishardIndexResponse.byteLength % 24 !== 0) {
           throw new Error(
@@ -352,14 +344,7 @@ async function getShardedData(
     cancellationToken,
   );
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
-    data = (
-      await requestAsyncComputation(
-        decodeGzip,
-        cancellationToken,
-        [data],
-        new Uint8Array(data),
-      )
-    ).buffer;
+    data = await decodeGzip(data);
   }
   return {
     data,

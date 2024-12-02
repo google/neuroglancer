@@ -14,27 +14,22 @@
  * limitations under the License.
  */
 
-import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
-import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import type { Configuration } from "#src/datasource/zarr/codec/gzip/resolve.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
+import { decodeGzip } from "#src/util/gzip.js";
 
 registerCodec({
   name: "gzip",
   kind: CodecKind.bytesToBytes,
-  decode(
+  async decode(
     configuration: Configuration,
     encoded: Uint8Array,
     cancellationToken: CancellationToken,
   ): Promise<Uint8Array> {
     configuration;
-    return requestAsyncComputation(
-      decodeGzip,
-      cancellationToken,
-      [encoded.buffer],
-      encoded,
-    );
+    cancellationToken;
+    return new Uint8Array(await decodeGzip(encoded));
   },
 });

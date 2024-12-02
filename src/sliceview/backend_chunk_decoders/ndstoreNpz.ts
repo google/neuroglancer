@@ -22,13 +22,12 @@
  * (each corresponding to a different variable) in NPY binary format.
  */
 
-import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
-import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import { DataType } from "#src/sliceview/base.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
+import { decodeGzip } from "#src/util/gzip.js";
 import { parseNpy } from "#src/util/npy.js";
 
 export async function decodeNdstoreNpzChunk(
@@ -36,14 +35,7 @@ export async function decodeNdstoreNpzChunk(
   cancellationToken: CancellationToken,
   response: ArrayBuffer,
 ) {
-  const parseResult = parseNpy(
-    await requestAsyncComputation(
-      decodeGzip,
-      cancellationToken,
-      [response],
-      new Uint8Array(response),
-    ),
-  );
+  const parseResult = parseNpy(new Uint8Array(await decodeGzip(response)));
   const chunkDataSize = chunk.chunkDataSize!;
   const source = chunk.source!;
   const { shape } = parseResult;

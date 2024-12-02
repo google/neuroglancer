@@ -44,7 +44,6 @@
     "@types/gl-matrix": "^2.4.5",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^20.14.12",
-    "@types/pako": "^2.0.3",
     "@types/yargs": "^17.0.32",
     "@typescript-eslint/eslint-plugin": "^7.17.0",
     "@typescript-eslint/parser": "^7.17.0",
@@ -83,8 +82,7 @@
     "ikonate": "github:mikolajdobrucki/ikonate#a86b4107c6ec717e7877f880a930d1ccf0b59d89",
     "lodash-es": "^4.17.21",
     "nifti-reader-js": "^0.6.8",
-    "numcodecs": "^0.3.2",
-    "pako": "^2.1.0"
+    "numcodecs": "^0.3.2"
   },
   "overrides": {
     "@puppeteer/browsers": ">=2"
@@ -264,12 +262,6 @@
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
       "neuroglancer/datasource/nifti:disabled": "./src/datasource/nifti/backend.ts",
       "default": "./src/datasource/nifti/backend.ts"
-    },
-    "#datasource/nifti/async_computation": {
-      "neuroglancer/datasource/nifti:enabled": "./src/datasource/nifti/async_computation.ts",
-      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/nifti:disabled": "./src/datasource/nifti/async_computation.ts",
-      "default": "./src/datasource/nifti/async_computation.ts"
     },
     "#datasource/nifti/register_default": {
       "neuroglancer/datasource/nifti:enabled": "./src/datasource/nifti/register_default.ts",
