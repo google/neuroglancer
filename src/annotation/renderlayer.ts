@@ -474,16 +474,18 @@ function AnnotationRenderLayer<
     private renderHelpers: AnnotationRenderHelper[] = [];
     private tempChunkPosition: Float32Array;
 
-    handleRankChanged() {
+    handleRankChanged(force = false) {
       const { rank } = this.base.source;
-      if (rank === this.curRank) return;
+      if (!force && rank === this.curRank) return;
       this.curRank = rank;
       this.tempChunkPosition = new Float32Array(rank);
       const { renderHelpers, gl } = this;
       for (const oldHelper of renderHelpers) {
         oldHelper.dispose();
       }
-      const { properties } = this.base.source;
+      const {
+        properties: { value: properties },
+      } = this.base.source;
       const { displayState } = this.base.state;
       for (const annotationType of annotationTypes) {
         const handler = getAnnotationTypeRenderHandler(annotationType);
@@ -522,6 +524,12 @@ function AnnotationRenderLayer<
       });
       this.role = base.state.role;
       this.registerDisposer(base.redrawNeeded.add(this.redrawNeeded.dispatch));
+      this.registerDisposer(
+        base.source.properties.changed.add(() => {
+          // todo, does it make sense to run this whole function? Or should we pass the watchable value to renderHelperConstructor?
+          this.handleRankChanged(true);
+        }),
+      );
       this.handleRankChanged();
       this.registerDisposer(
         this.base.state.displayState.shaderControls.histogramSpecifications.producerVisibility.add(
@@ -780,7 +788,9 @@ function AnnotationRenderLayer<
     transformPickedValue(pickState: PickState) {
       const { pickedAnnotationBuffer } = pickState;
       if (pickedAnnotationBuffer === undefined) return undefined;
-      const { properties } = this.base.source;
+      const {
+        properties: { value: properties },
+      } = this.base.source;
       if (properties.length === 0) return undefined;
       const {
         pickedAnnotationBufferBaseOffset,

@@ -99,7 +99,7 @@ import {
 } from "#src/util/json.js";
 import { MessageList } from "#src/util/message_list.js";
 import type { AnyConstructor } from "#src/util/mixin.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
 import type { SignalBindingUpdater } from "#src/util/signal_binding_updater.js";
 import {
   addSignalBinding,
@@ -191,6 +191,32 @@ export class UserLayer extends RefCounted {
   selectionState: UserLayerSelectionState;
 
   messages = new MessageList();
+
+  layerEventListeners = new Map<string, Signal>();
+
+  dispatchLayerEvent(type: string) {
+    this.layerEventListeners.get(type)?.dispatch();
+  }
+
+  registerLayerEvent(type: string, handler: () => void) {
+    const { layerEventListeners } = this;
+    let existingSignal = layerEventListeners.get(type);
+    if (!existingSignal) {
+      existingSignal = new Signal();
+      layerEventListeners.set(type, existingSignal);
+    }
+    const unregister = existingSignal.add(handler);
+    return () => {
+      const res = unregister();
+      // TODO delete from layerEventListeners if no other handlers attached? currently Signal.handlers is private
+      /*
+      if (existingSignal.handlers.length === 0) {
+        layerEventListeners.delete(type);
+      }
+      */
+      return res;
+    };
+  }
 
   initializeSelectionState(state: this["selectionState"]) {
     state.generation = -1;

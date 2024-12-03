@@ -49,3 +49,63 @@
   content: "()";
   color: #999;
 }
+
+.neuroglancer-annotation-tag-property-type {
+  color: #999;
+}
+
+.neuroglancer-tag-list > div {
+  display: grid;
+}
+
+.neuroglancer-add-tag-control > input,
+.neuroglancer-tag-list-entry > input {
+  background-color: #151515;
+  color: white;
+  font-family: monospace;
+  font-size: medium;
+  border: 2px solid #333;
+  padding: 2px;
+  outline: 0px;
+}
+
+/* copy of .neuroglancer-annotation-layer-view */
+/* layer/annotation/style.css vs src/ui/annotations.css */
+.neuroglancer-tags-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  align-items: stretch;
+}
+
+.neuroglancer-tag-list-outer {
+  position: relative;
+  margin: 0px;
+  padding: 0px;
+  margin-top: 2px;
+  overflow-y: auto;
+  height: 0px;
+  flex: 1;
+  flex-basis: 0px;
+  min-height: 0px;
+}
+
+.neuroglancer-tag-list-entry {
+  display: grid;
+  grid-template-columns: min-content auto min-content;
+  align-items: center;
+  white-space: nowrap;
+  padding: 2px 20px 2px 0;
+}
+
+.neuroglancer-tag-list-entry.add .neuroglancer-tool-button {
+  visibility: hidden;
+}
+
+.neuroglancer-tag-list-entry:hover .neuroglancer-tag-list-entry-delete {
+  visibility: visible;
+}
+
+.neuroglancer-tag-list-entry .neuroglancer-tag-list-entry-delete {
+  visibility: hidden;
+}
