@@ -778,8 +778,6 @@ export class ManagedUserLayer extends RefCounted {
 
   setCodeVisible(value: boolean) {
     this.codeVisible.value = value;
-    // if (value === this.codeVisible) return;
-    // this.codeVisible = value;
     this.layerChanged.dispatch();
   }
 
