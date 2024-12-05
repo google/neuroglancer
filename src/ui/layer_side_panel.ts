@@ -250,8 +250,6 @@ class LayerSidePanel extends SidePanel {
         handleTabElement: (id: string, element: HTMLElement) => {
           element.draggable = true;
           element.addEventListener("dragstart", (event: DragEvent) => {
-            event.stopPropagation();
-            event.dataTransfer!.setData("neuroglancer-side-panel", "");
             let message =
               "Drag tab to dock as new panel to the left/right/top/bottom of another panel";
             const hasOtherPanel = panelState.panels.panels.find(
@@ -262,7 +260,7 @@ class LayerSidePanel extends SidePanel {
                 layer.managedLayer.name,
               )} panel`;
             }
-            pushDragStatus(element, "drag", message);
+            pushDragStatus(event, element, "drag", message);
             this.sidePanelManager.startDrag(
               {
                 dropAsNewPanel: (location) => {
@@ -271,6 +269,10 @@ class LayerSidePanel extends SidePanel {
                     ...location,
                   });
                 },
+                getNewPanelDropEffect: () => ({
+                  description: "tab",
+                  dropEffect: "move",
+                }),
                 canDropAsTabs: (target) => {
                   if (
                     target instanceof LayerSidePanel &&
@@ -292,8 +294,7 @@ class LayerSidePanel extends SidePanel {
             );
           });
           element.addEventListener("dragend", (event: DragEvent) => {
-            event;
-            popDragStatus(element, "drag");
+            popDragStatus(event, element, "drag");
             this.sidePanelManager.endDrag();
           });
         },
@@ -352,14 +353,15 @@ class LayerSidePanel extends SidePanel {
       if (!numTabs) return;
       element.classList.add(DRAG_OVER_CLASSNAME);
       pushDragStatus(
+        event,
         element,
         "drop",
         `Move ${numTabs} ${numTabs === 1 ? "tab" : "tabs"} to this panel`,
       );
       event.preventDefault();
     });
-    element.addEventListener("dragleave", () => {
-      popDragStatus(element, "drop");
+    element.addEventListener("dragleave", (event) => {
+      popDragStatus(event, element, "drop");
       element.classList.remove(DRAG_OVER_CLASSNAME);
     });
     element.addEventListener("dragover", (event) => {
@@ -368,7 +370,7 @@ class LayerSidePanel extends SidePanel {
       event.preventDefault();
     });
     element.addEventListener("drop", (event) => {
-      popDragStatus(element, "drop");
+      popDragStatus(event, element, "drop");
       const { dragSource } = this.sidePanelManager;
       if (!dragSource?.canDropAsTabs?.(this)) return;
       element.classList.remove(DRAG_OVER_CLASSNAME);

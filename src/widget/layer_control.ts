@@ -100,6 +100,13 @@ function makeControl<LayerType extends UserLayer>(
     visibility,
   });
   controlElement.classList.add("neuroglancer-layer-control-control");
+
+  // Disable drag and drop on the control itself to avoid interference.
+  controlElement.draggable = true;
+  controlElement.addEventListener("dragstart", (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+  });
   controlContainer.appendChild(controlElement);
   return {
     controlContainer,
@@ -119,7 +126,13 @@ export class LayerControlTool<
   ) {
     super(layer);
   }
+
+  isLoading() {
+    return false;
+  }
+
   activate(activation: ToolActivation<this>) {
+    if (this.isLoading()) return;
     const { options } = this;
     const { layer } = this;
     const { isValid } = options;
@@ -135,6 +148,19 @@ export class LayerControlTool<
     header.appendChild(labelContainer);
     body.appendChild(controlContainer);
     options.activateTool(activation, control);
+  }
+  renderInPalette(context: RefCounted) {
+    if (this.isLoading()) return undefined;
+    const { controlContainer } = makeControl(
+      context,
+      this.layer,
+      this.options,
+      new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
+    );
+    controlContainer.classList.add(
+      "neuroglancer-layer-options-control-container",
+    );
+    return controlContainer;
   }
   get description() {
     const { options } = this;
@@ -162,7 +188,11 @@ function makeLayerControlToOptionsTab<LayerType extends UserLayer>(
   );
   label.prepend(
     context.registerDisposer(
-      new ToolBindingWidget(layer.toolBinder, options.toolJson),
+      new ToolBindingWidget(
+        layer.toolBinder,
+        options.toolJson,
+        controlContainer,
+      ),
     ).element,
   );
   return controlContainer;
@@ -202,5 +232,15 @@ export function registerLayerControl<LayerType extends UserLayer>(
     layerType,
     toolId,
     (layer) => new LayerControlTool<LayerType>(layer, options),
+    (layer, onChange) => {
+      const isValid = options.isValid?.(layer);
+      if (isValid !== undefined && onChange !== undefined) {
+        isValid.changed.addOnce(onChange);
+      }
+      if (options.isValid?.(layer).value === false) {
+        return [];
+      }
+      return [{ type: toolId }];
+    },
   );
 }
