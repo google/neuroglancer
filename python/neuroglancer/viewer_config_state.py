@@ -106,6 +106,9 @@ class ScreenshotReply(JsonObjectWrapper):
     height = wrapped_property("height", int)
     image_type = imageType = wrapped_property("imageType", str)
     depth_data = depthData = wrapped_property("depthData", optional(base64.b64decode))
+    resolution_metadata = resolutionMetadata = wrapped_property(
+        "resolutionMetadata", dict
+    )
 
     @property
     def image_pixels(self):

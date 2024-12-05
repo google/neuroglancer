@@ -405,6 +405,10 @@ export class GlobalToolBinder extends RefCounted {
     this.activeTool_ = undefined;
     activation.dispose();
   }
+
+  public deactivate() {
+    this.debounceDeactivate();
+  }
 }
 
 export class LocalToolBinder<

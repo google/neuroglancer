@@ -218,6 +218,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
+  highestResolutionLoadedVoxelSize: Float32Array | undefined;
   private modeOverride: TrackableVolumeRenderingModeValue;
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
@@ -878,6 +879,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         curPhysicalSpacing = physicalSpacing;
         curOptimalSamples = optimalSamples;
         curHistogramInformation = histogramInformation;
+        this.highestResolutionLoadedVoxelSize =
+          transformedSource.effectiveVoxelSize;
         const chunkLayout = getNormalizedChunkLayout(
           projectionParameters,
           transformedSource.chunkLayout,
