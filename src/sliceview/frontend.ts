@@ -27,6 +27,7 @@ import type {
   DisplayDimensionRenderInfo,
   NavigationState,
 } from "#src/navigation_state.js";
+import type { PerspectiveViewerState } from "#src/perspective_view/panel.js";
 import { updateProjectionParametersFromInverseViewAndProjection } from "#src/projection_parameters.js";
 import type {
   ChunkDisplayTransformParameters,
@@ -60,6 +61,7 @@ import {
   SliceViewProjectionParameters,
 } from "#src/sliceview/base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
@@ -73,6 +75,8 @@ import { getObjectId } from "#src/util/object_id.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
+import type { ParameterizedContextDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
+import { parameterizedContextDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import { TextureHistogramGenerator } from "#src/webgl/empirical_cdf.js";
 import type { TextureBuffer } from "#src/webgl/offscreen.js";
@@ -81,8 +85,7 @@ import {
   FramebufferConfiguration,
   makeTextureBuffers,
 } from "#src/webgl/offscreen.js";
-import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
-import { ShaderBuilder } from "#src/webgl/shader.js";
+import type { ShaderModule, ShaderBuilder } from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
@@ -715,39 +718,81 @@ export class SliceViewChunk extends Chunk {
  */
 export class SliceViewRenderHelper extends RefCounted {
   private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
-  private shader: ShaderProgram;
-
   private textureCoordinateAdjustment = new Float32Array(4);
+  private shaderGetter: ParameterizedContextDependentShaderGetter<
+    { emitter: ShaderModule; isProjection: boolean },
+    boolean
+  >;
 
-  constructor(
-    public gl: GL,
+  defineShader(
+    builder: ShaderBuilder,
+    hideTransparent: boolean,
+    isProjection: boolean,
     emitter: ShaderModule,
   ) {
-    super();
-    const builder = new ShaderBuilder(gl);
     builder.addVarying("vec2", "vTexCoord");
     builder.addUniform("sampler2D", "uSampler");
     builder.addInitializer((shader) => {
-      gl.uniform1i(shader.uniform("uSampler"), 0);
+      this.gl.uniform1i(shader.uniform("uSampler"), 0);
     });
     builder.addUniform("vec4", "uColorFactor");
     builder.addUniform("vec4", "uBackgroundColor");
     builder.addUniform("mat4", "uProjectionMatrix");
     builder.addUniform("vec4", "uTextureCoordinateAdjustment");
     builder.require(emitter);
-    builder.setFragmentMain(`
+    const glsl_fragmentMainStart = `
 vec4 sampledColor = texture(uSampler, vTexCoord);
-if (sampledColor.a == 0.0) {
+if (sampledColor.a == 0.0) {`;
+    let glsl_fragmentMainEnd: string;
+    if (hideTransparent && isProjection) {
+      glsl_fragmentMainEnd = `
+  discard;
+}
+else {
+  emit(sampledColor * uColorFactor, 0u);
+}
+`;
+    } else {
+      glsl_fragmentMainEnd = `
   sampledColor = uBackgroundColor;
 }
 emit(sampledColor * uColorFactor, 0u);
-`);
+`;
+    }
+    builder.setFragmentMain(`${glsl_fragmentMainStart}${glsl_fragmentMainEnd}`);
     builder.addAttribute("vec4", "aVertexPosition");
     builder.setVertexMain(`
 vTexCoord = uTextureCoordinateAdjustment.xy + 0.5 * (aVertexPosition.xy + 1.0) * uTextureCoordinateAdjustment.zw;
 gl_Position = uProjectionMatrix * aVertexPosition;
 `);
-    this.shader = this.registerDisposer(builder.build());
+  }
+
+  constructor(
+    public gl: GL,
+    private emitter: ShaderModule,
+    private viewer: SliceViewerState | PerspectiveViewerState,
+    private isProjection: boolean,
+  ) {
+    super();
+
+    this.shaderGetter = parameterizedContextDependentShaderGetter(
+      this,
+      this.gl,
+      {
+        memoizeKey: "sliceview/SliceViewRenderHelper",
+        parameters: this.viewer.hideCrossSectionBackgroundIn3D,
+        getContextKey: ({ emitter, isProjection }) =>
+          `${getObjectId(emitter)}${isProjection}`,
+        defineShader: (builder, context, hideTransparent) => {
+          this.defineShader(
+            builder,
+            hideTransparent,
+            context.isProjection,
+            context.emitter,
+          );
+        },
+      },
+    );
   }
 
   draw(
@@ -760,11 +805,19 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     xEnd: number,
     yEnd: number,
   ) {
-    const { gl, shader, textureCoordinateAdjustment } = this;
+    const { gl, textureCoordinateAdjustment } = this;
     textureCoordinateAdjustment[0] = xStart;
     textureCoordinateAdjustment[1] = yStart;
     textureCoordinateAdjustment[2] = xEnd - xStart;
     textureCoordinateAdjustment[3] = yEnd - yStart;
+    const shaderResult = this.shaderGetter({
+      emitter: this.emitter,
+      isProjection: this.isProjection,
+    });
+    const shader = shaderResult.shader;
+    if (shader === null) {
+      throw new Error("Shader compilation failed in SliceViewRenderHelper.");
+    }
     shader.bind();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -793,10 +846,15 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  static get(gl: GL, emitter: ShaderModule) {
+  static get(
+    gl: GL,
+    emitter: ShaderModule,
+    viewer: SliceViewerState | PerspectiveViewerState,
+    isProjection: boolean,
+  ) {
     return gl.memoize.get(
       `sliceview/SliceViewRenderHelper:${getObjectId(emitter)}`,
-      () => new SliceViewRenderHelper(gl, emitter),
+      () => new SliceViewRenderHelper(gl, emitter, viewer, isProjection),
     );
   }
 }
