@@ -105,10 +105,15 @@ class LayerVisibilityWidget extends RefCounted {
 
 class LayerColorWidget extends RefCounted {
   element = document.createElement("div");
+  elementWrapper = document.createElement("div");
+
   constructor(public layer: ManagedUserLayer) {
     super();
-    const { element } = this;
+    const { element, elementWrapper } = this;
     element.className = "neuroglancer-layer-list-panel-color-value";
+    elementWrapper.className = "neuroglancer-layer-list-panel-color-value-wrapper"
+
+    elementWrapper.appendChild(element);
 
     this.registerDisposer(
       this.layer.observeLayerColor(() => {
@@ -122,8 +127,7 @@ class LayerColorWidget extends RefCounted {
           element.style.background = "none";
           element.style.backgroundColor = color;
         } else {
-          element.style.background =
-            "radial-gradient(circle, red, orange, yellow, green, blue, indigo, violet)";
+          element.className = "neuroglancer-layer-list-panel-rainbow-color-value"
         }
       }),
     );
@@ -131,9 +135,9 @@ class LayerColorWidget extends RefCounted {
     this.registerDisposer(
       this.layer.layerChanged.add(() => {
         if (!this.layer.visible && this.layer.layerBarColorSync!.value) {
-          element.classList.add("cross");
+          elementWrapper.classList.add("cross");
         } else {
-          element.classList.remove("cross");
+          elementWrapper.classList.remove("cross");
         }
       }),
     );
@@ -205,7 +209,7 @@ class LayerListItem extends RefCounted {
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
     );
     element.appendChild(
-      this.registerDisposer(new LayerColorWidget(layer)).element,
+      this.registerDisposer(new LayerColorWidget(layer)).elementWrapper,
     );
     element.appendChild(
       this.registerDisposer(new LayerNameWidget(layer)).element,
