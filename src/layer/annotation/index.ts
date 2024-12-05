@@ -797,8 +797,8 @@ class RenderingOptionsTab extends Tab {
       }, managedLayer.codeVisible),
     );
     const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
-      enableTitle: "Hide code",
-      disableTitle: "Show code",
+      enableTitle: "Show code",
+      disableTitle: "Hide code",
       backgroundScheme: "dark",
       svg: svgCode,
     });

@@ -2030,12 +2030,6 @@ function initializeLayerFromSpecNoRestoreState(
   managedLayer.codeVisible.restoreState(
     verifyOptionalObjectProperty(spec, "codeVisible", verifyBoolean, true),
   );
-  // managedLayer.codeVisible.value = verifyOptionalObjectProperty(
-  //   spec,
-  //   "codeVisible",
-  //   verifyBoolean,
-  //   true,
-  // );
   const layerConstructor = layerTypes.get(layerType) || NewUserLayer;
   managedLayer.layer = new layerConstructor(managedLayer);
   return spec;
