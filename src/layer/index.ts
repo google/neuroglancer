@@ -198,14 +198,10 @@ export class UserLayer extends RefCounted {
 
   messages = new MessageList();
 
-
   layerBarUserDefinedColor = new TrackableOptionalRGB();
 
   observeLayerColor(callback: () => void): () => void {
-    return observeWatchable(
-      callback,
-      this.layerBarUserDefinedColor,
-    );
+    return observeWatchable(callback, this.layerBarUserDefinedColor);
   }
 
   get automaticLayerBarColor(): string | undefined {

@@ -21,7 +21,10 @@ import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
-import { observeWatchable, type WatchableValueInterface } from "#src/trackable_value.js";
+import {
+  observeWatchable,
+  type WatchableValueInterface,
+} from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -107,7 +110,8 @@ class LayerWidget extends RefCounted {
     });
 
     const layerColorElementWrapper = document.createElement("div");
-    layerColorElementWrapper.className = "neuroglancer-layer-color-value-wrapper"
+    layerColorElementWrapper.className =
+      "neuroglancer-layer-color-value-wrapper";
     layerColorElement.className = "neuroglancer-layer-color-value";
     layerColorElementWrapper.appendChild(layerColorElement);
 
@@ -116,10 +120,9 @@ class LayerWidget extends RefCounted {
         const color = this.layer.layerBarColor;
         if (color) {
           layerColorElement.style.backgroundColor = color;
-          layerColorElement.classList.remove("rainbow")
+          layerColorElement.classList.remove("rainbow");
         } else {
-          layerColorElement.classList.add("rainbow")
-
+          layerColorElement.classList.add("rainbow");
         }
       };
       this.registerDisposer(
@@ -129,9 +132,11 @@ class LayerWidget extends RefCounted {
       );
       this.registerDisposer(
         observeWatchable((layerColorEnabled) => {
-          layerColorElementWrapper.style.display = layerColorEnabled ? "block" : "none";
-        }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget)
-      )
+          layerColorElementWrapper.style.display = layerColorEnabled
+            ? "block"
+            : "none";
+        }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget),
+      );
       this.registerDisposer(
         layer.layerChanged.add(() => {
           if (!this.layer.visible) {
@@ -143,7 +148,7 @@ class LayerWidget extends RefCounted {
       );
     } else {
       // If the layer do not support color sync (no color to deal with)
-      layerColorElement.classList.add("unsupported")
+      layerColorElement.classList.add("unsupported");
     }
 
     // Compose the layer's title bar

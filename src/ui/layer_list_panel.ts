@@ -108,11 +108,15 @@ class LayerColorWidget extends RefCounted {
   element = document.createElement("div");
   elementWrapper = document.createElement("div");
 
-  constructor(public panel: LayerListPanel, public layer: ManagedUserLayer) {
+  constructor(
+    public panel: LayerListPanel,
+    public layer: ManagedUserLayer,
+  ) {
     super();
     const { element, elementWrapper } = this;
     element.className = "neuroglancer-layer-list-panel-color-value";
-    elementWrapper.className = "neuroglancer-layer-list-panel-color-value-wrapper"
+    elementWrapper.className =
+      "neuroglancer-layer-list-panel-color-value-wrapper";
     elementWrapper.appendChild(element);
 
     if (this.layer.supportsLayerBarColorSyncOption) {
@@ -120,10 +124,9 @@ class LayerColorWidget extends RefCounted {
         const color = this.layer.layerBarColor;
         if (color) {
           element.style.backgroundColor = color;
-          element.classList.remove("rainbow")
+          element.classList.remove("rainbow");
         } else {
-          element.classList.add("rainbow")
-
+          element.classList.add("rainbow");
         }
       };
       this.registerDisposer(
@@ -131,12 +134,12 @@ class LayerColorWidget extends RefCounted {
           updateLayerColorWidget();
         }),
       );
-      panel.sidePanelManager.viewerState.enableLayerColorWidget
+      panel.sidePanelManager.viewerState.enableLayerColorWidget;
       this.registerDisposer(
         observeWatchable((layerColorEnabled) => {
           elementWrapper.style.display = layerColorEnabled ? "block" : "none";
-        }, panel.sidePanelManager.viewerState.enableLayerColorWidget)
-      )
+        }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
+      );
       this.registerDisposer(
         layer.layerChanged.add(() => {
           if (!this.layer.visible) {
@@ -148,7 +151,7 @@ class LayerColorWidget extends RefCounted {
       );
     } else {
       // If the layer do not support color sync (no color to deal with)
-      element.classList.add("unsupported")
+      element.classList.add("unsupported");
     }
   }
 }

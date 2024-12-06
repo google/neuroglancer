@@ -226,7 +226,7 @@ export class SidePanelManager extends RefCounted {
     public visibility = new WatchableVisibilityPriority(
       WatchableVisibilityPriority.VISIBLE,
     ),
-    public viewerState: ViewerState
+    public viewerState: ViewerState,
   ) {
     super();
     const { element, centerColumn } = this;

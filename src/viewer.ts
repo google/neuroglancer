@@ -914,7 +914,12 @@ export class Viewer extends RefCounted implements ViewerState {
       new RootLayoutContainer(this, "4panel"),
     );
     this.sidePanelManager = this.registerDisposer(
-      new SidePanelManager(this.display, this.layout.element, this.visibility, this),
+      new SidePanelManager(
+        this.display,
+        this.layout.element,
+        this.visibility,
+        this,
+      ),
     );
     this.registerDisposer(
       this.sidePanelManager.registerPanel({
