@@ -118,11 +118,12 @@ class LayerColorWidget extends RefCounted {
     this.registerDisposer(
       this.layer.observeLayerColor(() => {
         if (!this.layer.layerBarColorSyncEnabled) {
-          element.style.background = "none";
           element.style.backgroundColor = "";
+          elementWrapper.style.display = "none";
           return;
         }
         const color = this.layer.layerBarColor;
+        elementWrapper.style.display = "block";
         if (color) {
           element.style.backgroundColor = color;
           element.classList.remove("rainbow")

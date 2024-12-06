@@ -116,11 +116,12 @@ class LayerWidget extends RefCounted {
 
     const updateLayerColorWidget = () => {
       if (!this.layer.layerBarColorSyncEnabled) {
-        layerColorElement.style.background = "none";
         layerColorElement.style.backgroundColor = "";
+        layerColorElementWrapper.style.display = "none";
         return;
       }
       const color = this.layer.layerBarColor;
+      layerColorElementWrapper.style.display = "block";
       if (color) {
         layerColorElement.style.backgroundColor = color;
         layerColorElement.classList.remove("rainbow")
@@ -163,6 +164,7 @@ class LayerWidget extends RefCounted {
 
     // Compose the layer's title bar
     element.appendChild(layerNumberElement);
+    element.appendChild(layerColorElementWrapper);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
     if (this.layer.supportsLayerBarColorSyncOption) {
@@ -171,7 +173,6 @@ class LayerWidget extends RefCounted {
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
-    element.appendChild(layerColorElementWrapper);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
       new PositionWidget(
