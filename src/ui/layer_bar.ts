@@ -122,10 +122,10 @@ class LayerWidget extends RefCounted {
       }
       const color = this.layer.layerBarColor;
       if (color) {
-        layerColorElement.style.background = "none";
         layerColorElement.style.backgroundColor = color;
+        layerColorElement.classList.remove("rainbow")
       } else {
-        layerColorElement.className = "neuroglancer-layer-rainbow-color-value"
+        layerColorElement.classList.add("rainbow")
 
       }
     };

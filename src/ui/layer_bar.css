@@ -148,7 +148,7 @@
   width: 10px;
 }
 
-.neuroglancer-layer-rainbow-color-value {
+.neuroglancer-layer-color-value.rainbow {
   position: relative;
   border-radius: 50%;
   height: 10px;
@@ -156,7 +156,7 @@
   overflow: hidden;
 }
 
-.neuroglancer-layer-rainbow-color-value::before {
+.neuroglancer-layer-color-value.rainbow::before {
   content: '';
   position: absolute;
   top: -17.5%;
@@ -169,7 +169,7 @@
 }
 
 .neuroglancer-layer-color-value-wrapper.cross .neuroglancer-layer-color-value,
-.neuroglancer-layer-color-value-wrapper.cross .neuroglancer-layer-rainbow-color-value::before {
+.neuroglancer-layer-color-value-wrapper.cross .neuroglancer-layer-color-value.rainbow::before {
   opacity: 0.4;
 }
 
