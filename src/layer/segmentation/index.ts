@@ -1272,10 +1272,15 @@ export class SegmentationUserLayer extends Base {
       this.displayState.segmentationGroupState.value.visibleSegments.changed.add(
         callback,
       );
+    const colorHashChangeDisposer =
+      this.displayState.segmentationColorGroupState.value.segmentColorHash.changed.add(
+        callback,
+      );
     return () => {
       disposer();
       defaultColorDisposer();
       visibleSegmentDisposer();
+      colorHashChangeDisposer();
     };
   }
 
