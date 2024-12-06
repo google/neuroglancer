@@ -127,7 +127,6 @@ const LOCAL_COORDINATE_SPACE_JSON_KEY = "localDimensions";
 const SOURCE_JSON_KEY = "source";
 const TRANSFORM_JSON_KEY = "transform";
 const PICK_JSON_KEY = "pick";
-const LAYERBAR_COLOR_JSON_KEY = "layerBarColorSync";
 
 export interface UserLayerSelectionState {
   generation: number;
@@ -199,21 +198,14 @@ export class UserLayer extends RefCounted {
 
   messages = new MessageList();
 
-  layerBarColorSync = new TrackableBoolean(false, false);
 
   layerBarUserDefinedColor = new TrackableOptionalRGB();
 
   observeLayerColor(callback: () => void): () => void {
-    const userDefinedColorDisposer = observeWatchable(
+    return observeWatchable(
       callback,
       this.layerBarUserDefinedColor,
     );
-    const layerBarColorSyncDisposer =
-      this.layerBarColorSync.changed.add(callback);
-    return () => {
-      userDefinedColorDisposer();
-      layerBarColorSyncDisposer();
-    };
   }
 
   get automaticLayerBarColor(): string | undefined {
@@ -406,8 +398,6 @@ export class UserLayer extends RefCounted {
     this.localPosition.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.layersChanged.dispatch);
-    this.layerBarColorSync.changed.add(this.specificationChanged.dispatch);
-    this.layerBarColorSync.changed.add(this.layersChanged.dispatch);
     this.dataSourcesChanged.add(this.specificationChanged.dispatch);
     this.dataSourcesChanged.add(() => this.updateDataSubsourceActivations());
     this.messages.changed.add(this.layersChanged.dispatch);
@@ -562,13 +552,6 @@ export class UserLayer extends RefCounted {
     if ((this.constructor as typeof UserLayer).supportsPickOption) {
       this.pick.restoreState(specification[PICK_JSON_KEY]);
     }
-    if (
-      (this.constructor as typeof UserLayer).supportsLayerBarColorSyncOption
-    ) {
-      this.layerBarColorSync.restoreState(
-        specification[LAYERBAR_COLOR_JSON_KEY],
-      );
-    }
     for (const spec of this.getDataSourceSpecifications(specification)) {
       this.addDataSource(spec);
     }
@@ -642,7 +625,6 @@ export class UserLayer extends RefCounted {
       [LOCAL_POSITION_JSON_KEY]: this.localPosition.toJSON(),
       [LOCAL_VELOCITY_JSON_KEY]: this.localVelocity.toJSON(),
       [PICK_JSON_KEY]: this.pick.toJSON(),
-      [LAYERBAR_COLOR_JSON_KEY]: this.layerBarColorSync.toJSON(),
       ...this.panels.toJSON(),
     };
   }
@@ -784,35 +766,9 @@ export class ManagedUserLayer extends RefCounted {
     }
   }
 
-  get layerBarColorSyncEnabled() {
-    const userLayer = this.layer;
-    return (
-      userLayer !== null &&
-      (userLayer.constructor as typeof UserLayer)
-        .supportsLayerBarColorSyncOption &&
-      userLayer.layerBarColorSync.value
-    );
-  }
-
-  set layerBarColorSyncEnabled(value: boolean) {
-    const userLayer = this.layer;
-    if (
-      userLayer !== null &&
-      (userLayer.constructor as typeof UserLayer)
-        .supportsLayerBarColorSyncOption
-    ) {
-      userLayer.layerBarColorSync.value = value;
-    }
-  }
-
   get layerBarColor(): string | undefined {
     const userLayer = this.layer;
     return userLayer?.layerBarColor;
-  }
-
-  get layerBarColorSync() {
-    const userLayer = this.layer;
-    return userLayer?.layerBarColorSync;
   }
 
   observeLayerColor(callback: () => void): () => void {
