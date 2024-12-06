@@ -105,6 +105,7 @@ export interface LayerGroupViewerState {
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  enableLayerColorWidget: TrackableBoolean;
 }
 
 export interface LayerGroupViewerOptions {
@@ -383,6 +384,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get scaleBarOptions() {
     return this.viewerState.scaleBarOptions;
+  }
+  get enableLayerColorWidget() {
+    return this.viewerState.enableLayerColorWidget;
   }
   layerPanel: LayerBar | undefined;
   layout: DataPanelLayoutContainer;

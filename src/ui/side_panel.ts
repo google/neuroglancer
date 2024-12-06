@@ -24,6 +24,7 @@ import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { Signal } from "#src/util/signal.js";
+import type { ViewerState } from "#src/viewer_state.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import { makeCloseButton } from "#src/widget/close_button.js";
 
@@ -225,6 +226,7 @@ export class SidePanelManager extends RefCounted {
     public visibility = new WatchableVisibilityPriority(
       WatchableVisibilityPriority.VISIBLE,
     ),
+    public viewerState: ViewerState
   ) {
     super();
     const { element, centerColumn } = this;

@@ -328,6 +328,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("partialViewport", viewer.partialViewport);
     this.add("selectedStateServer", viewer.selectedStateServer);
     this.add("toolBindings", viewer.toolBinder);
+    this.add("enableLayerColorWidget", viewer.enableLayerColorWidget);
   }
 
   restoreState(obj: any) {
@@ -468,6 +469,8 @@ export class Viewer extends RefCounted implements ViewerState {
     vec3.fromValues(0.5, 0.5, 0.5),
   );
   perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
+  enableLayerColorWidget = new TrackableBoolean(false, false);
+
   scaleBarOptions = new TrackableScaleBarOptions();
   partialViewport = new TrackableWindowedViewport();
   statisticsDisplayState = new StatisticsDisplayState();
@@ -911,7 +914,7 @@ export class Viewer extends RefCounted implements ViewerState {
       new RootLayoutContainer(this, "4panel"),
     );
     this.sidePanelManager = this.registerDisposer(
-      new SidePanelManager(this.display, this.layout.element, this.visibility),
+      new SidePanelManager(this.display, this.layout.element, this.visibility, this),
     );
     this.registerDisposer(
       this.sidePanelManager.registerPanel({

@@ -129,6 +129,7 @@ export class ViewerSettingsPanel extends SidePanel {
       "Enable adaptive downsampling",
       viewer.enableAdaptiveDownsampling,
     );
+    addCheckbox("Enable layer color widget", viewer.enableLayerColorWidget);
 
     const addColor = (label: string, value: WatchableValueInterface<vec3>) => {
       const labelElement = document.createElement("label");

@@ -21,7 +21,7 @@ import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { observeWatchable, type WatchableValueInterface } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -32,7 +32,6 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
-import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
@@ -109,57 +108,42 @@ class LayerWidget extends RefCounted {
 
     const layerColorElementWrapper = document.createElement("div");
     layerColorElementWrapper.className = "neuroglancer-layer-color-value-wrapper"
-
     layerColorElement.className = "neuroglancer-layer-color-value";
-
     layerColorElementWrapper.appendChild(layerColorElement);
 
-    const updateLayerColorWidget = () => {
-      if (!this.layer.layerBarColorSyncEnabled) {
-        layerColorElement.style.backgroundColor = "";
-        layerColorElementWrapper.style.display = "none";
-        return;
-      }
-      const color = this.layer.layerBarColor;
-      layerColorElementWrapper.style.display = "block";
-      if (color) {
-        layerColorElement.style.backgroundColor = color;
-        layerColorElement.classList.remove("rainbow")
-      } else {
-        layerColorElement.classList.add("rainbow")
-
-      }
-    };
-    let syncColorsElement = null;
     if (this.layer.supportsLayerBarColorSyncOption) {
-      const { element } = new CheckboxIcon(this.layer.layerBarColorSync!, {
-        text: "#",
-        backgroundScheme: "dark",
-        enableTitle: "Enable color sync",
-        disableTitle: "Disable color sync",
-      });
-      syncColorsElement = element;
-      syncColorsElement.addEventListener("click", (event: MouseEvent) => {
-        updateLayerColorWidget();
-        this.layer.layerChanged.dispatch();
-        event.stopPropagation();
-      });
+      const updateLayerColorWidget = () => {
+        const color = this.layer.layerBarColor;
+        if (color) {
+          layerColorElement.style.backgroundColor = color;
+          layerColorElement.classList.remove("rainbow")
+        } else {
+          layerColorElement.classList.add("rainbow")
 
+        }
+      };
       this.registerDisposer(
         layer.observeLayerColor(() => {
           updateLayerColorWidget();
         }),
       );
-
+      this.registerDisposer(
+        observeWatchable((layerColorEnabled) => {
+          layerColorElementWrapper.style.display = layerColorEnabled ? "block" : "none";
+        }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget)
+      )
       this.registerDisposer(
         layer.layerChanged.add(() => {
-          if (!this.layer.visible && this.layer.layerBarColorSync!.value) {
+          if (!this.layer.visible) {
             layerColorElementWrapper.classList.add("cross");
           } else {
             layerColorElementWrapper.classList.remove("cross");
           }
         }),
       );
+    } else {
+      // If the layer do not support color sync (no color to deal with)
+      layerColorElement.classList.add("unsupported")
     }
 
     // Compose the layer's title bar
@@ -167,9 +151,6 @@ class LayerWidget extends RefCounted {
     element.appendChild(layerColorElementWrapper);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
-    if (this.layer.supportsLayerBarColorSyncOption) {
-      buttonContainer.appendChild(syncColorsElement!);
-    }
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelElement);
