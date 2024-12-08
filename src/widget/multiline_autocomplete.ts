@@ -17,8 +17,6 @@
 import "#src/widget/multiline_autocomplete.css";
 
 import { debounce } from "lodash-es";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CancellationTokenSource } from "#src/util/cancellation.js";
 import type {
   BasicCompletionResult,
   Completion,
@@ -98,7 +96,7 @@ const keyMap = EventActionMap.fromObject({
 
 export type Completer = (
   value: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) => Promise<CompletionResult> | null;
 
 const DEFAULT_COMPLETION_DELAY = 200; // milliseconds
@@ -113,9 +111,8 @@ export class AutocompleteTextInput extends RefCounted {
   private prevInputValue: string | undefined = "";
   private completionsVisible = false;
   private activeCompletionPromise: Promise<CompletionResult> | null = null;
-  private activeCompletionCancellationToken:
-    | CancellationTokenSource
-    | undefined = undefined;
+  private activeCompletionAbortController: AbortController | undefined =
+    undefined;
   private hasFocus = false;
   private completionResult: CompletionResult | null = null;
   private dropdownContentsStale = true;
@@ -228,10 +225,10 @@ export class AutocompleteTextInput extends RefCounted {
 
     const debouncedCompleter = (this.scheduleUpdateCompletions = debounce(
       () => {
-        const cancellationToken = (this.activeCompletionCancellationToken =
-          new CancellationTokenSource());
+        const abortController = (this.activeCompletionAbortController =
+          new AbortController());
         const activeCompletionPromise = (this.activeCompletionPromise =
-          this.completer(this.value, cancellationToken));
+          this.completer(this.value, abortController.signal));
         if (activeCompletionPromise !== null) {
           activeCompletionPromise.then((completionResult) => {
             if (this.activeCompletionPromise === activeCompletionPromise) {
@@ -764,11 +761,8 @@ export class AutocompleteTextInput extends RefCounted {
 
   private cancelActiveCompletion() {
     this.prevInputValue = undefined;
-    const token = this.activeCompletionCancellationToken;
-    if (token !== undefined) {
-      token.cancel();
-    }
-    this.activeCompletionCancellationToken = undefined;
+    this.activeCompletionAbortController?.abort();
+    this.activeCompletionAbortController = undefined;
     this.activeCompletionPromise = null;
   }
 

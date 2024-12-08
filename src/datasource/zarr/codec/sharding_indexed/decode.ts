@@ -30,8 +30,6 @@ import type {
   ReadResponse,
 } from "#src/kvstore/index.js";
 import { composeByteRangeRequest } from "#src/kvstore/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 
@@ -53,7 +51,7 @@ class ShardedKvStore<BaseKey>
     super();
     this.indexCache = this.registerDisposer(
       new SimpleAsyncCache(chunkManager.addRef(), {
-        get: async (key: BaseKey, cancellationToken: CancellationToken) => {
+        get: async (key: BaseKey, abortSignal: AbortSignal) => {
           const { indexCodecs } = configuration;
           const encodedSize =
             indexCodecs.encodedSize[indexCodecs.encodedSize.length - 1];
@@ -67,7 +65,7 @@ class ShardedKvStore<BaseKey>
               break;
           }
           const response = await base.read(key, {
-            cancellationToken,
+            abortSignal,
             byteRange,
           });
           if (response === undefined) {
@@ -76,7 +74,7 @@ class ShardedKvStore<BaseKey>
           const index = await decodeArray(
             configuration.indexCodecs,
             response.data,
-            cancellationToken,
+            abortSignal,
           );
           return {
             size: index.byteLength,
@@ -111,10 +109,7 @@ class ShardedKvStore<BaseKey>
     key: { base: BaseKey; subChunk: number[] },
     options: ReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const shardIndex = await this.indexCache.get(
-      key.base,
-      options.cancellationToken ?? uncancelableToken,
-    );
+    const shardIndex = await this.indexCache.get(key.base, options.abortSignal);
     if (shardIndex === undefined) {
       // Shard not present.
       return undefined;
@@ -147,7 +142,7 @@ class ShardedKvStore<BaseKey>
       };
     }
     const response = await this.base.read(key.base, {
-      cancellationToken: options.cancellationToken,
+      abortSignal: options.abortSignal,
       byteRange: outerByteRange,
     });
     if (response === undefined) {

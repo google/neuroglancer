@@ -22,18 +22,12 @@
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import { Chunk, ChunkSourceBase } from "#src/chunk_manager/backend.js";
 import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import {
-  CANCELED,
-  makeCancelablePromise,
-  MultipleConsumerCancellationTokenSource,
-} from "#src/util/cancellation.js";
+import { raceWithAbort, SharedAbortController } from "#src/util/abort.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
-import { responseArrayBuffer } from "#src/util/http_request.js";
 import { stableStringify } from "#src/util/json.js";
 import { getObjectId } from "#src/util/object_id.js";
 import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 
 export type PriorityGetter = () => {
   priorityTier: ChunkPriorityTier;
@@ -44,6 +38,7 @@ interface FileDataRequester<Data> {
   resolve: (data: Data) => void;
   reject: (error: any) => void;
   getPriority: PriorityGetter;
+  cleanup: () => void;
 }
 
 class GenericSharedDataChunk<Key, Data> extends Chunk {
@@ -83,7 +78,7 @@ export interface GenericSharedDataSourceOptions<Key, Data> {
   encodeKey?: (key: Key) => string;
   download: (
     key: Key,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) => Promise<{ size: number; data: Data }>;
   sourceQueueLevel?: number;
 }
@@ -95,7 +90,7 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
 
   private downloadFunction: (
     key: Key,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) => Promise<{ size: number; data: Data }>;
 
   constructor(
@@ -139,11 +134,11 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
 
   async download(
     chunk: GenericSharedDataChunk<Key, Data>,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) {
     const { size, data } = await this.downloadFunction(
       chunk.decodedKey!,
-      cancellationToken,
+      abortSignal,
     );
     chunk.systemMemoryBytes = size;
     chunk.data = data;
@@ -152,11 +147,7 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
   /**
    * Precondition: priorityTier <= ChunkPriorityTier.LAST_ORDERED_TIER
    */
-  getData(
-    key: Key,
-    getPriority: PriorityGetter,
-    cancellationToken: CancellationToken,
-  ) {
+  getData(key: Key, getPriority: PriorityGetter, abortSignal: AbortSignal) {
     const encodedKey = this.encodeKeyFunction(key);
     let chunk = this.chunks.get(encodedKey);
     if (chunk === undefined) {
@@ -167,37 +158,37 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
       chunk.initialize(encodedKey);
       this.addChunk(chunk);
     }
-    return makeCancelablePromise<Data>(
-      cancellationToken,
-      (resolve, reject, token) => {
-        // If the data is already available or the request has already failed, resolve/reject the
-        // promise immediately.
-        switch (chunk!.state) {
-          case ChunkState.FAILED:
-            reject(chunk!.error);
-            return;
+    return new Promise<Data>((resolve, reject) => {
+      // If the data is already available or the request has already failed, resolve/reject the
+      // promise immediately.
+      switch (chunk!.state) {
+        case ChunkState.FAILED:
+          reject(chunk!.error);
+          return;
 
-          case ChunkState.SYSTEM_MEMORY_WORKER:
-            resolve(chunk!.data!);
-            return;
+        case ChunkState.SYSTEM_MEMORY_WORKER:
+          resolve(chunk!.data!);
+          return;
+      }
+      function handleAbort() {
+        const { requesters } = chunk!;
+        if (requesters !== undefined) {
+          requesters.delete(requester);
+          chunk!.chunkManager!.scheduleUpdateChunkPriorities();
         }
-        const requester: FileDataRequester<Data> = {
-          resolve,
-          reject,
-          getPriority,
-        };
-        chunk!.requesters!.add(requester);
-        token.add(() => {
-          const { requesters } = chunk!;
-          if (requesters !== undefined) {
-            requesters.delete(requester);
-            this.chunkManager.scheduleUpdateChunkPriorities();
-          }
-          reject(CANCELED);
-        });
-        this.chunkManager.scheduleUpdateChunkPriorities();
-      },
-    );
+        reject(abortSignal.reason);
+      }
+
+      const requester: FileDataRequester<Data> = {
+        resolve,
+        reject,
+        getPriority,
+        cleanup: () => abortSignal.removeEventListener("abort", handleAbort),
+      };
+      chunk!.requesters!.add(requester);
+      abortSignal.addEventListener("abort", handleAbort, { once: true });
+      this.chunkManager.scheduleUpdateChunkPriorities();
+    });
   }
 
   static get<Key, Data>(
@@ -217,14 +208,14 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
     options: GenericSharedDataSourceOptions<Key, Data>,
     key: Key,
     getPriority: PriorityGetter,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) {
     const source = GenericSharedDataSource.get(
       chunkManager,
       memoizeKey,
       options,
     );
-    const result = source.getData(key, getPriority, cancellationToken);
+    const result = source.getData(key, getPriority, abortSignal);
     source.dispose();
     return result;
   }
@@ -234,35 +225,32 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
     credentialsProvider: SpecialProtocolCredentialsProvider,
     decodeFunction: (
       buffer: ArrayBuffer,
-      cancellationToken: CancellationToken,
+      abortSignal: AbortSignal,
     ) => Promise<{ size: number; data: Data }>,
     url: string,
     getPriority: PriorityGetter,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) {
     return GenericSharedDataSource.getData<string, Data>(
       chunkManager,
       `${getObjectId(decodeFunction)}`,
       {
-        download: (url: string, cancellationToken: CancellationToken) =>
-          cancellableFetchSpecialOk(
-            credentialsProvider,
-            url,
-            {},
-            responseArrayBuffer,
-            cancellationToken,
-          ).then((response) => decodeFunction(response, cancellationToken)),
+        download: (url: string, abortSignal: AbortSignal) =>
+          fetchSpecialOk(credentialsProvider, url, { signal: abortSignal })
+            .then((response) => response.arrayBuffer())
+            .then((response) => decodeFunction(response, abortSignal)),
       },
       url,
       getPriority,
-      cancellationToken,
+      abortSignal,
     );
   }
 }
 
 class AsyncCacheChunk<Data> extends Chunk {
   promise: Promise<Data> | undefined;
-  cancellationSource: MultipleConsumerCancellationTokenSource | undefined;
+  outstandingRequests: number = 0;
+  sharedAbortController: SharedAbortController | undefined;
 
   initialize(key: string) {
     super.initialize(key);
@@ -270,7 +258,6 @@ class AsyncCacheChunk<Data> extends Chunk {
 
   freeSystemMemory() {
     this.promise = undefined;
-    this.cancellationSource = undefined;
   }
 }
 
@@ -278,7 +265,7 @@ export interface SimpleAsyncCacheOptions<Key, Value> {
   encodeKey?: (key: Key) => string;
   get: (
     key: Key,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) => Promise<{ size: number; data: Value }>;
 }
 
@@ -297,10 +284,10 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
   encodeKeyFunction: (key: Key) => string;
   downloadFunction: (
     key: Key,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) => Promise<{ size: number; data: Value }>;
 
-  get(key: Key, cancellationToken: CancellationToken): Promise<Value> {
+  get(key: Key, abortSignal?: AbortSignal): Promise<Value> {
     const encodedKey = this.encodeKeyFunction(key);
     let chunk = this.chunks.get(encodedKey);
     if (chunk === undefined) {
@@ -308,11 +295,14 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
       chunk.initialize(encodedKey);
       this.addChunk(chunk);
     }
-    if (chunk.promise === undefined) {
+    if (
+      chunk.promise === undefined ||
+      chunk.sharedAbortController?.signal.aborted
+    ) {
       let completed = false;
-      const cancellationSource = (chunk!.cancellationSource =
-        new MultipleConsumerCancellationTokenSource());
-      cancellationSource.add(() => {
+      const sharedAbortController = (chunk!.sharedAbortController =
+        new SharedAbortController());
+      sharedAbortController.signal.addEventListener("abort", () => {
         if (!completed) {
           chunk!.promise = undefined;
         }
@@ -321,7 +311,7 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
         try {
           const { data, size } = await this.downloadFunction(
             key,
-            cancellationSource,
+            sharedAbortController.signal,
           );
           chunk.systemMemoryBytes = size;
           chunk!.queueManager.updateChunkState(
@@ -334,11 +324,13 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
           throw e;
         } finally {
           completed = true;
+          sharedAbortController[Symbol.dispose]();
         }
       })();
     }
-    chunk.cancellationSource!.addConsumer(cancellationToken);
-    return chunk.promise;
+    chunk!.sharedAbortController!.addConsumer(abortSignal);
+    chunk!.sharedAbortController!.start();
+    return raceWithAbort(chunk.promise, abortSignal);
   }
 }
 

@@ -17,7 +17,6 @@
 import type { Configuration } from "#src/datasource/zarr/codec/crc32c/resolve.js";
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 const checksumSize = 4;
 
@@ -27,10 +26,10 @@ registerCodec({
   async decode(
     configuration: Configuration,
     encoded: Uint8Array,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<Uint8Array> {
     configuration;
-    cancellationToken;
+    abortSignal;
     if (encoded.length < checksumSize) {
       throw new Error(
         `Expected buffer of size at least ${checksumSize} bytes but received: ${encoded.length} bytes`,

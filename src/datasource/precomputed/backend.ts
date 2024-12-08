@@ -78,24 +78,19 @@ import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { fetchSpecialHttpByteRange } from "#src/util/byte_range_http_requests.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { convertEndian32, Endianness } from "#src/util/endian.js";
 import { vec3 } from "#src/util/geom.js";
 import { decodeGzip } from "#src/util/gzip.js";
 import { murmurHash3_x86_128Hash64Bits } from "#src/util/hash.js";
-import {
-  isNotFoundError,
-  responseArrayBuffer,
-  responseJson,
-} from "#src/util/http_request.js";
+import { isNotFoundError } from "#src/util/http_request.js";
 import { stableStringify } from "#src/util/json.js";
 import { getObjectId } from "#src/util/object_id.js";
 import type {
   SpecialProtocolCredentials,
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 import { Uint64 } from "#src/util/uint64.js";
 import {
   encodeZIndexCompressed,
@@ -153,10 +148,7 @@ function getMinishardIndexDataSource(
       credentialsProvider: getObjectId(credentialsProvider),
     }),
     {
-      download: async (
-        shardAndMinishard: Uint64,
-        cancellationToken: CancellationToken,
-      ) => {
+      download: async (shardAndMinishard: Uint64, abortSignal: AbortSignal) => {
         const minishard = Uint64.lowMask(new Uint64(), sharding.minishardBits);
         Uint64.and(minishard, minishard, shardAndMinishard);
         const shard = Uint64.lowMask(new Uint64(), sharding.shardBits);
@@ -184,7 +176,7 @@ function getMinishardIndexDataSource(
             shardUrl,
             shardIndexStart,
             shardIndexEnd,
-            cancellationToken,
+            abortSignal,
           );
         } catch (e) {
           if (isNotFoundError(e)) return { data: undefined, size: 0 };
@@ -215,7 +207,7 @@ function getMinishardIndexDataSource(
           shardUrl,
           minishardStartOffset,
           minishardEndOffset,
-          cancellationToken,
+          abortSignal,
         );
         if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
           minishardIndexResponse = await decodeGzip(minishardIndexResponse);
@@ -312,7 +304,7 @@ async function getShardedData(
   minishardIndexSource: MinishardIndexSource,
   chunk: Chunk,
   key: Uint64,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<{ shardInfo: ShardInfo; data: ArrayBuffer } | undefined> {
   const { sharding } = minishardIndexSource;
   const hashFunction = shardingHashFunctions.get(sharding.hash)!;
@@ -330,7 +322,7 @@ async function getShardedData(
   const minishardIndex = await minishardIndexSource.getData(
     shardAndMinishard,
     getPriority,
-    cancellationToken,
+    abortSignal,
   );
   if (minishardIndex === undefined) return undefined;
   const minishardEntry = findMinishardEntry(minishardIndex, key);
@@ -341,7 +333,7 @@ async function getShardedData(
     minishardIndex.shardUrl,
     startOffset,
     endOffset,
-    cancellationToken,
+    abortSignal,
   );
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
     data = await decodeGzip(data);
@@ -391,10 +383,7 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
     return gridShape;
   })();
 
-  async download(
-    chunk: VolumeChunk,
-    cancellationToken: CancellationToken,
-  ): Promise<void> {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal): Promise<void> {
     const { parameters } = this;
 
     const { minishardIndexSource } = this;
@@ -414,13 +403,9 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
           `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
       }
       try {
-        response = await cancellableFetchSpecialOk(
-          this.credentialsProvider,
-          url,
-          {},
-          responseArrayBuffer,
-          cancellationToken,
-        );
+        response = await fetchSpecialOk(this.credentialsProvider, url, {
+          signal: abortSignal,
+        }).then((response) => response.arrayBuffer());
       } catch (e) {
         if (isNotFoundError(e)) {
           response = undefined;
@@ -449,12 +434,12 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
           minishardIndexSource,
           chunk,
           chunkIndex,
-          cancellationToken,
+          abortSignal,
         )
       )?.data;
     }
     if (response !== undefined) {
-      await this.chunkDecoder(chunk, cancellationToken, response);
+      await this.chunkDecoder(chunk, abortSignal, response);
     }
   }
 }
@@ -487,31 +472,24 @@ export class PrecomputedMeshSource extends WithParameters(
   ),
   MeshSourceParameters,
 ) {
-  async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
+  async download(chunk: ManifestChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
-    const response = await cancellableFetchSpecialOk(
+    const response = await fetchSpecialOk(
       this.credentialsProvider,
       `${parameters.url}/${chunk.objectId}:${parameters.lod}`,
-      {},
-      responseJson,
-      cancellationToken,
+      { signal: abortSignal },
     );
-    decodeManifestChunk(chunk, response);
+    decodeManifestChunk(chunk, await response.json());
   }
 
-  async downloadFragment(
-    chunk: FragmentChunk,
-    cancellationToken: CancellationToken,
-  ) {
+  async downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
-    const response = await cancellableFetchSpecialOk(
+    const response = await fetchSpecialOk(
       this.credentialsProvider,
       `${parameters.url}/${chunk.fragmentId}`,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
+      { signal: abortSignal },
     );
-    decodeFragmentChunk(chunk, response);
+    decodeFragmentChunk(chunk, await response.arrayBuffer());
   }
 }
 
@@ -772,25 +750,23 @@ export class PrecomputedMultiscaleMeshSource extends WithParameters(
 
   async download(
     chunk: PrecomputedMultiscaleManifestChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void> {
     const { parameters, minishardIndexSource } = this;
     let data: ArrayBuffer;
     if (minishardIndexSource === undefined) {
-      data = await cancellableFetchSpecialOk(
+      data = await fetchSpecialOk(
         this.credentialsProvider,
         `${parameters.url}/${chunk.objectId}.index`,
-        {},
-        responseArrayBuffer,
-        cancellationToken,
-      );
+        { signal: abortSignal },
+      ).then((response) => response.arrayBuffer());
     } else {
       ({ data, shardInfo: chunk.shardInfo } = getOrNotFoundError(
         await getShardedData(
           minishardIndexSource,
           chunk,
           chunk.objectId,
-          cancellationToken,
+          abortSignal,
         ),
       ));
     }
@@ -799,7 +775,7 @@ export class PrecomputedMultiscaleMeshSource extends WithParameters(
 
   async downloadFragment(
     chunk: MultiscaleFragmentChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void> {
     const { parameters } = this;
     const manifestChunk =
@@ -842,7 +818,7 @@ export class PrecomputedMultiscaleMeshSource extends WithParameters(
       requestUrl,
       adjustedStartOffset,
       adjustedEndOffset,
-      cancellationToken,
+      abortSignal,
     );
     await decodeMultiscaleFragmentChunk(chunk, response);
   }
@@ -854,17 +830,13 @@ async function fetchByUint64(
   chunk: Chunk,
   minishardIndexSource: MinishardIndexSource | undefined,
   id: Uint64,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   if (minishardIndexSource === undefined) {
     try {
-      return await cancellableFetchSpecialOk(
-        credentialsProvider,
-        `${url}/${id}`,
-        {},
-        responseArrayBuffer,
-        cancellationToken,
-      );
+      return await fetchSpecialOk(credentialsProvider, `${url}/${id}`, {
+        signal: abortSignal,
+      }).then((response) => response.arrayBuffer());
     } catch (e) {
       if (isNotFoundError(e)) return undefined;
       throw e;
@@ -874,7 +846,7 @@ async function fetchByUint64(
     minishardIndexSource,
     chunk,
     id,
-    cancellationToken,
+    abortSignal,
   );
   if (result === undefined) return undefined;
   return result.data;
@@ -892,7 +864,7 @@ export class PrecomputedSkeletonSource extends WithParameters(
     this.credentialsProvider,
     { url: this.parameters.url, sharding: this.parameters.metadata.sharding },
   );
-  async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+  async download(chunk: SkeletonChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const response = getOrNotFoundError(
       await fetchByUint64(
@@ -901,7 +873,7 @@ export class PrecomputedSkeletonSource extends WithParameters(
         chunk,
         this.minishardIndexSource,
         chunk.objectId,
-        cancellationToken,
+        abortSignal,
       ),
     );
     decodeSkeletonChunk(chunk, response, parameters.metadata.vertexAttributes);
@@ -1058,10 +1030,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParamete
     this.parameters,
   );
   parent: PrecomputedAnnotationSourceBackend;
-  async download(
-    chunk: AnnotationGeometryChunk,
-    cancellationToken: CancellationToken,
-  ) {
+  async download(chunk: AnnotationGeometryChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
 
     const { minishardIndexSource } = this;
@@ -1071,13 +1040,9 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParamete
     if (minishardIndexSource === undefined) {
       const url = `${parameters.url}/${chunkGridPosition.join("_")}`;
       try {
-        response = await cancellableFetchSpecialOk(
-          this.credentialsProvider,
-          url,
-          {},
-          responseArrayBuffer,
-          cancellationToken,
-        );
+        response = await fetchSpecialOk(this.credentialsProvider, url, {
+          signal: abortSignal,
+        }).then((response) => response.arrayBuffer());
       } catch (e) {
         if (!isNotFoundError(e)) throw e;
       }
@@ -1093,7 +1058,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParamete
         minishardIndexSource,
         chunk,
         chunkIndex,
-        cancellationToken,
+        abortSignal,
       );
       if (result !== undefined) response = result.data;
     }
@@ -1133,7 +1098,7 @@ export class PrecomputedAnnotationSourceBackend extends WithParameters(
   async downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk,
     relationshipIndex: number,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) {
     const { parameters } = this;
     const response = await fetchByUint64(
@@ -1142,7 +1107,7 @@ export class PrecomputedAnnotationSourceBackend extends WithParameters(
       chunk,
       this.relationshipIndexSource[relationshipIndex],
       chunk.objectId,
-      cancellationToken,
+      abortSignal,
     );
     if (response !== undefined) {
       chunk.data = parseAnnotations(
@@ -1155,7 +1120,7 @@ export class PrecomputedAnnotationSourceBackend extends WithParameters(
 
   async downloadMetadata(
     chunk: AnnotationMetadataChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) {
     const { parameters } = this;
     const id = Uint64.parseString(chunk.key!);
@@ -1165,7 +1130,7 @@ export class PrecomputedAnnotationSourceBackend extends WithParameters(
       chunk,
       this.byIdMinishardIndexSource,
       id,
-      cancellationToken,
+      abortSignal,
     );
     if (response === undefined) {
       chunk.annotation = null;

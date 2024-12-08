@@ -20,12 +20,9 @@ import type {
   MaybeOptionalCredentialsProvider,
 } from "#src/credentials_provider/index.js";
 import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
-import type { ResponseTransform } from "#src/util/http_request.js";
 import { parseUrl } from "#src/util/http_request.js";
 import { getRandomHexString } from "#src/util/random.js";
-import { cancellableFetchS3Ok } from "#src/util/s3.js";
+import { fetchS3Ok } from "#src/util/s3.js";
 
 export type SpecialProtocolCredentials = any;
 export type SpecialProtocolCredentialsProvider =
@@ -131,13 +128,11 @@ export function parseSpecialUrl(
   }
 }
 
-export async function cancellableFetchSpecialOk<T>(
+export async function fetchSpecialOk(
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
   init: RequestInit,
-  transformResponse: ResponseTransform<T>,
-  cancellationToken: CancellationToken = uncancelableToken,
-): Promise<T> {
+): Promise<Response> {
   const u = parseUrl(url);
   switch (u.protocol) {
     case "gs":
@@ -165,8 +160,6 @@ export async function cancellableFetchSpecialOk<T>(
           `${encodeURIComponent(u.path.substring(1))}?alt=media` +
           `&neuroglancer=${getRandomHexString()}`,
         init,
-        transformResponse,
-        cancellationToken,
       );
     case "gs+xml":
       return fetchWithOAuth2Credentials(
@@ -174,24 +167,10 @@ export async function cancellableFetchSpecialOk<T>(
         `https://storage.googleapis.com/${u.host}${u.path}` +
           `?neuroglancer=${getRandomHexString()}`,
         init,
-        transformResponse,
-        cancellationToken,
       );
     case "s3":
-      return cancellableFetchS3Ok(
-        u.host,
-        u.path,
-        init,
-        transformResponse,
-        cancellationToken,
-      );
+      return fetchS3Ok(u.host, u.path, init);
     default:
-      return fetchWithOAuth2Credentials(
-        credentialsProvider,
-        url,
-        init,
-        transformResponse,
-        cancellationToken,
-      );
+      return fetchWithOAuth2Credentials(credentialsProvider, url, init);
   }
 }

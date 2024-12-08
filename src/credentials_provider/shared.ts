@@ -26,7 +26,6 @@ import {
   CREDENTIALS_PROVIDER_RPC_ID,
   CREDENTIALS_PROVIDER_GET_RPC_ID,
 } from "#src/credentials_provider/shared_common.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Owned } from "#src/util/disposable.js";
 import type { RPC, RPCPromise } from "#src/worker_rpc.js";
 import {
@@ -51,9 +50,9 @@ export class SharedCredentialsProvider<Credentials>
 
   get(
     invalidCredentials?: CredentialsWithGeneration<Credentials>,
-    cancellationToken?: CancellationToken,
+    abortSignal?: AbortSignal,
   ): Promise<CredentialsWithGeneration<Credentials>> {
-    return this.provider.get(invalidCredentials, cancellationToken);
+    return this.provider.get(invalidCredentials, abortSignal);
   }
 }
 
@@ -62,13 +61,11 @@ registerPromiseRPC(
   function (
     this: RPC,
     x: { providerId: number; invalidCredentials: any },
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): RPCPromise<CredentialsWithGeneration<any>> {
     const obj = <SharedCredentialsProvider<any>>this.get(x.providerId);
-    return obj
-      .get(x.invalidCredentials, cancellationToken)
-      .then((credentials) => ({
-        value: credentials,
-      }));
+    return obj.get(x.invalidCredentials, abortSignal).then((credentials) => ({
+      value: credentials,
+    }));
   },
 );

@@ -35,8 +35,6 @@ import type { SingleMeshSource } from "#src/single_mesh/frontend.js";
 import type { SkeletonSource } from "#src/skeleton/frontend.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import type {
   BasicCompletionResult,
   CompletionWithDescription,
@@ -97,7 +95,7 @@ export function suggestLayerNameBasedOnSeparator(
 
 export interface GetDataSourceOptionsBase {
   chunkManager: ChunkManager;
-  cancellationToken?: CancellationToken;
+  abortSignal?: AbortSignal;
   url: string;
   transform: CoordinateTransformSpecification | undefined;
   globalCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
@@ -107,7 +105,7 @@ export interface GetDataSourceOptionsBase {
 export interface GetDataSourceOptions extends GetDataSourceOptionsBase {
   registry: DataSourceProviderRegistry;
   providerUrl: string;
-  cancellationToken: CancellationToken;
+  abortSignal: AbortSignal;
   providerProtocol: string;
   credentialsManager: CredentialsManager;
 }
@@ -151,14 +149,14 @@ export interface DataSubsource {
 
 export interface CompleteUrlOptionsBase {
   url: string;
-  cancellationToken?: CancellationToken;
+  abortSignal?: AbortSignal;
   chunkManager: ChunkManager;
 }
 
 export interface CompleteUrlOptions extends CompleteUrlOptionsBase {
   registry: DataSourceProviderRegistry;
   providerUrl: string;
-  cancellationToken: CancellationToken;
+  abortSignal: AbortSignal;
   credentialsManager: CredentialsManager;
 }
 
@@ -382,7 +380,7 @@ export class DataSourceProviderRegistry extends RefCounted {
 
   async get(options: GetDataSourceOptionsBase): Promise<DataSource> {
     const redirectLog = new Set<string>();
-    const { cancellationToken = uncancelableToken } = options;
+    const { abortSignal } = options;
     let url: string = options.url;
     while (true) {
       const [provider, providerUrl, providerProtocol] = this.getProvider(
@@ -396,7 +394,7 @@ export class DataSourceProviderRegistry extends RefCounted {
           providerProtocol,
           providerUrl,
           registry: this,
-          cancellationToken,
+          abortSignal: abortSignal ?? new AbortController().signal,
           credentialsManager: this.credentialsManager,
         });
       } catch (e) {
@@ -460,7 +458,7 @@ export class DataSourceProviderRegistry extends RefCounted {
     options: CompleteUrlOptionsBase,
   ): Promise<CompletionResult> {
     // Check if url matches a protocol.  Note that protocolPattern always matches.
-    const { url, cancellationToken = uncancelableToken } = options;
+    const { url, abortSignal } = options;
     const protocolMatch = url.match(protocolPattern)!;
     const protocol = protocolMatch[1];
     if (protocol === undefined) {
@@ -481,7 +479,7 @@ export class DataSourceProviderRegistry extends RefCounted {
         url,
         providerUrl: protocolMatch[2],
         chunkManager: options.chunkManager,
-        cancellationToken,
+        abortSignal: abortSignal ?? new AbortController().signal,
         credentialsManager: this.credentialsManager,
       });
       return applyCompletionOffset(protocol.length + 3, completions);

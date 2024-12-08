@@ -31,7 +31,6 @@ import {
   ImageTileEncoding,
   ImageTileSourceParameters,
 } from "#src/datasource/deepzoom/base.js";
-import { responseText } from "#src/datasource/dvid/api.js";
 import type {
   CompleteUrlOptions,
   ConvertLegacyUrlOptions,
@@ -72,7 +71,7 @@ import type {
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 
@@ -248,11 +247,8 @@ function getDZIMetadata(
       credentialsProvider: getObjectId(credentialsProvider),
     },
     async () => {
-      const text = await cancellableFetchSpecialOk(
-        credentialsProvider,
-        url,
-        {},
-        responseText,
+      const text = await fetchSpecialOk(credentialsProvider, url, {}).then(
+        (response) => response.text(),
       );
       const xml = new DOMParser().parseFromString(text, "text/xml");
       const image = xml.documentElement;
@@ -346,7 +342,7 @@ export class DeepzoomDataSource extends DataSourceProvider {
     return completeHttpPath(
       options.credentialsManager,
       options.providerUrl,
-      options.cancellationToken,
+      options.abortSignal,
     );
   }
 }
