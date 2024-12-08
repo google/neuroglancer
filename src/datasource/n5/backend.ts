@@ -61,8 +61,11 @@ async function decodeChunk(
   chunk.chunkDataSize = shape;
   let buffer = new Uint8Array(response, offset);
   switch (encoding) {
+    case VolumeChunkEncoding.ZLIB:
+      buffer = new Uint8Array(await decodeGzip(buffer, "deflate"));
+      break;
     case VolumeChunkEncoding.GZIP:
-      buffer = new Uint8Array(await decodeGzip(buffer));
+      buffer = new Uint8Array(await decodeGzip(buffer, "gzip"));
       break;
     case VolumeChunkEncoding.BLOSC:
       buffer = await requestAsyncComputation(

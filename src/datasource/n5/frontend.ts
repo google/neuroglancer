@@ -68,6 +68,7 @@ import {
   expectArray,
   parseArray,
   parseFixedLengthArray,
+  verifyBoolean,
   verifyEnumString,
   verifyFinitePositiveFloat,
   verifyObject,
@@ -235,6 +236,17 @@ class ScaleMetadata {
       encoding = verifyObjectProperty(compression, "type", (x) =>
         verifyEnumString(x, VolumeChunkEncoding),
       );
+      if (
+        encoding === VolumeChunkEncoding.GZIP &&
+        verifyOptionalObjectProperty(
+          compression,
+          "useZlib",
+          verifyBoolean,
+          false,
+        ) === true
+      ) {
+        encoding = VolumeChunkEncoding.ZLIB;
+      }
     });
     if (encoding === undefined) {
       encoding = verifyObjectProperty(obj, "compressionType", (x) =>

@@ -396,16 +396,9 @@ export function parseV2Metadata(
           break;
         case "zlib":
         case "gzip":
-          codecs.push({
-            name: "gzip",
-            configuration: {
-              level: verifyObjectProperty(compressor, "level", verifyInt),
-            },
-          });
-          break;
         case "zstd":
           codecs.push({
-            name: "zstd",
+            name: id,
             configuration: {
               level: verifyObjectProperty(compressor, "level", verifyInt),
             },

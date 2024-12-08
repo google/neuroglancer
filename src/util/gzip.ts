@@ -22,9 +22,12 @@ export function isGzipFormat(data: ArrayBufferView) {
   return view.length > 2 && view[0] === 0x1f && view[1] === 0x8b;
 }
 
-export async function decodeGzip(data: ArrayBuffer | ArrayBufferView) {
+export async function decodeGzip(
+  data: ArrayBuffer | ArrayBufferView,
+  format: CompressionFormat,
+) {
   const decompressedStream = new Response(data).body!.pipeThrough(
-    new DecompressionStream("gzip"),
+    new DecompressionStream(format),
   );
   return await new Response(decompressedStream).arrayBuffer();
 }
@@ -40,7 +43,7 @@ export async function maybeDecompressGzip(data: ArrayBuffer | ArrayBufferView) {
     byteView = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
   if (isGzipFormat(byteView)) {
-    return new Uint8Array(await decodeGzip(byteView));
+    return new Uint8Array(await decodeGzip(byteView, "gzip"));
   }
   return byteView;
 }

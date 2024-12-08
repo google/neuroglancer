@@ -61,7 +61,7 @@ async function decodeNiftiFile(
   _cancellationToken: CancellationToken,
 ) {
   if (isCompressed(buffer)) {
-    buffer = await decodeGzip(buffer);
+    buffer = await decodeGzip(buffer, "gzip");
   }
   const data = new NiftiFileData();
   data.uncompressedData = buffer;
