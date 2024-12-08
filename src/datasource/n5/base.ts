@@ -15,10 +15,11 @@
  */
 
 export enum VolumeChunkEncoding {
-  RAW = 0,
-  GZIP = 1,
-  BLOSC = 2,
-  ZSTD = 3,
+  RAW,
+  ZLIB,
+  GZIP,
+  BLOSC,
+  ZSTD,
 }
 
 export class VolumeChunkSourceParameters {

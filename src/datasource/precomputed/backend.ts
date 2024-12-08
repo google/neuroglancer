@@ -218,7 +218,10 @@ function getMinishardIndexDataSource(
           cancellationToken,
         );
         if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
-          minishardIndexResponse = await decodeGzip(minishardIndexResponse);
+          minishardIndexResponse = await decodeGzip(
+            minishardIndexResponse,
+            "gzip",
+          );
         }
         if (minishardIndexResponse.byteLength % 24 !== 0) {
           throw new Error(
@@ -344,7 +347,7 @@ async function getShardedData(
     cancellationToken,
   );
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
-    data = await decodeGzip(data);
+    data = await decodeGzip(data, "gzip");
   }
   return {
     data,

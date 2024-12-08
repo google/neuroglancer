@@ -35,7 +35,9 @@ export async function decodeBossNpzChunk(
   cancellationToken: CancellationToken,
   response: ArrayBuffer,
 ) {
-  const parseResult = parseNpy(new Uint8Array(await decodeGzip(response)));
+  const parseResult = parseNpy(
+    new Uint8Array(await decodeGzip(response, "deflate")),
+  );
   const chunkDataSize = chunk.chunkDataSize!;
   const source = chunk.source!;
   const { shape } = parseResult;
