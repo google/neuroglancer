@@ -32,7 +32,6 @@ import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType } from "#src/sliceview/volume/base.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { Endianness } from "#src/util/endian.js";
 import {
@@ -58,7 +57,7 @@ export class NiftiFileData {
 
 async function decodeNiftiFile(
   buffer: ArrayBuffer,
-  _cancellationToken: CancellationToken,
+  _cancellationToken: AbortSignal,
 ) {
   if (isCompressed(buffer)) {
     buffer = await decodeGzip(buffer, "gzip");
@@ -78,7 +77,7 @@ function getNiftiFileData(
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
   getPriority: PriorityGetter,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   return GenericSharedDataSource.getUrl(
     chunkManager,
@@ -86,7 +85,7 @@ function getNiftiFileData(
     decodeNiftiFile,
     url,
     getPriority,
-    cancellationToken,
+    abortSignal,
   );
 }
 
@@ -96,7 +95,7 @@ async function getNiftiHeaderInfo(
   chunkManager: Borrowed<ChunkManager>,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   const data = await getNiftiFileData(
     chunkManager,
@@ -106,7 +105,7 @@ async function getNiftiHeaderInfo(
       priorityTier: ChunkPriorityTier.VISIBLE,
       priority: NIFTI_HEADER_INFO_PRIORITY,
     }),
-    cancellationToken,
+    abortSignal,
   );
   return data.header;
 }
@@ -166,7 +165,7 @@ const DATA_TYPE_CONVERSIONS = new Map([
 
 registerPromiseRPC(
   GET_NIFTI_VOLUME_INFO_RPC_ID,
-  async function (x, cancellationToken): RPCPromise<NiftiVolumeInfo> {
+  async function (x, abortSignal): RPCPromise<NiftiVolumeInfo> {
     const chunkManager = this.getRef<ChunkManager>(x.chunkManager);
     const credentialsProvider = this.getOptionalRef<
       SharedCredentialsProviderCounterpart<
@@ -178,7 +177,7 @@ registerPromiseRPC(
         chunkManager,
         credentialsProvider,
         x.url,
-        cancellationToken,
+        abortSignal,
       );
       const dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
       if (dataTypeInfo === undefined) {
@@ -321,19 +320,19 @@ export class NiftiVolumeChunkSource extends WithParameters(
   ),
   VolumeSourceParameters,
 ) {
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const data = await getNiftiFileData(
       this.chunkManager,
       this.credentialsProvider,
       this.parameters.url,
       () => ({ priorityTier: chunk.priorityTier, priority: chunk.priority }),
-      cancellationToken,
+      abortSignal,
     );
     const imageBuffer = readImage(data.header, data.uncompressedData);
     await decodeRawChunk(
       chunk,
-      cancellationToken,
+      abortSignal,
       imageBuffer,
       data.header.littleEndian ? Endianness.LITTLE : Endianness.BIG,
     );

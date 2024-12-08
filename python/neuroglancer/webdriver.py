@@ -35,6 +35,7 @@ class WebdriverBase:
         self,
         headless=True,
         browser="chrome",
+        browser_binary_path: Optional[str] = None,
         window_size=(1920, 1080),
         debug=False,
         docker=False,
@@ -50,6 +51,7 @@ class WebdriverBase:
             list(extra_command_line_args) if extra_command_line_args else []
         )
         self.debug = debug
+        self.browser_binary_path = browser_binary_path
         self._log_listeners_lock = threading.Lock()
         self._log_listeners: dict[LogListener, None] = {}
 
@@ -70,6 +72,8 @@ class WebdriverBase:
         if self.headless:
             chrome_options.add_argument("--headless=new")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        if self.browser_binary_path:
+            chrome_options.binary_location = self.browser_binary_path
         if self.docker:
             # https://www.intricatecloud.io/2019/05/running-webdriverio-tests-using-headless-chrome-inside-a-container/
             chrome_options.add_argument("--no-sandbox")
@@ -90,6 +94,8 @@ class WebdriverBase:
         if self.headless:
             options.add_argument("--headless")
         options.arguments.extend(self.extra_command_line_args)
+        if self.browser_binary_path:
+            options.binary_location = self.browser_binary_path
         self.driver = selenium.webdriver.Firefox(
             options=options,
         )

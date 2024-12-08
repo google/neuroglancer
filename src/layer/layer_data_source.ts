@@ -37,7 +37,6 @@ import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transfo
 import type { RenderLayer } from "#src/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
-import { CancellationTokenSource } from "#src/util/cancellation.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import {
@@ -399,7 +398,7 @@ export class LayerDataSource extends RefCounted {
     this.spec_ = spec;
     const chunkManager = layer.manager.chunkManager;
     const registry = layer.manager.dataSourceProviderRegistry;
-    const cancellationToken = new CancellationTokenSource();
+    const abortController = new AbortController();
     this.messages.addMessage({
       severity: MessageSeverity.info,
       message: "Loading data source",
@@ -408,7 +407,7 @@ export class LayerDataSource extends RefCounted {
       .get({
         chunkManager,
         url: spec.url,
-        cancellationToken,
+        abortSignal: abortController.signal,
         globalCoordinateSpace: layer.manager.root.coordinateSpace,
         transform: spec.transform,
         state: spec.state,
@@ -451,7 +450,7 @@ export class LayerDataSource extends RefCounted {
         this.changed.dispatch();
       });
     refCounted.registerDisposer(() => {
-      cancellationToken.cancel();
+      abortController.abort();
     });
     this.changed.dispatch();
   }

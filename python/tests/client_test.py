@@ -42,7 +42,7 @@ def capture_screenshot_from_dev_server(
         # new session.
         process_group_args = dict(start_new_session=True)
     p = subprocess.Popen(
-        ["npm", "run", "dev-server", "--"] + (extra_args or []),
+        ["npm", "run", "dev-server", "--", "--port", "0"] + (extra_args or []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

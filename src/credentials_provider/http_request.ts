@@ -18,32 +18,23 @@ import type {
   CredentialsProvider,
   CredentialsWithGeneration,
 } from "#src/credentials_provider/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { throwIfCanceled, uncancelableToken } from "#src/util/cancellation.js";
-import type { ResponseTransform } from "#src/util/http_request.js";
-import {
-  cancellableFetchOk,
-  HttpError,
-  pickDelay,
-} from "#src/util/http_request.js";
+import { fetchOk, HttpError, pickDelay } from "#src/util/http_request.js";
 
 const maxCredentialsAttempts = 3;
 
-export async function fetchWithCredentials<Credentials, T>(
+export async function fetchWithCredentials<Credentials>(
   credentialsProvider: CredentialsProvider<Credentials>,
   input: RequestInfo | ((credentials: Credentials) => RequestInfo),
   init: RequestInit,
-  transformResponse: ResponseTransform<T>,
   applyCredentials: (
     credentials: Credentials,
     requestInit: RequestInit,
   ) => RequestInit,
   errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
-  cancellationToken: CancellationToken = uncancelableToken,
-): Promise<T> {
+): Promise<Response> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
   for (let credentialsAttempt = 0; ; ) {
-    throwIfCanceled(cancellationToken);
+    init.signal?.throwIfAborted();
     if (credentialsAttempt > 1) {
       // Don't delay on the first attempt, and also don't delay on the second attempt, since if the
       // credentials have expired and there is no problem on the server there is no reason to delay
@@ -52,13 +43,14 @@ export async function fetchWithCredentials<Credentials, T>(
         setTimeout(resolve, pickDelay(credentialsAttempt - 2)),
       );
     }
-    credentials = await credentialsProvider.get(credentials, cancellationToken);
+    credentials = await credentialsProvider.get(
+      credentials,
+      init.signal ?? undefined,
+    );
     try {
-      return await cancellableFetchOk(
+      return await fetchOk(
         typeof input === "function" ? input(credentials.credentials) : input,
         applyCredentials(credentials.credentials, init),
-        transformResponse,
-        cancellationToken,
       );
     } catch (error) {
       if (error instanceof HttpError) {

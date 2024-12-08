@@ -63,6 +63,10 @@ def pytest_addoption(parser):
         help="Specifies the browser to use.",
     )
     parser.addoption(
+        "--browser-binary-path",
+        help="Overrides default browser executable path.",
+    )
+    parser.addoption(
         "--skip-browser-tests",
         action="store_true",
         default=False,
@@ -89,6 +93,7 @@ def _webdriver_internal(request):
         docker=request.config.getoption("--webdriver-docker"),
         debug=request.config.getoption("--debug-webdriver"),
         browser=request.config.getoption("--browser"),
+        browser_binary_path=request.config.getoption("--browser-binary-path"),
     )
     if request.config.getoption("--neuroglancer-server-debug"):
         neuroglancer.server.debug = True
@@ -105,6 +110,7 @@ def webdriver_generic(request):
         docker=request.config.getoption("--webdriver-docker"),
         debug=request.config.getoption("--debug-webdriver"),
         browser=request.config.getoption("--browser"),
+        browser_binary_path=request.config.getoption("--browser-binary-path"),
     )
     atexit.register(webdriver.driver.close)
     return webdriver

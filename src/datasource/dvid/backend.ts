@@ -20,7 +20,7 @@ import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provi
 import type { DVIDToken } from "#src/datasource/dvid/api.js";
 import {
   DVIDInstance,
-  makeRequestWithCredentials,
+  fetchWithDVIDCredentials,
   appendQueryStringForDvid,
 } from "#src/datasource/dvid/api.js";
 import {
@@ -42,7 +42,6 @@ import { decodeCompressedSegmentationChunk } from "#src/sliceview/backend_chunk_
 import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { Endianness } from "#src/util/endian.js";
 import type { SharedObject } from "#src/worker_rpc.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
@@ -65,7 +64,7 @@ export class DVIDSkeletonSource extends DVIDSource(
   SkeletonSource,
   SkeletonSourceParameters,
 ) {
-  download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+  download(chunk: SkeletonChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const bodyid = `${chunk.objectId}`;
     const url =
@@ -73,18 +72,18 @@ export class DVIDSkeletonSource extends DVIDSource(
       `/${parameters.dataInstanceKey}/key/` +
       bodyid +
       "_swc";
-    return makeRequestWithCredentials(
+    return fetchWithDVIDCredentials(
       this.credentialsProvider,
+      appendQueryStringForDvid(url, parameters.user),
       {
-        method: "GET",
-        url: appendQueryStringForDvid(url, parameters.user),
-        responseType: "arraybuffer",
+        signal: abortSignal,
       },
-      cancellationToken,
-    ).then((response) => {
-      const enc = new TextDecoder("utf-8");
-      decodeSwcSkeletonChunk(chunk, enc.decode(response));
-    });
+    )
+      .then((response) => response.arrayBuffer())
+      .then((response) => {
+        const enc = new TextDecoder("utf-8");
+        decodeSwcSkeletonChunk(chunk, enc.decode(response));
+      });
   }
 }
 
@@ -118,7 +117,7 @@ export class DVIDMeshSource extends DVIDSource(
     return Promise.resolve(undefined);
   }
 
-  downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
+  downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const dvidInstance = new DVIDInstance(
       parameters.baseUrl,
@@ -129,15 +128,15 @@ export class DVIDMeshSource extends DVIDSource(
       `${chunk.fragmentId}.ngmesh`,
     );
 
-    return makeRequestWithCredentials(
+    return fetchWithDVIDCredentials(
       this.credentialsProvider,
+      appendQueryStringForDvid(meshUrl, parameters.user),
       {
-        method: "GET",
-        url: appendQueryStringForDvid(meshUrl, parameters.user),
-        responseType: "arraybuffer",
+        signal: abortSignal,
       },
-      cancellationToken,
-    ).then((response) => decodeFragmentChunk(chunk, response));
+    )
+      .then((response) => response.arrayBuffer())
+      .then((response) => decodeFragmentChunk(chunk, response));
   }
 }
 
@@ -146,7 +145,7 @@ export class DVIDVolumeChunkSource extends DVIDSource(
   VolumeChunkSource,
   VolumeChunkSourceParameters,
 ) {
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
     const params = this.parameters;
     let path: string;
     {
@@ -159,18 +158,14 @@ export class DVIDVolumeChunkSource extends DVIDSource(
       path = this.getPath(chunkPosition, chunkDataSize);
     }
     const decoder = this.getDecoder(params);
-    const response = await makeRequestWithCredentials(
+    const response = await fetchWithDVIDCredentials(
       this.credentialsProvider,
-      {
-        method: "GET",
-        url: appendQueryStringForDvid(`${params.baseUrl}${path}`, params.user),
-        responseType: "arraybuffer",
-      },
-      cancellationToken,
-    );
+      appendQueryStringForDvid(`${params.baseUrl}${path}`, params.user),
+      { signal: abortSignal },
+    ).then((response) => response.arrayBuffer());
     await decoder(
       chunk,
-      cancellationToken,
+      abortSignal,
       params.encoding === VolumeChunkEncoding.JPEG
         ? response.slice(16)
         : response,

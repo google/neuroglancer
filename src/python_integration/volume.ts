@@ -33,8 +33,6 @@ import type { VolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CancellationTokenSource } from "#src/util/cancellation.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { valueOrThrow } from "#src/util/error.js";
@@ -374,7 +372,7 @@ export class VolumeRequestHandler extends RefCounted {
     (requestId: string, response: unknown) => void
   >();
 
-  private alreadyHandledRequests = new Map<string, CancellationTokenSource>();
+  private alreadyHandledRequests = new Map<string, AbortController>();
   private debouncedMaybeHandleRequests = this.registerCancellable(
     debounce(() => this.maybeHandleRequests(), 0),
   );
@@ -397,9 +395,9 @@ export class VolumeRequestHandler extends RefCounted {
       const { id } = request;
       seenRequests.add(id);
       if (alreadyHandledRequests.has(id)) continue;
-      const source = new CancellationTokenSource();
+      const abortController = new AbortController();
       try {
-        if (!this.maybeHandleRequest(request, source)) {
+        if (!this.maybeHandleRequest(request, abortController.signal)) {
           continue;
         }
       } catch (e) {
@@ -409,12 +407,12 @@ export class VolumeRequestHandler extends RefCounted {
           });
         }
       }
-      alreadyHandledRequests.set(id, source);
+      alreadyHandledRequests.set(id, abortController);
     }
 
-    for (const [requestId, cancellationSource] of alreadyHandledRequests) {
+    for (const [requestId, abortController] of alreadyHandledRequests) {
       if (!seenRequests.has(requestId)) {
-        cancellationSource.cancel();
+        abortController.abort();
         alreadyHandledRequests.delete(requestId);
       }
     }
@@ -422,7 +420,7 @@ export class VolumeRequestHandler extends RefCounted {
 
   private maybeHandleRequest(
     request: VolumeRequest,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): boolean {
     const layer = this.viewer.layerManager.getLayerByName(request.layer);
     if (layer === undefined) {
@@ -588,7 +586,7 @@ export class VolumeRequestHandler extends RefCounted {
               order: info.order,
             };
           },
-          cancellationToken,
+          abortSignal,
         );
       } catch (e) {
         response = { error: e.message };
