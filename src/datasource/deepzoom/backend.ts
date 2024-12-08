@@ -26,13 +26,9 @@ import {
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { transposeArray2d } from "#src/util/array.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import {
-  isNotFoundError,
-  responseArrayBuffer,
-} from "#src/util/http_request.js";
+import { isNotFoundError } from "#src/util/http_request.js";
 import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 /* This is enough if support for these aren't needed:
@@ -57,10 +53,7 @@ export class DeepzoomImageTileSource extends WithParameters(
     return gridShape;
   })();
 
-  async download(
-    chunk: VolumeChunk,
-    cancellationToken: CancellationToken,
-  ): Promise<void> {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal): Promise<void> {
     const { parameters } = this;
 
     // /* This block is enough if support for these aren't needed:
@@ -70,7 +63,7 @@ export class DeepzoomImageTileSource extends WithParameters(
     // const {tilesize, overlap} = parameters;
     // const [x, y] = chunk.chunkGridPosition;
     // const url = `${parameters.url}/${x}_${y}.${ImageTileEncoding[parameters.encoding].toLowerCase()}`;
-    // const response: Blob = await cancellableFetchSpecialOk(this.credentialsProvider, url, {}, response => response.blob(), cancellationToken);
+    // const response: Blob = await (await fetchSpecialOk(this.credentialsProvider, url, {signal: abortSignal})).blob();
     // const tile = await createImageBitmap(response);
     // const canvas = new OffscreenCanvas(tilesize, tilesize);
     // const ctx = canvas.getContext("2d")!;
@@ -91,13 +84,11 @@ export class DeepzoomImageTileSource extends WithParameters(
     const oy = y === 0 ? 0 : overlap;
     const url = `${parameters.url}/${x}_${y}.${parameters.format}`;
     try {
-      const responseBuffer = await cancellableFetchSpecialOk(
-        this.credentialsProvider,
-        url,
-        {},
-        responseArrayBuffer,
-        cancellationToken,
-      );
+      const responseBuffer = await (
+        await fetchSpecialOk(this.credentialsProvider, url, {
+          signal: abortSignal,
+        })
+      ).arrayBuffer();
 
       let tilewidth = 0;
       let tileheight = 0;
@@ -106,7 +97,7 @@ export class DeepzoomImageTileSource extends WithParameters(
         case ImageTileEncoding.PNG: {
           const pngbitmap = await requestAsyncComputation(
             decodePng,
-            cancellationToken,
+            abortSignal,
             [responseBuffer],
             new Uint8Array(responseBuffer),
             undefined,
@@ -129,7 +120,7 @@ export class DeepzoomImageTileSource extends WithParameters(
         case ImageTileEncoding.JPEG: {
           const jpegbitmap = await requestAsyncComputation(
             decodeJpeg,
-            cancellationToken,
+            abortSignal,
             [responseBuffer],
             new Uint8Array(responseBuffer),
             undefined,

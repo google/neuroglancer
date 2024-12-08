@@ -211,7 +211,7 @@ function parseArgs() {
             group: "Development server options",
             type: "number",
             nargs: 1,
-            default: 8080,
+            default: 0,
             description: "Port number for the development server",
           },
           host: {

@@ -64,6 +64,9 @@ export class RefCounted implements Disposable {
     }
     this.refCountReachedZero();
   }
+  [Symbol.dispose]() {
+    this.dispose();
+  }
 
   protected refCountReachedZero() {
     this.disposed();

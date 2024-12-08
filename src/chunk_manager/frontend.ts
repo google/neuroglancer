@@ -29,8 +29,6 @@ import {
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableValue } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CANCELED } from "#src/util/cancellation.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { stableStringify } from "#src/util/json.js";
 import { StringMemoize } from "#src/util/memoize.js";
@@ -198,9 +196,9 @@ export class ChunkQueueManager extends SharedObject {
   }
 
   private handleFetch_(source: ChunkSource, update: any) {
-    const { resolve, reject, cancellationToken } = update.promise;
-    if ((<CancellationToken>cancellationToken).isCanceled) {
-      reject(CANCELED);
+    const { resolve, reject, abortSignal } = update.promise;
+    if (abortSignal.aborted) {
+      reject(abortSignal.reason);
       return;
     }
 
@@ -352,9 +350,9 @@ registerRPC("Chunk.update", function (x) {
 
 registerPromiseRPC(
   "Chunk.retrieve",
-  function (x, cancellationToken): RPCPromise<any> {
+  function (x, abortSignal): RPCPromise<any> {
     return new Promise<{ value: any }>((resolve, reject) => {
-      x.promise = { resolve, reject, cancellationToken };
+      x.promise = { resolve, reject, abortSignal };
       updateChunk(this, x);
     });
   },

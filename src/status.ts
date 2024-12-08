@@ -83,6 +83,11 @@ export class StatusMessage {
       statusContainer.appendChild(element);
     }
   }
+
+  [Symbol.dispose]() {
+    this.dispose();
+  }
+
   dispose() {
     if (this.modalElementWrapper) {
       modalStatusContainer!.removeChild(this.modalElementWrapper);

@@ -25,11 +25,18 @@ export function isGzipFormat(data: ArrayBufferView) {
 export async function decodeGzip(
   data: ArrayBuffer | ArrayBufferView,
   format: CompressionFormat,
+  abortSignal?: AbortSignal,
 ) {
-  const decompressedStream = new Response(data).body!.pipeThrough(
-    new DecompressionStream(format),
-  );
-  return await new Response(decompressedStream).arrayBuffer();
+  try {
+    const decompressedStream = new Response(data).body!.pipeThrough(
+      new DecompressionStream(format),
+      { signal: abortSignal },
+    );
+    return await new Response(decompressedStream).arrayBuffer();
+  } catch {
+    abortSignal?.throwIfAborted();
+    throw new Error(`Failed to decode ${format}`);
+  }
 }
 
 /**

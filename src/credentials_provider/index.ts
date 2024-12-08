@@ -18,8 +18,7 @@
  * @file Generic facility for providing authentication/authorization credentials.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { MultipleConsumerCancellationTokenSource } from "#src/util/cancellation.js";
+import { raceWithAbort, SharedAbortController } from "#src/util/abort.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { StringMemoize } from "#src/util/memoize.js";
@@ -43,26 +42,24 @@ export abstract class CredentialsProvider<Credentials> extends RefCounted {
    */
   abstract get: (
     invalidCredentials?: CredentialsWithGeneration<Credentials>,
-    cancellationToken?: CancellationToken,
+    abortSignal?: AbortSignal | undefined,
   ) => Promise<CredentialsWithGeneration<Credentials>>;
 }
 
 export function makeCachedCredentialsGetter<Credentials>(
   getUncached: (
     invalidCredentials: CredentialsWithGeneration<Credentials> | undefined,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) => Promise<CredentialsWithGeneration<Credentials>>,
 ) {
   let cachedCredentials: CredentialsWithGeneration<Credentials> | undefined;
   let pendingCredentials:
     | Promise<CredentialsWithGeneration<Credentials>>
     | undefined;
-  let pendingCancellationToken:
-    | MultipleConsumerCancellationTokenSource
-    | undefined;
+  let pendingAbortController: SharedAbortController | undefined;
   return (
     invalidCredentials?: CredentialsWithGeneration<Credentials>,
-    cancellationToken?: CancellationToken,
+    abortSignal?: AbortSignal,
   ) => {
     if (
       pendingCredentials !== undefined &&
@@ -71,24 +68,26 @@ export function makeCachedCredentialsGetter<Credentials>(
         cachedCredentials.generation !== invalidCredentials.generation)
     ) {
       if (cachedCredentials === undefined) {
-        pendingCancellationToken!.addConsumer(cancellationToken);
+        pendingAbortController!.addConsumer(abortSignal);
       }
-      return pendingCredentials;
+      return raceWithAbort(pendingCredentials, abortSignal);
     }
     cachedCredentials = undefined;
-    pendingCancellationToken = new MultipleConsumerCancellationTokenSource();
+    pendingAbortController = new SharedAbortController();
     pendingCredentials = getUncached(
       invalidCredentials,
-      pendingCancellationToken,
+      pendingAbortController.signal,
     ).then(
       (credentials) => {
         cachedCredentials = credentials;
-        pendingCancellationToken = undefined;
+        pendingAbortController![Symbol.dispose]();
+        pendingAbortController = undefined;
         return credentials;
       },
       (reason) => {
-        if (pendingCancellationToken!.isCanceled) {
-          pendingCancellationToken = undefined;
+        pendingAbortController![Symbol.dispose]();
+        if (pendingAbortController?.signal.aborted) {
+          pendingAbortController = undefined;
           pendingCredentials = undefined;
         }
         throw reason;
@@ -99,14 +98,12 @@ export function makeCachedCredentialsGetter<Credentials>(
 }
 
 export function makeCredentialsGetter<Credentials>(
-  getWithoutGeneration: (
-    cancellationToken: CancellationToken,
-  ) => Promise<Credentials>,
+  getWithoutGeneration: (abortSignal: AbortSignal) => Promise<Credentials>,
 ) {
   let generation = 0;
   return makeCachedCredentialsGetter<Credentials>(
-    (_invalidCredentials, cancellationToken) =>
-      getWithoutGeneration(cancellationToken).then((credentials) => ({
+    (_invalidCredentials, abortSignal) =>
+      getWithoutGeneration(abortSignal).then((credentials) => ({
         generation: ++generation,
         credentials,
       })),

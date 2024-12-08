@@ -15,7 +15,6 @@
  */
 
 import type { CredentialsManager } from "#src/credentials_provider/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type {
   BasicCompletionResult,
   Completion,
@@ -28,7 +27,7 @@ import { getS3PathCompletions } from "#src/util/s3.js";
 import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
 import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 
@@ -37,22 +36,19 @@ import {
  */
 export async function getHtmlDirectoryListing(
   url: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
   credentialsProvider?: SpecialProtocolCredentialsProvider,
 ): Promise<string[]> {
-  const { text, contentType } = await cancellableFetchSpecialOk(
+  const response = await fetchSpecialOk(
     credentialsProvider,
     url,
-    /*init=*/ { headers: { accept: "text/html" } },
-    async (x) => ({
-      text: await x.text(),
-      contentType: x.headers.get("content-type"),
-    }),
-    cancellationToken,
+    /*init=*/ { headers: { accept: "text/html" }, signal: abortSignal },
   );
+  const contentType = response.headers.get("content-type");
   if (contentType === null || /\btext\/html\b/i.exec(contentType) === null) {
     return [];
   }
+  const text = await response.text();
   const doc = new DOMParser().parseFromString(text, "text/html");
   const nodes = doc.evaluate(
     "//a/@href",
@@ -74,7 +70,7 @@ export async function getHtmlDirectoryListing(
 
 export async function getHtmlPathCompletions(
   url: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
   credentialsProvider?: SpecialProtocolCredentialsProvider,
 ): Promise<BasicCompletionResult> {
   console.log("getHtmlPathCompletions");
@@ -82,7 +78,7 @@ export async function getHtmlPathCompletions(
   if (m === null) throw null;
   const entries = await getHtmlDirectoryListing(
     m[1],
-    cancellationToken,
+    abortSignal,
     credentialsProvider,
   );
   const offset = m[1].length;
@@ -124,7 +120,7 @@ const specialProtocolEmptyCompletions: CompletionWithDescription[] = [
 export async function completeHttpPath(
   credentialsManager: CredentialsManager,
   url: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<BasicCompletionResult<Completion>> {
   if (!url.includes("://")) {
     return {
@@ -156,7 +152,7 @@ export async function completeHttpPath(
         `${protocol}://${host}`,
         `https://storage.googleapis.com/${host}`,
         path,
-        cancellationToken,
+        abortSignal,
       );
     }
     if (protocol === "gs" && path.length > 0) {
@@ -165,11 +161,11 @@ export async function completeHttpPath(
         `${protocol}://${host}`,
         host,
         path,
-        cancellationToken,
+        abortSignal,
       );
     }
     if (protocol === "s3" && path.length > 0) {
-      return await getS3PathCompletions(host, path, cancellationToken);
+      return await getS3PathCompletions(host, path, abortSignal);
     }
     const s3Match = parsedUrl.match(
       /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^/]+|[^/]+\.storage\.googleapis\.com|[^/]+\.s3(?:[^./]+)?\.amazonaws.com))(\/.*)$/,
@@ -180,13 +176,13 @@ export async function completeHttpPath(
         s3Match[1],
         s3Match[1],
         s3Match[2],
-        cancellationToken,
+        abortSignal,
       );
     }
     if ((protocol === "http" || protocol === "https") && path.length > 0) {
       return await getHtmlPathCompletions(
         parsedUrl,
-        cancellationToken,
+        abortSignal,
         credentialsProvider,
       );
     }

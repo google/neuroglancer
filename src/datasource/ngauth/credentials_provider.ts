@@ -19,9 +19,13 @@ import {
   CredentialsProvider,
   makeCredentialsGetter,
 } from "#src/credentials_provider/index.js";
+import {
+  getCredentialsWithStatus,
+  monitorAuthPopupWindow,
+} from "#src/credentials_provider/interactive_credentials_provider.js";
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import { StatusMessage } from "#src/status.js";
-import { HttpError, responseJson } from "#src/util/http_request.js";
+import { raceWithAbort } from "#src/util/abort.js";
+import { HttpError } from "#src/util/http_request.js";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -39,74 +43,92 @@ export interface Credentials {
   token: string;
 }
 
-async function waitForLogin(serverUrl: string): Promise<Credentials> {
-  const status = new StatusMessage(/*delay=*/ false);
-  function writeLoginStatus(message: string, buttonMessage: string) {
-    status.element.textContent = message + " ";
-    const button = document.createElement("button");
-    button.textContent = buttonMessage;
-    status.element.appendChild(button);
-    button.addEventListener("click", () => {
-      window.open(
-        `${serverUrl}/login?origin=${encodeURIComponent(self.origin)}`,
-      );
-      writeLoginStatus(
-        `Waiting for login to ngauth server ${serverUrl}...`,
-        "Retry",
-      );
-    });
-  }
-  const messagePromise = new Promise<string>((resolve, reject) => {
-    function messageHandler(event: MessageEvent) {
-      const eventOrigin =
-        event.origin || (<MessageEvent>(<any>event).originalEvent).origin;
-      if (eventOrigin !== serverUrl) {
-        return;
-      }
-      const removeListener = () => {
-        window.removeEventListener("message", messageHandler, false);
-      };
-      const { data } = event;
-      if (event.data === "badorigin") {
-        removeListener();
-        reject(makeOriginError(serverUrl));
-      }
-      try {
-        verifyObject(data);
-        const token = verifyObjectProperty(data, "token", verifyString);
-        removeListener();
-        resolve(token);
-      } catch (e) {
-        console.log(
-          "ngauth: Received unexpected message from ${serverUrl}",
-          event,
-        );
-      }
-    }
-    window.addEventListener("message", messageHandler, false);
-  });
-  writeLoginStatus(`ngauth server ${serverUrl} login required.`, "Login");
+async function waitForLogin(
+  serverUrl: string,
+  abortSignal: AbortSignal,
+): Promise<Credentials> {
+  const abortController = new AbortController();
+  abortSignal = AbortSignal.any([abortController.signal, abortSignal]);
   try {
-    return { token: await messagePromise };
+    const newWindow = window.open(
+      `${serverUrl}/login?origin=${encodeURIComponent(self.origin)}`,
+    );
+    if (newWindow === null) {
+      throw new Error("Failed to create authentication popup window");
+    }
+    monitorAuthPopupWindow(newWindow, abortController);
+    return await raceWithAbort(
+      waitForAuthResponseMessage(serverUrl, newWindow, abortController.signal),
+      abortSignal,
+    );
   } finally {
-    status.dispose();
+    abortController.abort();
   }
+}
+
+function waitForAuthResponseMessage(
+  serverUrl: string,
+  source: Window,
+  abortSignal: AbortSignal,
+): Promise<Credentials> {
+  return new Promise((resolve, reject) => {
+    window.addEventListener(
+      "message",
+      (event: MessageEvent) => {
+        if (event.source !== source) return;
+        const eventOrigin =
+          event.origin || (<MessageEvent>(<any>event).originalEvent).origin;
+        if (eventOrigin !== serverUrl) {
+          return;
+        }
+        const { data } = event;
+        if (event.data === "badorigin") {
+          reject(makeOriginError(serverUrl));
+          return;
+        }
+        try {
+          verifyObject(data);
+          const token = verifyObjectProperty(data, "token", verifyString);
+          resolve({ token });
+        } catch (e) {
+          reject(
+            new Error(
+              `Received unexpected authentication response: ${e.message}`,
+            ),
+          );
+          console.error(
+            "ngauth: Received unexpected message from ${serverUrl}",
+            event,
+          );
+        }
+      },
+      { signal: abortSignal },
+    );
+  });
 }
 
 export class NgauthCredentialsProvider extends CredentialsProvider<Credentials> {
   constructor(public serverUrl: string) {
     super();
   }
-  get = makeCredentialsGetter(async () => {
+  get = makeCredentialsGetter(async (abortSignal) => {
     const response = await fetch(`${this.serverUrl}/token`, {
       method: "POST",
       credentials: "include",
+      signal: abortSignal,
     });
     switch (response.status) {
       case 200:
         return { token: await response.text() };
       case 401:
-        return await waitForLogin(this.serverUrl);
+        return await getCredentialsWithStatus(
+          {
+            description: `ngauth server ${this.serverUrl}`,
+            requestDescription: "login",
+            get: (abortSignal) => waitForLogin(this.serverUrl, abortSignal),
+          },
+          abortSignal,
+        );
       case 403:
         throw makeOriginError(this.serverUrl);
       default:
@@ -128,7 +150,6 @@ export class NgauthGcsCredentialsProvider extends CredentialsProvider<OAuth2Cred
       this.ngauthCredentialsProvider,
       `${this.serverUrl}/gcs_token`,
       { method: "POST" },
-      responseJson,
       (credentials, init) => {
         return {
           ...init,
@@ -146,6 +167,6 @@ export class NgauthGcsCredentialsProvider extends CredentialsProvider<OAuth2Cred
         throw error;
       },
     );
-    return { tokenType: "Bearer", accessToken: response.token };
+    return { tokenType: "Bearer", accessToken: (await response.json()).token };
   });
 }

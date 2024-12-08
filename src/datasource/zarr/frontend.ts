@@ -71,7 +71,7 @@ import {
 } from "#src/util/completion.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { completeHttpPath } from "#src/util/http_path_completion.js";
-import { isNotFoundError, responseJson } from "#src/util/http_request.js";
+import { isNotFoundError } from "#src/util/http_request.js";
 import {
   parseQueryStringParameters,
   verifyObject,
@@ -84,7 +84,7 @@ import type {
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 
@@ -189,11 +189,8 @@ function getJsonResource(
     },
     async () => {
       try {
-        return await cancellableFetchSpecialOk(
-          credentialsProvider,
-          url,
-          {},
-          responseJson,
+        return await fetchSpecialOk(credentialsProvider, url, {}).then(
+          (response) => response.json(),
         );
       } catch (e) {
         if (isNotFoundError(e)) return undefined;
@@ -566,7 +563,7 @@ export class ZarrDataSource extends DataSourceProvider {
     return await completeHttpPath(
       options.credentialsManager,
       options.providerUrl,
-      options.cancellationToken,
+      options.abortSignal,
     );
   }
 }

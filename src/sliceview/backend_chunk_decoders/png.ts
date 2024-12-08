@@ -18,19 +18,18 @@ import { decodePng } from "#src/async_computation/decode_png_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 
 export async function decodePngChunk(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const chunkDataSize = chunk.chunkDataSize!;
   const dataType = chunk.source!.spec.dataType;
   const { uint8Array: image } = await requestAsyncComputation(
     decodePng,
-    cancellationToken,
+    abortSignal,
     [response],
     /*buffer=*/ new Uint8Array(response),
     /*width=*/ undefined,
@@ -41,5 +40,5 @@ export async function decodePngChunk(
     /*convertToGrayscale=*/ false,
   );
 
-  await decodeRawChunk(chunk, cancellationToken, image.buffer);
+  await decodeRawChunk(chunk, abortSignal, image.buffer);
 }

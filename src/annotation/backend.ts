@@ -66,7 +66,6 @@ import {
 } from "#src/sliceview/backend.js";
 import type { TransformedSource } from "#src/sliceview/base.js";
 import { registerNested, WatchableValue } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { Uint64 } from "#src/util/uint64.js";
 import {
@@ -171,11 +170,8 @@ class AnnotationMetadataChunkSource extends ChunkSource {
     return chunk;
   }
 
-  download(
-    chunk: AnnotationMetadataChunk,
-    cancellationToken: CancellationToken,
-  ) {
-    return this.parent!.downloadMetadata(chunk, cancellationToken);
+  download(chunk: AnnotationMetadataChunk, abortSignal: AbortSignal) {
+    return this.parent!.downloadMetadata(chunk, abortSignal);
   }
 }
 
@@ -209,14 +205,11 @@ class AnnotationSubsetGeometryChunkSource extends ChunkSource {
     }
     return chunk;
   }
-  download(
-    chunk: AnnotationSubsetGeometryChunk,
-    cancellationToken: CancellationToken,
-  ) {
+  download(chunk: AnnotationSubsetGeometryChunk, abortSignal: AbortSignal) {
     return this.parent!.downloadSegmentFilteredGeometry(
       chunk,
       this.relationshipIndex,
-      cancellationToken,
+      abortSignal,
     );
   }
 }
@@ -227,12 +220,12 @@ export interface AnnotationSource {
   // TypeScript supports mixins with abstract classes.
   downloadMetadata(
     chunk: AnnotationMetadataChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void>;
   downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk,
     relationshipIndex: number,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void>;
 }
 
