@@ -23,13 +23,9 @@ import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postpr
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { Endianness } from "#src/util/endian.js";
 import { vec3 } from "#src/util/geom.js";
-import {
-  cancellableFetchOk,
-  responseArrayBuffer,
-} from "#src/util/http_request.js";
+import { fetchOk } from "#src/util/http_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 const chunkDecoders = new Map<string, ChunkDecoder>();
@@ -37,13 +33,13 @@ chunkDecoders.set(
   "jpg",
   async (
     chunk: VolumeChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
     response: ArrayBuffer,
   ) => {
     const chunkDataSize = chunk.chunkDataSize!;
     const { uint8Array: decoded } = await requestAsyncComputation(
       decodeJpeg,
-      cancellationToken,
+      abortSignal,
       [response],
       new Uint8Array(response),
       undefined,
@@ -52,11 +48,11 @@ chunkDecoders.set(
       3,
       true,
     );
-    await postProcessRawData(chunk, cancellationToken, decoded);
+    await postProcessRawData(chunk, abortSignal, decoded);
   },
 );
-chunkDecoders.set("raw16", (chunk, cancellationToken, response) => {
-  return decodeRawChunk(chunk, cancellationToken, response, Endianness.BIG);
+chunkDecoders.set("raw16", (chunk, abortSignal, response) => {
+  return decodeRawChunk(chunk, abortSignal, response, Endianness.BIG);
 });
 
 @registerSharedObject()
@@ -95,7 +91,7 @@ export class TileChunkSource extends WithParameters(
     return query_params.join("&");
   })();
 
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const { chunkGridPosition } = chunk;
 
@@ -124,12 +120,10 @@ export class TileChunkSource extends WithParameters(
       imageMethod = "jpeg-image";
     }
     const path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/${imageMethod}`;
-    const response = await cancellableFetchOk(
+    const response = await fetchOk(
       `${parameters.baseUrl}${path}?${this.queryString}`,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
+      { signal: abortSignal },
     );
-    await this.chunkDecoder(chunk, cancellationToken, response);
+    await this.chunkDecoder(chunk, abortSignal, await response.arrayBuffer());
   }
 }

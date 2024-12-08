@@ -18,7 +18,6 @@ import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import type { CodecArrayInfo } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import type { Configuration } from "#src/datasource/zarr/codec/transpose/resolve.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 registerCodec({
   name: "transpose",
@@ -27,10 +26,10 @@ registerCodec({
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded: ArrayBufferView,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<ArrayBufferView> {
     decodedArrayInfo;
-    cancellationToken;
+    abortSignal;
     configuration;
     return encoded;
   },

@@ -16,10 +16,7 @@
 
 import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
-import type { ResponseTransform } from "#src/util/http_request.js";
-import { cancellableFetchOk } from "#src/util/http_request.js";
+import { fetchOk } from "#src/util/http_request.js";
 
 export type BossToken = string;
 
@@ -28,19 +25,12 @@ export type BossToken = string;
  */
 export const credentialsKey = "boss";
 
-export function fetchWithBossCredentials<T>(
+export async function fetchWithBossCredentials(
   credentialsProvider: CredentialsProvider<BossToken>,
   input: RequestInfo,
   init: RequestInit,
-  transformResponse: ResponseTransform<T>,
-  cancellationToken: CancellationToken = uncancelableToken,
-): Promise<T> {
-  return cancellableFetchOk(
-    input,
-    init,
-    transformResponse,
-    cancellationToken,
-  ).catch((error) => {
+): Promise<Response> {
+  return fetchOk(input, init).catch((error) => {
     if (
       error.status !== 500 &&
       error.status !== 401 &&
@@ -55,7 +45,6 @@ export function fetchWithBossCredentials<T>(
       credentialsProvider,
       input,
       init,
-      transformResponse,
       (credentials) => {
         const headers = new Headers(init.headers);
         headers.set("Authorization", `Bearer ${credentials}`);
@@ -69,7 +58,6 @@ export function fetchWithBossCredentials<T>(
         }
         throw error;
       },
-      cancellationToken,
     );
   });
 }

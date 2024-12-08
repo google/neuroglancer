@@ -45,7 +45,6 @@ import {
   getObjectKey,
   forEachVisibleSegment,
 } from "#src/segmentation_display_state/base.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Endianness } from "#src/util/endian.js";
 import { convertEndian32 } from "#src/util/endian.js";
 import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
@@ -372,7 +371,7 @@ export interface MeshSource {
   // TypeScript supports mixins with abstract classes.
   downloadFragment(
     chunk: FragmentChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void>;
 }
 
@@ -424,8 +423,8 @@ export class MeshSource extends ChunkSource {
 @registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   meshSource: MeshSource | null = null;
-  download(chunk: FragmentChunk, cancellationToken: CancellationToken) {
-    return this.meshSource!.downloadFragment(chunk, cancellationToken);
+  download(chunk: FragmentChunk, abortSignal: AbortSignal) {
+    return this.meshSource!.downloadFragment(chunk, abortSignal);
   }
 }
 
@@ -570,7 +569,7 @@ export interface MultiscaleMeshSource {
   // TypeScript supports mixins with abstract classes.
   downloadFragment(
     chunk: MultiscaleFragmentChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void>;
 }
 
@@ -622,11 +621,8 @@ export class MultiscaleMeshSource extends ChunkSource {
 @registerSharedObject(MULTISCALE_FRAGMENT_SOURCE_RPC_ID)
 export class MultiscaleFragmentSource extends ChunkSource {
   meshSource: MultiscaleMeshSource | null = null;
-  download(
-    chunk: MultiscaleFragmentChunk,
-    cancellationToken: CancellationToken,
-  ) {
-    return this.meshSource!.downloadFragment(chunk, cancellationToken);
+  download(chunk: MultiscaleFragmentChunk, abortSignal: AbortSignal) {
+    return this.meshSource!.downloadFragment(chunk, abortSignal);
   }
 }
 

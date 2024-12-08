@@ -17,7 +17,6 @@
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import type { Configuration } from "#src/datasource/zarr/codec/gzip/resolve.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { decodeGzip } from "#src/util/gzip.js";
 
 registerCodec({
@@ -26,10 +25,10 @@ registerCodec({
   async decode(
     configuration: Configuration,
     encoded: Uint8Array,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<Uint8Array> {
     configuration;
-    cancellationToken;
+    abortSignal;
     return new Uint8Array(await decodeGzip(encoded));
   },
 });
