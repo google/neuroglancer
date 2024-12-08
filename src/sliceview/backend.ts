@@ -48,8 +48,7 @@ import {
 } from "#src/sliceview/base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CANCELED } from "#src/util/cancellation.js";
+import { raceWithAbort } from "#src/util/abort.js";
 import { erf } from "#src/util/erf.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
 import { VelocityEstimator } from "#src/util/velocity_estimation.js";
@@ -536,7 +535,7 @@ registerPromiseRPC(
   SLICEVIEW_REQUEST_CHUNK_RPC_ID,
   async function (
     x: { this: RPC; source: number; chunkGridPosition: Float32Array },
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): RPCPromise<void> {
     const source = this.get(x.source) as SliceViewChunkSourceBackend;
     const { chunkManager } = source;
@@ -568,13 +567,8 @@ registerPromiseRPC(
       };
     });
     source.registerChunkListener(key, listener!);
-    const cancelPromise = new Promise((_resolve, reject) => {
-      cancellationToken.add(() => {
-        reject(CANCELED);
-      });
-    });
     try {
-      await Promise.race([promise, cancelPromise]);
+      await raceWithAbort(promise, abortSignal);
       return { value: undefined };
     } finally {
       source.unregisterChunkListener(key, listener!);

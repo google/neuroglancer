@@ -21,7 +21,6 @@ import type {
 } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import type { ReadableKvStore } from "#src/kvstore/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { RefCounted } from "#src/util/disposable.js";
 
 export interface Codec {
@@ -35,7 +34,7 @@ export interface ArrayToArrayCodec<Configuration = unknown> extends Codec {
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded: ArrayBufferView,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<ArrayBufferView>;
 }
 
@@ -45,7 +44,7 @@ export interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded: Uint8Array,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<ArrayBufferView>;
 }
 
@@ -68,7 +67,7 @@ export interface BytesToBytesCodec<Configuration = unknown> extends Codec {
   decode(
     configuration: Configuration,
     encoded: Uint8Array,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<Uint8Array>;
 }
 
@@ -96,7 +95,7 @@ export function registerCodec<Configuration>(
 export async function decodeArray(
   codecs: CodecChainSpec,
   encoded: Uint8Array,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<ArrayBufferView> {
   const bytesToBytes = codecs[CodecKind.bytesToBytes];
   for (let i = bytesToBytes.length; i--; ) {
@@ -105,11 +104,7 @@ export async function decodeArray(
     if (impl === undefined) {
       throw new Error(`Unsupported codec: ${JSON.stringify(codec.name)}`);
     }
-    encoded = await impl.decode(
-      codec.configuration,
-      encoded,
-      cancellationToken,
-    );
+    encoded = await impl.decode(codec.configuration, encoded, abortSignal);
   }
 
   let decoded: ArrayBufferView;
@@ -123,7 +118,7 @@ export async function decodeArray(
       codec.configuration,
       codecs.arrayInfo[codecs.arrayInfo.length - 1],
       encoded,
-      cancellationToken,
+      abortSignal,
     );
   }
 
@@ -138,7 +133,7 @@ export async function decodeArray(
       codec.configuration,
       codecs.arrayInfo[i],
       decoded,
-      cancellationToken,
+      abortSignal,
     );
   }
 

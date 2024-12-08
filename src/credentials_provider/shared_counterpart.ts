@@ -29,7 +29,6 @@ import {
   CREDENTIALS_PROVIDER_GET_RPC_ID,
   CREDENTIALS_PROVIDER_RPC_ID,
 } from "#src/credentials_provider/shared_common.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import {
   registerSharedObject,
   SharedObjectCounterpart,
@@ -43,12 +42,12 @@ export class SharedCredentialsProviderCounterpart<Credentials>
   get = makeCachedCredentialsGetter(
     (
       invalidCredentials?: CredentialsWithGeneration<Credentials>,
-      cancellationToken?: CancellationToken,
+      abortSignal?: AbortSignal,
     ): Promise<CredentialsWithGeneration<Credentials>> =>
       this.rpc!.promiseInvoke(
         CREDENTIALS_PROVIDER_GET_RPC_ID,
         { providerId: this.rpcId, invalidCredentials: invalidCredentials },
-        cancellationToken,
+        abortSignal,
       ),
   );
 }

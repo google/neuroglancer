@@ -68,8 +68,6 @@ export class MultiscaleMeshMetadata {
   sharding: Array<ShardingParameters> | undefined;
 }
 
-export const responseIdentity = async (x: any) => x;
-
 export function isBaseSegmentId(segmentId: Uint64, nBitsForLayerId: number) {
   const layerId = Uint64.rshift(new Uint64(), segmentId, 64 - nBitsForLayerId);
   return Uint64.equal(layerId, Uint64.ONE);

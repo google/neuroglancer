@@ -62,8 +62,6 @@ import {
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
@@ -646,7 +644,7 @@ export abstract class SliceViewChunkSource<
   async fetchChunk<T>(
     chunkGridPosition: Float32Array,
     transform: (chunk: Chunk) => T,
-    cancellationToken: CancellationToken = uncancelableToken,
+    abortSignal?: AbortSignal,
   ): Promise<T> {
     const key = chunkGridPosition.join();
     const existingChunk = this.chunks.get(key);
@@ -675,7 +673,7 @@ export abstract class SliceViewChunkSource<
       await this.rpc!.promiseInvoke(
         SLICEVIEW_REQUEST_CHUNK_RPC_ID,
         { source: this.rpcId, chunkGridPosition },
-        cancellationToken,
+        abortSignal,
       );
       return await promise;
     } finally {

@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CANCELED, uncancelableToken } from "#src/util/cancellation.js";
 import { Uint64 } from "#src/util/uint64.js";
 
 export class HttpError extends Error {
@@ -102,9 +100,7 @@ export async function fetchOk(
   init?: RequestInit,
 ): Promise<Response> {
   for (let requestAttempt = 0; ; ) {
-    if (init?.signal?.aborted) {
-      throw CANCELED;
-    }
+    init?.signal?.throwIfAborted();
     let response: Response;
     try {
       response = await fetch(input, init);
@@ -127,50 +123,6 @@ export async function fetchOk(
       throw HttpError.fromResponse(response);
     }
     return response;
-  }
-}
-
-export function responseArrayBuffer(response: Response): Promise<ArrayBuffer> {
-  return response.arrayBuffer();
-}
-
-export function responseJson(response: Response): Promise<any> {
-  return response.json();
-}
-
-export type ResponseTransform<T> = (response: Response) => Promise<T>;
-
-/**
- * Issues a `fetch` request in the same way as `fetchOk`, and returns the result of the promise
- * returned by `transformResponse`.
- *
- * Additionally, the request may be cancelled through `cancellationToken`.
- *
- * The `transformResponse` function should not do anything with the `Response` object after its
- * result becomes ready; otherwise, cancellation may not work as expected.
- */
-export async function cancellableFetchOk<T>(
-  input: RequestInfo,
-  init: RequestInit,
-  transformResponse: ResponseTransform<T>,
-  cancellationToken: CancellationToken = uncancelableToken,
-): Promise<T> {
-  if (cancellationToken === uncancelableToken) {
-    const response = await fetchOk(input, init);
-    return await transformResponse(response);
-  }
-  const abortController = new AbortController();
-  const unregisterCancellation = cancellationToken.add(() =>
-    abortController.abort(),
-  );
-  try {
-    const response = await fetchOk(input, {
-      ...init,
-      signal: abortController.signal,
-    });
-    return await transformResponse(response);
-  } finally {
-    unregisterCancellation();
   }
 }
 
