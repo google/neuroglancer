@@ -115,41 +115,13 @@ class LayerWidget extends RefCounted {
     layerColorElement.className = "neuroglancer-layer-color-value";
     layerColorElementWrapper.appendChild(layerColorElement);
 
-    if (this.layer.supportsLayerBarColorSyncOption) {
-      const updateLayerColorWidget = () => {
-        const color = this.layer.layerBarColor;
-        if (color) {
-          layerColorElement.style.backgroundColor = color;
-          layerColorElement.classList.remove("rainbow");
-        } else {
-          layerColorElement.classList.add("rainbow");
-        }
-      };
-      this.registerDisposer(
-        layer.observeLayerColor(() => {
-          updateLayerColorWidget();
-        }),
-      );
-      this.registerDisposer(
-        observeWatchable((layerColorEnabled) => {
-          layerColorElementWrapper.style.display = layerColorEnabled
-            ? "block"
-            : "none";
-        }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget),
-      );
-      this.registerDisposer(
-        layer.layerChanged.add(() => {
-          if (!this.layer.visible) {
-            layerColorElementWrapper.classList.add("cross");
-          } else {
-            layerColorElementWrapper.classList.remove("cross");
-          }
-        }),
-      );
-    } else {
-      // If the layer do not support color sync (no color to deal with)
-      layerColorElement.classList.add("unsupported");
-    }
+    this.registerDisposer(
+      observeWatchable((layerColorEnabled) => {
+        layerColorElementWrapper.style.display = layerColorEnabled
+          ? "block"
+          : "none";
+      }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget),
+    );
 
     // Compose the layer's title bar
     element.appendChild(layerNumberElement);
@@ -201,7 +173,7 @@ class LayerWidget extends RefCounted {
   }
 
   update() {
-    const { layer, element } = this;
+    const { layer, element, panel, layerColorElement } = this;
     this.labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
     element.dataset.selected = (
@@ -218,6 +190,21 @@ class LayerWidget extends RefCounted {
     }
     title += ", drag to move, shift+drag to copy";
     element.title = title;
+    // Color widget updates
+    if (panel.layerGroupViewer.viewerState.enableLayerColorWidget.value) {
+      if (layer.supportsLayerBarColorSyncOption) {
+        const color = this.layer.layerBarColor;
+        if (color) {
+          element.dataset.color = "fixed";
+          layerColorElement.style.backgroundColor = color;
+        } else {
+          element.dataset.color = "rainbow";
+        }
+      } else {
+        element.dataset.color = "unsupported";
+      }
+    }
+    layerColorElement.title = layer.colorWidgetTooltip() || "";
   }
 
   disposed() {

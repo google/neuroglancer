@@ -215,6 +215,10 @@ export class UserLayer extends RefCounted {
     return this.automaticLayerBarColor;
   }
 
+  colorWidgetTooltip(): string | undefined {
+    return undefined;
+  }
+
   initializeSelectionState(state: this["selectionState"]) {
     state.generation = -1;
     state.localPositionValid = false;
@@ -765,6 +769,11 @@ export class ManagedUserLayer extends RefCounted {
   get layerBarColor(): string | undefined {
     const userLayer = this.layer;
     return userLayer?.layerBarColor;
+  }
+
+  colorWidgetTooltip(): string | undefined {
+    const userLayer = this.layer;
+    return userLayer?.colorWidgetTooltip();
   }
 
   observeLayerColor(callback: () => void): () => void {
