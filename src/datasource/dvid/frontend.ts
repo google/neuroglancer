@@ -36,7 +36,7 @@ import type {
 import type { DVIDToken } from "#src/datasource/dvid/api.js";
 import {
   credentialsKey,
-  makeRequestWithCredentials,
+  fetchWithDVIDCredentials,
 } from "#src/datasource/dvid/api.js";
 import type { DVIDSourceParameters } from "#src/datasource/dvid/base.js";
 import {
@@ -457,11 +457,15 @@ export function getServerInfo(
   return chunkManager.memoize.getUncounted(
     { type: "dvid:getServerInfo", baseUrl },
     () => {
-      const result = makeRequestWithCredentials(credentialsProvider, {
-        url: `${baseUrl}/api/repos/info`,
-        method: "GET",
-        responseType: "json",
-      }).then((response) => new ServerInfo(response));
+      const result = fetchWithDVIDCredentials(
+        credentialsProvider,
+        `${baseUrl}/api/repos/info`,
+        {
+          method: "GET",
+        },
+      )
+        .then((response) => response.json())
+        .then((response) => new ServerInfo(response));
       const description = `repository info for DVID server ${baseUrl}`;
       StatusMessage.forPromise(result, {
         initialMessage: `Retrieving ${description}.`,

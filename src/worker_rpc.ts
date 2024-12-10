@@ -14,13 +14,7 @@
  * limitations under the License.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-import {
-  CANCELED,
-  CancellationTokenSource,
-  makeCancelablePromise,
-  uncancelableToken,
-} from "#src/util/cancellation.js";
+import { promiseWithResolversAndAbortCallback } from "#src/util/abort.js";
 import { RefCounted } from "#src/util/disposable.js";
 
 export type RPCHandler = (this: RPC, x: any) => void;
@@ -56,17 +50,17 @@ export class RPCError extends Error {
 
 export function registerPromiseRPC<T>(
   key: string,
-  handler: (
-    this: RPC,
-    x: any,
-    cancellationToken: CancellationToken,
-  ) => RPCPromise<T>,
+  handler: (this: RPC, x: any, abortSignal: AbortSignal) => RPCPromise<T>,
 ) {
   registerRPC(key, function (this: RPC, x: any) {
     const id = <number>x.id;
-    const cancellationToken = new CancellationTokenSource();
-    const promise = handler.call(this, x, cancellationToken) as RPCPromise<T>;
-    this.set(id, { promise, cancellationToken });
+    const abortController = new AbortController();
+    const promise = handler.call(
+      this,
+      x,
+      abortController.signal,
+    ) as RPCPromise<T>;
+    this.set(id, { promise, abortController });
     promise.then(
       ({ value, transfers }) => {
         this.delete(id);
@@ -88,8 +82,8 @@ registerRPC(PROMISE_CANCEL_ID, function (this: RPC, x: any) {
   const id = <number>x.id;
   const request = this.get(id);
   if (request !== undefined) {
-    const { cancellationToken } = request;
-    cancellationToken.cancel();
+    const { abortController } = request;
+    abortController.abort();
   }
 });
 
@@ -100,12 +94,7 @@ registerRPC(PROMISE_RESPONSE_ID, function (this: RPC, x: any) {
   if (Object.prototype.hasOwnProperty.call(x, "value")) {
     resolve(x.value);
   } else {
-    const errorName = x.errorName;
-    if (errorName === CANCELED.name) {
-      reject(CANCELED);
-    } else {
-      reject(new RPCError(x.errorName, x.error));
-    }
+    reject(new RPCError(x.errorName, x.error));
   }
 });
 
@@ -204,21 +193,24 @@ export class RPC {
   promiseInvoke<T>(
     name: string,
     x: any,
-    cancellationToken = uncancelableToken,
+    abortSignal?: AbortSignal | undefined,
     transfers?: any[],
   ): Promise<T> {
-    return makeCancelablePromise<T>(
-      cancellationToken,
-      (resolve, reject, token) => {
-        const id = (x.id = this.newId());
-        this.set(id, { resolve, reject });
-        this.invoke(name, x, transfers);
-        token.add(() => {
-          this.invoke(PROMISE_CANCEL_ID, { id: id });
-        });
-      },
-    );
+    if (abortSignal?.aborted) {
+      return Promise.reject(abortSignal.reason);
+    }
+    const id = (x.id = this.newId());
+    this.invoke(name, x, transfers);
+    const { promise, resolve, reject } =
+      abortSignal === undefined
+        ? Promise.withResolvers<T>()
+        : promiseWithResolversAndAbortCallback<T>(abortSignal, () => {
+            this.invoke(PROMISE_CANCEL_ID, { id: id });
+          });
+    this.set(id, { resolve, reject });
+    return promise;
   }
+
   newId() {
     return IS_WORKER ? this.nextId-- : this.nextId++;
   }

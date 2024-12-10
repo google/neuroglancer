@@ -60,7 +60,7 @@ export class ObjDataSource extends DataSourceProvider {
     return completeHttpPath(
       options.credentialsManager,
       options.providerUrl,
-      options.cancellationToken,
+      options.abortSignal,
     );
   }
 }

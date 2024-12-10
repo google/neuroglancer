@@ -22,7 +22,12 @@ import {
   CredentialsProvider,
   makeCredentialsGetter,
 } from "#src/credentials_provider/index.js";
+import {
+  getCredentialsWithStatus,
+  monitorAuthPopupWindow,
+} from "#src/credentials_provider/interactive_credentials_provider.js";
 import { StatusMessage } from "#src/status.js";
+import { raceWithAbort } from "#src/util/abort.js";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -51,83 +56,68 @@ function openPopupCenter(url: string, width: number, height: number) {
   );
 }
 
-async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
-  const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
+function waitForAuthResponseMessage(
+  serverUrl: string,
+  source: Window,
+  abortSignal: AbortSignal,
+): Promise<MiddleAuthToken> {
+  return new Promise((resolve, reject) => {
+    window.addEventListener(
+      "message",
+      (event) => {
+        if (event.source !== source) return;
+        try {
+          const obj = verifyObject(event.data);
+          const accessToken = verifyObjectProperty(obj, "token", verifyString);
+          const appUrls = verifyObjectProperty(
+            obj,
+            "app_urls",
+            verifyStringArray,
+          );
 
-  const res: Promise<MiddleAuthToken> = new Promise((f) => {
-    function writeLoginStatus(message: string, buttonMessage: string) {
-      status.element.textContent = message + " ";
-      const button = document.createElement("button");
-      button.textContent = buttonMessage;
-      status.element.appendChild(button);
-
-      button.addEventListener("click", () => {
-        writeLoginStatus(
-          `Waiting for login to middleauth server ${serverUrl}...`,
-          "Retry",
-        );
-
-        const auth_popup = openPopupCenter(
-          `${serverUrl}/api/v1/authorize`,
-          400,
-          650,
-        );
-
-        const closeAuthPopup = () => {
-          auth_popup?.close();
-        };
-
-        window.addEventListener("beforeunload", closeAuthPopup);
-        const checkClosed = setInterval(() => {
-          if (auth_popup?.closed) {
-            clearInterval(checkClosed);
-            writeLoginStatus(
-              `Login window closed for middleauth server ${serverUrl}.`,
-              "Retry",
-            );
-          }
-        }, 1000);
-
-        const tokenListener = async (ev: MessageEvent) => {
-          if (ev.source === auth_popup) {
-            clearInterval(checkClosed);
-            window.removeEventListener("message", tokenListener);
-            window.removeEventListener("beforeunload", closeAuthPopup);
-            closeAuthPopup();
-
-            verifyObject(ev.data);
-            const accessToken = verifyObjectProperty(
-              ev.data,
-              "token",
-              verifyString,
-            );
-            const appUrls = verifyObjectProperty(
-              ev.data,
-              "app_urls",
-              verifyStringArray,
-            );
-
-            const token: MiddleAuthToken = {
-              tokenType: "Bearer",
-              accessToken,
-              url: serverUrl,
-              appUrls,
-            };
-            f(token);
-          }
-        };
-
-        window.addEventListener("message", tokenListener);
-      });
-    }
-
-    writeLoginStatus(`middleauth server ${serverUrl} login required.`, "Login");
+          const token: MiddleAuthToken = {
+            tokenType: "Bearer",
+            accessToken,
+            url: serverUrl,
+            appUrls,
+          };
+          resolve(token);
+        } catch (parseError) {
+          reject(
+            new Error(
+              `Received unexpected authentication response: ${parseError.message}`,
+            ),
+          );
+          console.error("Response received: ", event.data);
+        }
+      },
+      { signal: abortSignal },
+    );
   });
+}
 
+async function waitForLogin(
+  serverUrl: string,
+  abortSignal: AbortSignal,
+): Promise<MiddleAuthToken> {
+  const abortController = new AbortController();
+  abortSignal = AbortSignal.any([abortController.signal, abortSignal]);
   try {
-    return await res;
+    const newWindow = openPopupCenter(
+      `${serverUrl}/api/v1/authorize`,
+      400,
+      650,
+    );
+    if (newWindow === null) {
+      throw new Error("Failed to create authentication popup window");
+    }
+    monitorAuthPopupWindow(newWindow, abortController);
+    return await raceWithAbort(
+      waitForAuthResponseMessage(serverUrl, newWindow, abortController.signal),
+      abortSignal,
+    );
   } finally {
-    status.dispose();
+    abortController.abort();
   }
 }
 
@@ -154,7 +144,7 @@ export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAut
   constructor(private serverUrl: string) {
     super();
   }
-  get = makeCredentialsGetter(async () => {
+  get = makeCredentialsGetter(async (abortSignal) => {
     let token = undefined;
 
     if (!this.alreadyTriedLocalStorage) {
@@ -163,7 +153,14 @@ export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAut
     }
 
     if (!token) {
-      token = await waitForLogin(this.serverUrl);
+      token = await getCredentialsWithStatus(
+        {
+          description: `middleauth server ${this.serverUrl}`,
+          requestDescription: "login",
+          get: (abortSignal) => waitForLogin(this.serverUrl, abortSignal),
+        },
+        abortSignal,
+      );
       saveAuthTokenToLocalStorage(this.serverUrl, token);
     }
 

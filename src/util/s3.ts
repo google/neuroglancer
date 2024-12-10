@@ -14,39 +14,29 @@
  * limitations under the License.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
-import type { ResponseTransform } from "#src/util/http_request.js";
-import { cancellableFetchOk } from "#src/util/http_request.js";
+import { fetchOk } from "#src/util/http_request.js";
 import { getS3CompatiblePathCompletions } from "#src/util/s3_bucket_listing.js";
 
 // Support for s3:// special protocol.
 
-export async function cancellableFetchS3Ok<T>(
+export function fetchS3Ok(
   bucket: string,
   path: string,
   requestInit: RequestInit,
-  transformResponse: ResponseTransform<T>,
-  cancellationToken: CancellationToken = uncancelableToken,
 ) {
-  return await cancellableFetchOk(
-    `https://${bucket}.s3.amazonaws.com${path}`,
-    requestInit,
-    transformResponse,
-    cancellationToken,
-  );
+  return fetchOk(`https://${bucket}.s3.amazonaws.com${path}`, requestInit);
 }
 
 export async function getS3PathCompletions(
   bucket: string,
   path: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   return await getS3CompatiblePathCompletions(
     undefined,
     `s3://${bucket}`,
     `https://${bucket}.s3.amazonaws.com`,
     path,
-    cancellationToken,
+    abortSignal,
   );
 }

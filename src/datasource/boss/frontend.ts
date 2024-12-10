@@ -66,7 +66,6 @@ import {
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
 import { vec2, vec3 } from "#src/util/geom.js";
-import { responseJson } from "#src/util/http_request.js";
 import {
   parseArray,
   parseQueryStringParameters,
@@ -514,17 +513,18 @@ export function getExperimentInfo(
         credentialsProvider,
         `${hostname}/latest/collection/${collection}/experiment/${experiment}/`,
         {},
-        responseJson,
-      ).then((value) =>
-        parseExperimentInfo(
-          value,
-          chunkManager,
-          hostname,
-          credentialsProvider,
-          collection,
-          experiment,
+      )
+        .then((response) => response.json())
+        .then((value) =>
+          parseExperimentInfo(
+            value,
+            chunkManager,
+            hostname,
+            credentialsProvider,
+            collection,
+            experiment,
+          ),
         ),
-      ),
   );
 }
 
@@ -549,8 +549,9 @@ export function getChannelInfo(
         credentialsProvider,
         `${hostname}/latest/collection/${collection}/experiment/${experiment}/channel/${channel}/`,
         {},
-        responseJson,
-      ).then(parseChannelInfo),
+      )
+        .then((response) => response.json())
+        .then(parseChannelInfo),
   );
 }
 
@@ -577,8 +578,7 @@ export function getDownsampleInfoForChannel(
           credentialsProvider,
           `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}`,
           {},
-          responseJson,
-        ),
+        ).then((response) => response.json()),
     )
     .then((downsampleObj) => {
       return parseDownsampleInfoForChannel(
@@ -747,12 +747,13 @@ export function getCollections(
         credentialsProvider,
         `${hostname}/latest/collection/`,
         {},
-        responseJson,
-      ).then((value) =>
-        verifyObjectProperty(value, "collections", (x) =>
-          parseArray(x, verifyString),
+      )
+        .then((response) => response.json())
+        .then((value) =>
+          verifyObjectProperty(value, "collections", (x) =>
+            parseArray(x, verifyString),
+          ),
         ),
-      ),
   );
 }
 
@@ -769,12 +770,13 @@ export function getExperiments(
         credentialsProvider,
         `${hostname}/latest/collection/${collection}/experiment/`,
         {},
-        responseJson,
-      ).then((value) =>
-        verifyObjectProperty(value, "experiments", (x) =>
-          parseArray(x, verifyString),
+      )
+        .then((response) => response.json())
+        .then((value) =>
+          verifyObjectProperty(value, "experiments", (x) =>
+            parseArray(x, verifyString),
+          ),
         ),
-      ),
   );
 }
 
@@ -797,10 +799,11 @@ export function getCoordinateFrame(
         credentialsProvider,
         `${hostname}/latest/coord/${key}/`,
         {},
-        responseJson,
-      ).then((coordinateFrameObj) =>
-        parseCoordinateFrame(coordinateFrameObj, experimentInfo),
-      ),
+      )
+        .then((response) => response.json())
+        .then((coordinateFrameObj) =>
+          parseCoordinateFrame(coordinateFrameObj, experimentInfo),
+        ),
   );
 }
 
