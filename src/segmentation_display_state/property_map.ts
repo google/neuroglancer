@@ -83,7 +83,7 @@ export interface IndexedSegmentPropertyMapOptions {
 }
 
 export class IndexedSegmentPropertySource extends ChunkSource {
-  OPTIONS: IndexedSegmentPropertyMapOptions;
+  declare OPTIONS: IndexedSegmentPropertyMapOptions;
   properties: readonly Readonly<IndexedSegmentProperty>[];
 
   constructor(

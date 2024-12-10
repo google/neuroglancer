@@ -493,12 +493,13 @@ export class LocalToolBinder<
 
 export class ToolBindingWidget<Context extends object> extends RefCounted {
   element = document.createElement("div");
-  private toolJsonString = JSON.stringify(this.toolJson);
+  private toolJsonString: string;
   constructor(
     public localBinder: LocalToolBinder<Context>,
     public toolJson: any,
   ) {
     super();
+    this.toolJsonString = JSON.stringify(toolJson);
     const { element } = this;
     element.classList.add("neuroglancer-tool-key-binding");
     this.registerDisposer(

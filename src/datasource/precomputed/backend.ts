@@ -1032,7 +1032,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParamete
     this.credentialsProvider,
     this.parameters,
   );
-  parent: PrecomputedAnnotationSourceBackend;
+  declare parent: PrecomputedAnnotationSourceBackend;
   async download(chunk: AnnotationGeometryChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
 

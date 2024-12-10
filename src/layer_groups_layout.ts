@@ -781,13 +781,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
 }
 
 export class RootLayoutContainer extends RefCounted implements Trackable {
-  container = this.registerDisposer(
-    new LayoutComponentContainer(
-      this.viewer,
-      this.defaultSpecification,
-      undefined,
-    ),
-  );
+  container: LayoutComponentContainer;
 
   get changed() {
     return this.container.changed;
@@ -802,6 +796,9 @@ export class RootLayoutContainer extends RefCounted implements Trackable {
     public defaultSpecification: any,
   ) {
     super();
+    this.container = this.registerDisposer(
+      new LayoutComponentContainer(viewer, defaultSpecification, undefined),
+    );
   }
 
   reset() {

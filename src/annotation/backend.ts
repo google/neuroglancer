@@ -148,11 +148,11 @@ function GeometryChunkMixin<TBase extends { new (...args: any[]): Chunk }>(
 export class AnnotationGeometryChunk extends GeometryChunkMixin(
   SliceViewChunk,
 ) {
-  source: AnnotationGeometryChunkSourceBackend;
+  declare source: AnnotationGeometryChunkSourceBackend;
 }
 
 export class AnnotationSubsetGeometryChunk extends GeometryChunkMixin(Chunk) {
-  source: AnnotationSubsetGeometryChunkSource;
+  declare source: AnnotationSubsetGeometryChunkSource;
   objectId: Uint64;
 }
 
@@ -191,7 +191,7 @@ AnnotationGeometryChunkSourceBackend.prototype.chunkConstructor =
 @registerSharedObject(ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID)
 class AnnotationSubsetGeometryChunkSource extends ChunkSource {
   parent: Borrowed<AnnotationSource> | undefined = undefined;
-  chunks: Map<string, AnnotationSubsetGeometryChunk>;
+  declare chunks: Map<string, AnnotationSubsetGeometryChunk>;
   relationshipIndex: number;
   getChunk(objectId: Uint64) {
     const key = getObjectKey(objectId);

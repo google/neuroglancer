@@ -295,7 +295,7 @@ export class SharedObject extends RefCounted {
    * Should be set to a constant specifying the SharedObject type identifier on the prototype of
    * final derived owner classes.  It is not used on counterpart (non-owner) classes.
    */
-  RPC_TYPE_ID: string;
+  declare RPC_TYPE_ID: string;
 }
 
 export function initializeSharedObjectCounterpart(

@@ -69,7 +69,7 @@ export function WithCredentialsProvider<Credentials>() {
     };
     class C extends Base {
       credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>;
-      OPTIONS: WithCredentialsOptions;
+      declare OPTIONS: WithCredentialsOptions;
       constructor(...args: any[]) {
         super(...args);
         const options: WithCredentialsOptions = args[1];

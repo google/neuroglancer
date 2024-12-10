@@ -25,6 +25,7 @@ import {
   getDisplayLowerUpperBounds,
   insertDimensionAt,
 } from "#src/coordinate_transform.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -97,10 +98,11 @@ export class ChannelDimensionsWidget extends RefCounted {
     );
   }
 
-  coordinateSpace = this.combiner.combined;
+  coordinateSpace: WatchableValueInterface<CoordinateSpace>;
 
   constructor(public combiner: CoordinateSpaceCombiner) {
     super();
+    this.coordinateSpace = combiner.combined;
     const { element } = this;
     element.classList.add("neuroglancer-channel-dimensions-widget");
     const debouncedUpdateView = this.registerCancellable(

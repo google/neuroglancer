@@ -349,9 +349,7 @@ export class UserLayer extends RefCounted {
   tabs = this.registerDisposer(new TabSpecification());
   panels = new UserLayerSidePanelsState(this);
   tool = this.registerDisposer(new SelectedLegacyTool(this));
-  toolBinder = this.registerDisposer(
-    new LocalToolBinder(this, this.manager.root.toolBinder),
-  );
+  toolBinder: LocalToolBinder<this>;
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
@@ -362,6 +360,9 @@ export class UserLayer extends RefCounted {
 
   constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
     super();
+    this.toolBinder = this.registerDisposer(
+      new LocalToolBinder(this, this.manager.root.toolBinder),
+    );
     this.localCoordinateSpaceCombiner.includeDimensionPredicate =
       isLocalOrChannelDimension;
     this.tabs.changed.add(this.specificationChanged.dispatch);
@@ -2104,13 +2105,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     return this;
   }
 
-  coordinateSpaceCombiner = new CoordinateSpaceCombiner(
-    this.coordinateSpace,
-    isGlobalDimension,
-  );
+  coordinateSpaceCombiner: CoordinateSpaceCombiner;
   subsets = new Set<LayerSubsetSpecification>();
-
-  layerSelectedValues = this.selectionState.layerSelectedValues;
+  layerSelectedValues: LayerSelectedValues;
 
   constructor(
     public display: DisplayContext,
@@ -2124,6 +2121,11 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     public toolBinder: Borrowed<GlobalToolBinder>,
   ) {
     super();
+    this.coordinateSpaceCombiner = new CoordinateSpaceCombiner(
+      coordinateSpace,
+      isGlobalDimension,
+    );
+    this.layerSelectedValues = selectionState.layerSelectedValues;
     this.registerDisposer(
       layerManager.layersChanged.add(this.changed.dispatch),
     );

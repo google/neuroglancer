@@ -114,7 +114,7 @@ type GraphSegmentUpdate = GraphSegmentInfo | "invalid" | "error";
 let updateGeneration = 0;
 
 class GraphConnection extends SegmentationGraphSourceConnection {
-  graph: NggraphSegmentationGraphSource;
+  declare graph: NggraphSegmentationGraphSource;
   constructor(
     graph: NggraphSegmentationGraphSource,
     segmentsState: VisibleSegmentsState,

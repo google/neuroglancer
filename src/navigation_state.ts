@@ -674,15 +674,17 @@ export class CoordinateSpacePlaybackVelocity extends RefCounted {
 
 export class LinkedCoordinateSpacePlaybackVelocity extends RefCounted {
   changed = new NullarySignal();
-  velocity = this.registerDisposer(
-    new CoordinateSpacePlaybackVelocity(this.peer.coordinateSpace),
-  );
+  velocity: CoordinateSpacePlaybackVelocity;
 
   constructor(
     public peer: Owned<CoordinateSpacePlaybackVelocity>,
     public positionLink: TrackableLinkInterface,
   ) {
     super();
+    this.velocity = this.registerDisposer(
+      new CoordinateSpacePlaybackVelocity(peer.coordinateSpace),
+    );
+
     this.registerDisposer(peer);
     this.velocity.changed.add(() => {
       if (this.positionLink.value === NavigationLinkType.UNLINKED) {
@@ -1447,17 +1449,10 @@ export function validateDisplayDimensionRenderInfoProperty(
 
 export class WatchableDisplayDimensionRenderInfo extends RefCounted {
   changed = new NullarySignal();
-  private curRelativeDisplayScales: RelativeDisplayScales =
-    this.relativeDisplayScales.value;
-  private curDisplayDimensions: DisplayDimensions =
-    this.displayDimensions.value;
-  private curCoordinateSpace: CoordinateSpace =
-    this.relativeDisplayScales.coordinateSpace.value;
-  private value_: DisplayDimensionRenderInfo = getDisplayDimensionRenderInfo(
-    this.curCoordinateSpace,
-    this.curDisplayDimensions,
-    this.curRelativeDisplayScales,
-  );
+  private curRelativeDisplayScales: RelativeDisplayScales;
+  private curDisplayDimensions: DisplayDimensions;
+  private curCoordinateSpace: CoordinateSpace;
+  private value_: DisplayDimensionRenderInfo;
   get value() {
     const {
       relativeDisplayScales: {
@@ -1495,6 +1490,15 @@ export class WatchableDisplayDimensionRenderInfo extends RefCounted {
     public displayDimensions: Owned<TrackableDisplayDimensions>,
   ) {
     super();
+    this.curRelativeDisplayScales = this.relativeDisplayScales.value;
+    this.curDisplayDimensions = this.displayDimensions.value;
+    this.curCoordinateSpace = this.relativeDisplayScales.coordinateSpace.value;
+    this.value_ = getDisplayDimensionRenderInfo(
+      this.curCoordinateSpace,
+      this.curDisplayDimensions,
+      this.curRelativeDisplayScales,
+    );
+
     this.registerDisposer(relativeDisplayScales);
     this.registerDisposer(displayDimensions);
     const maybeUpdateValue = () => {

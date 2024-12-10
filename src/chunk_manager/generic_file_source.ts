@@ -84,7 +84,7 @@ export interface GenericSharedDataSourceOptions<Key, Data> {
 }
 
 export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
-  chunks: Map<string, GenericSharedDataChunk<Key, Data>>;
+  declare chunks: Map<string, GenericSharedDataChunk<Key, Data>>;
 
   private encodeKeyFunction: (key: Key) => string;
 
@@ -270,7 +270,7 @@ export interface SimpleAsyncCacheOptions<Key, Value> {
 }
 
 export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
-  chunks: Map<string, AsyncCacheChunk<Value>>;
+  declare chunks: Map<string, AsyncCacheChunk<Value>>;
 
   constructor(
     chunkManager: Owned<ChunkManager>,
