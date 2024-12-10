@@ -400,7 +400,7 @@ export class VertexChunkData {
 }
 
 export class SingleMeshChunk extends Chunk {
-  source: SingleMeshSource;
+  declare source: SingleMeshSource;
   indexBuffer: Buffer;
   numIndices: number;
   indices: Uint32Array;
@@ -459,51 +459,55 @@ const SharedObjectWithSharedVisibility = withSharedVisibility(SharedObject);
 class SingleMeshLayerSharedObject extends SharedObjectWithSharedVisibility {}
 
 export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
-  private shaderManager = new SingleMeshShaderManager(
-    pickAttributeNames(this.source.info.vertexAttributes.map((a) => a.name)),
-    this.source.info.vertexAttributes,
-  );
+  private shaderManager: SingleMeshShaderManager;
   private shaders = new Map<ShaderModule, ShaderProgram | null>();
   private sharedObject = this.registerDisposer(
     new SingleMeshLayerSharedObject(),
   );
-  private shaderGetter = parameterizedEmitterDependentShaderGetter(
-    this,
-    this.gl,
-    {
-      memoizeKey: {
-        t: "single_mesh/RenderLayer",
-        attributes: this.source.info.vertexAttributes,
-      },
-      fallbackParameters: new WatchableValue(
-        getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
-      ),
-      parameters: this.displayState.shaderControlState.builderState,
-      encodeParameters: (p) => p.key,
-      shaderError: this.displayState.shaderError,
-      defineShader: (
-        builder: ShaderBuilder,
-        shaderBuilderState: ShaderControlsBuilderState,
-      ) => {
-        if (shaderBuilderState.parseResult.errors.length !== 0) {
-          throw new Error("Invalid UI control specification");
-        }
-        addControlsToBuilder(shaderBuilderState, builder);
-        this.shaderManager.defineShader(builder);
-        builder.setFragmentMainFunction(
-          shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
-        );
-      },
-    },
-  );
-
-  protected countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
+  private shaderGetter;
+  protected countingBuffer;
   constructor(
     public source: SingleMeshSource,
     public displayState: SingleMeshDisplayState,
     public transform: WatchableRenderLayerTransform,
   ) {
     super();
+    this.shaderManager = new SingleMeshShaderManager(
+      pickAttributeNames(source.info.vertexAttributes.map((a) => a.name)),
+      source.info.vertexAttributes,
+    );
+    this.shaderGetter = parameterizedEmitterDependentShaderGetter(
+      this,
+      this.gl,
+      {
+        memoizeKey: {
+          t: "single_mesh/RenderLayer",
+          attributes: this.source.info.vertexAttributes,
+        },
+        fallbackParameters: new WatchableValue(
+          getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
+        ),
+        parameters: this.displayState.shaderControlState.builderState,
+        encodeParameters: (p) => p.key,
+        shaderError: this.displayState.shaderError,
+        defineShader: (
+          builder: ShaderBuilder,
+          shaderBuilderState: ShaderControlsBuilderState,
+        ) => {
+          if (shaderBuilderState.parseResult.errors.length !== 0) {
+            throw new Error("Invalid UI control specification");
+          }
+          addControlsToBuilder(shaderBuilderState, builder);
+          this.shaderManager.defineShader(builder);
+          builder.setFragmentMainFunction(
+            shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
+          );
+        },
+      },
+    );
+
+    this.countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
+
     this.registerDisposer(
       displayState.shaderControlState.parseResult.changed.add(
         this.redrawNeeded.dispatch,

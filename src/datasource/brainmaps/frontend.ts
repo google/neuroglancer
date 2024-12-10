@@ -691,8 +691,8 @@ const MultiscaleAnnotationSourceBase = WithParameters(
 );
 
 export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
-  key: any;
-  parameters: AnnotationSourceParameters;
+  declare key: any;
+  declare parameters: AnnotationSourceParameters;
   credentialsProvider: Owned<CredentialsProvider<OAuth2Credentials>>;
   constructor(
     chunkManager: ChunkManager,

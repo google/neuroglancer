@@ -430,7 +430,7 @@ export interface ChunkRequesterState {
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class ChunkSource extends SharedObject {
-  OPTIONS: object;
+  declare OPTIONS: object;
   chunks = new Map<string, Chunk>();
 
   chunkRequesters: Map<string, ChunkRequesterState[]> | undefined;
@@ -506,7 +506,7 @@ export function WithParameters<
   };
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)
   class C extends Base {
-    OPTIONS: WithParametersOptions;
+    declare OPTIONS: WithParametersOptions;
     parameters: Parameters;
     constructor(...args: any[]) {
       super(...args);

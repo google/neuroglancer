@@ -1822,8 +1822,8 @@ class ChunkedGraphChunkSource
   extends SliceViewChunkSource
   implements ChunkedGraphChunkSourceInterface
 {
-  spec: ChunkedGraphChunkSpecification;
-  OPTIONS: { spec: ChunkedGraphChunkSpecification };
+  declare spec: ChunkedGraphChunkSpecification;
+  declare OPTIONS: { spec: ChunkedGraphChunkSpecification };
 }
 
 class GrapheneChunkedGraphChunkSource extends WithParameters(

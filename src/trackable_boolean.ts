@@ -109,12 +109,13 @@ export class TrackableBooleanCheckbox extends RefCounted {
 }
 
 export class ElementVisibilityFromTrackableBoolean extends RefCounted {
-  private initialDisplay = this.element.style.display;
+  private initialDisplay: string;
   constructor(
     public model: WatchableValueInterface<boolean>,
     public element: HTMLElement,
   ) {
     super();
+    this.initialDisplay = this.element.style.display;
     this.updateVisibility();
     this.registerDisposer(
       model.changed.add(

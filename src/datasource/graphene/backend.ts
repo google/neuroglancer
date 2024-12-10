@@ -256,7 +256,7 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
   ChunkedGraphSourceParameters,
 ) {
   spec: ChunkedGraphChunkSpecification;
-  chunks: Map<string, ChunkedGraphChunk>;
+  declare chunks: Map<string, ChunkedGraphChunk>;
   tempChunkDataSize: Uint32Array;
   tempChunkPosition: Float32Array;
 

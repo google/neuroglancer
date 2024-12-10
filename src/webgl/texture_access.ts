@@ -495,8 +495,10 @@ ${shaderType} ${functionName}(${indexType} index) {
 }
 
 export class OneDimensionalTextureAccessHelper {
-  readTextureValue = `readTextureValue_${this.key}`;
-  constructor(public key: string) {}
+  readTextureValue: string;
+  constructor(public key: string) {
+    this.readTextureValue = `readTextureValue_${key}`;
+  }
   defineShader(builder: ShaderBuilder) {
     builder;
   }
@@ -549,11 +551,13 @@ void ${this.readTextureValue}(highp ${samplerPrefix}sampler2D sampler, highp uin
 }
 
 export class TextureAccessHelper {
-  readTextureValue = `readTextureValue_${this.key}`;
+  readTextureValue: string;
   constructor(
     public key: string,
     public textureDims: number,
-  ) {}
+  ) {
+    this.readTextureValue = `readTextureValue_${key}`;
+  }
   getReadTextureValueCode(
     texelsPerElement: number,
     samplerPrefix: ShaderSamplerPrefix,

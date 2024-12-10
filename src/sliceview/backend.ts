@@ -388,7 +388,7 @@ export class SliceViewChunkSourceBackend<
   implements SliceViewChunkSourceInterface
 {
   spec: Spec;
-  chunks: Map<string, ChunkType>;
+  declare chunks: Map<string, ChunkType>;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.spec = options.spec;
@@ -411,7 +411,7 @@ export class SliceViewRenderLayerBackend
   extends SharedObjectCounterpart
   implements SliceViewRenderLayerInterface, ChunkRenderLayerBackend
 {
-  rpcId: number;
+  declare rpcId: number;
   renderScaleTarget: SharedWatchableValue<number>;
   localPosition: WatchableValueInterface<Float32Array>;
 

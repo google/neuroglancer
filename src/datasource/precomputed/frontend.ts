@@ -420,10 +420,10 @@ interface PrecomputedAnnotationSourceOptions {
 }
 
 export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase {
-  key: any;
+  declare key: any;
   metadata: AnnotationMetadata;
   credentialsProvider: SpecialProtocolCredentialsProvider;
-  OPTIONS: PrecomputedAnnotationSourceOptions;
+  declare OPTIONS: PrecomputedAnnotationSourceOptions;
   constructor(
     chunkManager: ChunkManager,
     options: PrecomputedAnnotationSourceOptions,

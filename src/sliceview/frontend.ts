@@ -157,10 +157,10 @@ function disposeTransformedSources(
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends Base {
-  gl = this.chunkManager.gl;
+  gl: GL;
   viewChanged = new NullarySignal();
-  rpc: RPC;
-  rpcId: number;
+  declare rpc: RPC;
+  declare rpcId: number;
 
   renderingStale = true;
 
@@ -168,22 +168,17 @@ export class SliceView extends Base {
 
   visibleLayerList = new Array<SliceViewRenderLayer>();
 
-  visibleLayers: Map<SliceViewRenderLayer, FrontendVisibleLayerSources>;
+  declare visibleLayers: Map<SliceViewRenderLayer, FrontendVisibleLayerSources>;
 
-  offscreenFramebuffer = this.registerDisposer(
-    new FramebufferConfiguration(this.gl, {
-      colorBuffers: makeTextureBuffers(this.gl, 1),
-      depthBuffer: new DepthTextureBuffer(this.gl),
-    }),
-  );
+  offscreenFramebuffer;
   histogramInputTextures: TextureBuffer[] = [];
-  offscreenFramebuffersWithHistograms = [this.offscreenFramebuffer];
+  offscreenFramebuffersWithHistograms;
 
   get displayDimensionRenderInfo() {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
-  private histogramGenerator = TextureHistogramGenerator.get(this.gl);
+  private histogramGenerator: TextureHistogramGenerator;
 
   computeHistograms(
     count: number,
@@ -198,7 +193,7 @@ export class SliceView extends Base {
     );
   }
 
-  projectionParameters: Owned<
+  declare projectionParameters: Owned<
     DerivedProjectionParameters<SliceViewProjectionParameters>
   >;
 
@@ -274,6 +269,17 @@ export class SliceView extends Base {
         },
       }),
     );
+    this.gl = chunkManager.gl;
+
+    this.offscreenFramebuffer = this.registerDisposer(
+      new FramebufferConfiguration(this.gl, {
+        colorBuffers: makeTextureBuffers(this.gl, 1),
+        depthBuffer: new DepthTextureBuffer(this.gl),
+      }),
+    );
+    this.offscreenFramebuffersWithHistograms = [this.offscreenFramebuffer];
+    this.histogramGenerator = TextureHistogramGenerator.get(this.gl);
+
     this.registerDisposer(navigationState);
     this.registerDisposer(this.projectionParameters);
     this.registerDisposer(
@@ -603,9 +609,9 @@ export abstract class SliceViewChunkSource<
   extends ChunkSource
   implements SliceViewChunkSourceInterface
 {
-  chunks: Map<string, ChunkType>;
+  declare chunks: Map<string, ChunkType>;
 
-  OPTIONS: SliceViewChunkSourceOptions<Spec>;
+  declare OPTIONS: SliceViewChunkSourceOptions<Spec>;
 
   spec: Spec;
 
@@ -699,7 +705,7 @@ export interface SliceViewChunkSource {
 
 export class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
-  source: SliceViewChunkSource;
+  declare source: SliceViewChunkSource;
 
   constructor(source: SliceViewChunkSource, x: any) {
     super(source);
@@ -712,7 +718,7 @@ export class SliceViewChunk extends Chunk {
  * Helper for rendering a SliceView that has been pre-rendered to a texture.
  */
 export class SliceViewRenderHelper extends RefCounted {
-  private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
+  private copyVertexPositionsBuffer;
   private shader: ShaderProgram;
 
   private textureCoordinateAdjustment = new Float32Array(4);
@@ -722,6 +728,8 @@ export class SliceViewRenderHelper extends RefCounted {
     emitter: ShaderModule,
   ) {
     super();
+    this.copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
+
     const builder = new ShaderBuilder(gl);
     builder.addVarying("vec2", "vTexCoord");
     builder.addUniform("sampler2D", "uSampler");
