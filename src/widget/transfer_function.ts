@@ -593,7 +593,7 @@ abstract class BaseLookupTexture extends RefCounted {
  */
 class DirectLookupTableTexture extends BaseLookupTexture {
   texture: WebGLTexture | null = null;
-  protected declare priorOptions: LookupTableTextureOptions | undefined;
+  declare protected priorOptions: LookupTableTextureOptions | undefined;
 
   constructor(public gl: GL | null) {
     super(gl);
@@ -622,7 +622,7 @@ class DirectLookupTableTexture extends BaseLookupTexture {
 }
 
 export class ControlPointTexture extends BaseLookupTexture {
-  protected declare priorOptions: ControlPointTextureOptions | undefined;
+  declare protected priorOptions: ControlPointTextureOptions | undefined;
   constructor(public gl: GL | null) {
     super(gl);
   }

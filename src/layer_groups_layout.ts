@@ -518,7 +518,7 @@ function setupDropZone(
       event.stopPropagation();
       try {
         layoutSpec = JSON.parse(event.dataTransfer!.getData(viewerDragType));
-      } catch (e) {
+      } catch {
         return;
       }
       dropLayers = getDropLayers(event, manager, {

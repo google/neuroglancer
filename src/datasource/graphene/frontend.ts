@@ -245,7 +245,7 @@ class AppInfo {
         "supported_api_versions",
         (x) => parseArray(x, verifyNonnegativeInt),
       );
-    } catch (error) {
+    } catch {
       // Dealing with a prehistoric graph server with no version information
       this.supported_api_versions = [0];
     }
