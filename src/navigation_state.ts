@@ -1010,7 +1010,7 @@ export class OrientationState extends RefCounted {
     try {
       parseFiniteVec(this.orientation, obj);
       quat.normalize(this.orientation, this.orientation);
-    } catch (ignoredError) {
+    } catch {
       quat.identity(this.orientation);
     }
     this.changed.dispatch();

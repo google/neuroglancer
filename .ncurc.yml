@@ -1,0 +1,8 @@
+reject:
+  # API break
+  - "gl-matrix"
+  - "@types/gl-matrix"
+  # Newer versions don't support eslint
+  - "fork-ts-checker-webpack-plugin"
+  # API break
+  - "codemirror"

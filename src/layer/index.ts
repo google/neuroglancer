@@ -1247,8 +1247,7 @@ const DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE = {
 
 export class TrackableDataSelectionState
   extends RefCounted
-  implements
-    TrackableValueInterface<PersistentViewerSelectionState | undefined>
+  implements TrackableValueInterface<PersistentViewerSelectionState | undefined>
 {
   changed = new NullarySignal();
   history: PersistentViewerSelectionState[] = [];

@@ -681,7 +681,7 @@ export function parseSegmentQuery(
       }
       try {
         parsed.regexp = new RegExp(word.substring(1));
-      } catch (e) {
+      } catch {
         errors.push({
           begin: startIndex,
           end: endIndex,

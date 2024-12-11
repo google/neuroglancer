@@ -23,7 +23,7 @@ import { pathToFileURL } from "node:url";
 import path from "path";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import type { Configuration } from "webpack";
-import webpackCli from "webpack-cli/lib/bootstrap.js"; // eslint-disable-line import/default
+import webpackCli from "webpack-cli/lib/bootstrap.js";
 import * as webpackMerge from "webpack-merge";
 import yargs from "yargs";
 import { normalizeConfigurationWithDefine } from "./webpack/configuration_with_define.js";

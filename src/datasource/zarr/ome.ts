@@ -46,7 +46,7 @@ const OME_UNITS = new Map<string, { unit: string; scale: number }>([
   ["foot", { unit: "m", scale: 0.3048 }],
   ["inch", { unit: "m", scale: 0.0254 }],
   ["mile", { unit: "m", scale: 1609.34 }],
-  // eslint-disable-next-line @typescript-eslint/no-loss-of-precision
+  // eslint-disable-next-line no-loss-of-precision
   ["parsec", { unit: "m", scale: 3.0856775814913673e16 }],
   ["yard", { unit: "m", scale: 0.9144 }],
   ["minute", { unit: "s", scale: 60 }],
