@@ -545,6 +545,10 @@ registerPromiseRPC(
       // Already available on frontend.
       return { value: undefined };
     }
+    if (chunk.state === ChunkState.FAILED) {
+      // Already failed
+      throw chunk.error;
+    }
     const disposeRecompute = chunkManager.recomputeChunkPriorities.add(() => {
       chunkManager.requestChunk(
         chunk,
