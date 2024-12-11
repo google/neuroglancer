@@ -16,7 +16,7 @@
     "last 2 Safari versions"
   ],
   "scripts": {
-    "generate-code": "tsx ./config/generate_code.ts",
+    "generate-code": "tsx ./build_tools/generate-code.ts",
     "update-conditions": "tsx ./build_tools/update-conditions.ts",
     "prepare": "tsx ./build_tools/build-package.ts --inplace --if-not-toplevel",
     "prepack": "tsx ./build_tools/build-package.ts --inplace",
@@ -45,6 +45,7 @@
     "@types/gl-matrix": "^2.4.5",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^20.14.12",
+    "@types/nunjucks": "^3.2.6",
     "@types/yargs": "^17.0.32",
     "@typescript-eslint/eslint-plugin": "^7.17.0",
     "@typescript-eslint/parser": "^7.17.0",
@@ -63,6 +64,7 @@
     "glob": "^11.0.0",
     "html-webpack-plugin": "^5.6.0",
     "mini-css-extract-plugin": "^2.9.0",
+    "nunjucks": "^3.2.4",
     "prettier": "3.3.3",
     "style-loader": "^4.0.0",
     "svg-inline-loader": "^0.8.2",
