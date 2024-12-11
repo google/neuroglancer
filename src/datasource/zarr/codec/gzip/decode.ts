@@ -28,9 +28,9 @@ for (const [name, compressionFormat] of [
     kind: CodecKind.bytesToBytes,
     async decode(
       configuration: Configuration,
-      encoded: Uint8Array,
+      encoded,
       abortSignal: AbortSignal,
-    ): Promise<Uint8Array> {
+    ) {
       configuration;
       return new Uint8Array(
         await decodeGzip(encoded, compressionFormat, abortSignal),

@@ -33,9 +33,9 @@ export interface ArrayToArrayCodec<Configuration = unknown> extends Codec {
   decode(
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
-    encoded: ArrayBufferView,
+    encoded: ArrayBufferView<ArrayBuffer>,
     abortSignal: AbortSignal,
-  ): Promise<ArrayBufferView>;
+  ): Promise<ArrayBufferView<ArrayBuffer>>;
 }
 
 export interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
@@ -43,9 +43,9 @@ export interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
   decode(
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
-    encoded: Uint8Array,
+    encoded: Uint8Array<ArrayBuffer>,
     abortSignal: AbortSignal,
-  ): Promise<ArrayBufferView>;
+  ): Promise<ArrayBufferView<ArrayBuffer>>;
 }
 
 export type ShardingKey<BaseKey> = {
@@ -66,9 +66,9 @@ export interface BytesToBytesCodec<Configuration = unknown> extends Codec {
   kind: CodecKind.bytesToBytes;
   decode(
     configuration: Configuration,
-    encoded: Uint8Array,
+    encoded: Uint8Array<ArrayBuffer>,
     abortSignal: AbortSignal,
-  ): Promise<Uint8Array>;
+  ): Promise<Uint8Array<ArrayBuffer>>;
 }
 
 const codecRegistry = {
@@ -94,9 +94,9 @@ export function registerCodec<Configuration>(
 
 export async function decodeArray(
   codecs: CodecChainSpec,
-  encoded: Uint8Array,
+  encoded: Uint8Array<ArrayBuffer>,
   abortSignal: AbortSignal,
-): Promise<ArrayBufferView> {
+): Promise<ArrayBufferView<ArrayBuffer>> {
   const bytesToBytes = codecs[CodecKind.bytesToBytes];
   for (let i = bytesToBytes.length; i--; ) {
     const codec = bytesToBytes[i];
@@ -107,7 +107,7 @@ export async function decodeArray(
     encoded = await impl.decode(codec.configuration, encoded, abortSignal);
   }
 
-  let decoded: ArrayBufferView;
+  let decoded: ArrayBufferView<ArrayBuffer>;
   {
     const codec = codecs[CodecKind.arrayToBytes];
     const impl = codecRegistry[CodecKind.arrayToBytes].get(codec.name);

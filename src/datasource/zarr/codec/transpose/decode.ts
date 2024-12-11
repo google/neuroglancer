@@ -25,9 +25,9 @@ registerCodec({
   async decode(
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
-    encoded: ArrayBufferView,
+    encoded,
     abortSignal: AbortSignal,
-  ): Promise<ArrayBufferView> {
+  ) {
     decodedArrayInfo;
     abortSignal;
     configuration;

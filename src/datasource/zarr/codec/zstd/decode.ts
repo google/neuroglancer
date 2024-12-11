@@ -23,11 +23,7 @@ import type { Configuration } from "#src/datasource/zarr/codec/zstd/resolve.js";
 registerCodec({
   name: "zstd",
   kind: CodecKind.bytesToBytes,
-  decode(
-    configuration: Configuration,
-    encoded: Uint8Array,
-    abortSignal: AbortSignal,
-  ): Promise<Uint8Array> {
+  decode(configuration: Configuration, encoded, abortSignal: AbortSignal) {
     configuration;
     return requestAsyncComputation(
       decodeZstd,

@@ -138,7 +138,7 @@ const coordinateTransformParsers = new Map([
 function parseOmeCoordinateTransform(
   rank: number,
   transformJson: unknown,
-): Float64Array {
+): Float64Array<ArrayBuffer> {
   verifyObject(transformJson);
   const transformType = verifyObjectProperty(
     transformJson,
@@ -163,7 +163,7 @@ function parseOmeCoordinateTransforms(
   parseArray(transforms, (transformJson) => {
     const newTransform = parseOmeCoordinateTransform(rank, transformJson);
     transform = matrix.multiply(
-      new Float64Array(transform.length),
+      new Float64Array(transform.length) as Float64Array<ArrayBuffer>,
       rank + 1,
       newTransform,
       rank + 1,
@@ -211,7 +211,7 @@ function parseOmeMultiscale(
     parseArray(obj, (x) => {
       const scale = parseMultiscaleScale(rank, url, x);
       scale.transform = matrix.multiply(
-        new Float64Array((rank + 1) ** 2),
+        new Float64Array((rank + 1) ** 2) as Float64Array<ArrayBuffer>,
         rank + 1,
         transform,
         rank + 1,

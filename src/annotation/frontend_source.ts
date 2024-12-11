@@ -290,7 +290,7 @@ function copyOtherAnnotations(
   propertySerializers: AnnotationPropertySerializer[],
   excludedType: AnnotationType,
   excludedTypeAdjustment: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const newData = new Uint8Array(
     serializedAnnotations.data.length + excludedTypeAdjustment,
   );

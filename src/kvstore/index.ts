@@ -53,7 +53,7 @@ export type ByteRangeRequest =
     };
 
 export interface ReadResponse {
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   dataRange: ByteRange;
   totalSize: number | undefined;
 }

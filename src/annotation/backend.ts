@@ -99,7 +99,7 @@ export class AnnotationMetadataChunk extends Chunk {
 }
 
 export class AnnotationGeometryData implements SerializedAnnotations {
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   typeToOffset: number[];
   typeToIds: string[][];
   typeToIdMaps: Map<string, number>[];

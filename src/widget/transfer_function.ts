@@ -51,7 +51,7 @@ import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { Uint64 } from "#src/util/uint64.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import { Buffer , getMemoizedBuffer } from "#src/webgl/buffer.js";
+import { Buffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
