@@ -18,14 +18,13 @@ import { decodeCompresso } from "#src/async_computation/decode_compresso_request
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { TypedArray } from "#src/util/array.js";
 
 export async function decodeCompressoChunk(
   chunk: VolumeChunk,
   abortSignal: AbortSignal,
   response: ArrayBuffer,
 ) {
-  const image: TypedArray = await requestAsyncComputation(
+  const image = await requestAsyncComputation(
     decodeCompresso,
     abortSignal,
     [response],

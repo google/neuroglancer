@@ -25,9 +25,9 @@ registerCodec({
   kind: CodecKind.bytesToBytes,
   async decode(
     configuration: Configuration,
-    encoded: Uint8Array,
+    encoded,
     abortSignal: AbortSignal,
-  ): Promise<Uint8Array> {
+  ) {
     configuration;
     abortSignal;
     if (encoded.length < checksumSize) {

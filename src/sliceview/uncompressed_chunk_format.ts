@@ -348,7 +348,9 @@ export function getFillValueArray(
   dataType: DataType,
   fillValue: number | Uint64,
 ) {
-  const array = new DATA_TYPE_ARRAY_CONSTRUCTOR[dataType](
+  const array = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
+    dataType
+  ] as TypedArrayConstructor<ArrayBuffer>)(
     DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType],
   );
   if (dataType === DataType.UINT64) {

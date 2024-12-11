@@ -27,9 +27,9 @@ registerCodec({
   async decode(
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
-    encoded: Uint8Array,
+    encoded,
     abortSignal: AbortSignal,
-  ): Promise<ArrayBufferView> {
+  ) {
     abortSignal;
     const { dataType, chunkShape } = decodedArrayInfo;
     const numElements = chunkShape.reduce((a, b) => a * b, 1);

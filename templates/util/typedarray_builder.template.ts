@@ -16,7 +16,7 @@
 
 export class $TYPE$Builder {
   length = 0;
-  data: $TYPE$;
+  data: $TYPE$<ArrayBuffer>;
 
   constructor(initialCapacity: number = 16) {
     this.data = new $TYPE$(initialCapacity);
@@ -34,7 +34,7 @@ export class $TYPE$Builder {
 
   get view() {
     let {data} = this;
-    return new $TYPE$(data.buffer, data.byteOffset, this.length);
+    return new $TYPE$<ArrayBuffer>(data.buffer, data.byteOffset, this.length);
   }
 
   shrinkToFit() {

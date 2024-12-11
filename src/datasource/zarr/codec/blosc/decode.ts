@@ -23,11 +23,7 @@ import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 registerCodec({
   name: "blosc",
   kind: CodecKind.bytesToBytes,
-  decode(
-    configuration: Configuration,
-    encoded: Uint8Array,
-    abortSignal: AbortSignal,
-  ): Promise<Uint8Array> {
+  decode(configuration: Configuration, encoded, abortSignal: AbortSignal) {
     configuration;
     return requestAsyncComputation(
       decodeBlosc,

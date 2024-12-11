@@ -910,7 +910,7 @@ function parseAnnotations(
   }
   const geometryData = new AnnotationGeometryData();
   const origData = new Uint8Array(buffer, 8, numBytes * countLow);
-  let data: Uint8Array;
+  let data: Uint8Array<ArrayBuffer>;
   const { propertyGroupBytes } = propertySerializer;
   if (propertyGroupBytes.length > 1) {
     // Need to transpose the property data.
