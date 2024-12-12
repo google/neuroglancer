@@ -19,8 +19,10 @@ import "#src/ui/layer_bar.css";
 import svg_plus from "ikonate/icons/plus.svg?raw";
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
+import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
+import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
@@ -67,6 +69,64 @@ class LayerWidget extends RefCounted {
     element.appendChild(prefetchProgress);
     labelElement.className = "neuroglancer-layer-item-label";
     labelElement.appendChild(labelElementText);
+
+    this.registerDisposer(
+      layer.readyStateChanged.add(() => {
+        if (layer.isReady() && layer.layer instanceof SegmentationUserLayer) {
+          const timeButton = makeIcon({
+            text: "🕘",
+          });
+          element.appendChild(timeButton);
+          const { segmentationGroupState } = layer.layer.displayState;
+          const { timestamp, timestampOwner } = segmentationGroupState.value;
+          const updateTimeButton = () => {
+            const otherOwners = [...timestampOwner].filter(
+              (x) => x !== layer.name,
+            );
+            if (timestamp.value) {
+              if (otherOwners.length) {
+                timeButton.title = `${new Date(timestamp.value)}.\nBound to layer(s): ${otherOwners.join(", ")}`;
+              } else {
+                timeButton.title = `${new Date(timestamp.value)}.\nClick to return to current form.`;
+              }
+              timeButton.classList.toggle("locked", otherOwners.length > 0);
+            }
+            timeButton.style.display =
+              timestamp.value === undefined ? "none" : "inherit";
+          };
+          updateTimeButton();
+          timestampOwner.changed.add(() => {
+            updateTimeButton();
+            const layerNames = layer.manager.layerManager.managedLayers.map(
+              (x) => x.name,
+            );
+            const invalidOwners = [...timestampOwner].filter(
+              (x) => !layerNames.includes(x),
+            );
+            for (const owner of invalidOwners) {
+              timestampOwner.delete(owner);
+            }
+          });
+          timestamp.changed.add(() => {
+            updateTimeButton();
+          });
+          timeButton.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            if (segmentationGroupState.value.canSetTimestamp(layer.name)) {
+              timestamp.reset();
+              timestampOwner.clear(); // TODO(chrisj) should we reset timestamp owner or should that be layer controlled?
+            } else {
+              const otherOwners = [...timestampOwner].filter(
+                (x) => x !== layer.name,
+              );
+              StatusMessage.showTemporaryMessage(
+                `Segmentation time bound to layer(s): ${otherOwners.join(", ")}`,
+              );
+            }
+          });
+        }
+      }),
+    );
     visibleProgress.className = "neuroglancer-layer-item-visible-progress";
     prefetchProgress.className = "neuroglancer-layer-item-prefetch-progress";
     layerNumberElement.className = "neuroglancer-layer-item-number";

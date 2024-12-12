@@ -97,6 +97,7 @@ import {
   makeCachedLazyDerivedWatchableValue,
   registerNestedSync,
   TrackableValue,
+  WatchableSet,
   WatchableValue,
 } from "#src/trackable_value.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
@@ -124,6 +125,7 @@ import {
   verifyObjectAsMap,
   verifyOptionalObjectProperty,
   verifyString,
+  verifyStringArray,
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { Uint64 } from "#src/util/uint64.js";
@@ -161,6 +163,9 @@ export class SegmentationUserLayerGroupState
         }
       }
     });
+
+    this.timestamp.changed.add(specificationChanged.dispatch);
+    this.timestampOwner.changed.add(specificationChanged.dispatch);
   }
 
   restoreState(specification: unknown) {
@@ -202,6 +207,24 @@ export class SegmentationUserLayerGroupState
       json_keys.SEGMENT_QUERY_JSON_KEY,
       (value) => this.segmentQuery.restoreState(value),
     );
+    verifyOptionalObjectProperty(
+      specification,
+      json_keys.TIMESTAMP_OWNER_JSON_KEY,
+      (value) => {
+        const owners = verifyStringArray(value);
+        this.timestampOwner.clear();
+        for (const owner of owners) {
+          this.timestampOwner.add(owner);
+        }
+      },
+    );
+    verifyOptionalObjectProperty(
+      specification,
+      json_keys.TIMESTAMP_JSON_KEY,
+      (value) => {
+        this.timestamp.restoreState(value);
+      },
+    );
   }
 
   toJSON() {
@@ -223,6 +246,10 @@ export class SegmentationUserLayerGroupState
       x[json_keys.EQUIVALENCES_JSON_KEY] = segmentEquivalences.toJSON();
     }
     x[json_keys.SEGMENT_QUERY_JSON_KEY] = this.segmentQuery.toJSON();
+    x[json_keys.TIMESTAMP_JSON_KEY] = this.timestamp.toJSON();
+    if (this.timestampOwner.size > 0) {
+      x[json_keys.TIMESTAMP_OWNER_JSON_KEY] = [...this.timestampOwner];
+    }
     return x;
   }
 
@@ -232,9 +259,13 @@ export class SegmentationUserLayerGroupState
     this.selectedSegments.assignFrom(other.selectedSegments);
     this.visibleSegments.assignFrom(other.visibleSegments);
     this.segmentEquivalences.assignFrom(other.segmentEquivalences);
+    this.timestamp.value = other.timestamp.value;
+    this.timestampOwner.values = new Set(other.timestampOwner); // TODO this won't trigger changed properly
   }
 
   localGraph = new LocalSegmentationGraphSource();
+  timestamp = new TrackableValue<number | undefined>(undefined, (x) => x);
+  timestampOwner = new WatchableSet<string>();
   visibleSegments = this.registerDisposer(
     Uint64Set.makeWithCounterpart(this.layer.manager.rpc),
   );
@@ -277,6 +308,14 @@ export class SegmentationUserLayerGroupState
   useTemporarySegmentEquivalences = this.layer.registerDisposer(
     SharedWatchableValue.make(this.layer.manager.rpc, false),
   );
+
+  canSetTimestamp(owner?: string) {
+    const otherOwners = [...this.timestampOwner].filter((x) => x !== owner);
+    if (otherOwners.length) {
+      return false;
+    }
+    return true;
+  }
 }
 
 export class SegmentationUserLayerColorGroupState
