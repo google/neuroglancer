@@ -38,6 +38,6 @@ exclude .prettierignore
 exclude eslint.config.js
 exclude .ncurc.yml
 exclude index.html
-exclude webpack.config.js
+exclude rspack.config.js
 exclude firebase.json
 exclude .firebaserc
