@@ -15,6 +15,7 @@
  */
 
 import type { CredentialsManager } from "#src/credentials_provider/index.js";
+import { isGlobusEnabled } from "#src/datasource/globus/register_credentials_provider.js";
 import type { CancellationToken } from "#src/util/cancellation.js";
 import type {
   BasicCompletionResult,
@@ -120,6 +121,13 @@ const specialProtocolEmptyCompletions: CompletionWithDescription[] = [
   { value: "https://" },
   { value: "http://" },
 ];
+
+if (isGlobusEnabled()) {
+  specialProtocolEmptyCompletions.push({
+    value: "globus+https://",
+    description: "Globus-sourced data authenticated via Globus Auth",
+  });
+}
 
 export async function completeHttpPath(
   credentialsManager: CredentialsManager,

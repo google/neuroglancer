@@ -109,6 +109,14 @@ export function parseSpecialUrl(
         ),
         url: "gs+xml:/" + u.path,
       };
+    case "globus+https":
+      return {
+        credentialsProvider: credentialsManager.getCredentialsProvider(
+          "globus",
+          `https://${u.host}`,
+        ),
+        url: `https://${u.host}${u.path}`,
+      };
     case "middleauth+https":
       url = url.substr("middleauth+".length);
       return {
