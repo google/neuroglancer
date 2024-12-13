@@ -136,3 +136,19 @@
   + .neuroglancer-tool-button {
   margin-left: 1em;
 }
+
+.neuroglancer-segment-list-entry .neuroglancer-color-widget {
+  border: none;
+  border-color: transparent;
+  appearance: none;
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  margin-left: 3px;
+  height: 19px;
+  width: 20px;
+}
+
+.neuroglancer-segment-list-entry .neuroglancer-color-widget.overridden {
+  background-color: white;
+}
