@@ -39,6 +39,7 @@ import {
   AnnotationType,
   annotationTypeHandlers,
   formatNumericProperty,
+  isAnnotationTagPropertySpec,
 } from "#src/annotation/index.js";
 import {
   AnnotationLayer,
@@ -195,6 +196,26 @@ function setLayerPosition(
   if (chunkTransform.error !== undefined) return;
   layer.setLayerPosition(chunkTransform.modelTransform, layerPosition);
 }
+
+const moveToAnnotation = (
+  layer: UserLayer,
+  annotation: Annotation,
+  state: AnnotationLayerState,
+) => {
+  const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
+  const { layerRank } = chunkTransform;
+  const chunkPosition = new Float32Array(layerRank);
+  const layerPosition = new Float32Array(layerRank);
+  getCenterPosition(chunkPosition, annotation);
+  matrix.transformPoint(
+    layerPosition,
+    chunkTransform.chunkToLayerTransform,
+    layerRank + 1,
+    chunkPosition,
+    layerRank,
+  );
+  setLayerPosition(layer, chunkTransform, layerPosition);
+};
 
 function visitTransformedAnnotationGeometry(
   annotation: Annotation,
@@ -917,6 +938,26 @@ export class AnnotationLayerView extends Tab {
       description.textContent = annotation.description;
       element.appendChild(description);
     }
+    const {
+      properties: { value: properties },
+    } = state.source;
+    const activeTags: string[] = [];
+    for (let i = 0, count = properties.length; i < count; ++i) {
+      const property = properties[i];
+      const value = annotation.properties[i];
+      activeTags;
+      if (isAnnotationTagPropertySpec(property) && property.tag) {
+        if (value !== 0) {
+          activeTags.push(property.tag);
+        }
+      }
+    }
+    if (activeTags.length) {
+      const tags = document.createElement("div");
+      tags.classList.add("neuroglancer-annotation-tags");
+      tags.textContent = activeTags.map((x) => `#${x}`).join(" ");
+      element.appendChild(tags);
+    }
     icon.style.gridRow = `span ${numRows}`;
     if (deleteButton !== undefined) {
       deleteButton.style.gridRow = `span ${numRows}`;
@@ -933,7 +974,6 @@ export class AnnotationLayerView extends Tab {
       event.stopPropagation();
       this.layer.selectAnnotation(state, annotation.id, "toggle");
     });
-
     element.addEventListener("action:pin-annotation", (event) => {
       event.stopPropagation();
       this.layer.selectAnnotation(state, annotation.id, true);
@@ -942,18 +982,7 @@ export class AnnotationLayerView extends Tab {
     element.addEventListener("action:move-to-annotation", (event) => {
       event.stopPropagation();
       event.preventDefault();
-      const { layerRank } = chunkTransform;
-      const chunkPosition = new Float32Array(layerRank);
-      const layerPosition = new Float32Array(layerRank);
-      getCenterPosition(chunkPosition, annotation);
-      matrix.transformPoint(
-        layerPosition,
-        chunkTransform.chunkToLayerTransform,
-        layerRank + 1,
-        chunkPosition,
-        layerRank,
-      );
-      setLayerPosition(this.layer, chunkTransform, layerPosition);
+      moveToAnnotation(this.layer, annotation, state);
     });
 
     const selectionState = this.selectedAnnotationState.value;
@@ -1050,7 +1079,9 @@ export class PlacePointTool extends PlaceAnnotationTool {
         relatedSegments: getSelectedAssociatedSegments(annotationLayer),
         point,
         type: AnnotationType.POINT,
-        properties: annotationLayer.source.properties.map((x) => x.default),
+        properties: annotationLayer.source.properties.value.map(
+          (x) => x.default,
+        ),
       };
       const reference = annotationLayer.source.add(
         annotation,
@@ -1202,7 +1233,7 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
       description: "",
       pointA: point,
       pointB: point,
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1326,7 +1357,7 @@ class PlaceEllipsoidTool extends TwoStepAnnotationTool {
       segments: getSelectedAssociatedSegments(annotationLayer),
       center: point,
       radii: vec3.fromValues(0, 0, 0),
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1652,6 +1683,16 @@ export function UserLayerWithAnnotationsMixin<
           this.annotationDisplayState.hoverState.value = undefined;
         }),
       );
+      this.registerDisposer(
+        this.registerLayerEvent("select-previous", () => {
+          this.changeSelectedIndex(-1);
+        }),
+      );
+      this.registerDisposer(
+        this.registerLayerEvent("select-next", () => {
+          this.changeSelectedIndex(1);
+        }),
+      );
     }
 
     initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
@@ -1735,7 +1776,7 @@ export function UserLayerWithAnnotationsMixin<
                     new AnnotationPropertySerializer(
                       rank,
                       numGeometryBytes,
-                      properties,
+                      properties.value,
                     );
                   const annotationIndex = state.annotationIndex!;
                   const annotationCount = state.annotationCount!;
@@ -1754,7 +1795,9 @@ export function UserLayerWithAnnotationsMixin<
                     annotationIndex,
                     annotationCount,
                     isLittleEndian,
-                    (annotation.properties = new Array(properties.length)),
+                    (annotation.properties = new Array(
+                      properties.value.length,
+                    )),
                   );
                   if (annotationLayer.source.hasNonSerializedProperties()) {
                     statusText = "Loading...";
@@ -1852,7 +1895,10 @@ export function UserLayerWithAnnotationsMixin<
                   positionGrid.appendChild(button);
                 }
 
-                const { relationships, properties } = annotationLayer.source;
+                const {
+                  relationships,
+                  properties: { value: properties },
+                } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
 
                 // Add the ID to the annotation details.
@@ -1872,8 +1918,17 @@ export function UserLayerWithAnnotationsMixin<
                 label.appendChild(valueElement);
                 parent.appendChild(label);
 
+                const activeTags: string[] = [];
+
                 for (let i = 0, count = properties.length; i < count; ++i) {
                   const property = properties[i];
+                  const value = annotation.properties[i];
+                  if (isAnnotationTagPropertySpec(property) && property.tag) {
+                    if (value !== 0) {
+                      activeTags.push(property.tag);
+                    }
+                    continue;
+                  }
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
                   const idElement = document.createElement("span");
@@ -1886,7 +1941,6 @@ export function UserLayerWithAnnotationsMixin<
                   if (description !== undefined) {
                     label.title = description;
                   }
-                  const value = annotation.properties[i];
                   const valueElement = document.createElement("span");
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
@@ -1922,6 +1976,26 @@ export function UserLayerWithAnnotationsMixin<
                       );
                       break;
                   }
+                  label.appendChild(valueElement);
+                  parent.appendChild(label);
+                }
+
+                if (activeTags.length) {
+                  const label = document.createElement("label");
+                  label.classList.add("neuroglancer-annotation-property");
+                  const idElement = document.createElement("span");
+                  idElement.classList.add(
+                    "neuroglancer-annotation-property-label",
+                  );
+                  idElement.textContent = "tags";
+                  label.appendChild(idElement);
+                  const valueElement = document.createElement("span");
+                  valueElement.classList.add(
+                    "neuroglancer-annotation-property-value",
+                  );
+                  valueElement.textContent = activeTags
+                    .map((x) => `#${x}`)
+                    .join(" ");
                   label.appendChild(valueElement);
                   parent.appendChild(label);
                 }
@@ -2144,6 +2218,50 @@ export function UserLayerWithAnnotationsMixin<
         pin,
       );
     }
+
+    changeSelectedIndex = (offset: number) => {
+      const selectionState = this.manager.root.selectionState.value;
+      if (selectionState === undefined) return;
+      const layerSelectionState = selectionState.layers.find(
+        (s) => s.layer === this,
+      )?.state;
+      if (layerSelectionState === undefined) return;
+      const { annotationId } = layerSelectionState;
+      if (annotationId === undefined) return;
+      let annotationLayerState = this.annotationStates.states.find(
+        (x) =>
+          x.sourceIndex === layerSelectionState.annotationSourceIndex &&
+          (layerSelectionState.annotationSubsource === undefined ||
+            x.subsourceId === layerSelectionState.annotationSubsource),
+      );
+      if (annotationLayerState === undefined) return;
+      let annotationLayerStateIndex =
+        this.annotationStates.states.indexOf(annotationLayerState);
+      let { source } = annotationLayerState;
+      let annotations = Array.from(source);
+      let index = annotations.findIndex((x) => x.id === annotationId);
+      while (true) {
+        index = index + offset;
+        if (index === -1) {
+          // this only happens if offset is negative
+          annotationLayerStateIndex -= 1;
+        } else if (index === annotations.length) {
+          // this only happens if offset is positive
+          annotationLayerStateIndex += 1;
+        } else {
+          const annotation = annotations[index];
+          this.selectAnnotation(annotationLayerState, annotation.id, true);
+          moveToAnnotation(this, annotation, annotationLayerState);
+          return;
+        }
+        annotationLayerState =
+          this.annotationStates.states[annotationLayerStateIndex];
+        if (annotationLayerState === undefined) return;
+        source = annotationLayerState.source;
+        annotations = Array.from(source);
+        index = index === -1 ? annotations.length : 0;
+      }
+    };
 
     toJSON() {
       const x = super.toJSON();
