@@ -15,13 +15,12 @@
  */
 
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function decodeCompressedSegmentationChunk(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
   response: ArrayBuffer,
 ) {
-  cancellationToken;
+  abortSignal;
   chunk.data = new Uint32Array(response);
 }

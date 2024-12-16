@@ -67,12 +67,6 @@ export class SharedDisjointUint64Sets
     return obj;
   }
 
-  disposed() {
-    this.disjointSets = <any>undefined;
-    this.changed = <any>undefined;
-    super.disposed();
-  }
-
   link(a: Uint64, b: Uint64) {
     if (this.disjointSets.link(a, b)) {
       const { rpc } = this;

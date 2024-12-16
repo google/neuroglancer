@@ -7,6 +7,13 @@ on:
     tags:
       - v**
   pull_request:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: "Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)"
+        required: false
+        default: false
 
 jobs:
   client:
@@ -97,12 +104,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # Uncomment the action below for an interactive shell
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
+      - uses: ./.github/actions/setup-firefox
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
       - name: Install Python packaging/test tools
         run: pip install tox nox wheel numpy -r python/requirements-test.txt
-      - uses: ./.github/actions/setup-firefox
       - run: nox -s lint format mypy
       - name: Check for dirty working directory
         run: git diff --exit-code

@@ -17,4 +17,6 @@
 import { asyncComputation } from "#src/async_computation/index.js";
 
 export const decodeZstd =
-  asyncComputation<(data: Uint8Array) => Uint8Array>("decodeZstd");
+  asyncComputation<(data: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer>>(
+    "decodeZstd",
+  );

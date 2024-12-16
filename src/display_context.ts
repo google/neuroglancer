@@ -119,7 +119,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   renderViewport = new RenderViewport();
 
-  private monitorState: PanelMonitorState = {};
+  private monitorState: PanelMonitorState = { isIntersecting: true };
 
   constructor(
     public context: Borrowed<DisplayContext>,
@@ -400,6 +400,13 @@ interface PanelMonitorState {
   // detections due to normalization that the browser may do.
   intersectionObserverMargin?: string;
 
+  // Indicates that the element is intersecting the viewport at all. If `true`,
+  // then the intersection observer margin is set normally to detect any
+  // changes. If `false`, then the intersection observer margin is set to cover
+  // the entire viewport in order to detect when the panel becomes visible
+  // again.
+  isIntersecting: boolean;
+
   // Indicates that the panel element was added to the resize observer.
   addedToResizeObserver?: boolean;
 }
@@ -447,21 +454,37 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       this.resizeObserver.observe(element);
       state.addedToResizeObserver = true;
     }
-    const rootRect = this.rootRect!;
-    const marginTop = rootRect.top - elementClientRect.top;
-    const marginLeft = rootRect.left - elementClientRect.left;
-    const marginRight = elementClientRect.right - rootRect.right;
-    const marginBottom = elementClientRect.bottom - rootRect.bottom;
-    const margin = `${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px`;
+    let margin: string;
+    if (state.isIntersecting) {
+      const rootRect = this.rootRect!;
+      const marginTop = rootRect.top - elementClientRect.top;
+      const marginLeft = rootRect.left - elementClientRect.left;
+      const marginRight = elementClientRect.right - rootRect.right;
+      const marginBottom = elementClientRect.bottom - rootRect.bottom;
+      margin = `${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px`;
+    } else {
+      margin = "";
+    }
     if (state.intersectionObserverMargin !== margin) {
       state.intersectionObserverMargin = margin;
       state.intersectionObserver?.disconnect();
+      const thresholds = new Array(101);
+      for (let i = 0; i <= 100; ++i) {
+        thresholds[i] = 0.01 * i;
+      }
       const intersectionObserver = (state.intersectionObserver =
-        new IntersectionObserver(this.resizeCallback, {
-          root: this.container,
-          rootMargin: margin,
-          threshold: [0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1],
-        }));
+        new IntersectionObserver(
+          (entries) => {
+            const lastEntry = entries[entries.length - 1];
+            state.isIntersecting = lastEntry.isIntersecting;
+            this.resizeCallback();
+          },
+          {
+            root: this.container,
+            rootMargin: margin,
+            threshold: thresholds,
+          },
+        ));
       intersectionObserver.observe(element);
     }
   }

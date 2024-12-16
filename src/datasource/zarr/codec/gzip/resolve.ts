@@ -26,12 +26,14 @@ export interface Configuration {
   level: number;
 }
 
-registerCodec({
-  name: "gzip",
-  kind: CodecKind.bytesToBytes,
-  resolve(configuration: unknown): { configuration: Configuration } {
-    verifyObject(configuration);
-    const level = verifyObjectProperty(configuration, "level", verifyInt);
-    return { configuration: { level } };
-  },
-});
+for (const name of ["gzip", "zlib"]) {
+  registerCodec({
+    name,
+    kind: CodecKind.bytesToBytes,
+    resolve(configuration: unknown): { configuration: Configuration } {
+      verifyObject(configuration);
+      const level = verifyObjectProperty(configuration, "level", verifyInt);
+      return { configuration: { level } };
+    },
+  });
+}

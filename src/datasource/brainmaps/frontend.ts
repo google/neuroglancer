@@ -691,8 +691,8 @@ const MultiscaleAnnotationSourceBase = WithParameters(
 );
 
 export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
-  key: any;
-  parameters: AnnotationSourceParameters;
+  declare key: any;
+  declare parameters: AnnotationSourceParameters;
   credentialsProvider: Owned<CredentialsProvider<OAuth2Credentials>>;
   constructor(
     chunkManager: ChunkManager,
@@ -793,8 +793,9 @@ export class BrainmapsDataSource extends DataSourceProvider {
         makeRequest(this.instance, this.credentialsProvider, {
           method: "GET",
           path: `/v1beta2/volumes/${volumeId}`,
-          responseType: "json",
-        }).then((response) => new MultiscaleVolumeInfo(response)),
+        })
+          .then((response) => response.json())
+          .then((response) => new MultiscaleVolumeInfo(response)),
     );
   }
 
@@ -810,8 +811,9 @@ export class BrainmapsDataSource extends DataSourceProvider {
         makeRequest(this.instance, this.credentialsProvider, {
           method: "GET",
           path: `/v1beta2/objects/${volumeId}/meshes`,
-          responseType: "json",
-        }).then((response) => parseMeshesResponse(response)),
+        })
+          .then((response) => response.json())
+          .then((response) => parseMeshesResponse(response)),
     );
   }
 
@@ -1020,10 +1022,11 @@ export class BrainmapsDataSource extends DataSourceProvider {
         const promise = makeRequest(this.instance, this.credentialsProvider, {
           method: "GET",
           path: "/v1beta2/projects",
-          responseType: "json",
-        }).then((projectsResponse) => {
-          return parseProjectList(projectsResponse);
-        });
+        })
+          .then((response) => response.json())
+          .then((projectsResponse) => {
+            return parseProjectList(projectsResponse);
+          });
         const description = `${this.instance.description} project list`;
         StatusMessage.forPromise(promise, {
           delay: true,
@@ -1042,10 +1045,11 @@ export class BrainmapsDataSource extends DataSourceProvider {
         const promise = makeRequest(this.instance, this.credentialsProvider, {
           method: "GET",
           path: `/v1beta2/datasets?project_id=${project}`,
-          responseType: "json",
-        }).then((datasetsResponse) => {
-          return parseAPIResponseList(datasetsResponse, "datasetIds");
-        });
+        })
+          .then((response) => response.json())
+          .then((datasetsResponse) => {
+            return parseAPIResponseList(datasetsResponse, "datasetIds");
+          });
         const description = `${this.instance.description} dataset list`;
         StatusMessage.forPromise(promise, {
           delay: true,
@@ -1067,19 +1071,20 @@ export class BrainmapsDataSource extends DataSourceProvider {
         const promise = makeRequest(this.instance, this.credentialsProvider, {
           method: "GET",
           path: `/v1beta2/volumes?project_id=${project}&dataset_id=${dataset}`,
-          responseType: "json",
-        }).then((volumesResponse) => {
-          const fullyQualifyiedVolumeList = parseAPIResponseList(
-            volumesResponse,
-            "volumeId",
-          );
-          const splitPoint = project.length + dataset.length + 2;
-          const volumeList = [];
-          for (const volume of fullyQualifyiedVolumeList) {
-            volumeList.push(volume.substring(splitPoint));
-          }
-          return volumeList;
-        });
+        })
+          .then((response) => response.json())
+          .then((volumesResponse) => {
+            const fullyQualifyiedVolumeList = parseAPIResponseList(
+              volumesResponse,
+              "volumeId",
+            );
+            const splitPoint = project.length + dataset.length + 2;
+            const volumeList = [];
+            for (const volume of fullyQualifyiedVolumeList) {
+              volumeList.push(volume.substring(splitPoint));
+            }
+            return volumeList;
+          });
         const description = `${this.instance.description} volume list`;
         StatusMessage.forPromise(promise, {
           delay: true,
@@ -1105,9 +1110,10 @@ export class BrainmapsDataSource extends DataSourceProvider {
           {
             method: "GET",
             path: `/v1beta2/changes/${volumeId}/change_stacks`,
-            responseType: "json",
           },
-        ).then((response) => parseChangeStackList(response));
+        )
+          .then((response) => response.json())
+          .then((response) => parseChangeStackList(response));
         const description = `change stacks for ${volumeId}`;
         StatusMessage.forPromise(promise, {
           delay: true,

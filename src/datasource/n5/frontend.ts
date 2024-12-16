@@ -59,15 +59,12 @@ import {
 import { transposeNestedArrays } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { completeHttpPath } from "#src/util/http_path_completion.js";
-import {
-  isNotFoundError,
-  parseUrl,
-  responseJson,
-} from "#src/util/http_request.js";
+import { isNotFoundError, parseUrl } from "#src/util/http_request.js";
 import {
   expectArray,
   parseArray,
   parseFixedLengthArray,
+  verifyBoolean,
   verifyEnumString,
   verifyFinitePositiveFloat,
   verifyObject,
@@ -85,7 +82,7 @@ import type {
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 
@@ -235,6 +232,17 @@ class ScaleMetadata {
       encoding = verifyObjectProperty(compression, "type", (x) =>
         verifyEnumString(x, VolumeChunkEncoding),
       );
+      if (
+        encoding === VolumeChunkEncoding.GZIP &&
+        verifyOptionalObjectProperty(
+          compression,
+          "useZlib",
+          verifyBoolean,
+          false,
+        ) === true
+      ) {
+        encoding = VolumeChunkEncoding.ZLIB;
+      }
     });
     if (encoding === undefined) {
       encoding = verifyObjectProperty(obj, "compressionType", (x) =>
@@ -292,7 +300,8 @@ function getIndividualAttributesJson(
       credentialsProvider: getObjectId(credentialsProvider),
     },
     () =>
-      cancellableFetchSpecialOk(credentialsProvider, url, {}, responseJson)
+      fetchSpecialOk(credentialsProvider, url, {})
+        .then((response) => response.json())
         .then((j) => {
           try {
             return verifyObject(j);
@@ -579,7 +588,7 @@ export class N5DataSource extends DataSourceProvider {
     return completeHttpPath(
       options.credentialsManager,
       options.providerUrl,
-      options.cancellationToken,
+      options.abortSignal,
     );
   }
 }

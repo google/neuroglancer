@@ -23,5 +23,9 @@ export class JpegDecoder {
   height: number;
   numComponents: number;
   parse(data: Uint8Array): void;
-  getData(width: number, height: number, forceRGBOutput?: boolean): Uint8Array;
+  getData(
+    width: number,
+    height: number,
+    forceRGBOutput?: boolean,
+  ): Uint8Array<ArrayBuffer>;
 }

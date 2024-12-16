@@ -1,9 +1,8 @@
 import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { responseJson } from "#src/util/http_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 import type { Viewer } from "#src/viewer.js";
@@ -85,16 +84,12 @@ export class StateShare extends RefCounted {
       );
 
       StatusMessage.forPromise(
-        cancellableFetchSpecialOk(
-          credentialsProvider,
-          parsedUrl,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(viewer.state.toJSON()),
-          },
-          responseJson,
-        )
+        fetchSpecialOk(credentialsProvider, parsedUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(viewer.state.toJSON()),
+        })
+          .then((response) => response.json())
           .then((res) => {
             const stateUrlProtcol = new URL(res).protocol;
             const stateUrlWithoutProtocol = res.substring(

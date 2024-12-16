@@ -19,20 +19,15 @@ import { requestAsyncComputation } from "#src/async_computation/request.js";
 import type { Configuration } from "#src/datasource/zarr/codec/blosc/resolve.js";
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 registerCodec({
   name: "blosc",
   kind: CodecKind.bytesToBytes,
-  decode(
-    configuration: Configuration,
-    encoded: Uint8Array,
-    cancellationToken: CancellationToken,
-  ): Promise<Uint8Array> {
+  decode(configuration: Configuration, encoded, abortSignal: AbortSignal) {
     configuration;
     return requestAsyncComputation(
       decodeBlosc,
-      cancellationToken,
+      abortSignal,
       [encoded.buffer],
       encoded,
     );

@@ -22,10 +22,9 @@ import type {
   ReadResponse,
 } from "#src/kvstore/index.js";
 import { composeByteRangeRequest } from "#src/kvstore/index.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import { isNotFoundError } from "#src/util/http_request.js";
 import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 
 function getRangeHeader(
   request: ByteRangeRequest | undefined,
@@ -54,14 +53,10 @@ class SpecialProtocolKvStore implements ReadableKvStore {
 
   async getObjectLength(url: string, options: ReadOptions) {
     // Use a HEAD request to get the length of an object
-    const { cancellationToken = uncancelableToken } = options;
-    const headResponse = await cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      url,
-      { method: "HEAD" },
-      async (response) => response,
-      cancellationToken,
-    );
+    const headResponse = await fetchSpecialOk(this.credentialsProvider, url, {
+      method: "HEAD",
+      signal: options.abortSignal,
+    });
 
     if (headResponse.status !== 200) {
       throw new Error(
@@ -82,7 +77,6 @@ class SpecialProtocolKvStore implements ReadableKvStore {
     key: string,
     options: ReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const { cancellationToken = uncancelableToken } = options;
     let { byteRange: byteRangeRequest } = options;
     const url = this.baseUrl + key;
 
@@ -109,22 +103,18 @@ class SpecialProtocolKvStore implements ReadableKvStore {
           byteRangeRequest,
         ).outer;
       }
-      const requestInit: RequestInit = {};
+      const requestInit: RequestInit = { signal: options.abortSignal };
       const rangeHeader = getRangeHeader(byteRangeRequest);
       if (rangeHeader !== undefined) {
         requestInit.headers = { range: rangeHeader };
         requestInit.cache = byteRangeCacheMode;
       }
-      const { response, data } = await cancellableFetchSpecialOk(
+      const response = await fetchSpecialOk(
         this.credentialsProvider,
         url,
         requestInit,
-        async (response) => ({
-          response,
-          data: await response.arrayBuffer(),
-        }),
-        cancellationToken,
       );
+      const data = await response.arrayBuffer();
       let byteRange: ByteRange | undefined;
       if (response.status === 206) {
         const contentRange = response.headers.get("content-range");
