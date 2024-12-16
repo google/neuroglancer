@@ -39,6 +39,7 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
+export const MAX_RENDER_AREA_PIXELS = 5041 * 5041;
 const SCREENSHOT_TIMEOUT = 3000;
 
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
@@ -207,8 +208,7 @@ export class ScreenshotManager extends RefCounted {
   }
 
   public set screenshotScale(scale: number) {
-    this.handleScreenshotZoomAndResize(scale);
-    this._screenshotScale = scale;
+    this._screenshotScale = this.handleScreenshotZoomAndResize(scale);
     this.zoomMaybeChanged.dispatch();
   }
 
@@ -345,8 +345,23 @@ export class ScreenshotManager extends RefCounted {
     resetZoom: boolean = false,
   ) {
     const oldScale = this.screenshotScale;
-    const zoomScaleFactor = resetZoom ? scale : oldScale / scale;
-    const canvasScaleFactor = resetZoom ? 1 : scale / oldScale;
+
+    // Because the scale is applied to the canvas, we need to check if the new scale will exceed the maximum render area
+    // If so, that means the scale needs to be adjusted to fit within the maximum render area
+    let intendedScale = scale;
+    if (!resetZoom && scale > 1) {
+      const currentCanvasSize = this.calculatedClippedViewportSize();
+      const numPixels =
+        (currentCanvasSize.width * currentCanvasSize.height) /
+        (oldScale * oldScale);
+      if (numPixels * intendedScale * intendedScale > MAX_RENDER_AREA_PIXELS) {
+        intendedScale = Math.sqrt(MAX_RENDER_AREA_PIXELS / numPixels);
+      }
+    }
+
+    const scaleFactor = intendedScale / oldScale;
+    const zoomScaleFactor = resetZoom ? scale : 1 / scaleFactor;
+    const canvasScaleFactor = resetZoom ? 1 : scaleFactor;
 
     if (this.shouldKeepSliceViewFOVFixed || resetZoom) {
       // Scale the zoom factor of each slice view panel
@@ -361,6 +376,8 @@ export class ScreenshotManager extends RefCounted {
     }
 
     this.resizeCanvasIfNeeded(canvasScaleFactor);
+
+    return intendedScale;
   }
 
   /**

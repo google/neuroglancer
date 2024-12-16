@@ -27,6 +27,7 @@ import type {
   ScreenshotLoadStatistics,
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
+import { MAX_RENDER_AREA_PIXELS } from "#src/util/screenshot_manager.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type {
   DimensionResolutionStats,
@@ -48,7 +49,6 @@ import { makeIcon } from "#src/widget/icon.js";
 const DEBUG_ALLOW_MENU_CLOSE = false;
 
 // For easy access to UI elements
-const LARGE_SCREENSHOT_SIZE = 4096 * 4096;
 const PANEL_TABLE_HEADER_STRINGS = {
   type: "Panel type",
   pixelResolution: "Pixel resolution",
@@ -687,9 +687,13 @@ export class ScreenshotDialog extends Overlay {
   private handleScreenshotResize() {
     const screenshotSize =
       this.screenshotManager.calculatedClippedViewportSize();
-    if (screenshotSize.width * screenshotSize.height > LARGE_SCREENSHOT_SIZE) {
-      this.warningElement.textContent =
-        "Warning: large screenshots (bigger than 4096x4096) may fail";
+    const scale = this.screenshotManager.screenshotScale.toFixed(2);
+    const numPixels = Math.round(Math.sqrt(MAX_RENDER_AREA_PIXELS));
+    // Add a little to account for potential rounding errors
+    if (
+      (screenshotSize.width + 2) * (screenshotSize.height + 2) >= MAX_RENDER_AREA_PIXELS
+    ) {
+      this.warningElement.textContent = `Screenshots can't have more than ${numPixels}x${numPixels} total pixels, the scale factor was reduced to x${scale} to fit.`;
     } else {
       this.warningElement.textContent = "";
     }
