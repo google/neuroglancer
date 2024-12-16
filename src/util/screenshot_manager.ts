@@ -39,7 +39,7 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
-export const MAX_RENDER_AREA_PIXELS = 5041 * 5041;
+export const MAX_RENDER_AREA_PIXELS = 5100 * 5100;
 const SCREENSHOT_TIMEOUT = 3000;
 
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
@@ -354,6 +354,7 @@ export class ScreenshotManager extends RefCounted {
       const numPixels =
         (currentCanvasSize.width * currentCanvasSize.height) /
         (oldScale * oldScale);
+      console.log(Math.sqrt(numPixels * intendedScale * intendedScale));
       if (numPixels * intendedScale * intendedScale > MAX_RENDER_AREA_PIXELS) {
         intendedScale = Math.sqrt(MAX_RENDER_AREA_PIXELS / numPixels);
       }
