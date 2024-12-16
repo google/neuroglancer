@@ -299,7 +299,6 @@ export class ScreenshotManager extends RefCounted {
       };
       viewer.display.canvas.width = newSize.width;
       viewer.display.canvas.height = newSize.height;
-      ++viewer.display.resizeGeneration;
       viewer.display.resizeCallback();
     }
   }
