@@ -354,7 +354,6 @@ export class ScreenshotManager extends RefCounted {
       const numPixels =
         (currentCanvasSize.width * currentCanvasSize.height) /
         (oldScale * oldScale);
-      console.log(Math.sqrt(numPixels * intendedScale * intendedScale));
       if (numPixels * intendedScale * intendedScale > MAX_RENDER_AREA_PIXELS) {
         intendedScale = Math.sqrt(MAX_RENDER_AREA_PIXELS / numPixels);
       }
