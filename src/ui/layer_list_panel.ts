@@ -119,40 +119,48 @@ class LayerColorWidget extends RefCounted {
       "neuroglancer-layer-list-panel-color-value-wrapper";
     elementWrapper.appendChild(element);
 
-    if (this.layer.supportsLayerBarColorSyncOption) {
-      const updateLayerColorWidget = () => {
-        const color = this.layer.layerBarColor;
-        if (color) {
-          element.style.backgroundColor = color;
-          element.classList.remove("rainbow");
+    this.registerDisposer(
+      observeWatchable((layerColorEnabled) => {
+        elementWrapper.style.display = layerColorEnabled ? "block" : "none";
+        if (this.layer.supportsLayerBarColorSyncOption) {
+          elementWrapper.classList.remove("unsupported");
+          element.classList.remove("unsupported");
         } else {
-          element.classList.add("rainbow");
+          elementWrapper.classList.add("unsupported");
+          element.classList.add("unsupported");
         }
-      };
-      this.registerDisposer(
-        layer.observeLayerColor(() => {
-          updateLayerColorWidget();
-        }),
-      );
-      panel.sidePanelManager.viewerState.enableLayerColorWidget;
-      this.registerDisposer(
-        observeWatchable((layerColorEnabled) => {
-          elementWrapper.style.display = layerColorEnabled ? "block" : "none";
-        }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
-      );
-      this.registerDisposer(
-        layer.layerChanged.add(() => {
-          if (!this.layer.visible) {
-            elementWrapper.classList.add("cross");
-          } else {
-            elementWrapper.classList.remove("cross");
-          }
-        }),
-      );
-    } else {
-      // If the layer do not support color sync (no color to deal with)
+      }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
+    );
+    if (!this.layer.supportsLayerBarColorSyncOption) {
+      elementWrapper.classList.add("unsupported");
       element.classList.add("unsupported");
     }
+    const updateLayerColorWidget = () => {
+      const color = this.layer.layerBarColor;
+      if (color) {
+        element.style.backgroundColor = color;
+        element.classList.remove("rainbow");
+      } else {
+        const style = this.layer.supportsLayerBarColorSyncOption
+          ? "rainbow"
+          : "unsupported";
+        element.classList.add(style);
+      }
+    };
+    this.registerDisposer(
+      layer.observeLayerColor(() => {
+        updateLayerColorWidget();
+      }),
+    );
+    this.registerDisposer(
+      layer.layerChanged.add(() => {
+        if (!this.layer.visible) {
+          elementWrapper.classList.add("cross");
+        } else {
+          elementWrapper.classList.remove("cross");
+        }
+      }),
+    );
   }
 }
 
