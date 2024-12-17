@@ -269,7 +269,7 @@ class PerspectiveViewState extends PerspectiveViewStateBase {
 }
 
 export class PerspectivePanel extends RenderedDataPanel {
-  viewer: PerspectiveViewerState;
+  declare viewer: PerspectiveViewerState;
 
   projectionParameters: Owned<DerivedProjectionParameters>;
 
@@ -999,6 +999,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       sliceViewsPresent: this.sliceViews.size > 0,
       isContinuousCameraMotionInProgress:
         this.isContinuousCameraMotionInProgress,
+      force3DHistogramForAutoRange: this.context.force3DHistogramForAutoRange,
     };
 
     mat4.copy(

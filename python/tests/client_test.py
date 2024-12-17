@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 
 import filelock
 import neuroglancer.static_file_server
@@ -80,6 +81,14 @@ def capture_screenshot_from_dev_server(
 
         assert url is not None
 
+        while True:
+            try:
+                assert urllib.request.urlopen(url).status == 200
+                break
+            except Exception as e:
+                print(f"URL {url} not yet ready: {e}")
+                time.sleep(0.1)
+
         return capture_screenshot(webdriver, url, test_fragment)
     finally:
         if sys.platform == "win32":
@@ -139,7 +148,7 @@ def capture_screenshot(webdriver, url, test_fragment):
         webdriver.driver.switch_to.window(original_window_handle)
 
 
-TEST_FRAGMENT = "#!%7B%22dimensions%22:%7B%22x%22:%5B8e-9%2C%22m%22%5D%2C%22y%22:%5B8e-9%2C%22m%22%5D%2C%22z%22:%5B8e-9%2C%22m%22%5D%7D%2C%22position%22:%5B22316.904296875%2C21921.87890625%2C24029.763671875%5D%2C%22crossSectionScale%22:1%2C%22crossSectionDepth%22:-37.62185354999912%2C%22projectionOrientation%22:%5B-0.1470303237438202%2C0.5691322684288025%2C0.19562694430351257%2C0.7849844694137573%5D%2C%22projectionScale%22:118020.30607575581%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22precomputed://gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg%22%2C%22tab%22:%22source%22%2C%22name%22:%22emdata%22%7D%2C%7B%22type%22:%22segmentation%22%2C%22source%22:%22precomputed://gs://neuroglancer-janelia-flyem-hemibrain/v1.0/segmentation%22%2C%22tab%22:%22segments%22%2C%22segments%22:%5B%221944507292%22%5D%2C%22name%22:%22segmentation%22%7D%5D%2C%22showSlices%22:false%2C%22selectedLayer%22:%7B%22layer%22:%22segmentation%22%7D%2C%22layout%22:%22xy-3d%22%7D"
+TEST_FRAGMENT = "#!%7B%22dimensions%22:%7B%22x%22:%5B8e-9%2C%22m%22%5D%2C%22y%22:%5B8e-9%2C%22m%22%5D%2C%22z%22:%5B8e-9%2C%22m%22%5D%7D%2C%22position%22:%5B22316.904296875%2C21921.87890625%2C24029.763671875%5D%2C%22crossSectionScale%22:1%2C%22crossSectionDepth%22:-37.62185354999912%2C%22projectionOrientation%22:%5B-0.1470303237438202%2C0.5691322684288025%2C0.19562694430351257%2C0.7849844694137573%5D%2C%22projectionScale%22:118020.30607575581%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22precomputed://gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg%22%2C%22tab%22:%22rendering%22%2C%22crossSectionRenderScale%22:4%2C%22name%22:%22emdata%22%7D%2C%7B%22type%22:%22segmentation%22%2C%22source%22:%22precomputed://gs://neuroglancer-janelia-flyem-hemibrain/v1.0/segmentation%22%2C%22tab%22:%22rendering%22%2C%22segments%22:%5B%221944507292%22%5D%2C%22name%22:%22segmentation%22%7D%5D%2C%22showSlices%22:false%2C%22selectedLayer%22:%7B%22layer%22:%22emdata%22%7D%2C%22layout%22:%22xy-3d%22%2C%22statistics%22:%7B%22size%22:232%7D%7D"
 
 
 @pytest.fixture(scope="session")
@@ -162,6 +171,8 @@ EXAMPLE_DIRS = [
         # Disable parcel since it currently has "failed to resolve bundle" errors.
         # "parcel",
         "webpack",
+        "rsbuild",
+        "rspack",
     ]
     for package in ["source", "built"]
 ]
@@ -201,7 +212,11 @@ def built_package(request):
         subprocess.run(
             ["npm", "install", "--no-fund", "--no-audit"], cwd=root_dir, check=True
         )
-        subprocess.run(["npm", "run", "build-package"], cwd=root_dir, check=True)
+        subprocess.run(
+            ["npm", "run", "build-package", "--", "--skip-declarations"],
+            cwd=root_dir,
+            check=True,
+        )
 
     get_xdist_session_value(
         do_build,
@@ -270,7 +285,6 @@ def compare_screenshot(screenshot, expected_screenshot, extras, threshold=20):
         pytest.fail(f"Screenshots don't match, max_difference={max_difference}")
 
 
-# Flaky due to https://github.com/parcel-bundler/parcel/issues/9476
 @pytest.mark.flaky(reruns=5)
 @pytest.mark.timeout(timeout=60, func_only=True)
 def test_dev_server(
@@ -292,7 +306,6 @@ def test_dev_server(
     )
 
 
-# Flaky due to https://github.com/parcel-bundler/parcel/issues/9476
 @pytest.mark.flaky(reruns=5)
 @pytest.mark.timeout(timeout=60, func_only=True)
 def test_build(
@@ -314,6 +327,7 @@ def test_build(
     )
 
 
+@pytest.mark.flaky(reruns=5)
 @pytest.mark.timeout(timeout=60, func_only=True)
 def test_root_build(
     request,

@@ -98,19 +98,26 @@ export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
 }
 
 export class HashSetShaderManager {
-  textureUnitSymbol = Symbol.for(`gpuhashtable:${this.prefix}`);
-  private accessHelper = new OneDimensionalTextureAccessHelper(
-    `gpuhashtable_${this.prefix}`,
-  );
-  samplerName = this.prefix + "_sampler";
-  hashSeedsName = this.prefix + "_seeds";
-  hashKeyMask = this.prefix + "_keyMask";
-  readTable = this.prefix + "_readTable";
+  textureUnitSymbol: symbol;
+  private accessHelper: OneDimensionalTextureAccessHelper;
+  samplerName: string;
+  hashSeedsName: string;
+  hashKeyMask: string;
+  readTable: string;
 
   constructor(
     public prefix: string,
     public numAlternatives = NUM_ALTERNATIVES,
-  ) {}
+  ) {
+    this.textureUnitSymbol = Symbol.for(`gpuhashtable:${this.prefix}`);
+    this.accessHelper = new OneDimensionalTextureAccessHelper(
+      `gpuhashtable_${this.prefix}`,
+    );
+    this.samplerName = prefix + "_sampler";
+    this.hashSeedsName = prefix + "_seeds";
+    this.hashKeyMask = prefix + "_keyMask";
+    this.readTable = prefix + "_readTable";
+  }
 
   defineShader(builder: ShaderBuilder) {
     const { hashSeedsName, samplerName, numAlternatives, hashKeyMask } = this;

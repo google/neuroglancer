@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2019 Google Inc.
+ * Copyright 2024 William Silversmith
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,10 +14,24 @@
  * limitations under the License.
  */
 
-import { decodeGzip } from "#src/async_computation/decode_gzip_request.js";
+import { decodeJxl } from "#src/async_computation/decode_jxl_request.js";
 import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { decompressJxl } from "#src/sliceview/jxl/index.js";
 
-registerAsyncComputation(decodeGzip, async (data: Uint8Array) => {
-  const result = (await import("pako")).inflate(data);
-  return { value: result, transfer: [result.buffer] };
-});
+registerAsyncComputation(
+  decodeJxl,
+  async (
+    data: Uint8Array,
+    area: number | undefined,
+    numComponents: number | undefined,
+    bytesPerPixel: number,
+  ) => {
+    const result = await decompressJxl(
+      data,
+      area,
+      numComponents,
+      bytesPerPixel,
+    );
+    return { value: result, transfer: [result.uint8Array.buffer] };
+  },
+);

@@ -93,7 +93,7 @@ import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import { completeHttpPath } from "#src/util/http_path_completion.js";
-import { isNotFoundError, responseJson } from "#src/util/http_request.js";
+import { isNotFoundError } from "#src/util/http_request.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -119,7 +119,7 @@ import type {
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 import { Uint64 } from "#src/util/uint64.js";
@@ -420,10 +420,10 @@ interface PrecomputedAnnotationSourceOptions {
 }
 
 export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase {
-  key: any;
+  declare key: any;
   metadata: AnnotationMetadata;
   credentialsProvider: SpecialProtocolCredentialsProvider;
-  OPTIONS: PrecomputedAnnotationSourceOptions;
+  declare OPTIONS: PrecomputedAnnotationSourceOptions;
   constructor(
     chunkManager: ChunkManager,
     options: PrecomputedAnnotationSourceOptions,
@@ -749,11 +749,8 @@ function getJsonMetadata(
       credentialsProvider: getObjectId(credentialsProvider),
     },
     async () => {
-      return await cancellableFetchSpecialOk(
-        credentialsProvider,
-        `${url}/info`,
-        {},
-        responseJson,
+      return await fetchSpecialOk(credentialsProvider, `${url}/info`, {}).then(
+        (response) => response.json(),
       );
     },
   );
@@ -1443,7 +1440,7 @@ export class PrecomputedDataSource extends DataSourceProvider {
     return completeHttpPath(
       options.credentialsManager,
       options.providerUrl,
-      options.cancellationToken,
+      options.abortSignal,
     );
   }
 }

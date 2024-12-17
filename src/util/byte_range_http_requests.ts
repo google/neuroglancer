@@ -14,13 +14,9 @@
  * limitations under the License.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-import {
-  getByteRangeHeader,
-  responseArrayBuffer,
-} from "#src/util/http_request.js";
+import { getByteRangeHeader } from "#src/util/http_request.js";
 import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 import type { Uint64 } from "#src/util/uint64.js";
 
 /**
@@ -37,16 +33,11 @@ export function fetchSpecialHttpByteRange(
   url: string,
   startOffset: Uint64 | number,
   endOffset: Uint64 | number,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<ArrayBuffer> {
-  return cancellableFetchSpecialOk(
-    credentialsProvider,
-    url,
-    {
-      headers: getByteRangeHeader(startOffset, endOffset),
-      cache: cacheMode,
-    },
-    responseArrayBuffer,
-    cancellationToken,
-  );
+  return fetchSpecialOk(credentialsProvider, url, {
+    headers: getByteRangeHeader(startOffset, endOffset),
+    cache: cacheMode,
+    signal: abortSignal,
+  }).then((response) => response.arrayBuffer());
 }

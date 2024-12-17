@@ -15,6 +15,7 @@
  */
 
 import type { DecodedImage } from "#src/async_computation/decode_png_request.js";
+import { transposeArray2d } from "#src/util/array.js";
 
 const libraryEnv = {
   emscripten_notify_memory_growth: () => {},
@@ -71,13 +72,13 @@ function readHeader(buffer: Uint8Array): {
   }
 
   if (buffer.length < 8 + 4) {
-    throw new Error("png: Invalid image size: {buffer.length}");
+    throw new Error(`png: Invalid image size: ${buffer.length}`);
   }
 
   // check for header for magic sequence
   const validMagic = arrayEqualTrucated(magicSpec, buffer);
   if (!validMagic) {
-    throw new Error(`png: didn't match magic numbers: {buffer.slice(0,8)}`);
+    throw new Error(`png: didn't match magic numbers: ${buffer.slice(0, 8)}`);
   }
 
   // offset into IHDR chunk so we can read more naturally
@@ -86,7 +87,7 @@ function readHeader(buffer: Uint8Array): {
   const chunkHeaderLength = 12; // len (4), code (4), CRC (4)
 
   if (buffer.length < magicSpec.length + chunkLength + chunkHeaderLength) {
-    throw new Error("png: Invalid image size: {buffer.length}");
+    throw new Error(`png: Invalid image size: ${buffer.length}`);
   }
 
   const chunkCode = [4, 5, 6, 7].map((i) =>
@@ -160,7 +161,7 @@ function readHeader(buffer: Uint8Array): {
         `png: invalid bit depth for grayscale + alpha channel colorspace. Got: ${bitDepth}`,
       );
     }
-    numChannels = 4;
+    numChannels = 2;
   } else {
     throw new Error(`png: Invalid color space: ${colorSpace}`);
   }
@@ -232,11 +233,16 @@ export async function decompressPng(
     // Likewise, we reference memory.buffer instead of heap.buffer
     // because memory growth during decompress could have detached
     // the buffer.
-    const image = new Uint8Array(
+    let image = new Uint8Array(
       (m.exports.memory as WebAssembly.Memory).buffer,
       imagePtr,
       nbytes,
     );
+
+    if (numChannels !== 1) {
+      image = transposeArray2d(image, sx * sy, numChannels);
+    }
+
     // copy the array so it can be memory managed by JS
     // and we can free the emscripten buffer
     return {

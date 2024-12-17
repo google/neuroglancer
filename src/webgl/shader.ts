@@ -186,12 +186,12 @@ export class ShaderProgram extends RefCounted {
     const vertexShader = (this.vertexShader = getShader(
       gl,
       vertexSource,
-      gl.VERTEX_SHADER,
+      WebGL2RenderingContext.VERTEX_SHADER,
     ));
     const fragmentShader = (this.fragmentShader = getShader(
       gl,
       fragmentSource,
-      gl.FRAGMENT_SHADER,
+      WebGL2RenderingContext.FRAGMENT_SHADER,
     ));
 
     const shaderProgram = gl.createProgram()!;

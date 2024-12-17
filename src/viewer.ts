@@ -95,6 +95,11 @@ import { StateEditorDialog } from "#src/ui/state_editor.js";
 import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
 import { GlobalToolBinder, LocalToolBinder } from "#src/ui/tool.js";
 import {
+  MultiToolPaletteDropdownButton,
+  MultiToolPaletteManager,
+  MultiToolPaletteState,
+} from "#src/ui/tool_palette.js";
+import {
   ViewerSettingsPanel,
   ViewerSettingsPanelState,
 } from "#src/ui/viewer_settings.js";
@@ -212,6 +217,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showHelpButton",
   "showSettingsButton",
   "showEditStateButton",
+  "showToolPaletteButton",
   "showLayerListPanelButton",
   "showSelectionPanelButton",
   "showLayerSidePanelButton",
@@ -328,6 +334,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("partialViewport", viewer.partialViewport);
     this.add("selectedStateServer", viewer.selectedStateServer);
     this.add("toolBindings", viewer.toolBinder);
+    this.add("toolPalettes", viewer.toolPalettes);
     this.add("enableLayerColorWidget", viewer.enableLayerColorWidget);
   }
 
@@ -772,6 +779,20 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const button = this.registerDisposer(
+        new MultiToolPaletteDropdownButton(this.toolPalettes),
+      ).element;
+
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showToolPaletteButton,
+          button,
+        ),
+      );
+      topRow.appendChild(button);
+    }
+
+    {
       const { layerListPanelState } = this;
       const button = this.registerDisposer(
         new CheckboxIcon(layerListPanelState.location.watchableVisible, {
@@ -996,6 +1017,10 @@ export class Viewer extends RefCounted implements ViewerState {
       }),
     );
 
+    this.registerDisposer(
+      new MultiToolPaletteManager(this.sidePanelManager, this.toolPalettes),
+    );
+
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
       if (shouldBeVisible !== this.visible) {
@@ -1127,8 +1152,10 @@ export class Viewer extends RefCounted implements ViewerState {
     );
   };
 
-  private globalToolBinder = this.registerDisposer(
-    new GlobalToolBinder(this.toolInputEventMapBinder),
+  public toolPalettes = new MultiToolPaletteState(this);
+
+  public globalToolBinder = this.registerDisposer(
+    new GlobalToolBinder(this.toolInputEventMapBinder, this.toolPalettes),
   );
 
   public toolBinder = this.registerDisposer(

@@ -759,19 +759,21 @@ function makeShaderCodeWidget(layer: AnnotationUserLayer) {
 }
 
 class ShaderCodeOverlay extends Overlay {
-  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
     super();
+    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     this.content.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
   }
 }
 
 class RenderingOptionsTab extends Tab {
-  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
     super();
     const { element } = this;
+    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-annotation-rendering-tab");
     element.appendChild(
       this.registerDisposer(

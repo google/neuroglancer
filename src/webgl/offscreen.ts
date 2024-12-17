@@ -110,9 +110,10 @@ export class DepthStencilRenderbuffer extends DepthRenderbuffer {
 export const StencilRenderbuffer = DepthStencilRenderbuffer;
 
 export class Framebuffer extends RefCounted {
-  framebuffer = this.gl.createFramebuffer();
+  framebuffer;
   constructor(public gl: GL) {
     super();
+    this.framebuffer = gl.createFramebuffer();
   }
   disposed() {
     const { gl } = this;
@@ -219,7 +220,7 @@ export class FramebufferConfiguration<
   depthBuffer: DepthBuffer | undefined;
   fullAttachmentList = new Array<number>();
   private attachmentVerified = false;
-  singleAttachmentList = [this.gl.COLOR_ATTACHMENT0];
+  singleAttachmentList = [WebGL2RenderingContext.COLOR_ATTACHMENT0];
 
   constructor(
     public gl: GL,
@@ -352,9 +353,11 @@ export class OffscreenCopyHelper extends RefCounted {
   ) {
     super();
     this.registerDisposer(shader);
+    this.copyVertexPositionsBuffer = getSquareCornersBuffer(gl);
+    this.copyTexCoordsBuffer = getSquareCornersBuffer(gl, 0, 0, 1, 1);
   }
-  private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
-  private copyTexCoordsBuffer = getSquareCornersBuffer(this.gl, 0, 0, 1, 1);
+  private copyVertexPositionsBuffer;
+  private copyTexCoordsBuffer;
 
   draw(...textures: (WebGLTexture | null)[]) {
     const { gl, shader } = this;

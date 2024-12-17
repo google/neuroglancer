@@ -382,6 +382,29 @@ export class AnnotationLayerView extends Tab {
   ) {
     super();
     this.element.classList.add("neuroglancer-annotation-layer-view");
+    this.selectedAnnotationState = makeCachedLazyDerivedWatchableValue(
+      (selectionState, pin) => {
+        if (selectionState === undefined) return undefined;
+        const { layer } = this;
+        const layerSelectionState = selectionState.layers.find(
+          (s) => s.layer === layer,
+        )?.state;
+        if (layerSelectionState === undefined) return undefined;
+        const { annotationId } = layerSelectionState;
+        if (annotationId === undefined) return undefined;
+        const annotationLayerState = this.annotationStates.states.find(
+          (x) =>
+            x.sourceIndex === layerSelectionState.annotationSourceIndex &&
+            (layerSelectionState.annotationSubsource === undefined ||
+              x.subsourceId === layerSelectionState.annotationSubsource),
+        );
+        if (annotationLayerState === undefined) return undefined;
+        return { annotationId, annotationLayerState, pin };
+      },
+      layer.manager.root.selectionState,
+      layer.manager.root.selectionState.pin,
+    );
+
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(
       this.annotationStates.changed.add(() =>
@@ -530,28 +553,7 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
-  private selectedAnnotationState = makeCachedLazyDerivedWatchableValue(
-    (selectionState, pin) => {
-      if (selectionState === undefined) return undefined;
-      const { layer } = this;
-      const layerSelectionState = selectionState.layers.find(
-        (s) => s.layer === layer,
-      )?.state;
-      if (layerSelectionState === undefined) return undefined;
-      const { annotationId } = layerSelectionState;
-      if (annotationId === undefined) return undefined;
-      const annotationLayerState = this.annotationStates.states.find(
-        (x) =>
-          x.sourceIndex === layerSelectionState.annotationSourceIndex &&
-          (layerSelectionState.annotationSubsource === undefined ||
-            x.subsourceId === layerSelectionState.annotationSubsource),
-      );
-      if (annotationLayerState === undefined) return undefined;
-      return { annotationId, annotationLayerState, pin };
-    },
-    this.layer.manager.root.selectionState,
-    this.layer.manager.root.selectionState.pin,
-  );
+  private selectedAnnotationState;
 
   private updateSelectionView() {
     const selectionState = this.selectedAnnotationState.value;
@@ -967,11 +969,13 @@ export class AnnotationLayerView extends Tab {
 }
 
 export class AnnotationTab extends Tab {
-  private layerView = this.registerDisposer(
-    new AnnotationLayerView(this.layer, this.layer.annotationDisplayState),
-  );
+  private layerView: AnnotationLayerView;
   constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
     super();
+    this.layerView = this.registerDisposer(
+      new AnnotationLayerView(layer, layer.annotationDisplayState),
+    );
+
     const { element } = this;
     element.classList.add("neuroglancer-annotations-tab");
     element.appendChild(this.layerView.element);
@@ -1008,7 +1012,7 @@ function getSelectedAssociatedSegments(
 }
 
 abstract class PlaceAnnotationTool extends LegacyTool {
-  layer: UserLayerWithAnnotations;
+  declare layer: UserLayerWithAnnotations;
   constructor(layer: UserLayerWithAnnotations, options: any) {
     super(layer);
     options;
@@ -1180,7 +1184,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 }
 
 abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
-  annotationType:
+  declare annotationType:
     | AnnotationType.LINE
     | AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
 

@@ -142,7 +142,7 @@ export class VolumeChunkSource
   extends SliceViewChunkSourceBackend
   implements VolumeChunkSourceInterface
 {
-  spec: VolumeChunkSpecification;
+  declare spec: VolumeChunkSpecification;
   tempChunkDataSize: Uint32Array;
   tempChunkPosition: Float32Array;
   constructor(rpc: RPC, options: any) {
