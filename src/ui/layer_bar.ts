@@ -257,13 +257,17 @@ export class LayerBar extends RefCounted {
     return this.layerGroupViewer.viewerNavigationState;
   }
 
+  get viewerState() {
+    return this.layerGroupViewer.viewerState;
+  }
+
   constructor(
     public layerGroupViewer: LayerGroupViewer,
     public getLayoutSpecForDrag: () => any,
     public showLayerHoverValues: WatchableValueInterface<boolean>,
   ) {
     super();
-    const { element, manager, selectedLayer } = this;
+    const { element, manager, selectedLayer, viewerState } = this;
     element.className = "neuroglancer-layer-panel";
     this.registerDisposer(
       manager.layerSelectedValues.changed.add(() => {
@@ -283,6 +287,11 @@ export class LayerBar extends RefCounted {
     this.registerDisposer(
       showLayerHoverValues.changed.add(() => {
         this.handleLayerItemValueChanged();
+      }),
+    );
+    this.registerDisposer(
+      viewerState.enableLayerColorWidget.changed.add(() => {
+        this.handleLayersChanged();
       }),
     );
     this.element.dataset.showHoverValues =
