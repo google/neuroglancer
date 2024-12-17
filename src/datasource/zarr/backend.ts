@@ -34,7 +34,6 @@ import { getSpecialProtocolKvStore } from "#src/kvstore/special/index.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
@@ -54,7 +53,7 @@ export class ZarrVolumeChunkSource extends WithParameters(
     ),
   );
 
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const { parameters } = this;
     const { chunkGridPosition } = chunk;
@@ -94,15 +93,15 @@ export class ZarrVolumeChunkSource extends WithParameters(
     const { chunkKvStore } = this;
     const response = await chunkKvStore.kvStore.read(
       chunkKvStore.getChunkKey(chunkGridPosition, baseKey),
-      { cancellationToken },
+      { abortSignal },
     );
     if (response !== undefined) {
       const decoded = await decodeArray(
         chunkKvStore.decodeCodecs,
         response.data,
-        cancellationToken,
+        abortSignal,
       );
-      await postProcessRawData(chunk, cancellationToken, decoded);
+      await postProcessRawData(chunk, abortSignal, decoded);
     }
   }
 }

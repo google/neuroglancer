@@ -120,7 +120,7 @@ export class SkeletonChunk extends Chunk {
 }
 
 export class SkeletonSource extends ChunkSource {
-  chunks: Map<string, SkeletonChunk>;
+  declare chunks: Map<string, SkeletonChunk>;
   getChunk(objectId: Uint64) {
     const key = getObjectKey(objectId);
     let chunk = this.chunks.get(key);

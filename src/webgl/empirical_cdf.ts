@@ -105,24 +105,30 @@ const histogramSamples = 2 ** 14;
  * Generates a histogram from a single-channel uint8 texture.
  */
 export class TextureHistogramGenerator extends RefCounted {
-  private shader = this.registerDisposer(
-    (() => {
-      const builder = new ShaderBuilder(this.gl);
-      builder.addOutputBuffer("vec4", "outputValue", 0);
-      builder.addAttribute("float", "aInput1");
-      builder.addTextureSampler(
-        "sampler2D",
-        "uDataSampler",
-        histogramDataSamplerTextureUnit,
-      );
-      builder.addTextureSampler(
-        "sampler2D",
-        "uDepthSampler",
-        histogramDepthTextureUnit,
-      );
-      // builder.addUniform('float', 'uRandomSeed');
-      builder.addVertexCode(glsl_simpleFloatHash);
-      builder.setVertexMain(`
+  private shader;
+  private inputIndexBuffer;
+
+  constructor(public gl: GL) {
+    super();
+
+    this.shader = this.registerDisposer(
+      (() => {
+        const builder = new ShaderBuilder(this.gl);
+        builder.addOutputBuffer("vec4", "outputValue", 0);
+        builder.addAttribute("float", "aInput1");
+        builder.addTextureSampler(
+          "sampler2D",
+          "uDataSampler",
+          histogramDataSamplerTextureUnit,
+        );
+        builder.addTextureSampler(
+          "sampler2D",
+          "uDepthSampler",
+          histogramDepthTextureUnit,
+        );
+        // builder.addUniform('float', 'uRandomSeed');
+        builder.addVertexCode(glsl_simpleFloatHash);
+        builder.setVertexMain(`
 float uRandomSeed = 0.0;
 vec2 p = vec2(simpleFloatHash(vec2(aInput1 + float(gl_VertexID), uRandomSeed + float(gl_InstanceID))),
               simpleFloatHash(vec2(aInput1 + float(gl_VertexID) + 10.0, 5.0 + uRandomSeed + float(gl_InstanceID))));
@@ -135,23 +141,20 @@ if (stencilValue == 1.0) {
 }
 gl_PointSize = 1.0;
 `);
-      builder.setFragmentMain(`
+        builder.setFragmentMain(`
 outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 `);
-      return builder.build();
-    })(),
-  );
+        return builder.build();
+      })(),
+    );
 
-  private inputIndexBuffer = this.registerDisposer(
-    getMemoizedBuffer(
-      this.gl,
-      WebGL2RenderingContext.ARRAY_BUFFER,
-      () => new Uint8Array(histogramSamplesPerInstance),
-    ),
-  );
-
-  constructor(public gl: GL) {
-    super();
+    this.inputIndexBuffer = this.registerDisposer(
+      getMemoizedBuffer(
+        this.gl,
+        WebGL2RenderingContext.ARRAY_BUFFER,
+        () => new Uint8Array(histogramSamplesPerInstance),
+      ),
+    );
   }
 
   static get(gl: GL) {

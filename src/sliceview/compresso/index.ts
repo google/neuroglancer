@@ -75,7 +75,7 @@ function readHeader(buffer: Uint8Array): {
 
 export async function decompressCompresso(
   buffer: Uint8Array,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const m = await getCompressoModulePromise();
 
   const { sx, sy, sz, dataWidth } = readHeader(buffer);

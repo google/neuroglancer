@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-
 export interface ByteRange {
   offset: number;
   length: number;
@@ -55,19 +53,19 @@ export type ByteRangeRequest =
     };
 
 export interface ReadResponse {
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   dataRange: ByteRange;
   totalSize: number | undefined;
 }
 
 export interface ReadOptions {
   byteRange?: ByteRangeRequest;
-  cancellationToken?: CancellationToken;
+  abortSignal?: AbortSignal;
 }
 
 export interface ListOptions {
   prefix: string;
-  cancellationToken?: CancellationToken;
+  abortSignal?: AbortSignal;
 }
 
 export interface ListEntry {

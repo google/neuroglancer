@@ -45,11 +45,8 @@ import {
 } from "#src/segmentation_graph/source.js";
 import { StatusMessage } from "#src/status.js";
 import type { Uint64Set } from "#src/uint64_set.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import { getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
 import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
-import { responseJson } from "#src/util/http_request.js";
 import {
   parseArray,
   verifyFiniteFloat,
@@ -117,7 +114,7 @@ type GraphSegmentUpdate = GraphSegmentInfo | "invalid" | "error";
 let updateGeneration = 0;
 
 class GraphConnection extends SegmentationGraphSourceConnection {
-  graph: NggraphSegmentationGraphSource;
+  declare graph: NggraphSegmentationGraphSource;
   constructor(
     graph: NggraphSegmentationGraphSource,
     segmentsState: VisibleSegmentsState,
@@ -611,13 +608,11 @@ function fetchWithNggraphCredentials(
   serverUrl: string,
   path: string,
   init: RequestInit,
-  cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<any> {
   return fetchWithCredentials(
     credentialsProvider,
     `${serverUrl}${path}`,
     init,
-    responseJson,
     (credentials, init) => {
       const headers = new Headers(init.headers);
       headers.set("Authorization", credentials.token);
@@ -628,8 +623,7 @@ function fetchWithNggraphCredentials(
       if (status === 401) return "refresh";
       throw error;
     },
-    cancellationToken,
-  );
+  ).then((response) => response.json());
 }
 
 interface EntityCredentials extends Credentials {
@@ -642,14 +636,12 @@ function nggraphServerFetch(
   serverUrl: string,
   path: string,
   init: RequestInit,
-  cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<any> {
   return fetchWithNggraphCredentials(
     getCredentialsProvider(chunkManager, serverUrl),
     serverUrl,
     path,
     init,
-    cancellationToken,
   );
 }
 
@@ -710,14 +702,12 @@ function nggraphGraphFetch(
   entityName: string,
   path: string,
   init: RequestInit,
-  cancellationToken: CancellationToken = uncancelableToken,
 ): Promise<any> {
   return fetchWithNggraphCredentials(
     getEntityCredentialsProvider(chunkManager, serverUrl, entityName),
     serverUrl,
     path,
     init,
-    cancellationToken,
   );
 }
 

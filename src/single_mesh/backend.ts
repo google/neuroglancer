@@ -39,7 +39,6 @@ import {
   SingleMeshSourceParametersWithInfo,
 } from "#src/single_mesh/base.js";
 import type { TypedArray } from "#src/util/array.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { stableStringify } from "#src/util/json.js";
 import type {
   SpecialProtocolCredentials,
@@ -117,7 +116,7 @@ interface SingleMeshFactory {
     credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string,
     getPriority: PriorityGetter,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ) => Promise<SingleMesh>;
 }
 
@@ -154,7 +153,7 @@ export function getMesh(
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
   getPriority: PriorityGetter,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   const [factory, path] = getDataSource(singleMeshFactories, url);
   return factory.getMesh(
@@ -162,7 +161,7 @@ export function getMesh(
     credentialsProvider,
     path,
     getPriority,
-    cancellationToken,
+    abortSignal,
   );
 }
 
@@ -181,14 +180,14 @@ export function getCombinedMesh(
   credentialsProvider: SpecialProtocolCredentialsProvider,
   parameters: SingleMeshSourceParameters,
   getPriority: PriorityGetter,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   return getMesh(
     chunkManager,
     credentialsProvider,
     parameters.meshSourceUrl,
     getPriority,
-    cancellationToken,
+    abortSignal,
   );
 }
 
@@ -210,7 +209,7 @@ export class SingleMeshSource extends WithParameters(
     return chunk;
   }
 
-  download(chunk: SingleMeshChunk, cancellationToken: CancellationToken) {
+  download(chunk: SingleMeshChunk, abortSignal: AbortSignal) {
     const getPriority = () => ({
       priorityTier: chunk.priorityTier,
       priority: chunk.priority,
@@ -220,7 +219,7 @@ export class SingleMeshSource extends WithParameters(
       this.credentialsProvider,
       this.parameters,
       getPriority,
-      cancellationToken,
+      abortSignal,
     ).then((data) => {
       if (
         stableStringify(data.info) !== stableStringify(this.parameters.info)
@@ -278,7 +277,7 @@ const INFO_PRIORITY = 1000;
 
 registerPromiseRPC(
   GET_SINGLE_MESH_INFO_RPC_ID,
-  async function (x, cancellationToken): RPCPromise<SingleMeshInfo> {
+  async function (x, abortSignal): RPCPromise<SingleMeshInfo> {
     const chunkManager = this.getRef<ChunkManager>(x.chunkManager);
     const credentialsProvider = this.getOptionalRef<
       SharedCredentialsProviderCounterpart<
@@ -295,7 +294,7 @@ registerPromiseRPC(
           priorityTier: ChunkPriorityTier.VISIBLE,
           priority: INFO_PRIORITY,
         }),
-        cancellationToken,
+        abortSignal,
       );
       return { value: mesh.info };
     } finally {

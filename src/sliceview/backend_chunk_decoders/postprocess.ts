@@ -25,14 +25,12 @@ import {
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { DataType } from "#src/sliceview/base.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function postProcessRawData(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
   data: ArrayBufferView,
 ) {
-  cancellationToken;
   const { spec } = chunk.source!;
   if (spec.compressedSegmentationBlockSize !== undefined) {
     const { dataType } = spec;
@@ -47,7 +45,7 @@ export async function postProcessRawData(
       case DataType.UINT32:
         chunk.data = await requestAsyncComputation(
           encodeCompressedSegmentationUint32,
-          cancellationToken,
+          abortSignal,
           [data.buffer],
           data as Uint32Array,
           shape,
@@ -57,7 +55,7 @@ export async function postProcessRawData(
       case DataType.UINT64:
         chunk.data = await requestAsyncComputation(
           encodeCompressedSegmentationUint64,
-          cancellationToken,
+          abortSignal,
           [data.buffer],
           data as Uint32Array,
           shape,

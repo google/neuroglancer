@@ -1414,7 +1414,7 @@ export class CoordinateSpaceCombiner {
 
   private retainCount = 0;
 
-  private prevCombined: CoordinateSpace | undefined = this.combined.value;
+  private prevCombined: CoordinateSpace | undefined;
 
   dimensionRefCounts = new Map<string, number>();
 
@@ -1454,6 +1454,7 @@ export class CoordinateSpaceCombiner {
     includeDimensionPredicate: (name: string) => boolean,
   ) {
     this.includeDimensionPredicate_ = includeDimensionPredicate;
+    this.prevCombined = this.combined.value;
   }
 
   private update() {

@@ -40,7 +40,6 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -53,6 +52,7 @@ import type { MessageList } from "#src/util/message_list.js";
 import { MessageSeverity } from "#src/util/message_list.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { CoordinateSpaceTransformWidget } from "#src/widget/coordinate_transform.js";
+import type { Completer } from "#src/widget/multiline_autocomplete.js";
 import {
   AutocompleteTextInput,
   makeCompletionElementWithDescription,
@@ -64,15 +64,12 @@ class SourceUrlAutocomplete extends AutocompleteTextInput {
   dirty: WatchableValueInterface<boolean>;
   constructor(dataSourceView: DataSourceView) {
     const { manager } = dataSourceView.source.layer;
-    const sourceCompleter = (
-      value: string,
-      cancellationToken: CancellationToken,
-    ) =>
+    const sourceCompleter: Completer = ({ value }, abortSignal: AbortSignal) =>
       manager.dataSourceProviderRegistry
         .completeUrl({
           url: value,
           chunkManager: manager.chunkManager,
-          cancellationToken,
+          abortSignal,
         })
         .then((originalResult) => ({
           completions: originalResult.completions,

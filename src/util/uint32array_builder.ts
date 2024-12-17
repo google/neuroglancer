@@ -1,4 +1,4 @@
-// DO NOT EDIT.  Generated from templates/neuroglancer/util/typedarray_builder.template.ts.
+// DO NOT EDIT.  Generated from templates/util/typedarray_builder.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
@@ -17,9 +17,9 @@
 
 export class Uint32ArrayBuilder {
   length = 0;
-  data: Uint32Array;
+  data: Uint32Array<ArrayBuffer>;
 
-  constructor(initialCapacity = 16) {
+  constructor(initialCapacity: number = 16) {
     this.data = new Uint32Array(initialCapacity);
   }
 
@@ -35,7 +35,11 @@ export class Uint32ArrayBuilder {
 
   get view() {
     const { data } = this;
-    return new Uint32Array(data.buffer, data.byteOffset, this.length);
+    return new Uint32Array<ArrayBuffer>(
+      data.buffer,
+      data.byteOffset,
+      this.length,
+    );
   }
 
   shrinkToFit() {

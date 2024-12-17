@@ -18,17 +18,16 @@ import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function decodeJpegChunk(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const chunkDataSize = chunk.chunkDataSize!;
   const { uint8Array: decoded } = await requestAsyncComputation(
     decodeJpeg,
-    cancellationToken,
+    abortSignal,
     [response],
     new Uint8Array(response),
     undefined,
@@ -37,5 +36,5 @@ export async function decodeJpegChunk(
     chunkDataSize[3] || 1,
     false,
   );
-  await postProcessRawData(chunk, cancellationToken, decoded);
+  await postProcessRawData(chunk, abortSignal, decoded);
 }

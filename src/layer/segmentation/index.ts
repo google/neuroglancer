@@ -142,7 +142,40 @@ export class SegmentationUserLayerGroupState
     this.hideSegmentZero.changed.add(specificationChanged.dispatch);
     this.segmentQuery.changed.add(specificationChanged.dispatch);
 
-    const { visibleSegments, selectedSegments } = this;
+    const { selectedSegments } = this;
+    const visibleSegments = (this.visibleSegments = this.registerDisposer(
+      Uint64Set.makeWithCounterpart(layer.manager.rpc),
+    ));
+    this.segmentEquivalences = this.registerDisposer(
+      SharedDisjointUint64Sets.makeWithCounterpart(
+        layer.manager.rpc,
+        layer.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (x) =>
+              x?.visibleSegmentEquivalencePolicy ||
+              VisibleSegmentEquivalencePolicy.MIN_REPRESENTATIVE,
+            [this.graph],
+          ),
+        ),
+      ),
+    );
+
+    this.temporaryVisibleSegments = layer.registerDisposer(
+      Uint64Set.makeWithCounterpart(layer.manager.rpc),
+    );
+    this.temporarySegmentEquivalences = layer.registerDisposer(
+      SharedDisjointUint64Sets.makeWithCounterpart(
+        layer.manager.rpc,
+        this.segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy,
+      ),
+    );
+    this.useTemporaryVisibleSegments = layer.registerDisposer(
+      SharedWatchableValue.make(layer.manager.rpc, false),
+    );
+    this.useTemporarySegmentEquivalences = layer.registerDisposer(
+      SharedWatchableValue.make(layer.manager.rpc, false),
+    );
+
     visibleSegments.changed.add(specificationChanged.dispatch);
     selectedSegments.changed.add(specificationChanged.dispatch);
     selectedSegments.changed.add((x, add) => {
@@ -235,48 +268,23 @@ export class SegmentationUserLayerGroupState
   }
 
   localGraph = new LocalSegmentationGraphSource();
-  visibleSegments = this.registerDisposer(
-    Uint64Set.makeWithCounterpart(this.layer.manager.rpc),
-  );
+  visibleSegments: Uint64Set;
   selectedSegments = this.registerDisposer(new Uint64OrderedSet());
 
   segmentPropertyMap = new WatchableValue<
     PreprocessedSegmentPropertyMap | undefined
   >(undefined);
   graph = new WatchableValue<SegmentationGraphSource | undefined>(undefined);
-  segmentEquivalences = this.registerDisposer(
-    SharedDisjointUint64Sets.makeWithCounterpart(
-      this.layer.manager.rpc,
-      this.layer.registerDisposer(
-        makeCachedDerivedWatchableValue(
-          (x) =>
-            x?.visibleSegmentEquivalencePolicy ||
-            VisibleSegmentEquivalencePolicy.MIN_REPRESENTATIVE,
-          [this.graph],
-        ),
-      ),
-    ),
-  );
+  segmentEquivalences: SharedDisjointUint64Sets;
   localSegmentEquivalences = false;
   maxIdLength = new WatchableValue(1);
   hideSegmentZero = new TrackableBoolean(true, true);
   segmentQuery = new TrackableValue<string>("", verifyString);
 
-  temporaryVisibleSegments = this.layer.registerDisposer(
-    Uint64Set.makeWithCounterpart(this.layer.manager.rpc),
-  );
-  temporarySegmentEquivalences = this.layer.registerDisposer(
-    SharedDisjointUint64Sets.makeWithCounterpart(
-      this.layer.manager.rpc,
-      this.segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy,
-    ),
-  );
-  useTemporaryVisibleSegments = this.layer.registerDisposer(
-    SharedWatchableValue.make(this.layer.manager.rpc, false),
-  );
-  useTemporarySegmentEquivalences = this.layer.registerDisposer(
-    SharedWatchableValue.make(this.layer.manager.rpc, false),
-  );
+  temporaryVisibleSegments: Uint64Set;
+  temporarySegmentEquivalences: SharedDisjointUint64Sets;
+  useTemporaryVisibleSegments: SharedWatchableValue<boolean>;
+  useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
 }
 
 export class SegmentationUserLayerColorGroupState
@@ -403,6 +411,41 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
     layer.displayState = this;
+
+    this.linkedSegmentationGroup = layer.registerDisposer(
+      new LinkedLayerGroup(
+        layer.manager.rootLayers,
+        layer,
+        (userLayer) => userLayer instanceof SegmentationUserLayer,
+        (userLayer: SegmentationUserLayer) =>
+          userLayer.displayState.linkedSegmentationGroup,
+      ),
+    );
+
+    this.linkedSegmentationColorGroup = this.layer.registerDisposer(
+      new LinkedLayerGroup(
+        layer.manager.rootLayers,
+        layer,
+        (userLayer) => userLayer instanceof SegmentationUserLayer,
+        (userLayer: SegmentationUserLayer) =>
+          userLayer.displayState.linkedSegmentationColorGroup,
+      ),
+    );
+
+    this.originalSegmentationGroupState = layer.registerDisposer(
+      new SegmentationUserLayerGroupState(layer),
+    );
+
+    this.originalSegmentationColorGroupState = layer.registerDisposer(
+      new SegmentationUserLayerColorGroupState(layer),
+    );
+
+    this.transparentPickEnabled = layer.pick;
+
+    this.useTempSegmentStatedColors2d = layer.registerDisposer(
+      SharedWatchableValue.make(layer.manager.rpc, false),
+    );
+
     this.segmentationGroupState = this.layer.registerDisposer(
       new LinkedSegmentationGroupState<SegmentationUserLayerGroupState>(
         this.linkedSegmentationGroup,
@@ -415,6 +458,9 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         "originalSegmentationColorGroupState",
       ),
     );
+
+    this.selectSegment = layer.selectSegment;
+    this.filterBySegmentLabel = layer.filterBySegmentLabel;
 
     this.hideSegmentZero = this.layer.registerDisposer(
       new IndirectWatchableValue(
@@ -488,47 +534,22 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   shaderError = makeWatchableShaderError();
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
-  selectSegment = this.layer.selectSegment;
-  transparentPickEnabled = this.layer.pick;
+  selectSegment: (id: Uint64, pin: boolean | "toggle") => void;
+  transparentPickEnabled: TrackableBoolean;
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
-  useTempSegmentStatedColors2d = this.layer.registerDisposer(
-    SharedWatchableValue.make(this.layer.manager.rpc, false),
-  );
+  useTempSegmentStatedColors2d: SharedWatchableValue<boolean>;
 
-  filterBySegmentLabel = this.layer.filterBySegmentLabel;
+  filterBySegmentLabel: (id: Uint64) => void;
 
   moveToSegment = (id: Uint64) => {
     this.layer.moveToSegment(id);
   };
 
-  linkedSegmentationGroup: LinkedLayerGroup = this.layer.registerDisposer(
-    new LinkedLayerGroup(
-      this.layer.manager.rootLayers,
-      this.layer,
-      (userLayer) => userLayer instanceof SegmentationUserLayer,
-      (userLayer: SegmentationUserLayer) =>
-        userLayer.displayState.linkedSegmentationGroup,
-    ),
-  );
-
-  linkedSegmentationColorGroup: LinkedLayerGroup = this.layer.registerDisposer(
-    new LinkedLayerGroup(
-      this.layer.manager.rootLayers,
-      this.layer,
-      (userLayer) => userLayer instanceof SegmentationUserLayer,
-      (userLayer: SegmentationUserLayer) =>
-        userLayer.displayState.linkedSegmentationColorGroup,
-    ),
-  );
-
-  originalSegmentationGroupState = this.layer.registerDisposer(
-    new SegmentationUserLayerGroupState(this.layer),
-  );
-
-  originalSegmentationColorGroupState = this.layer.registerDisposer(
-    new SegmentationUserLayerColorGroupState(this.layer),
-  );
+  linkedSegmentationGroup: LinkedLayerGroup;
+  linkedSegmentationColorGroup: LinkedLayerGroup;
+  originalSegmentationGroupState: SegmentationUserLayerGroupState;
+  originalSegmentationColorGroupState: SegmentationUserLayerColorGroupState;
 
   segmentationGroupState: WatchableValueInterface<SegmentationUserLayerGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationUserLayerColorGroupState>;

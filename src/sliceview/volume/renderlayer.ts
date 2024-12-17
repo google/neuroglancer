@@ -333,7 +333,7 @@ interface ShaderContext {
 export abstract class SliceViewVolumeRenderLayer<
   ShaderParameters = any,
 > extends SliceViewRenderLayer<VolumeChunkSource, VolumeSourceOptions> {
-  multiscaleSource: MultiscaleVolumeChunkSource;
+  declare multiscaleSource: MultiscaleVolumeChunkSource;
   protected shaderGetter: ParameterizedContextDependentShaderGetter<
     { chunkFormat: ChunkFormat | null; dataHistogramsEnabled: boolean },
     ShaderParameters,

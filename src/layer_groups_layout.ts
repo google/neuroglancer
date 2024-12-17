@@ -477,8 +477,8 @@ function setupDropZone(
     }
     dropZone.classList.add("neuroglancer-drag-over");
   });
-  dropZone.addEventListener("dragleave", () => {
-    popDragStatus(dropZone, "drop");
+  dropZone.addEventListener("dragleave", (event) => {
+    popDragStatus(event, dropZone, "drop");
     dropZone.classList.remove("neuroglancer-drag-over");
   });
   dropZone.addEventListener("dragover", (event: DragEvent) => {
@@ -487,7 +487,7 @@ function setupDropZone(
       message: string,
     ) => {
       if (info.dropEffectMessage) message += ` (${info.dropEffectMessage})`;
-      pushDragStatus(dropZone, "drop", message);
+      pushDragStatus(event, dropZone, "drop", message);
       event.stopPropagation();
       event.preventDefault();
     };
@@ -513,14 +513,14 @@ function setupDropZone(
   });
   dropZone.addEventListener("drop", (event: DragEvent) => {
     dropZone.classList.remove("neuroglancer-drag-over");
-    popDragStatus(dropZone, "drop");
+    popDragStatus(event, dropZone, "drop");
     let dropLayers: DropLayers | undefined;
     let layoutSpec: any;
     if (hasViewerDrag(event)) {
       event.stopPropagation();
       try {
         layoutSpec = JSON.parse(event.dataTransfer!.getData(viewerDragType));
-      } catch (e) {
+      } catch {
         return;
       }
       dropLayers = getDropLayers(event, manager, {
@@ -608,6 +608,7 @@ export class StackLayoutComponent
       event.preventDefault();
       const updateMessage = () => {
         pushDragStatus(
+          event,
           dropZone,
           "drag",
           `Drag to resize, current ${
@@ -642,8 +643,8 @@ export class StackLayoutComponent
             Math.round((1 - firstFraction) * existingFlexSum * 100) / 100;
           updateMessage();
         },
-        () => {
-          popDragStatus(dropZone, "drag");
+        (event) => {
+          popDragStatus(event, dropZone, "drag");
         },
       );
     });
@@ -783,13 +784,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
 }
 
 export class RootLayoutContainer extends RefCounted implements Trackable {
-  container = this.registerDisposer(
-    new LayoutComponentContainer(
-      this.viewer,
-      this.defaultSpecification,
-      undefined,
-    ),
-  );
+  container: LayoutComponentContainer;
 
   get changed() {
     return this.container.changed;
@@ -804,6 +799,9 @@ export class RootLayoutContainer extends RefCounted implements Trackable {
     public defaultSpecification: any,
   ) {
     super();
+    this.container = this.registerDisposer(
+      new LayoutComponentContainer(viewer, defaultSpecification, undefined),
+    );
   }
 
   reset() {

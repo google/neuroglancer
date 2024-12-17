@@ -270,7 +270,7 @@ class PerspectiveViewState extends PerspectiveViewStateBase {
 }
 
 export class PerspectivePanel extends RenderedDataPanel {
-  viewer: PerspectiveViewerState;
+  declare viewer: PerspectiveViewerState;
 
   projectionParameters: Owned<DerivedProjectionParameters>;
 

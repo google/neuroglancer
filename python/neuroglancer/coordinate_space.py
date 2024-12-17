@@ -237,6 +237,7 @@ class CoordinateSpace:
                 names_tuple = tuple(names)
                 rank = len(names_tuple)
                 self.names = names_tuple
+                scales_array: np.typing.NDArray[np.float64]
                 if scales is None:
                     scales_array = np.ones(rank, dtype=np.float64)
                 else:
