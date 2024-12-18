@@ -1557,6 +1557,49 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         }),
       ).element,
     );
+
+    const shouldIgnoreEvent = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.matches(".neuroglancer-position-dimension-playback *")
+      ) {
+        return true;
+      }
+      return false;
+    };
+    const mouseHandler = this.registerDisposer(
+      new MouseEventBinder(plot.element, inputEventMap),
+    );
+    mouseHandler.shouldIgnore = shouldIgnoreEvent;
+
+    registerActionListener<WheelEvent>(
+      plot.element,
+      "adjust-via-wheel",
+      (actionEvent) => {
+        actionEvent.stopPropagation();
+        const event = actionEvent.detail;
+        const { deltaY } = event;
+        if (deltaY === 0) {
+          return;
+        }
+        positionWidget.adjustDimensionPosition(
+          this.dimensionId,
+          Math.sign(deltaY),
+        );
+      },
+    );
+
+    registerActionListener<WheelEvent>(
+      plot.element,
+      "adjust-velocity-via-wheel",
+      (actionEvent) => {
+        actionEvent.stopPropagation();
+        const factor = getWheelZoomAmount(actionEvent.detail);
+        viewer.velocity.multiplyVelocity(this.dimensionId, factor);
+      },
+    );
+
     return { positionWidget };
   }
 
