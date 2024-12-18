@@ -705,6 +705,7 @@ export class ManagedUserLayer extends RefCounted {
   set name(value: string) {
     if (value !== this.name_) {
       this.name_ = value;
+      this.layerChanged.dispatch();
     }
   }
 
