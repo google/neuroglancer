@@ -722,7 +722,6 @@ export class SliceViewChunk extends Chunk {
  */
 export class SliceViewRenderHelper extends RefCounted {
   private copyVertexPositionsBuffer;
-  private shader: ShaderProgram;
 
   private textureCoordinateAdjustment = new Float32Array(4);
   private shaderGetter: ParameterizedContextDependentShaderGetter<
@@ -736,7 +735,6 @@ export class SliceViewRenderHelper extends RefCounted {
     isProjection: boolean,
     emitter: ShaderModule,
   ) {
-    this.copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
     builder.addVarying("vec2", "vTexCoord");
     builder.addUniform("sampler2D", "uSampler");
     builder.addInitializer((shader) => {
@@ -782,6 +780,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
   ) {
     super();
 
+    this.copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
     this.shaderGetter = parameterizedContextDependentShaderGetter(
       this,
       this.gl,
