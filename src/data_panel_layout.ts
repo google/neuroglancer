@@ -181,8 +181,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
     scaleBarOptions: viewer.scaleBarOptions,
-    hideCrossSectionBackgroundIn3D:
-      viewer.hideCrossSectionBackgroundIn3D,
+    hideCrossSectionBackgroundIn3D: viewer.hideCrossSectionBackgroundIn3D,
   };
 }
 
