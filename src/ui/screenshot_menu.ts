@@ -691,7 +691,8 @@ export class ScreenshotDialog extends Overlay {
     const numPixels = Math.round(Math.sqrt(MAX_RENDER_AREA_PIXELS));
     // Add a little to account for potential rounding errors
     if (
-      (screenshotSize.width + 2) * (screenshotSize.height + 2) >= MAX_RENDER_AREA_PIXELS
+      (screenshotSize.width + 2) * (screenshotSize.height + 2) >=
+      MAX_RENDER_AREA_PIXELS
     ) {
       this.warningElement.textContent = `Screenshots can't have more than ${numPixels}x${numPixels} total pixels, the scale factor was reduced to x${scale} to fit.`;
     } else {
