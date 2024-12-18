@@ -597,6 +597,11 @@ def define_state_modification_args(ap: argparse.ArgumentParser):
         help="Multiply projection view scale by specified factor.",
     )
     ap.add_argument(
+        "--resolution-scale-factor",
+        type=float,
+        help="Divide cross section view scale by specified factor. E.g. a 2000x2000 output with a resolution scale factor of 2 will have the same FOV as a 1000x1000 output.",
+    )
+    ap.add_argument(
         "--system-memory-limit",
         type=int,
         default=3 * 1024 * 1024 * 1024,
@@ -621,7 +626,6 @@ def define_state_modification_args(ap: argparse.ArgumentParser):
         "--scale-bar-scale", type=float, help="Scale factor for scale bar", default=1
     )
 
-
 def apply_state_modifications(
     state: neuroglancer.ViewerState, args: argparse.Namespace
 ):
@@ -635,6 +639,8 @@ def apply_state_modifications(
         state.show_default_annotations = args.show_default_annotations
     if args.projection_scale_multiplier is not None:
         state.projection_scale *= args.projection_scale_multiplier
+    if args.resolution_scale_factor is not None:
+        state.cross_section_scale /= args.resolution_scale_factor
     if args.cross_section_background_color is not None:
         state.cross_section_background_color = args.cross_section_background_color
 
