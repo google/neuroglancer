@@ -84,7 +84,9 @@
     "@puppeteer/browsers": ">=2"
   },
   "files": [
-    "lib/**/*"
+    "src/**/*",
+    "typings/**/*",
+    "tsconfig.json"
   ],
   "private": true,
   "type": "module",

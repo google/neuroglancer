@@ -28,8 +28,17 @@ await Promise.all(
       await execFileAsync("npm", ["install", "--no-audit", "--no-fund"], {
         cwd: exampleDir,
       });
-      await execFileAsync("git", ["add", "package-lock.json"], {
-        cwd: exampleDir,
-      });
     }),
+);
+
+await execFileAsync(
+  "git",
+  [
+    "add",
+    ...(await glob("examples/*/*/package-lock.json", {
+      absolute: false,
+      cwd: rootDir,
+    })),
+  ],
+  { cwd: rootDir },
 );
