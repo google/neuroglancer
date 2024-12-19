@@ -23,8 +23,28 @@ export default defineConfig({
     fs: {
       // Allow serving files from parent neuroglancer project, due to the local
       // path reference.  This would not be needed for projects that depend on
-      // Neuroglancer normally.
+      // Neuroglancer normally, or when using pnpm rather than npm.
       allow: ["../../.."],
     },
+  },
+  optimizeDeps: {
+    // Neuroglancer is incompatible with Vite's optimizeDeps step used for the
+    // dev server due to its use of `new URL` syntax (not supported by esbuild).
+    exclude: ["neuroglancer"],
+    // Some of Neuroglancer's dependencies are CommonJS modules for which the
+    // optimizeDeps step is mandatory.
+    //
+    // There does not seem to be a way to avoid having to specify all of these
+    // explicitly.
+    include: [
+      "neuroglancer > codemirror",
+      "neuroglancer > codemirror/mode/javascript/javascript.js",
+      "neuroglancer > codemirror/addon/fold/foldcode.js",
+      "neuroglancer > codemirror/addon/fold/foldgutter.js",
+      "neuroglancer > codemirror/addon/fold/brace-fold.js",
+      "neuroglancer > codemirror/addon/lint/lint.js",
+      "neuroglancer > core-js/actual/symbol/dispose.js",
+      "neuroglancer > core-js/actual/symbol/async-dispose.js",
+    ],
   },
 });
