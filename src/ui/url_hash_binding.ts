@@ -19,10 +19,9 @@ import type { CredentialsManager } from "#src/credentials_provider/index.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { responseJson } from "#src/util/http_request.js";
 import { urlSafeParse, verifyObject } from "#src/util/json.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 import type { Trackable } from "#src/util/trackable.js";
@@ -127,16 +126,13 @@ export class UrlHashBinding extends RefCounted {
           this.credentialsManager,
         );
         StatusMessage.forPromise(
-          cancellableFetchSpecialOk(
-            credentialsProvider,
-            parsedUrl,
-            {},
-            responseJson,
-          ).then((json) => {
-            verifyObject(json);
-            this.root.reset();
-            this.root.restoreState(json);
-          }),
+          fetchSpecialOk(credentialsProvider, parsedUrl, {})
+            .then((response) => response.json())
+            .then((json) => {
+              verifyObject(json);
+              this.root.reset();
+              this.root.restoreState(json);
+            }),
           {
             initialMessage: `Loading state from ${url}`,
             errorPrefix: "Error loading state:",

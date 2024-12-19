@@ -47,7 +47,7 @@ export abstract class HashTableBase {
   /**
    * Number of uint32 elements per entry in hash table.
    */
-  entryStride: number;
+  declare entryStride: number;
 
   generation = 0;
 

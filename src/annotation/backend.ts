@@ -66,7 +66,6 @@ import {
 } from "#src/sliceview/backend.js";
 import type { TransformedSource } from "#src/sliceview/base.js";
 import { registerNested, WatchableValue } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { Uint64 } from "#src/util/uint64.js";
 import {
@@ -100,7 +99,7 @@ export class AnnotationMetadataChunk extends Chunk {
 }
 
 export class AnnotationGeometryData implements SerializedAnnotations {
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   typeToOffset: number[];
   typeToIds: string[][];
   typeToIdMaps: Map<string, number>[];
@@ -149,11 +148,11 @@ function GeometryChunkMixin<TBase extends { new (...args: any[]): Chunk }>(
 export class AnnotationGeometryChunk extends GeometryChunkMixin(
   SliceViewChunk,
 ) {
-  source: AnnotationGeometryChunkSourceBackend;
+  declare source: AnnotationGeometryChunkSourceBackend;
 }
 
 export class AnnotationSubsetGeometryChunk extends GeometryChunkMixin(Chunk) {
-  source: AnnotationSubsetGeometryChunkSource;
+  declare source: AnnotationSubsetGeometryChunkSource;
   objectId: Uint64;
 }
 
@@ -171,11 +170,8 @@ class AnnotationMetadataChunkSource extends ChunkSource {
     return chunk;
   }
 
-  download(
-    chunk: AnnotationMetadataChunk,
-    cancellationToken: CancellationToken,
-  ) {
-    return this.parent!.downloadMetadata(chunk, cancellationToken);
+  download(chunk: AnnotationMetadataChunk, abortSignal: AbortSignal) {
+    return this.parent!.downloadMetadata(chunk, abortSignal);
   }
 }
 
@@ -195,7 +191,7 @@ AnnotationGeometryChunkSourceBackend.prototype.chunkConstructor =
 @registerSharedObject(ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID)
 class AnnotationSubsetGeometryChunkSource extends ChunkSource {
   parent: Borrowed<AnnotationSource> | undefined = undefined;
-  chunks: Map<string, AnnotationSubsetGeometryChunk>;
+  declare chunks: Map<string, AnnotationSubsetGeometryChunk>;
   relationshipIndex: number;
   getChunk(objectId: Uint64) {
     const key = getObjectKey(objectId);
@@ -209,14 +205,11 @@ class AnnotationSubsetGeometryChunkSource extends ChunkSource {
     }
     return chunk;
   }
-  download(
-    chunk: AnnotationSubsetGeometryChunk,
-    cancellationToken: CancellationToken,
-  ) {
+  download(chunk: AnnotationSubsetGeometryChunk, abortSignal: AbortSignal) {
     return this.parent!.downloadSegmentFilteredGeometry(
       chunk,
       this.relationshipIndex,
-      cancellationToken,
+      abortSignal,
     );
   }
 }
@@ -227,12 +220,12 @@ export interface AnnotationSource {
   // TypeScript supports mixins with abstract classes.
   downloadMetadata(
     chunk: AnnotationMetadataChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void>;
   downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk,
     relationshipIndex: number,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void>;
 }
 

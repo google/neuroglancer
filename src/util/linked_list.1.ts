@@ -1,4 +1,4 @@
-// DO NOT EDIT.  Generated from templates/neuroglancer/util/linked_list.template.ts.
+// DO NOT EDIT.  Generated from templates/util/linked_list.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.

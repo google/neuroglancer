@@ -19,11 +19,7 @@ import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
-import type {
-  TypedArray,
-  TypedArrayConstructor,
-  WritableArrayLike,
-} from "#src/util/array.js";
+import type { TypedArray, WritableArrayLike } from "#src/util/array.js";
 import { mergeSequences } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -68,13 +64,13 @@ export interface InlineSegmentNumericalProperty {
   type: "number";
   dataType: DataType;
   description: string | undefined;
-  values: TypedArray;
+  values: TypedArray<ArrayBuffer>;
   bounds: DataTypeInterval;
 }
 
 export interface InlineSegmentPropertyMap {
   // Specifies low/high 32-bit portions of ids.
-  ids: Uint32Array;
+  ids: Uint32Array<ArrayBuffer>;
   properties: InlineSegmentProperty[];
 }
 
@@ -83,7 +79,7 @@ export interface IndexedSegmentPropertyMapOptions {
 }
 
 export class IndexedSegmentPropertySource extends ChunkSource {
-  OPTIONS: IndexedSegmentPropertyMapOptions;
+  declare OPTIONS: IndexedSegmentPropertyMapOptions;
   properties: readonly Readonly<IndexedSegmentProperty>[];
 
   constructor(
@@ -289,9 +285,7 @@ export function normalizeInlineSegmentPropertyMap(
   }
   const properties = inlineProperties.properties.map((property) => {
     const { values } = property;
-    const newValues = new (values.constructor as
-      | TypedArrayConstructor
-      | typeof Array)(length);
+    const newValues = new (values.constructor as typeof Array)(length);
     for (let i = 0; i < length; ++i) {
       newValues[i] = values[permutation[i]];
     }
@@ -385,7 +379,7 @@ function mergeInlinePropertyMaps(
       ++numUnique;
     },
   );
-  let ids: Uint32Array;
+  let ids: Uint32Array<ArrayBuffer>;
   if (numUnique === aCount) {
     ids = aIds;
   } else if (numUnique === bCount) {
@@ -687,7 +681,7 @@ export function parseSegmentQuery(
       }
       try {
         parsed.regexp = new RegExp(word.substring(1));
-      } catch (e) {
+      } catch {
         errors.push({
           begin: startIndex,
           end: endIndex,
@@ -697,7 +691,7 @@ export function parseSegmentQuery(
       continue;
     }
     const constraintMatch = word.match(
-      /^([a-zA-Z][a-zA-Z0-9_]*)(<|<=|=|>=|>)([0-9.].*)$/,
+      /^([a-zA-Z][a-zA-Z0-9_]*)(<|<=|=|>=|>)(-?[0-9.].*)$/,
     );
     if (constraintMatch !== null) {
       let fieldId = constraintMatch[1].toLowerCase();

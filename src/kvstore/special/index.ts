@@ -22,10 +22,9 @@ import type {
   ReadResponse,
 } from "#src/kvstore/index.js";
 import { composeByteRangeRequest } from "#src/kvstore/index.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
-import { HttpError, isNotFoundError } from "#src/util/http_request.js";
+import { isNotFoundError } from "#src/util/http_request.js";
 import type { SpecialProtocolCredentialsProvider } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 
 function getRangeHeader(
   request: ByteRangeRequest | undefined,
@@ -54,14 +53,10 @@ class SpecialProtocolKvStore implements ReadableKvStore {
 
   async getObjectLength(url: string, options: ReadOptions) {
     // Use a HEAD request to get the length of an object
-    const { cancellationToken = uncancelableToken } = options;
-    const headResponse = await cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      url,
-      { method: "HEAD" },
-      async (response) => response,
-      cancellationToken,
-    );
+    const headResponse = await fetchSpecialOk(this.credentialsProvider, url, {
+      method: "HEAD",
+      signal: options.abortSignal,
+    });
 
     if (headResponse.status !== 200) {
       throw new Error(
@@ -82,100 +77,93 @@ class SpecialProtocolKvStore implements ReadableKvStore {
     key: string,
     options: ReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const { cancellationToken = uncancelableToken } = options;
     let { byteRange: byteRangeRequest } = options;
     const url = this.baseUrl + key;
-    for (let attempt = 0; ; ++attempt) {
-      try {
-        const requestInit: RequestInit = {};
-        const rangeHeader = getRangeHeader(byteRangeRequest);
-        if (rangeHeader !== undefined) {
-          requestInit.headers = { range: rangeHeader };
-          requestInit.cache = byteRangeCacheMode;
-        }
-        const { response, data } = await cancellableFetchSpecialOk(
-          this.credentialsProvider,
-          url,
-          requestInit,
-          async (response) => ({
-            response,
-            data: await response.arrayBuffer(),
-          }),
-          cancellationToken,
-        );
-        let byteRange: ByteRange | undefined;
-        let totalSize: number | undefined;
-        if (response.status === 206) {
-          const contentRange = response.headers.get("content-range");
-          if (contentRange === null) {
-            if (byteRangeRequest !== undefined) {
-              if ("suffixLength" in byteRangeRequest) {
-                const objectSize = await this.getObjectLength(url, options);
-                byteRange = {
-                  offset: objectSize - byteRangeRequest.suffixLength,
-                  length: Number(response.headers.get("content-length")),
-                };
-              } else {
-                byteRange = {
-                  offset: byteRangeRequest.offset,
-                  length: data.byteLength,
-                };
-              }
-            } else {
-              throw new Error(
-                "Unexpected HTTP 206 response when no byte range specified.",
-              );
-            }
-          }
-          if (contentRange !== null) {
-            const m = contentRange.match(
-              /bytes ([0-9]+)-([0-9]+)\/([0-9]+|\*)/,
-            );
-            if (m === null) {
-              throw new Error(
-                `Invalid content-range header: ${JSON.stringify(contentRange)}`,
-              );
-            }
-            const beginPos = parseInt(m[1], 10);
-            const endPos = parseInt(m[2], 10);
-            if (endPos !== beginPos + data.byteLength - 1) {
-              throw new Error(
-                `Length in content-range header ${JSON.stringify(
-                  contentRange,
-                )} does not match content length ${data.byteLength}`,
-              );
-            }
-            totalSize = m[3] === "*" ? undefined : parseInt(m[3], 10);
-            byteRange = { offset: beginPos, length: data.byteLength };
-          }
-        }
-        if (byteRange === undefined) {
-          byteRange = { offset: 0, length: data.byteLength };
-          totalSize = data.byteLength;
-        }
-        return { data: new Uint8Array(data), dataRange: byteRange, totalSize };
-      } catch (e) {
-        if (
-          attempt === 0 &&
-          e instanceof HttpError &&
-          e.status === 416 &&
-          options.byteRange !== undefined &&
-          "suffixLength" in options.byteRange
-        ) {
-          // Some servers, such as the npm http-server package, do not support suffixLength
-          // byte-range requests.
-          const contentLengthNumber = await this.getObjectLength(url, options);
-          byteRangeRequest = composeByteRangeRequest(
-            { offset: 0, length: contentLengthNumber },
-            byteRangeRequest,
-          ).outer;
-          continue;
-        }
-        if (isNotFoundError(e)) {
-          return undefined;
-        }
-        throw e;
+
+    try {
+      // The HTTP spec supports suffixLength requests directly via "Range:
+      // bytes=-N" requests, which avoids the need for a separate HEAD request.
+      // However, per
+      // https://fetch.spec.whatwg.org/#cors-safelisted-request-header a suffix
+      // length byte range request header will always trigger an OPTIONS preflight
+      // request, which would otherwise be avoided. This negates the benefit of
+      // using a suffixLength request directly. Additionally, some servers such as
+      // the npm http-server package and https://uk1s3.embassy.ebi.ac.uk/ do not
+      // correctly handle suffixLength requests or do not correctly handle CORS
+      // preflight requests. To avoid those issues, always just issue a separate
+      // HEAD request to determine the length.
+      let totalSize: number | undefined;
+      if (
+        byteRangeRequest !== undefined &&
+        "suffixLength" in byteRangeRequest
+      ) {
+        const totalSize = await this.getObjectLength(url, options);
+        byteRangeRequest = composeByteRangeRequest(
+          { offset: 0, length: totalSize },
+          byteRangeRequest,
+        ).outer;
       }
+      const requestInit: RequestInit = { signal: options.abortSignal };
+      const rangeHeader = getRangeHeader(byteRangeRequest);
+      if (rangeHeader !== undefined) {
+        requestInit.headers = { range: rangeHeader };
+        requestInit.cache = byteRangeCacheMode;
+      }
+      const response = await fetchSpecialOk(
+        this.credentialsProvider,
+        url,
+        requestInit,
+      );
+      const data = await response.arrayBuffer();
+      let byteRange: ByteRange | undefined;
+      if (response.status === 206) {
+        const contentRange = response.headers.get("content-range");
+        if (contentRange === null) {
+          // Content-range should always be sent, but some buggy servers don't
+          // send it.
+          if (byteRangeRequest !== undefined) {
+            byteRange = {
+              offset: byteRangeRequest.offset,
+              length: data.byteLength,
+            };
+          } else {
+            throw new Error(
+              "Unexpected HTTP 206 response when no byte range specified.",
+            );
+          }
+        }
+        if (contentRange !== null) {
+          const m = contentRange.match(/bytes ([0-9]+)-([0-9]+)\/([0-9]+|\*)/);
+          if (m === null) {
+            throw new Error(
+              `Invalid content-range header: ${JSON.stringify(contentRange)}`,
+            );
+          }
+          const beginPos = parseInt(m[1], 10);
+          const endPos = parseInt(m[2], 10);
+          if (endPos !== beginPos + data.byteLength - 1) {
+            throw new Error(
+              `Length in content-range header ${JSON.stringify(
+                contentRange,
+              )} does not match content length ${data.byteLength}`,
+            );
+          }
+          if (m[3] !== "*") {
+            totalSize = parseInt(m[3], 10);
+          }
+          byteRange = { offset: beginPos, length: data.byteLength };
+        }
+      }
+      if (byteRange === undefined) {
+        byteRange = { offset: 0, length: data.byteLength };
+        totalSize = data.byteLength;
+      }
+      return { data: new Uint8Array(data), dataRange: byteRange, totalSize };
+    } catch (e) {
+      if (isNotFoundError(e)) {
+        return undefined;
+      }
+      throw e;
     }
   }
 }

@@ -1,0 +1,5 @@
+reject:
+  # API break
+  - "gl-matrix"
+  - "@types/gl-matrix"
+  - "codemirror"

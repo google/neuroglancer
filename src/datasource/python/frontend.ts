@@ -98,10 +98,10 @@ function WithPythonDataSource<
     generation: number;
   };
   class C extends Base {
-    OPTIONS: Options;
+    declare OPTIONS: Options;
     dataSource: Owned<PythonDataSource>;
     generation: number;
-    parameters: PythonSourceParameters;
+    declare parameters: PythonSourceParameters;
     constructor(...args: any[]) {
       super(...args);
       const options: Options = args[1];

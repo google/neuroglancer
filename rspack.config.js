@@ -1,10 +1,7 @@
 import path from "node:path";
-import { EsbuildPlugin } from "esbuild-loader";
-import HtmlWebpackPlugin from "html-webpack-plugin";
-import MiniCssExtractPlugin from "mini-css-extract-plugin";
-import webpack from "webpack";
-import StartupChunkDependenciesPlugin from "webpack/lib/runtime/StartupChunkDependenciesPlugin.js";
-import { normalizeConfigurationWithDefine } from "./build_tools/webpack/configuration_with_define.js";
+import { HtmlRspackPlugin, ProgressPlugin } from "@rspack/core";
+import { normalizeConfigurationWithDefine } from "./build_tools/rspack/configuration_with_define.js";
+import packageJson from "./package.json";
 
 export default (env, args) => {
   const mode = args.mode === "production" ? "production" : "development";
@@ -23,13 +20,6 @@ export default (env, args) => {
       splitChunks: {
         chunks: "all",
       },
-      minimizer: [
-        new EsbuildPlugin({
-          target: "es2020",
-          format: "esm",
-          css: true,
-        }),
-      ],
     },
     devtool: "source-map",
     module: {
@@ -37,11 +27,19 @@ export default (env, args) => {
         // Needed to support Neuroglancer TypeScript sources.
         {
           test: /\.tsx?$/,
-          loader: "esbuild-loader",
+          loader: "builtin:swc-loader",
           options: {
-            // Needed to ensure `import.meta.url` is available.
-            target: "es2020",
+            jsc: {
+              parser: {
+                syntax: "typescript",
+                decorators: true,
+              },
+            },
+            env: {
+              targets: packageJson.browserslist,
+            },
           },
+          type: "javascript/auto",
         },
         {
           test: /\.wasm$/,
@@ -64,19 +62,6 @@ export default (env, args) => {
             filename: "[name][ext]",
           },
         },
-        // Necessary to handle CSS files.
-        {
-          test: /\.css$/,
-          use: [
-            {
-              loader:
-                mode === "production"
-                  ? MiniCssExtractPlugin.loader
-                  : "style-loader",
-            },
-            { loader: "css-loader" },
-          ],
-        },
       ],
     },
     devServer: {
@@ -89,37 +74,23 @@ export default (env, args) => {
       hot: false,
     },
     plugins: [
-      // Fixes esm output with splitChunks
-      // https://github.com/webpack/webpack/pull/17015/files
-      new StartupChunkDependenciesPlugin({
-        chunkLoading: "import",
-        asyncChunkLoading: true,
-      }),
-      new webpack.ProgressPlugin(),
-      ...(mode === "production"
-        ? [new MiniCssExtractPlugin({ filename: "[name].[chunkhash].css" })]
-        : []),
-      new HtmlWebpackPlugin({
-        title: "Neuroglancer",
-        scriptLoading: "module",
+      new ProgressPlugin(),
+      new HtmlRspackPlugin({
+        title: "neuroglancer",
       }),
     ],
     output: {
       path: path.resolve(import.meta.dirname, "dist", "client"),
       filename: "[name].[chunkhash].js",
       chunkFilename: "[name].[contenthash].js",
-      chunkLoading: "import",
-      workerChunkLoading: "import",
-      chunkFormat: "module",
       asyncChunks: true,
-      module: true,
       clean: true,
     },
-    target: ["es2020", "web"],
+    target: ["web", "browserslist"],
     experiments: {
-      outputModule: true,
+      css: true,
     },
-    // Additional defines, to be added via `webpack.DefinePlugin`.  This is not a
+    // Additional defines, to be added via `DefinePlugin`.  This is not a
     // standard webpack configuration property, but is handled specially by
     // `normalizeConfigurationWithDefine`.
     define: {
@@ -145,6 +116,9 @@ export default (env, args) => {
       // NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: true
 
       // NEUROGLANCER_GOOGLE_TAG_MANAGER: JSON.stringify('GTM-XXXXXX'),
+    },
+    watchOptions: {
+      ignored: /node_modules/,
     },
   };
   return env.NEUROGLANCER_CLI

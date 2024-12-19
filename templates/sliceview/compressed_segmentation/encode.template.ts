@@ -19,11 +19,11 @@
  * Support for compressing uint32/uint64 segment label chunks.
  */
 
-import {encodeChannel as encodeChannelCommon, encodeChannels as encodeChannelsCommon, writeBlock} from 'neuroglancer/sliceview/compressed_segmentation/encode_common';
-import {getFortranOrderStrides} from 'neuroglancer/util/array';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {encodeChannel as encodeChannelCommon, encodeChannels as encodeChannelsCommon, writeBlock} from '#src/sliceview/compressed_segmentation/encode_common.js';
+import {getFortranOrderStrides} from '#src/util/array.js';
+import {Uint32ArrayBuilder} from '#src/util/uint32array_builder.js';
 
-export {newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_common';
+export {newCache} from '#src/sliceview/compressed_segmentation/encode_common.js';
 
 let tempEncodingBuffer: Uint32Array;
 let tempValuesBuffer1: Uint32Array;
@@ -39,7 +39,8 @@ export function encodeBlock(
     cache: Map<string, number>, output: Uint32ArrayBuilder): [number, number] {
   const ax = actualSize[0], ay = actualSize[1], az = actualSize[2];
   const bx = blockSize[0], by = blockSize[1], bz = blockSize[2];
-  let sx = inputStrides[0], sy = inputStrides[1], sz = inputStrides[2];
+  const sx = inputStrides[0];
+  let sy = inputStrides[1], sz = inputStrides[2];
   sz -= sy * ay;
   sy -= sx * ax;
   if (ax * ay * az === 0) {

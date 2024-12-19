@@ -24,8 +24,7 @@ import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 registerAsyncComputation(
   parseOBJFromArrayBuffer,
   async (buffer: ArrayBuffer) => {
-    buffer = await maybeDecompressGzip(buffer);
-    let text = new TextDecoder().decode(buffer);
+    let text = new TextDecoder().decode(await maybeDecompressGzip(buffer));
     // Strip comments
     text = text.replace(/#.*/g, "");
     const vertexPositions = new Float32ArrayBuilder();

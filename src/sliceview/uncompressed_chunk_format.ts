@@ -51,7 +51,7 @@ import {
 
 class TextureLayout extends RefCounted {
   strides: Uint32Array;
-  textureShape = new Uint32Array(this.textureDims);
+  textureShape: Uint32Array;
   constructor(
     gl: GL,
     public chunkDataSize: Uint32Array,
@@ -68,7 +68,9 @@ class TextureLayout extends RefCounted {
       textureDims === 3 ? gl.max3dTextureSize : gl.maxTextureSize;
     let textureDim = 0;
     let textureDimSize = 1;
-    const { textureShape } = this;
+    const textureShape = (this.textureShape = new Uint32Array(
+      this.textureDims,
+    ));
     textureShape.fill(1);
     for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
       const size = chunkDataSize[chunkDim];
@@ -284,8 +286,8 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<
   Uint8Array,
   TextureLayout
 > {
-  CHUNK_FORMAT_TYPE: ChunkFormat;
-  source: Source;
+  declare CHUNK_FORMAT_TYPE: ChunkFormat;
+  declare source: Source;
 
   setTextureData(gl: GL) {
     const { source } = this;
@@ -346,7 +348,9 @@ export function getFillValueArray(
   dataType: DataType,
   fillValue: number | Uint64,
 ) {
-  const array = new DATA_TYPE_ARRAY_CONSTRUCTOR[dataType](
+  const array = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
+    dataType
+  ] as TypedArrayConstructor<ArrayBuffer>)(
     DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType],
   );
   if (dataType === DataType.UINT64) {

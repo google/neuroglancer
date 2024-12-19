@@ -17,9 +17,9 @@
 import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
 import { registerAsyncComputation } from "#src/async_computation/handler.js";
 
-registerAsyncComputation(decodeZstd, async (data: Uint8Array) => {
+registerAsyncComputation(decodeZstd, async (data) => {
   const { default: Zstd } = await import("numcodecs/zstd");
   const codec = Zstd.fromConfig({ id: "blosc" });
-  const result = await codec.decode(data);
+  const result = (await codec.decode(data)) as Uint8Array<ArrayBuffer>;
   return { value: result, transfer: [result.buffer] };
 });

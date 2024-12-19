@@ -26,6 +26,7 @@ TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
     "spec",
     [
         {"driver": "zarr"},
+        {"driver": "zarr", "metadata": {"compressor": {"id": "zlib"}}},
         {"driver": "zarr", "schema": {"chunk_layout": {"inner_order": [2, 1, 0]}}},
         {"driver": "zarr3"},
         {"driver": "zarr3", "schema": {"chunk_layout": {"inner_order": [2, 1, 0]}}},
@@ -153,6 +154,53 @@ def test_zarr(tempdir_server: tuple[pathlib.Path, str], webdriver, spec):
     vol = webdriver.viewer.volume("a").result()
     b = vol.read().result()
     np.testing.assert_equal(a, b)
+
+
+def test_zarr_corrupt(tempdir_server: tuple[pathlib.Path, str], webdriver):
+    import tensorstore as ts
+
+    tmp_path, server_url = tempdir_server
+
+    shape = [10, 20, 30]
+
+    a = np.arange(np.prod(shape), dtype=np.int32).reshape(shape)
+
+    full_spec_for_chunks = {
+        "driver": "zarr3",
+        "kvstore": {
+            "driver": "file",
+            "path": str(tmp_path),
+        },
+        "metadata": {"codecs": ["zstd"]},
+    }
+
+    full_spec_for_metadata = {
+        "driver": "zarr3",
+        "kvstore": {
+            "driver": "file",
+            "path": str(tmp_path),
+        },
+        "metadata": {"codecs": ["gzip"]},
+    }
+
+    ts.open(full_spec_for_metadata, create=True, dtype=ts.int32, shape=shape).result()
+    store = ts.open(
+        full_spec_for_chunks,
+        open=True,
+        assume_metadata=True,
+        dtype=ts.int32,
+        shape=shape,
+    ).result()
+    store[...] = a
+
+    with webdriver.viewer.txn() as s:
+        s.layers.append(
+            name="a", layer=neuroglancer.ImageLayer(source=f"zarr3://{server_url}")
+        )
+
+    vol = webdriver.viewer.volume("a").result()
+    with pytest.raises(ValueError, match=".*Failed to decode gzip"):
+        vol.read().result()
 
 
 EXCLUDED_ZARR_V2_CASES = {

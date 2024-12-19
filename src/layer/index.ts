@@ -80,7 +80,7 @@ import {
   TrackableSidePanelLocation,
 } from "#src/ui/side_panel_location.js";
 import type { GlobalToolBinder } from "#src/ui/tool.js";
-import { LocalToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
+import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
@@ -349,9 +349,7 @@ export class UserLayer extends RefCounted {
   tabs = this.registerDisposer(new TabSpecification());
   panels = new UserLayerSidePanelsState(this);
   tool = this.registerDisposer(new SelectedLegacyTool(this));
-  toolBinder = this.registerDisposer(
-    new LocalToolBinder(this, this.manager.root.toolBinder),
-  );
+  toolBinder: LayerToolBinder<this>;
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
@@ -362,6 +360,9 @@ export class UserLayer extends RefCounted {
 
   constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
     super();
+    this.toolBinder = this.registerDisposer(
+      new LayerToolBinder(this, this.manager.root.toolBinder),
+    );
     this.localCoordinateSpaceCombiner.includeDimensionPredicate =
       isLocalOrChannelDimension;
     this.tabs.changed.add(this.specificationChanged.dispatch);
@@ -955,6 +956,7 @@ export class LayerManager extends RefCounted {
     // Also notify the root LayerManager, to ensures the layer is removed if this is the last direct
     // reference.
     managedLayer.manager.rootLayers.layersChanged.dispatch();
+    managedLayer.manager.rootLayers.specificationChanged.dispatch();
     managedLayer.dispose();
   }
 
@@ -1245,8 +1247,7 @@ const DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE = {
 
 export class TrackableDataSelectionState
   extends RefCounted
-  implements
-    TrackableValueInterface<PersistentViewerSelectionState | undefined>
+  implements TrackableValueInterface<PersistentViewerSelectionState | undefined>
 {
   changed = new NullarySignal();
   history: PersistentViewerSelectionState[] = [];
@@ -2103,13 +2104,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     return this;
   }
 
-  coordinateSpaceCombiner = new CoordinateSpaceCombiner(
-    this.coordinateSpace,
-    isGlobalDimension,
-  );
+  coordinateSpaceCombiner: CoordinateSpaceCombiner;
   subsets = new Set<LayerSubsetSpecification>();
-
-  layerSelectedValues = this.selectionState.layerSelectedValues;
+  layerSelectedValues: LayerSelectedValues;
 
   constructor(
     public display: DisplayContext,
@@ -2123,6 +2120,11 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     public toolBinder: Borrowed<GlobalToolBinder>,
   ) {
     super();
+    this.coordinateSpaceCombiner = new CoordinateSpaceCombiner(
+      coordinateSpace,
+      isGlobalDimension,
+    );
+    this.layerSelectedValues = selectionState.layerSelectedValues;
     this.registerDisposer(
       layerManager.layersChanged.add(this.changed.dispatch),
     );

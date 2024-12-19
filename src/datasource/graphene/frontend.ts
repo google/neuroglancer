@@ -51,7 +51,6 @@ import {
   makeChunkedGraphChunkSpecification,
   MeshSourceParameters,
   PYCG_APP_VERSION,
-  responseIdentity,
 } from "#src/datasource/graphene/base.js";
 import type {
   DataSource,
@@ -161,11 +160,7 @@ import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { mat4, vec3, vec4 } from "#src/util/geom.js";
-import {
-  HttpError,
-  isNotFoundError,
-  responseJson,
-} from "#src/util/http_request.js";
+import { HttpError, isNotFoundError } from "#src/util/http_request.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -190,7 +185,7 @@ import type {
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
 import {
-  cancellableFetchSpecialOk,
+  fetchSpecialOk,
   parseSpecialUrl,
 } from "#src/util/special_protocol_request.js";
 import type { Trackable } from "#src/util/trackable.js";
@@ -250,7 +245,7 @@ class AppInfo {
         "supported_api_versions",
         (x) => parseArray(x, verifyNonnegativeInt),
       );
-    } catch (error) {
+    } catch {
       // Dealing with a prehistoric graph server with no version information
       this.supported_api_versions = [0];
     }
@@ -566,11 +561,8 @@ function getJsonMetadata(
       credentialsProvider: getObjectId(credentialsProvider),
     },
     async () => {
-      return await cancellableFetchSpecialOk(
-        credentialsProvider,
-        `${url}/info`,
-        {},
-        responseJson,
+      return await fetchSpecialOk(credentialsProvider, `${url}/info`, {}).then(
+        (response) => response.json(),
       );
     },
   );
@@ -1607,12 +1599,7 @@ class GrapheneGraphServerInterface {
       Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
     }`;
 
-    const promise = cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      url,
-      {},
-      responseIdentity,
-    );
+    const promise = fetchSpecialOk(this.credentialsProvider, url, {});
 
     const response = await withErrorMessageHTTP(promise, {
       initialMessage: `Retrieving root for segment ${segment}`,
@@ -1632,7 +1619,7 @@ class GrapheneGraphServerInterface {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = cancellableFetchSpecialOk(
+    const promise = fetchSpecialOk(
       this.credentialsProvider,
       `${url}/merge?int64_as_str=1`,
       {
@@ -1648,7 +1635,6 @@ class GrapheneGraphServerInterface {
           ],
         ]),
       },
-      responseIdentity,
     );
 
     try {
@@ -1674,7 +1660,7 @@ class GrapheneGraphServerInterface {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = cancellableFetchSpecialOk(
+    const promise = fetchSpecialOk(
       this.credentialsProvider,
       `${url}/split?int64_as_str=1`,
       {
@@ -1690,7 +1676,6 @@ class GrapheneGraphServerInterface {
           ]),
         }),
       },
-      responseIdentity,
     );
 
     const response = await withErrorMessageHTTP(promise, {
@@ -1708,17 +1693,12 @@ class GrapheneGraphServerInterface {
   async filterLatestRoots(segments: Uint64[]): Promise<Uint64[]> {
     const url = `${this.url}/is_latest_roots`;
 
-    const promise = cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      url,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          node_ids: segments.map((x) => x.toJSON()),
-        }),
-      },
-      responseIdentity,
-    );
+    const promise = fetchSpecialOk(this.credentialsProvider, url, {
+      method: "POST",
+      body: JSON.stringify({
+        node_ids: segments.map((x) => x.toJSON()),
+      }),
+    });
 
     const response = await withErrorMessageHTTP(promise, {
       errorPrefix: "Could not check latest: ",
@@ -1842,8 +1822,8 @@ class ChunkedGraphChunkSource
   extends SliceViewChunkSource
   implements ChunkedGraphChunkSourceInterface
 {
-  spec: ChunkedGraphChunkSpecification;
-  OPTIONS: { spec: ChunkedGraphChunkSpecification };
+  declare spec: ChunkedGraphChunkSpecification;
+  declare OPTIONS: { spec: ChunkedGraphChunkSpecification };
 }
 
 class GrapheneChunkedGraphChunkSource extends WithParameters(

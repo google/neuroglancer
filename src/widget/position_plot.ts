@@ -98,9 +98,9 @@ export class PositionPlot extends RefCounted {
   visible = true;
   dragging = new WatchableValue(false);
 
-  tickWidth: number = this.orientation === "column" ? 10 : 5;
-  barWidth: number = this.orientation === "column" ? 15 : 10;
-  barRightMargin: number = this.orientation === "column" ? 10 : 2;
+  tickWidth: number;
+  barWidth: number;
+  barRightMargin: number;
   canvasWidth: number;
 
   constructor(
@@ -109,6 +109,10 @@ export class PositionPlot extends RefCounted {
     public orientation: "row" | "column" = "column",
   ) {
     super();
+    this.tickWidth = orientation === "column" ? 10 : 5;
+    this.barWidth = orientation === "column" ? 15 : 10;
+    this.barRightMargin = orientation === "column" ? 10 : 2;
+
     this.canvasWidth = this.tickWidth + this.barWidth + this.barRightMargin;
     const plotElement = this.element;
     plotElement.classList.add("neuroglancer-position-dimension-plot");
@@ -173,6 +177,7 @@ export class PositionPlot extends RefCounted {
         this.visible = false;
         return;
       }
+      this.element.style.display = "";
       this.visible = true;
 
       const { lowerBound, upperBound } = normalizedDimensionBounds;
