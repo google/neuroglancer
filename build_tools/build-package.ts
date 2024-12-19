@@ -122,6 +122,7 @@ async function buildPackage(options: {
     const { postpack } = packageJson["scripts"];
     delete packageJson["scripts"];
     packageJson["scripts"] = { postpack };
+    packageJson["files"] = ["lib/**/*"];
   } else {
     delete packageJson["private"];
     packageJson["scripts"] = {};
