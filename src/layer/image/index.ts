@@ -15,6 +15,7 @@
  */
 
 import "#src/layer/image/style.css";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
@@ -54,6 +55,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
   registerNested,
   WatchableValue,
 } from "#src/trackable_value.js";
@@ -79,6 +81,7 @@ import {
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
@@ -541,6 +544,22 @@ class RenderingOptionsTab extends Tab {
     topRow.className = "neuroglancer-image-dropdown-top-row";
     topRow.appendChild(document.createTextNode("Shader"));
     topRow.appendChild(spacer);
+
+    const managedLayer = this.layer.managedLayer;
+    this.registerDisposer(
+      observeWatchable((visible) => {
+        this.codeWidget.setVisible(visible);
+      }, managedLayer.codeVisible),
+    );
+
+    const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
+      enableTitle: "Show code",
+      disableTitle: "Hide code",
+      backgroundScheme: "dark",
+      svg: svgCode,
+    });
+    topRow.appendChild(codeVisibilityControl.element);
+
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
@@ -562,6 +581,7 @@ class RenderingOptionsTab extends Tab {
         new ChannelDimensionsWidget(layer.channelCoordinateSpaceCombiner),
       ).element,
     );
+
     element.appendChild(this.codeWidget.element);
     element.appendChild(
       this.registerDisposer(

@@ -15,6 +15,7 @@
  */
 
 import "#src/layer/single_mesh/style.css";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import {
@@ -32,10 +33,11 @@ import {
   SingleMeshLayer,
 } from "#src/single_mesh/frontend.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { WatchableValue } from "#src/trackable_value.js";
+import { observeWatchable, WatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, removeFromParent } from "#src/util/dom.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
@@ -210,6 +212,22 @@ class DisplayOptionsTab extends Tab {
     spacer.style.flex = "1";
 
     topRow.appendChild(spacer);
+
+    const managedLayer = this.layer.managedLayer;
+    this.registerDisposer(
+      observeWatchable((visible) => {
+        this.codeWidget.setVisible(visible);
+      }, managedLayer.codeVisible),
+    );
+
+    const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
+      enableTitle: "Show code",
+      disableTitle: "Hide code",
+      backgroundScheme: "dark",
+      svg: svgCode,
+    });
+    topRow.appendChild(codeVisibilityControl.element);
+
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
