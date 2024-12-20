@@ -729,7 +729,9 @@ export class AnnotationUserLayer extends Base {
   }
 
   get automaticLayerBarColor() {
-    if (this.annotationDisplayState.color) {
+    const shaderHasDefaultColor =
+      this.annotationDisplayState.shader.value.includes("defaultColor");
+    if (shaderHasDefaultColor && this.annotationDisplayState.color.value) {
       const [r, g, b] = this.annotationDisplayState.color.value;
       return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;
     }
