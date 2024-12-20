@@ -47,9 +47,13 @@ export class Overlay extends RefCounted {
     document.body.appendChild(container);
     this.registerDisposer(new KeyboardEventBinder(this.container, this.keyMap));
     this.registerEventListener(container, "action:close", () => {
-      this.dispose();
+      this.close();
     });
     content.focus();
+  }
+
+  close() {
+    this.dispose();
   }
 
   disposed() {
