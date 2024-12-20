@@ -18,6 +18,7 @@
  * @file User interface for display and editing annotations.
  */
 
+import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -452,6 +453,13 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(ellipsoidButton);
+    const helpIcon = document.createElement("div");
+    helpIcon.title =
+      "The left icons allows you to select the type of the anotation. Color and other display settings are available in the 'Redering' tab";
+    helpIcon.className = "neuroglancer-icon";
+    helpIcon.innerHTML = svg_help;
+    mutableControls.appendChild(helpIcon);
+
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 

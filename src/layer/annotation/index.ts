@@ -16,7 +16,6 @@
 
 import "#src/layer/annotation/style.css";
 
-import svg_help from "ikonate/icons/help.svg?raw";
 import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import { AnnotationLayerState } from "#src/annotation/annotation_layer_state.js";
 import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
@@ -696,20 +695,6 @@ export class AnnotationUserLayer extends Base {
         new LinkedSegmentationLayersWidget(this.linkedSegmentationLayers),
       ).element,
     );
-    const label = document.createElement("label");
-    label.appendChild(document.createTextNode("Default color"));
-    label.style.display = "flex";
-    label.style.justifyContent = "space-between";
-    label.style.alignItems = "center";
-    label.style.width = "100%";
-
-    const helpIcon = document.createElement("div");
-    helpIcon.title =
-      "Annotation default color has moved from the 'Annotations' tab to the 'Redering' tab";
-    helpIcon.className = "neuroglancer-icon";
-    helpIcon.innerHTML = svg_help;
-    label.appendChild(helpIcon);
-    tab.element.appendChild(label);
   }
 
   toJSON() {
