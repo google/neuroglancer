@@ -1,0 +1,80 @@
+{
+  "multiscales": [
+    {
+      "axes": [
+        {
+          "name": "y",
+          "type": "space",
+          "unit": "nanometer"
+        },
+        {
+          "name": "x",
+          "type": "space",
+          "unit": "nanometer"
+        }
+      ],
+      "datasets": [
+        {
+          "path": "scale0/image",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                4,
+                30
+              ],
+              "type": "scale"
+            },
+            {
+              "translation": [
+                0.0,
+                0.0
+              ],
+              "type": "translation"
+            }
+          ]
+        },
+        {
+          "path": "scale1/image",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                8,
+                60
+              ],
+              "type": "scale"
+            },
+            {
+              "translation": [
+                2,
+                15
+              ],
+              "type": "translation"
+            }
+          ]
+        },
+        {
+          "path": "scale2/image",
+          "coordinateTransformations": [
+            {
+              "scale": [
+                16,
+                120
+              ],
+              "type": "scale"
+            },
+            {
+              "translation": [
+                6,
+                45
+              ],
+              "type": "translation"
+            }
+          ]
+        }
+      ],
+      "name": "image",
+      "version": "0.4",
+      "@type": "ngff:Image"
+    }
+  ]
+}

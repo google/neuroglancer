@@ -34,13 +34,16 @@ import {
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
-import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type {
+  CredentialsManager,
+  CredentialsProvider,
+} from "#src/credentials_provider/index.js";
 import type {
   BrainmapsCredentialsProvider,
   BrainmapsInstance,
   OAuth2Credentials,
 } from "#src/datasource/brainmaps/api.js";
-import { makeRequest } from "#src/datasource/brainmaps/api.js";
+import { credentialsKey, makeRequest } from "#src/datasource/brainmaps/api.js";
 import type {
   ChangeSpec,
   MultiscaleMeshInfo,
@@ -58,9 +61,10 @@ import {
 import type {
   CompleteUrlOptions,
   DataSource,
+  DataSourceRegistry,
   GetDataSourceOptions,
+  DataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import { VertexPositionFormat } from "#src/mesh/base.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
@@ -79,7 +83,6 @@ import {
   MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import { StatusMessage } from "#src/status.js";
 import { transposeNestedArrays } from "#src/util/array.js";
 import type { CompletionWithDescription } from "#src/util/completion.js";
 import {
@@ -106,7 +109,8 @@ import {
   verifyPositiveInt,
   verifyString,
 } from "#src/util/json.js";
-import { getObjectId } from "#src/util/object_id.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 import { defaultStringCompare } from "#src/util/string.js";
 
 class BrainmapsVolumeChunkSource extends WithParameters(
@@ -769,49 +773,65 @@ const supportedQueryParameters = [
   },
 ];
 
-export class BrainmapsDataSource extends DataSourceProvider {
+function getCredentialsProvider(credentialsManager: CredentialsManager) {
+  return credentialsManager.getCredentialsProvider<OAuth2Credentials>(
+    credentialsKey,
+  );
+}
+
+export class BrainmapsDataSource implements DataSourceProvider {
   constructor(
     public instance: BrainmapsInstance,
-    public credentialsProvider: Owned<BrainmapsCredentialsProvider>,
-  ) {
-    super();
-  }
+    public scheme: string,
+  ) {}
 
   get description() {
     return this.instance.description;
   }
 
-  private getMultiscaleInfo(chunkManager: ChunkManager, volumeId: string) {
-    return chunkManager.memoize.getUncounted(
+  private getMultiscaleInfo(
+    registry: DataSourceRegistry,
+    volumeId: string,
+    options: Partial<ProgressOptions>,
+  ) {
+    return registry.chunkManager.memoize.getAsync(
       {
         type: "brainmaps:getMultiscaleInfo",
         volumeId,
         instance: this.instance,
-        credentialsProvider: getObjectId(this.credentialsProvider),
       },
-      () =>
-        makeRequest(this.instance, this.credentialsProvider, {
-          method: "GET",
-          path: `/v1beta2/volumes/${volumeId}`,
-        })
-          .then((response) => response.json())
-          .then((response) => new MultiscaleVolumeInfo(response)),
+      options,
+      async (progressOptions) => {
+        const response = await makeRequest(
+          this.instance,
+          getCredentialsProvider(registry.credentialsManager),
+          `/v1beta2/volumes/${volumeId}`,
+          progressOptions,
+        );
+        return new MultiscaleVolumeInfo(await response.json());
+      },
     );
   }
 
-  private getMeshesInfo(chunkManager: ChunkManager, volumeId: string) {
-    return chunkManager.memoize.getUncounted(
+  private getMeshesInfo(
+    registry: DataSourceRegistry,
+    volumeId: string,
+    options: Partial<ProgressOptions>,
+  ) {
+    return registry.chunkManager.memoize.getAsync(
       {
         type: "brainmaps:getMeshesInfo",
         volumeId,
         instance: this.instance,
-        credentialsProvider: getObjectId(this.credentialsProvider),
       },
-      () =>
-        makeRequest(this.instance, this.credentialsProvider, {
-          method: "GET",
-          path: `/v1beta2/objects/${volumeId}/meshes`,
-        })
+      options,
+      (progressOptions) =>
+        makeRequest(
+          this.instance,
+          getCredentialsProvider(registry.credentialsManager),
+          `/v1beta2/objects/${volumeId}/meshes`,
+          progressOptions,
+        )
           .then((response) => response.json())
           .then((response) => parseMeshesResponse(response)),
     );
@@ -848,7 +868,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
       chunkLayoutPreference,
       jpegQuality,
     };
-    return options.chunkManager.memoize.getUncounted(
+    return options.registry.chunkManager.memoize.getAsync(
       {
         type: "brainmaps:get",
         instance: this.instance,
@@ -856,15 +876,19 @@ export class BrainmapsDataSource extends DataSourceProvider {
         changeSpec,
         brainmapsOptions,
       },
-      async () => {
+      options,
+      async (progressOptions) => {
+        const credentialsProvider = getCredentialsProvider(
+          options.registry.credentialsManager,
+        );
         const [multiscaleVolumeInfo, meshesInfo] = await Promise.all([
-          this.getMultiscaleInfo(options.chunkManager, volumeId),
-          this.getMeshesInfo(options.chunkManager, volumeId),
+          this.getMultiscaleInfo(options.registry, volumeId, progressOptions),
+          this.getMeshesInfo(options.registry, volumeId, progressOptions),
         ]);
         const volume = new MultiscaleVolumeChunkSource(
-          options.chunkManager,
+          options.registry.chunkManager,
           this.instance,
-          this.credentialsProvider,
+          credentialsProvider,
           volumeId,
           changeSpec,
           multiscaleVolumeInfo,
@@ -918,10 +942,10 @@ export class BrainmapsDataSource extends DataSourceProvider {
           const { single } = mesh;
           if (single !== undefined) {
             if (single.type === "TRIANGLES") {
-              meshSource = options.chunkManager.getChunkSource(
+              meshSource = options.registry.chunkManager.getChunkSource(
                 BrainmapsMeshSource,
                 {
-                  credentialsProvider: this.credentialsProvider,
+                  credentialsProvider,
                   parameters: {
                     instance: this.instance,
                     volumeId: volumeId,
@@ -931,10 +955,10 @@ export class BrainmapsDataSource extends DataSourceProvider {
                 },
               );
             } else {
-              meshSource = options.chunkManager.getChunkSource(
+              meshSource = options.registry.chunkManager.getChunkSource(
                 BrainmapsSkeletonSource,
                 {
-                  credentialsProvider: this.credentialsProvider,
+                  credentialsProvider,
                   parameters: {
                     instance: this.instance,
                     volumeId: volumeId,
@@ -946,10 +970,10 @@ export class BrainmapsDataSource extends DataSourceProvider {
             }
           } else {
             const multi = mesh.multi!;
-            meshSource = options.chunkManager.getChunkSource(
+            meshSource = options.registry.chunkManager.getChunkSource(
               BrainmapsMultiscaleMeshSource,
               {
-                credentialsProvider: this.credentialsProvider,
+                credentialsProvider,
                 format: {
                   fragmentRelativeVertices: false,
                   vertexPositionFormat: VertexPositionFormat.float32,
@@ -994,7 +1018,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
             default: true,
             modelSubspaceDimensionIndices: [0, 1, 2],
             subsource: {
-              annotation: options.chunkManager.getChunkSource(
+              annotation: options.registry.chunkManager.getChunkSource(
                 BrainmapsAnnotationSource,
                 {
                   parameters: {
@@ -1004,7 +1028,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
                     upperVoxelBound:
                       multiscaleVolumeInfo.scales[0].upperVoxelBound,
                   },
-                  credentialsProvider: this.credentialsProvider,
+                  credentialsProvider,
                 },
               ),
             },
@@ -1015,112 +1039,110 @@ export class BrainmapsDataSource extends DataSourceProvider {
     );
   }
 
-  getProjectList(chunkManager: ChunkManager) {
-    return chunkManager.memoize.getUncounted(
+  getProjectList(
+    registry: DataSourceRegistry,
+    options: Partial<ProgressOptions>,
+  ) {
+    return registry.chunkManager.memoize.getAsync(
       { instance: this.instance, type: "brainmaps:getProjectList" },
-      () => {
-        const promise = makeRequest(this.instance, this.credentialsProvider, {
-          method: "GET",
-          path: "/v1beta2/projects",
-        })
-          .then((response) => response.json())
-          .then((projectsResponse) => {
-            return parseProjectList(projectsResponse);
-          });
-        const description = `${this.instance.description} project list`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}.`,
-          errorPrefix: `Error retrieving ${description}: `,
+      options,
+      async (progressOptions) => {
+        using _span = new ProgressSpan(progressOptions.progressListener, {
+          message: `Retrieving ${this.instance.description} project list`,
         });
-        return promise;
+        const response = await makeRequest(
+          this.instance,
+          getCredentialsProvider(registry.credentialsManager),
+          "/v1beta2/projects",
+          progressOptions,
+        );
+        return parseProjectList(await response.json());
       },
     );
   }
 
-  getDatasetList(chunkManager: ChunkManager, project: string) {
-    return chunkManager.memoize.getUncounted(
+  getDatasetList(
+    registry: DataSourceRegistry,
+    project: string,
+    options: Partial<ProgressOptions>,
+  ) {
+    return registry.chunkManager.memoize.getAsync(
       { instance: this.instance, type: `brainmaps:${project}:getDatasetList` },
-      () => {
-        const promise = makeRequest(this.instance, this.credentialsProvider, {
-          method: "GET",
-          path: `/v1beta2/datasets?project_id=${project}`,
-        })
-          .then((response) => response.json())
-          .then((datasetsResponse) => {
-            return parseAPIResponseList(datasetsResponse, "datasetIds");
-          });
-        const description = `${this.instance.description} dataset list`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}`,
-          errorPrefix: `Error retrieving ${description}`,
+      options,
+      async (progressOptions) => {
+        using _span = new ProgressSpan(progressOptions.progressListener, {
+          message: `Retrieving ${this.instance.description} dataset list for ${project}`,
         });
-        return promise;
+        const response = await makeRequest(
+          this.instance,
+          getCredentialsProvider(registry.credentialsManager),
+          `/v1beta2/datasets?project_id=${project}`,
+        );
+        return parseAPIResponseList(await response.json(), "datasetIds");
       },
     );
   }
 
-  getVolumeList(chunkManager: ChunkManager, project: string, dataset: string) {
-    return chunkManager.memoize.getUncounted(
+  getVolumeList(
+    registry: DataSourceRegistry,
+    project: string,
+    dataset: string,
+    options: Partial<ProgressOptions>,
+  ) {
+    return registry.chunkManager.memoize.getAsync(
       {
         instance: this.instance,
         type: `brainmaps:${project}:${dataset}:getVolumeList`,
       },
-      () => {
-        const promise = makeRequest(this.instance, this.credentialsProvider, {
-          method: "GET",
-          path: `/v1beta2/volumes?project_id=${project}&dataset_id=${dataset}`,
-        })
-          .then((response) => response.json())
-          .then((volumesResponse) => {
-            const fullyQualifyiedVolumeList = parseAPIResponseList(
-              volumesResponse,
-              "volumeId",
-            );
-            const splitPoint = project.length + dataset.length + 2;
-            const volumeList = [];
-            for (const volume of fullyQualifyiedVolumeList) {
-              volumeList.push(volume.substring(splitPoint));
-            }
-            return volumeList;
-          });
-        const description = `${this.instance.description} volume list`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}`,
-          errorPrefix: `Error retrieving ${description}`,
+      options,
+      async (progressOptions) => {
+        using _span = new ProgressSpan(progressOptions.progressListener, {
+          message: `Retrieving ${this.instance.description} volume list for ${project}:${dataset}`,
         });
-        return promise;
+
+        const response = await makeRequest(
+          this.instance,
+          getCredentialsProvider(registry.credentialsManager),
+          `/v1beta2/volumes?project_id=${project}&dataset_id=${dataset}`,
+          progressOptions,
+        );
+        const fullyQualifyiedVolumeList = parseAPIResponseList(
+          await response.json(),
+          "volumeId",
+        );
+        const splitPoint = project.length + dataset.length + 2;
+        const volumeList = [];
+        for (const volume of fullyQualifyiedVolumeList) {
+          volumeList.push(volume.substring(splitPoint));
+        }
+        return volumeList;
       },
     );
   }
 
-  getChangeStackList(chunkManager: ChunkManager, volumeId: string) {
-    return chunkManager.memoize.getUncounted(
+  getChangeStackList(
+    registry: DataSourceRegistry,
+    volumeId: string,
+    options: Partial<ProgressOptions>,
+  ) {
+    return registry.chunkManager.memoize.getAsync(
       {
         instance: this.instance,
         type: "brainmaps:getChangeStackList",
         volumeId,
       },
-      () => {
-        const promise: Promise<string[] | undefined> = makeRequest(
-          this.instance,
-          this.credentialsProvider,
-          {
-            method: "GET",
-            path: `/v1beta2/changes/${volumeId}/change_stacks`,
-          },
-        )
-          .then((response) => response.json())
-          .then((response) => parseChangeStackList(response));
-        const description = `change stacks for ${volumeId}`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}.`,
-          errorPrefix: `Error retrieving ${description}: `,
+      options,
+      async (progressOptions) => {
+        using _span = new ProgressSpan(progressOptions.progressListener, {
+          message: `Retrieving ${this.instance.description} change stack list for ${volumeId}`,
         });
-        return promise;
+        const response = await makeRequest(
+          this.instance,
+          getCredentialsProvider(registry.credentialsManager),
+          `/v1beta2/changes/${volumeId}/change_stacks`,
+          progressOptions,
+        );
+        return parseChangeStackList(await response.json());
       },
     );
   }
@@ -1143,7 +1165,11 @@ export class BrainmapsDataSource extends DataSourceProvider {
     }
     if (meshName !== undefined) {
       const volumeId = `${project}:${dataset}:${volume}`;
-      const meshes = await this.getMeshesInfo(options.chunkManager, volumeId);
+      const meshes = await this.getMeshesInfo(
+        options.registry,
+        volumeId,
+        options,
+      );
       const results: CompletionWithDescription[] = [];
       const seenMultiscale = new Set<string>();
       for (const mesh of meshes) {
@@ -1180,8 +1206,9 @@ export class BrainmapsDataSource extends DataSourceProvider {
     if (changestack !== undefined) {
       const volumeId = `${project}:${dataset}:${volume}`;
       const changeStacks = await this.getChangeStackList(
-        options.chunkManager,
+        options.registry,
         volumeId,
+        options,
       );
       if (changeStacks === undefined) {
         throw null;
@@ -1196,12 +1223,16 @@ export class BrainmapsDataSource extends DataSourceProvider {
         offset: providerUrl.length - volume.length,
         completions: getPrefixMatches(
           volume,
-          await this.getVolumeList(options.chunkManager, project, dataset),
+          await this.getVolumeList(options.registry, project, dataset, options),
         ),
       };
     }
     if (dataset !== undefined) {
-      const datasets = await this.getDatasetList(options.chunkManager, project);
+      const datasets = await this.getDatasetList(
+        options.registry,
+        project,
+        options,
+      );
       return {
         offset: providerUrl.length - dataset.length,
         completions: getPrefixMatches(
@@ -1211,7 +1242,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
       };
     }
 
-    const projects = await this.getProjectList(options.chunkManager);
+    const projects = await this.getProjectList(options.registry, options);
     return {
       offset: 0,
       completions: getPrefixMatchesWithDescriptions(

@@ -21,18 +21,18 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 
 export async function decodeJxlChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const chunkDataSize = chunk.chunkDataSize!;
   const { uint8Array: decoded } = await requestAsyncComputation(
     decodeJxl,
-    abortSignal,
+    signal,
     [response],
     new Uint8Array(response),
     chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
     chunkDataSize[3] || 1,
     1, // bytesPerPixel
   );
-  await postProcessRawData(chunk, abortSignal, decoded);
+  await postProcessRawData(chunk, signal, decoded);
 }

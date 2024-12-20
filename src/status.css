@@ -63,6 +63,7 @@
   background-color: #808080;
   padding: 20px;
   padding-top: 30px;
+  border: 1px solid white;
 }
 
 #neuroglancer-status-container-modal > div > div:first-child {

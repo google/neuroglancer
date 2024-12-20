@@ -28,9 +28,9 @@ registerCodec({
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ) {
-    abortSignal;
+    signal;
     const { dataType, chunkShape } = decodedArrayInfo;
     const numElements = chunkShape.reduce((a, b) => a * b, 1);
     const bytesPerElement = DATA_TYPE_BYTES[dataType];

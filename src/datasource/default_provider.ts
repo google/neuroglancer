@@ -18,32 +18,47 @@
  * @file Facility for registering default data sources.
  */
 
-import type { CredentialsManager } from "#src/credentials_provider/index.js";
-import type { DataSourceProvider } from "#src/datasource/index.js";
-import { DataSourceProviderRegistry } from "#src/datasource/index.js";
-import type { Owned } from "#src/util/disposable.js";
+import type { SharedCredentialsManager } from "#src/credentials_provider/shared.js";
+import type {
+  DataSourceProvider,
+  KvStoreBasedDataSourceProvider,
+} from "#src/datasource/index.js";
+import { DataSourceRegistry } from "#src/datasource/index.js";
+import { LocalDataSourceProvider } from "#src/datasource/local.js";
+import { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 
 export interface ProviderOptions {
-  credentialsManager: CredentialsManager;
+  credentialsManager: SharedCredentialsManager;
+  kvStoreContext: SharedKvStoreContext;
 }
 
-export type ProviderFactory = (
-  options: ProviderOptions,
-) => Owned<DataSourceProvider>;
-const providerFactories = new Map<string, ProviderFactory>();
+const providers: DataSourceProvider[] = [];
+const kvStoreBasedProviders: KvStoreBasedDataSourceProvider[] = [];
+export const dataSourceAutoDetectRegistry = new AutoDetectRegistry();
 
-export function registerProvider(name: string, factory: ProviderFactory) {
-  providerFactories.set(name, factory);
+export function registerProvider(provider: DataSourceProvider) {
+  providers.push(provider);
+}
+
+export function registerKvStoreBasedDataProvider(
+  provider: KvStoreBasedDataSourceProvider,
+) {
+  kvStoreBasedProviders.push(provider);
 }
 
 export function getDefaultDataSourceProvider(options: ProviderOptions) {
-  const provider = new DataSourceProviderRegistry(options.credentialsManager);
-  for (const [name, factory] of providerFactories) {
-    try {
-      provider.register(name, factory(options));
-    } catch (e) {
-      console.warn(`Skipping ${name} data source: ${e}`);
-    }
+  const registry = new DataSourceRegistry(options.kvStoreContext);
+  registry.register(new LocalDataSourceProvider());
+  for (const provider of providers) {
+    registry.register(provider);
   }
-  return provider;
+  for (const provider of kvStoreBasedProviders) {
+    registry.registerKvStoreBasedProvider(provider);
+  }
+  options.kvStoreContext.kvStoreContext.autoDetectRegistry.copyTo(
+    registry.autoDetectRegistry,
+  );
+  dataSourceAutoDetectRegistry.copyTo(registry.autoDetectRegistry);
+  return registry;
 }

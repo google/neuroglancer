@@ -21,27 +21,80 @@ import {
   registerCodec,
 } from "#src/datasource/zarr/codec/decode.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { Configuration } from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
+import type {
+  Configuration,
+  IndexConfiguration,
+} from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import { ShardIndexLocation } from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
+import { FileByteRangeHandle } from "#src/kvstore/byte_range/file_handle.js";
 import type {
   ByteRangeRequest,
   ReadableKvStore,
-  ReadOptions,
+  DriverReadOptions,
   ReadResponse,
+  StatResponse,
+  StatOptions,
+  ByteRange,
 } from "#src/kvstore/index.js";
-import { composeByteRangeRequest } from "#src/kvstore/index.js";
+import { KvStoreFileHandle } from "#src/kvstore/index.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 type ShardIndex = BigUint64Array | undefined;
 
 const MISSING_VALUE = BigInt("18446744073709551615");
 
+type ShardIndexCache<BaseKey> = SimpleAsyncCache<BaseKey, ShardIndex>;
+
+function makeIndexCache<BaseKey>(
+  chunkManager: ChunkManager,
+  base: ReadableKvStore<BaseKey>,
+  configuration: IndexConfiguration,
+): ShardIndexCache<BaseKey> {
+  return new SimpleAsyncCache(chunkManager.addRef(), {
+    get: async (key: BaseKey, progressOptions: ProgressOptions) => {
+      const { indexCodecs } = configuration;
+      const encodedSize =
+        indexCodecs.encodedSize[indexCodecs.encodedSize.length - 1];
+      let byteRange: ByteRangeRequest;
+      switch (configuration.indexLocation) {
+        case ShardIndexLocation.START:
+          byteRange = { offset: 0, length: encodedSize! };
+          break;
+        case ShardIndexLocation.END:
+          byteRange = { suffixLength: encodedSize! };
+          break;
+      }
+      const response = await base.read(key, {
+        ...progressOptions,
+        byteRange,
+      });
+      if (response === undefined) {
+        return { size: 0, data: undefined };
+      }
+      const index = await decodeArray(
+        configuration.indexCodecs,
+        new Uint8Array(await response.response.arrayBuffer()),
+        progressOptions.signal,
+      );
+      return {
+        size: index.byteLength,
+        data: new BigUint64Array(
+          index.buffer,
+          index.byteOffset,
+          index.byteLength / 8,
+        ),
+      };
+    },
+  });
+}
+
 class ShardedKvStore<BaseKey>
   extends RefCounted
   implements ReadableKvStore<{ base: BaseKey; subChunk: number[] }>
 {
-  private indexCache: Owned<SimpleAsyncCache<BaseKey, ShardIndex>>;
+  private indexCache: Owned<ShardIndexCache<BaseKey>>;
   private indexStrides: number[];
   constructor(
     private configuration: Configuration,
@@ -50,42 +103,7 @@ class ShardedKvStore<BaseKey>
   ) {
     super();
     this.indexCache = this.registerDisposer(
-      new SimpleAsyncCache(chunkManager.addRef(), {
-        get: async (key: BaseKey, abortSignal: AbortSignal) => {
-          const { indexCodecs } = configuration;
-          const encodedSize =
-            indexCodecs.encodedSize[indexCodecs.encodedSize.length - 1];
-          let byteRange: ByteRangeRequest;
-          switch (configuration.indexLocation) {
-            case ShardIndexLocation.START:
-              byteRange = { offset: 0, length: encodedSize! };
-              break;
-            case ShardIndexLocation.END:
-              byteRange = { suffixLength: encodedSize! };
-              break;
-          }
-          const response = await base.read(key, {
-            abortSignal,
-            byteRange,
-          });
-          if (response === undefined) {
-            return { size: 0, data: undefined };
-          }
-          const index = await decodeArray(
-            configuration.indexCodecs,
-            response.data,
-            abortSignal,
-          );
-          return {
-            size: index.byteLength,
-            data: new BigUint64Array(
-              index.buffer,
-              index.byteOffset,
-              index.byteLength / 8,
-            ),
-          };
-        },
-      }),
+      makeIndexCache(chunkManager, base, configuration),
     );
     const { subChunkGridShape } = this.configuration;
     const rank = subChunkGridShape.length;
@@ -105,11 +123,14 @@ class ShardedKvStore<BaseKey>
     }
   }
 
-  async read(
-    key: { base: BaseKey; subChunk: number[] },
-    options: ReadOptions,
-  ): Promise<ReadResponse | undefined> {
-    const shardIndex = await this.indexCache.get(key.base, options.abortSignal);
+  private async findKey(
+    key: {
+      base: BaseKey;
+      subChunk: number[];
+    },
+    progressOptions: Partial<ProgressOptions>,
+  ): Promise<ByteRange | undefined> {
+    const shardIndex = await this.indexCache.get(key.base, progressOptions);
     if (shardIndex === undefined) {
       // Shard not present.
       return undefined;
@@ -128,42 +149,42 @@ class ShardedKvStore<BaseKey>
       // Sub-chunk not present.
       return undefined;
     }
-    const fullByteRange = {
+    return {
       offset: Number(dataOffset),
       length: Number(dataLength),
     };
-    const { outer: outerByteRange, inner: innerByteRange } =
-      composeByteRangeRequest(fullByteRange, options.byteRange);
-    if (outerByteRange.length === 0) {
-      return {
-        data: new Uint8Array(0),
-        dataRange: innerByteRange,
-        totalSize: fullByteRange.length,
-      };
-    }
-    const response = await this.base.read(key.base, {
-      abortSignal: options.abortSignal,
-      byteRange: outerByteRange,
-    });
-    if (response === undefined) {
-      // Shard unexpectedly deleted.
-      return undefined;
-    }
-    if (
-      response.dataRange.offset !== outerByteRange.offset ||
-      response.dataRange.length !== outerByteRange.length
-    ) {
-      throw new Error(
-        `Received truncated response, expected ${JSON.stringify(
-          outerByteRange,
-        )} but received ${JSON.stringify(response.dataRange)}`,
-      );
-    }
-    return {
-      data: response.data,
-      dataRange: innerByteRange,
-      totalSize: fullByteRange.length,
-    };
+  }
+
+  async stat(
+    key: { base: BaseKey; subChunk: number[] },
+    options: StatOptions,
+  ): Promise<StatResponse | undefined> {
+    const fullByteRange = await this.findKey(key, options);
+    if (fullByteRange === undefined) return undefined;
+    return { totalSize: fullByteRange.length };
+  }
+
+  async read(
+    key: { base: BaseKey; subChunk: number[] },
+    options: DriverReadOptions,
+  ): Promise<ReadResponse | undefined> {
+    const fullByteRange = await this.findKey(key, options);
+    if (fullByteRange === undefined) return undefined;
+    return new FileByteRangeHandle(
+      new KvStoreFileHandle(this.base, key.base),
+      fullByteRange,
+    ).read(options);
+  }
+
+  getUrl(key: { base: BaseKey; subChunk: number[] }): string {
+    return `subchunk ${JSON.stringify(key.subChunk)} within shard ${this.base.getUrl(key.base)}`;
+  }
+
+  get supportsOffsetReads() {
+    return true;
+  }
+  get supportsSuffixReads() {
+    return true;
   }
 }
 

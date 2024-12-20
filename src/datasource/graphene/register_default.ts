@@ -16,5 +16,8 @@
 
 import { registerProvider } from "#src/datasource/default_provider.js";
 import { GrapheneDataSource } from "#src/datasource/graphene/frontend.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
 
-registerProvider("graphene", () => new GrapheneDataSource());
+registerProvider(
+  new KvStoreBasedDataSourceLegacyUrlAdapter(new GrapheneDataSource()),
+);

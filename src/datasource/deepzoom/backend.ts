@@ -18,17 +18,14 @@ import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
 import { decodePng } from "#src/async_computation/decode_png_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import {
   ImageTileEncoding,
   ImageTileSourceParameters,
 } from "#src/datasource/deepzoom/base.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { transposeArray2d } from "#src/util/array.js";
-import { isNotFoundError } from "#src/util/http_request.js";
-import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
-import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 /* This is enough if support for these aren't needed:
@@ -39,11 +36,13 @@ import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
 export class DeepzoomImageTileSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    VolumeChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
   ImageTileSourceParameters,
 ) {
+  private tileKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+
   gridShape = (() => {
     const gridShape = new Uint32Array(2);
     const { upperVoxelBound, chunkDataSize } = this.spec;
@@ -53,7 +52,7 @@ export class DeepzoomImageTileSource extends WithParameters(
     return gridShape;
   })();
 
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal): Promise<void> {
+  async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
     const { parameters } = this;
 
     // /* This block is enough if support for these aren't needed:
@@ -63,7 +62,7 @@ export class DeepzoomImageTileSource extends WithParameters(
     // const {tilesize, overlap} = parameters;
     // const [x, y] = chunk.chunkGridPosition;
     // const url = `${parameters.url}/${x}_${y}.${ImageTileEncoding[parameters.encoding].toLowerCase()}`;
-    // const response: Blob = await (await fetchSpecialOk(this.credentialsProvider, url, {signal: abortSignal})).blob();
+    // const response: Blob = await (await fetchSpecialOk(this.credentialsProvider, url, {signal: signal})).blob();
     // const tile = await createImageBitmap(response);
     // const canvas = new OffscreenCanvas(tilesize, tilesize);
     // const ctx = canvas.getContext("2d")!;
@@ -82,73 +81,71 @@ export class DeepzoomImageTileSource extends WithParameters(
     const [x, y] = chunk.chunkGridPosition;
     const ox = x === 0 ? 0 : overlap;
     const oy = y === 0 ? 0 : overlap;
-    const url = `${parameters.url}/${x}_${y}.${parameters.format}`;
-    try {
-      const responseBuffer = await (
-        await fetchSpecialOk(this.credentialsProvider, url, {
-          signal: abortSignal,
-        })
-      ).arrayBuffer();
+    const path = `${this.tileKvStore.path}/${x}_${y}.${parameters.format}`;
+    const response = await this.tileKvStore.store.read(path, {
+      signal,
+    });
+    if (response === undefined) {
+      return;
+    }
+    const responseArray = new Uint8Array(await response.response.arrayBuffer());
 
-      let tilewidth = 0;
-      let tileheight = 0;
-      let tiledata: Uint8Array | undefined;
-      switch (encoding) {
-        case ImageTileEncoding.PNG: {
-          const pngbitmap = await requestAsyncComputation(
-            decodePng,
-            abortSignal,
-            [responseBuffer],
-            new Uint8Array(responseBuffer),
-            undefined,
-            undefined,
-            undefined,
-            3,
-            1,
-            false,
-          );
-          ({ width: tilewidth, height: tileheight } = pngbitmap);
-          tiledata = transposeArray2d(
-            pngbitmap.uint8Array,
-            tilewidth * tileheight,
-            3,
-          );
-          break;
-        }
+    let tilewidth = 0;
+    let tileheight = 0;
+    let tiledata: Uint8Array | undefined;
+    switch (encoding) {
+      case ImageTileEncoding.PNG: {
+        const pngbitmap = await requestAsyncComputation(
+          decodePng,
+          signal,
+          [responseArray.buffer],
+          responseArray,
+          undefined,
+          undefined,
+          undefined,
+          3,
+          1,
+          false,
+        );
+        ({ width: tilewidth, height: tileheight } = pngbitmap);
+        tiledata = transposeArray2d(
+          pngbitmap.uint8Array,
+          tilewidth * tileheight,
+          3,
+        );
+        break;
+      }
 
-        case ImageTileEncoding.JPG:
-        case ImageTileEncoding.JPEG: {
-          const jpegbitmap = await requestAsyncComputation(
-            decodeJpeg,
-            abortSignal,
-            [responseBuffer],
-            new Uint8Array(responseBuffer),
-            undefined,
-            undefined,
-            undefined,
-            3,
-            false,
-          );
-          ({
-            uint8Array: tiledata,
-            width: tilewidth,
-            height: tileheight,
-          } = jpegbitmap);
-          break;
-        }
+      case ImageTileEncoding.JPG:
+      case ImageTileEncoding.JPEG: {
+        const jpegbitmap = await requestAsyncComputation(
+          decodeJpeg,
+          signal,
+          [responseArray.buffer],
+          responseArray,
+          undefined,
+          undefined,
+          undefined,
+          3,
+          false,
+        );
+        ({
+          uint8Array: tiledata,
+          width: tilewidth,
+          height: tileheight,
+        } = jpegbitmap);
+        break;
       }
-      if (tiledata !== undefined) {
-        const t2 = tilesize * tilesize;
-        const twh = tilewidth * tileheight;
-        const d = (chunk.data = new Uint8Array(t2 * 3));
-        for (let k = 0; k < 3; k++)
-          for (let j = 0; j < tileheight; j++)
-            for (let i = 0; i < tilewidth; i++)
-              d[i + j * tilesize + k * t2] =
-                tiledata[i + ox + (j + oy) * tilewidth + k * twh];
-      }
-    } catch (e) {
-      if (!isNotFoundError(e)) throw e;
+    }
+    if (tiledata !== undefined) {
+      const t2 = tilesize * tilesize;
+      const twh = tilewidth * tileheight;
+      const d = (chunk.data = new Uint8Array(t2 * 3));
+      for (let k = 0; k < 3; k++)
+        for (let j = 0; j < tileheight; j++)
+          for (let i = 0; i < tilewidth; i++)
+            d[i + j * tilesize + k * t2] =
+              tiledata[i + ox + (j + oy) * tilewidth + k * twh];
     }
   }
 }

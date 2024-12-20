@@ -26,15 +26,16 @@ import {
 import { getCredentialsWithStatus } from "#src/credentials_provider/interactive_credentials_provider.js";
 import type { DVIDToken } from "#src/datasource/dvid/api.js";
 import { fetchOk } from "#src/util/http_request.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 async function getAuthToken(
   authServer: string,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<DVIDToken> {
   const response = await fetchOk(authServer, {
     method: "GET",
     credentials: "include",
-    signal: abortSignal,
+    signal: signal,
   });
   const token = await response.text();
   return { token };
@@ -45,16 +46,19 @@ class BaseDVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
     super();
   }
 
-  get = makeCredentialsGetter(async (abortSignal) => {
+  get = makeCredentialsGetter(async (options) => {
     const { authServer } = this;
     if (!authServer) return { token: "" };
+    using _span = new ProgressSpan(options.progressListener, {
+      message: `Requesting DVID access token from ${authServer}`,
+    });
     return await getCredentialsWithStatus(
       {
         description: `DVID server ${this.authServer}`,
         supportsImmediate: true,
-        get: async (abortSignal, immediate) => {
+        get: async (signal, immediate) => {
           if (immediate) {
-            return await getAuthToken(authServer, abortSignal);
+            return await getAuthToken(authServer, signal);
           }
           // In the current DVID setup, https://flyemlogin.<domain> is expected for the login server
           const match = authServer.match(/^[^/]+\/\/[^/.]+\.([^/]+)/);
@@ -70,7 +74,7 @@ class BaseDVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
           }
         },
       },
-      abortSignal,
+      options.signal,
     );
   });
 }

@@ -31,7 +31,7 @@ import { parseNpy } from "#src/util/npy.js";
 
 export async function decodeNdstoreNpzChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const parseResult = parseNpy(
@@ -55,5 +55,5 @@ export async function decodeNdstoreNpzChunk(
         `expected data type ${DataType[spec.dataType]}`,
     );
   }
-  await postProcessRawData(chunk, abortSignal, parseResult.data);
+  await postProcessRawData(chunk, signal, parseResult.data);
 }

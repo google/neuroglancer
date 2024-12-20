@@ -31,7 +31,7 @@ import { parseNpy } from "#src/util/npy.js";
 
 export async function decodeBossNpzChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const parseResult = parseNpy(
@@ -61,5 +61,5 @@ export async function decodeBossNpzChunk(
       } does not match expected data type ${DataType[spec.dataType]}`,
     );
   }
-  await postProcessRawData(chunk, abortSignal, parseResult.data);
+  await postProcessRawData(chunk, signal, parseResult.data);
 }

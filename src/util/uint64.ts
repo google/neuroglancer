@@ -338,6 +338,10 @@ export class Uint64 {
     return this.low + this.high * 0x100000000;
   }
 
+  toBigInt() {
+    return BigInt(this.low) | (BigInt(this.high) << BigInt(32));
+  }
+
   setFromNumber(value: number) {
     value = Math.round(value);
     if (value < 0) {
