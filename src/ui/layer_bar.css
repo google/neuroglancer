@@ -176,14 +176,6 @@
   transform: scale(1.35);
 }
 
-/* linear-gradient(
-    45deg,
-    rgba(200, 200, 200, 0.3) 25%,
-    transparent 25%
-  ),
-  linear-gradient(-45deg, rgba(200, 200, 200, 0.3) 25%, transparent 25%),
-  linear-gradient(45deg, transparent 75%, rgba(200, 200, 200, 0.3) 75%),
-  linear-gradient(-45deg, transparent 75%, rgba(200, 200, 200, 0.3) 75%); */
 .neuroglancer-layer-item[data-color="unsupported"]
   .neuroglancer-layer-color-value {
   background-image: linear-gradient(
