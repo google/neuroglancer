@@ -19,24 +19,30 @@ import {
   makeIdentityTransform,
 } from "#src/coordinate_transform.js";
 import type {
-  CompleteUrlOptions,
   DataSource,
-  GetDataSourceOptions,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import { getSingleMeshSource } from "#src/single_mesh/frontend.js";
-import { completeHttpPath } from "#src/util/http_path_completion.js";
 
-export class VtkDataSource extends DataSourceProvider {
+export class VtkDataSource implements KvStoreBasedDataSourceProvider {
+  get scheme() {
+    return "vtk";
+  }
   get description() {
-    return "VTK mesh file";
+    return "VTK mesh";
+  }
+  get singleFile() {
+    return true;
   }
 
-  async get(options: GetDataSourceOptions): Promise<DataSource> {
+  async get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureEmptyUrlSuffix(options.url);
     const meshSource = await getSingleMeshSource(
-      options.chunkManager,
-      options.credentialsManager,
-      options.url,
+      options.registry.sharedKvStoreContext,
+      options.kvStoreUrl,
+      options,
     );
     const modelSpace = makeCoordinateSpace({
       rank: 3,
@@ -55,12 +61,5 @@ export class VtkDataSource extends DataSourceProvider {
       ],
     };
     return dataSource;
-  }
-  completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(
-      options.credentialsManager,
-      options.providerUrl,
-      options.abortSignal,
-    );
   }
 }

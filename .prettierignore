@@ -1,9 +1,12 @@
 /templates/
 /python/
 /third_party/jpgjs/jpg.js
-/testdata/*.json
+/testdata/**/*.json
+zarr.json
 .parcel-cache
 dist
 /lib
 /docs/_build/
 /.ruff_cache
+package.json
+package-lock.json

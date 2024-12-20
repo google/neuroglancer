@@ -32,7 +32,7 @@ import {
   TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type {
-  DataSourceProviderRegistry,
+  DataSourceRegistry,
   DataSourceSpecification,
   DataSubsource,
 } from "#src/datasource/index.js";
@@ -2080,7 +2080,7 @@ export abstract class LayerListSpecification extends RefCounted {
 
   abstract rpc: RPC;
 
-  abstract dataSourceProviderRegistry: Borrowed<DataSourceProviderRegistry>;
+  abstract dataSourceProviderRegistry: Borrowed<DataSourceRegistry>;
   abstract layerManager: Borrowed<LayerManager>;
   abstract chunkManager: Borrowed<ChunkManager>;
   abstract layerSelectedValues: Borrowed<LayerSelectedValues>;
@@ -2110,7 +2110,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
 
   constructor(
     public display: DisplayContext,
-    public dataSourceProviderRegistry: DataSourceProviderRegistry,
+    public dataSourceProviderRegistry: DataSourceRegistry,
     public layerManager: LayerManager,
     public chunkManager: ChunkManager,
     public selectionState: Borrowed<TrackableDataSelectionState>,

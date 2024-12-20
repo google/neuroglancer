@@ -15,21 +15,13 @@
  */
 
 import type { BrainmapsInstance } from "#src/datasource/brainmaps/api.js";
-import { credentialsKey } from "#src/datasource/brainmaps/api.js";
 import {
   BrainmapsDataSource,
   productionInstance,
 } from "#src/datasource/brainmaps/frontend.js";
 import { registerProvider } from "#src/datasource/default_provider.js";
 
-registerProvider(
-  "brainmaps",
-  (options) =>
-    new BrainmapsDataSource(
-      productionInstance,
-      options.credentialsManager.getCredentialsProvider(credentialsKey),
-    ),
-);
+registerProvider(new BrainmapsDataSource(productionInstance, "brainmaps"));
 
 declare const NEUROGLANCER_BRAINMAPS_SERVERS:
   | { [key: string]: BrainmapsInstance }
@@ -39,13 +31,6 @@ if (typeof NEUROGLANCER_BRAINMAPS_SERVERS !== "undefined") {
   for (const [key, instance] of Object.entries(
     NEUROGLANCER_BRAINMAPS_SERVERS,
   )) {
-    registerProvider(
-      `brainmaps-${key}`,
-      (options) =>
-        new BrainmapsDataSource(
-          instance,
-          options.credentialsManager.getCredentialsProvider(credentialsKey),
-        ),
-    );
+    registerProvider(new BrainmapsDataSource(instance, `brainmaps-${key}`));
   }
 }

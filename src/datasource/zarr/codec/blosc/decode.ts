@@ -23,11 +23,11 @@ import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 registerCodec({
   name: "blosc",
   kind: CodecKind.bytesToBytes,
-  decode(configuration: Configuration, encoded, abortSignal: AbortSignal) {
+  decode(configuration: Configuration, encoded, signal: AbortSignal) {
     configuration;
     return requestAsyncComputation(
       decodeBlosc,
-      abortSignal,
+      signal,
       [encoded.buffer],
       encoded,
     );

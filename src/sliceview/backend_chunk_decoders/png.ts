@@ -22,14 +22,14 @@ import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 
 export async function decodePngChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const chunkDataSize = chunk.chunkDataSize!;
   const dataType = chunk.source!.spec.dataType;
   const { uint8Array: image } = await requestAsyncComputation(
     decodePng,
-    abortSignal,
+    signal,
     [response],
     /*buffer=*/ new Uint8Array(response),
     /*width=*/ undefined,
@@ -40,5 +40,5 @@ export async function decodePngChunk(
     /*convertToGrayscale=*/ false,
   );
 
-  await decodeRawChunk(chunk, abortSignal, image.buffer);
+  await decodeRawChunk(chunk, signal, image.buffer);
 }

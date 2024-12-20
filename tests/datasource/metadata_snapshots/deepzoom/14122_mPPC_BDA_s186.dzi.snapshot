@@ -1,0 +1,1181 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186.dzi|deepzoom:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          0,
+          0,
+          0,
+        ],
+        "upperBounds": Float64Array [
+          48023,
+          34907,
+          3,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+        ,
+      ],
+      "names": [
+        "x",
+        "y",
+        "c^",
+      ],
+      "scales": Float64Array [
+        1e-9,
+        1e-9,
+        1,
+      ],
+      "units": [
+        "m",
+        "m",
+        "",
+      ],
+      "valid": true,
+    },
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "UINT8",
+          "rank": 3,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/16/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      48023,
+                      34907,
+                      3,
+                    ],
+                  },
+                },
+                "upperClipBound": Float32Array [
+                  48023,
+                  34907,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/15/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      24012,
+                      17454,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    2,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    2,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  24011.5,
+                  17453.5,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/14/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      12006,
+                      8727,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    4,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    4,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  12005.75,
+                  8726.75,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/13/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      6003,
+                      4364,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    8,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    8,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  6002.875,
+                  4363.375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/12/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      3002,
+                      2182,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    16,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    16,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  3001.4375,
+                  2181.6875,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/11/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      1501,
+                      1091,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    32,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    32,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  1500.71875,
+                  1090.84375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/10/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      751,
+                      546,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    64,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    64,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  750.359375,
+                  545.421875,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/9/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      376,
+                      273,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    128,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    128,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  375.1796875,
+                  272.7109375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/8/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      188,
+                      137,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    256,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    256,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  187.58984375,
+                  136.35546875,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/7/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      94,
+                      69,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    512,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    512,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  93.794921875,
+                  68.177734375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/6/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      47,
+                      35,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    1024,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    1024,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  46.8974609375,
+                  34.0888671875,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/5/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      24,
+                      18,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    2048,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    2048,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  23.44873046875,
+                  17.04443359375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/4/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      12,
+                      9,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    4096,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    4096,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  11.724365234375,
+                  8.522216796875,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/3/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      6,
+                      5,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    8192,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    8192,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  5.8621826171875,
+                  4.2611083984375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/2/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      3,
+                      3,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    16384,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    16384,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  2.93109130859375,
+                  2.13055419921875,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/1/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      2,
+                      2,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    32768,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    32768,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  1.465545654296875,
+                  1.065277099609375,
+                  3,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "format": "jpg",
+                    "overlap": 1,
+                    "tilesize": 254,
+                    "url": "http://localhost:*/datasource/deepzoom/14122_mPPC_BDA_s186_files/0/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      254,
+                      254,
+                      3,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      1,
+                      1,
+                      3,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    65536,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    65536,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "upperClipBound": Float32Array [
+                  0.7327728271484375,
+                  0.5326385498046875,
+                  3,
+                ],
+              },
+            ],
+          ],
+          "volumeType": "IMAGE",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              0,
+              0,
+              0,
+            ],
+            "pointB": [
+              48023,
+              34907,
+              3,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}

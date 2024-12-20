@@ -18,24 +18,21 @@ import { decodeBlosc } from "#src/async_computation/decode_blosc_request.js";
 import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import {
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
 } from "#src/datasource/n5/base.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { Endianness } from "#src/util/endian.js";
 import { decodeGzip } from "#src/util/gzip.js";
-import { isNotFoundError } from "#src/util/http_request.js";
-import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
-import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 async function decodeChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
   encoding: VolumeChunkEncoding,
 ) {
@@ -66,7 +63,7 @@ async function decodeChunk(
     case VolumeChunkEncoding.BLOSC:
       buffer = await requestAsyncComputation(
         decodeBlosc,
-        abortSignal,
+        signal,
         [buffer.buffer],
         buffer,
       );
@@ -74,7 +71,7 @@ async function decodeChunk(
     case VolumeChunkEncoding.ZSTD:
       buffer = await requestAsyncComputation(
         decodeZstd,
-        abortSignal,
+        signal,
         [buffer.buffer],
         buffer,
       );
@@ -82,7 +79,7 @@ async function decodeChunk(
   }
   await decodeRawChunk(
     chunk,
-    abortSignal,
+    signal,
     buffer.buffer,
     Endianness.BIG,
     buffer.byteOffset,
@@ -92,31 +89,32 @@ async function decodeChunk(
 
 @registerSharedObject()
 export class PrecomputedVolumeChunkSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    VolumeChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
-    const { parameters } = this;
+  private chunkKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
+    const { parameters, chunkKvStore } = this;
     const { chunkGridPosition } = chunk;
-    let url = parameters.url;
+    let path = chunkKvStore.path;
     const rank = this.spec.rank;
     for (let i = 0; i < rank; ++i) {
-      url += `/${chunkGridPosition[i]}`;
+      if (i !== 0) {
+        path += "/";
+      }
+      path += `${chunkGridPosition[i]}`;
     }
-    try {
-      const response = await fetchSpecialOk(this.credentialsProvider, url, {
-        signal: abortSignal,
-      });
-      await decodeChunk(
-        chunk,
-        abortSignal,
-        await response.arrayBuffer(),
-        parameters.encoding,
-      );
-    } catch (e) {
-      if (!isNotFoundError(e)) throw e;
-    }
+    const response = await chunkKvStore.store.read(path, {
+      signal,
+    });
+    if (response === undefined) return;
+    await decodeChunk(
+      chunk,
+      signal,
+      await response.response.arrayBuffer(),
+      parameters.encoding,
+    );
   }
 }

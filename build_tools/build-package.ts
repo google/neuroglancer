@@ -71,6 +71,7 @@ async function buildPackage(options: {
     outbase: srcDir,
     bundle: false,
     outdir: libDir,
+    target: "es2022",
   });
 
   let compilerOptionsFromConfigFile: ts.CompilerOptions = {};

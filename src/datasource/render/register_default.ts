@@ -17,4 +17,4 @@
 import { registerProvider } from "#src/datasource/default_provider.js";
 import { RenderDataSource } from "#src/datasource/render/frontend.js";
 
-registerProvider("render", () => new RenderDataSource());
+registerProvider(new RenderDataSource());

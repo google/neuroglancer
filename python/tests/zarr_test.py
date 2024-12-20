@@ -19,7 +19,9 @@ import neuroglancer
 import numpy as np
 import pytest
 
-TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
+TEST_DATA_DIR = (
+    pathlib.Path(__file__).parent.parent.parent / "testdata" / "datasource" / "zarr"
+)
 
 
 @pytest.mark.parametrize(

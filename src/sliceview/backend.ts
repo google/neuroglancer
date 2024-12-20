@@ -535,7 +535,7 @@ registerPromiseRPC(
   SLICEVIEW_REQUEST_CHUNK_RPC_ID,
   async function (
     x: { this: RPC; source: number; chunkGridPosition: Float32Array },
-    abortSignal: AbortSignal,
+    progressOptions,
   ): RPCPromise<void> {
     const source = this.get(x.source) as SliceViewChunkSourceBackend;
     const { chunkManager } = source;
@@ -572,7 +572,7 @@ registerPromiseRPC(
     });
     source.registerChunkListener(key, listener!);
     try {
-      await raceWithAbort(promise, abortSignal);
+      await raceWithAbort(promise, progressOptions.signal);
       return { value: undefined };
     } finally {
       source.unregisterChunkListener(key, listener!);

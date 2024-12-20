@@ -23,13 +23,13 @@ import * as vector from "#src/util/vector.js";
 
 export async function decodeRawChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
   endianness: Endianness = ENDIANNESS,
   byteOffset = 0,
   byteLength: number = response.byteLength,
 ) {
-  abortSignal;
+  signal;
   const { spec } = chunk.source!;
   const { dataType } = spec;
   const numElements = vector.prod(chunk.chunkDataSize!);
@@ -48,5 +48,5 @@ export async function decodeRawChunk(
     byteLength,
   );
   convertEndian(data, endianness, bytesPerElement);
-  await postProcessRawData(chunk, abortSignal, data);
+  await postProcessRawData(chunk, signal, data);
 }
