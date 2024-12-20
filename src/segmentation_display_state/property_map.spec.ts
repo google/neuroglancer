@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, test, expect } from "vitest";
 import {
   mergeSegmentPropertyMaps,
+  parseSegmentQuery,
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
+import { DataType } from "#src/util/data_type.js";
 import { Uint64 } from "#src/util/uint64.js";
 
 describe("PreprocessedSegmentPropertyMap", () => {
-  it("handles lookups correctly", () => {
+  test("handles lookups correctly", () => {
     const map = new PreprocessedSegmentPropertyMap({
       inlineProperties: {
         ids: Uint32Array.of(5, 0, 15, 0, 20, 5),
@@ -39,7 +41,7 @@ describe("PreprocessedSegmentPropertyMap", () => {
 });
 
 describe("mergeSegmentPropertyMaps", () => {
-  it("works correctly for 2 maps", () => {
+  test("works correctly for 2 maps", () => {
     const a = new SegmentPropertyMap({
       inlineProperties: {
         ids: Uint32Array.of(5, 0, 6, 0, 8, 0),
@@ -63,5 +65,353 @@ describe("mergeSegmentPropertyMaps", () => {
         { type: "string", id: "prop2", values: ["a", "", "b", ""] },
       ],
     });
+  });
+});
+
+describe("parseSegmentQuery", () => {
+  const map = new PreprocessedSegmentPropertyMap({
+    inlineProperties: {
+      ids: Uint32Array.of(),
+      properties: [
+        { type: "label", id: "label", values: [] },
+        {
+          type: "number",
+          dataType: DataType.INT32,
+          description: undefined,
+          id: "prop1",
+          values: Int32Array.of(),
+          bounds: [-10, 100],
+        },
+        {
+          id: "tags",
+          type: "tags",
+          tags: ["abc", "def"],
+          tagDescriptions: ["foo", "bar"],
+          values: [],
+        },
+      ],
+    },
+  });
+
+  test("handles empty query", () => {
+    expect(parseSegmentQuery(undefined, "")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "id",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles single number", () => {
+    expect(parseSegmentQuery(undefined, "123")).toMatchInlineSnapshot(`
+      {
+        "ids": [
+          "123",
+        ],
+      }
+    `);
+  });
+
+  test("handles multiple numbers", () => {
+    expect(parseSegmentQuery(undefined, "123 456")).toMatchInlineSnapshot(`
+      {
+        "ids": [
+          "123",
+          "456",
+        ],
+      }
+    `);
+  });
+
+  test("handles regular expression", () => {
+    expect(parseSegmentQuery(map, "/xyz")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [],
+        "prefix": undefined,
+        "regexp": /xyz/,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles prefix", () => {
+    expect(parseSegmentQuery(map, "xyz")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [],
+        "prefix": "xyz",
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles prefix", () => {
+    expect(parseSegmentQuery(map, "xyz")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [],
+        "prefix": "xyz",
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles numeric > comparison", () => {
+    expect(parseSegmentQuery(map, "prop1>5")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [
+          {
+            "bounds": [
+              6,
+              100,
+            ],
+            "fieldId": "prop1",
+          },
+        ],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles numeric >= comparison", () => {
+    expect(parseSegmentQuery(map, "prop1>=5")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [
+          {
+            "bounds": [
+              5,
+              100,
+            ],
+            "fieldId": "prop1",
+          },
+        ],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles numeric = comparison", () => {
+    expect(parseSegmentQuery(map, "prop1=5")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [
+          {
+            "bounds": [
+              5,
+              5,
+            ],
+            "fieldId": "prop1",
+          },
+        ],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles numeric >= comparison", () => {
+    expect(parseSegmentQuery(map, "prop1>=5")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [
+          {
+            "bounds": [
+              5,
+              100,
+            ],
+            "fieldId": "prop1",
+          },
+        ],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles numeric > comparison", () => {
+    expect(parseSegmentQuery(map, "prop1>5")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [
+          {
+            "bounds": [
+              6,
+              100,
+            ],
+            "fieldId": "prop1",
+          },
+        ],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles numeric > comparison negative", () => {
+    expect(parseSegmentQuery(map, "prop1>-5")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [
+          {
+            "bounds": [
+              -4,
+              100,
+            ],
+            "fieldId": "prop1",
+          },
+        ],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles sort field", () => {
+    expect(parseSegmentQuery(map, ">prop1")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [],
+        "includeTags": [],
+        "numericalConstraints": [],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "prop1",
+            "order": ">",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles column inclusions", () => {
+    expect(parseSegmentQuery(map, "|prop1")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [],
+        "includeColumns": [
+          "prop1",
+        ],
+        "includeTags": [],
+        "numericalConstraints": [],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
+  });
+
+  test("handles tags", () => {
+    expect(parseSegmentQuery(map, "#abc -#def")).toMatchInlineSnapshot(`
+      {
+        "excludeTags": [
+          "def",
+        ],
+        "includeColumns": [],
+        "includeTags": [
+          "abc",
+        ],
+        "numericalConstraints": [],
+        "prefix": undefined,
+        "regexp": undefined,
+        "sortBy": [
+          {
+            "fieldId": "label",
+            "order": "<",
+          },
+        ],
+      }
+    `);
   });
 });

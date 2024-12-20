@@ -249,7 +249,7 @@ function parseStackVersionInfo(stackVersionObj: any): vec3 {
       "stackResolutionZ",
       verifyFloat,
     );
-  } catch (ignoredError) {
+  } catch {
     // default is 1, 1, 1
     voxelResolution[0] = 1;
     voxelResolution[1] = 1;

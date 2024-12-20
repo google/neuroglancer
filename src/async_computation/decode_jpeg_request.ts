@@ -18,7 +18,7 @@ import { asyncComputation } from "#src/async_computation/index.js";
 
 export const decodeJpeg = asyncComputation<
   (
-    data: Uint8Array,
+    data: Uint8Array<ArrayBuffer>,
     width: number | undefined,
     height: number | undefined,
     // Expected width * height

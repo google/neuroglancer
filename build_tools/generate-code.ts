@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-"use strict";
+import fs from "node:fs";
+import path from "node:path";
+import nunjucks from "nunjucks";
 
-const nunjucks = require("nunjucks");
-const fs = require("fs");
-const path = require("path");
-
-const rootDir = path.resolve(__dirname, "..");
-const srcDir = path.resolve(rootDir, "src");
+const rootDir = path.resolve(import.meta.dirname, "..");
 const templatesDir = path.resolve(rootDir, "templates");
 
 const env = nunjucks.configure(rootDir, {
@@ -34,7 +31,11 @@ const env = nunjucks.configure(rootDir, {
   },
 });
 
-function writeGenerated(sourcePath, outputPath, contents) {
+function writeGenerated(
+  sourcePath: string,
+  outputPath: string,
+  contents: string,
+) {
   fs.writeFileSync(
     path.resolve(rootDir, "src", outputPath),
     `// DO NOT EDIT.  Generated from templates/${sourcePath}.
@@ -42,7 +43,11 @@ function writeGenerated(sourcePath, outputPath, contents) {
   );
 }
 
-function renderTemplate(sourcePath, outputPath, context) {
+function renderTemplate(
+  sourcePath: string,
+  outputPath: string,
+  context: Record<string, string | number>,
+) {
   writeGenerated(
     sourcePath,
     outputPath,
@@ -58,7 +63,7 @@ function writeSegmentationCompression() {
     {},
   );
   for (const dataType of ["uint64", "uint32"]) {
-    const context = {
+    const context: Record<string, string | number> = {
       dataType,
       strideMultiplier: dataType === "uint64" ? 2 : 1,
     };
@@ -72,7 +77,11 @@ function writeSegmentationCompression() {
   }
 }
 
-function makeSubstitutions(inputPath, outputPath, replacements) {
+function makeSubstitutions(
+  inputPath: string,
+  outputPath: string,
+  replacements: [string | RegExp, string][],
+) {
   let inputContents = fs.readFileSync(path.resolve(templatesDir, inputPath), {
     encoding: "utf-8",
   });
@@ -107,7 +116,7 @@ function writeDataStructures() {
     const nextPrevReplacements = [
       [/NEXT_PROPERTY/g, `next${i}`],
       [/PREV_PROPERTY/g, `prev${i}`],
-    ];
+    ] as [string | RegExp, string][];
     makeSubstitutions(
       path.join(baseDir, "linked_list.template.ts"),
       path.join(baseDir, `linked_list.${i}.ts`),

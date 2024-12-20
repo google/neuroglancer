@@ -220,16 +220,8 @@ export class LayerBar extends RefCounted {
   private valueUpdateNeeded = false;
   dropZone: HTMLDivElement;
   private layerWidgetInsertionPoint = document.createElement("div");
-  private positionWidget = this.registerDisposer(
-    new PositionWidget(
-      this.viewerNavigationState.position.value,
-      this.manager.root.coordinateSpaceCombiner,
-      {
-        velocity: this.viewerNavigationState.velocity.velocity,
-        getToolBinder: () => this.layerGroupViewer.toolBinder,
-      },
-    ),
-  );
+  private positionWidget: PositionWidget;
+
   /**
    * For use within this module only.
    */
@@ -267,6 +259,17 @@ export class LayerBar extends RefCounted {
     public showLayerHoverValues: WatchableValueInterface<boolean>,
   ) {
     super();
+    this.positionWidget = this.registerDisposer(
+      new PositionWidget(
+        this.viewerNavigationState.position.value,
+        this.manager.root.coordinateSpaceCombiner,
+        {
+          velocity: this.viewerNavigationState.velocity.velocity,
+          getToolBinder: () => this.layerGroupViewer.toolBinder,
+        },
+      ),
+    );
+
     const { element, manager, selectedLayer, viewerState } = this;
     element.className = "neuroglancer-layer-panel";
     this.registerDisposer(

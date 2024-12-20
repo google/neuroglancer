@@ -27,7 +27,6 @@ import type { ChunkedGraphChunkSpecification } from "#src/datasource/graphene/ba
 import {
   getGrapheneFragmentKey,
   GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
-  responseIdentity,
   ChunkedGraphSourceParameters,
   MeshSourceParameters,
   CHUNKED_GRAPH_LAYER_RPC_ID,
@@ -61,14 +60,12 @@ import {
 import { computeChunkBounds } from "#src/sliceview/volume/backend.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { fetchSpecialHttpByteRange } from "#src/util/byte_range_http_requests.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
-import { responseArrayBuffer, responseJson } from "#src/util/http_request.js";
 import type {
   SpecialProtocolCredentials,
   SpecialProtocolCredentialsProvider,
 } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
 import { Uint64 } from "#src/util/uint64.js";
 import {
   getBasePriority,
@@ -82,7 +79,7 @@ function getVerifiedFragmentPromise(
   credentialsProvider: SpecialProtocolCredentialsProvider,
   chunk: FragmentChunk,
   parameters: MeshSourceParameters,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   if (chunk.fragmentId && chunk.fragmentId.charAt(0) === "~") {
     const parts = chunk.fragmentId.substr(1).split(":");
@@ -93,23 +90,21 @@ function getVerifiedFragmentPromise(
       `${parameters.fragmentUrl}/initial/${parts[0]}`,
       startOffset,
       endOffset,
-      cancellationToken,
+      abortSignal,
     );
   }
-  return cancellableFetchSpecialOk(
+  return fetchSpecialOk(
     credentialsProvider,
     `${parameters.fragmentUrl}/dynamic/${chunk.fragmentId}`,
-    {},
-    responseArrayBuffer,
-    cancellationToken,
-  );
+    { signal: abortSignal },
+  ).then((response) => response.arrayBuffer());
 }
 
 function getFragmentDownloadPromise(
   credentialsProvider: SpecialProtocolCredentialsProvider,
   chunk: FragmentChunk,
   parameters: MeshSourceParameters,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ) {
   let fragmentDownloadPromise;
   if (parameters.sharding) {
@@ -117,16 +112,14 @@ function getFragmentDownloadPromise(
       credentialsProvider,
       chunk,
       parameters,
-      cancellationToken,
+      abortSignal,
     );
   } else {
-    fragmentDownloadPromise = cancellableFetchSpecialOk(
+    fragmentDownloadPromise = fetchSpecialOk(
       credentialsProvider,
       `${parameters.fragmentUrl}/${chunk.fragmentId}`,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
-    );
+      { signal: abortSignal },
+    ).then((response) => response.arrayBuffer());
   }
   return fragmentDownloadPromise;
 }
@@ -158,51 +151,46 @@ export class GrapheneMeshSource extends WithParameters(
     }, TEN_MINUTES);
   }
 
-  async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
+  async download(chunk: ManifestChunk, abortSignal: AbortSignal) {
     const { parameters, newSegments, manifestRequestCount } = this;
     if (isBaseSegmentId(chunk.objectId, parameters.nBitsForLayerId)) {
       return decodeManifestChunk(chunk, { fragments: [] });
     }
     const url = `${parameters.manifestUrl}/manifest`;
     const manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
-    await cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      manifestUrl,
-      {},
-      responseJson,
-      cancellationToken,
-    ).then((response) => {
-      const chunkIdentifier = manifestUrl;
-      if (newSegments.has(chunk.objectId)) {
-        const requestCount =
-          (manifestRequestCount.get(chunkIdentifier) || 0) + 1;
-        manifestRequestCount.set(chunkIdentifier, requestCount);
-        setTimeout(
-          () => {
-            this.chunkManager.queueManager.updateChunkState(
-              chunk,
-              ChunkState.QUEUED,
-            );
-          },
-          2 ** requestCount * 1000,
-        );
-      } else {
-        manifestRequestCount.delete(chunkIdentifier);
-      }
-      return decodeManifestChunk(chunk, response);
-    });
+    await fetchSpecialOk(this.credentialsProvider, manifestUrl, {
+      signal: abortSignal,
+    })
+      .then((response) => response.json())
+      .then((response) => {
+        const chunkIdentifier = manifestUrl;
+        if (newSegments.has(chunk.objectId)) {
+          const requestCount =
+            (manifestRequestCount.get(chunkIdentifier) || 0) + 1;
+          manifestRequestCount.set(chunkIdentifier, requestCount);
+          setTimeout(
+            () => {
+              this.chunkManager.queueManager.updateChunkState(
+                chunk,
+                ChunkState.QUEUED,
+              );
+            },
+            2 ** requestCount * 1000,
+          );
+        } else {
+          manifestRequestCount.delete(chunkIdentifier);
+        }
+        return decodeManifestChunk(chunk, response);
+      });
   }
 
-  async downloadFragment(
-    chunk: FragmentChunk,
-    cancellationToken: CancellationToken,
-  ) {
+  async downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const response = await getFragmentDownloadPromise(
       undefined,
       chunk,
       parameters,
-      cancellationToken,
+      abortSignal,
     );
     await decodeDracoFragmentChunk(chunk, response);
   }
@@ -268,7 +256,7 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
   ChunkedGraphSourceParameters,
 ) {
   spec: ChunkedGraphChunkSpecification;
-  chunks: Map<string, ChunkedGraphChunk>;
+  declare chunks: Map<string, ChunkedGraphChunk>;
   tempChunkDataSize: Uint32Array;
   tempChunkPosition: Float32Array;
 
@@ -282,7 +270,7 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
 
   async download(
     chunk: ChunkedGraphChunk,
-    cancellationToken: CancellationToken,
+    abortSignal: AbortSignal,
   ): Promise<void> {
     const { parameters } = this;
     const chunkPosition = this.computeChunkBounds(chunk);
@@ -292,12 +280,10 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
       `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
       `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
 
-    const request = cancellableFetchSpecialOk(
+    const request = fetchSpecialOk(
       this.credentialsProvider,
       `${parameters.url}/${chunk.segment}/leaves?int64_as_str=1&bounds=${bounds}`,
-      {},
-      responseIdentity,
-      cancellationToken,
+      { signal: abortSignal },
     );
     await this.withErrorMessage(
       request,

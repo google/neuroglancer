@@ -51,8 +51,6 @@ import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import { completeHttpPath } from "#src/util/http_path_completion.js";
 import * as matrix from "#src/util/matrix.js";
 import type {
@@ -121,7 +119,7 @@ function getNiftiVolumeInfo(
   chunkManager: ChunkManager,
   credentialsProvider: SpecialProtocolCredentialsProvider,
   url: string,
-  cancellationToken: CancellationToken,
+  abortSignal?: AbortSignal,
 ) {
   return chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
     GET_NIFTI_VOLUME_INFO_RPC_ID,
@@ -134,7 +132,7 @@ function getNiftiVolumeInfo(
         ),
       url: url,
     },
-    cancellationToken,
+    abortSignal,
   );
 }
 
@@ -154,7 +152,6 @@ function getDataSource(
         chunkManager,
         credentialsProvider,
         parsedUrl,
-        uncancelableToken,
       );
       const volume = new NiftiMultiscaleVolumeChunkSource(
         chunkManager,
@@ -223,7 +220,7 @@ export class NiftiDataSource extends DataSourceProvider {
     return completeHttpPath(
       options.credentialsManager,
       options.providerUrl,
-      options.cancellationToken,
+      options.abortSignal,
     );
   }
 }

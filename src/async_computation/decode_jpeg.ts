@@ -22,7 +22,7 @@ import { transposeArray2d } from "#src/util/array.js";
 registerAsyncComputation(
   decodeJpeg,
   async (
-    data: Uint8Array,
+    data,
     width: number | undefined,
     height: number | undefined,
     area: number | undefined,
@@ -52,7 +52,7 @@ registerAsyncComputation(
       );
     }
     numComponents = parser.numComponents;
-    let result: Uint8Array;
+    let result: Uint8Array<ArrayBuffer>;
     if (parser.numComponents === 1) {
       result = parser.getData(
         parser.width,

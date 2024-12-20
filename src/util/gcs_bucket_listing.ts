@@ -15,9 +15,7 @@
  */
 
 import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import type { BasicCompletionResult } from "#src/util/completion.js";
-import { responseJson } from "#src/util/http_request.js";
 import {
   parseArray,
   verifyObject,
@@ -33,7 +31,7 @@ export async function getGcsBucketListing(
   bucket: string,
   prefix: string,
   delimiter: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<string[]> {
   // Include origin as `neuroglancerOrigin` query string parameter.  See comment in
   // `special_protocol_request.ts` for details.
@@ -44,10 +42,8 @@ export async function getGcsBucketListing(
         prefix,
       )}&` +
       `neuroglancerOrigin=${encodeURIComponent(location.origin)}`,
-    {},
-    responseJson,
-    cancellationToken,
-  );
+    { signal: abortSignal },
+  ).then((response) => response.json());
   verifyObject(response);
   const prefixes = verifyOptionalObjectProperty(
     response,
@@ -73,7 +69,7 @@ export async function getGcsPathCompletions(
   enteredBucketUrl: string,
   bucket: string,
   path: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<BasicCompletionResult> {
   const prefix = path;
   if (!prefix.startsWith("/")) throw null;
@@ -82,7 +78,7 @@ export async function getGcsPathCompletions(
     bucket,
     path.substring(1),
     "/",
-    cancellationToken,
+    abortSignal,
   );
   const offset = path.lastIndexOf("/");
   return {

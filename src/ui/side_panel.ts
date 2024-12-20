@@ -18,10 +18,15 @@ import "#src/ui/side_panel.css";
 
 import type { DisplayContext } from "#src/display_context.js";
 import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
-import type { Side } from "#src/ui/side_panel_location.js";
+import type { Side, SidePanelLocation } from "#src/ui/side_panel_location.js";
 import { TrackableSidePanelLocation } from "#src/ui/side_panel_location.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
+import {
+  getDropEffect,
+  getDropEffectFromModifiers,
+  setDropEffect,
+} from "#src/util/drag_and_drop.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { Signal } from "#src/util/signal.js";
 import type { ViewerState } from "#src/viewer_state.js";
@@ -88,6 +93,11 @@ export class SidePanel extends RefCounted {
   visibility = new WatchableVisibilityPriority(
     WatchableVisibilityPriority.VISIBLE,
   );
+
+  getDragDropDescription() {
+    return "side panel";
+  }
+
   constructor(
     public sidePanelManager: SidePanelManager,
     public location: TrackableSidePanelLocation = new TrackableSidePanelLocation(),
@@ -102,25 +112,54 @@ export class SidePanel extends RefCounted {
       setTimeout(() => {
         element.style.backgroundColor = "";
       }, 0);
-      pushDragStatus(element, "drag", () => {
-        return document.createTextNode(
-          "Drag side panel to move it to the left/right/top/bottom of another panel",
-        );
-      });
+      pushDragStatus(
+        event,
+        element,
+        "drag",
+        `Drag ${this.getDragDropDescription()} to move it to the left/right/top/bottom of another panel`,
+      );
     });
     element.addEventListener("dragend", (event: DragEvent) => {
-      event;
       this.sidePanelManager.endDrag();
-      popDragStatus(element, "drag");
+      popDragStatus(event, element, "drag");
     });
+  }
+
+  canCopy() {
+    return false;
+  }
+
+  copyToNewLocation(location: SidePanelLocation) {
+    location;
   }
 
   makeDragSource(): DragSource {
     return {
-      dropAsNewPanel: (location) => {
+      dropAsNewPanel: (location, dropEffect) => {
         const oldLocation = this.location.value;
-        this.location.value = { ...oldLocation, ...location };
+        const newLocation: SidePanelLocation = { ...oldLocation, ...location };
+        console.log({ oldLocation, newLocation });
+        if (dropEffect === "copy") {
+          this.copyToNewLocation(newLocation);
+          return;
+        }
+        this.location.value = newLocation;
         this.location.locationChanged.dispatch();
+      },
+      getNewPanelDropEffect: (event) => {
+        const description = this.getDragDropDescription();
+        if (this.canCopy()) {
+          const result = getDropEffectFromModifiers(
+            event,
+            /*defaultDropEffect=*/ "move",
+            /*moveAllowed=*/ true,
+          );
+          return {
+            description,
+            ...result,
+          };
+        }
+        return { description, dropEffect: "move" };
       },
     };
   }
@@ -194,7 +233,16 @@ export interface SidePanelDropLocation {
 export interface DragSource {
   canDropAsTabs?: (target: SidePanel) => number;
   dropAsTab?: (target: SidePanel) => void;
-  dropAsNewPanel: (location: SidePanelDropLocation) => void;
+  dropAsNewPanel: (
+    location: SidePanelDropLocation,
+    dropEffect: DataTransfer["dropEffect"],
+  ) => void;
+  getNewPanelDropEffect: (event: DragEvent) => {
+    dropEffect: DataTransfer["dropEffect"];
+    description: string;
+    dropEffectMessage?: string;
+    leaveHandler?: () => void;
+  };
 }
 
 export interface RegisteredSidePanel {
@@ -309,33 +357,46 @@ export class SidePanelManager extends RefCounted {
       element.style.position = "relative";
       element.style[MARGIN_FOR_SIDE[OPPOSITE_SIDE[zoneSide]]] = `-${size}px`;
     }
+
+    const update = (event: DragEvent) => {
+      const { dragSource } = this;
+      if (dragSource === undefined) return false;
+      event.preventDefault();
+      const { dropEffect, description, dropEffectMessage, leaveHandler } =
+        dragSource.getNewPanelDropEffect(event);
+      setDropEffect(event, dropEffect);
+      let message = `Drop to ${dropEffect} ${description} to new ${zoneFlexDirection}`;
+      if (dropEffectMessage) message += ` (${dropEffectMessage})`;
+      pushDragStatus(event, element, "drop", message, leaveHandler);
+      return true;
+    };
     element.addEventListener("dragenter", (event) => {
-      if (!this.hasDroppablePanel()) return;
+      if (!update(event)) return;
       element.classList.add(DRAG_OVER_CLASSNAME);
       event.preventDefault();
-      pushDragStatus(element, "drop", () =>
-        document.createTextNode(`Drop side panel as new ${zoneFlexDirection}`),
-      );
     });
-    element.addEventListener("dragleave", () => {
-      popDragStatus(element, "drop");
+    element.addEventListener("dragleave", (event) => {
+      popDragStatus(event, element, "drop");
       element.classList.remove(DRAG_OVER_CLASSNAME);
     });
     element.addEventListener("dragover", (event) => {
-      if (!this.hasDroppablePanel()) return;
+      if (!update(event)) return;
       event.preventDefault();
     });
     element.addEventListener("drop", (event) => {
       const { dragSource } = this;
       if (dragSource === undefined) return;
-      popDragStatus(element, "drop");
+      popDragStatus(event, element, "drop");
       element.classList.remove(DRAG_OVER_CLASSNAME);
       const flexDirection = FLEX_DIRECTION_FOR_SIDE[side];
-      dragSource.dropAsNewPanel({
-        side,
-        row: flexDirection === "column" ? flexIndex : crossIndex,
-        col: flexDirection === "row" ? flexIndex : crossIndex,
-      });
+      dragSource.dropAsNewPanel(
+        {
+          side,
+          row: flexDirection === "column" ? flexIndex : crossIndex,
+          col: flexDirection === "row" ? flexIndex : crossIndex,
+        },
+        getDropEffect() ?? "none",
+      );
       this.dragSource = undefined;
       event.preventDefault();
       event.stopPropagation();
@@ -423,6 +484,7 @@ export class SidePanelManager extends RefCounted {
       const minSize = flexGroup.minSize;
       const updateMessage = () => {
         pushDragStatus(
+          event,
           gutter,
           "drag",
           `Drag to resize, current ${SIZE_FOR_DIRECTION[direction]} is ${flexGroup.crossSize}px`,
@@ -438,8 +500,8 @@ export class SidePanelManager extends RefCounted {
           updateMessage();
           this.invalidateLayout();
         },
-        () => {
-          popDragStatus(gutter, "drag");
+        (event) => {
+          popDragStatus(event, gutter, "drag");
         },
       );
     });
@@ -481,8 +543,9 @@ export class SidePanelManager extends RefCounted {
       }
       if (nextFlexIndex === cells.length) return;
       const nextCell = cells[nextFlexIndex];
-      const updateMessage = () => {
+      const updateMessage = (event: MouseEvent) => {
         pushDragStatus(
+          event,
           gutter,
           "drag",
           `Drag to resize, current ${SIZE_FOR_DIRECTION[direction]} ratio is ` +
@@ -490,7 +553,7 @@ export class SidePanelManager extends RefCounted {
             `${nextCell.registeredPanel.location.value.flex}`,
         );
       };
-      updateMessage();
+      updateMessage(event);
       startRelativeMouseDrag(
         event,
         (newEvent) => {
@@ -521,13 +584,13 @@ export class SidePanelManager extends RefCounted {
             ...secondLocation,
             flex: Math.round((1 - firstFraction) * existingFlexSum * 100) / 100,
           };
-          updateMessage();
+          updateMessage(newEvent);
           cell.registeredPanel.location.locationChanged.dispatch();
           nextCell.registeredPanel.location.locationChanged.dispatch();
           this.invalidateLayout();
         },
-        () => {
-          popDragStatus(gutter, "drag");
+        (event) => {
+          popDragStatus(event, gutter, "drag");
         },
       );
     });

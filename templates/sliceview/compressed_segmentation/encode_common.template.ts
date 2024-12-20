@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {Uint32ArrayBuilder} from '#src/util/uint32array_builder.js';
 
 export const BLOCK_HEADER_SIZE = 2;
 

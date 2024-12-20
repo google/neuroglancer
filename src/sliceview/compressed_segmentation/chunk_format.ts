@@ -300,7 +300,7 @@ export class CompressedSegmentationVolumeChunk extends SingleTextureVolumeChunk<
   Uint32Array,
   TextureLayout
 > {
-  CHUNK_FORMAT_TYPE: ChunkFormat;
+  declare CHUNK_FORMAT_TYPE: ChunkFormat;
 
   setTextureData(gl: GL) {
     const { data } = this;

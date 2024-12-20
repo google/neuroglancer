@@ -1,5 +1,4 @@
-// DO NOT EDIT.  Generated from
-// templates/neuroglancer/sliceview/compressed_segmentation/encode_common.template.ts.
+// DO NOT EDIT.  Generated from templates/sliceview/compressed_segmentation/encode_common.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
@@ -351,22 +350,22 @@ export function encodeChannel(
     const curGridSize = (gridSize[i] = Math.ceil(volumeSize[i] / blockSize[i]));
     blockIndexSize *= curGridSize;
   }
-  const gx = gridSize[0];
-  const gy = gridSize[1];
-  const gz = gridSize[2];
-  const xSize = volumeSize[0];
-  const ySize = volumeSize[1];
-  const zSize = volumeSize[2];
-  const xBlockSize = blockSize[0];
-  const yBlockSize = blockSize[1];
-  const zBlockSize = blockSize[2];
+  const gx = gridSize[0],
+    gy = gridSize[1],
+    gz = gridSize[2];
+  const xSize = volumeSize[0],
+    ySize = volumeSize[1],
+    zSize = volumeSize[2];
+  const xBlockSize = blockSize[0],
+    yBlockSize = blockSize[1],
+    zBlockSize = blockSize[2];
   const baseOffset = output.length;
   let headerOffset = baseOffset;
   const actualSize = [0, 0, 0];
   output.resize(baseOffset + blockIndexSize);
-  const sx = inputStrides[0];
-  const sy = inputStrides[1];
-  const sz = inputStrides[2];
+  const sx = inputStrides[0],
+    sy = inputStrides[1],
+    sz = inputStrides[2];
   for (let bz = 0; bz < gz; ++bz) {
     actualSize[2] = Math.min(zBlockSize, zSize - bz * zBlockSize);
     for (let by = 0; by < gy; ++by) {

@@ -61,6 +61,15 @@ export class Signal<Callable extends Function = () => void> {
     };
   }
 
+  addOnce(handler: Callable): void {
+    const { handlers } = this;
+    function onceWrapper(...args: any) {
+      handlers.delete(onceWrapper as any);
+      handler(...args);
+    }
+    handlers.add(onceWrapper as any);
+  }
+
   /**
    * Remove a handler function.  If `dispatch` is currently be called and the new handler has not
    * yet been called, then it will not be called.
@@ -117,6 +126,7 @@ export class NullarySignal extends Signal<() => void> {}
 export interface ReadonlySignal<Callable extends Function> {
   readonly count: number;
   add(handler: Callable): () => void;
+  addOnce(handler: Callable): void;
   remove(handler: Callable): boolean;
 }
 
@@ -127,6 +137,7 @@ export const neverSignal: NullaryReadonlySignal = {
   add(_handler: any) {
     return () => {};
   },
+  addOnce(_handler: any) {},
   remove(_handler: any) {
     return false;
   },

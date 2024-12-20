@@ -152,6 +152,17 @@ def export_tool(tool_class):
     return tool_class
 
 
+@export
+class LayerTool(Tool):
+    __slots__ = ()
+
+    layer = wrapped_property("layer", optional(str))
+    """Name of the layer to which this tool applies.
+
+    Only valid for tools contained within `~ToolPalette.tools`.
+    """
+
+
 @export_tool
 class PlacePointTool(Tool):
     __slots__ = ()
@@ -177,164 +188,164 @@ class PlaceEllipsoidTool(Tool):
 
 
 @export_tool
-class BlendTool(Tool):
+class BlendTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "blend"
 
 
 @export_tool
-class OpacityTool(Tool):
+class OpacityTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "opacity"
 
 
 @export_tool
-class VolumeRenderingTool(Tool):
+class VolumeRenderingTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "volumeRendering"
 
 
 @export_tool
-class VolumeRenderingGainTool(Tool):
+class VolumeRenderingGainTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "volumeRenderingGain"
 
 
 @export_tool
-class VolumeRenderingDepthSamplesTool(Tool):
+class VolumeRenderingDepthSamplesTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "volumeRenderingDepthSamples"
 
 
 @export_tool
-class CrossSectionRenderScaleTool(Tool):
+class CrossSectionRenderScaleTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "crossSectionRenderScale"
 
 
 @export_tool
-class SelectedAlphaTool(Tool):
+class SelectedAlphaTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "selectedAlpha"
 
 
 @export_tool
-class NotSelectedAlphaTool(Tool):
+class NotSelectedAlphaTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "notSelectedAlpha"
 
 
 @export_tool
-class ObjectAlphaTool(Tool):
+class ObjectAlphaTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "objectAlpha"
 
 
 @export_tool
-class HideSegmentZeroTool(Tool):
+class HideSegmentZeroTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "hideSegmentZero"
 
 
 @export_tool
-class HoverHighlightTool(Tool):
+class HoverHighlightTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "hoverHighlight"
 
 
 @export_tool
-class BaseSegmentColoringTool(Tool):
+class BaseSegmentColoringTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "baseSegmentColoring"
 
 
 @export_tool
-class IgnoreNullVisibleSetTool(Tool):
+class IgnoreNullVisibleSetTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "ignoreNullVisibleSet"
 
 
 @export_tool
-class ColorSeedTool(Tool):
+class ColorSeedTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "colorSeed"
 
 
 @export_tool
-class SegmentDefaultColorTool(Tool):
+class SegmentDefaultColorTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "segmentDefaultColor"
 
 
 @export_tool
-class MeshRenderScaleTool(Tool):
+class MeshRenderScaleTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "meshRenderScale"
 
 
 @export_tool
-class MeshSilhouetteRenderingTool(Tool):
+class MeshSilhouetteRenderingTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "meshSilhouetteRendering"
 
 
 @export_tool
-class SaturationTool(Tool):
+class SaturationTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "saturation"
 
 
 @export_tool
-class SkeletonRenderingMode2dTool(Tool):
+class SkeletonRenderingMode2dTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.mode2d"
 
 
 @export_tool
-class SkeletonRenderingMode3dTool(Tool):
+class SkeletonRenderingMode3dTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.mode3d"
 
 
 @export_tool
-class SkeletonRenderingLineWidth2dTool(Tool):
+class SkeletonRenderingLineWidth2dTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.lineWidth2d"
 
 
 @export_tool
-class SkeletonRenderingLineWidth3dTool(Tool):
+class SkeletonRenderingLineWidth3dTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.lineWidth3d"
 
 
 @export_tool
-class ShaderControlTool(Tool):
+class ShaderControlTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "shaderControl"
     control = wrapped_property("control", str)
 
 
 @export_tool
-class MergeSegmentsTool(Tool):
+class MergeSegmentsTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "mergeSegments"
 
 
 @export_tool
-class SplitSegmentsTool(Tool):
+class SplitSegmentsTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "splitSegments"
 
 
 @export_tool
-class SelectSegmentsTool(Tool):
+class SelectSegmentsTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "selectSegments"
 
 
 @export_tool
-class DimensionTool(Tool):
+class DimensionTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "dimension"
     dimension = wrapped_property("dimension", str)
@@ -342,6 +353,7 @@ class DimensionTool(Tool):
 
 @export
 class SidePanelLocation(JsonObjectWrapper):
+    __slots__ = ()
     side = wrapped_property("side", optional(str))
     visible = wrapped_property("visible", optional(bool))
     size = wrapped_property("size", optional(int))
@@ -351,7 +363,15 @@ class SidePanelLocation(JsonObjectWrapper):
 
 
 @export
+class ToolPalette(SidePanelLocation):
+    __slots__ = ()
+    tools = wrapped_property("tools", typed_list(Tool))
+    query = wrapped_property("query", optional(str))
+
+
+@export
 class SelectedLayerState(SidePanelLocation):
+    __slots__ = ()
     layer = wrapped_property("layer", optional(str))
 
 
@@ -1826,6 +1846,9 @@ class ViewerState(JsonObjectWrapper):
     )
     tool_bindings = toolBindings = wrapped_property(
         "toolBindings", typed_map(key_type=str, value_type=Tool)
+    )
+    tool_palettes = toolPalettes = wrapped_property(
+        "toolPalettes", typed_map(key_type=str, value_type=ToolPalette)
     )
 
     @staticmethod

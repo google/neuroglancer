@@ -265,32 +265,9 @@ export class AnnotationLayer extends RefCounted {
     return sharedObject.visibility;
   }
 
-  segmentationStates = this.registerDisposer(
-    makeCachedDerivedWatchableValue(
-      (_relationshipStates, _ignoreNullSegmentFilter) => {
-        const { displayState, source } = this.state;
-        const { relationshipStates } = displayState;
-        return displayState.displayUnfiltered.value
-          ? undefined
-          : source.relationships.map((relationship) => {
-              const state = relationshipStates.get(relationship);
-              return state.showMatches.value
-                ? state.segmentationState.value
-                : undefined;
-            });
-      },
-      [
-        this.state.displayState.relationshipStates,
-        this.state.displayState.ignoreNullSegmentFilter,
-      ],
-      (a, b) => {
-        if (a === undefined || b === undefined) {
-          return a === b;
-        }
-        return arraysEqual(a, b);
-      },
-    ),
-  );
+  segmentationStates: WatchableValueInterface<
+    OptionalSegmentationDisplayState[] | undefined
+  >;
 
   constructor(
     public chunkManager: ChunkManager,
@@ -298,6 +275,32 @@ export class AnnotationLayer extends RefCounted {
   ) {
     super();
     this.registerDisposer(state);
+    this.segmentationStates = this.registerDisposer(
+      makeCachedDerivedWatchableValue(
+        (_relationshipStates, _ignoreNullSegmentFilter) => {
+          const { displayState, source } = this.state;
+          const { relationshipStates } = displayState;
+          return displayState.displayUnfiltered.value
+            ? undefined
+            : source.relationships.map((relationship) => {
+                const state = relationshipStates.get(relationship);
+                return state.showMatches.value
+                  ? state.segmentationState.value
+                  : undefined;
+              });
+        },
+        [
+          this.state.displayState.relationshipStates,
+          this.state.displayState.ignoreNullSegmentFilter,
+        ],
+        (a, b) => {
+          if (a === undefined || b === undefined) {
+            return a === b;
+          }
+          return arraysEqual(a, b);
+        },
+      ),
+    );
     this.registerDisposer(
       this.source.changed.add(this.handleChangeAffectingBuffer),
     );

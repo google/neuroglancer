@@ -18,14 +18,11 @@ import {
   CredentialsProvider,
   makeCredentialsGetter,
 } from "#src/credentials_provider/index.js";
-import { StatusMessage } from "#src/status.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import {
-  CANCELED,
-  CancellationTokenSource,
-  uncancelableToken,
-} from "#src/util/cancellation.js";
-import { RefCounted } from "#src/util/disposable.js";
+  getCredentialsWithStatus,
+  monitorAuthPopupWindow,
+} from "#src/credentials_provider/interactive_credentials_provider.js";
+import { raceWithAbort } from "#src/util/abort.js";
 import { removeFromParent } from "#src/util/dom.js";
 import {
   verifyObject,
@@ -63,62 +60,57 @@ function extractEmailFromIdToken(idToken: string): string {
   }
 }
 
-async function waitForAuthResponseMessage(
+// Note: `abortSignal` is guaranteed to be aborted once the operation completes.
+function waitForAuthResponseMessage(
   source: Window,
   state: string,
-  cancellationToken: CancellationToken,
+  abortSignal: AbortSignal,
 ): Promise<OAuth2Token> {
-  const context = new RefCounted();
-  try {
-    return await new Promise((resolve, reject) => {
-      context.registerDisposer(cancellationToken.add(() => reject(CANCELED)));
-      context.registerEventListener(
-        window,
-        "message",
-        (event: MessageEvent) => {
-          if (event.origin !== location.origin) {
-            return;
+  return new Promise((resolve, reject) => {
+    window.addEventListener(
+      "message",
+      (event: MessageEvent) => {
+        if (event.origin !== location.origin) {
+          return;
+        }
+
+        if (event.source !== source) return;
+
+        try {
+          const obj = verifyObject(event.data);
+          const receivedState = verifyObjectProperty(
+            obj,
+            "state",
+            verifyString,
+          );
+          if (receivedState !== state) {
+            throw new Error("invalid state");
           }
-
-          if (event.source !== source) return;
-
-          try {
-            const obj = verifyObject(event.data);
-            const receivedState = verifyObjectProperty(
+          const idToken = verifyObjectProperty(obj, "id_token", verifyString);
+          const token: OAuth2Token = {
+            accessToken: verifyObjectProperty(
               obj,
-              "state",
+              "access_token",
               verifyString,
-            );
-            if (receivedState !== state) {
-              throw new Error("invalid state");
-            }
-            const idToken = verifyObjectProperty(obj, "id_token", verifyString);
-            const token: OAuth2Token = {
-              accessToken: verifyObjectProperty(
-                obj,
-                "access_token",
-                verifyString,
-              ),
-              tokenType: verifyObjectProperty(obj, "token_type", verifyString),
-              expiresIn: verifyObjectProperty(obj, "expires_in", verifyString),
-              scope: verifyObjectProperty(obj, "scope", verifyString),
-              email: extractEmailFromIdToken(idToken),
-            };
-            resolve(token);
-          } catch (parseError) {
-            reject(
-              new Error(
-                `Received unexpected authentication response: ${parseError.message}`,
-              ),
-            );
-            console.error("Response received: ", event.data);
-          }
-        },
-      );
-    });
-  } finally {
-    context.dispose();
-  }
+            ),
+            tokenType: verifyObjectProperty(obj, "token_type", verifyString),
+            expiresIn: verifyObjectProperty(obj, "expires_in", verifyString),
+            scope: verifyObjectProperty(obj, "scope", verifyString),
+            email: extractEmailFromIdToken(idToken),
+          };
+          resolve(token);
+        } catch (parseError) {
+          reject(
+            new Error(
+              `Received unexpected authentication response: ${parseError.message}`,
+            ),
+          );
+          console.error("Response received: ", event.data);
+        }
+      },
+      { signal: abortSignal },
+    );
+  });
 }
 
 function makeAuthRequestUrl(options: {
@@ -129,6 +121,7 @@ function makeAuthRequestUrl(options: {
   state?: string;
   loginHint?: string;
   authUser?: number;
+  includeGrantedScopes?: boolean;
   immediate?: boolean;
 }) {
   let url = `${AUTH_SERVER}?client_id=${encodeURIComponent(options.clientId)}`;
@@ -141,7 +134,9 @@ function makeAuthRequestUrl(options: {
     responseType = "token%20id_token";
   }
   url += `&response_type=${responseType}`;
-  url += "&include_granted_scopes=true";
+  if (options.includeGrantedScopes === true) {
+    url += "&include_granted_scopes=true";
+  }
   url += `&scope=${encodeURIComponent(scopes.join(" "))}`;
   if (options.state) {
     url += `&state=${options.state}`;
@@ -161,6 +156,30 @@ function makeAuthRequestUrl(options: {
   return url;
 }
 
+function createAuthIframe(
+  url: string,
+  abortController: AbortController,
+): Window {
+  const iframe = document.createElement("iframe");
+  iframe.src = url;
+  iframe.style.display = "none";
+  iframe.addEventListener(
+    "load",
+    () => {
+      if (iframe.contentDocument == null) {
+        // Error received
+        abortController.abort(new Error("Immediate authentication failed"));
+      }
+    },
+    { signal: abortController.signal },
+  );
+  document.body.appendChild(iframe);
+  abortController.signal.addEventListener("abort", () => {
+    removeFromParent(iframe);
+  });
+  return iframe.contentWindow!;
+}
+
 /**
  * Obtain a Google OAuth2 authentication token.
  * @return A Promise that resolves to an authentication token.
@@ -174,7 +193,7 @@ export async function authenticateGoogleOAuth2(
     immediate?: boolean;
     authUser?: number;
   },
-  cancellationToken = uncancelableToken,
+  abortSignal: AbortSignal,
 ) {
   const state = getRandomHexString();
   const nonce = getRandomHexString();
@@ -188,52 +207,26 @@ export async function authenticateGoogleOAuth2(
     immediate: options.immediate,
     authUser: options.authUser,
   });
-  let source: Window;
-  let cleanup: (() => void) | undefined;
-  const extraPromises: Array<Promise<OAuth2Token>> = [];
-  if (options.immediate) {
-    // For immediate mode auth, we can wait until the relay is ready, since we aren't opening a new
-    // window.
-    const iframe = document.createElement("iframe");
-    iframe.src = url;
-    iframe.style.display = "none";
-    extraPromises.push(
-      new Promise((_resolve, reject) => {
-        iframe.addEventListener("load", () => {
-          console.log("iframe loaded", iframe.contentDocument);
-          if (iframe.contentDocument == null) {
-            // Error received
-            reject(new Error("Immediate authentication failed"));
-          }
-        });
-      }),
-    );
-    document.body.appendChild(iframe);
-    source = iframe.contentWindow!;
-    cleanup = () => {
-      removeFromParent(iframe);
-    };
-  } else {
-    const newWindow = open(url);
-    source = newWindow!;
-    if (newWindow !== null) {
-      cleanup = () => {
-        try {
-          newWindow.close();
-        } catch {
-          // Ignore error closing window.
-        }
-      };
-    }
-  }
-
+  const abortController = new AbortController();
+  abortSignal = AbortSignal.any([abortController.signal, abortSignal]);
   try {
-    return await Promise.race([
-      ...extraPromises,
-      waitForAuthResponseMessage(source, state, cancellationToken),
-    ]);
+    let source: Window;
+    if (options.immediate) {
+      source = createAuthIframe(url, abortController);
+    } else {
+      const newWindow = open(url);
+      if (newWindow === null) {
+        throw new Error("Failed to create authentication popup window");
+      }
+      monitorAuthPopupWindow(newWindow, abortController);
+      source = newWindow!;
+    }
+    return await raceWithAbort(
+      waitForAuthResponseMessage(source, state, abortController.signal),
+      abortSignal,
+    );
   } finally {
-    cleanup?.();
+    abortController.abort();
   }
 }
 
@@ -244,76 +237,23 @@ export class GoogleOAuth2CredentialsProvider extends CredentialsProvider<OAuth2T
     super();
   }
 
-  get = makeCredentialsGetter((cancellationToken) => {
-    const { options } = this;
-    const status = new StatusMessage(/*delay=*/ true);
-    let cancellationSource: CancellationTokenSource | undefined;
-    return new Promise<OAuth2Token>((resolve, reject) => {
-      const dispose = () => {
-        cancellationSource = undefined;
-        status.dispose();
-      };
-      cancellationToken.add(() => {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-          cancellationSource = undefined;
-          status.dispose();
-          reject(CANCELED);
-        }
-      });
-      function writeLoginStatus(
-        msg = `${options.description} authorization required.`,
-        linkMessage = "Request authorization.",
-      ) {
-        status.setText(msg + "  ");
-        const button = document.createElement("button");
-        button.textContent = linkMessage;
-        status.element.appendChild(button);
-        button.addEventListener("click", () => {
-          login(/*immediate=*/ false);
-        });
-        status.setVisible(true);
-      }
-      function login(immediate: boolean) {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-        }
-        cancellationSource = new CancellationTokenSource();
-        writeLoginStatus(
-          `Waiting for ${options.description} authorization...`,
-          "Retry",
-        );
-        authenticateGoogleOAuth2(
-          {
-            clientId: options.clientId,
-            scopes: options.scopes,
-            immediate: immediate,
-            authUser: 0,
-          },
-          cancellationSource,
-        ).then(
-          (token) => {
-            if (cancellationSource !== undefined) {
-              dispose();
-              resolve(token);
-            }
-          },
-          (reason) => {
-            if (cancellationSource !== undefined) {
-              cancellationSource = undefined;
-              if (immediate) {
-                writeLoginStatus();
-              } else {
-                writeLoginStatus(
-                  `${options.description} authorization failed: ${reason}.`,
-                  "Retry",
-                );
-              }
-            }
-          },
-        );
-      }
-      login(/*immediate=*/ true);
-    });
-  });
+  get = makeCredentialsGetter((abortSignal) =>
+    getCredentialsWithStatus(
+      {
+        description: this.options.description,
+        supportsImmediate: true,
+        get: (abortSignal, immediate) =>
+          authenticateGoogleOAuth2(
+            {
+              clientId: this.options.clientId,
+              scopes: this.options.scopes,
+              immediate: immediate,
+              authUser: 0,
+            },
+            abortSignal,
+          ),
+      },
+      abortSignal,
+    ),
+  );
 }

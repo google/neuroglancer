@@ -1,0 +1,18 @@
+[package]
+name = "jxl-wasm"
+version = "1.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jxl-oxide = "0.9.1"
+
+[profile.release]
+lto = true
+
+[package.metadata.wasm-opt]
+memory = { initial = 10, maximum = 100 }  # Set initial and max memory in MiB

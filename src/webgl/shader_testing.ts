@@ -117,10 +117,10 @@ export class FragmentShaderTester<
   Inputs extends FragmentShaderTestOutputs,
   Outputs extends FragmentShaderTestOutputs,
 > extends RefCounted {
-  builder = new ShaderBuilder(this.gl);
+  builder: ShaderBuilder;
   private shader_: ShaderProgram;
   offscreenFramebuffer: FramebufferConfiguration<TextureBuffer>;
-  private vertexPositionsBuffer = getSquareCornersBuffer(this.gl, -1, -1, 1, 1);
+  private vertexPositionsBuffer;
 
   constructor(
     public gl: GL,
@@ -128,8 +128,10 @@ export class FragmentShaderTester<
     public outputs: Outputs,
   ) {
     super();
-    const { builder } = this;
-    this.offscreenFramebuffer = new FramebufferConfiguration(this.gl, {
+    const builder = (this.builder = new ShaderBuilder(gl));
+    this.vertexPositionsBuffer = getSquareCornersBuffer(gl, -1, -1, 1, 1);
+
+    this.offscreenFramebuffer = new FramebufferConfiguration(gl, {
       colorBuffers: makeTextureBuffersForOutputs(gl, outputs),
     });
     builder.addAttribute("vec4", "shader_testing_aVertexPosition");

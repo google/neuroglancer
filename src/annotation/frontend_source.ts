@@ -115,7 +115,7 @@ export class AnnotationGeometryData {
 }
 
 export class AnnotationSubsetGeometryChunk extends Chunk {
-  source: AnnotationSubsetGeometryChunkSource;
+  declare source: AnnotationSubsetGeometryChunkSource;
   // undefined indicates chunk not found
   data: AnnotationGeometryData | undefined;
   constructor(source: AnnotationSubsetGeometryChunkSource, x: any) {
@@ -139,7 +139,7 @@ export class AnnotationSubsetGeometryChunk extends Chunk {
 }
 
 export class AnnotationGeometryChunk extends SliceViewChunk {
-  source: AnnotationGeometryChunkSource;
+  declare source: AnnotationGeometryChunkSource;
   // undefined indicates chunk not found
   data: AnnotationGeometryData | undefined;
 
@@ -168,7 +168,7 @@ export class AnnotationGeometryChunkSource extends SliceViewChunkSource<
   AnnotationGeometryChunkSpecification,
   AnnotationGeometryChunk
 > {
-  OPTIONS: AnnotationGeometryChunkSourceOptions;
+  declare OPTIONS: AnnotationGeometryChunkSourceOptions;
   parent: Borrowed<MultiscaleAnnotationSource>;
   immediateChunkUpdates = true;
 
@@ -226,7 +226,7 @@ export class AnnotationGeometryChunkSource extends SliceViewChunkSource<
 @registerSharedObjectOwner(ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID)
 export class AnnotationSubsetGeometryChunkSource extends ChunkSource {
   immediateChunkUpdates = true;
-  chunks: Map<string, AnnotationSubsetGeometryChunk>;
+  declare chunks: Map<string, AnnotationSubsetGeometryChunk>;
 
   constructor(
     chunkManager: Borrowed<ChunkManager>,
@@ -256,7 +256,7 @@ export class AnnotationMetadataChunk extends Chunk {
 
 @registerSharedObjectOwner(ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID)
 export class AnnotationMetadataChunkSource extends ChunkSource {
-  chunks: Map<string, AnnotationMetadataChunk>;
+  declare chunks: Map<string, AnnotationMetadataChunk>;
   constructor(
     chunkManager: Borrowed<ChunkManager>,
     public parent: Borrowed<MultiscaleAnnotationSource>,
@@ -290,7 +290,7 @@ function copyOtherAnnotations(
   propertySerializers: AnnotationPropertySerializer[],
   excludedType: AnnotationType,
   excludedTypeAdjustment: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const newData = new Uint8Array(
     serializedAnnotations.data.length + excludedTypeAdjustment,
   );
@@ -510,9 +510,7 @@ export class MultiscaleAnnotationSource
 {
   OPTIONS: object;
   key: any;
-  metadataChunkSource = this.registerDisposer(
-    new AnnotationMetadataChunkSource(this.chunkManager, this),
-  );
+  metadataChunkSource: AnnotationMetadataChunkSource;
   segmentFilteredSources: Owned<AnnotationSubsetGeometryChunkSource>[];
   spatiallyIndexedSources = new Set<Borrowed<AnnotationGeometryChunkSource>>();
   rank: number;
@@ -528,6 +526,9 @@ export class MultiscaleAnnotationSource
     },
   ) {
     super();
+    this.metadataChunkSource = this.registerDisposer(
+      new AnnotationMetadataChunkSource(this.chunkManager, this),
+    );
     this.rank = options.rank;
     this.properties = options.properties;
     this.annotationPropertySerializers = makeAnnotationPropertySerializers(

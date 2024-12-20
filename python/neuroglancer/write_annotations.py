@@ -82,6 +82,8 @@ def _get_dtype_for_properties(
 class AnnotationWriter:
     annotations: list[Annotation]
     related_annotations: list[dict[int, list[Annotation]]]
+    lower_bound: np.typing.NDArray[np.float64]
+    upper_bound: np.typing.NDArray[np.float64]
 
     def __init__(
         self,

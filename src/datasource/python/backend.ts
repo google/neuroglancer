@@ -38,12 +38,8 @@ import {
   VolumeChunk,
   VolumeChunkSource,
 } from "#src/sliceview/volume/backend.js";
-import { CancellationToken } from "#src/util/cancellation.js";
 import { Endianness } from "#src/util/endian.js";
-import {
-  cancellableFetchOk,
-  responseArrayBuffer,
-} from "#src/util/http_request.js";
+import { fetchOk } from "#src/util/http_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 const chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
@@ -59,7 +55,7 @@ export class PythonVolumeChunkSource extends WithParameters(
   chunkDecoder = chunkDecoders.get(this.parameters["encoding"])!;
   encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
 
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     let path = `../../neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
@@ -74,13 +70,10 @@ export class PythonVolumeChunkSource extends WithParameters(
         path += (chunkPosition[i] + chunkDataSize[i]).toString();
       }
     }
-    const response = await cancellableFetchOk(
-      new URL(path, parameters.baseUrl).href,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
-    );
-    await this.chunkDecoder(chunk, cancellationToken, response);
+    const response = await fetchOk(new URL(path, parameters.baseUrl).href, {
+      signal: abortSignal,
+    });
+    await this.chunkDecoder(chunk, abortSignal, await response.arrayBuffer());
   }
 }
 
@@ -112,17 +105,16 @@ export class PythonMeshSource extends WithParameters(
     return Promise.resolve(undefined);
   }
 
-  downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
+  downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const requestPath = `../../neuroglancer/mesh/${parameters.key}/${
       chunk.manifestChunk!.objectId
     }`;
-    return cancellableFetchOk(
-      new URL(requestPath, parameters.baseUrl).href,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
-    ).then((response) => decodeFragmentChunk(chunk, response));
+    return fetchOk(new URL(requestPath, parameters.baseUrl).href, {
+      signal: abortSignal,
+    })
+      .then((response) => response.arrayBuffer())
+      .then((response) => decodeFragmentChunk(chunk, response));
   }
 }
 
@@ -131,16 +123,15 @@ export class PythonSkeletonSource extends WithParameters(
   SkeletonSource,
   SkeletonSourceParameters,
 ) {
-  download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+  download(chunk: SkeletonChunk, abortSignal: AbortSignal) {
     const { parameters } = this;
     const requestPath = `../../neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
-    return cancellableFetchOk(
-      new URL(requestPath, parameters.baseUrl).href,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
-    ).then((response) =>
-      decodeSkeletonChunk(chunk, response, parameters.vertexAttributes),
-    );
+    return fetchOk(new URL(requestPath, parameters.baseUrl).href, {
+      signal: abortSignal,
+    })
+      .then((response) => response.arrayBuffer())
+      .then((response) =>
+        decodeSkeletonChunk(chunk, response, parameters.vertexAttributes),
+      );
   }
 }

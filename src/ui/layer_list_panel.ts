@@ -73,7 +73,7 @@ export class LayerListPanelState implements Trackable {
   }
 }
 
-class LayerVisibilityWidget extends RefCounted {
+export class LayerVisibilityWidget extends RefCounted {
   element = document.createElement("div");
   constructor(public layer: ManagedUserLayer) {
     super();

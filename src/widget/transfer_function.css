@@ -20,8 +20,20 @@
   margin-top: 5px;
 }
 
-.neuroglancer-transfer-function-color-picker {
+.neuroglancer-transfer-function-color-picker-container {
   text-align: right;
+}
+
+.neuroglancer-transfer-function-color-picker {
+  height: 24px;
+  display: inline-block;
+}
+
+.neuroglancer-transfer-function-clear-button {
+  font-size: 11pt;
+  cursor: pointer;
+  margin-right: 2px;
+  margin-left: auto;
 }
 
 .neuroglancer-transfer-function-widget-bound {
