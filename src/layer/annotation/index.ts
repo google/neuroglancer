@@ -722,9 +722,14 @@ export class AnnotationUserLayer extends Base {
       callback,
       this.annotationDisplayState.color,
     );
+    const shaderDisposer = observeWatchable(
+      callback,
+      this.annotationDisplayState.shader,
+    );
     return () => {
       disposer();
       subDisposer();
+      shaderDisposer();
     };
   }
 
