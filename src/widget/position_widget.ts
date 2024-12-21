@@ -1557,6 +1557,36 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         }),
       ).element,
     );
+
+    this.registerDisposer(new MouseEventBinder(plot.element, inputEventMap));
+
+    registerActionListener<WheelEvent>(
+      plot.element,
+      "adjust-via-wheel",
+      (actionEvent) => {
+        actionEvent.stopPropagation();
+        const event = actionEvent.detail;
+        const { deltaY } = event;
+        if (deltaY === 0) {
+          return;
+        }
+        positionWidget.adjustDimensionPosition(
+          this.dimensionId,
+          Math.sign(deltaY),
+        );
+      },
+    );
+
+    registerActionListener<WheelEvent>(
+      plot.element,
+      "adjust-velocity-via-wheel",
+      (actionEvent) => {
+        actionEvent.stopPropagation();
+        const factor = getWheelZoomAmount(actionEvent.detail);
+        viewer.velocity.multiplyVelocity(this.dimensionId, factor);
+      },
+    );
+
     return { positionWidget };
   }
 
