@@ -92,6 +92,8 @@ export class LayerVisibilityWidget extends RefCounted {
         this.layer.setVisible(true);
       },
     });
+    element.style.display = "flex";
+    element.style.alignItems = "center";
     element.appendChild(showIcon);
     element.appendChild(hideIcon);
     const updateView = () => {
