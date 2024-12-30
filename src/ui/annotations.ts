@@ -455,7 +455,7 @@ export class AnnotationLayerView extends Tab {
     mutableControls.appendChild(ellipsoidButton);
     const helpIcon = document.createElement("div");
     helpIcon.title =
-      "The left icons allows you to select the type of the anotation. Color and other display settings are available in the 'Redering' tab";
+      "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Redering' tab";
     helpIcon.className = "neuroglancer-icon";
     helpIcon.innerHTML = svg_help;
     mutableControls.appendChild(helpIcon);
