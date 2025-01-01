@@ -50,12 +50,13 @@ export function makeIcon(options: MakeIconOptions): HTMLElement {
 
   if (title !== undefined) {
     element.title = title;
+    element.classList.add("neuroglancer-tooltip");
   }
   if (onClick !== undefined) {
     element.addEventListener("click", onClick);
   }
   const { svg } = options;
-  element.className = "neuroglancer-icon";
+  element.classList.add("neuroglancer-icon");
   if (svg !== undefined) {
     element.innerHTML = svg;
   }
