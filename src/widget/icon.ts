@@ -22,6 +22,7 @@ export interface MakeIconOptions {
   title?: string;
   onClick?: (this: HTMLElement, event: MouseEvent) => void;
   href?: string;
+  clickable?: boolean;
 }
 
 export interface MakeHoverIconOptions extends MakeIconOptions {
@@ -38,7 +39,7 @@ export function makeHoverIcon(options: MakeHoverIconOptions): HTMLElement {
 }
 
 export function makeIcon(options: MakeIconOptions): HTMLElement {
-  const { title, onClick, href } = options;
+  const { title, onClick, href, clickable = true } = options;
   let element: HTMLDivElement | HTMLAnchorElement;
   if (href !== undefined) {
     element = document.createElement("a");
@@ -50,10 +51,12 @@ export function makeIcon(options: MakeIconOptions): HTMLElement {
 
   if (title !== undefined) {
     element.title = title;
-    element.classList.add("neuroglancer-tooltip");
   }
   if (onClick !== undefined) {
     element.addEventListener("click", onClick);
+  }
+  if (!clickable) {
+    element.classList.add("neuroglancer-info-icon");
   }
   const { svg } = options;
   element.classList.add("neuroglancer-icon");

@@ -21,19 +21,3 @@
 .neuroglancer-checkbox-icon.dark-background[data-checked="true"] {
   background-color: rgba(255, 255, 255, 0.2);
 }
-
-.neuroglancer-checkbox-icon.light-background.neuroglancer-checkbox-tooltip:hover {
-  background-color: inherit;
-}
-
-.neuroglancer-checkbox-icon.dark-background.neuroglancer-checkbox-tooltip:hover {
-  background-color: inherit;
-}
-
-.neuroglancer-checkbox-icon.light-background[data-checked="true"].neuroglancer-checkbox-tooltip:hover {
-  background-color: rgba(0, 0, 0, 0.5);
-}
-
-.neuroglancer-checkbox-icon.dark-background[data-checked="true"].neuroglancer-checkbox-tooltip:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}

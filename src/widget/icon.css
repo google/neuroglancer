@@ -49,7 +49,7 @@
   background-color: #db4437;
 }
 
-.neuroglancer-icon.neuroglancer-tooltip:hover {
+.neuroglancer-icon.neuroglancer-info-icon:hover {
   background-color: inherit;
 }
 

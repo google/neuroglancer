@@ -457,8 +457,7 @@ export class AnnotationLayerView extends Tab {
     helpIcon.title =
       "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Redering' tab";
     
-    helpIcon.classList.add("neuroglancer-tooltip");
-    helpIcon.classList.add("tooltip-left");
+    helpIcon.classList.add("neuroglancer-info-icon");
     helpIcon.classList.add("neuroglancer-icon");
     helpIcon.style.marginLeft = "auto";
     helpIcon.innerHTML = svg_help;

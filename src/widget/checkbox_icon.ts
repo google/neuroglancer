@@ -53,9 +53,6 @@ export class CheckboxIcon extends RefCounted {
       this.element.title =
         (value ? options.disableTitle : options.enableTitle) || "";
     };
-    if(this.element.title !== undefined) {
-      this.element.classList.add("neuroglancer-checkbox-tooltip");
-    }
     this.registerDisposer(model.changed.add(updateView));
     updateView();
   }
