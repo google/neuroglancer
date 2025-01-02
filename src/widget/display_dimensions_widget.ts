@@ -328,7 +328,6 @@ export class DisplayDimensionsWidget extends RefCounted {
     for (let i = 0; i < 2; ++i) {
       const container = document.createElement("div");
       container.classList.add("neuroglancer-display-dimensions-widget-fov-container");
-      container.style.display = "contents";
       const label = document.createElement("span");
       label.textContent = i === 0 ? "Primary" : "Secondary";
       container.appendChild(label);
@@ -463,7 +462,7 @@ export class DisplayDimensionsWidget extends RefCounted {
             if (widget === undefined) {
               const container = document.createElement("div");
               container.title = "Visible depth range";
-              container.style.display = "contents";
+              container.classList.add("neuroglancer-depth-range-container");
               depthGridContainer.appendChild(container);
               const plusMinus = document.createElement("span");
               plusMinus.textContent = "±";

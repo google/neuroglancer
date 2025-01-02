@@ -20,6 +20,7 @@
   top: 2px;
   left: 2px;
   background-color: rgba(0, 0, 0, 0.3);
+  padding: 2px 4px;
 }
 
 .neuroglancer-display-dimensions-widget-dimension-grid {
@@ -38,10 +39,21 @@
   padding: 2px;
 }
 
+.neuroglancer-display-dimensions-widget input:hover {
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.40);
+}
+
+.neuroglancer-display-dimensions-widget input:focus {
+  background-color: #222;
+  border: 1px solid #FFF;
+}
+
 .neuroglancer-display-dimensions-widget input,
 .neuroglancer-display-dimensions-widget {
   font-family: monospace;
   color: white;
+  font-size: 0.75rem;
 }
 
 .neuroglancer-display-dimensions-widget-dimension:hover {
@@ -83,6 +95,17 @@
   margin-left: 5px;
 }
 
+.neuroglancer-display-dimensions-widget-fov {
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-display-dimensions-widget-fov-container {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
   .neuroglancer-display-dimensions-widget-scale-factor,
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
@@ -113,12 +136,19 @@
   grid-row: 4;
   grid-column-start: 1;
   grid-column-end: 3;
-  display: inline-block;
+  display: flex;
+  align-items: center;
   white-space: nowrap;
 }
 
-.neuroglancer-display-dimensions-widget-default input {
-  margin-right: 3px;
+.neuroglancer-display-dimensions-widget input[type="checkbox"] {
+  margin-right: 0.25rem;
+  vertical-align: middle;
+}
+
+.neuroglancer-depth-range-relative-checkbox-label {
+  display: flex;
+  align-items: center;
 }
 
 .neuroglancer-depth-range-widget-grid {
@@ -140,4 +170,9 @@
 .neuroglancer-depth-range-widget-dimension-names {
   margin-left: 1ch;
   white-space: nowrap;
+}
+
+.neuroglancer-depth-range-container {
+  display: flex;
+  align-items: center;
 }
