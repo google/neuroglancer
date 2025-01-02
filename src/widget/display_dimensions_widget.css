@@ -90,6 +90,8 @@
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
   .neuroglancer-display-dimensions-widget-default,
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
+  .neuroglancer-display-dimensions-widget-fov,
+.neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
   .neuroglancer-depth-range-widget-grid,
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
   .neuroglancer-depth-range-relative-checkbox-label {

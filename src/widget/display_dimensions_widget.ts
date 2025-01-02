@@ -85,6 +85,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   dimensionGridContainer = document.createElement("div");
   depthGridContainer = document.createElement("div");
+  fovGridContainer = document.createElement("div");
 
   defaultCheckbox = document.createElement("input");
 
@@ -248,6 +249,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     return this.displayDimensionRenderInfo.relativeDisplayScales;
   }
 
+  // TODO skm - the constructor needs info on the panel dimensions shown
+  // This can happen the same way displayUnit is passed in
   constructor(
     public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
     public zoom: TrackableZoomInterface,
@@ -318,9 +321,48 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     });
 
+    // Hold two input boxes that display the primary and secondary dimensions
+    const { fovGridContainer } = this;
+    fovGridContainer.classList.add("neuroglancer-display-dimensions-widget-fov");
+    element.appendChild(fovGridContainer);
+    for (let i = 0; i < 2; ++i) {
+      const container = document.createElement("div");
+      container.classList.add("neuroglancer-display-dimensions-widget-fov-container");
+      container.style.display = "contents";
+      const label = document.createElement("span");
+      label.textContent = i === 0 ? "Primary" : "Secondary";
+      container.appendChild(label);
+      const input = document.createElement("input");
+      input.spellcheck = false;
+      input.autocomplete = "off";
+      input.title = "Field of view";
+      container.appendChild(input);
+      fovGridContainer.appendChild(container);
+    }
+
     const { depthGridContainer } = this;
     depthGridContainer.classList.add("neuroglancer-depth-range-widget-grid");
     element.appendChild(depthGridContainer);
+
+    // TODO skm combine this into the scale representation box
+    // Takes a scale factor and sets the zoom level to the desired scale
+    // const setScaleInputBox = document.createElement("input");
+    // setScaleInputBox.type = "number";
+    // setScaleInputBox.step = "any";
+    // setScaleInputBox.min = "-1";
+    // setScaleInputBox.max = "Infinity";
+    // element.appendChild(setScaleInputBox);
+    // setScaleInputBox.addEventListener("input", () => {
+    //   const { canonicalVoxelFactors, displayDimensionScales } =
+    //     this.displayDimensionRenderInfo.value;
+    //   const scale = Number(setScaleInputBox.value);
+    //   // TEMP just take the first
+    //   const i = 0;
+    //   const desiredZoomLevel =
+    //     (scale * canonicalVoxelFactors[i]) / displayDimensionScales[i];
+    //   this.zoom.value = desiredZoomLevel;
+    // });
+    // TODO skm - use similar logic to the above to link up the FOV input boxes
 
     const relativeCheckboxLabel = document.createElement("label");
     const relativeCheckbox = document.createElement("input");
