@@ -22,6 +22,7 @@ import { debounce } from "lodash-es";
 import type { UserLayer } from "#src/layer/index.js";
 import {
   ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
   TrackableBooleanCheckbox,
 } from "#src/trackable_boolean.js";
 import {
@@ -273,6 +274,8 @@ export class ToolPaletteState extends RefCounted implements Trackable {
     return this.trackable.changed;
   }
 
+  verticalStacking = new TrackableBoolean(true, true);
+
   constructor(public viewer: Viewer) {
     super();
     this.tools = this.registerDisposer(new TrackableToolList(viewer));
@@ -280,6 +283,7 @@ export class ToolPaletteState extends RefCounted implements Trackable {
     this.name.changed.add(this.changed.dispatch);
     this.trackable.add("tools", this.tools);
     this.trackable.add("query", this.query);
+    this.trackable.add("verticalStacking", this.verticalStacking);
     this.queryDefined = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         (value) => value.length === 0,
@@ -687,6 +691,14 @@ export class ToolPalettePanel extends SidePanel {
       makeCachedDerivedWatchableValue((value) => value !== "", [state.query]),
     );
     const self = this;
+    const changeStackingButton = this.registerDisposer(
+      new CheckboxIcon(this.state.verticalStacking, {
+        svg: svg_tool,
+        enableTitle: "Swap to vertical stacking",
+        disableTitle: "Swap to horizontal stacking",
+      }),
+    );
+    titleBar.appendChild(changeStackingButton.element);
     const searchButton = this.registerDisposer(
       new CheckboxIcon(
         {
@@ -744,7 +756,33 @@ export class ToolPalettePanel extends SidePanel {
     );
     this.registerDisposer(this.state.tools.changed.add(debouncedRender));
     this.registerDisposer(this.queryResults.changed.add(debouncedRender));
+    this.registerDisposer(
+      this.state.verticalStacking.changed.add(() =>
+        this.handleStackingChange(),
+      ),
+    );
     this.visibility.changed.add(debouncedRender);
+    this.render();
+  }
+
+  // TODO - implement properly
+  private handleStackingChange() {
+    // Vertical stacking is the default.
+    console.log(
+      "stacking changed, handling",
+      this.state.verticalStacking.value,
+    );
+    const { itemContainer } = this;
+
+    // TODO: implement properly, this isn't necessarily the best approach - just an idea
+    if (this.state.verticalStacking.value) {
+      itemContainer.classList.remove(
+        "neuroglancer-tool-palette-items-horizontal",
+      );
+    } else {
+      itemContainer.classList.add("neuroglancer-tool-palette-items-horizontal");
+    }
+
     this.render();
   }
 
