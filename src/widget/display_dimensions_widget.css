@@ -32,21 +32,20 @@
 .neuroglancer-display-dimensions-widget input {
   outline: 0px;
   background-color: transparent;
-  border-color: transparent;
+  border: 1px solid transparent;
   box-shadow: none;
   margin: 0;
-  border: 0;
   padding: 2px;
 }
 
 .neuroglancer-display-dimensions-widget input:hover {
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.40);
+  border-color: rgba(255, 255, 255, 0.40);
 }
 
 .neuroglancer-display-dimensions-widget input:focus {
   background-color: #222;
-  border: 1px solid #FFF;
+  border-color: #FFF;
 }
 
 .neuroglancer-display-dimensions-widget input,
