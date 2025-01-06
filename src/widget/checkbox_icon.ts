@@ -54,7 +54,9 @@ export class CheckboxIcon extends RefCounted {
       this.element.dataset.checked = value ? "true" : "false";
       this.element.title =
         (value ? options.disableTitle : options.enableTitle) || "";
-      this.element.innerHTML = (value ? options.disableSvg : options.enableSvg) || "";
+      if(options.enableSvg && options.disableSvg) {
+        this.element.innerHTML = value ? options.disableSvg : options.enableSvg;
+      }
     };
     this.registerDisposer(model.changed.add(updateView));
     updateView();
