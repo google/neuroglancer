@@ -756,8 +756,6 @@ export class ToolPalettePanel extends SidePanel {
 
     const { dropZone } = this;
     dropZone.classList.add("neuroglancer-tool-palette-drop-zone");
-    const dropText = document.createTextNode("Drop items here");
-    dropZone.appendChild(dropText);
     itemContainer.appendChild(dropZone);
     this.registerDropHandlers(dropZone, () => undefined);
     const debouncedRender = this.registerCancellable(
