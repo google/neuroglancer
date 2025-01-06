@@ -31,7 +31,7 @@ import {
   registerLayerBarDropHandlers,
   registerLayerDragHandlers,
 } from "#src/ui/layer_drag_and_drop.js";
-import { LayerNameWidget } from "#src/ui/layer_side_panel.js";
+import { LayerNameWidget, getLayerType } from "#src/ui/layer_side_panel.js";
 import type { SidePanelManager } from "#src/ui/side_panel.js";
 import { SidePanel } from "#src/ui/side_panel.js";
 import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
@@ -53,6 +53,15 @@ const DEFAULT_LAYER_LIST_PANEL_LOCATION: SidePanelLocation = {
   side: "left",
   row: 0,
 };
+
+enum LayerType {
+  new = "new",
+  auto = "auto",
+  seg = "seg",
+  img = "img",
+  ann = "ann",
+  mesh = "mesh"
+}
 
 export class LayerListPanelState implements Trackable {
   location = new TrackableSidePanelLocation(DEFAULT_LAYER_LIST_PANEL_LOCATION);
@@ -167,6 +176,7 @@ class LayerListItem extends RefCounted {
     element.appendChild(
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
     );
+    element.appendChild(this.createLayerTypeElement());
     element.appendChild(
       this.registerDisposer(new LayerNameWidget(layer)).element,
     );
@@ -208,6 +218,13 @@ class LayerListItem extends RefCounted {
       event.stopPropagation();
       event.preventDefault();
     });
+  }
+
+  private createLayerTypeElement() {
+    const layerTypeElement = document.createElement("div");
+    layerTypeElement.classList.add("layer-type");
+    layerTypeElement.textContent = getLayerType(LayerType.img);
+    return layerTypeElement;
   }
 }
 
