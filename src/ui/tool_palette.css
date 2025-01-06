@@ -89,11 +89,8 @@
 }
 
 .neuroglancer-tool-palette-drop-zone {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex: 1;
-  border: 2px dashed grey;
 }
 
 .neuroglancer-tool-palette-items {
