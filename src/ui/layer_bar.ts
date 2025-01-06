@@ -38,15 +38,6 @@ import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
 
-enum LayerType {
-  new = "new",
-  auto = "auto",
-  seg = "seg",
-  img = "img",
-  ann = "ann",
-  mesh = "mesh"
-}
-
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
   layerNumberElement = document.createElement("div");
@@ -189,7 +180,7 @@ class LayerWidget extends RefCounted {
   private createLayerTypeElement() {
     const layerTypeElement = document.createElement("div");
     layerTypeElement.classList.add("layer-type");
-    layerTypeElement.textContent = getLayerType(LayerType.img);
+    layerTypeElement.textContent = getLayerType(this.layer.toJSON().type);
     return layerTypeElement;
   }
 }

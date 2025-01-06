@@ -56,8 +56,18 @@ const layerNameInputEventMap = EventActionMap.fromObject({
   escape: { action: "cancel" },
 });
 
-export function getLayerType(type: string) {
-  return type;
+enum LayerType {
+  new = "new",
+  auto = "auto",
+  segmentation = "seg",
+  image = "img",
+  annotation = "ann",
+  mesh = "mesh"
+}
+
+export function getLayerType(type: LayerType): string {
+  const mappedType = LayerType[type as keyof typeof LayerType];
+  return mappedType || type;
 }
 
 export class LayerNameWidget extends RefCounted {

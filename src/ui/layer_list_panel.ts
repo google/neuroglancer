@@ -54,15 +54,6 @@ const DEFAULT_LAYER_LIST_PANEL_LOCATION: SidePanelLocation = {
   row: 0,
 };
 
-enum LayerType {
-  new = "new",
-  auto = "auto",
-  seg = "seg",
-  img = "img",
-  ann = "ann",
-  mesh = "mesh"
-}
-
 export class LayerListPanelState implements Trackable {
   location = new TrackableSidePanelLocation(DEFAULT_LAYER_LIST_PANEL_LOCATION);
   get changed() {
@@ -218,12 +209,14 @@ class LayerListItem extends RefCounted {
       event.stopPropagation();
       event.preventDefault();
     });
+    
   }
 
   private createLayerTypeElement() {
     const layerTypeElement = document.createElement("div");
     layerTypeElement.classList.add("layer-type");
-    layerTypeElement.textContent = getLayerType(LayerType.img);
+    layerTypeElement.textContent = getLayerType(this.layer.toJSON().type);
+
     return layerTypeElement;
   }
 }
