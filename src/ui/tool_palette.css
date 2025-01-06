@@ -89,8 +89,11 @@
 }
 
 .neuroglancer-tool-palette-drop-zone {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 1;
+  border: 2px dashed grey;
 }
 
 .neuroglancer-tool-palette-items {
@@ -99,9 +102,22 @@
   flex-grow: 1;
   flex-shrink: 1;
   flex-basis: 0px;
-  font: 10pt sans-serif;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.neuroglancer-tool-palette-layer-group-items {
+  display: flex;
+  flex-direction: column;
+  font: 10pt sans-serif;
+}
+
+.neuroglancer-tool-palette-layer-group-items.neuroglancer-tool-palette-layer-group-items-horizontal {
+  flex-direction: row;
+}
+
+.neuroglancer-tool-palette-layer-group-items .neuroglancer-tool-palette-layer-group {
+  width: 100%;
 }
 
 .neuroglancer-tool-palette-tool-container {

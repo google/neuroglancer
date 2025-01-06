@@ -18,6 +18,8 @@ import "#src/ui/tool_palette.css";
 
 import svg_search from "ikonate/icons/search.svg?raw";
 import svg_tool from "ikonate/icons/tool.svg?raw";
+import swap_vertical from "ikonate/icons/swap-vertical.svg?raw";
+import swap_horizontal from "ikonate/icons/swap-horizontal.svg?raw";
 import { debounce } from "lodash-es";
 import type { UserLayer } from "#src/layer/index.js";
 import {
@@ -516,6 +518,7 @@ class RenderedTool extends RefCounted {
 
 export class ToolPalettePanel extends SidePanel {
   private itemContainer = document.createElement("div");
+  private layerGroupItemsContainer = document.createElement("div");
   private dropZone = document.createElement("div");
   private renderedTools = new Map<Tool, RenderedTool>();
   private dragState:
@@ -693,7 +696,8 @@ export class ToolPalettePanel extends SidePanel {
     const self = this;
     const changeStackingButton = this.registerDisposer(
       new CheckboxIcon(this.state.verticalStacking, {
-        svg: svg_tool,
+        enableSvg: swap_horizontal,
+        disableSvg: swap_vertical,
         enableTitle: "Swap to vertical stacking",
         disableTitle: "Swap to horizontal stacking",
       }),
@@ -730,8 +734,9 @@ export class ToolPalettePanel extends SidePanel {
 
     const body = document.createElement("div");
     body.classList.add("neuroglancer-tool-palette-body");
-    const { itemContainer } = this;
+    const { itemContainer, layerGroupItemsContainer } = this;
     itemContainer.classList.add("neuroglancer-tool-palette-items");
+    layerGroupItemsContainer.classList.add("neuroglancer-tool-palette-layer-group-items")
     body.appendChild(
       this.registerDisposer(
         new DependentViewWidget(
@@ -745,11 +750,15 @@ export class ToolPalettePanel extends SidePanel {
         ),
       ).element,
     );
+    itemContainer.appendChild(layerGroupItemsContainer);
     body.appendChild(itemContainer);
     this.addBody(body);
 
     const { dropZone } = this;
     dropZone.classList.add("neuroglancer-tool-palette-drop-zone");
+    const dropText = document.createTextNode("Drop items here");
+    dropZone.appendChild(dropText);
+    itemContainer.appendChild(dropZone);
     this.registerDropHandlers(dropZone, () => undefined);
     const debouncedRender = this.registerCancellable(
       animationFrameDebounce(() => this.render()),
@@ -772,15 +781,15 @@ export class ToolPalettePanel extends SidePanel {
       "stacking changed, handling",
       this.state.verticalStacking.value,
     );
-    const { itemContainer } = this;
+    const { layerGroupItemsContainer } = this;
 
     // TODO: implement properly, this isn't necessarily the best approach - just an idea
     if (this.state.verticalStacking.value) {
-      itemContainer.classList.remove(
-        "neuroglancer-tool-palette-items-horizontal",
+      layerGroupItemsContainer.classList.remove(
+        "neuroglancer-tool-palette-layer-group-items-horizontal",
       );
     } else {
-      itemContainer.classList.add("neuroglancer-tool-palette-items-horizontal");
+      layerGroupItemsContainer.classList.add("neuroglancer-tool-palette-layer-group-items-horizontal");
     }
 
     this.render();
@@ -876,9 +885,9 @@ export class ToolPalettePanel extends SidePanel {
         }
       }
 
-      yield self.dropZone;
+      // yield self.dropZone;
     }
-    updateChildren(this.itemContainer, getItems());
+    updateChildren(this.layerGroupItemsContainer, getItems());
   }
 
   disposed() {}
