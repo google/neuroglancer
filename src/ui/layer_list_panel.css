@@ -47,9 +47,9 @@
 }
 
 .neuroglancer-layer-list-panel-item input[type="checkbox"] {
-  width: '1rem';
-  height: '1rem';
-  margin: '0.25rem';
+  width: "1rem";
+  height: "1rem";
+  margin: "0.25rem";
 }
 
 .neuroglancer-layer-list-panel-color-value-wrapper {
