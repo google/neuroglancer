@@ -201,6 +201,7 @@ class LayerWidget extends RefCounted {
           element.dataset.color = "rainbow";
         }
       } else {
+        layerColorElement.style.backgroundColor = "";
         element.dataset.color = "unsupported";
       }
     }
