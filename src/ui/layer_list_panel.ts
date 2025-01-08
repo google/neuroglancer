@@ -138,6 +138,8 @@ class LayerColorWidget extends RefCounted {
       element.classList.add("unsupported");
     }
     const updateLayerColorWidget = () => {
+      element.classList.remove("rainbow");
+      element.classList.remove("unsupported");
       const color = this.layer.layerBarColor;
       if (color) {
         element.style.backgroundColor = color;
@@ -147,6 +149,7 @@ class LayerColorWidget extends RefCounted {
           ? "rainbow"
           : "unsupported";
         element.classList.add(style);
+        element.style.backgroundColor = "";
       }
     };
     this.registerDisposer(
@@ -161,6 +164,7 @@ class LayerColorWidget extends RefCounted {
         } else {
           elementWrapper.classList.remove("cross");
         }
+        updateLayerColorWidget();
       }),
     );
   }
