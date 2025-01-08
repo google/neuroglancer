@@ -765,23 +765,20 @@ export class ToolPalettePanel extends SidePanel {
     this.registerDisposer(this.queryResults.changed.add(debouncedRender));
     this.registerDisposer(
       this.state.verticalStacking.changed.add(() =>
-        this.handleStackingChange(),
+        {
+          this.handleStackingChange();
+          debouncedRender();
+        },
       ),
     );
     this.visibility.changed.add(debouncedRender);
+    this.handleStackingChange();
     this.render();
   }
 
-  // TODO - implement properly
   private handleStackingChange() {
-    // Vertical stacking is the default.
-    console.log(
-      "stacking changed, handling",
-      this.state.verticalStacking.value,
-    );
     const { layerGroupItemsContainer } = this;
 
-    // TODO: implement properly, this isn't necessarily the best approach - just an idea
     if (this.state.verticalStacking.value) {
       layerGroupItemsContainer.classList.remove(
         "neuroglancer-tool-palette-layer-group-items-horizontal",
@@ -789,8 +786,6 @@ export class ToolPalettePanel extends SidePanel {
     } else {
       layerGroupItemsContainer.classList.add("neuroglancer-tool-palette-layer-group-items-horizontal");
     }
-
-    this.render();
   }
 
   private getRenderedTool(tool: Tool) {
@@ -882,8 +877,6 @@ export class ToolPalettePanel extends SidePanel {
           renderedTools.delete(tool);
         }
       }
-
-      // yield self.dropZone;
     }
     updateChildren(this.layerGroupItemsContainer, getItems());
   }
