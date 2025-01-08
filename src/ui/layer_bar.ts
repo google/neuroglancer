@@ -205,7 +205,9 @@ class LayerWidget extends RefCounted {
         element.dataset.color = "unsupported";
       }
     }
-    layerColorElement.title = layer.colorWidgetTooltip() || "";
+    layerColorElement.title =
+      layer.colorWidgetTooltip() ||
+      "The color of this layer cannot be determined";
   }
 
   disposed() {
