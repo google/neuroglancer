@@ -120,23 +120,6 @@ class LayerColorWidget extends RefCounted {
     elementWrapper.className =
       "neuroglancer-layer-list-panel-color-value-wrapper";
     elementWrapper.appendChild(element);
-
-    this.registerDisposer(
-      observeWatchable((layerColorEnabled) => {
-        elementWrapper.style.display = layerColorEnabled ? "block" : "none";
-        if (this.layer.supportsLayerBarColorSyncOption) {
-          elementWrapper.classList.remove("unsupported");
-          element.classList.remove("unsupported");
-        } else {
-          elementWrapper.classList.add("unsupported");
-          element.classList.add("unsupported");
-        }
-      }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
-    );
-    if (!this.layer.supportsLayerBarColorSyncOption) {
-      elementWrapper.classList.add("unsupported");
-      element.classList.add("unsupported");
-    }
     const updateLayerColorWidget = () => {
       element.classList.remove("rainbow");
       element.classList.remove("unsupported");
@@ -152,6 +135,11 @@ class LayerColorWidget extends RefCounted {
         element.style.backgroundColor = "";
       }
     };
+    this.registerDisposer(
+      observeWatchable((layerColorEnabled) => {
+        elementWrapper.style.display = layerColorEnabled ? "block" : "none";
+      }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
+    );
     this.registerDisposer(
       layer.observeLayerColor(() => {
         updateLayerColorWidget();
