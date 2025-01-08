@@ -751,7 +751,7 @@ export class AnnotationUserLayer extends Base {
       return `The color comes from the selected shader default color`;
     }
 
-    return "Your shader code doesn't use the default color, we cannot easily determine which color you are using";
+    return "Your shader code doesn't use the default color, we cannot determine which color you are using";
   }
 
   static type = "annotation";
