@@ -696,7 +696,7 @@ export class ToolPalettePanel extends SidePanel {
     const self = this;
     const changeStackingButton = this.registerDisposer(
       new CheckboxIcon(this.state.verticalStacking, {
-        enableSvg: swap_horizontal,
+        svg: swap_horizontal,
         disableSvg: swap_vertical,
         enableTitle: "Swap to vertical stacking",
         disableTitle: "Swap to horizontal stacking",
