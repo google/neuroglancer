@@ -70,11 +70,7 @@ import type {
   WatchableSet,
   WatchableValueInterface,
 } from "#src/trackable_value.js";
-import {
-  observeWatchable,
-  registerNested,
-  WatchableValue,
-} from "#src/trackable_value.js";
+import { registerNested, WatchableValue } from "#src/trackable_value.js";
 import {
   SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION,
   UserLayerSidePanelsState,
@@ -86,7 +82,6 @@ import {
 import type { GlobalToolBinder } from "#src/ui/tool.js";
 import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
-import { TrackableOptionalRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
 import {
@@ -198,10 +193,8 @@ export class UserLayer extends RefCounted {
 
   messages = new MessageList();
 
-  layerBarUserDefinedColor = new TrackableOptionalRGB();
-
-  observeLayerColor(callback: () => void): () => void {
-    return observeWatchable(callback, this.layerBarUserDefinedColor);
+  observeLayerColor(_: () => void): () => void {
+    return () => {};
   }
 
   get automaticLayerBarColor(): string | undefined {
@@ -209,9 +202,6 @@ export class UserLayer extends RefCounted {
   }
 
   get layerBarColor(): string | undefined {
-    if (this.layerBarUserDefinedColor.value) {
-      return this.layerBarUserDefinedColor.toJSON();
-    }
     return this.automaticLayerBarColor;
   }
 
