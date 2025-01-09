@@ -115,7 +115,8 @@
   overflow-y: hidden;
 }
 
-.neuroglancer-tool-palette-layer-group-items .neuroglancer-tool-palette-layer-group {
+.neuroglancer-tool-palette-layer-group-items
+  .neuroglancer-tool-palette-layer-group {
   width: 100%;
 }
 

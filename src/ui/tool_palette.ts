@@ -736,7 +736,9 @@ export class ToolPalettePanel extends SidePanel {
     body.classList.add("neuroglancer-tool-palette-body");
     const { itemContainer, layerGroupItemsContainer } = this;
     itemContainer.classList.add("neuroglancer-tool-palette-items");
-    layerGroupItemsContainer.classList.add("neuroglancer-tool-palette-layer-group-items")
+    layerGroupItemsContainer.classList.add(
+      "neuroglancer-tool-palette-layer-group-items",
+    );
     body.appendChild(
       this.registerDisposer(
         new DependentViewWidget(
@@ -764,12 +766,10 @@ export class ToolPalettePanel extends SidePanel {
     this.registerDisposer(this.state.tools.changed.add(debouncedRender));
     this.registerDisposer(this.queryResults.changed.add(debouncedRender));
     this.registerDisposer(
-      this.state.verticalStacking.changed.add(() =>
-        {
-          this.handleStackingChange();
-          debouncedRender();
-        },
-      ),
+      this.state.verticalStacking.changed.add(() => {
+        this.handleStackingChange();
+        debouncedRender();
+      }),
     );
     this.visibility.changed.add(debouncedRender);
     this.handleStackingChange();
@@ -784,7 +784,9 @@ export class ToolPalettePanel extends SidePanel {
         "neuroglancer-tool-palette-layer-group-items-horizontal",
       );
     } else {
-      layerGroupItemsContainer.classList.add("neuroglancer-tool-palette-layer-group-items-horizontal");
+      layerGroupItemsContainer.classList.add(
+        "neuroglancer-tool-palette-layer-group-items-horizontal",
+      );
     }
   }
 
