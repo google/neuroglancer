@@ -17,9 +17,9 @@
 import "#src/ui/tool_palette.css";
 
 import svg_search from "ikonate/icons/search.svg?raw";
-import svg_tool from "ikonate/icons/tool.svg?raw";
-import swap_vertical from "ikonate/icons/swap-vertical.svg?raw";
 import swap_horizontal from "ikonate/icons/swap-horizontal.svg?raw";
+import swap_vertical from "ikonate/icons/swap-vertical.svg?raw";
+import svg_tool from "ikonate/icons/tool.svg?raw";
 import { debounce } from "lodash-es";
 import type { UserLayer } from "#src/layer/index.js";
 import {
