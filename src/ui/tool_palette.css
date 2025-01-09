@@ -111,6 +111,8 @@
 
 .neuroglancer-tool-palette-layer-group-items.neuroglancer-tool-palette-layer-group-items-horizontal {
   flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .neuroglancer-tool-palette-layer-group-items .neuroglancer-tool-palette-layer-group {
@@ -123,6 +125,7 @@
   align-items: center;
   padding-top: 2px;
   padding-bottom: 2px;
+  width: 100%;
 }
 
 .neuroglancer-tool-palette-tool-container:hover {
