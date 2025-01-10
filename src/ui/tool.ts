@@ -105,7 +105,9 @@ export abstract class Tool<Context extends object = object> extends RefCounted {
   abstract activate(activation: ToolActivation<this>): void;
   renderInPalette(context: RefCounted): HTMLElement | undefined {
     context;
-    return undefined;
+    const content = document.createElement("div");
+    content.textContent = this.description;
+    return content;
   }
 
   abstract toJSON(): any;
