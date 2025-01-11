@@ -18,6 +18,7 @@
  * @file Basic annotation data structures.
  */
 
+import { vec3 } from "gl-matrix";
 import type {
   BoundingBox,
   CoordinateSpaceTransform,
@@ -695,6 +696,13 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     annotation: T,
     callback: (vec: Float32Array, isVector: boolean) => void,
   ) => void;
+  defaultProperties: (
+    annotation: T,
+    scales: vec3,
+  ) => {
+    properties: AnnotationNumericPropertySpec[];
+    values: number[];
+  };
 }
 
 function serializeFloatVector(
@@ -814,6 +822,24 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
+    defaultProperties(annotation: Line, scales: vec3) {
+      return {
+        properties: [
+          {
+            type: "float32",
+            identifier: "Length",
+            default: 0,
+            description: "Length of the line annotation in nanometers",
+          },
+        ],
+        values: [
+          vec3.dist(
+            vec3.mul(vec3.create(), scales, annotation.pointA as vec3),
+            vec3.mul(vec3.create(), scales, annotation.pointB as vec3),
+          ),
+        ],
+      };
+    },
   },
   [AnnotationType.POINT]: {
     icon: "⚬",
@@ -857,6 +883,11 @@ export const annotationTypeHandlers: Record<
     },
     visitGeometry(annotation: Point, callback) {
       callback(annotation.point, false);
+    },
+    defaultProperties(annotation: Point, scales: vec3) {
+      annotation;
+      scales;
+      return { properties: [], values: [] };
     },
   },
   [AnnotationType.AXIS_ALIGNED_BOUNDING_BOX]: {
@@ -926,6 +957,11 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
+    defaultProperties(annotation: AxisAlignedBoundingBox, scales: vec3) {
+      annotation;
+      scales;
+      return { properties: [], values: [] };
+    },
   },
   [AnnotationType.ELLIPSOID]: {
     icon: "◎",
@@ -993,6 +1029,11 @@ export const annotationTypeHandlers: Record<
     visitGeometry(annotation: Ellipsoid, callback) {
       callback(annotation.center, false);
       callback(annotation.radii, true);
+    },
+    defaultProperties(annotation: Ellipsoid, scales: vec3) {
+      annotation;
+      scales;
+      return { properties: [], values: [] };
     },
   },
 };
