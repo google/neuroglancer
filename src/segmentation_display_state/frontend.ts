@@ -66,6 +66,10 @@ import { makeEyeButton } from "#src/widget/eye_button.js";
 import { makeFilterButton } from "#src/widget/filter_button.js";
 import { makeStarButton } from "#src/widget/star_button.js";
 
+declare const SEGMENT_LIST_COLOR_WIDGET: boolean | undefined;
+const SEGMENT_LIST_COLOR_WIDGET_ENABLED =
+  typeof SEGMENT_LIST_COLOR_WIDGET !== "undefined" &&
+  SEGMENT_LIST_COLOR_WIDGET === true;
 export class Uint64MapEntry {
   constructor(
     public key: bigint,
@@ -342,8 +346,11 @@ const segmentWidgetTemplate = (() => {
   filterElement.classList.add("neuroglancer-segment-list-entry-filter");
   const filterIndex = template.childElementCount;
   template.appendChild(filterElement);
-  const colorWidgetIndex = template.childElementCount;
-  template.appendChild(ColorWidget.template());
+  let colorWidgetIndex = -1;
+  if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+    colorWidgetIndex = template.childElementCount;
+    template.appendChild(ColorWidget.template());
+  }
   return {
     template,
     copyContainerIndex,
@@ -537,27 +544,27 @@ function makeRegisterSegmentWidgetEventHandlers(
       selectedSegments.set(id, !selectedSegments.has(id));
     });
 
-    const trackableRGB = new TrackableRGB(vec3.fromValues(0, 0, 0));
-    trackableRGB.changed.add(() => {
-      const testU = BigInt(packColor(trackableRGB.value));
-      const idString = element.dataset.id!;
-      const id = BigInt(idString);
-      displayState.segmentStatedColors.value.delete(id);
-      displayState.segmentStatedColors.value.set(id, testU);
-    });
-
-    // TODO, need to register disposer?
-    new ColorWidget(
-      trackableRGB,
-      undefined,
-      children[template.colorWidgetIndex] as HTMLInputElement,
-      () => {
+    if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+      const trackableRGB = new TrackableRGB(vec3.fromValues(0, 0, 0));
+      trackableRGB.changed.add(() => {
+        const testU = BigInt(packColor(trackableRGB.value));
         const idString = element.dataset.id!;
         const id = BigInt(idString);
         displayState.segmentStatedColors.value.delete(id);
-      },
-      false,
-    );
+        displayState.segmentStatedColors.value.set(id, testU);
+      });
+      new ColorWidget(
+        trackableRGB,
+        undefined,
+        children[template.colorWidgetIndex] as HTMLInputElement,
+        () => {
+          const idString = element.dataset.id!;
+          const id = BigInt(idString);
+          displayState.segmentStatedColors.value.delete(id);
+        },
+        false,
+      );
+    }
   };
 }
 
@@ -688,13 +695,15 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
       idContainer.children[template.idIndex] as HTMLElement,
       color,
     );
-    const isOverridden =
-      !!this.displayState?.segmentStatedColors.value.has(mapped);
-    setColorWidgetColor(
-      children[template.colorWidgetIndex] as HTMLInputElement,
-      color,
-      isOverridden,
-    );
+    if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+      const isOverridden =
+        !!this.displayState?.segmentStatedColors.value.has(mapped);
+      setColorWidgetColor(
+        children[template.colorWidgetIndex] as HTMLInputElement,
+        color,
+        isOverridden,
+      );
+    }
     const { unmappedIdIndex } = template;
     if (unmappedIdIndex !== -1) {
       let unmappedIdString: string | undefined;
@@ -711,13 +720,15 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
         idContainer.children[unmappedIdIndex] as HTMLElement,
         color,
       );
-      const isOverridden =
-        !!this.displayState?.segmentStatedColors.value.has(mapped);
-      setColorWidgetColor(
-        children[template.colorWidgetIndex] as HTMLInputElement,
-        color,
-        isOverridden,
-      );
+      if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+        const isOverridden =
+          !!this.displayState?.segmentStatedColors.value.has(mapped);
+        setColorWidgetColor(
+          children[template.colorWidgetIndex] as HTMLInputElement,
+          color,
+          isOverridden,
+        );
+      }
     }
   }
 }
