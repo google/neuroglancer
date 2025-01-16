@@ -18,7 +18,6 @@
  * @file Basic annotation data structures.
  */
 
-import { vec3 } from "gl-matrix";
 import type {
   BoundingBox,
   CoordinateSpaceTransform,
@@ -703,7 +702,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   ) => void;
   defaultProperties: (
     annotation: T,
-    scales: vec3,
+    scales: Float64Array,
   ) => {
     properties: AnnotationNumericPropertySpec[];
     values: number[];
@@ -827,24 +826,32 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
-    defaultProperties(annotation: Line, scales: vec3) {
-      return {
-        properties: [
-          {
-            type: "float32",
-            identifier: "Length",
-            default: 0,
-            description: "Length of the line annotation in nanometers",
-            format: formatLength,
-          },
-        ],
-        values: [
-          vec3.dist(
-            vec3.mul(vec3.create(), scales, annotation.pointA as vec3),
-            vec3.mul(vec3.create(), scales, annotation.pointB as vec3),
-          ),
-        ],
-      };
+    defaultProperties(annotation: Line, scales: Float64Array) {
+      const properties: AnnotationNumericPropertySpec[] = [];
+      const values: number[] = [];
+      const rank = scales.length;
+      if (
+        rank === annotation.pointA.length &&
+        rank === annotation.pointB.length
+      ) {
+        properties.push({
+          type: "float32",
+          identifier: "Length",
+          default: 0,
+          description: "Length of the line annotation in nanometers",
+          format: formatLength,
+        });
+        let length = 0;
+        for (let dim = 0; dim < rank; dim++) {
+          length +=
+            (((annotation.pointA[dim] - annotation.pointB[dim]) / 1e-9) *
+              scales[dim]) **
+            2;
+        }
+        length = Math.sqrt(length);
+        values.push(length);
+      }
+      return { properties, values };
     },
   },
   [AnnotationType.POINT]: {
@@ -890,7 +897,7 @@ export const annotationTypeHandlers: Record<
     visitGeometry(annotation: Point, callback) {
       callback(annotation.point, false);
     },
-    defaultProperties(annotation: Point, scales: vec3) {
+    defaultProperties(annotation: Point, scales: Float64Array) {
       annotation;
       scales;
       return { properties: [], values: [] };
@@ -963,7 +970,10 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
-    defaultProperties(annotation: AxisAlignedBoundingBox, scales: vec3) {
+    defaultProperties(
+      annotation: AxisAlignedBoundingBox,
+      scales: Float64Array,
+    ) {
       annotation;
       scales;
       return { properties: [], values: [] };
@@ -1036,7 +1046,7 @@ export const annotationTypeHandlers: Record<
       callback(annotation.center, false);
       callback(annotation.radii, true);
     },
-    defaultProperties(annotation: Ellipsoid, scales: vec3) {
+    defaultProperties(annotation: Ellipsoid, scales: Float64Array) {
       annotation;
       scales;
       return { properties: [], values: [] };
