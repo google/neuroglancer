@@ -55,6 +55,7 @@ import {
 import { parseDataTypeValue } from "#src/util/lerp.js";
 import { getRandomHexString } from "#src/util/random.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
+import { formatLength } from "#src/util/spatial_units.js";
 import { Uint64 } from "#src/util/uint64.js";
 
 export type AnnotationId = string;
@@ -107,6 +108,7 @@ export interface AnnotationNumericPropertySpec
   min?: number;
   max?: number;
   step?: number;
+  format?: (x: number) => string;
 }
 
 export const propertyTypeDataType: Record<
@@ -497,6 +499,9 @@ export function formatNumericProperty(
   property: AnnotationNumericPropertySpec,
   value: number,
 ): string {
+  if (property.format) {
+    return property.format(value);
+  }
   const formattedValue =
     property.type === "float32" ? value.toPrecision(6) : value.toString();
   const { enumValues, enumLabels } = property;
@@ -830,6 +835,7 @@ export const annotationTypeHandlers: Record<
             identifier: "Length",
             default: 0,
             description: "Length of the line annotation in nanometers",
+            format: formatLength,
           },
         ],
         values: [
