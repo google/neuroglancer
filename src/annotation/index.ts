@@ -56,6 +56,7 @@ import { getRandomHexString } from "#src/util/random.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { formatLength } from "#src/util/spatial_units.js";
 import { Uint64 } from "#src/util/uint64.js";
+import { ALLOWED_UNITS } from "#src/widget/scale_bar.js";
 
 export type AnnotationId = string;
 
@@ -703,6 +704,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   defaultProperties: (
     annotation: T,
     scales: Float64Array,
+    units: readonly string[],
   ) => {
     properties: AnnotationNumericPropertySpec[];
     values: number[];
@@ -761,6 +763,29 @@ function deserializeTwoFloatVectors(
   offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vecA);
   offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vecB);
   return offset;
+}
+
+function lineLength(
+  line: Line,
+  scales: Float64Array,
+  units: readonly string[],
+) {
+  const scalesRank = scales.length;
+  const lineRank = line.pointA.length;
+  if (scalesRank < lineRank) {
+    return;
+  }
+  let lengthSquared = 0;
+  for (let dim = 0; dim < lineRank; dim++) {
+    const unitInfo = ALLOWED_UNITS.find((x) => x.unit === units[dim]);
+    if (!unitInfo) {
+      return;
+    }
+    const voxelToNanometers = scales[dim] * unitInfo.lengthInNanometers;
+    lengthSquared +=
+      ((line.pointA[dim] - line.pointB[dim]) * voxelToNanometers) ** 2;
+  }
+  return Math.sqrt(lengthSquared);
 }
 
 export const annotationTypeHandlers: Record<
@@ -826,14 +851,15 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
-    defaultProperties(annotation: Line, scales: Float64Array) {
+    defaultProperties(
+      annotation: Line,
+      scales: Float64Array,
+      units: readonly string[],
+    ) {
       const properties: AnnotationNumericPropertySpec[] = [];
       const values: number[] = [];
-      const rank = scales.length;
-      if (
-        rank === annotation.pointA.length &&
-        rank === annotation.pointB.length
-      ) {
+      const length = lineLength(annotation, scales, units);
+      if (length) {
         properties.push({
           type: "float32",
           identifier: "Length",
@@ -841,14 +867,6 @@ export const annotationTypeHandlers: Record<
           description: "Length of the line annotation in nanometers",
           format: formatLength,
         });
-        let length = 0;
-        for (let dim = 0; dim < rank; dim++) {
-          length +=
-            (((annotation.pointA[dim] - annotation.pointB[dim]) / 1e-9) *
-              scales[dim]) **
-            2;
-        }
-        length = Math.sqrt(length);
         values.push(length);
       }
       return { properties, values };
@@ -897,9 +915,14 @@ export const annotationTypeHandlers: Record<
     visitGeometry(annotation: Point, callback) {
       callback(annotation.point, false);
     },
-    defaultProperties(annotation: Point, scales: Float64Array) {
+    defaultProperties(
+      annotation: Point,
+      scales: Float64Array,
+      units: string[],
+    ) {
       annotation;
       scales;
+      units;
       return { properties: [], values: [] };
     },
   },
@@ -973,9 +996,11 @@ export const annotationTypeHandlers: Record<
     defaultProperties(
       annotation: AxisAlignedBoundingBox,
       scales: Float64Array,
+      units: string[],
     ) {
       annotation;
       scales;
+      units;
       return { properties: [], values: [] };
     },
   },
@@ -1046,9 +1071,14 @@ export const annotationTypeHandlers: Record<
       callback(annotation.center, false);
       callback(annotation.radii, true);
     },
-    defaultProperties(annotation: Ellipsoid, scales: Float64Array) {
+    defaultProperties(
+      annotation: Ellipsoid,
+      scales: Float64Array,
+      units: string[],
+    ) {
       annotation;
       scales;
+      units;
       return { properties: [], values: [] };
     },
   },

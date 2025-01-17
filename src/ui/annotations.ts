@@ -1858,7 +1858,11 @@ export function UserLayerWithAnnotationsMixin<
                   this.manager.root.coordinateSpace.value;
                 const defaultProperties = annotationTypeHandlers[
                   annotation.type
-                ].defaultProperties(annotation, globalCoordinateSpace.scales);
+                ].defaultProperties(
+                  annotation,
+                  globalCoordinateSpace.scales,
+                  globalCoordinateSpace.units,
+                );
                 const allProperties = [
                   ...defaultProperties.properties,
                   ...properties,
