@@ -219,32 +219,25 @@ export class ScreenshotDialog extends Overlay {
   }
 
   private setupHelpTooltips() {
-    const generalSettingsTooltip = makeIcon({ svg: svg_help });
-    generalSettingsTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    generalSettingsTooltip.setAttribute(
-      "data-tooltip",
-      TOOLTIPS.generalSettingsTooltip,
-    );
+    const generalSettingsTooltip = makeIcon({
+      svg: svg_help,
+      title: TOOLTIPS.generalSettingsTooltip,
+    });
 
-    const orthographicSettingsTooltip = makeIcon({ svg: svg_help });
-    orthographicSettingsTooltip.classList.add(
-      "neuroglancer-screenshot-tooltip",
-    );
-    orthographicSettingsTooltip.setAttribute(
-      "data-tooltip",
-      TOOLTIPS.orthographicSettingsTooltip,
-    );
+    const orthographicSettingsTooltip = makeIcon({
+      svg: svg_help,
+      title: TOOLTIPS.orthographicSettingsTooltip,
+    });
 
-    const layerDataTooltip = makeIcon({ svg: svg_help });
-    layerDataTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    layerDataTooltip.setAttribute("data-tooltip", TOOLTIPS.layerDataTooltip);
+    const layerDataTooltip = makeIcon({
+      svg: svg_help,
+      title: TOOLTIPS.layerDataTooltip,
+    });
 
-    const scaleFactorHelpTooltip = makeIcon({ svg: svg_help });
-    scaleFactorHelpTooltip.classList.add("neuroglancer-screenshot-tooltip");
-    scaleFactorHelpTooltip.setAttribute(
-      "data-tooltip",
-      TOOLTIPS.scaleFactorHelpTooltip,
-    );
+    const scaleFactorHelpTooltip = makeIcon({
+      svg: svg_help,
+      title: TOOLTIPS.scaleFactorHelpTooltip,
+    });
 
     return (this.helpTooltips = {
       generalSettingsTooltip,
