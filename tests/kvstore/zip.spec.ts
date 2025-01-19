@@ -42,7 +42,7 @@ function readAllUsingYauzl(zipPath: string) {
         return;
       }
       zipfile.on("entry", async (entry) => {
-        if (/\/$/.test(entry.fileName)) {
+        if (entry.fileName.endsWith("/")) {
           zipfile.readEntry();
           return;
         }

@@ -32,8 +32,8 @@
     "test:watch": "vitest watch",
     "benchmark": "vitest bench --run",
     "benchmark:watch": "vitest bench",
-    "lint:check": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint:check": "oxlint && eslint . --cache --format codeframe",
+    "lint:fix": "oxlint --fix && eslint . --cache --fix --format codeframe && prettier --cache -w -l .",
     "format:check": "prettier --cache . -c",
     "format:fix": "prettier --cache -w -l .",
     "typecheck": "tsc --noEmit",
@@ -62,8 +62,10 @@
     "css-loader": "^7.1.2",
     "esbuild": "^0.24.2",
     "eslint": "^9.18.0",
+    "eslint-formatter-codeframe": "^7.32.1",
     "eslint-import-resolver-typescript": "^3.7.0",
     "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-oxlint": "^0.15.7",
     "eslint-rspack-plugin": "^4.2.1",
     "express": "^4.21.2",
     "glob": "^11.0.1",
@@ -71,6 +73,7 @@
     "jsdom": "^26.0.0",
     "msw": "^2.7.0",
     "nunjucks": "^3.2.4",
+    "oxlint": "^0.15.7",
     "playwright": "^1.49.1",
     "prettier": "3.4.2",
     "s3rver": "^3.7.1",
@@ -251,12 +254,6 @@
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
       "neuroglancer/datasource/n5:disabled": "./src/util/false.ts",
       "default": "./src/datasource/n5/register_default.ts"
-    },
-    "#datasource/nggraph/backend": {
-      "neuroglancer/datasource/nggraph:enabled": "./src/datasource/nggraph/backend.ts",
-      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/nggraph:disabled": "./src/util/false.ts",
-      "default": "./src/datasource/nggraph/backend.ts"
     },
     "#datasource/nggraph/register_default": {
       "neuroglancer/datasource/nggraph:enabled": "./src/datasource/nggraph/register_default.ts",

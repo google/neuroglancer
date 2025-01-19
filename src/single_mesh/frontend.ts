@@ -45,7 +45,7 @@ import type { mat4 } from "#src/util/geom.js";
 import { vec3 } from "#src/util/geom.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
-import type { Buffer } from "#src/webgl/buffer.js";
+import type { GLBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import {
@@ -396,7 +396,7 @@ export class VertexChunkData {
 
 export class SingleMeshChunk extends Chunk {
   declare source: SingleMeshSource;
-  indexBuffer: Buffer;
+  indexBuffer: GLBuffer;
   numIndices: number;
   indices: Uint32Array;
   vertexData: VertexChunkData;
