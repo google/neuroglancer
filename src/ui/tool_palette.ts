@@ -1028,7 +1028,7 @@ export class MultiToolPaletteState implements Trackable {
     this.checkTitles(palette);
     palette.location.value = {
       ...DEFAULT_TOOL_PALETTE_PANEL_LOCATION,
-      ...(location ?? {}),
+      ...location,
     };
     palette.location.locationChanged.dispatch();
     this.add(palette);
