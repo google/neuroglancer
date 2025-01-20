@@ -24,6 +24,7 @@ import {
   makeDataBoundsBoundingBoxAnnotationSet,
   parseAnnotationPropertySpecs,
 } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type {
   BoundingBox,
@@ -405,9 +406,12 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
   declare key: any;
   metadata: AnnotationMetadata;
   declare OPTIONS: PrecomputedAnnotationSourceOptions;
-  constructor(options: PrecomputedAnnotationSourceOptions) {
+  constructor(
+    chunkManager: ChunkManager,
+    options: PrecomputedAnnotationSourceOptions,
+  ) {
     const { parameters } = options;
-    super(options.sharedKvStoreContext.chunkManager, {
+    super(chunkManager, {
       rank: parameters.rank,
       relationships: parameters.relationships.map((x) => x.name),
       properties: parameters.properties,
