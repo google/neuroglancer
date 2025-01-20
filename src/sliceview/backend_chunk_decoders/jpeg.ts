@@ -21,13 +21,13 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 
 export async function decodeJpegChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const chunkDataSize = chunk.chunkDataSize!;
   const { uint8Array: decoded } = await requestAsyncComputation(
     decodeJpeg,
-    abortSignal,
+    signal,
     [response],
     new Uint8Array(response),
     undefined,
@@ -36,5 +36,5 @@ export async function decodeJpegChunk(
     chunkDataSize[3] || 1,
     false,
   );
-  await postProcessRawData(chunk, abortSignal, decoded);
+  await postProcessRawData(chunk, signal, decoded);
 }

@@ -15,7 +15,6 @@
  */
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type {
   BoundingBox,
@@ -26,25 +25,24 @@ import {
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
-import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import {
   ImageTileEncoding,
   ImageTileSourceParameters,
 } from "#src/datasource/deepzoom/base.js";
 import type {
-  CompleteUrlOptions,
-  ConvertLegacyUrlOptions,
   DataSource,
   DataSubsourceEntry,
-  GetDataSourceOptions,
-  NormalizeUrlOptions,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
-import {
-  parseProviderUrl,
-  resolvePath,
-  unparseProviderUrl,
-} from "#src/datasource/precomputed/frontend.js";
+import type {
+  AutoDetectFileOptions,
+  AutoDetectMatch,
+  AutoDetectRegistry,
+} from "#src/kvstore/auto_detect.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
@@ -57,7 +55,6 @@ import {
 } from "#src/sliceview/volume/frontend.js";
 import { transposeNestedArrays } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
-import { completeHttpPath } from "#src/util/http_path_completion.js";
 import {
   verifyEnumString,
   verifyInt,
@@ -65,18 +62,11 @@ import {
   verifyPositiveInt,
   verifyString,
 } from "#src/util/json.js";
-import { getObjectId } from "#src/util/object_id.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 /*export*/ class DeepzoomImageTileSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),
+  WithSharedKvStoreContext(VolumeChunkSource),
   ImageTileSourceParameters,
 ) {}
 
@@ -150,12 +140,11 @@ interface LevelInfo {
   url: string;
 
   constructor(
-    chunkManager: ChunkManager,
-    public credentialsProvider: SpecialProtocolCredentialsProvider,
-    /*public*/ url: string,
+    public sharedKvStoreContext: SharedKvStoreContext,
+    url: string,
     public info: PyramidalImageInfo,
   ) {
-    super(chunkManager);
+    super(sharedKvStoreContext.chunkManager);
     this.url = url.substring(0, url.lastIndexOf(".")) + "_files";
   }
 
@@ -196,13 +185,10 @@ interface LevelInfo {
             chunkSource: this.chunkManager.getChunkSource(
               DeepzoomImageTileSource,
               {
-                credentialsProvider: this.credentialsProvider,
+                sharedKvStoreContext: this.sharedKvStoreContext,
                 spec,
                 parameters: {
-                  url: resolvePath(
-                    this.url,
-                    (array.length - 1 - index).toString(),
-                  ),
+                  url: `${this.url}/${array.length - 1 - index}/`,
                   encoding: this.info.encoding,
                   format: this.info.format,
                   overlap: this.info.overlap,
@@ -228,9 +214,9 @@ interface DZIMetaData {
 }
 
 function getDZIMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ): Promise<DZIMetaData> {
   if (url.endsWith(".json") || url.includes(".json?")) {
     /* http://openseadragon.github.io/examples/tilesource-dzi/
@@ -240,16 +226,21 @@ function getDZIMetadata(
      */
     throw new Error("DZI-JSON: OpenSeadragon hack not supported yet.");
   }
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     {
       type: "deepzoom:metadata",
       url,
-      credentialsProvider: getObjectId(credentialsProvider),
     },
-    async () => {
-      const text = await fetchSpecialOk(credentialsProvider, url, {}).then(
-        (response) => response.text(),
-      );
+    options,
+    async (progressOptions) => {
+      using _span = new ProgressSpan(progressOptions.progressListener, {
+        message: `Reading Deep Zoom metadata from ${url}`,
+      });
+      const { response } = await sharedKvStoreContext.kvStoreContext.read(url, {
+        ...progressOptions,
+        throwIfMissing: true,
+      });
+      const text = await response.text();
       const xml = new DOMParser().parseFromString(text, "text/xml");
       const image = xml.documentElement;
       const size = verifyObject(image.getElementsByTagName("Size").item(0));
@@ -266,16 +257,14 @@ function getDZIMetadata(
   );
 }
 
-async function getImageDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+function getImageDataSource(
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   metadata: DZIMetaData,
-): Promise<DataSource> {
+): DataSource {
   const info = buildPyramidalImageInfo(metadata);
   const volume = new DeepzoomPyramidalImageTileSource(
-    options.chunkManager,
-    credentialsProvider,
+    sharedKvStoreContext,
     url,
     info,
   );
@@ -296,53 +285,61 @@ async function getImageDataSource(
       },
     },
   ];
-  return { modelTransform: makeIdentityTransform(modelSpace), subsources };
+  return {
+    modelTransform: makeIdentityTransform(modelSpace),
+    subsources,
+    canonicalUrl: `${url}|deepzoom:`,
+  };
 }
 
-export class DeepzoomDataSource extends DataSourceProvider {
+export class DeepzoomDataSource implements KvStoreBasedDataSourceProvider {
+  get scheme() {
+    return "deepzoom";
+  }
   get description() {
-    return "Deep Zoom file-backed data source";
+    return "Deep Zoom data source";
   }
 
-  normalizeUrl(options: NormalizeUrlOptions): string {
-    const { url, parameters } = parseProviderUrl(options.providerUrl);
-    return (
-      options.providerProtocol + "://" + unparseProviderUrl(url, parameters)
-    );
-  }
-
-  convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
-    const { url, parameters } = parseProviderUrl(options.providerUrl);
-    return (
-      options.providerProtocol + "://" + unparseProviderUrl(url, parameters)
-    );
-  }
-
-  get(options: GetDataSourceOptions): Promise<DataSource> {
-    const { url: providerUrl, parameters } = parseProviderUrl(
-      options.providerUrl,
-    );
-    return options.chunkManager.memoize.getUncounted(
-      { type: "deepzoom:get", providerUrl, parameters },
-      async (): Promise<DataSource> => {
-        const { url, credentialsProvider } = parseSpecialUrl(
-          providerUrl,
-          options.credentialsManager,
-        );
+  get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureEmptyUrlSuffix(options.url);
+    return options.registry.chunkManager.memoize.getAsync(
+      { type: "deepzoom:get", url: options.kvStoreUrl },
+      options,
+      async (progressOptions): Promise<DataSource> => {
         const metadata = await getDZIMetadata(
-          options.chunkManager,
-          credentialsProvider,
-          url,
+          options.registry.sharedKvStoreContext,
+          options.kvStoreUrl,
+          progressOptions,
         );
-        return getImageDataSource(options, credentialsProvider, url, metadata);
+        return getImageDataSource(
+          options.registry.sharedKvStoreContext,
+          options.kvStoreUrl,
+          metadata,
+        );
       },
     );
   }
-  completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(
-      options.credentialsManager,
-      options.providerUrl,
-      options.abortSignal,
-    );
+}
+
+async function detectFormat(
+  options: AutoDetectFileOptions,
+): Promise<AutoDetectMatch[]> {
+  const text = new TextDecoder().decode(options.prefix);
+  const xml = new DOMParser().parseFromString(text, "text/xml");
+  if (
+    xml.documentElement.tagName === "Image" &&
+    xml.documentElement.namespaceURI ===
+      "http://schemas.microsoft.com/deepzoom/2009"
+  ) {
+    return [{ suffix: "deepzoom:", description: "Deep Zoom" }];
   }
+  return [];
+}
+
+export function registerAutoDetect(registry: AutoDetectRegistry) {
+  registry.registerFileFormat({
+    prefixLength: 500,
+    suffixLength: 0,
+    match: detectFormat,
+  });
 }

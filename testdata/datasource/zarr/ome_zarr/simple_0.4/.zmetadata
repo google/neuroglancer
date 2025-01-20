@@ -1,0 +1,202 @@
+{
+  "metadata": {
+    ".zgroup": {
+      "zarr_format": 2
+    },
+    ".zattrs": {
+      "multiscales": [
+        {
+          "axes": [
+            {
+              "name": "y",
+              "type": "space",
+              "unit": "nanometer"
+            },
+            {
+              "name": "x",
+              "type": "space",
+              "unit": "nanometer"
+            }
+          ],
+          "datasets": [
+            {
+              "path": "scale0/image",
+              "coordinateTransformations": [
+                {
+                  "scale": [
+                    4,
+                    30
+                  ],
+                  "type": "scale"
+                },
+                {
+                  "translation": [
+                    0.0,
+                    0.0
+                  ],
+                  "type": "translation"
+                }
+              ]
+            },
+            {
+              "path": "scale1/image",
+              "coordinateTransformations": [
+                {
+                  "scale": [
+                    8,
+                    60
+                  ],
+                  "type": "scale"
+                },
+                {
+                  "translation": [
+                    2,
+                    15
+                  ],
+                  "type": "translation"
+                }
+              ]
+            },
+            {
+              "path": "scale2/image",
+              "coordinateTransformations": [
+                {
+                  "scale": [
+                    16,
+                    120
+                  ],
+                  "type": "scale"
+                },
+                {
+                  "translation": [
+                    6,
+                    45
+                  ],
+                  "type": "translation"
+                }
+              ]
+            }
+          ],
+          "name": "image",
+          "version": "0.4",
+          "@type": "ngff:Image"
+        }
+      ]
+    },
+    "scale2/.zattrs": {
+      "_ARRAY_DIMENSIONS": [
+        "y",
+        "x"
+      ]
+    },
+    "scale2/.zgroup": {
+      "zarr_format": 2,
+      "consolidated_metadata": {
+        "metadata": {},
+        "must_understand": false,
+        "kind": "inline"
+      }
+    },
+    "scale2/image/.zattrs": {},
+    "scale2/image/.zarray": {
+      "shape": [
+        2,
+        2
+      ],
+      "chunks": [
+        2,
+        2
+      ],
+      "fill_value": null,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": {
+        "id": "blosc",
+        "cname": "lz4",
+        "clevel": 5,
+        "shuffle": -1,
+        "blocksize": 0
+      },
+      "zarr_format": 2,
+      "dtype": "<u2"
+    },
+    "scale0/.zattrs": {
+      "_ARRAY_DIMENSIONS": [
+        "y",
+        "x"
+      ]
+    },
+    "scale0/.zgroup": {
+      "zarr_format": 2,
+      "consolidated_metadata": {
+        "metadata": {},
+        "must_understand": false,
+        "kind": "inline"
+      }
+    },
+    "scale0/image/.zattrs": {},
+    "scale0/image/.zarray": {
+      "shape": [
+        10,
+        10
+      ],
+      "chunks": [
+        10,
+        10
+      ],
+      "fill_value": null,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": {
+        "id": "blosc",
+        "cname": "lz4",
+        "clevel": 5,
+        "shuffle": -1,
+        "blocksize": 0
+      },
+      "zarr_format": 2,
+      "dtype": "<u2"
+    },
+    "scale1/.zattrs": {
+      "_ARRAY_DIMENSIONS": [
+        "y",
+        "x"
+      ]
+    },
+    "scale1/.zgroup": {
+      "zarr_format": 2,
+      "consolidated_metadata": {
+        "metadata": {},
+        "must_understand": false,
+        "kind": "inline"
+      }
+    },
+    "scale1/image/.zattrs": {},
+    "scale1/image/.zarray": {
+      "shape": [
+        5,
+        5
+      ],
+      "chunks": [
+        5,
+        5
+      ],
+      "fill_value": null,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": {
+        "id": "blosc",
+        "cname": "lz4",
+        "clevel": 5,
+        "shuffle": -1,
+        "blocksize": 0
+      },
+      "zarr_format": 2,
+      "dtype": "<u2"
+    }
+  },
+  "zarr_consolidated_format": 1
+}

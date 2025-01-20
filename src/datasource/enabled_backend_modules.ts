@@ -5,7 +5,6 @@ import "#datasource/deepzoom/backend";
 import "#datasource/dvid/backend";
 import "#datasource/graphene/backend";
 import "#datasource/n5/backend";
-import "#datasource/nggraph/backend";
 import "#datasource/nifti/backend";
 import "#datasource/obj/backend";
 import "#datasource/precomputed/backend";

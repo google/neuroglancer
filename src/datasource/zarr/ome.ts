@@ -188,7 +188,7 @@ function parseMultiscaleScale(
     "coordinateTransformations",
     (x) => parseOmeCoordinateTransforms(rank, x),
   );
-  const scaleUrl = `${url}/${path}`;
+  const scaleUrl = `${url}${path}/`;
   return { url: scaleUrl, transform };
 }
 

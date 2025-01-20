@@ -51,7 +51,7 @@ import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { Uint64 } from "#src/util/uint64.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import { Buffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
+import { GLBuffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
@@ -685,12 +685,12 @@ function getTextureVertexBufferArray() {
  */
 class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: DirectLookupTableTexture;
-  private textureVertexBuffer: Buffer;
-  private controlPointsVertexBuffer: Buffer;
+  private textureVertexBuffer: GLBuffer;
+  private controlPointsVertexBuffer: GLBuffer;
   private controlPointsPositionArray = new Float32Array();
-  private controlPointsColorBuffer: Buffer;
+  private controlPointsColorBuffer: GLBuffer;
   private controlPointsColorArray = new Float32Array();
-  private linePositionBuffer: Buffer;
+  private linePositionBuffer: GLBuffer;
   private linePositionArray = new Float32Array();
   get drawOrder() {
     return 1;
@@ -740,13 +740,13 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       ),
     ).value;
     this.controlPointsVertexBuffer = this.registerDisposer(
-      new Buffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
     this.controlPointsColorBuffer = this.registerDisposer(
-      new Buffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
     this.linePositionBuffer = this.registerDisposer(
-      new Buffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
   }
 

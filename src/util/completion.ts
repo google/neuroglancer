@@ -26,6 +26,12 @@ export interface CompletionWithDescription extends Completion {
 
 export interface BasicCompletionResult<C extends Completion = Completion> {
   completions: C[];
+  // Default completion to show.
+  //
+  // If not specified, the longest common prefix of all completions is the
+  // "default completion" to show inline as a hint and to append if the user
+  // presses TAB.  This option overrides that.
+  defaultCompletion?: string;
   offset: number;
 }
 

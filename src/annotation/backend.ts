@@ -170,8 +170,8 @@ class AnnotationMetadataChunkSource extends ChunkSource {
     return chunk;
   }
 
-  download(chunk: AnnotationMetadataChunk, abortSignal: AbortSignal) {
-    return this.parent!.downloadMetadata(chunk, abortSignal);
+  download(chunk: AnnotationMetadataChunk, signal: AbortSignal) {
+    return this.parent!.downloadMetadata(chunk, signal);
   }
 }
 
@@ -205,11 +205,11 @@ class AnnotationSubsetGeometryChunkSource extends ChunkSource {
     }
     return chunk;
   }
-  download(chunk: AnnotationSubsetGeometryChunk, abortSignal: AbortSignal) {
+  download(chunk: AnnotationSubsetGeometryChunk, signal: AbortSignal) {
     return this.parent!.downloadSegmentFilteredGeometry(
       chunk,
       this.relationshipIndex,
-      abortSignal,
+      signal,
     );
   }
 }
@@ -220,12 +220,12 @@ export interface AnnotationSource {
   // TypeScript supports mixins with abstract classes.
   downloadMetadata(
     chunk: AnnotationMetadataChunk,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<void>;
   downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk,
     relationshipIndex: number,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<void>;
 }
 

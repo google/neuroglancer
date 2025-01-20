@@ -21,6 +21,9 @@ import { makeCloseButton } from "#src/widget/close_button.js";
 let statusContainer: HTMLElement | undefined;
 let modalStatusContainer: HTMLElement | undefined;
 
+// Exported for use by #tests/fixtures/status_message_handler.js
+export const statusMessages = new Set<StatusMessage>();
+
 export const DEFAULT_STATUS_DELAY = 200;
 
 export type Delay = boolean | number;
@@ -57,6 +60,11 @@ function getModalStatusContainer() {
   return modalStatusContainer;
 }
 
+// For use by #tests/fixtures/status_message_handler.js
+export function getStatusMessageContainers() {
+  return [getStatusContainer(), getModalStatusContainer()];
+}
+
 export class StatusMessage {
   element: HTMLElement;
   private modalElementWrapper: HTMLElement | undefined;
@@ -75,6 +83,7 @@ export class StatusMessage {
     } else {
       this.timer = null;
     }
+    statusMessages.add(this);
   }
 
   [Symbol.dispose]() {
@@ -90,6 +99,7 @@ export class StatusMessage {
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }
+    statusMessages.delete(this);
   }
   setText(text: string, makeVisible?: boolean) {
     this.element.textContent = text;

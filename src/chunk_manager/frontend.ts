@@ -196,9 +196,9 @@ export class ChunkQueueManager extends SharedObject {
   }
 
   private handleFetch_(source: ChunkSource, update: any) {
-    const { resolve, reject, abortSignal } = update.promise;
-    if (abortSignal.aborted) {
-      reject(abortSignal.reason);
+    const { resolve, reject, signal } = update.promise;
+    if (signal.aborted) {
+      reject(signal.reason);
       return;
     }
 
@@ -348,15 +348,12 @@ registerRPC("Chunk.update", function (x) {
   updateChunk(this, x);
 });
 
-registerPromiseRPC(
-  "Chunk.retrieve",
-  function (x, abortSignal): RPCPromise<any> {
-    return new Promise<{ value: any }>((resolve, reject) => {
-      x.promise = { resolve, reject, abortSignal };
-      updateChunk(this, x);
-    });
-  },
-);
+registerPromiseRPC("Chunk.retrieve", function (x, signal): RPCPromise<any> {
+  return new Promise<{ value: any }>((resolve, reject) => {
+    x.promise = { resolve, reject, signal };
+    updateChunk(this, x);
+  });
+});
 
 registerRPC(CHUNK_LAYER_STATISTICS_RPC_ID, function (x) {
   const chunkManager = this.get(x.id) as ChunkManager;

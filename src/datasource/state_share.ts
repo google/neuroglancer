@@ -1,10 +1,6 @@
-import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { HttpKvStore } from "#src/kvstore/http/index.js";
 import { StatusMessage } from "#src/status.js";
 import { RefCounted } from "#src/util/disposable.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
 import type { Viewer } from "#src/viewer.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -77,24 +73,32 @@ export class StateShare extends RefCounted {
       const selectedStateServer = this.selectStateServerElement
         ? this.selectStateServerElement.value
         : Object.values(STATE_SERVERS)[0].url;
-      const protocol = new URL(selectedStateServer).protocol;
-      const { url: parsedUrl, credentialsProvider } = parseSpecialUrl(
-        selectedStateServer,
-        defaultCredentialsManager,
-      );
+
+      const { store, path } =
+        viewer.dataSourceProvider.sharedKvStoreContext.kvStoreContext.getKvStore(
+          selectedStateServer,
+        );
+
+      if (!(store instanceof HttpKvStore)) {
+        throw new Error(
+          `Non-HTTP protocol not supported: ${selectedStateServer}`,
+        );
+      }
 
       StatusMessage.forPromise(
-        fetchSpecialOk(credentialsProvider, parsedUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(viewer.state.toJSON()),
-        })
+        store
+          .fetchOkImpl(store.baseUrl + path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(viewer.state.toJSON()),
+          })
           .then((response) => response.json())
           .then((res) => {
             const stateUrlProtcol = new URL(res).protocol;
             const stateUrlWithoutProtocol = res.substring(
               stateUrlProtcol.length,
             );
+            const protocol = new URL(selectedStateServer).protocol;
             const link = `${window.location.origin}/#!${protocol}${stateUrlWithoutProtocol}`;
             navigator.clipboard.writeText(link).then(() => {
               StatusMessage.showTemporaryMessage(

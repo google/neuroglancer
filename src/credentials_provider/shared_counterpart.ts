@@ -20,15 +20,23 @@
  */
 
 import type {
-  CredentialsProvider,
+  CredentialsManager,
   CredentialsWithGeneration,
   MaybeOptionalCredentialsProvider,
 } from "#src/credentials_provider/index.js";
-import { makeCachedCredentialsGetter } from "#src/credentials_provider/index.js";
 import {
+  CachingCredentialsManager,
+  makeCachedCredentialsGetter,
+  CredentialsProvider,
+} from "#src/credentials_provider/index.js";
+import {
+  CREDENTIALS_MANAGER_GET_RPC_ID,
+  CREDENTIALS_MANAGER_RPC_ID,
   CREDENTIALS_PROVIDER_GET_RPC_ID,
   CREDENTIALS_PROVIDER_RPC_ID,
 } from "#src/credentials_provider/shared_common.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerSharedObject,
   SharedObjectCounterpart,
@@ -41,13 +49,13 @@ export class SharedCredentialsProviderCounterpart<Credentials>
 {
   get = makeCachedCredentialsGetter(
     (
-      invalidCredentials?: CredentialsWithGeneration<Credentials>,
-      abortSignal?: AbortSignal,
+      invalidCredentials: CredentialsWithGeneration<Credentials> | undefined,
+      options: ProgressOptions,
     ): Promise<CredentialsWithGeneration<Credentials>> =>
       this.rpc!.promiseInvoke(
         CREDENTIALS_PROVIDER_GET_RPC_ID,
         { providerId: this.rpcId, invalidCredentials: invalidCredentials },
-        abortSignal,
+        { signal: options.signal, progressListener: options.progressListener },
       ),
   );
 }
@@ -66,4 +74,58 @@ export function WithSharedCredentialsProviderCounterpart<Credentials>() {
         >(options.credentialsProvider) as any;
       }
     };
+}
+
+class ProxyCredentialsProvider<
+  Credentials,
+> extends CredentialsProvider<Credentials> {
+  constructor(
+    public rpc: RPC,
+    public managerId: number,
+    public key: string,
+    public parameters?: any,
+  ) {
+    super();
+  }
+  get = makeCachedCredentialsGetter(
+    (
+      invalidCredentials: CredentialsWithGeneration<Credentials> | undefined,
+      options: ProgressOptions,
+    ): Promise<CredentialsWithGeneration<Credentials>> =>
+      this.rpc.promiseInvoke(
+        CREDENTIALS_MANAGER_GET_RPC_ID,
+        {
+          managerId: this.managerId,
+          key: this.key,
+          parameters: this.parameters,
+          invalidCredentials: invalidCredentials,
+        },
+        { signal: options.signal, progressListener: options.progressListener },
+      ),
+  );
+}
+
+@registerSharedObject(CREDENTIALS_MANAGER_RPC_ID)
+export class SharedCredentialsManagerCounterpart
+  extends SharedObjectCounterpart
+  implements CredentialsManager
+{
+  private impl: CachingCredentialsManager<CredentialsManager> =
+    new CachingCredentialsManager(this.makeBaseCredentialsManager());
+
+  private makeBaseCredentialsManager(): CredentialsManager {
+    return {
+      getCredentialsProvider: <Credentials>(key: string, parameters?: any) =>
+        new ProxyCredentialsProvider<Credentials>(
+          this.rpc!,
+          this.rpcId!,
+          key,
+          parameters,
+        ),
+    };
+  }
+
+  getCredentialsProvider<Credentials>(key: string, parameters?: any) {
+    return this.impl.getCredentialsProvider<Credentials>(key, parameters);
+  }
 }

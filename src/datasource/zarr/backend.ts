@@ -20,7 +20,6 @@ import "#src/datasource/zarr/codec/bytes/decode.js";
 import "#src/datasource/zarr/codec/crc32c/decode.js";
 
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
 import {
   applySharding,
@@ -30,30 +29,24 @@ import "#src/datasource/zarr/codec/gzip/decode.js";
 import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
 import "#src/datasource/zarr/codec/transpose/decode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
-import { getSpecialProtocolKvStore } from "#src/kvstore/special/index.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
 export class ZarrVolumeChunkSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    VolumeChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {
   private chunkKvStore = applySharding(
     this.chunkManager,
     this.parameters.metadata.codecs,
-    getSpecialProtocolKvStore(
-      this.credentialsProvider,
-      this.parameters.url + "/",
-    ),
+    this.sharedKvStoreContext.kvStoreContext.getKvStore(this.parameters.url),
   );
 
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const { parameters } = this;
     const { chunkGridPosition } = chunk;
@@ -93,15 +86,15 @@ export class ZarrVolumeChunkSource extends WithParameters(
     const { chunkKvStore } = this;
     const response = await chunkKvStore.kvStore.read(
       chunkKvStore.getChunkKey(chunkGridPosition, baseKey),
-      { abortSignal },
+      { signal },
     );
     if (response !== undefined) {
       const decoded = await decodeArray(
         chunkKvStore.decodeCodecs,
-        response.data,
-        abortSignal,
+        new Uint8Array(await response.response.arrayBuffer()),
+        signal,
       );
-      await postProcessRawData(chunk, abortSignal, decoded);
+      await postProcessRawData(chunk, signal, decoded);
     }
   }
 }

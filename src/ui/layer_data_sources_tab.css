@@ -112,3 +112,13 @@ li.neuroglancer-message-info {
 .neuroglancer-layer-data-sources-tab-type-detection-type {
   font-weight: bold;
 }
+
+.neuroglancer-layer-data-sources-tab .neuroglancer-progress {
+  margin: 0px;
+  list-style: none;
+  padding: 0px;
+}
+
+.neuroglancer-layer-data-sources-tab .neuroglancer-progress > li {
+  color: #ccc;
+}

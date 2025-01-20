@@ -33,6 +33,7 @@ import {
   verifyObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 import { getRandomHexString } from "#src/util/random.js";
 
 export type BossToken = string;
@@ -61,7 +62,7 @@ function makeAuthRequestUrl(options: {
 function waitForAuthResponseMessage(
   source: Window,
   state: string,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<BossToken> {
   return new Promise((resolve, reject) => {
     window.addEventListener(
@@ -104,7 +105,7 @@ function waitForAuthResponseMessage(
           console.error("Response received: ", event.data);
         }
       },
-      { signal: abortSignal },
+      { signal: signal },
     );
   });
 }
@@ -115,7 +116,7 @@ function waitForAuthResponseMessage(
  */
 export async function authenticateKeycloakOIDC(
   options: { realm: string; clientId: string; authServer: string },
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<BossToken> {
   const state = getRandomHexString();
   const nonce = getRandomHexString();
@@ -127,7 +128,7 @@ export async function authenticateKeycloakOIDC(
     nonce: nonce,
   });
   const abortController = new AbortController();
-  abortSignal = AbortSignal.any([abortController.signal, abortSignal]);
+  signal = AbortSignal.any([abortController.signal, signal]);
   try {
     const newWindow = open(url);
     if (newWindow === null) {
@@ -136,7 +137,7 @@ export async function authenticateKeycloakOIDC(
     monitorAuthPopupWindow(newWindow, abortController);
     return await raceWithAbort(
       waitForAuthResponseMessage(newWindow, state, abortController.signal),
-      abortSignal,
+      signal,
     );
   } finally {
     abortController.abort();
@@ -148,8 +149,11 @@ export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
     super();
   }
 
-  get = makeCredentialsGetter((abortSignal) =>
-    getCredentialsWithStatus(
+  get = makeCredentialsGetter(async (options) => {
+    using _span = new ProgressSpan(options.progressListener, {
+      message: `Requesting Boss access token from ${this.authServer}`,
+    });
+    return await getCredentialsWithStatus(
       {
         description: "Boss",
         get: (signal) =>
@@ -162,7 +166,7 @@ export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
             signal,
           ),
       },
-      abortSignal,
-    ),
-  );
+      options.signal,
+    );
+  });
 }
