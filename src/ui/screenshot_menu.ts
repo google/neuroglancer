@@ -328,6 +328,7 @@ export class ScreenshotDialog extends Overlay {
     this.screenshotPixelSize = document.createElement("span");
 
     const screenshotCopyButton = makeCopyButton({
+      title: "Copy table to clipboard",
       onClick: () => {
         const result = setClipboard(this.getResolutionText());
         StatusMessage.showTemporaryMessage(
@@ -338,10 +339,6 @@ export class ScreenshotDialog extends Overlay {
       },
     });
     screenshotCopyButton.classList.add("neuroglancer-screenshot-copy-icon");
-    screenshotCopyButton.setAttribute(
-      "data-tooltip",
-      "Copy table to clipboard",
-    );
 
     this.screenshotSizeText.appendChild(screenshotLabel);
     this.screenshotSizeText.appendChild(this.screenshotPixelSize);

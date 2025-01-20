@@ -362,67 +362,6 @@
   padding: 0.25rem 0.375rem;
 }
 
-.neuroglancer-screenshot-resolution-table th .neuroglancer-screenshot-tooltip,
-.neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip {
-  flex: none;
-  cursor: pointer;
-  width: 1rem;
-  height: 1rem;
-  background-size: contain;
-  position: relative;
-  display: inline-block;
-  margin-left: 0.25rem;
-  position: relative;
-  vertical-align: top;
-}
-
-.neuroglancer-screenshot-resolution-table
-  th
-  .neuroglancer-screenshot-tooltip:hover::after,
-.neuroglancer-screenshot-resolution-table
-  th
-  .neuroglancer-screenshot-tooltip:hover::before,
-.neuroglancer-screenshot-scale-factor
-  .neuroglancer-screenshot-tooltip:hover::after,
-.neuroglancer-screenshot-scale-factor
-  .neuroglancer-screenshot-tooltip:hover::before {
-  opacity: 1;
-  visibility: visible;
-}
-
-.neuroglancer-screenshot-resolution-table
-  th
-  .neuroglancer-screenshot-tooltip::after,
-.neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  border-width: 0.375rem;
-  border-style: solid;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  border-color: transparent transparent transparent var(--gray600);
-  left: 160%;
-}
-
-.neuroglancer-screenshot-resolution-table
-  th
-  .neuroglancer-screenshot-tooltip::before,
-.neuroglancer-screenshot-scale-factor .neuroglancer-screenshot-tooltip::before {
-  content: "";
-  position: absolute;
-  top: 0; /* Adjust this to move the arrow closer to the tooltip */
-  left: 100%;
-  border-width: 0.375rem;
-  border-style: solid;
-  border-color: transparent var(--gray600) transparent transparent; /* Arrow pointing leftwards */
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
 .neuroglancer-screenshot-resolution-table td {
   font-size: 0.813rem;
   color: var(--gray700);
@@ -439,63 +378,6 @@
   margin: 0.12rem 0 0 -1.25rem;
 }
 
-.neuroglancer-screenshot-tooltip {
-  flex: none;
-  cursor: pointer;
-  width: 1rem;
-  height: 1rem;
-  background-size: contain;
-  position: relative;
-  cursor: pointer;
-}
-.neuroglancer-screenshot-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  text-indent: 0;
-  color: white;
-  white-space: normal;
-  padding: 0.5rem 0.75rem;
-  border-radius: 5px;
-  height: auto;
-  width: 20rem;
-  line-height: 1rem;
-  font-size: 0.75rem;
-  font-weight: 590;
-  border-radius: 8px;
-  background: var(--gray600);
-  text-align: center;
-  opacity: 0;
-  visibility: hidden;
-  z-index: 99999;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  right: 150%;
-  top: -100%;
-}
-.neuroglancer-screenshot-tooltip::before {
-  content: "";
-  position: absolute;
-  border-width: 0.375rem;
-  border-style: solid;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  border-color: transparent transparent transparent black;
-  top: 0;
-  left: -50%;
-}
-
-.neuroglancer-screenshot-tooltip:hover::after,
-.neuroglancer-screenshot-tooltip:hover::before {
-  opacity: 1;
-  visibility: visible;
-}
-.neuroglancer-screenshot-close-and-help .neuroglancer-screenshot-tooltip {
-  position: absolute;
-  right: 0.875rem;
-  top: 4.4rem;
-}
 .neuroglancer-screenshot-footer-container {
   margin: 0;
   display: flex;
@@ -526,49 +408,6 @@
 .neuroglancer-screenshot-footer-container
   .neuroglancer-screenshot-button:disabled {
   display: none;
-}
-
-.neuroglancer-screenshot-copy-icon::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  text-indent: 0;
-  color: white;
-  padding: 0.5rem 0.75rem;
-  border-radius: 5px;
-  height: auto;
-  width: 8.125rem;
-  line-height: 1rem;
-  font-size: 0.75rem;
-  font-weight: 590;
-  border-radius: 8px;
-  background: var(--gray600);
-  text-align: center;
-  opacity: 0;
-  visibility: hidden;
-  z-index: 9999;
-  transition: opacity 0.3s ease;
-  pointer-events: none; /* Prevent the tooltip from blocking interaction */
-  right: 10%;
-  top: -50%;
-}
-.neuroglancer-screenshot-copy-icon::before {
-  content: "";
-  position: absolute;
-  border-width: 0.375rem;
-  border-style: solid;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  border-color: transparent transparent transparent black;
-  top: 0;
-  left: 90%;
-}
-
-.neuroglancer-screenshot-copy-icon:hover::after,
-.neuroglancer-screenshot-copy-icon:hover::before {
-  opacity: 1;
-  visibility: visible;
 }
 
 .neuroglancer-screenshot-dimension {
