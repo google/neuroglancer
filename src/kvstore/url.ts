@@ -174,10 +174,12 @@ export function resolveRelativePath(basePath: string, relativePath: string) {
           `Invalid relative path ${JSON.stringify(relativePath)} from base path ${JSON.stringify(origBasePath)}`,
         );
       }
-      basePath = basePath.substring(0, prevSlash - 1);
+      basePath = basePath.substring(0, prevSlash);
       continue;
     }
-    basePath += "/";
+    if (basePath !== "") {
+      basePath += "/";
+    }
     basePath += component;
   }
   if (relativePath.endsWith("/")) {

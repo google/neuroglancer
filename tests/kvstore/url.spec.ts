@@ -21,6 +21,7 @@ import {
   parsePipelineUrlComponent,
   parseUrlSuffix,
   pipelineUrlJoin,
+  resolveRelativePath,
 } from "#src/kvstore/url.js";
 
 describe("kvstoreEnsureDirectoryPipelineUrl", () => {
@@ -178,5 +179,21 @@ describe("parseUrlSuffix", () => {
         "query": undefined,
       }
     `);
+  });
+});
+
+describe("resolveRelativePath", () => {
+  test("empty base", () => {
+    expect(resolveRelativePath("", "a")).toEqual("a");
+    expect(resolveRelativePath("", "a/")).toEqual("a/");
+    expect(resolveRelativePath("", "")).toEqual("");
+    expect(() => resolveRelativePath("", "..")).toThrowError(
+      /Invalid relative path/,
+    );
+  });
+
+  test("non empty base", () => {
+    expect(resolveRelativePath("base/b", "../c")).toEqual("base/c");
+    expect(resolveRelativePath("base/b", "../c/")).toEqual("base/c/");
   });
 });
