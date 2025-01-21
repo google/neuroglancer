@@ -1783,6 +1783,8 @@ export function UserLayerWithAnnotationsMixin<
                 icon.textContent = handler.icon;
                 positionGrid.appendChild(icon);
 
+                const annotationLayerPositions: Float32Array<ArrayBufferLike>[] =
+                  [];
                 if (layerRank !== 0) {
                   const { layerDimensionNames } = (
                     chunkTransform as ChunkTransformParameters
@@ -1800,6 +1802,7 @@ export function UserLayerWithAnnotationsMixin<
                     annotation,
                     chunkTransform as ChunkTransformParameters,
                     (layerPosition, isVector) => {
+                      annotationLayerPositions.push(layerPosition);
                       const copyButton = makeCopyButton({
                         title: "Copy position",
                         onClick: () => {
@@ -1860,6 +1863,7 @@ export function UserLayerWithAnnotationsMixin<
                   annotation.type
                 ].defaultProperties(
                   annotation,
+                  annotationLayerPositions,
                   globalCoordinateSpace.scales,
                   globalCoordinateSpace.units,
                 );

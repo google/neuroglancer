@@ -703,6 +703,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   ) => void;
   defaultProperties: (
     annotation: T,
+    layerPosition: Float32Array<ArrayBufferLike>[],
     scales: Float64Array,
     units: readonly string[],
   ) => {
@@ -766,12 +767,16 @@ function deserializeTwoFloatVectors(
 }
 
 function lineLength(
-  line: Line,
+  annotationLayerPositions: Float32Array<ArrayBufferLike>[],
   scales: Float64Array,
   units: readonly string[],
 ) {
+  if (annotationLayerPositions.length !== 2) {
+    return;
+  }
+  const [pointA, pointB] = annotationLayerPositions;
   const scalesRank = scales.length;
-  const lineRank = line.pointA.length;
+  const lineRank = pointA.length;
   if (scalesRank < lineRank) {
     return;
   }
@@ -782,8 +787,7 @@ function lineLength(
       return;
     }
     const voxelToNanometers = scales[dim] * unitInfo.lengthInNanometers;
-    lengthSquared +=
-      ((line.pointA[dim] - line.pointB[dim]) * voxelToNanometers) ** 2;
+    lengthSquared += ((pointA[dim] - pointB[dim]) * voxelToNanometers) ** 2;
   }
   return Math.sqrt(lengthSquared);
 }
@@ -853,12 +857,14 @@ export const annotationTypeHandlers: Record<
     },
     defaultProperties(
       annotation: Line,
+      annotationLayerPositions: Float32Array<ArrayBufferLike>[],
       scales: Float64Array,
       units: readonly string[],
     ) {
+      annotation;
       const properties: AnnotationNumericPropertySpec[] = [];
       const values: number[] = [];
-      const length = lineLength(annotation, scales, units);
+      const length = lineLength(annotationLayerPositions, scales, units);
       if (length) {
         properties.push({
           type: "float32",
@@ -917,10 +923,12 @@ export const annotationTypeHandlers: Record<
     },
     defaultProperties(
       annotation: Point,
+      layerPosition: Float32Array<ArrayBufferLike>[],
       scales: Float64Array,
       units: string[],
     ) {
       annotation;
+      layerPosition;
       scales;
       units;
       return { properties: [], values: [] };
@@ -995,10 +1003,12 @@ export const annotationTypeHandlers: Record<
     },
     defaultProperties(
       annotation: AxisAlignedBoundingBox,
+      layerPosition: Float32Array<ArrayBufferLike>[],
       scales: Float64Array,
       units: string[],
     ) {
       annotation;
+      layerPosition;
       scales;
       units;
       return { properties: [], values: [] };
@@ -1073,10 +1083,12 @@ export const annotationTypeHandlers: Record<
     },
     defaultProperties(
       annotation: Ellipsoid,
+      layerPosition: Float32Array<ArrayBufferLike>[],
       scales: Float64Array,
       units: string[],
     ) {
       annotation;
+      layerPosition;
       scales;
       units;
       return { properties: [], values: [] };
