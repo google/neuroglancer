@@ -68,6 +68,7 @@ import type { vec4 } from "#src/util/geom.js";
 import { kOneVec, kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import { getObjectId } from "#src/util/object_id.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
@@ -650,7 +651,7 @@ export abstract class SliceViewChunkSource<
   async fetchChunk<T>(
     chunkGridPosition: Float32Array,
     transform: (chunk: Chunk) => T,
-    abortSignal?: AbortSignal,
+    progressOptions: Partial<ProgressOptions>,
   ): Promise<T> {
     const key = chunkGridPosition.join();
     const existingChunk = this.chunks.get(key);
@@ -679,7 +680,7 @@ export abstract class SliceViewChunkSource<
       await this.rpc!.promiseInvoke(
         SLICEVIEW_REQUEST_CHUNK_RPC_ID,
         { source: this.rpcId, chunkGridPosition },
-        abortSignal,
+        progressOptions,
       );
       return await promise;
     } finally {

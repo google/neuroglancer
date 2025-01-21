@@ -18,7 +18,6 @@ import "#src/datasource/zarr/codec/blosc/resolve.js";
 import "#src/datasource/zarr/codec/zstd/resolve.js";
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
@@ -26,13 +25,12 @@ import {
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
-import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import type {
-  CompleteUrlOptions,
   DataSource,
-  GetDataSourceOptions,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
+import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
 import "#src/datasource/zarr/codec/crc32c/resolve.js";
@@ -53,6 +51,16 @@ import {
 } from "#src/datasource/zarr/metadata/parse.js";
 import type { OmeMultiscaleMetadata } from "#src/datasource/zarr/ome.js";
 import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
+import type { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
+import { simpleFilePresenceAutoDetectDirectorySpec } from "#src/kvstore/auto_detect.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { CompletionResult } from "#src/kvstore/context.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import {
+  kvstoreEnsureDirectoryPipelineUrl,
+  parseUrlSuffix,
+  pipelineUrlJoin,
+} from "#src/kvstore/url.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
@@ -69,27 +77,17 @@ import {
   applyCompletionOffset,
   completeQueryStringParametersFromTable,
 } from "#src/util/completion.js";
-import type { Borrowed } from "#src/util/disposable.js";
-import { completeHttpPath } from "#src/util/http_path_completion.js";
-import { isNotFoundError } from "#src/util/http_request.js";
 import {
   parseQueryStringParameters,
   verifyObject,
   verifyOptionalObjectProperty,
 } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
-import { getObjectId } from "#src/util/object_id.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 class ZarrVolumeChunkSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),
+  WithSharedKvStoreContext(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {}
 
@@ -109,11 +107,10 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   }
 
   constructor(
-    chunkManager: Borrowed<ChunkManager>,
-    public credentialsProvider: SpecialProtocolCredentialsProvider,
+    public sharedKvStoreContext: SharedKvStoreContext,
     public multiscale: ZarrMultiscaleInfo,
   ) {
-    super(chunkManager);
+    super(sharedKvStoreContext.chunkManager);
     this.volumeType = VolumeType.IMAGE;
   }
 
@@ -160,7 +157,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
             chunkSource: this.chunkManager.getChunkSource(
               ZarrVolumeChunkSource,
               {
-                credentialsProvider: this.credentialsProvider,
+                sharedKvStoreContext: this.sharedKvStoreContext,
                 spec,
                 parameters: {
                   url: scale.url,
@@ -177,25 +174,27 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
 }
 
 function getJsonResource(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  description: string,
+  options: Partial<ProgressOptions>,
 ): Promise<any | undefined> {
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     {
       type: "zarr:json",
       url,
-      credentialsProvider: getObjectId(credentialsProvider),
     },
-    async () => {
-      try {
-        return await fetchSpecialOk(credentialsProvider, url, {}).then(
-          (response) => response.json(),
-        );
-      } catch (e) {
-        if (isNotFoundError(e)) return undefined;
-        throw e;
-      }
+    options,
+    async (options) => {
+      using _span = new ProgressSpan(options.progressListener, {
+        message: `Reading ${description} from ${url}`,
+      });
+      const response = await sharedKvStoreContext.kvStoreContext.read(
+        url,
+        options,
+      );
+      if (response === undefined) return undefined;
+      return await response.response.json();
     },
   );
 }
@@ -294,26 +293,19 @@ function getMultiscaleInfoForSingleArray(
 }
 
 async function resolveOmeMultiscale(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   multiscale: OmeMultiscaleMetadata,
   options: {
     explicitDimensionSeparator: DimensionSeparator | undefined;
     zarrVersion: 2 | 3;
-  },
+  } & Partial<ProgressOptions>,
 ): Promise<ZarrMultiscaleInfo> {
   const scaleZarrMetadata = await Promise.all(
     multiscale.scales.map(async (scale) => {
-      const metadata = await getMetadata(
-        chunkManager,
-        credentialsProvider,
-        scale.url,
-        {
-          zarrVersion: options.zarrVersion,
-          expectedNodeType: "array",
-          explicitDimensionSeparator: options.explicitDimensionSeparator,
-        },
-      );
+      const metadata = await getMetadata(sharedKvStoreContext, scale.url, {
+        ...options,
+        expectedNodeType: "array",
+      });
       if (metadata === undefined) {
         throw new Error(
           `zarr v{zarrVersion} array metadata not found at ${scale.url}`,
@@ -383,19 +375,28 @@ async function resolveOmeMultiscale(
 }
 
 async function getMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   options: {
     zarrVersion?: 2 | 3 | undefined;
     expectedNodeType?: NodeType | undefined;
     explicitDimensionSeparator?: DimensionSeparator | undefined;
-  },
+  } & Partial<ProgressOptions>,
 ): Promise<Metadata | undefined> {
   if (options.zarrVersion === 2) {
     const [zarray, zattrs] = await Promise.all([
-      getJsonResource(chunkManager, credentialsProvider, `${url}/.zarray`),
-      getJsonResource(chunkManager, credentialsProvider, `${url}/.zattrs`),
+      getJsonResource(
+        sharedKvStoreContext,
+        `${url}.zarray`,
+        "zarr v2 array metadata",
+        options,
+      ),
+      getJsonResource(
+        sharedKvStoreContext,
+        `${url}.zattrs`,
+        "zarr v2 attributes",
+        options,
+      ),
     ]);
     if (zarray === undefined) {
       if (zattrs === undefined) {
@@ -421,9 +422,10 @@ async function getMetadata(
   }
   if (options.zarrVersion === 3) {
     const zarrJson = await getJsonResource(
-      chunkManager,
-      credentialsProvider,
-      `${url}/zarr.json`,
+      sharedKvStoreContext,
+      `${url}zarr.json`,
+      "zarr v3 metadata",
+      options,
     );
     if (zarrJson === undefined) return undefined;
     if (options.explicitDimensionSeparator !== undefined) {
@@ -434,11 +436,11 @@ async function getMetadata(
     return parseV3Metadata(zarrJson, options.expectedNodeType);
   }
   const [v2Result, v3Result] = await Promise.all([
-    getMetadata(chunkManager, credentialsProvider, url, {
+    getMetadata(sharedKvStoreContext, url, {
       ...options,
       zarrVersion: 2,
     }),
-    getMetadata(chunkManager, credentialsProvider, url, {
+    getMetadata(sharedKvStoreContext, url, {
       ...options,
       zarrVersion: 3,
     }),
@@ -449,49 +451,64 @@ async function getMetadata(
   return v2Result ?? v3Result;
 }
 
-export class ZarrDataSource extends DataSourceProvider {
-  constructor(public zarrVersion: 2 | 3 | undefined = undefined) {
-    super();
+function resolveUrl(options: GetKvStoreBasedDataSourceOptions) {
+  const {
+    authorityAndPath: additionalPath,
+    query,
+    fragment,
+  } = parseUrlSuffix(options.url.suffix);
+
+  if (query) {
+    throw new Error(
+      `Invalid URL ${JSON.stringify(options.url.url)}: query parameters not supported`,
+    );
+  }
+  return {
+    kvStoreUrl: kvstoreEnsureDirectoryPipelineUrl(options.kvStoreUrl),
+    additionalPath: additionalPath ?? "",
+    fragment,
+  };
+}
+
+export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
+  constructor(public zarrVersion: 2 | 3 | undefined = undefined) {}
+  get scheme() {
+    return `zarr${this.zarrVersion ?? ""}`;
+  }
+  get expectsDirectory() {
+    return true;
   }
   get description() {
     const versionStr =
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
     return `Zarr${versionStr} data source`;
   }
-  get(options: GetDataSourceOptions): Promise<DataSource> {
-    // Pattern is infallible.
-    let [, providerUrl, query] =
-      options.providerUrl.match(/([^?]*)(?:\?(.*))?$/)!;
-    const parameters = parseQueryStringParameters(query || "");
+  get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
+    kvStoreUrl = kvstoreEnsureDirectoryPipelineUrl(
+      pipelineUrlJoin(kvStoreUrl, additionalPath),
+    );
+    const parameters = parseQueryStringParameters(fragment || "");
     verifyObject(parameters);
     const dimensionSeparator = verifyOptionalObjectProperty(
       parameters,
       "dimension_separator",
       parseDimensionSeparator,
     );
-    if (providerUrl.endsWith("/")) {
-      providerUrl = providerUrl.substring(0, providerUrl.length - 1);
-    }
-    return options.chunkManager.memoize.getUncounted(
+    return options.registry.chunkManager.memoize.getAsync(
       {
         type: "zarr:MultiscaleVolumeChunkSource",
-        providerUrl,
+        kvStoreUrl,
         dimensionSeparator,
       },
-      async () => {
-        const { url, credentialsProvider } = parseSpecialUrl(
-          providerUrl,
-          options.credentialsManager,
-        );
-        const metadata = await getMetadata(
-          options.chunkManager,
-          credentialsProvider,
-          url,
-          {
-            zarrVersion: this.zarrVersion,
-            explicitDimensionSeparator: dimensionSeparator,
-          },
-        );
+      options,
+      async (progressOptions) => {
+        const { sharedKvStoreContext } = options.registry;
+        const metadata = await getMetadata(sharedKvStoreContext, kvStoreUrl, {
+          ...progressOptions,
+          zarrVersion: this.zarrVersion,
+          explicitDimensionSeparator: dimensionSeparator,
+        });
         if (metadata === undefined) {
           throw new Error("No zarr metadata found");
         }
@@ -499,31 +516,34 @@ export class ZarrDataSource extends DataSourceProvider {
         if (metadata.nodeType === "group") {
           // May be an OME-zarr multiscale dataset.
           const multiscale = parseOmeMetadata(
-            url,
+            kvStoreUrl,
             metadata.userAttributes,
             metadata.zarrVersion,
           );
           if (multiscale === undefined) {
-            throw new Error("Neithre array nor OME multiscale metadata found");
+            throw new Error("Neither array nor OME multiscale metadata found");
           }
           multiscaleInfo = await resolveOmeMultiscale(
-            options.chunkManager,
-            credentialsProvider,
+            sharedKvStoreContext,
             multiscale,
             {
+              ...progressOptions,
               zarrVersion: metadata.zarrVersion,
               explicitDimensionSeparator: dimensionSeparator,
             },
           );
         } else {
-          multiscaleInfo = getMultiscaleInfoForSingleArray(url, metadata);
+          multiscaleInfo = getMultiscaleInfoForSingleArray(
+            kvStoreUrl,
+            metadata,
+          );
         }
         const volume = new MultiscaleVolumeChunkSource(
-          options.chunkManager,
-          credentialsProvider,
+          sharedKvStoreContext,
           multiscaleInfo,
         );
         return {
+          canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),
           subsources: [
             {
@@ -547,23 +567,46 @@ export class ZarrDataSource extends DataSourceProvider {
       },
     );
   }
-
-  async completeUrl(options: CompleteUrlOptions) {
-    // Pattern is infallible.
-    const [, , query] = options.providerUrl.match(/([^?]*)(?:\?(.*))?$/)!;
-    if (query !== undefined) {
-      return applyCompletionOffset(
-        options.providerUrl.length - query.length,
-        await completeQueryStringParametersFromTable(
-          query,
-          supportedQueryParameters,
-        ),
-      );
+  async completeUrl(
+    options: GetKvStoreBasedDataSourceOptions,
+  ): Promise<CompletionResult> {
+    const { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
+    if (fragment === undefined) {
+      return getKvStorePathCompletions(options.registry.sharedKvStoreContext, {
+        baseUrl: kvStoreUrl,
+        path: additionalPath,
+        directoryOnly: true,
+        signal: options.signal,
+        progressListener: options.progressListener,
+      });
     }
-    return await completeHttpPath(
-      options.credentialsManager,
-      options.providerUrl,
-      options.abortSignal,
+    if (this.zarrVersion === 3) {
+      throw new Error("URL fragment parameters not supported");
+    }
+    return applyCompletionOffset(
+      options.url.url.length - fragment.length,
+      await completeQueryStringParametersFromTable(
+        fragment,
+        supportedQueryParameters,
+      ),
     );
   }
+}
+
+export function registerAutoDetectV2(registry: AutoDetectRegistry) {
+  registry.registerDirectoryFormat(
+    simpleFilePresenceAutoDetectDirectorySpec(new Set([".zarray", ".zattrs"]), {
+      suffix: "zarr2:",
+      description: "Zarr v2 data source",
+    }),
+  );
+}
+
+export function registerAutoDetectV3(registry: AutoDetectRegistry) {
+  registry.registerDirectoryFormat(
+    simpleFilePresenceAutoDetectDirectorySpec(new Set(["zarr.json"]), {
+      suffix: "zarr3:",
+      description: "Zarr v3 data source",
+    }),
+  );
 }

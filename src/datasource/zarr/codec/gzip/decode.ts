@@ -26,14 +26,10 @@ for (const [name, compressionFormat] of [
   registerCodec({
     name,
     kind: CodecKind.bytesToBytes,
-    async decode(
-      configuration: Configuration,
-      encoded,
-      abortSignal: AbortSignal,
-    ) {
+    async decode(configuration: Configuration, encoded, signal: AbortSignal) {
       configuration;
       return new Uint8Array(
-        await decodeGzip(encoded, compressionFormat, abortSignal),
+        await decodeGzip(encoded, compressionFormat, signal),
       );
     },
   });

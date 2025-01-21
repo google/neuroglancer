@@ -15,14 +15,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Uint64 } from "#src/util/uint64.js";
 import { decodeZIndexCompressed, zorder3LessThan } from "#src/util/zorder.js";
 
 describe("decodeZIndexCompressed", () => {
   it("works for repetitive pattern 21,21,21", () => {
     expect(
       decodeZIndexCompressed(
-        Uint64.parseString("111000100010001111000100010001111000100010001", 2),
+        0b111000100010001111000100010001111000100010001n,
         21,
         21,
         21,
@@ -35,10 +34,7 @@ describe("decodeZIndexCompressed", () => {
   it("works for repetitive pattern 18,15,17", () => {
     expect(
       decodeZIndexCompressed(
-        Uint64.parseString(
-          "11101111000100010001111000100010001111000100010001",
-          2,
-        ),
+        0b11101111000100010001111000100010001111000100010001n,
         18,
         15,
         17,

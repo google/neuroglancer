@@ -17,4 +17,4 @@
 import { registerProvider } from "#src/datasource/default_provider.js";
 import { NggraphDataSource } from "#src/datasource/nggraph/frontend.js";
 
-registerProvider("nggraph", () => new NggraphDataSource());
+registerProvider(new NggraphDataSource());

@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
-import { N5DataSource } from "#src/datasource/n5/frontend.js";
+import {
+  registerKvStoreBasedDataProvider,
+  dataSourceAutoDetectRegistry,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
+import {
+  N5DataSource,
+  registerAutoDetect,
+} from "#src/datasource/n5/frontend.js";
 
-registerProvider("n5", () => new N5DataSource());
+const provider = new N5DataSource();
+registerKvStoreBasedDataProvider(provider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
+registerAutoDetect(dataSourceAutoDetectRegistry);

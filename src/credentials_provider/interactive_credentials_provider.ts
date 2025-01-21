@@ -22,15 +22,15 @@ export function getCredentialsWithStatus<Token>(
     description: string;
     requestDescription?: string;
     supportsImmediate?: boolean;
-    get: (abortSignal: AbortSignal, immediate: boolean) => Promise<Token>;
+    get: (signal: AbortSignal, immediate: boolean) => Promise<Token>;
   },
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<Token> {
   const { requestDescription = "login" } = options;
   const status = new StatusMessage(/*delay=*/ true);
   let abortController: AbortController | undefined;
   return new Promise<Token>((resolve, reject) => {
-    const disposeAbortCallback = scopedAbortCallback(abortSignal, (reason) => {
+    const disposeAbortCallback = scopedAbortCallback(signal, (reason) => {
       if (abortController !== undefined) {
         abortController.abort(reason);
         abortController = undefined;
@@ -92,6 +92,7 @@ export function getCredentialsWithStatus<Token>(
     } else {
       writeLoginStatus();
       status.setVisible(true);
+      status.setModal(true);
     }
   });
 }

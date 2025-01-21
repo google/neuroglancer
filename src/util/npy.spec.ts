@@ -48,6 +48,8 @@ describe("parseNpy", () => {
           "..",
           "..",
           "testdata",
+          "codec",
+          "npy",
         );
         const example = JSON.parse(
           await fs.readFile(`${testDataDir}/npy_test.${json}.json`, {

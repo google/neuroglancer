@@ -25,6 +25,7 @@ import type {
 } from "#src/sliceview/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import type { mat4 } from "#src/util/geom.js";
+import type { HttpError } from "#src/util/http_request.js";
 
 import { Uint64 } from "#src/util/uint64.js";
 
@@ -136,4 +137,17 @@ export function makeChunkedGraphChunkSpecification(
 
 export interface ChunkedGraphChunkSource extends SliceViewChunkSource {
   spec: ChunkedGraphChunkSpecification;
+}
+
+export async function parseGrapheneError(e: HttpError) {
+  if (e.response) {
+    let msg: string;
+    if (e.response.headers.get("content-type") === "application/json") {
+      msg = (await e.response.json()).message;
+    } else {
+      msg = await e.response.text();
+    }
+    return msg;
+  }
+  return undefined;
 }

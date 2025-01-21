@@ -18,9 +18,9 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 
 export async function decodeCompressedSegmentationChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
-  abortSignal;
+  signal;
   chunk.data = new Uint32Array(response);
 }

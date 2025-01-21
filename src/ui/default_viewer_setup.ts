@@ -37,7 +37,7 @@ export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
   const hashBinding = viewer.registerDisposer(
     new UrlHashBinding(
       viewer.state,
-      viewer.dataSourceProvider.credentialsManager,
+      viewer.dataSourceProvider.sharedKvStoreContext,
       {
         defaultFragment:
           typeof NEUROGLANCER_DEFAULT_STATE_FRAGMENT !== "undefined"

@@ -38,9 +38,12 @@ export enum ShardIndexLocation {
   END,
 }
 
-export interface Configuration {
+export interface IndexConfiguration {
   indexCodecs: CodecChainSpec;
   indexLocation: ShardIndexLocation;
+}
+
+export interface Configuration extends IndexConfiguration {
   subChunkCodecs: CodecChainSpec;
   subChunkShape: number[];
   subChunkGridShape: number[];

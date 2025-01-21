@@ -1,0 +1,315 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/precomputed/two_channels/|neuroglancer-precomputed:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          0,
+          0,
+          0,
+          0,
+        ],
+        "upperBounds": Float64Array [
+          10,
+          20,
+          30,
+          2,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+        ,
+        ,
+      ],
+      "names": [
+        "x",
+        "y",
+        "z",
+        "c^",
+      ],
+      "scales": Float64Array [
+        3e-9,
+        4e-9,
+        5e-9,
+        1,
+      ],
+      "units": [
+        "m",
+        "m",
+        "m",
+        "",
+      ],
+      "valid": true,
+    },
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "UINT16",
+          "rank": 4,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "sharding": undefined,
+                    "url": "http://localhost:*/datasource/precomputed/two_channels/3_4_5/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      10,
+                      20,
+                      30,
+                      2,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      10,
+                      20,
+                      30,
+                      2,
+                    ],
+                  },
+                },
+                "lowerClipBound": Float32Array [
+                  0,
+                  0,
+                  0,
+                  0,
+                ],
+                "upperClipBound": Float32Array [
+                  10,
+                  20,
+                  30,
+                  2,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "sharding": undefined,
+                    "url": "http://localhost:*/datasource/precomputed/two_channels/6_8_10/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      5,
+                      10,
+                      15,
+                      2,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      5,
+                      10,
+                      15,
+                      2,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    2,
+                    0,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    2,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    2,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "lowerClipBound": Float32Array [
+                  0,
+                  0,
+                  0,
+                  0,
+                ],
+                "upperClipBound": Float32Array [
+                  5,
+                  10,
+                  15,
+                  2,
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 0,
+                    "sharding": undefined,
+                    "url": "http://localhost:*/datasource/precomputed/two_channels/12_16_20/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      3,
+                      5,
+                      8,
+                      2,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      3,
+                      5,
+                      8,
+                      2,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    4,
+                    0,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    4,
+                    0,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    4,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+                "lowerClipBound": Float32Array [
+                  0,
+                  0,
+                  0,
+                  0,
+                ],
+                "upperClipBound": Float32Array [
+                  2.5,
+                  5,
+                  7.5,
+                  2,
+                ],
+              },
+            ],
+          ],
+          "volumeType": "IMAGE",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              0,
+              0,
+              0,
+              0,
+            ],
+            "pointB": [
+              10,
+              20,
+              30,
+              2,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}

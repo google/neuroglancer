@@ -18,18 +18,20 @@ import type {
   CredentialsProvider,
   CredentialsWithGeneration,
 } from "#src/credentials_provider/index.js";
+import type { FetchOk } from "#src/util/http_request.js";
 import { fetchOk, HttpError, pickDelay } from "#src/util/http_request.js";
+import type { ProgressListener } from "#src/util/progress_listener.js";
 
 const maxCredentialsAttempts = 3;
 
-export async function fetchWithCredentials<Credentials>(
+export async function fetchOkWithCredentials<Credentials>(
   credentialsProvider: CredentialsProvider<Credentials>,
   input: RequestInfo | ((credentials: Credentials) => RequestInfo),
-  init: RequestInit,
+  init: RequestInit & { progressListener?: ProgressListener },
   applyCredentials: (
     credentials: Credentials,
-    requestInit: RequestInit,
-  ) => RequestInit,
+    requestInit: RequestInit & { progressListener?: ProgressListener },
+  ) => RequestInit & { progressListener?: ProgressListener },
   errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
 ): Promise<Response> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
@@ -43,10 +45,10 @@ export async function fetchWithCredentials<Credentials>(
         setTimeout(resolve, pickDelay(credentialsAttempt - 2)),
       );
     }
-    credentials = await credentialsProvider.get(
-      credentials,
-      init.signal ?? undefined,
-    );
+    credentials = await credentialsProvider.get(credentials, {
+      signal: init.signal ?? undefined,
+      progressListener: init.progressListener,
+    });
     try {
       return await fetchOk(
         typeof input === "function" ? input(credentials.credentials) : input,
@@ -62,4 +64,22 @@ export async function fetchWithCredentials<Credentials>(
       throw error;
     }
   }
+}
+
+export function fetchOkWithCredentialsAdapter<Credentials>(
+  credentialsProvider: CredentialsProvider<Credentials>,
+  applyCredentials: (
+    credentials: Credentials,
+    requestInit: RequestInit & { progressListener?: ProgressListener },
+  ) => RequestInit & { progressListener?: ProgressListener },
+  errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
+): FetchOk {
+  return (input, init = {}) =>
+    fetchOkWithCredentials(
+      credentialsProvider,
+      input,
+      init,
+      applyCredentials,
+      errorHandler,
+    );
 }
