@@ -35,8 +35,8 @@ import { preventDrag } from "#src/util/drag_and_drop.js";
 import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
-import { LayerTypeIndicatorWidget } from "#src/widget/layer_type_indicator.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
+import { LayerTypeIndicatorWidget } from "#src/widget/layer_type_indicator.js";
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
