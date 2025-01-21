@@ -16,7 +16,7 @@
 
 export function kvstoreEnsureDirectoryPipelineUrl(url: string): string {
   const m = url.match(
-    /^((?:.*?|)?)([a-zA-Z][a-zA-Z0-9-+.]*)(?:(:[^?#|]*)((?:[?#][^|]*)?))?$/,
+    /^((?:.*?\|)?)([a-zA-Z][a-zA-Z0-9-+.]*)(?:(:[^?#|]*)((?:[?#][^|]*)?))?$/,
   );
   if (m === null) {
     throw new Error(`Invalid URL: ${url}`);
