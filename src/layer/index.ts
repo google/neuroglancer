@@ -2313,6 +2313,8 @@ export interface LayerTypeGuess {
   layerConstructor: UserLayerConstructor;
   // Priority of the guess.  Higher values take precedence.
   priority: number;
+  // Number of channels - for image data
+  numChannels?: number;
 }
 export type LayerTypeDetector = (
   subsource: DataSubsource,
@@ -2323,7 +2325,11 @@ const layerTypeDetectors: LayerTypeDetector[] = [
     if (volume === undefined) return undefined;
     const layerConstructor = volumeLayerTypes.get(volume.volumeType);
     if (layerConstructor === undefined) return undefined;
-    return { layerConstructor, priority: 0 };
+    return {
+      layerConstructor,
+      priority: 0,
+      numChannels: volume.heuristicNumChannels,
+    };
   },
 ];
 
@@ -2402,6 +2408,7 @@ export function detectLayerTypeFromDataSubsource(
       bestGuess = getMaxPriorityGuess(bestGuess, {
         layerConstructor,
         priority: 0,
+        numChannels: volume.heuristicNumChannels,
       });
     }
   }
@@ -2465,10 +2472,23 @@ export class AutoUserLayer extends UserLayer {
   static typeAbbreviation = "auto";
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    const layerConstructor =
-      detectLayerTypeFromSubsources(subsources)?.layerConstructor;
+    const bestGuess = detectLayerTypeFromSubsources(subsources);
+    const layerConstructor = bestGuess?.layerConstructor;
+    const numChannels = bestGuess?.numChannels;
+    console.log(layerConstructor, numChannels);
     if (layerConstructor !== undefined) {
-      changeLayerType(this.managedLayer, layerConstructor);
+      if (numChannels !== undefined && numChannels !== 1) {
+        // TODO temp - get real subsource or pass many to FN
+        console.log("Creating new layer");
+        createNewLayerAsMultichannelLayers(
+          this.managedLayer,
+          numChannels,
+          this.manager,
+          layerConstructor,
+        );
+      } else {
+        changeLayerType(this.managedLayer, layerConstructor);
+      }
     }
   }
 }
@@ -2481,6 +2501,34 @@ export function addNewLayer(
   manager.add(layer);
   selectedLayer.layer = layer;
   selectedLayer.visible = true;
+}
+
+export function createNewLayerAsMultichannelLayers(
+  managedUserLayer: ManagedUserLayer,
+  numChannels: number,
+  layerManager: Borrowed<LayerListSpecification>,
+  constructor: UserLayerConstructor,
+) {
+  // Create the initial layer as normal (change type)
+  // TODO copied from changeLayerType should think about this more
+  const originalName = managedUserLayer.name;
+  changeLayerType(managedUserLayer, constructor);
+  managedUserLayer.name = `${originalName} chan 1`;
+  const spec = managedUserLayer.layer?.toJSON();
+  console.log(spec);
+  // TODO also set chan1
+
+  // Create subsequent layers for other channels
+  for (let i = 1; i < numChannels; i++) {
+    // First, create a new layer
+    const newLayerName = `${originalName} chan ${i + 1}`;
+    const channelSpec = spec;
+    console.log(spec);
+    // spec["shaderControls"][]
+    const layer = makeLayer(layerManager, newLayerName, spec);
+    layerManager.add(layer);
+    console.log(layer.layer);
+  }
 }
 
 registerLayerType(NewUserLayer);

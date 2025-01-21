@@ -307,6 +307,10 @@ export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChun
     return this.info.modelSpace.rank;
   }
 
+  get heuristicNumChannels() {
+    return this.info.scales[0].size[3] ?? 1;
+  }
+
   constructor(
     public sharedKvStoreContext: SharedKvStoreContext,
     public url: string,
