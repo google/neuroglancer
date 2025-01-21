@@ -56,20 +56,6 @@ const layerNameInputEventMap = EventActionMap.fromObject({
   escape: { action: "cancel" },
 });
 
-enum LayerType {
-  new = "new",
-  auto = "auto",
-  segmentation = "seg",
-  image = "img",
-  annotation = "ann",
-  mesh = "mesh"
-}
-
-export function getLayerType(type: LayerType): string {
-  const mappedType = LayerType[type as keyof typeof LayerType];
-  return mappedType || type;
-}
-
 export class LayerNameWidget extends RefCounted {
   element = document.createElement("input");
   constructor(public layer: ManagedUserLayer) {

@@ -31,7 +31,7 @@ import {
   registerLayerBarDropHandlers,
   registerLayerDragHandlers,
 } from "#src/ui/layer_drag_and_drop.js";
-import { LayerNameWidget, getLayerType } from "#src/ui/layer_side_panel.js";
+import { LayerNameWidget } from "#src/ui/layer_side_panel.js";
 import type { SidePanelManager } from "#src/ui/side_panel.js";
 import { SidePanel } from "#src/ui/side_panel.js";
 import type { SidePanelLocation } from "#src/ui/side_panel_location.js";
@@ -47,6 +47,7 @@ import type { Trackable } from "#src/util/trackable.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
+import { LayerTypeIndicatorWidget } from "#src/widget/layer_type_indicator.js";
 
 const DEFAULT_LAYER_LIST_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,
@@ -167,7 +168,7 @@ class LayerListItem extends RefCounted {
     element.appendChild(
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
     );
-    element.appendChild(this.createLayerTypeElement());
+    element.appendChild(new LayerTypeIndicatorWidget(layer).element);
     element.appendChild(
       this.registerDisposer(new LayerNameWidget(layer)).element,
     );
@@ -209,15 +210,6 @@ class LayerListItem extends RefCounted {
       event.stopPropagation();
       event.preventDefault();
     });
-    
-  }
-
-  private createLayerTypeElement() {
-    const layerTypeElement = document.createElement("div");
-    layerTypeElement.classList.add("layer-type");
-    layerTypeElement.textContent = getLayerType(this.layer.toJSON().type);
-
-    return layerTypeElement;
   }
 }
 
