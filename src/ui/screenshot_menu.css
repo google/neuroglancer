@@ -73,17 +73,6 @@
   font-family: sans-serif;
 }
 
-.neuroglancer-screenshot-close-and-help {
-  border-bottom: 1px solid var(--gray50);
-  display: flex;
-  color: var(--gray600);
-  align-items: center;
-  display: flex;
-  padding: 0.75rem 1rem;
-  align-items: center;
-  gap: 10px;
-}
-
 .neuroglancer-screenshot-main-body-container {
   height: auto !important;
   max-height: calc(100vh - 200px) !important;
@@ -91,18 +80,34 @@
   overflow-x: hidden;
 }
 
-.neuroglancer-screenshot-title-heading {
+.neuroglancer-screenshot-title {
   font-size: 0.938rem;
   font-weight: 590;
+  color: var(--gray600);
   margin: 0;
 }
+
+.neuroglancer-screenshot-label {
+  font-size: 0.813rem;
+  color: var(--gray200);
+  font-weight: 590;
+}
+
+.neuroglancer-screenshot-close-and-help {
+  border-bottom: 1px solid var(--gray50);
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  gap: 10px;
+}
+
 .neuroglancer-screenshot-scale-menu {
   padding: 0 1rem;
   display: flex;
   flex-wrap: wrap;
 }
 
-.neuroglancer-screenshot-scale-menu label {
+.neuroglancer-screenshot-scale-radio-container label {
   color: var(--gray700);
   font-size: 0.75rem;
   margin-right: 2.125rem;
@@ -114,14 +119,6 @@
 
 .neuroglancer-screenshot-keep-slice-fov-checkbox {
   margin: 0;
-}
-
-.neuroglancer-screenshot-size-text,
-.neuroglancer-screenshot-keep-slice-label,
-.neuroglancer-screenshot-scale-menu .neuroglancer-screenshot-scale-factor {
-  font-size: 0.813rem;
-  color: var(--gray200);
-  font-weight: 590;
 }
 
 .neuroglancer-screenshot-scale-factor {
@@ -143,12 +140,8 @@
 }
 
 .neuroglancer-screenshot-title-subheading {
-  font-size: 0.938rem;
-  font-weight: 590;
-  margin: 0;
   display: flex;
   align-items: center;
-  color: var(--gray600);
   justify-content: space-between;
 }
 
@@ -163,9 +156,7 @@
 
 .neuroglancer-screenshot-filename-and-buttons label {
   color: var(--gray800);
-  font-size: 0.813rem;
   font-style: normal;
-  font-weight: 590;
   display: block;
   margin: 0.75rem 0 0.375rem;
 }
@@ -208,29 +199,25 @@
   border: 0;
 }
 
-.neuroglancer-screenshot-statistics-title {
-  padding: 1rem;
-}
-
 .neuroglancer-screenshot-statistics-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.neuroglancer-screenshot-statistics-table-header,
-.neuroglancer-screenshot-statistics-table-data {
+.neuroglancer-screenshot-statistics-table th,
+.neuroglancer-screenshot-statistics-table td {
   text-align: left;
   width: 33.33%;
 }
 
-.neuroglancer-screenshot-statistics-table-data {
+.neuroglancer-screenshot-statistics-table td {
   color: var(--gray200);
   font-size: 0.813rem;
   font-weight: 590;
   padding: 0.5rem 0;
 }
 
-.neuroglancer-screenshot-statistics-table-header[colspan="2"] {
+.statistics-table-description-header {
   font-size: 0.813rem;
   color: var(--gray700);
   line-height: 1.25rem;
@@ -238,23 +225,19 @@
   padding-bottom: 0.75rem;
 }
 
-.neuroglancer-screenshot-statistics-table-header[colspan="2"] a {
+.statistics-table-description-link {
   font-weight: 590;
   cursor: pointer;
   color: var(--primary500);
   margin-left: 0.1rem;
 }
 
-.neuroglancer-screenshot-statistics-table-data:last-child {
+.neuroglancer-screenshot-statistics-table td:last-child {
   color: var(--gray700);
   font-weight: 400;
 }
 
-.neuroglancer-screenshot-statistics-table-header {
-  font-size: 0.938rem;
-  font-weight: 590;
-  margin: 0;
-  color: var(--gray600);
+.neuroglancer-screenshot-statistics-table th {
   padding: 0 0 0.5rem;
 }
 
@@ -264,17 +247,6 @@
   background: var(--gray500);
   width: 100%;
   padding: 1rem;
-}
-
-.neuroglancer-screenshot-resolution-preview-container h2 {
-  font-size: 0.938rem;
-  font-weight: 590;
-  margin: 0;
-  color: var(--gray600);
-}
-
-.neuroglancer-screenshot-resolution-preview-top-container {
-  display: flex;
 }
 
 .neuroglancer-screenshot-resolution-table {
@@ -290,19 +262,19 @@
   margin-bottom: 0.75rem;
 }
 
-.neuroglancer-screenshot-resolution-table-row:nth-child(2) .neuroglancer-screenshot-resolution-table-data:first-child {
+.neuroglancer-screenshot-resolution-table tr:nth-child(2) td:first-child {
   border-top-left-radius: 0.25rem;
 }
 
-.neuroglancer-screenshot-resolution-table-row:nth-child(2) .neuroglancer-screenshot-resolution-table-data:last-child {
+.neuroglancer-screenshot-resolution-table tr:nth-child(2) td:last-child {
   border-top-right-radius: 0.25rem;
 }
 
-.neuroglancer-screenshot-resolution-table-row:last-child .neuroglancer-screenshot-resolution-table-data:first-child {
+.neuroglancer-screenshot-resolution-table tr:last-child td:first-child {
   border-bottom-left-radius: 0.25rem;
 }
 
-.neuroglancer-screenshot-resolution-table-row:last-child .neuroglancer-screenshot-resolution-table-data:last-child {
+.neuroglancer-screenshot-resolution-table tr:last-child td:last-child {
   border-bottom-right-radius: 0.25rem;
 }
 
@@ -375,7 +347,7 @@
   border: 0;
 }
 
-.neuroglancer-screenshot-resolution-table-header {
+.neuroglancer-screenshot-resolution-table th {
   text-align: left;
   color: var(--gray200);
   font-size: 0.813rem;
@@ -386,7 +358,7 @@
   padding: 0.25rem 0.375rem;
 }
 
-.neuroglancer-screenshot-resolution-table-data {
+.neuroglancer-screenshot-resolution-table td {
   font-size: 0.813rem;
   color: var(--gray700);
   width: 33.33%;
@@ -433,7 +405,7 @@
 }
 
 .neuroglancer-screenshot-footer-container
-  .neuroglancer-screenshot-button:disabled {
+.neuroglancer-screenshot-button:disabled {
   display: none;
 }
 
