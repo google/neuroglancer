@@ -15,12 +15,9 @@
  */
 
 :root {
-  --blue: #1e90ff;
-  --white: #ffffff;
   --gray300: #d0d5dd;
   --gray600: #141415;
   --gray500: #f7f7f7;
-  --gray100: #ebebeb;
   --gray50: #e6e6e6;
   --gray800: #344054;
   --primary500: #0069eb;
@@ -29,10 +26,12 @@
   --gray400: rgba(20, 20, 21, 0.4);
   --gray200: rgba(20, 20, 21, 0.8);
 }
+
 .neuroglancer-screenshot-overlay {
   overflow-x: hidden;
   overflow-y: auto;
 }
+
 .neuroglancer-screenshot-overlay
   :is(
     div,
@@ -61,6 +60,7 @@
   box-sizing: border-box;
   outline: 0;
 }
+
 .neuroglancer-screenshot-dialog {
   width: 48.75rem;
   padding: 0;
@@ -72,7 +72,8 @@
   border-radius: 0.5rem;
   font-family: sans-serif;
 }
-.neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-and-help {
+
+.neuroglancer-screenshot-close-and-help {
   border-bottom: 1px solid var(--gray50);
   display: flex;
   color: var(--gray600);
@@ -90,7 +91,7 @@
   overflow-x: hidden;
 }
 
-.neuroglancer-screenshot-dialog .neuroglancer-screenshot-title-heading {
+.neuroglancer-screenshot-title-heading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -100,12 +101,14 @@
   display: flex;
   flex-wrap: wrap;
 }
+
 .neuroglancer-screenshot-scale-menu label {
   color: var(--gray700);
   font-size: 0.75rem;
   margin-right: 2.125rem;
 }
-.neuroglancer-screenshot-scale-menu .neuroglancer-screenshot-scale-radio {
+
+.neuroglancer-screenshot-scale-radio {
   margin: 0 0.188rem 0 0;
 }
 
@@ -120,6 +123,7 @@
   color: var(--gray200);
   font-weight: 590;
 }
+
 .neuroglancer-screenshot-scale-factor {
   width: 100%;
   margin-bottom: 0.5rem;
@@ -127,6 +131,7 @@
   align-items: center;
   gap: 0.15rem;
 }
+
 .neuroglancer-screenshot-keep-slice-label {
   display: flex;
   flex-direction: row-reverse;
@@ -136,8 +141,8 @@
   align-items: center;
   gap: 0.5rem;
 }
-.neuroglancer-screenshot-filename-and-buttons
-  .neuroglancer-screenshot-title-subheading {
+
+.neuroglancer-screenshot-title-subheading {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
@@ -155,6 +160,7 @@
 .neuroglancer-screenshot-filename-and-buttons {
   padding: 1rem 1rem 0.75rem 1rem;
 }
+
 .neuroglancer-screenshot-filename-and-buttons label {
   color: var(--gray800);
   font-size: 0.813rem;
@@ -163,6 +169,7 @@
   display: block;
   margin: 0.75rem 0 0.375rem;
 }
+
 .neuroglancer-screenshot-name-input {
   width: 100%;
   margin-right: 10px;
@@ -179,10 +186,12 @@
   box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
   line-height: 20px;
 }
+
 .neuroglancer-screenshot-name-input:disabled {
   background: var(--gray500);
   color: var(--gray400);
 }
+
 .neuroglancer-screenshot-name-input::placeholder {
   color: var(--gray700);
 }
@@ -208,18 +217,20 @@
   border-collapse: collapse;
 }
 
-.neuroglancer-screenshot-statistics-table th,
-.neuroglancer-screenshot-statistics-table td {
+.neuroglancer-screenshot-statistics-table-header,
+.neuroglancer-screenshot-statistics-table-data {
   text-align: left;
   width: 33.33%;
 }
-.neuroglancer-screenshot-statistics-table td {
+
+.neuroglancer-screenshot-statistics-table-data {
   color: var(--gray200);
   font-size: 0.813rem;
   font-weight: 590;
   padding: 0.5rem 0;
 }
-.neuroglancer-screenshot-statistics-table th[colspan="2"] {
+
+.neuroglancer-screenshot-statistics-table-header[colspan="2"] {
   font-size: 0.813rem;
   color: var(--gray700);
   line-height: 1.25rem;
@@ -227,23 +238,26 @@
   padding-bottom: 0.75rem;
 }
 
-.neuroglancer-screenshot-statistics-table th[colspan="2"] a {
+.neuroglancer-screenshot-statistics-table-header[colspan="2"] a {
   font-weight: 590;
   cursor: pointer;
   color: var(--primary500);
   margin-left: 0.1rem;
 }
-.neuroglancer-screenshot-statistics-table td:last-child {
+
+.neuroglancer-screenshot-statistics-table-data:last-child {
   color: var(--gray700);
   font-weight: 400;
 }
-.neuroglancer-screenshot-statistics-table th {
+
+.neuroglancer-screenshot-statistics-table-header {
   font-size: 0.938rem;
   font-weight: 590;
   margin: 0;
   color: var(--gray600);
   padding: 0 0 0.5rem;
 }
+
 .neuroglancer-screenshot-resolution-preview-container {
   border-top: 1px solid var(--gray50);
   border-bottom: 1px solid var(--gray50);
@@ -251,6 +265,7 @@
   width: 100%;
   padding: 1rem;
 }
+
 .neuroglancer-screenshot-resolution-preview-container h2 {
   font-size: 0.938rem;
   font-weight: 590;
@@ -261,6 +276,7 @@
 .neuroglancer-screenshot-resolution-preview-top-container {
   display: flex;
 }
+
 .neuroglancer-screenshot-resolution-table {
   width: 100%;
   border-collapse: separate;
@@ -274,19 +290,19 @@
   margin-bottom: 0.75rem;
 }
 
-.neuroglancer-screenshot-resolution-table table tr:nth-child(2) td:first-child {
+.neuroglancer-screenshot-resolution-table-row:nth-child(2) .neuroglancer-screenshot-resolution-table-data:first-child {
   border-top-left-radius: 0.25rem;
 }
 
-.neuroglancer-screenshot-resolution-table table tr:nth-child(2) td:last-child {
+.neuroglancer-screenshot-resolution-table-row:nth-child(2) .neuroglancer-screenshot-resolution-table-data:last-child {
   border-top-right-radius: 0.25rem;
 }
 
-.neuroglancer-screenshot-resolution-table table tr:last-child td:first-child {
+.neuroglancer-screenshot-resolution-table-row:last-child .neuroglancer-screenshot-resolution-table-data:first-child {
   border-bottom-left-radius: 0.25rem;
 }
 
-.neuroglancer-screenshot-resolution-table table tr:last-child td:last-child {
+.neuroglancer-screenshot-resolution-table-row:last-child .neuroglancer-screenshot-resolution-table-data:last-child {
   border-bottom-right-radius: 0.25rem;
 }
 
@@ -300,6 +316,7 @@
   padding: 0;
   margin: 0 0;
 }
+
 .neuroglancer-screenshot-size-text {
   margin: 0.75rem 0 0.75rem 0;
   display: flex;
@@ -319,6 +336,7 @@
   padding: 0.25rem;
   font-weight: 400;
 }
+
 .neuroglancer-screenshot-copy-icon {
   outline: 0;
   border: 0;
@@ -329,11 +347,13 @@
   width: 33.33% !important;
   justify-content: flex-end;
 }
+
 .neuroglancer-screenshot-dialog .neuroglancer-icon svg {
   stroke: rgba(20, 20, 21, 0.4);
   width: 1rem;
   height: 1rem;
 }
+
 .neuroglancer-screenshot-dialog .neuroglancer-icon {
   width: 1rem;
   height: 1rem;
@@ -341,17 +361,21 @@
   min-height: inherit;
   padding: 0;
 }
+
 .neuroglancer-screenshot-dialog .neuroglancer-icon:hover {
   background: none;
 }
+
 .neuroglancer-screenshot-size-text + .neuroglancer-screenshot-resolution-table {
   border: 0;
 }
+
 .neuroglancer-screenshot-resolution-table
   + .neuroglancer-screenshot-resolution-table {
   border: 0;
 }
-.neuroglancer-screenshot-resolution-table th {
+
+.neuroglancer-screenshot-resolution-table-header {
   text-align: left;
   color: var(--gray200);
   font-size: 0.813rem;
@@ -362,7 +386,7 @@
   padding: 0.25rem 0.375rem;
 }
 
-.neuroglancer-screenshot-resolution-table td {
+.neuroglancer-screenshot-resolution-table-data {
   font-size: 0.813rem;
   color: var(--gray700);
   width: 33.33%;
@@ -384,6 +408,7 @@
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--gray50);
 }
+
 .neuroglancer-screenshot-footer-container
   .neuroglancer-screenshot-progress-text {
   margin: 0;
@@ -395,6 +420,7 @@
   align-self: center;
   color: var(--primary700);
 }
+
 .neuroglancer-screenshot-footer-container .neuroglancer-screenshot-button {
   border-radius: 0.5rem;
   border: 1px solid var(--gray300);
@@ -405,6 +431,7 @@
   color: var(--gray800);
   margin: 0 0 0 0.25rem;
 }
+
 .neuroglancer-screenshot-footer-container
   .neuroglancer-screenshot-button:disabled {
   display: none;

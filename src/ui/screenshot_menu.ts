@@ -88,6 +88,24 @@ const layerNamesForUI = {
   SegmentationRenderLayer: "Segmentation slice (2D)",
 };
 
+function splitIntoLines(text: string, maxLineLength: number): string {
+  const words = text.split(' ');
+  let lines = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if ((currentLine + word).length > maxLineLength) {
+      lines.push(currentLine.trim());
+      currentLine = word + ' ';
+    } else {
+      currentLine += word + ' ';
+    }
+  }
+  lines.push(currentLine.trim());
+
+  return lines.join('\n');
+}
+
 /**
  * Combine the resolution of all dimensions into a single string for UI display
  */
@@ -221,7 +239,7 @@ export class ScreenshotDialog extends Overlay {
   private setupHelpTooltips() {
     const generalSettingsTooltip = makeIcon({
       svg: svg_help,
-      title: TOOLTIPS.generalSettingsTooltip,
+      title: splitIntoLines(TOOLTIPS.generalSettingsTooltip, 30),
     });
 
     const orthographicSettingsTooltip = makeIcon({
@@ -231,12 +249,12 @@ export class ScreenshotDialog extends Overlay {
 
     const layerDataTooltip = makeIcon({
       svg: svg_help,
-      title: TOOLTIPS.layerDataTooltip,
+      title: splitIntoLines(TOOLTIPS.layerDataTooltip, 30),
     });
 
     const scaleFactorHelpTooltip = makeIcon({
       svg: svg_help,
-      title: TOOLTIPS.scaleFactorHelpTooltip,
+      title: splitIntoLines(TOOLTIPS.scaleFactorHelpTooltip, 30),
     });
 
     return (this.helpTooltips = {
@@ -511,13 +529,16 @@ export class ScreenshotDialog extends Overlay {
     const headerRow = this.statisticsTable.createTHead().insertRow();
     const keyHeader = document.createElement("th");
     keyHeader.textContent = "Screenshot progress";
+    keyHeader.classList.add("neuroglancer-screenshot-statistics-table-header");
     headerRow.appendChild(keyHeader);
     const valueHeader = document.createElement("th");
+    valueHeader.classList.add("neuroglancer-screenshot-statistics-table-header");
     valueHeader.textContent = "";
     headerRow.appendChild(valueHeader);
 
     const descriptionRow = this.statisticsTable.createTHead().insertRow();
     const descriptionkeyHeader = document.createElement("th");
+    descriptionkeyHeader.classList.add("neuroglancer-screenshot-statistics-table-header");
     descriptionkeyHeader.colSpan = 2;
 
     descriptionkeyHeader.textContent =
@@ -544,6 +565,8 @@ export class ScreenshotDialog extends Overlay {
         statisticsNamesForUI[key as keyof typeof statisticsNamesForUI];
       valueCell.textContent =
         orderedStatsRow[key as keyof typeof orderedStatsRow];
+      keyCell.classList.add("neuroglancer-screenshot-statistics-table-data");
+      valueCell.classList.add("neuroglancer-screenshot-statistics-table-data");
       this.statisticsKeyToCellMap.set(key, valueCell);
     }
 
@@ -558,15 +581,19 @@ export class ScreenshotDialog extends Overlay {
     resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
 
     const headerRow = resolutionTable.createTHead().insertRow();
+    headerRow.classList.add("neuroglancer-screenshot-resolution-table-row");
     const keyHeader = document.createElement("th");
+    keyHeader.classList.add("neuroglancer-screenshot-resolution-table-header");
     keyHeader.textContent = PANEL_TABLE_HEADER_STRINGS.type;
     keyHeader.appendChild(this.helpTooltips.orthographicSettingsTooltip);
 
     headerRow.appendChild(keyHeader);
     const pixelValueHeader = document.createElement("th");
     pixelValueHeader.textContent = PANEL_TABLE_HEADER_STRINGS.pixelResolution;
+    pixelValueHeader.classList.add("neuroglancer-screenshot-resolution-table-header")
     headerRow.appendChild(pixelValueHeader);
     const physicalValueHeader = document.createElement("th");
+    physicalValueHeader.classList.add("neuroglancer-screenshot-resolution-table-header");
     physicalValueHeader.textContent =
       PANEL_TABLE_HEADER_STRINGS.physicalResolution;
     headerRow.appendChild(physicalValueHeader);
@@ -594,6 +621,10 @@ export class ScreenshotDialog extends Overlay {
       const physicalValueCell = row.insertCell();
       keyCell.textContent = physicalResolution.type;
       physicalValueCell.innerHTML = physicalResolution.resolution;
+      row.classList.add("neuroglancer-screenshot-resolution-table-row");
+      keyCell.classList.add("neuroglancer-screenshot-resolution-table-data");
+      pixelValueCell.classList.add("neuroglancer-screenshot-resolution-table-data");
+      physicalValueCell.classList.add("neuroglancer-screenshot-resolution-table-data");
     }
     return resolutionTable;
   }
@@ -604,16 +635,20 @@ export class ScreenshotDialog extends Overlay {
     resolutionTable.classList.add("neuroglancer-screenshot-resolution-table");
 
     const headerRow = resolutionTable.createTHead().insertRow();
+    headerRow.classList.add("neuroglancer-screenshot-resolution-table-row");
     const keyHeader = document.createElement("th");
+    keyHeader.classList.add("neuroglancer-screenshot-resolution-table-header");
     keyHeader.textContent = LAYER_TABLE_HEADER_STRINGS.name;
     keyHeader.appendChild(this.helpTooltips.layerDataTooltip);
 
     headerRow.appendChild(keyHeader);
     const typeHeader = document.createElement("th");
     typeHeader.textContent = LAYER_TABLE_HEADER_STRINGS.type;
+    typeHeader.classList.add("neuroglancer-screenshot-resolution-table-header");
     headerRow.appendChild(typeHeader);
     const valueHeader = document.createElement("th");
     valueHeader.textContent = LAYER_TABLE_HEADER_STRINGS.resolution;
+    valueHeader.classList.add("neuroglancer-screenshot-resolution-table-header")
     headerRow.appendChild(valueHeader);
     return resolutionTable;
   }
@@ -632,6 +667,7 @@ export class ScreenshotDialog extends Overlay {
       let valueCell = this.layerResolutionKeyToCellMap.get(stringKey);
       if (valueCell === undefined) {
         const row = resolutionTable.insertRow();
+        row.classList.add("neuroglancer-screenshot-resolution-table-row");
         const keyCell = row.insertCell();
         const typeCell = row.insertCell();
         valueCell = row.insertCell();
@@ -639,7 +675,11 @@ export class ScreenshotDialog extends Overlay {
         typeCell.textContent =
           layerNamesForUI[type as keyof typeof layerNamesForUI];
         this.layerResolutionKeyToCellMap.set(stringKey, valueCell);
+        row.classList.add("neuroglancer-screenshot-resolution-table-row");
+        keyCell.classList.add("neuroglancer-screenshot-resolution-table-data");
+        typeCell.classList.add("neuroglancer-screenshot-resolution-table-data");
       }
+      valueCell.classList.add("neuroglancer-screenshot-resolution-table-data");
       valueCell.innerHTML = formatPhysicalResolution(value).resolution;
     }
   }
