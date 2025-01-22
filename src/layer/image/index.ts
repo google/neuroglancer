@@ -50,12 +50,12 @@ import {
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { trackableBlendModeValue } from "#src/trackable_blend.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
-  observeWatchable,
   registerNested,
   WatchableValue,
 } from "#src/trackable_value.js";
@@ -108,6 +108,7 @@ import { Tab } from "#src/widget/tab_view.js";
 const OPACITY_JSON_KEY = "opacity";
 const BLEND_JSON_KEY = "blend";
 const SHADER_JSON_KEY = "shader";
+const CODE_VISIBLE_KEY = "codeVisibleTEST";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
@@ -127,6 +128,7 @@ const [
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
+  codeVisible = new TrackableBoolean(true, true);
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
@@ -207,6 +209,9 @@ export class ImageUserLayer extends Base {
       isLocalDimension;
     this.blendMode.changed.add(this.specificationChanged.dispatch);
     this.opacity.changed.add(this.specificationChanged.dispatch);
+    this.codeVisible.changed.add(() => {
+      this.specificationChanged.dispatch;
+    });
     this.volumeRenderingGain.changed.add(this.specificationChanged.dispatch);
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
@@ -296,6 +301,7 @@ export class ImageUserLayer extends Base {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
+    this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     verifyOptionalObjectProperty(specification, BLEND_JSON_KEY, (blendValue) =>
       this.blendMode.restoreState(blendValue),
     );
@@ -341,6 +347,7 @@ export class ImageUserLayer extends Base {
     const x = super.toJSON();
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
+    x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
@@ -544,14 +551,13 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(document.createTextNode("Shader"));
     topRow.appendChild(spacer);
 
-    const managedLayer = this.layer.managedLayer;
     this.registerDisposer(
-      observeWatchable((visible) => {
-        this.codeWidget.setVisible(visible);
-      }, managedLayer.codeVisible),
+      this.layer.codeVisible.changed.add(() => {
+        this.codeWidget.setVisible(this.layer.codeVisible.value);
+      }),
     );
 
-    const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
+    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
       enableTitle: "Show code",
       disableTitle: "Hide code",
       backgroundScheme: "dark",
