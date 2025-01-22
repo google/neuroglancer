@@ -236,21 +236,21 @@
   border: 0;
 }
 
-.neuroglancer-screenshot-resolution-table-header {
+.neuroglancer-screenshot-resolution-table th {
+  font-size: 0.813rem;
+  width: 33.33%;
   text-align: left;
   color: var(--gray200);
-  font-size: 0.813rem;
   font-style: normal;
   font-weight: 590;
-  width: 33.33%;
   background: var(--gray50);
   padding: 0.25rem 0.375rem;
 }
 
-.neuroglancer-screenshot-resolution-table-data {
+.neuroglancer-screenshot-resolution-table td {
   font-size: 0.813rem;
-  color: var(--gray700);
   width: 33.33%;
+  color: var(--gray700);
   background: white;
   padding: 0.375rem;
   line-height: 1.25rem;
@@ -282,13 +282,13 @@
   border-collapse: collapse;
 }
 
-.neuroglancer-screenshot-statistics-table-header {
+.neuroglancer-screenshot-statistics-table th {
   text-align: left;
   width: 33.33%;
   padding: 0 0 0.5rem;
 }
 
-.neuroglancer-screenshot-statistics-table-data {
+.neuroglancer-screenshot-statistics-table td {
   text-align: left;
   width: 33.33%;
   font-size: 0.813rem;
@@ -310,8 +310,6 @@
   color: var(--gray700);
   line-height: 1.25rem;
   font-weight: 400;
-  padding: 0 0 0.5rem;
-  text-align: left;
 }
 
 .neuroglancer-statistics-table-description-link {
