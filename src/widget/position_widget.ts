@@ -1566,20 +1566,7 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
       ).element,
     );
 
-    const shouldIgnoreEvent = (event: Event) => {
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        target.matches(".neuroglancer-position-dimension-playback *")
-      ) {
-        return true;
-      }
-      return false;
-    };
-    const mouseHandler = this.registerDisposer(
-      new MouseEventBinder(plot.element, inputEventMap),
-    );
-    mouseHandler.shouldIgnore = shouldIgnoreEvent;
+    this.registerDisposer(new MouseEventBinder(plot.element, inputEventMap));
 
     registerActionListener<WheelEvent>(
       plot.element,
