@@ -88,7 +88,7 @@ const layerNamesForUI = {
   SegmentationRenderLayer: "Segmentation slice (2D)",
 };
 
-function splitIntoLines(text: string, maxLineLength: number): string {
+function splitIntoLines(text: string, maxLineLength: number = 60): string {
   const words = text.split(" ");
   let lines = [];
   let currentLine = "";
@@ -239,7 +239,7 @@ export class ScreenshotDialog extends Overlay {
   private setupHelpTooltips() {
     const generalSettingsTooltip = makeIcon({
       svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.generalSettingsTooltip, 30),
+      title: splitIntoLines(TOOLTIPS.generalSettingsTooltip),
     });
 
     const orthographicSettingsTooltip = makeIcon({
@@ -252,7 +252,7 @@ export class ScreenshotDialog extends Overlay {
 
     const layerDataTooltip = makeIcon({
       svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.layerDataTooltip, 30),
+      title: splitIntoLines(TOOLTIPS.layerDataTooltip),
     });
     layerDataTooltip.classList.add(
       "neuroglancer-screenshot-resolution-table-tooltip",
@@ -260,7 +260,7 @@ export class ScreenshotDialog extends Overlay {
 
     const scaleFactorHelpTooltip = makeIcon({
       svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.scaleFactorHelpTooltip, 30),
+      title: splitIntoLines(TOOLTIPS.scaleFactorHelpTooltip),
     });
 
     return (this.helpTooltips = {
