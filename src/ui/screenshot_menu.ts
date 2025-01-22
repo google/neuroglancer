@@ -90,7 +90,7 @@ const layerNamesForUI = {
 
 function splitIntoLines(text: string, maxLineLength: number = 60): string {
   const words = text.split(" ");
-  let lines = [];
+  const lines = [];
   let currentLine = "";
 
   for (const word of words) {

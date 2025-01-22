@@ -29,14 +29,7 @@
 }
 
 /* General headings, labels, and top-level containers */
-.neuroglancer-screenshot-overlay
-  :is(
-    div,
-    table,
-    tr,
-    td,
-    th,
-  ) {
+.neuroglancer-screenshot-overlay :is(div, table, tr, td, th, ) {
   box-sizing: border-box;
   outline: 0;
 }
@@ -265,7 +258,7 @@
 
 .neuroglancer-screenshot-resolution-table-tooltip {
   vertical-align: top;
-  margin-left: .25rem;
+  margin-left: 0.25rem;
 }
 
 .neuroglancer-screenshot-copy-icon {
