@@ -1363,7 +1363,7 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
 }
 
 export interface SerializedAnnotations {
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];

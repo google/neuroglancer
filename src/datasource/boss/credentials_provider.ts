@@ -23,138 +23,125 @@ import {
   CredentialsProvider,
   makeCredentialsGetter,
 } from "#src/credentials_provider/index.js";
-import { StatusMessage } from "#src/status.js";
 import {
-  CANCELED,
-  CancellationTokenSource,
-  uncancelableToken,
-} from "#src/util/cancellation.js";
-import { verifyObject, verifyString } from "#src/util/json.js";
+  getCredentialsWithStatus,
+  monitorAuthPopupWindow,
+} from "#src/credentials_provider/interactive_credentials_provider.js";
+import { raceWithAbort } from "#src/util/abort.js";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 import { getRandomHexString } from "#src/util/random.js";
-import { Signal } from "#src/util/signal.js";
 
 export type BossToken = string;
 
-class PendingRequest {
-  finished = new Signal<(token?: BossToken, error?: any) => void>();
+function makeAuthRequestUrl(options: {
+  authServer: string;
+  clientId: string;
+  redirect_uri: string;
+  state?: string;
+  nonce?: string;
+}) {
+  let url = `${options.authServer}/realms/BOSS/protocol/openid-connect/auth?`;
+  url += `client_id=${encodeURIComponent(options.clientId)}`;
+  url += `&redirect_uri=${encodeURIComponent(options.redirect_uri)}`;
+  url += "&response_mode=fragment";
+  url += "&response_type=code%20id_token%20token";
+  if (options.state) {
+    url += `&state=${options.state}`;
+  }
+  if (options.nonce) {
+    url += `&nonce=${options.nonce}`;
+  }
+  return url;
 }
 
-class AuthHandler {
-  oidcCallbackService = "bossAuthCallback";
-  relayReadyPromise: Promise<void>;
-  pendingRequests = new Map<string, PendingRequest>();
-
-  constructor() {
-    this.registerListener();
-  }
-
-  registerListener() {
-    addEventListener("message", (event: MessageEvent) => {
-      if (event.origin !== location.origin) {
-        // Ignore messages from different origins.
-        return;
-      }
-      try {
-        const data = verifyObject(JSON.parse(event.data));
-        const service = verifyString(data.service);
-        if (service === this.oidcCallbackService) {
-          const accessToken = verifyString(data.access_token);
-          const state = verifyString(data.state);
-          const request = this.pendingRequests.get(state);
-          if (request === undefined) {
-            // Request may have been cancelled.
-            return;
-          }
-          request.finished.dispatch(accessToken);
+function waitForAuthResponseMessage(
+  source: Window,
+  state: string,
+  signal: AbortSignal,
+): Promise<BossToken> {
+  return new Promise((resolve, reject) => {
+    window.addEventListener(
+      "message",
+      (event: MessageEvent) => {
+        if (event.origin !== location.origin) {
+          return;
         }
-      } catch (parseError) {
-        // Ignore invalid message.
-      }
-    });
-  }
 
-  addPendingRequest(state: string) {
-    const request = new PendingRequest();
-    this.pendingRequests.set(state, request);
-    request.finished.add(() => {
-      this.pendingRequests.delete(state);
-    });
-    return request;
-  }
+        if (event.source !== source) return;
 
-  makeAuthRequestUrl(options: {
-    authServer: string;
-    clientId: string;
-    redirect_uri: string;
-    state?: string;
-    nonce?: string;
-  }) {
-    let url = `${options.authServer}/realms/BOSS/protocol/openid-connect/auth?`;
-    url += `client_id=${encodeURIComponent(options.clientId)}`;
-    url += `&redirect_uri=${encodeURIComponent(options.redirect_uri)}`;
-    url += "&response_mode=fragment";
-    url += "&response_type=code%20id_token%20token";
-    if (options.state) {
-      url += `&state=${options.state}`;
-    }
-    if (options.nonce) {
-      url += `&nonce=${options.nonce}`;
-    }
-    return url;
-  }
-}
-
-let authHandlerInstance: AuthHandler;
-
-function authHandler() {
-  if (authHandlerInstance === undefined) {
-    authHandlerInstance = new AuthHandler();
-  }
-  return authHandlerInstance;
+        try {
+          const obj = verifyObject(JSON.parse(event.data));
+          if (
+            verifyObjectProperty(obj, "service", verifyString) !==
+            "bossAuthCallback"
+          ) {
+            throw new Error("Unexpected service");
+          }
+          const receivedState = verifyObjectProperty(
+            obj,
+            "state",
+            verifyString,
+          );
+          if (receivedState !== state) {
+            throw new Error("invalid state");
+          }
+          const accessToken = verifyObjectProperty(
+            obj,
+            "access_token",
+            verifyString,
+          );
+          resolve(accessToken);
+        } catch (parseError) {
+          reject(
+            new Error(
+              `Received unexpected authentication response: ${parseError.message}`,
+            ),
+          );
+          console.error("Response received: ", event.data);
+        }
+      },
+      { signal: signal },
+    );
+  });
 }
 
 /**
  * Obtain a Keycloak OIDC authentication token.
  * @return A Promise that resolves to an authentication token.
  */
-export function authenticateKeycloakOIDC(
+export async function authenticateKeycloakOIDC(
   options: { realm: string; clientId: string; authServer: string },
-  cancellationToken = uncancelableToken,
-) {
+  signal: AbortSignal,
+): Promise<BossToken> {
   const state = getRandomHexString();
   const nonce = getRandomHexString();
-  const handler = authHandler();
-  const url = handler.makeAuthRequestUrl({
+  const url = makeAuthRequestUrl({
     state: state,
     clientId: options.clientId,
     redirect_uri: new URL("./bossauth.html", import.meta.url).href,
     authServer: options.authServer,
     nonce: nonce,
   });
-  const request = handler.addPendingRequest(state);
-  const promise = new Promise<BossToken>((resolve, reject) => {
-    request.finished.add((token: string, error: string) => {
-      if (token !== undefined) {
-        resolve(token);
-      } else {
-        reject(error);
-      }
-    });
-  });
-  request.finished.add(
-    cancellationToken.add(() => {
-      request.finished.dispatch(undefined, CANCELED);
-    }),
-  );
-  if (!cancellationToken.isCanceled) {
+  const abortController = new AbortController();
+  signal = AbortSignal.any([abortController.signal, signal]);
+  try {
     const newWindow = open(url);
-    if (newWindow !== null) {
-      request.finished.add(() => {
-        newWindow.close();
-      });
+    if (newWindow === null) {
+      throw new Error("Failed to create authentication popup window");
     }
+    monitorAuthPopupWindow(newWindow, abortController);
+    return await raceWithAbort(
+      waitForAuthResponseMessage(newWindow, state, abortController.signal),
+      signal,
+    );
+  } finally {
+    abortController.abort();
   }
-  return promise;
 }
 
 export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
@@ -162,64 +149,24 @@ export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
     super();
   }
 
-  get = makeCredentialsGetter((cancellationToken) => {
-    const status = new StatusMessage(/*delay=*/ true);
-    let cancellationSource: CancellationTokenSource | undefined;
-    return new Promise<BossToken>((resolve, reject) => {
-      const dispose = () => {
-        cancellationSource = undefined;
-        status.dispose();
-      };
-      cancellationToken.add(() => {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-          cancellationSource = undefined;
-          status.dispose();
-          reject(CANCELED);
-        }
-      });
-      function writeLoginStatus(
-        msg = "Boss authorization required.",
-        linkMessage = "Request authorization.",
-      ) {
-        status.setText(msg + " ");
-        const button = document.createElement("button");
-        button.textContent = linkMessage;
-        status.element.appendChild(button);
-        button.addEventListener("click", () => {
-          login();
-        });
-        status.setVisible(true);
-      }
-      const authServer = this.authServer;
-      function login() {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-        }
-        cancellationSource = new CancellationTokenSource();
-        writeLoginStatus("Waiting for Boss authorization...", "Retry");
-        authenticateKeycloakOIDC(
-          { realm: "boss", clientId: "endpoint", authServer: authServer },
-          cancellationSource,
-        ).then(
-          (token) => {
-            if (cancellationSource !== undefined) {
-              dispose();
-              resolve(token);
-            }
-          },
-          (reason) => {
-            if (cancellationSource !== undefined) {
-              cancellationSource = undefined;
-              writeLoginStatus(
-                `Boss authorization failed: ${reason}.`,
-                "Retry",
-              );
-            }
-          },
-        );
-      }
-      writeLoginStatus();
+  get = makeCredentialsGetter(async (options) => {
+    using _span = new ProgressSpan(options.progressListener, {
+      message: `Requesting Boss access token from ${this.authServer}`,
     });
+    return await getCredentialsWithStatus(
+      {
+        description: "Boss",
+        get: (signal) =>
+          authenticateKeycloakOIDC(
+            {
+              realm: "boss",
+              clientId: "endpoint",
+              authServer: this.authServer,
+            },
+            signal,
+          ),
+      },
+      options.signal,
+    );
   });
 }

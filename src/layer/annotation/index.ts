@@ -30,7 +30,7 @@ import {
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
-import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/index.js";
+import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/local.js";
 import type { LayerManager, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LayerReference,
@@ -731,19 +731,21 @@ function makeShaderCodeWidget(layer: AnnotationUserLayer) {
 }
 
 class ShaderCodeOverlay extends Overlay {
-  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
     super();
+    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     this.content.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
   }
 }
 
 class RenderingOptionsTab extends Tab {
-  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
     super();
     const { element } = this;
+    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-annotation-rendering-tab");
     const shaderProperties = this.registerDisposer(
       new DependentViewWidget(

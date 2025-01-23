@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
+import {
+  registerKvStoreBasedDataProvider,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
 import { VtkDataSource } from "#src/datasource/vtk/frontend.js";
 
-registerProvider("vtk", () => new VtkDataSource());
+const provider = new VtkDataSource();
+registerKvStoreBasedDataProvider(provider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));

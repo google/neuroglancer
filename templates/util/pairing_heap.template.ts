@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
+import { PairingHeapOperations } from "#src/util/pairing_heap.js";
 
 interface Node<T> {
   CHILD_PROPERTY: T|null;

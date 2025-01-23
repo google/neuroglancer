@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import type { CancellationToken } from "#src/util/cancellation.js";
-import {
-  CANCELED,
-  CancellationTokenSource,
-  makeCancelablePromise,
-  uncancelableToken,
-} from "#src/util/cancellation.js";
+import { promiseWithResolversAndAbortCallback } from "#src/util/abort.js";
 import { RefCounted } from "#src/util/disposable.js";
+import type {
+  ProgressListener,
+  ProgressOptions,
+  ProgressSpanId,
+} from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 export type RPCHandler = (this: RPC, x: any) => void;
 
@@ -35,6 +35,8 @@ const DEBUG_MESSAGES = false;
 
 const PROMISE_RESPONSE_ID = "rpc.promise.response";
 const PROMISE_CANCEL_ID = "rpc.promise.cancel";
+const PROMISE_PROGRESS_ADD_SPAN_ID = "rpc.promise.addProgressSpan";
+const PROMISE_PROGRESS_REMOVE_SPAN_ID = "rpc.promise.removeProgressSpan";
 const READY_ID = "rpc.ready";
 
 const handlers = new Map<string, RPCHandler>();
@@ -45,12 +47,27 @@ export function registerRPC(key: string, handler: RPCHandler) {
 
 export type RPCPromise<T> = Promise<{ value: T; transfers?: any[] }>;
 
-export class RPCError extends Error {
+class ProxyProgressListener implements ProgressListener {
   constructor(
-    public name: string,
-    public message: string,
-  ) {
-    super(message);
+    private rpc: RPC,
+    private id: number,
+  ) {}
+
+  addSpan(span: ProgressSpan) {
+    this.rpc.invoke(PROMISE_PROGRESS_ADD_SPAN_ID, {
+      id: this.id,
+      span: {
+        id: span.id,
+        message: span.message,
+        startTime: span.startTime,
+      },
+    });
+  }
+  removeSpan(spanId: ProgressSpanId) {
+    this.rpc.invoke(PROMISE_PROGRESS_REMOVE_SPAN_ID, {
+      id: this.id,
+      spanId,
+    });
   }
 }
 
@@ -59,14 +76,21 @@ export function registerPromiseRPC<T>(
   handler: (
     this: RPC,
     x: any,
-    cancellationToken: CancellationToken,
+    progressOptions: Partial<ProgressOptions>,
   ) => RPCPromise<T>,
 ) {
   registerRPC(key, function (this: RPC, x: any) {
     const id = <number>x.id;
-    const cancellationToken = new CancellationTokenSource();
-    const promise = handler.call(this, x, cancellationToken) as RPCPromise<T>;
-    this.set(id, { promise, cancellationToken });
+    const abortController = new AbortController();
+    let progressListener: ProgressListener | undefined;
+    if (x.progressListener === true) {
+      progressListener = new ProxyProgressListener(this, id);
+    }
+    const promise = handler.call(this, x, {
+      signal: abortController.signal,
+      progressListener,
+    }) as RPCPromise<T>;
+    this.set(id, { promise, abortController });
     promise.then(
       ({ value, transfers }) => {
         this.delete(id);
@@ -76,8 +100,7 @@ export function registerPromiseRPC<T>(
         this.delete(id);
         this.invoke(PROMISE_RESPONSE_ID, {
           id: id,
-          error: error.message,
-          errorName: error.name,
+          error: error,
         });
       },
     );
@@ -88,8 +111,8 @@ registerRPC(PROMISE_CANCEL_ID, function (this: RPC, x: any) {
   const id = <number>x.id;
   const request = this.get(id);
   if (request !== undefined) {
-    const { cancellationToken } = request;
-    cancellationToken.cancel();
+    const { abortController } = request;
+    abortController.abort();
   }
 });
 
@@ -100,13 +123,20 @@ registerRPC(PROMISE_RESPONSE_ID, function (this: RPC, x: any) {
   if (Object.prototype.hasOwnProperty.call(x, "value")) {
     resolve(x.value);
   } else {
-    const errorName = x.errorName;
-    if (errorName === CANCELED.name) {
-      reject(CANCELED);
-    } else {
-      reject(new RPCError(x.errorName, x.error));
-    }
+    reject(x.error);
   }
+});
+
+registerRPC(PROMISE_PROGRESS_ADD_SPAN_ID, function (this: RPC, x: any) {
+  const id = <number>x.id;
+  const { progressListener } = this.get(id);
+  new ProgressSpan(progressListener, x.span);
+});
+
+registerRPC(PROMISE_PROGRESS_REMOVE_SPAN_ID, function (this: RPC, x: any) {
+  const id = <number>x.id;
+  const { progressListener } = this.get(id);
+  progressListener.removeSpan(x.spanId);
 });
 
 registerRPC(READY_ID, function (this: RPC, x: any) {
@@ -136,6 +166,10 @@ export class RPC {
       const data = e.data;
       if (DEBUG_MESSAGES) {
         console.log("Received message", data);
+      }
+      const handler = handlers.get(data.functionName);
+      if (handler === undefined) {
+        throw new Error(`Missing RPC function: ${data.functionName}`);
       }
       handlers.get(data.functionName)!.call(this, data);
     };
@@ -204,21 +238,36 @@ export class RPC {
   promiseInvoke<T>(
     name: string,
     x: any,
-    cancellationToken = uncancelableToken,
-    transfers?: any[],
+    options?: {
+      signal?: AbortSignal;
+      progressListener?: ProgressListener;
+      transfers?: any[];
+    },
   ): Promise<T> {
-    return makeCancelablePromise<T>(
-      cancellationToken,
-      (resolve, reject, token) => {
-        const id = (x.id = this.newId());
-        this.set(id, { resolve, reject });
-        this.invoke(name, x, transfers);
-        token.add(() => {
-          this.invoke(PROMISE_CANCEL_ID, { id: id });
-        });
-      },
-    );
+    let signal: AbortSignal | undefined;
+    let progressListener: ProgressListener | undefined;
+    let transfers: any[] | undefined;
+    if (options !== undefined) {
+      ({ signal, progressListener, transfers } = options);
+    }
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
+    if (progressListener !== undefined) {
+      x.progressListener = true;
+    }
+    const id = (x.id = this.newId());
+    this.invoke(name, x, transfers);
+    const { promise, resolve, reject } =
+      signal === undefined
+        ? Promise.withResolvers<T>()
+        : promiseWithResolversAndAbortCallback<T>(signal, () => {
+            this.invoke(PROMISE_CANCEL_ID, { id: id });
+          });
+    this.set(id, { resolve, reject, progressListener });
+    return promise;
   }
+
   newId() {
     return IS_WORKER ? this.nextId-- : this.nextId++;
   }
@@ -303,7 +352,7 @@ export class SharedObject extends RefCounted {
    * Should be set to a constant specifying the SharedObject type identifier on the prototype of
    * final derived owner classes.  It is not used on counterpart (non-owner) classes.
    */
-  RPC_TYPE_ID: string;
+  declare RPC_TYPE_ID: string;
 }
 
 export function initializeSharedObjectCounterpart(

@@ -16,20 +16,28 @@
 
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { parseVTKFromArrayBuffer } from "#src/async_computation/vtk_mesh_request.js";
-import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
+import { getCachedDecodedUrl } from "#src/chunk_manager/generic_file_source.js";
+import type { ReadResponse } from "#src/kvstore/index.js";
 import type { SingleMesh } from "#src/single_mesh/backend.js";
 import { registerSingleMeshFactory } from "#src/single_mesh/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { DataType } from "#src/util/data_type.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 /**
- * This needs to be a global function, because it identifies the instance of GenericSharedDataSource
+ * This needs to be a global function, because it identifies the instance of SimpleAsyncCache
  * to use.
  */
-function parse(buffer: ArrayBuffer, cancellationToken: CancellationToken) {
+async function parse(
+  readResponse: ReadResponse | undefined,
+  progressOptions: Partial<ProgressOptions>,
+) {
+  if (readResponse === undefined) {
+    throw new Error("Not found");
+  }
+  const buffer = await readResponse.response.arrayBuffer();
   return requestAsyncComputation(
     parseVTKFromArrayBuffer,
-    cancellationToken,
+    progressOptions.signal,
     [buffer],
     buffer,
   );
@@ -37,39 +45,31 @@ function parse(buffer: ArrayBuffer, cancellationToken: CancellationToken) {
 
 registerSingleMeshFactory("vtk", {
   description: "VTK",
-  getMesh: (
-    chunkManager,
-    credentialsProvider,
-    url,
-    getPriority,
-    cancellationToken,
-  ) =>
-    GenericSharedDataSource.getUrl(
-      chunkManager,
-      credentialsProvider,
-      parse,
+  getMesh: async (sharedKvStoreContext, url, options) => {
+    const mesh = await getCachedDecodedUrl(
+      sharedKvStoreContext,
       url,
-      getPriority,
-      cancellationToken,
-    ).then((mesh) => {
-      const result: SingleMesh = {
-        info: {
-          numTriangles: mesh.numTriangles,
-          numVertices: mesh.numVertices,
-          vertexAttributes: [],
-        },
-        indices: mesh.indices,
-        vertexPositions: mesh.vertexPositions,
+      parse,
+      options,
+    );
+    const result: SingleMesh = {
+      info: {
+        numTriangles: mesh.numTriangles,
+        numVertices: mesh.numVertices,
         vertexAttributes: [],
-      };
-      for (const attribute of mesh.vertexAttributes) {
-        result.info.vertexAttributes.push({
-          name: attribute.name,
-          dataType: DataType.FLOAT32,
-          numComponents: attribute.numComponents,
-        });
-        result.vertexAttributes.push(attribute.data);
-      }
-      return result;
-    }),
+      },
+      indices: mesh.indices,
+      vertexPositions: mesh.vertexPositions,
+      vertexAttributes: [],
+    };
+    for (const attribute of mesh.vertexAttributes) {
+      result.info.vertexAttributes.push({
+        name: attribute.name,
+        dataType: DataType.FLOAT32,
+        numComponents: attribute.numComponents,
+      });
+      result.vertexAttributes.push(attribute.data);
+    }
+    return result;
+  },
 });

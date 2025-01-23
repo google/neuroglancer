@@ -20,7 +20,8 @@
  */
 
 import { debounce } from "lodash-es";
-import type { DataSourceProviderRegistry } from "#src/datasource/index.js";
+import type { DataManagementContext } from "#src/data_management_context.js";
+import type { DataSourceRegistry } from "#src/datasource/index.js";
 import type { DisplayContext } from "#src/display_context.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -31,10 +32,7 @@ import {
   verifyObjectProperty,
 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
-import type {
-  DataManagementContext,
-  ViewerUIConfiguration,
-} from "#src/viewer.js";
+import type { ViewerUIConfiguration } from "#src/viewer.js";
 import { Viewer } from "#src/viewer.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 
@@ -46,7 +44,7 @@ export class PrefetchManager extends RefCounted {
 
   constructor(
     public display: Borrowed<DisplayContext>,
-    public dataSourceProvider: DataSourceProviderRegistry,
+    public dataSourceProvider: DataSourceRegistry,
     public dataContext: Owned<DataManagementContext>,
     public uiConfiguration: ViewerUIConfiguration,
   ) {

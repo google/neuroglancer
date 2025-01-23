@@ -46,8 +46,8 @@ import type {
   CompletionResult,
   DataSource,
   GetDataSourceOptions,
+  DataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import { MeshSource } from "#src/mesh/frontend.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
@@ -66,7 +66,6 @@ import {
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
 import { vec2, vec3 } from "#src/util/geom.js";
-import { responseJson } from "#src/util/http_request.js";
 import {
   parseArray,
   parseQueryStringParameters,
@@ -82,6 +81,7 @@ import {
   verifyOptionalString,
   verifyString,
 } from "#src/util/json.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 class BossVolumeChunkSource extends WithParameters(
   WithCredentialsProvider<BossToken>()(VolumeChunkSource),
@@ -250,6 +250,7 @@ function parseExperimentInfo(
   credentialsProvider: CredentialsProvider<BossToken>,
   collection: string,
   experiment: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ExperimentInfo> {
   verifyObject(obj);
 
@@ -262,6 +263,7 @@ function parseExperimentInfo(
         experiment,
         collection,
         ch,
+        options,
       ),
     ),
   );
@@ -291,6 +293,7 @@ function parseExperimentInfo(
       hostname,
       credentialsProvider,
       experimentInfo,
+      options,
     );
   });
 }
@@ -501,30 +504,34 @@ export function getExperimentInfo(
   credentialsProvider: CredentialsProvider<BossToken>,
   experiment: string,
   collection: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ExperimentInfo> {
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     {
       hostname: hostname,
       collection: collection,
       experiment: experiment,
       type: "boss:getExperimentInfo",
     },
-    () =>
+    options,
+    (progressOptions) =>
       fetchWithBossCredentials(
         credentialsProvider,
         `${hostname}/latest/collection/${collection}/experiment/${experiment}/`,
-        {},
-        responseJson,
-      ).then((value) =>
-        parseExperimentInfo(
-          value,
-          chunkManager,
-          hostname,
-          credentialsProvider,
-          collection,
-          experiment,
+        progressOptions,
+      )
+        .then((response) => response.json())
+        .then((value) =>
+          parseExperimentInfo(
+            value,
+            chunkManager,
+            hostname,
+            credentialsProvider,
+            collection,
+            experiment,
+            progressOptions,
+          ),
         ),
-      ),
   );
 }
 
@@ -535,8 +542,9 @@ export function getChannelInfo(
   experiment: string,
   collection: string,
   channel: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ChannelInfo> {
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     {
       hostname: hostname,
       collection: collection,
@@ -544,13 +552,15 @@ export function getChannelInfo(
       channel: channel,
       type: "boss:getChannelInfo",
     },
-    () =>
+    options,
+    (progressOptions) =>
       fetchWithBossCredentials(
         credentialsProvider,
         `${hostname}/latest/collection/${collection}/experiment/${experiment}/channel/${channel}/`,
-        {},
-        responseJson,
-      ).then(parseChannelInfo),
+        progressOptions,
+      )
+        .then((response) => response.json())
+        .then(parseChannelInfo),
   );
 }
 
@@ -561,9 +571,10 @@ export function getDownsampleInfoForChannel(
   collection: string,
   experimentInfo: ExperimentInfo,
   channel: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ExperimentInfo> {
   return chunkManager.memoize
-    .getUncounted(
+    .getAsync(
       {
         hostname: hostname,
         collection: collection,
@@ -572,13 +583,13 @@ export function getDownsampleInfoForChannel(
         downsample: true,
         type: "boss:getDownsampleInfoForChannel",
       },
-      () =>
+      options,
+      (progressOptions) =>
         fetchWithBossCredentials(
           credentialsProvider,
           `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}`,
-          {},
-          responseJson,
-        ),
+          progressOptions,
+        ).then((response) => response.json()),
     )
     .then((downsampleObj) => {
       return parseDownsampleInfoForChannel(
@@ -660,6 +671,7 @@ export function getDataSource(
   hostname: string,
   credentialsProvider: CredentialsProvider<BossToken>,
   path: string,
+  options: Partial<ProgressOptions>,
 ) {
   const match = path.match(pathPattern);
   if (match === null) {
@@ -670,15 +682,17 @@ export function getDataSource(
   const channel = match[3];
   const parameters = parseQueryStringParameters(match[4] || "");
   // Warning: If additional arguments are added, the cache key should be updated as well.
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     { hostname: hostname, path: path, type: "boss:getVolume" },
-    async () => {
+    options,
+    async (progressOptions) => {
       const experimentInfo = await getExperimentInfo(
         chunkManager,
         hostname,
         credentialsProvider,
         experiment,
         collection,
+        progressOptions,
       );
       const experimentInfoWithDownsample = await getDownsampleInfoForChannel(
         chunkManager,
@@ -687,6 +701,7 @@ export function getDataSource(
         collection,
         experimentInfo,
         channel,
+        progressOptions,
       );
       const volume = new BossMultiscaleVolumeChunkSource(
         chunkManager,
@@ -739,20 +754,23 @@ export function getCollections(
   chunkManager: ChunkManager,
   hostname: string,
   credentialsProvider: CredentialsProvider<BossToken>,
+  options: Partial<ProgressOptions>,
 ) {
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     { hostname: hostname, type: "boss:getCollections" },
-    () =>
+    options,
+    (progressOptions) =>
       fetchWithBossCredentials(
         credentialsProvider,
         `${hostname}/latest/collection/`,
-        {},
-        responseJson,
-      ).then((value) =>
-        verifyObjectProperty(value, "collections", (x) =>
-          parseArray(x, verifyString),
+        progressOptions,
+      )
+        .then((response) => response.json())
+        .then((value) =>
+          verifyObjectProperty(value, "collections", (x) =>
+            parseArray(x, verifyString),
+          ),
         ),
-      ),
   );
 }
 
@@ -761,20 +779,23 @@ export function getExperiments(
   hostname: string,
   credentialsProvider: CredentialsProvider<BossToken>,
   collection: string,
+  options: Partial<ProgressOptions>,
 ) {
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     { hostname: hostname, collection: collection, type: "boss:getExperiments" },
-    () =>
+    options,
+    (progressOptions) =>
       fetchWithBossCredentials(
         credentialsProvider,
         `${hostname}/latest/collection/${collection}/experiment/`,
-        {},
-        responseJson,
-      ).then((value) =>
-        verifyObjectProperty(value, "experiments", (x) =>
-          parseArray(x, verifyString),
+        progressOptions,
+      )
+        .then((response) => response.json())
+        .then((value) =>
+          verifyObjectProperty(value, "experiments", (x) =>
+            parseArray(x, verifyString),
+          ),
         ),
-      ),
   );
 }
 
@@ -783,24 +804,27 @@ export function getCoordinateFrame(
   hostname: string,
   credentialsProvider: CredentialsProvider<BossToken>,
   experimentInfo: ExperimentInfo,
+  options: Partial<ProgressOptions>,
 ): Promise<ExperimentInfo> {
   const key = experimentInfo.coordFrameKey;
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     {
       hostname: hostname,
       coordinateframe: key,
       experimentInfo: experimentInfo,
       type: "boss:getCoordinateFrame",
     },
-    () =>
+    options,
+    (progressOptions) =>
       fetchWithBossCredentials(
         credentialsProvider,
         `${hostname}/latest/coord/${key}/`,
-        {},
-        responseJson,
-      ).then((coordinateFrameObj) =>
-        parseCoordinateFrame(coordinateFrameObj, experimentInfo),
-      ),
+        progressOptions,
+      )
+        .then((response) => response.json())
+        .then((coordinateFrameObj) =>
+          parseCoordinateFrame(coordinateFrameObj, experimentInfo),
+        ),
   );
 }
 
@@ -809,6 +833,7 @@ export function collectionExperimentChannelCompleter(
   hostname: string,
   credentialsProvider: CredentialsProvider<BossToken>,
   path: string,
+  options: Partial<ProgressOptions>,
 ): Promise<CompletionResult> {
   const channelMatch = path.match(
     /^(?:([^/]+)(?:\/?([^/]*)(?:\/?([^/]*)(?:\/?([^/]*)?))?)?)?$/,
@@ -824,19 +849,22 @@ export function collectionExperimentChannelCompleter(
   if (channelMatch[2] === undefined) {
     const collectionPrefix = channelMatch[1] || "";
     // Try to complete the collection.
-    return getCollections(chunkManager, hostname, credentialsProvider).then(
-      (collections) => {
-        return {
-          offset: 0,
-          completions: getPrefixMatchesWithDescriptions(
-            collectionPrefix,
-            collections,
-            (x) => x + "/",
-            () => undefined,
-          ),
-        };
-      },
-    );
+    return getCollections(
+      chunkManager,
+      hostname,
+      credentialsProvider,
+      options,
+    ).then((collections) => {
+      return {
+        offset: 0,
+        completions: getPrefixMatchesWithDescriptions(
+          collectionPrefix,
+          collections,
+          (x) => x + "/",
+          () => undefined,
+        ),
+      };
+    });
   }
   if (channelMatch[3] === undefined) {
     const experimentPrefix = channelMatch[2] || "";
@@ -845,6 +873,7 @@ export function collectionExperimentChannelCompleter(
       hostname,
       credentialsProvider,
       channelMatch[1],
+      options,
     ).then((experiments) => {
       return {
         offset: channelMatch![1].length + 1,
@@ -863,6 +892,7 @@ export function collectionExperimentChannelCompleter(
     credentialsProvider,
     channelMatch[2],
     channelMatch[1],
+    options,
   ).then((experimentInfo) => {
     const completions = getPrefixMatchesWithDescriptions(
       channelMatch![3],
@@ -890,18 +920,17 @@ function getAuthServer(endpoint: string): string {
   return authServer;
 }
 
-export class BossDataSource extends DataSourceProvider {
-  constructor(public credentialsManager: CredentialsManager) {
-    super();
+export class BossDataSource implements DataSourceProvider {
+  get scheme() {
+    return "boss";
   }
-
   get description() {
     return "bossDB: Block & Object Storage System";
   }
 
-  getCredentialsProvider(path: string) {
+  getCredentialsProvider(credentialsManager: CredentialsManager, path: string) {
     const authServer = getAuthServer(path);
-    return this.credentialsManager.getCredentialsProvider<BossToken>(
+    return credentialsManager.getCredentialsProvider<BossToken>(
       credentialsKey,
       authServer,
     );
@@ -915,13 +944,15 @@ export class BossDataSource extends DataSourceProvider {
       );
     }
     const credentialsProvider = this.getCredentialsProvider(
+      options.registry.credentialsManager,
       options.providerUrl,
     );
     return getDataSource(
-      options.chunkManager,
+      options.registry.chunkManager,
       match[1],
       credentialsProvider,
       match[2],
+      options,
     );
   }
 
@@ -932,13 +963,17 @@ export class BossDataSource extends DataSourceProvider {
       throw null;
     }
     const hostname = match[1];
-    const credentialsProvider = this.getCredentialsProvider(match[1]);
+    const credentialsProvider = this.getCredentialsProvider(
+      options.registry.credentialsManager,
+      match[1],
+    );
     const path = match[2];
     const completions = await collectionExperimentChannelCompleter(
-      options.chunkManager,
+      options.registry.chunkManager,
       hostname,
       credentialsProvider,
       path,
+      options,
     );
     return applyCompletionOffset(match![1].length + 1, completions);
   }

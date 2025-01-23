@@ -20,8 +20,7 @@ import type {
   CodecChainSpec,
 } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { ReadableKvStore } from "#src/kvstore/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
+import type { KvStoreWithPath, ReadableKvStore } from "#src/kvstore/index.js";
 import type { RefCounted } from "#src/util/disposable.js";
 
 export interface Codec {
@@ -34,9 +33,9 @@ export interface ArrayToArrayCodec<Configuration = unknown> extends Codec {
   decode(
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
-    encoded: ArrayBufferView,
-    cancellationToken: CancellationToken,
-  ): Promise<ArrayBufferView>;
+    encoded: ArrayBufferView<ArrayBuffer>,
+    signal: AbortSignal,
+  ): Promise<ArrayBufferView<ArrayBuffer>>;
 }
 
 export interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
@@ -44,9 +43,9 @@ export interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
   decode(
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
-    encoded: Uint8Array,
-    cancellationToken: CancellationToken,
-  ): Promise<ArrayBufferView>;
+    encoded: Uint8Array<ArrayBuffer>,
+    signal: AbortSignal,
+  ): Promise<ArrayBufferView<ArrayBuffer>>;
 }
 
 export type ShardingKey<BaseKey> = {
@@ -67,9 +66,9 @@ export interface BytesToBytesCodec<Configuration = unknown> extends Codec {
   kind: CodecKind.bytesToBytes;
   decode(
     configuration: Configuration,
-    encoded: Uint8Array,
-    cancellationToken: CancellationToken,
-  ): Promise<Uint8Array>;
+    encoded: Uint8Array<ArrayBuffer>,
+    signal: AbortSignal,
+  ): Promise<Uint8Array<ArrayBuffer>>;
 }
 
 const codecRegistry = {
@@ -95,9 +94,9 @@ export function registerCodec<Configuration>(
 
 export async function decodeArray(
   codecs: CodecChainSpec,
-  encoded: Uint8Array,
-  cancellationToken: CancellationToken,
-): Promise<ArrayBufferView> {
+  encoded: Uint8Array<ArrayBuffer>,
+  signal: AbortSignal,
+): Promise<ArrayBufferView<ArrayBuffer>> {
   const bytesToBytes = codecs[CodecKind.bytesToBytes];
   for (let i = bytesToBytes.length; i--; ) {
     const codec = bytesToBytes[i];
@@ -105,14 +104,10 @@ export async function decodeArray(
     if (impl === undefined) {
       throw new Error(`Unsupported codec: ${JSON.stringify(codec.name)}`);
     }
-    encoded = await impl.decode(
-      codec.configuration,
-      encoded,
-      cancellationToken,
-    );
+    encoded = await impl.decode(codec.configuration, encoded, signal);
   }
 
-  let decoded: ArrayBufferView;
+  let decoded: ArrayBufferView<ArrayBuffer>;
   {
     const codec = codecs[CodecKind.arrayToBytes];
     const impl = codecRegistry[CodecKind.arrayToBytes].get(codec.name);
@@ -123,7 +118,7 @@ export async function decodeArray(
       codec.configuration,
       codecs.arrayInfo[codecs.arrayInfo.length - 1],
       encoded,
-      cancellationToken,
+      signal,
     );
   }
 
@@ -138,7 +133,7 @@ export async function decodeArray(
       codec.configuration,
       codecs.arrayInfo[i],
       decoded,
-      cancellationToken,
+      signal,
     );
   }
 
@@ -148,7 +143,7 @@ export async function decodeArray(
 export function applySharding(
   chunkManager: ChunkManager,
   codecs: CodecChainSpec,
-  baseKvStore: ReadableKvStore<string>,
+  baseKvStore: KvStoreWithPath,
 ): {
   kvStore: ReadableKvStore<unknown>;
   getChunkKey: (
@@ -157,7 +152,7 @@ export function applySharding(
   ) => unknown;
   decodeCodecs: CodecChainSpec;
 } {
-  let kvStore: ReadableKvStore<unknown> = baseKvStore;
+  let kvStore: ReadableKvStore<unknown> = baseKvStore.store;
   let curCodecs = codecs;
   while (true) {
     const { shardingInfo } = curCodecs;
@@ -177,11 +172,13 @@ export function applySharding(
 
   const decodeCodecs = curCodecs;
 
+  const pathPrefix = baseKvStore.path;
+
   function getChunkKey(
     chunkGridPosition: ArrayLike<number>,
     baseKey: string,
   ): unknown {
-    let key: unknown = baseKey;
+    let key: unknown = pathPrefix + baseKey;
     const rank = chunkGridPosition.length;
     let curCodecs = codecs;
     while (curCodecs.shardingInfo !== undefined) {

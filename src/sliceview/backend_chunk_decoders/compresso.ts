@@ -18,20 +18,18 @@ import { decodeCompresso } from "#src/async_computation/decode_compresso_request
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { TypedArray } from "#src/util/array.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 export async function decodeCompressoChunk(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
-  const image: TypedArray = await requestAsyncComputation(
+  const image = await requestAsyncComputation(
     decodeCompresso,
-    cancellationToken,
+    signal,
     [response],
     new Uint8Array(response),
   );
 
-  await decodeRawChunk(chunk, cancellationToken, image.buffer);
+  await decodeRawChunk(chunk, signal, image.buffer);
 }

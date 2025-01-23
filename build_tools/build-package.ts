@@ -32,8 +32,11 @@ function buildDeclarationFiles(
   program.emit();
 }
 
-async function buildPackage(options: { inplace?: boolean }) {
-  const { inplace = false } = options;
+async function buildPackage(options: {
+  inplace?: boolean;
+  skipDeclarations?: boolean;
+}) {
+  const { inplace = false, skipDeclarations = false } = options;
 
   const srcDir = path.resolve(rootDir, "src");
   const outDir = inplace ? rootDir : path.resolve(rootDir, "dist", "package");
@@ -68,6 +71,7 @@ async function buildPackage(options: { inplace?: boolean }) {
     outbase: srcDir,
     bundle: false,
     outdir: libDir,
+    target: "es2022",
   });
 
   let compilerOptionsFromConfigFile: ts.CompilerOptions = {};
@@ -80,10 +84,12 @@ async function buildPackage(options: { inplace?: boolean }) {
       "./",
     ).options;
   }
-  buildDeclarationFiles(entryPoints, {
-    ...compilerOptionsFromConfigFile,
-    outDir: libDir,
-  });
+  if (!skipDeclarations) {
+    buildDeclarationFiles(entryPoints, {
+      ...compilerOptionsFromConfigFile,
+      outDir: libDir,
+    });
+  }
 
   const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
     cwd: srcDir,
@@ -117,6 +123,7 @@ async function buildPackage(options: { inplace?: boolean }) {
     const { postpack } = packageJson["scripts"];
     delete packageJson["scripts"];
     packageJson["scripts"] = { postpack };
+    packageJson["files"] = ["lib/**/*"];
   } else {
     delete packageJson["private"];
     packageJson["scripts"] = {};
@@ -156,6 +163,11 @@ async function parseArgsAndRunMain() {
         default: false,
         description: "Convert package to built format inplace.",
       },
+      ["skip-declarations"]: {
+        type: "boolean",
+        default: false,
+        description: "Skip generating .d.ts files.",
+      },
       ["if-not-toplevel"]: {
         type: "boolean",
         default: false,
@@ -193,7 +205,10 @@ async function parseArgsAndRunMain() {
       return;
     }
   }
-  buildPackage({ inplace: argv.inplace });
+  buildPackage({
+    inplace: argv.inplace,
+    skipDeclarations: argv.skipDeclarations,
+  });
 }
 
 if (process.argv[1] === import.meta.filename) {

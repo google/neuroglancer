@@ -31,6 +31,8 @@ Neuroglancer can be used as a dependency in two ways:
 The following bundlers are known to be compatible:
 
 - [webpack](./webpack/) (recommended)
+- [rspack](./rspack/)
+- [rsbuild](./rsbuild/)
 - [parcel](./parcel/)
 - [vite](./vite/)
 
