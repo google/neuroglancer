@@ -104,12 +104,15 @@
 }
 
 .neuroglancer-tool-palette-layer-group-items {
-  display: flex;
-  flex-direction: column;
   font: 10pt sans-serif;
+  display: flex;
 }
 
-.neuroglancer-tool-palette-layer-group-items.neuroglancer-tool-palette-layer-group-items-horizontal {
+.neuroglancer-tool-palette-layer-group-items[tool-stacking="vertical"] {
+  flex-direction: column;
+}
+
+.neuroglancer-tool-palette-layer-group-items[tool-stacking="horizontal"] {
   flex-direction: row;
   overflow-x: auto;
 }

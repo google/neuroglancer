@@ -777,17 +777,10 @@ export class ToolPalettePanel extends SidePanel {
   }
 
   private handleStackingChange() {
-    const { layerGroupItemsContainer } = this;
-
-    if (this.state.verticalStacking.value) {
-      layerGroupItemsContainer.classList.remove(
-        "neuroglancer-tool-palette-layer-group-items-horizontal",
-      );
-    } else {
-      layerGroupItemsContainer.classList.add(
-        "neuroglancer-tool-palette-layer-group-items-horizontal",
-      );
-    }
+    this.layerGroupItemsContainer.setAttribute(
+      "tool-stacking",
+      this.state.verticalStacking.value ? "vertical" : "horizontal",
+    );
   }
 
   private getRenderedTool(tool: Tool) {
