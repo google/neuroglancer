@@ -402,6 +402,7 @@ export class DataSourceRegistry extends RefCounted {
   ): Promise<DataSourceWithRedirectInfo> {
     const redirectLog = new Set<string>();
     let url: string = options.url;
+    url = url.trim();
     // Trim any trailing "|" characters.
     url = url.replace(/\|+$/, "");
     let originalCanonicalUrl: string | undefined;

@@ -85,6 +85,16 @@ import {
   TextureFormat,
 } from "#src/webgl/texture_access.js";
 import { SharedObject } from "#src/worker_rpc.js";
+import type {
+  DataSource,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
+} from "#src/datasource/index.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
+import {
+  makeCoordinateSpace,
+  makeIdentityTransform,
+} from "#src/coordinate_transform.js";
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();
@@ -680,4 +690,42 @@ export async function getSingleMeshSource(
     sharedKvStoreContext,
     parameters: { meshSourceUrl: url, info },
   });
+}
+
+export class SingleMeshDataSource implements KvStoreBasedDataSourceProvider {
+  constructor(
+    public scheme: string,
+    public description: string,
+  ) {}
+
+  get singleFile() {
+    return true;
+  }
+
+  async get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureEmptyUrlSuffix(options.url);
+    const meshSource = await getSingleMeshSource(
+      options.registry.sharedKvStoreContext,
+      `${options.url.scheme}://${options.kvStoreUrl}`,
+      options,
+    );
+    const modelSpace = makeCoordinateSpace({
+      rank: 3,
+      names: ["x", "y", "z"],
+      units: ["m", "m", "m"],
+      scales: Float64Array.of(1e-9, 1e-9, 1e-9),
+    });
+    const dataSource: DataSource = {
+      canonicalUrl: `${options.kvStoreUrl}|${options.url.scheme}:`,
+      modelTransform: makeIdentityTransform(modelSpace),
+      subsources: [
+        {
+          id: "default",
+          default: true,
+          subsource: { singleMesh: meshSource },
+        },
+      ],
+    };
+    return dataSource;
+  }
 }
