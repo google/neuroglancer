@@ -698,8 +698,8 @@ export class ToolPalettePanel extends SidePanel {
       new CheckboxIcon(this.state.verticalStacking, {
         svg: swap_horizontal,
         disableSvg: swap_vertical,
-        enableTitle: "Swap to vertical stacking",
-        disableTitle: "Swap to horizontal stacking",
+        enableTitle: "Swap to vertical group stacking",
+        disableTitle: "Swap to horizontal group stacking",
       }),
     );
     titleBar.appendChild(changeStackingButton.element);
