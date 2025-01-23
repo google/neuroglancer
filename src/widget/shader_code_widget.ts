@@ -189,12 +189,4 @@ export class ShaderCodeWidget extends RefCounted {
     this.textEditor = <any>undefined;
     super.disposed();
   }
-
-  setVisible(visible: boolean) {
-    this.element.style.display = visible ? "block" : "none";
-  }
-
-  isVisible() {
-    return this.element.style.display === "block";
-  }
 }

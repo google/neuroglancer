@@ -47,11 +47,9 @@ import type { SegmentationDisplayState } from "#src/segmentation_display_state/f
 import {
   TrackableBoolean,
   TrackableBooleanCheckbox,
+  ElementVisibilityFromTrackableBoolean,
 } from "#src/trackable_boolean.js";
-import {
-  makeCachedLazyDerivedWatchableValue,
-  observeWatchable,
-} from "#src/trackable_value.js";
+import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -799,10 +797,16 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(label);
 
     this.registerDisposer(
-      observeWatchable((visible) => {
-        shaderProperties.style.display = visible ? "block" : "none";
-        this.codeWidget.setVisible(visible);
-      }, this.layer.codeVisible),
+      new ElementVisibilityFromTrackableBoolean(
+        this.layer.codeVisible,
+        this.codeWidget.element,
+      ),
+    );
+    this.registerDisposer(
+      new ElementVisibilityFromTrackableBoolean(
+        this.layer.codeVisible,
+        shaderProperties,
+      ),
     );
     const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
       enableTitle: "Show code",
