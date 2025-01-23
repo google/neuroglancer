@@ -32,8 +32,12 @@ import {
   SingleMeshDisplayState,
   SingleMeshLayer,
 } from "#src/single_mesh/frontend.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
+} from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { observeWatchable, WatchableValue } from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, removeFromParent } from "#src/util/dom.js";
@@ -49,14 +53,18 @@ import { Tab } from "#src/widget/tab_view.js";
 
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+const CODE_VISIBLE_KEY = "codeVisible";
 
 export class SingleMeshUserLayer extends UserLayer {
   displayState = new SingleMeshDisplayState();
+  codeVisible = new TrackableBoolean(true);
+
   vertexAttributes = new WatchableValue<VertexAttributeInfo[] | undefined>(
     undefined,
   );
   constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.registerDisposer(
       this.displayState.shaderControlState.changed.add(
         this.specificationChanged.dispatch,
@@ -77,6 +85,7 @@ export class SingleMeshUserLayer extends UserLayer {
 
   restoreState(specification: any) {
     super.restoreState(specification);
+    this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.displayState.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     this.displayState.shaderControlState.restoreState(
       specification[SHADER_CONTROLS_JSON_KEY],
@@ -118,6 +127,7 @@ export class SingleMeshUserLayer extends UserLayer {
     const x = super.toJSON();
     x[SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.displayState.shaderControlState.toJSON();
+    x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     return x;
   }
 
@@ -213,14 +223,13 @@ class DisplayOptionsTab extends Tab {
 
     topRow.appendChild(spacer);
 
-    const managedLayer = this.layer.managedLayer;
     this.registerDisposer(
-      observeWatchable((visible) => {
-        this.codeWidget.setVisible(visible);
-      }, managedLayer.codeVisible),
+      new ElementVisibilityFromTrackableBoolean(
+        this.layer.codeVisible,
+        this.codeWidget.element,
+      ),
     );
-
-    const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
+    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
       enableTitle: "Show code",
       disableTitle: "Hide code",
       backgroundScheme: "dark",

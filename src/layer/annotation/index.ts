@@ -44,8 +44,10 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
-import type { TrackableBoolean } from "#src/trackable_boolean.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import {
   makeCachedLazyDerivedWatchableValue,
   observeWatchable,
@@ -143,6 +145,7 @@ interface LinkedSegmentationLayer {
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = "linkedSegmentationLayer";
 const FILTER_BY_SEGMENTATION_JSON_KEY = "filterBySegmentation";
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = "ignoreNullSegmentFilter";
+const CODE_VISIBLE_KEY = "codeVisible";
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -387,6 +390,7 @@ class LinkedSegmentationLayersWidget extends RefCounted {
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
+  codeVisible = new TrackableBoolean(true);
   private localAnnotationProperties: AnnotationPropertySpec[] | undefined;
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
@@ -412,6 +416,7 @@ export class AnnotationUserLayer extends Base {
     this.linkedSegmentationLayers.changed.add(
       this.specificationChanged.dispatch,
     );
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
       this.specificationChanged.dispatch,
     );
@@ -432,6 +437,7 @@ export class AnnotationUserLayer extends Base {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
+    this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     this.localAnnotationProperties = verifyOptionalObjectProperty(
       specification,
@@ -693,6 +699,7 @@ export class AnnotationUserLayer extends Base {
     const x = super.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationCrossSectionRenderScaleTarget.toJSON();
+    x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     x[PROJECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationProjectionRenderScaleTarget.toJSON();
     if (this.localAnnotations !== undefined) {
@@ -791,14 +798,13 @@ class RenderingOptionsTab extends Tab {
     label.textContent = "Annotation shader:";
     topRow.appendChild(label);
 
-    const managedLayer = this.layer.managedLayer;
     this.registerDisposer(
       observeWatchable((visible) => {
         shaderProperties.style.display = visible ? "block" : "none";
         this.codeWidget.setVisible(visible);
-      }, managedLayer.codeVisible),
+      }, this.layer.codeVisible),
     );
-    const codeVisibilityControl = new CheckboxIcon(managedLayer.codeVisible, {
+    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
       enableTitle: "Show code",
       disableTitle: "Hide code",
       backgroundScheme: "dark",
