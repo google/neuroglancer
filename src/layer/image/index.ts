@@ -50,7 +50,10 @@ import {
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { trackableBlendModeValue } from "#src/trackable_blend.js";
-import { TrackableBoolean } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  ElementVisibilityFromTrackableBoolean,
+} from "#src/trackable_boolean.js";
 import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -108,7 +111,7 @@ import { Tab } from "#src/widget/tab_view.js";
 const OPACITY_JSON_KEY = "opacity";
 const BLEND_JSON_KEY = "blend";
 const SHADER_JSON_KEY = "shader";
-const CODE_VISIBLE_KEY = "codeVisibleTEST";
+const CODE_VISIBLE_KEY = "codeVisible";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
@@ -128,7 +131,7 @@ const [
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
-  codeVisible = new TrackableBoolean(true, true);
+  codeVisible = new TrackableBoolean(true);
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
@@ -209,9 +212,7 @@ export class ImageUserLayer extends Base {
       isLocalDimension;
     this.blendMode.changed.add(this.specificationChanged.dispatch);
     this.opacity.changed.add(this.specificationChanged.dispatch);
-    this.codeVisible.changed.add(() => {
-      this.specificationChanged.dispatch;
-    });
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.volumeRenderingGain.changed.add(this.specificationChanged.dispatch);
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
@@ -552,9 +553,10 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(spacer);
 
     this.registerDisposer(
-      this.layer.codeVisible.changed.add(() => {
-        this.codeWidget.setVisible(this.layer.codeVisible.value);
-      }),
+      new ElementVisibilityFromTrackableBoolean(
+        this.layer.codeVisible,
+        this.codeWidget.element,
+      ),
     );
 
     const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
