@@ -413,7 +413,6 @@ export class SliceView extends Base {
     const { visibleLayers, visibleLayerList } = this;
     const { displayDimensionRenderInfo } = this.projectionParameters.value;
     const rpc = this.rpc!;
-    const rpcMessage: any = { id: this.rpcId };
     let changed = false;
     visibleLayerList.length = 0;
     for (const renderLayer of this.layerManager.readyRenderLayers()) {
@@ -454,20 +453,22 @@ export class SliceView extends Base {
           layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
           layerInfo.transformGeneration = curTransformGeneration;
         }
-        rpcMessage.layerId = renderLayer.rpcId;
-        rpcMessage.sources = serializeAllTransformedSources(
-          layerInfo.allSources,
-        );
-        rpcMessage.displayDimensionRenderInfo = displayDimensionRenderInfo;
         this.flushBackendProjectionParameters();
-        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
+        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
+          id: this.rpcId,
+          layerId: renderLayer.rpcId,
+          sources: serializeAllTransformedSources(layerInfo.allSources),
+          displayDimensionRenderInfo: displayDimensionRenderInfo,
+        });
         changed = true;
       }
     }
     for (const [renderLayer, layerInfo] of visibleLayers) {
       if (layerInfo.lastSeenGeneration === curUpdateGeneration) continue;
-      rpcMessage.layerId = renderLayer.rpcId;
-      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
+      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
+        id: this.rpcId,
+        layerId: renderLayer.rpcId,
+      });
       visibleLayers.delete(renderLayer);
       disposeTransformedSources(renderLayer, layerInfo.allSources);
       invokeDisposers(layerInfo.disposers);
