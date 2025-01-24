@@ -24,7 +24,7 @@ enum LayerType {
   segmentation = "seg",
   image = "img",
   annotation = "ann",
-  mesh = "mesh",
+  mesh = "msh",
 }
 
 function getLayerTypeString(type: string | undefined): string {

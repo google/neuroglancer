@@ -36,7 +36,6 @@ import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
-import { LayerTypeIndicatorWidget } from "#src/widget/layer_type_indicator.js";
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
@@ -109,7 +108,6 @@ class LayerWidget extends RefCounted {
     valueContainer.appendChild(buttonContainer);
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
-    element.appendChild(new LayerTypeIndicatorWidget(layer).element);
     element.appendChild(labelElement);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
