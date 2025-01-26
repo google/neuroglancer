@@ -85,6 +85,7 @@ export async function decodeDracoPartitioned(
   buffer: Uint8Array,
   vertexQuantizationBits: number,
   partition: boolean,
+  skipDequantization: boolean,
 ): Promise<RawPartitionedMeshData> {
   const m = await getDracoModulePromise();
   const offset = (m.exports.malloc as Function)(buffer.byteLength);
@@ -96,7 +97,7 @@ export async function decodeDracoPartitioned(
     buffer.byteLength,
     partition,
     vertexQuantizationBits,
-    true,
+    skipDequantization,
   );
   if (code === 0) {
     const r = decodeResult;

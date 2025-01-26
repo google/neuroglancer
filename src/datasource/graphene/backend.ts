@@ -73,6 +73,8 @@ import {
 } from "#src/visibility_priority/backend.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObject, registerRPC } from "#src/worker_rpc.js";
+import { isNotFoundError } from "#src/util/http_request.js";
+import { verifyObject } from "#src/util/json.js";
 
 function downloadFragmentWithSharding(
   fragmentKvStore: KvStoreWithPath,

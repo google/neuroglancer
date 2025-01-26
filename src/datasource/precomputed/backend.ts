@@ -459,6 +459,7 @@ async function decodeMultiscaleFragmentChunk(
     new Uint8Array(response),
     source.parameters.metadata.vertexQuantizationBits,
     lod !== 0,
+    true,
   );
   assignMultiscaleMeshFragmentData(
     chunk,
