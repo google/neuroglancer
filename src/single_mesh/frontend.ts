@@ -20,8 +20,18 @@ import {
   ChunkSource,
   WithParameters,
 } from "#src/chunk_manager/frontend.js";
+import {
+  makeCoordinateSpace,
+  makeIdentityTransform,
+} from "#src/coordinate_transform.js";
+import type {
+  DataSource,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
+} from "#src/datasource/index.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import type { PickState, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
@@ -85,16 +95,6 @@ import {
   TextureFormat,
 } from "#src/webgl/texture_access.js";
 import { SharedObject } from "#src/worker_rpc.js";
-import type {
-  DataSource,
-  GetKvStoreBasedDataSourceOptions,
-  KvStoreBasedDataSourceProvider,
-} from "#src/datasource/index.js";
-import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
-import {
-  makeCoordinateSpace,
-  makeIdentityTransform,
-} from "#src/coordinate_transform.js";
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();
