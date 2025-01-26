@@ -50,12 +50,9 @@ export class NiftiFileData {
 }
 
 async function decodeNiftiFile(
-  readResponse: ReadResponse | undefined,
+  readResponse: ReadResponse,
   options: ProgressOptions,
 ) {
-  if (readResponse === undefined) {
-    throw new Error("Not found");
-  }
   let buffer = await readResponse.response.arrayBuffer();
   if (isCompressed(buffer)) {
     buffer = await decodeGzip(buffer, "gzip", options.signal);
