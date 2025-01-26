@@ -196,7 +196,7 @@ export function pathIsDirectory(path: string) {
 // pipeline, special characters must be percent encoded.
 export function encodePathForUrl(path: string) {
   return encodeURI(path).replace(
-    /[?#]/g,
+    /[?#@]/g,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }

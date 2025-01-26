@@ -40,12 +40,12 @@ export const emptyCompletionResult = {
   completions: [],
 };
 
-export function applyCompletionOffset<T extends { offset: number }>(
+export function applyCompletionOffset<T extends { offset: number } | undefined>(
   offset: number,
   completionResult: T,
-) {
-  completionResult.offset += offset;
-  return completionResult;
+): T {
+  if (completionResult === undefined) return completionResult;
+  return { ...completionResult, offset: completionResult.offset + offset };
 }
 
 export function getPrefixMatches(prefix: string, options: Iterable<string>) {
@@ -142,4 +142,40 @@ export async function completeQueryStringParametersFromTable<
       return emptyCompletionResult;
     },
   );
+}
+
+export async function concatCompletions<C extends Completion>(
+  url: string,
+  inputs: (
+    | undefined
+    | BasicCompletionResult<C>
+    | Promise<BasicCompletionResult<C> | undefined>
+  )[],
+): Promise<BasicCompletionResult<C>> {
+  const resultSets: BasicCompletionResult<C>[] = [];
+  let minOffset = Number.POSITIVE_INFINITY;
+  for (const result of await Promise.allSettled(inputs)) {
+    if (result.status === "rejected") continue;
+    const { value } = result;
+    if (value === undefined || value.completions.length === 0) continue;
+    resultSets.push(value);
+    minOffset = Math.min(minOffset, value.offset);
+  }
+  if (resultSets.length === 0) return emptyCompletionResult;
+  if (resultSets.length === 1) return resultSets[0];
+  const completions: C[] = [];
+  let defaultCompletion: string | undefined;
+  for (const resultSet of resultSets) {
+    defaultCompletion = defaultCompletion ?? resultSet.defaultCompletion;
+    for (let completion of resultSet.completions) {
+      if (resultSet.offset !== minOffset) {
+        completion = {
+          ...completion,
+          value: url.slice(minOffset, resultSet.offset) + completion.value,
+        };
+      }
+      completions.push(completion);
+    }
+  }
+  return { offset: minOffset, completions, defaultCompletion };
 }

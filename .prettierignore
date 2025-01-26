@@ -1,7 +1,7 @@
 /templates/
 /python/
 /third_party/jpgjs/jpg.js
-/testdata/**/*.json
+/testdata/
 zarr.json
 .parcel-cache
 dist
