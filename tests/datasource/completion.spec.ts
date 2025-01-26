@@ -95,7 +95,13 @@ describe("http completion", () => {
       {
         "completions": [
           {
+            "value": "first|",
+          },
+          {
             "value": "x|",
+          },
+          {
+            "value": "z|",
           },
         ],
         "defaultCompletion": undefined,

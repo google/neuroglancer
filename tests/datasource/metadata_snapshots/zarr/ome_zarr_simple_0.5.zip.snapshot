@@ -1,5 +1,5 @@
 {
-  "canonicalUrl": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.4.zip|zip:|zarr3:",
+  "canonicalUrl": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:|zarr3:",
   "modelTransform": {
     "inputSpace": {
       "bounds": {
@@ -48,7 +48,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.4.zip|zip:scale0/image/",
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:scale0/image/",
                   },
                   "spec": {
                     "baseVoxelOffset": [
@@ -92,7 +92,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.4.zip|zip:scale1/image/",
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:scale1/image/",
                   },
                   "spec": {
                     "baseVoxelOffset": [
@@ -136,7 +136,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.4.zip|zip:scale2/image/",
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:scale2/image/",
                   },
                   "spec": {
                     "baseVoxelOffset": [

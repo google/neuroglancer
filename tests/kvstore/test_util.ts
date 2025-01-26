@@ -15,6 +15,8 @@
  */
 
 import { describe, expect, test } from "vitest";
+import type { AutoDetectMatch } from "#src/kvstore/auto_detect.js";
+import { autoDetectFormat } from "#src/kvstore/auto_detect.js";
 import type { KvStore } from "#src/kvstore/index.js";
 import { listKvStoreRecursively, readKvStore } from "#src/kvstore/index.js";
 import type { Fixture } from "#tests/fixtures/fixture.js";
@@ -122,30 +124,26 @@ export function testList(url: Fixture<string>) {
       ).kvStoreContext.list(await url(), {
         responseKeys: "suffix",
       }),
-    ).toMatchInlineSnapshot(`
-      {
-        "directories": [
-          "baz",
-        ],
-        "entries": [
-          {
-            "key": "#",
-          },
-          {
-            "key": "a",
-          },
-          {
-            "key": "b",
-          },
-          {
-            "key": "c",
-          },
-          {
-            "key": "empty",
-          },
-        ],
-      }
-    `);
+    ).toEqual({
+      directories: ["baz"],
+      entries: [
+        {
+          key: "#",
+        },
+        {
+          key: "a",
+        },
+        {
+          key: "b",
+        },
+        {
+          key: "c",
+        },
+        {
+          key: "empty",
+        },
+      ],
+    });
   });
 
   test("list with file prefix", async () => {
@@ -155,16 +153,14 @@ export function testList(url: Fixture<string>) {
       ).kvStoreContext.list(`${await url()}e`, {
         responseKeys: "suffix",
       }),
-    ).toMatchInlineSnapshot(`
-      {
-        "directories": [],
-        "entries": [
-          {
-            "key": "mpty",
-          },
-        ],
-      }
-    `);
+    ).toEqual({
+      directories: [],
+      entries: [
+        {
+          key: "mpty",
+        },
+      ],
+    });
   });
 
   test("list with directory prefix", async () => {
@@ -174,21 +170,21 @@ export function testList(url: Fixture<string>) {
       ).kvStoreContext.list(`${await url()}baz/`, {
         responseKeys: "suffix",
       }),
-    ).toMatchInlineSnapshot(`
-      {
-        "directories": [],
-        "entries": [
-          {
-            "key": "x",
-          },
-        ],
-      }
-    `);
+    ).toEqual({
+      directories: [],
+      entries: [
+        { key: "first" },
+        {
+          key: "x",
+        },
+        { key: "z" },
+      ],
+    });
   });
 }
 
-export function testKvStore(url: Fixture<string>) {
-  describe("kvstore", () => {
+export function testKvStore(url: Fixture<string>, name = "kvstore") {
+  describe(name, () => {
     testRead(url);
     testList(url);
   });
@@ -210,4 +206,15 @@ export async function readAllFromKvStore(
     }),
   );
   return new Map(Array.from(keys, ({ key }, i) => [key, values[i]]));
+}
+
+export async function testAutoDetect(url: string): Promise<AutoDetectMatch[]> {
+  const kvStoreContext = (await sharedKvStoreContext()).kvStoreContext;
+  const result = await autoDetectFormat({
+    url,
+    kvStoreContext,
+    autoDetectDirectory: () => kvStoreContext.autoDetectRegistry.directorySpec,
+    autoDetectFile: () => kvStoreContext.autoDetectRegistry.fileSpec,
+  });
+  return result.matches;
 }

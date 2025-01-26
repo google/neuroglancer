@@ -19,3 +19,4 @@ export const SHARED_KVSTORE_CONTEXT_RPC_ID = "SharedKvStoreContext";
 export const STAT_RPC_ID = "SharedKvStoreContext.stat";
 export const READ_RPC_ID = "SharedKvStoreContext.read";
 export const LIST_RPC_ID = "SharedKvStoreContext.list";
+export const COMPLETE_URL_RPC_ID = "SharedKvStoreContext.completeUrl";

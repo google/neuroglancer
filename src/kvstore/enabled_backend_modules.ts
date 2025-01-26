@@ -5,5 +5,6 @@ import "#kvstore/gzip/register";
 import "#kvstore/http/register";
 import "#kvstore/middleauth/register";
 import "#kvstore/ngauth/register";
+import "#kvstore/ocdbt/register_backend";
 import "#kvstore/s3/register";
 import "#kvstore/zip/register_backend";

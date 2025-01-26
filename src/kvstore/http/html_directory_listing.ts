@@ -90,7 +90,9 @@ export async function listFromHtmlDirectoryListing(
   const baseAndPrefix = base + prefix;
   const fullUrl = baseAndPrefix + queryAndFragment;
   const m = fullUrl.match(/^([a-z]+:\/\/.*\/)([^/?#]*)$/);
-  if (m === null) throw null;
+  if (m === null) {
+    throw new Error(`Invalid HTTP URL: ${fullUrl}`);
+  }
   const [, directoryUrl] = m;
   const listing = await getHtmlDirectoryListing(
     directoryUrl + queryAndFragment,
