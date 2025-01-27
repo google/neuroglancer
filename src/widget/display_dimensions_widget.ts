@@ -26,7 +26,10 @@ import type {
   TrackableZoomInterface,
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
-import { registerNested } from "#src/trackable_value.js";
+import {
+  registerNested,
+  TrackableValueInterface,
+} from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Owned } from "#src/util/disposable.js";
@@ -43,8 +46,11 @@ import {
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
+
+export type NamedAxes = "xy" | "xz" | "yz";
 
 interface DimensionWidget {
   container: HTMLDivElement;
@@ -86,8 +92,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   dimensionGridContainer = document.createElement("div");
   depthGridContainer = document.createElement("div");
   fovGridContainer = document.createElement("div");
-
   defaultCheckbox = document.createElement("input");
+
+  fovElements: HTMLInputElement[] = [];
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -146,13 +153,8 @@ export class DisplayDimensionsWidget extends RefCounted {
       const { canonicalVoxelFactors, displayDimensionScales } =
         this.displayDimensionRenderInfo.value;
       // If the scale ends with /px or /vh, remove it
-      const formattedScale = scale.value.replace(/\/px$|\/vh$/, "");
+      const formattedScale = scale.value.replace(`/${this.displayUnit}`, "");
       const parsedScale = parseScale(formattedScale);
-      console.log(
-        parsedScale,
-        canonicalVoxelFactors[i],
-        displayDimensionScales[i],
-      );
       if (!parsedScale) {
         // If the input is invalid, reset the scale to the current value
         this.updateView();
@@ -289,6 +291,10 @@ export class DisplayDimensionsWidget extends RefCounted {
     public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
     public zoom: TrackableZoomInterface,
     public depthRange: Owned<TrackableDepthRange>,
+    public axes: NamedAxes | undefined,
+    public panelPixelResolutionX: TrackableValueInterface<number>,
+    public panelPixelResolutionY: TrackableValueInterface<number>,
+    public panel: RenderedDataPanel,
     public displayUnit = "px",
   ) {
     super();
@@ -354,27 +360,31 @@ export class DisplayDimensionsWidget extends RefCounted {
         focused.blur();
       }
     });
-
-    // Hold two input boxes that display the primary and secondary dimensions
-    const { fovGridContainer } = this;
-    fovGridContainer.classList.add(
-      "neuroglancer-display-dimensions-widget-fov",
-    );
-    element.appendChild(fovGridContainer);
-    for (let i = 0; i < 2; ++i) {
-      const container = document.createElement("div");
-      container.classList.add(
-        "neuroglancer-display-dimensions-widget-fov-container",
+    
+    // TODO need to handle update to this inputs
+    if (axes !== undefined) {
+      const { fovGridContainer } = this;
+      fovGridContainer.classList.add(
+        "neuroglancer-display-dimensions-widget-fov",
       );
-      const label = document.createElement("span");
-      label.textContent = i === 0 ? "Primary" : "Secondary";
-      container.appendChild(label);
-      const input = document.createElement("input");
-      input.spellcheck = false;
-      input.autocomplete = "off";
-      input.title = "Field of view";
-      container.appendChild(input);
-      fovGridContainer.appendChild(container);
+      element.appendChild(fovGridContainer);
+      for (let i = 0; i < 2; ++i) {
+        const container = document.createElement("div");
+        container.classList.add(
+          "neuroglancer-display-dimensions-widget-fov-container",
+        );
+        const label = document.createElement("span");
+        // TODO replace by looking up the actual name
+        label.textContent = axes[i];
+        container.appendChild(label);
+        const input = document.createElement("input");
+        input.spellcheck = false;
+        input.autocomplete = "off";
+        input.title = "Field of view";
+        this.fovElements.push(input);
+        container.appendChild(input);
+        fovGridContainer.appendChild(container);
+      }
     }
 
     const { depthGridContainer } = this;
@@ -672,6 +682,37 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
       updateInputFieldWidth(dimElements.name);
       updateInputFieldWidth(dimElements.scaleFactor);
+    }
+    // Update the FOV fields
+    if (this.axes !== undefined) {
+      // TODO enum cleaner
+      const axesMap = new Map([
+        ["x", 0],
+        ["y", 1],
+        ["z", 2],
+      ]);
+      // TODO needs to watch for trackable updates
+      for (let j = 0; j < 2; j++) {
+        this.panel.updatePixelResolution();
+        const axis = this.axes[j];
+        const i = axesMap.get(axis)!;
+        const totalScale =
+          (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
+        const pixelResolution =
+          j === 0
+            ? this.panel.pixelResolutionX.value
+            : this.panel.pixelResolutionY.value;
+        console.log(pixelResolution, totalScale);
+        const fieldOfView = totalScale * pixelResolution;
+        // TODO this is temp - needs correct unit
+        const formattedFieldOfView = formatScaleWithUnitAsString(
+          fieldOfView,
+          "m",
+          { precision: 2 },
+        );
+        console.log(fieldOfView);
+        this.fovElements[j].value = formattedFieldOfView;
+      }
     }
   }
 

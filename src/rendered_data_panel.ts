@@ -46,6 +46,8 @@ import type {
 import { TouchEventBinder } from "#src/util/touch_bindings.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { ViewerState } from "#src/viewer_state.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { verifyFinitePositiveFloat } from "#src/util/json.js";
 
 declare let NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean | undefined;
 
@@ -55,6 +57,14 @@ export interface RenderedDataViewerState extends ViewerState {
   inputEventMap: EventActionMap;
 }
 
+export interface PanelViewport {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+// TODO replace by combined trackable separate x and y
 export class FramePickingData {
   pickIDs = new PickIDManager();
   viewportWidth = 0;
@@ -346,6 +356,21 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     );
   }
 
+  public get panelViewport(): PanelViewport {
+    const viewport = this.renderViewport;
+    const { width, height } = viewport;
+    const panelLeft = this.canvasRelativeClippedLeft;
+    const panelTop = this.canvasRelativeClippedTop;
+    const panelRight = panelLeft + width;
+    const panelBottom = panelTop + height;
+    return {
+      left: panelLeft,
+      right: panelRight,
+      top: panelTop,
+      bottom: panelBottom,
+    };
+  }
+
   draw() {
     const { width, height } = this.renderViewport;
     this.checkForPickRequestCompletion(true);
@@ -448,6 +473,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   protected isMovingToMousePositionOnPick = false;
+  pixelResolutionX = new TrackableValue<number>(0.0, verifyFinitePositiveFloat);
+  pixelResolutionY = new TrackableValue<number>(0.0, verifyFinitePositiveFloat);
 
   constructor(
     context: Borrowed<DisplayContext>,
@@ -758,6 +785,19 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         }
       },
     );
+
+    this.element.addEventListener("resize", () => {
+      this.updatePixelResolution();
+    });
+    this.updatePixelResolution();
+  }
+
+  updatePixelResolution() {
+    const panelViewport = this.panelViewport;
+    console.log(this.panelViewport);
+    this.pixelResolutionX.value = panelViewport.right - panelViewport.left;
+    this.pixelResolutionY.value = panelViewport.bottom - panelViewport.top;
+    console.log(this.pixelResolutionX, this.pixelResolutionY);
   }
 
   abstract translateDataPointByViewportPixels(

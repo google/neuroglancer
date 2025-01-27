@@ -67,7 +67,10 @@ import type { Trackable } from "#src/util/trackable.js";
 import { optionallyRestoreFromJsonMember } from "#src/util/trackable.js";
 import { WatchableMap } from "#src/util/watchable_map.js";
 import type { VisibilityPrioritySpecification } from "#src/viewer_state.js";
-import { DisplayDimensionsWidget } from "#src/widget/display_dimensions_widget.js";
+import {
+  DisplayDimensionsWidget,
+  NamedAxes,
+} from "#src/widget/display_dimensions_widget.js";
 import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
 
 export interface SliceViewViewerState {
@@ -106,8 +109,6 @@ export interface DataDisplayLayout extends RefCounted {
   rootElement: HTMLElement;
   container: DataPanelLayoutContainer;
 }
-
-type NamedAxes = "xy" | "xz" | "yz";
 
 const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
   ["xy", undefined],
@@ -206,14 +207,20 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 function addDisplayDimensionsWidget(
   layout: DataDisplayLayout,
   panel: RenderedDataPanel,
+  axes: NamedAxes | undefined,
 ) {
   const { navigationState } = panel;
+  // TODO temp, would rather avoid tying to panel
   panel.element.appendChild(
     layout.registerDisposer(
       new DisplayDimensionsWidget(
         navigationState.pose.displayDimensionRenderInfo.addRef(),
         navigationState.zoomFactor,
         navigationState.depthRange.addRef(),
+        axes,
+        panel.pixelResolutionX,
+        panel.pixelResolutionY,
+        panel,
         panel instanceof SliceViewPanel ? "px" : "vh",
       ),
     ).element,
@@ -362,7 +369,7 @@ export class FourPanelLayout extends RefCounted {
         new SliceViewPanel(display, element, sliceViews.get(axes)!, state),
       );
       if (displayDimensionsWidget) {
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, axes);
       }
       registerRelatedLayouts(this, panel, [axes, `${axes}-3d`]);
       return panel;
@@ -401,7 +408,7 @@ export class FourPanelLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
-                addDisplayDimensionsWidget(this, panel);
+                addDisplayDimensionsWidget(this, panel, undefined);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d"]);
               }),
@@ -459,7 +466,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           const panel = this.registerDisposer(
             new SliceViewPanel(display, element, sliceView, sliceViewerState),
           );
-          addDisplayDimensionsWidget(this, panel);
+          addDisplayDimensionsWidget(this, panel, axes);
           registerRelatedLayouts(this, panel, [axes, "4panel"]);
         }),
         L.withFlex(1, (element) => {
@@ -468,7 +475,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           );
           panel.sliceViews.set(sliceView.addRef(), false);
           addUnconditionalSliceViews(viewer, panel, crossSections);
-          addDisplayDimensionsWidget(this, panel);
+          addDisplayDimensionsWidget(this, panel, undefined);
           registerRelatedLayouts(this, panel, ["3d", "4panel"]);
         }),
       ]),
@@ -505,7 +512,7 @@ export class SinglePanelLayout extends RefCounted {
             sliceViewerState,
           ),
         );
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, axes);
         registerRelatedLayouts(this, panel, ["4panel", `${axes}-3d`]);
       }),
     ])(rootElement);
@@ -536,7 +543,7 @@ export class SinglePerspectiveLayout extends RefCounted {
           new PerspectivePanel(viewer.display, element, perspectiveViewerState),
         );
         addUnconditionalSliceViews(viewer, panel, crossSections);
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, undefined);
         registerRelatedLayouts(this, panel, ["4panel"]);
       }),
     ])(rootElement);
