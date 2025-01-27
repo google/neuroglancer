@@ -21,15 +21,15 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 
 export async function decodeCompressoChunk(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) {
   const image = await requestAsyncComputation(
     decodeCompresso,
-    abortSignal,
+    signal,
     [response],
     new Uint8Array(response),
   );
 
-  await decodeRawChunk(chunk, abortSignal, image.buffer);
+  await decodeRawChunk(chunk, signal, image.buffer);
 }

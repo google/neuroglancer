@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
+import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 
 export interface DVIDToken {
@@ -76,7 +76,7 @@ export function fetchWithDVIDCredentials(
   input: string,
   init: RequestInit,
 ): Promise<Response> {
-  return fetchWithCredentials(
+  return fetchOkWithCredentials(
     credentialsProvider,
     input,
     init,

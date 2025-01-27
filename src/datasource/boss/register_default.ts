@@ -17,7 +17,4 @@
 import { BossDataSource } from "#src/datasource/boss/frontend.js";
 import { registerProvider } from "#src/datasource/default_provider.js";
 
-registerProvider(
-  "boss",
-  (options) => new BossDataSource(options.credentialsManager),
-);
+registerProvider(new BossDataSource());

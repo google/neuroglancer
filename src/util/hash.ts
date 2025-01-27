@@ -143,3 +143,56 @@ export function murmurHash3_x86_128Hash64Bits(
   out.high = h2;
   return out;
 }
+
+export function murmurHash3_x86_128Hash64Bits_Bigint(
+  seed: number,
+  input: bigint,
+): bigint {
+  let h1 = seed;
+  let h2 = seed;
+  let h3 = seed;
+  let h4 = seed;
+  const c1 = 0x239b961b;
+  const c2 = 0xab0e9789;
+  const c3 = 0x38b34ae5;
+  // const c4 = 0xa1e38b93;
+
+  let k2 = Math.imul(Number(input >> BigInt(32)), c2);
+  k2 = rotl32(k2, 16);
+  k2 = Math.imul(k2, c3);
+  h2 ^= k2;
+
+  let k1 = Math.imul(Number(input & BigInt(0xffffffff)), c1);
+  k1 = rotl32(k1, 15);
+  k1 = Math.imul(k1, c2);
+  h1 ^= k1;
+
+  const len = 8;
+
+  h1 ^= len;
+  h2 ^= len;
+  h3 ^= len;
+  h4 ^= len;
+
+  h1 = (h1 + h2) >>> 0;
+  h1 = (h1 + h3) >>> 0;
+  h1 = (h1 + h4) >>> 0;
+  h2 = (h2 + h1) >>> 0;
+  h3 = (h3 + h1) >>> 0;
+  h4 = (h4 + h1) >>> 0;
+
+  h1 = murmurHash3_x86_128Mix(h1);
+  h2 = murmurHash3_x86_128Mix(h2);
+  h3 = murmurHash3_x86_128Mix(h3);
+  h4 = murmurHash3_x86_128Mix(h4);
+
+  h1 = (h1 + h2) >>> 0;
+  h1 = (h1 + h3) >>> 0;
+  h1 = (h1 + h4) >>> 0;
+  h2 = (h2 + h1) >>> 0;
+
+  // h3 = (h3 + h1) >>> 0;
+  // h4 = (h4 + h1) >>> 0;
+
+  return BigInt(h1) | (BigInt(h2) << BigInt(32));
+}

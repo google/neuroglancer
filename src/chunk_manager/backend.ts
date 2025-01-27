@@ -412,12 +412,12 @@ export interface ChunkSourceBase {
    * Note: This method must be defined by subclasses.
    *
    * @param chunk Chunk to download.
-   * @param abortSignal Used to abort download.
+   * @param signal Used to abort download.
    *
    * TODO(jbms): Move this back to the class definition above and declare this abstract once mixins
    * are compatible with abstract classes.
    */
-  download(chunk: Chunk, abortSignal: AbortSignal): Promise<void>;
+  download(chunk: Chunk, signal: AbortSignal): Promise<void>;
 }
 
 export class ChunkSource extends ChunkSourceBase {
@@ -462,7 +462,7 @@ function startChunkDownload(chunk: Chunk) {
 function cancelChunkDownload(chunk: Chunk) {
   const controller = chunk.downloadAbortController!;
   chunk.downloadAbortController = undefined;
-  controller.abort();
+  controller.abort(new DOMException("chunk download cancelled", "AbortError"));
 }
 
 class ChunkPriorityQueue {
@@ -888,6 +888,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.adjustCapacitiesForChunk(chunk, true);
     this.addChunkToQueues_(chunk);
     this.scheduleUpdate();
+  }
+
+  markRecentlyUsed(chunk: Chunk) {
+    this.removeChunkFromQueues_(chunk);
+    this.addChunkToQueues_(chunk);
   }
 
   private processGPUPromotions_() {

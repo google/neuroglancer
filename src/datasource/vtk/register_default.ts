@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
-import { VtkDataSource } from "#src/datasource/vtk/frontend.js";
+import {
+  registerKvStoreBasedDataProvider,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
+import { SingleMeshDataSource } from "#src/single_mesh/frontend.js";
 
-registerProvider("vtk", () => new VtkDataSource());
+const provider = new SingleMeshDataSource("vtk", "VTK mesh");
+registerKvStoreBasedDataProvider(provider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));

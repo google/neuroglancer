@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
-import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
+import {
+  fetchOkWithCredentials,
+  fetchOkWithCredentialsAdapter,
+} from "#src/credentials_provider/http_request.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { FetchOk, HttpError } from "#src/util/http_request.js";
 import { fetchOk } from "#src/util/http_request.js";
 
 /**
@@ -27,7 +31,41 @@ export interface OAuth2Credentials {
   email?: string;
 }
 
-export function fetchWithOAuth2Credentials(
+function applyCredentials(
+  credentials: OAuth2Credentials,
+  init: RequestInit,
+): RequestInit {
+  if (!credentials.accessToken) return init;
+  const headers = new Headers(init.headers);
+  headers.set(
+    "Authorization",
+    `${credentials.tokenType} ${credentials.accessToken}`,
+  );
+  return { ...init, headers };
+}
+
+function errorHandler(
+  error: HttpError,
+  credentials: OAuth2Credentials,
+): "refresh" {
+  const { status } = error;
+  if (status === 401) {
+    // 401: Authorization needed.  OAuth2 token may have expired.
+    return "refresh";
+  }
+  if (status === 403 && !credentials.accessToken) {
+    // Anonymous access denied.  Request credentials.
+    return "refresh";
+  }
+  if (error instanceof Error && credentials.email !== undefined) {
+    error.message += `  (Using credentials for ${JSON.stringify(
+      credentials.email,
+    )})`;
+  }
+  throw error;
+}
+
+export function fetchOkWithOAuth2Credentials(
   credentialsProvider: CredentialsProvider<OAuth2Credentials> | undefined,
   input: RequestInfo,
   init: RequestInit,
@@ -35,35 +73,22 @@ export function fetchWithOAuth2Credentials(
   if (credentialsProvider === undefined) {
     return fetchOk(input, init);
   }
-  return fetchWithCredentials(
+  return fetchOkWithCredentials(
     credentialsProvider,
     input,
     init,
-    (credentials, init) => {
-      if (!credentials.accessToken) return init;
-      const headers = new Headers(init.headers);
-      headers.set(
-        "Authorization",
-        `${credentials.tokenType} ${credentials.accessToken}`,
-      );
-      return { ...init, headers };
-    },
-    (error, credentials) => {
-      const { status } = error;
-      if (status === 401) {
-        // 401: Authorization needed.  OAuth2 token may have expired.
-        return "refresh";
-      }
-      if (status === 403 && !credentials.accessToken) {
-        // Anonymous access denied.  Request credentials.
-        return "refresh";
-      }
-      if (error instanceof Error && credentials.email !== undefined) {
-        error.message += `  (Using credentials for ${JSON.stringify(
-          credentials.email,
-        )})`;
-      }
-      throw error;
-    },
+    applyCredentials,
+    errorHandler,
+  );
+}
+
+export function fetchOkWithOAuth2CredentialsAdapter(
+  credentialsProvider: CredentialsProvider<OAuth2Credentials> | undefined,
+): FetchOk {
+  if (credentialsProvider === undefined) return fetchOk;
+  return fetchOkWithCredentialsAdapter(
+    credentialsProvider,
+    applyCredentials,
+    errorHandler,
   );
 }

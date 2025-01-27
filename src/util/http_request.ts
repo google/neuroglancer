@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#src/util/uint64.js";
+import type { ProgressListener } from "#src/util/progress_listener.js";
 
 export class HttpError extends Error {
   url: string;
@@ -27,6 +27,7 @@ export class HttpError extends Error {
     status: number,
     statusText: string,
     response?: Response,
+    options?: { cause: any },
   ) {
     let message = `Fetching ${JSON.stringify(
       url,
@@ -35,7 +36,7 @@ export class HttpError extends Error {
       message += `: ${statusText}`;
     }
     message += ".";
-    super(message);
+    super(message, options);
     this.name = "HttpError";
     this.message = message;
     this.url = url;
@@ -63,7 +64,9 @@ export class HttpError extends Error {
       } else {
         url = input.url;
       }
-      return new HttpError(url, 0, "Network or CORS error");
+      return new HttpError(url, 0, "Network or CORS error", undefined, {
+        cause: error,
+      });
     }
     return error;
   }
@@ -97,7 +100,7 @@ export function pickDelay(attemptNumber: number): number {
  */
 export async function fetchOk(
   input: RequestInfo,
-  init?: RequestInit,
+  init?: RequestInitWithProgress,
 ): Promise<Response> {
   for (let requestAttempt = 0; ; ) {
     init?.signal?.throwIfAborted();
@@ -126,34 +129,14 @@ export async function fetchOk(
   }
 }
 
-const tempUint64 = new Uint64();
-
-export function getByteRangeHeader(
-  startOffset: Uint64 | number,
-  endOffset: Uint64 | number,
-) {
-  let endOffsetStr: string;
-  if (typeof endOffset === "number") {
-    endOffsetStr = `${endOffset - 1}`;
-  } else {
-    Uint64.decrement(tempUint64, endOffset);
-    endOffsetStr = tempUint64.toString();
-  }
-  return { Range: `bytes=${startOffset}-${endOffsetStr}` };
+export interface RequestInitWithProgress extends RequestInit {
+  progressListener?: ProgressListener;
 }
 
-export function parseUrl(url: string): {
-  protocol: string;
-  host: string;
-  path: string;
-} {
-  const urlProtocolPattern = /^([^:/]+):\/\/([^/]+)((?:\/.*)?)$/;
-  const match = url.match(urlProtocolPattern);
-  if (match === null) {
-    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
-  }
-  return { protocol: match[1], host: match[2], path: match[3] };
-}
+export type FetchOk = (
+  input: RequestInfo,
+  init?: RequestInitWithProgress,
+) => Promise<Response>;
 
 export function isNotFoundError(e: any) {
   if (!(e instanceof HttpError)) return false;

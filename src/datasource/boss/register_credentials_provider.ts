@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { registerDefaultCredentialsProvider } from "#src/credentials_provider/default_manager.js";
 import { credentialsKey } from "#src/datasource/boss/api.js";
 import { BossCredentialsProvider } from "#src/datasource/boss/credentials_provider.js";
 
-defaultCredentialsManager.register(
+registerDefaultCredentialsProvider(
   credentialsKey,
   (authServer) => new BossCredentialsProvider(authServer),
 );

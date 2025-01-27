@@ -20,28 +20,29 @@
  */
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import {
-  getCredentialsProviderCounterpart,
-  WithCredentialsProvider,
-} from "#src/credentials_provider/chunk_source_frontend.js";
-import type { CredentialsManager } from "#src/credentials_provider/index.js";
-import type {
-  CompleteUrlOptions,
-  DataSource,
-  GetDataSourceOptions,
+  type DataSource,
+  type GetKvStoreBasedDataSourceOptions,
+  type KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import type { NiftiVolumeInfo } from "#src/datasource/nifti/base.js";
 import {
   GET_NIFTI_VOLUME_INFO_RPC_ID,
   VolumeSourceParameters,
 } from "#src/datasource/nifti/base.js";
+import type {
+  AutoDetectFileOptions,
+  AutoDetectFileSpec,
+  AutoDetectRegistry,
+} from "#src/kvstore/auto_detect.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
   makeVolumeChunkSpecificationWithDefaultCompression,
@@ -51,27 +52,22 @@ import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import { completeHttpPath } from "#src/util/http_path_completion.js";
+import { Endianness } from "#src/util/endian.js";
 import * as matrix from "#src/util/matrix.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import { parseSpecialUrl } from "#src/util/special_protocol_request.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 class NiftiVolumeChunkSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),
+  WithSharedKvStoreContext(VolumeChunkSource),
   VolumeSourceParameters,
 ) {}
 
 export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   constructor(
-    chunkManager: ChunkManager,
-    public credentialsProvider: SpecialProtocolCredentialsProvider,
+    public sharedKvStoreContext: SharedKvStoreContext,
     public url: string,
     public info: NiftiVolumeInfo,
   ) {
-    super(chunkManager);
+    super(sharedKvStoreContext.chunkManager);
   }
   get dataType() {
     return this.info.dataType;
@@ -103,7 +99,7 @@ export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
           chunkSource: this.chunkManager.getChunkSource(
             NiftiVolumeChunkSource,
             {
-              credentialsProvider: this.credentialsProvider,
+              sharedKvStoreContext: this.sharedKvStoreContext,
               spec,
               parameters: { url: this.url },
             },
@@ -116,47 +112,37 @@ export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
 }
 
 function getNiftiVolumeInfo(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
-  abortSignal?: AbortSignal,
+  options: Partial<ProgressOptions>,
 ) {
-  return chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
+  return sharedKvStoreContext.chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
     GET_NIFTI_VOLUME_INFO_RPC_ID,
     {
-      chunkManager: chunkManager.addCounterpartRef(),
-      credentialsProvider:
-        getCredentialsProviderCounterpart<SpecialProtocolCredentials>(
-          chunkManager,
-          credentialsProvider,
-        ),
+      sharedKvStoreContext: sharedKvStoreContext.rpcId,
       url: url,
     },
-    abortSignal,
+    { signal: options.signal, progressListener: options.progressListener },
   );
 }
 
 function getDataSource(
-  chunkManager: ChunkManager,
-  credentialsManager: CredentialsManager,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ) {
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     { type: "nifti/getVolume", url },
-    async () => {
-      const { url: parsedUrl, credentialsProvider } = parseSpecialUrl(
-        url,
-        credentialsManager,
-      );
+    options,
+    async (progressOptions) => {
       const info = await getNiftiVolumeInfo(
-        chunkManager,
-        credentialsProvider,
-        parsedUrl,
+        sharedKvStoreContext,
+        url,
+        progressOptions,
       );
       const volume = new NiftiMultiscaleVolumeChunkSource(
-        chunkManager,
-        credentialsProvider,
-        parsedUrl,
+        sharedKvStoreContext,
+        url,
         info,
       );
       const box = {
@@ -177,6 +163,7 @@ function getDataSource(
         units: info.units,
       });
       const dataSource: DataSource = {
+        canonicalUrl: `${url}|nifti:`,
         subsources: [
           {
             id: "default",
@@ -204,23 +191,70 @@ function getDataSource(
   );
 }
 
-export class NiftiDataSource extends DataSourceProvider {
+export class NiftiDataSource implements KvStoreBasedDataSourceProvider {
+  get scheme() {
+    return "nifti";
+  }
   get description() {
-    return "Single NIfTI file";
+    return "NIfTI";
   }
-  get(options: GetDataSourceOptions): Promise<DataSource> {
+  get singleFile() {
+    return true;
+  }
+  get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureEmptyUrlSuffix(options.url);
     return getDataSource(
-      options.chunkManager,
-      options.credentialsManager,
-      options.providerUrl,
+      options.registry.sharedKvStoreContext,
+      options.kvStoreUrl,
+      options,
     );
   }
+}
 
-  completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(
-      options.credentialsManager,
-      options.providerUrl,
-      options.abortSignal,
+function getAutoDetectSpec(
+  headerSize: number,
+  magicStringOffset: number,
+  magicString: string,
+  version: string,
+): AutoDetectFileSpec {
+  async function match(options: AutoDetectFileOptions) {
+    const { prefix } = options;
+    if (prefix.length < magicStringOffset + magicString.length) return [];
+    const dv = new DataView(
+      prefix.buffer,
+      prefix.byteOffset,
+      prefix.byteLength,
     );
+    let endianness: Endianness;
+    if (dv.getInt32(0, /*littleEndian=*/ true) === headerSize) {
+      endianness = Endianness.LITTLE;
+    } else if (dv.getInt32(0, /*littleEndian=*/ false) === headerSize) {
+      endianness = Endianness.BIG;
+    } else {
+      return [];
+    }
+    for (let i = 0; i < magicString.length; ++i) {
+      if (magicString.charCodeAt(i) !== prefix[i + magicStringOffset])
+        return [];
+    }
+
+    return [
+      {
+        suffix: "nifti:",
+        description: `NIfTI ${version} (${Endianness[endianness].toLowerCase()}-endian)`,
+      },
+    ];
   }
+  return {
+    prefixLength: magicStringOffset + magicString.length,
+    suffixLength: 0,
+    match,
+  };
+}
+
+export function registerAutoDetect(registry: AutoDetectRegistry) {
+  registry.registerFileFormat(getAutoDetectSpec(348, 344, "n+1\0", "v1"));
+  registry.registerFileFormat(
+    getAutoDetectSpec(540, 4, "n+2\0\r\n\x1a\n", "v2"),
+  );
 }

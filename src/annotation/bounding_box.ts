@@ -37,7 +37,7 @@ import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js"
 import { tile2dArray } from "#src/util/array.js";
 import { getViewFrustrumWorldBounds, mat4 } from "#src/util/geom.js";
 import { CORNERS_PER_BOX, EDGES_PER_BOX } from "#src/webgl/bounding_box.js";
-import { Buffer } from "#src/webgl/buffer.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
 import {
   defineCircleShader,
   drawCircles,
@@ -293,7 +293,7 @@ void setBoundingBoxFillColor(vec4 color) {
 
 class PerspectiveViewRenderHelper extends RenderHelper {
   private edgeBoxCornerOffsetsBuffer = this.registerDisposer(
-    Buffer.fromData(
+    GLBuffer.fromData(
       this.gl,
       tile2dArray(
         edgeBoxCornerOffsetData,
@@ -346,7 +346,7 @@ emitAnnotation(vec4(vColor.rgb, getLineAlpha() * vClipCoefficient));
   );
 
   private boxCornerOffsetsBuffer = this.registerDisposer(
-    Buffer.fromData(
+    GLBuffer.fromData(
       this.gl,
       tile2dArray(
         vertexBasePositions,

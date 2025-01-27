@@ -67,7 +67,7 @@ export class BossVolumeChunkSource extends BossSource(
 ) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
     const { parameters } = this;
     let url = `${parameters.baseUrl}/latest/cutout/${parameters.collection}/${parameters.experiment}/${parameters.channel}/${parameters.resolution}`;
     {
@@ -88,11 +88,11 @@ export class BossVolumeChunkSource extends BossSource(
       this.credentialsProvider,
       url,
       {
-        signal: abortSignal,
+        signal: signal,
         headers: { Accept: acceptHeaders.get(parameters.encoding)! },
       },
     );
-    await this.chunkDecoder(chunk, abortSignal, await response.arrayBuffer());
+    await this.chunkDecoder(chunk, signal, await response.arrayBuffer());
   }
 }
 
@@ -119,23 +119,23 @@ export class BossMeshSource extends BossSource(
   MeshSource,
   MeshSourceParameters,
 ) {
-  download(chunk: ManifestChunk, abortSignal: AbortSignal) {
+  download(chunk: ManifestChunk, signal: AbortSignal) {
     const { parameters } = this;
     return fetchWithBossCredentials(
       this.credentialsProvider,
       `${parameters.baseUrl}${chunk.objectId}`,
-      { signal: abortSignal },
+      { signal: signal },
     )
       .then((response) => response.arrayBuffer())
       .then((response) => decodeManifestChunk(chunk, response));
   }
 
-  downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
+  downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
     const { parameters } = this;
     return fetchWithBossCredentials(
       this.credentialsProvider,
       `${parameters.baseUrl}${chunk.fragmentId}`,
-      { signal: abortSignal },
+      { signal: signal },
     )
       .then((response) => response.arrayBuffer())
       .then((response) => decodeFragmentChunk(chunk, response));

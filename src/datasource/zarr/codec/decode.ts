@@ -20,7 +20,7 @@ import type {
   CodecChainSpec,
 } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { ReadableKvStore } from "#src/kvstore/index.js";
+import type { KvStoreWithPath, ReadableKvStore } from "#src/kvstore/index.js";
 import type { RefCounted } from "#src/util/disposable.js";
 
 export interface Codec {
@@ -34,7 +34,7 @@ export interface ArrayToArrayCodec<Configuration = unknown> extends Codec {
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded: ArrayBufferView<ArrayBuffer>,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<ArrayBufferView<ArrayBuffer>>;
 }
 
@@ -44,7 +44,7 @@ export interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded: Uint8Array<ArrayBuffer>,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<ArrayBufferView<ArrayBuffer>>;
 }
 
@@ -67,7 +67,7 @@ export interface BytesToBytesCodec<Configuration = unknown> extends Codec {
   decode(
     configuration: Configuration,
     encoded: Uint8Array<ArrayBuffer>,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<Uint8Array<ArrayBuffer>>;
 }
 
@@ -95,7 +95,7 @@ export function registerCodec<Configuration>(
 export async function decodeArray(
   codecs: CodecChainSpec,
   encoded: Uint8Array<ArrayBuffer>,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<ArrayBufferView<ArrayBuffer>> {
   const bytesToBytes = codecs[CodecKind.bytesToBytes];
   for (let i = bytesToBytes.length; i--; ) {
@@ -104,7 +104,7 @@ export async function decodeArray(
     if (impl === undefined) {
       throw new Error(`Unsupported codec: ${JSON.stringify(codec.name)}`);
     }
-    encoded = await impl.decode(codec.configuration, encoded, abortSignal);
+    encoded = await impl.decode(codec.configuration, encoded, signal);
   }
 
   let decoded: ArrayBufferView<ArrayBuffer>;
@@ -118,7 +118,7 @@ export async function decodeArray(
       codec.configuration,
       codecs.arrayInfo[codecs.arrayInfo.length - 1],
       encoded,
-      abortSignal,
+      signal,
     );
   }
 
@@ -133,7 +133,7 @@ export async function decodeArray(
       codec.configuration,
       codecs.arrayInfo[i],
       decoded,
-      abortSignal,
+      signal,
     );
   }
 
@@ -143,7 +143,7 @@ export async function decodeArray(
 export function applySharding(
   chunkManager: ChunkManager,
   codecs: CodecChainSpec,
-  baseKvStore: ReadableKvStore<string>,
+  baseKvStore: KvStoreWithPath,
 ): {
   kvStore: ReadableKvStore<unknown>;
   getChunkKey: (
@@ -152,7 +152,7 @@ export function applySharding(
   ) => unknown;
   decodeCodecs: CodecChainSpec;
 } {
-  let kvStore: ReadableKvStore<unknown> = baseKvStore;
+  let kvStore: ReadableKvStore<unknown> = baseKvStore.store;
   let curCodecs = codecs;
   while (true) {
     const { shardingInfo } = curCodecs;
@@ -172,11 +172,13 @@ export function applySharding(
 
   const decodeCodecs = curCodecs;
 
+  const pathPrefix = baseKvStore.path;
+
   function getChunkKey(
     chunkGridPosition: ArrayLike<number>,
     baseKey: string,
   ): unknown {
-    let key: unknown = baseKey;
+    let key: unknown = pathPrefix + baseKey;
     const rank = chunkGridPosition.length;
     let curCodecs = codecs;
     while (curCodecs.shardingInfo !== undefined) {
