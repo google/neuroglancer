@@ -84,7 +84,6 @@ import { EnumSelectWidget } from "#src/widget/enum_widget.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { NumberInputWidget } from "#src/widget/number_input_widget.js";
 import { PositionPlot } from "#src/widget/position_plot.js";
-import { EventAction } from "#src/util/event_action_map.js";
 
 export const positionDragType = "neuroglancer-position";
 
