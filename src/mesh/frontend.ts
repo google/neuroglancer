@@ -889,7 +889,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           manifest;
         if (DEBUG_MULTISCALE_FRAGMENTS) {
           try {
-            validateOctree(octree);
+            validateOctree(octree, /*allowDuplicateChildren=*/ true);
           } catch (e) {
             console.log(`invalid octree for object=${objectId}: ${e.message}`);
           }

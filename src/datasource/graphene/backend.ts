@@ -176,17 +176,170 @@ export class GrapheneMeshSource extends WithParameters(
     return decodeManifestChunk(chunk, response);
   }
 
-  async downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
-    const { response } = await downloadFragment(
-      this.fragmentKvStore,
-      chunk.fragmentId!,
-      this.parameters,
-      signal,
+  async downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
+    const { credentialsProvider, parameters } = this;
+    const response = await getFragmentDownloadPromise(
+      credentialsProvider,
+      chunk.fragmentId,
+      parameters,
+      abortSignal,
     );
-    await decodeDracoFragmentChunk(
-      chunk,
-      new Uint8Array(await response.arrayBuffer()),
-    );
+    await decodeDracoFragmentChunk(chunk, response);
+  }
+
+  getFragmentKey(objectKey: string | null, fragmentId: string) {
+    objectKey;
+    return getGrapheneFragmentKey(fragmentId);
+  }
+}
+
+interface ShardInfo {
+  shardUrl: string;
+  offset: Uint64;
+}
+
+interface GrapheneMultiscaleManifestChunk extends MultiscaleManifestChunk {
+  fragmentIds: FragmentId[] | null;
+  shardInfo?: ShardInfo;
+}
+
+function decodeMultiscaleManifestChunk(chunk: GrapheneMultiscaleManifestChunk, response: any) {
+  verifyObject(response);
+  chunk.manifest = {
+    chunkShape: vec3.clone(response.chunkShape),
+    chunkGridSpatialOrigin: vec3.clone(response.chunkGridSpatialOrigin),
+    lodScales: new Float32Array(response.lodScales),
+    octree: new Uint32Array(response.octree),
+    vertexOffsets: new Float32Array(response.lodScales.length * 3),
+    clipLowerBound: vec3.clone(response.clipLowerBound),
+    clipUpperBound: vec3.clone(response.clipUpperBound),
+  };
+  chunk.fragmentIds = response.fragments;
+  chunk.manifest.clipLowerBound.fill(0);
+  chunk.manifest.clipUpperBound.fill(10000000);
+  chunk.manifest.octree[5 * (response.fragments.length - 1) + 4] &= 0x7fffffff;
+  chunk.manifest.octree[5 * (response.fragments.length - 1) + 3] |= 0x80000000;
+}
+
+async function decodeMultiscaleFragmentChunk(
+  chunk: MultiscaleFragmentChunk,
+  response: ArrayBuffer,
+) {
+  const { lod } = chunk;
+  const source = chunk.manifestChunk!.source! as GrapheneMultiscaleMeshSource;
+  const rawMesh = await decodeDracoPartitioned(new Uint8Array(response), 0, lod !== 0, false);
+  rawMesh.vertexPositions = new Float32Array(
+    rawMesh.vertexPositions.buffer,
+    rawMesh.vertexPositions.byteOffset,
+    rawMesh.vertexPositions.length,
+  );
+  assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
+  const manifest = chunk.manifestChunk!.manifest!;
+  const minVertex = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
+    maxVertex = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+  const vertexPositions = chunk.meshData!.vertexPositions;
+  for (let i = 0; i < vertexPositions.length; ++i) {
+    const v = (vertexPositions as Float32Array)[i];
+    minVertex[i % 3] = Math.min(minVertex[i % 3], v);
+    maxVertex[i % 3] = Math.max(maxVertex[i % 3], v);
+  }
+  const { chunkShape } = manifest;
+  const expectedMin = [0, 0, 0],
+    expectedMax = [0, 0, 0];
+  const row = chunk.chunkIndex;
+  for (let i = 0; i < 3; ++i) {
+    const size = chunkShape[i] * 2 ** lod;
+    expectedMin[i] = size * manifest.octree[row * 5 + i] + manifest.chunkGridSpatialOrigin[i];
+    expectedMax[i] = expectedMin[i] + size;
+  }
+  console.log(
+    `lod=${lod} cell ${manifest.octree.slice(row * 5, row * 5 + 3).join(",")}: chunk shape=${chunkShape.join(",")} actual min=${minVertex}, max=${maxVertex}, expeted min=${expectedMin}, max=${expectedMax}`,
+  );
+}
+
+@registerSharedObject()
+export class GrapheneMultiscaleMeshSource extends WithParameters(
+  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(MultiscaleMeshSource),
+  MultiscaleMeshSourceParameters,
+) {
+  manifestRequestCount = new Map<string, number>();
+  newSegments = new Uint64Set();
+
+  addNewSegment(segment: Uint64) {
+    const { newSegments } = this;
+    newSegments.add(segment);
+    const TEN_MINUTES = 1000 * 60 * 10;
+    setTimeout(() => {
+      newSegments.delete(segment);
+    }, TEN_MINUTES);
+  }
+
+
+  async download(
+    chunk: GrapheneMultiscaleManifestChunk,
+    abortSignal: AbortSignal,
+  ): Promise<void> {
+    const { credentialsProvider, parameters, newSegments, manifestRequestCount } = this;
+    if (isBaseSegmentId(chunk.objectId, parameters.nBitsForLayerId)) {
+      return decodeManifestChunk(chunk, { fragments: [] });
+    }
+    const url = `${parameters.manifestUrl}/manifest/multiscale`;
+    const manifestUrl = `${url}/${chunk.objectId}?verify=1&prepend_seg_ids=1`;
+
+    await fetchSpecialOk(credentialsProvider, manifestUrl, {
+      signal: abortSignal,
+    })
+    .then((response) => response.json())
+    .then((response) => {
+      const chunkIdentifier = manifestUrl;
+      if (newSegments.has(chunk.objectId)) {
+        const requestCount =
+          (manifestRequestCount.get(chunkIdentifier) || 0) + 1;
+        manifestRequestCount.set(chunkIdentifier, requestCount);
+        setTimeout(
+          () => {
+            this.chunkManager.queueManager.updateChunkState(
+              chunk,
+              ChunkState.QUEUED,
+            );
+          },
+          2 ** requestCount * 1000,
+        );
+      } else {
+        manifestRequestCount.delete(chunkIdentifier);
+      }
+      return decodeMultiscaleManifestChunk(chunk, response);
+    });
+  }
+
+  async downloadFragment(
+    chunk: MultiscaleFragmentChunk,
+    abortSignal: AbortSignal,
+  ): Promise<void> {
+    const { credentialsProvider, parameters } = this;
+    const manifestChunk = chunk.manifestChunk! as GrapheneMultiscaleManifestChunk;
+    const chunkIndex = chunk.chunkIndex;
+    const { fragmentIds } = manifestChunk;
+
+    try {
+      let fragmentId = null;
+      if (fragmentIds !== null) {
+        fragmentId = fragmentIds[chunkIndex];
+        fragmentId = fragmentId.substring(fragmentId.indexOf(":") + 1);
+      }
+      const response = await getFragmentDownloadPromise(
+        credentialsProvider,
+        fragmentId,
+        parameters,
+        abortSignal,
+      );
+      await decodeMultiscaleFragmentChunk(chunk, response);
+    } catch (e) {
+      if (isNotFoundError(e)) {
+        chunk.source!.removeChunk(chunk);
+      }
+      Promise.reject(e);
+    }
   }
 
   getFragmentKey(objectKey: string | null, fragmentId: string) {

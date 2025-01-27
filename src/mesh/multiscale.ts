@@ -169,7 +169,7 @@ export function getDesiredMultiscaleMeshChunks(
     const gridX = octree[rowOffset];
     const gridY = octree[rowOffset + 1];
     const gridZ = octree[rowOffset + 2];
-    const childBegin = octree[rowOffset + 3];
+    const childBeginAndVirtual = octree[rowOffset + 3];
     const childEndAndEmpty = octree[rowOffset + 4];
     let xLower = gridX * size * chunkShape[0] + chunkGridSpatialOrigin[0];
     let yLower = gridY * size * chunkShape[1] + chunkGridSpatialOrigin[1];
@@ -202,16 +202,19 @@ export function getDesiredMultiscaleMeshChunks(
       const pixelSize = minW / scaleFactor;
 
       if (priorLodScale === 0 || pixelSize * detailCutoff < priorLodScale) {
-        const lodScale = lodScales[lod];
+        let lodScale = lodScales[lod];
         if (lodScale !== 0) {
-          callback(lod, row, lodScale / pixelSize, childEndAndEmpty >>> 31);
+          const virtual = childBeginAndVirtual >>> 31;
+          if (virtual) {
+            lodScale = 0;
+          }
+          const empty = childEndAndEmpty >>> 31;
+          callback(lod, row, lodScale / pixelSize, empty | virtual);
         }
 
-        if (
-          lod > 0 &&
-          (lodScale === 0 || pixelSize * detailCutoff < lodScale)
-        ) {
+        if (lod > 0 && (lodScale === 0 || pixelSize * detailCutoff < lodScale)) {
           const nextPriorLodScale = lodScale === 0 ? priorLodScale : lodScale;
+          const childBegin = (childBeginAndVirtual & 0x7fffffff) >>> 0;
           const childEnd = (childEndAndEmpty & 0x7fffffff) >>> 0;
           for (let childRow = childBegin; childRow < childEnd; ++childRow) {
             handleChunk(lod - 1, childRow, nextPriorLodScale);
@@ -349,7 +352,7 @@ export function getMultiscaleChunksToDraw(
   emitChunksUpTo(0, 0);
 }
 
-export function validateOctree(octree: Uint32Array) {
+export function validateOctree(octree: Uint32Array, allowDuplicateChildren: boolean = false) {
   if (octree.length % 5 !== 0) {
     throw new Error("Invalid length");
   }
@@ -357,32 +360,36 @@ export function validateOctree(octree: Uint32Array) {
   const seenNodes = new Set<number>();
   function exploreNode(node: number) {
     if (seenNodes.has(node)) {
-      throw new Error("Previously seen node");
+      throw new Error(`Previously seen node: ${node}`);
     }
     seenNodes.add(node);
     if (node < 0 || node >= numNodes) {
-      throw new Error("Invalid node reference");
+      throw new Error(`Invalid node reference: ${node}`);
     }
     const x = octree[node * 5];
     const y = octree[node * 5 + 1];
     const z = octree[node * 5 + 2];
-    const beginChild = octree[node * 5 + 3];
-    const endChild = octree[node * 5 + 4];
+    const beginChild = (octree[node * 5 + 3] & 0x7fffffff) >>> 0;
+    const endChild = (octree[node * 5 + 4] & 0x7fffffff) >>> 0;
     if (
       beginChild < 0 ||
       endChild < 0 ||
       endChild < beginChild ||
       endChild > numNodes ||
-      beginChild + 8 < endChild
+      (!allowDuplicateChildren && beginChild + 8 < endChild)
     ) {
-      throw new Error("Invalid child references");
+      throw new Error(
+        `Invalid child references: node ${node} specifies beginChild=${beginChild}, endChild=${endChild}`,
+      );
     }
     for (let child = beginChild; child < endChild; ++child) {
       const childX = octree[child * 5];
       const childY = octree[child * 5 + 1];
       const childZ = octree[child * 5 + 2];
       if (childX >>> 1 !== x || childY >>> 1 !== y || childZ >>> 1 !== z) {
-        throw new Error("invalid child");
+        throw new Error(
+          `invalid child position: parent=${node} child=${child} childX=${childX} childY=${childY} childZ=${childZ} parentX=${x} parentY=${y} parentZ=${z}`,
+        );
       }
       exploreNode(child);
     }
