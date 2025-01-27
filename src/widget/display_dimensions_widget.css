@@ -40,12 +40,12 @@
 
 .neuroglancer-display-dimensions-widget input:hover {
   cursor: pointer;
-  border-color: rgba(255, 255, 255, 0.40);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .neuroglancer-display-dimensions-widget input:focus {
   background-color: #222;
-  border-color: #FFF;
+  border-color: #fff;
 }
 
 .neuroglancer-display-dimensions-widget input,

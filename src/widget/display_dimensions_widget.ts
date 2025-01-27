@@ -323,11 +323,15 @@ export class DisplayDimensionsWidget extends RefCounted {
 
     // Hold two input boxes that display the primary and secondary dimensions
     const { fovGridContainer } = this;
-    fovGridContainer.classList.add("neuroglancer-display-dimensions-widget-fov");
+    fovGridContainer.classList.add(
+      "neuroglancer-display-dimensions-widget-fov",
+    );
     element.appendChild(fovGridContainer);
     for (let i = 0; i < 2; ++i) {
       const container = document.createElement("div");
-      container.classList.add("neuroglancer-display-dimensions-widget-fov-container");
+      container.classList.add(
+        "neuroglancer-display-dimensions-widget-fov-container",
+      );
       const label = document.createElement("span");
       label.textContent = i === 0 ? "Primary" : "Secondary";
       container.appendChild(label);
