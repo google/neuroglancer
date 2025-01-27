@@ -31,15 +31,11 @@ import { registerSharedObject } from "#src/worker_rpc.js";
 const chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set(
   "jpg",
-  async (
-    chunk: VolumeChunk,
-    abortSignal: AbortSignal,
-    response: ArrayBuffer,
-  ) => {
+  async (chunk: VolumeChunk, signal: AbortSignal, response: ArrayBuffer) => {
     const chunkDataSize = chunk.chunkDataSize!;
     const { uint8Array: decoded } = await requestAsyncComputation(
       decodeJpeg,
-      abortSignal,
+      signal,
       [response],
       new Uint8Array(response),
       undefined,
@@ -48,11 +44,11 @@ chunkDecoders.set(
       3,
       true,
     );
-    await postProcessRawData(chunk, abortSignal, decoded);
+    await postProcessRawData(chunk, signal, decoded);
   },
 );
-chunkDecoders.set("raw16", (chunk, abortSignal, response) => {
-  return decodeRawChunk(chunk, abortSignal, response, Endianness.BIG);
+chunkDecoders.set("raw16", (chunk, signal, response) => {
+  return decodeRawChunk(chunk, signal, response, Endianness.BIG);
 });
 
 @registerSharedObject()
@@ -91,7 +87,7 @@ export class TileChunkSource extends WithParameters(
     return query_params.join("&");
   })();
 
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
     const { parameters } = this;
     const { chunkGridPosition } = chunk;
 
@@ -122,8 +118,8 @@ export class TileChunkSource extends WithParameters(
     const path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/${imageMethod}`;
     const response = await fetchOk(
       `${parameters.baseUrl}${path}?${this.queryString}`,
-      { signal: abortSignal },
+      { signal: signal },
     );
-    await this.chunkDecoder(chunk, abortSignal, await response.arrayBuffer());
+    await this.chunkDecoder(chunk, signal, await response.arrayBuffer());
   }
 }

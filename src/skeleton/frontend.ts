@@ -51,7 +51,7 @@ import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
-import { Buffer } from "#src/webgl/buffer.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
 import {
   defineCircleShader,
   drawCircles,
@@ -781,7 +781,7 @@ export class SkeletonChunk extends Chunk {
   declare source: SkeletonSource;
   vertexAttributes: Uint8Array;
   indices: Uint32Array;
-  indexBuffer: Buffer;
+  indexBuffer: GLBuffer;
   numIndices: number;
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
@@ -822,7 +822,7 @@ export class SkeletonChunk extends Chunk {
       vertexAttributeTextures[i] = texture;
     }
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
-    this.indexBuffer = Buffer.fromData(
+    this.indexBuffer = GLBuffer.fromData(
       gl,
       this.indices,
       WebGL2RenderingContext.ARRAY_BUFFER,

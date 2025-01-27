@@ -16,7 +16,8 @@
 
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import { fetchOkWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import type { RequestInitWithProgress } from "#src/util/http_request.js";
 
 export type { OAuth2Credentials };
 
@@ -93,25 +94,15 @@ export interface BatchMeshFragmentPayload {
   batches: BatchMeshFragment[];
 }
 
-export interface HttpCall {
-  method: "GET" | "POST";
-  path: string;
-  payload?: string;
-  signal?: AbortSignal;
-}
-
 export function makeRequest(
   instance: BrainmapsInstance,
   credentialsProvider: BrainmapsCredentialsProvider,
-  httpCall: HttpCall,
+  path: string,
+  init: RequestInitWithProgress = {},
 ): Promise<Response> {
-  return fetchWithOAuth2Credentials(
+  return fetchOkWithOAuth2Credentials(
     credentialsProvider,
-    `${instance.serverUrl}${httpCall.path}`,
-    {
-      signal: httpCall.signal,
-      method: httpCall.method,
-      body: httpCall.payload,
-    },
+    `${instance.serverUrl}${path}`,
+    init,
   );
 }

@@ -16,7 +16,7 @@
 
 import { debounce } from "lodash-es";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
-import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
+import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
 import {
   CredentialsProvider,
   makeCredentialsGetter,
@@ -27,8 +27,8 @@ import type {
   DataSource,
   DataSubsourceEntry,
   GetDataSourceOptions,
+  DataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import type { Credentials } from "#src/datasource/nggraph/credentials_provider.js";
 import { NggraphCredentialsProvider } from "#src/datasource/nggraph/credentials_provider.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
@@ -47,6 +47,7 @@ import { StatusMessage } from "#src/status.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import { getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
 import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import type { RequestInitWithProgress } from "#src/util/http_request.js";
 import {
   parseArray,
   verifyFiniteFloat,
@@ -609,7 +610,7 @@ function fetchWithNggraphCredentials(
   path: string,
   init: RequestInit,
 ): Promise<any> {
-  return fetchWithCredentials(
+  return fetchOkWithCredentials(
     credentialsProvider,
     `${serverUrl}${path}`,
     init,
@@ -701,7 +702,7 @@ function nggraphGraphFetch(
   serverUrl: string,
   entityName: string,
   path: string,
-  init: RequestInit,
+  init: RequestInitWithProgress,
 ): Promise<any> {
   return fetchWithNggraphCredentials(
     getEntityCredentialsProvider(chunkManager, serverUrl, entityName),
@@ -732,41 +733,46 @@ function parseListResponse(response: any) {
   );
 }
 
-export class NggraphDataSource extends DataSourceProvider {
+export class NggraphDataSource implements DataSourceProvider {
+  get scheme() {
+    return "nggraph";
+  }
   get description() {
     return "nggraph data source";
   }
 
   get(options: GetDataSourceOptions): Promise<DataSource> {
     const { serverUrl, id } = parseNggraphUrl(options.providerUrl);
-    return options.chunkManager.memoize.getUncounted(
+    return options.registry.chunkManager.memoize.getAsync(
       { type: "nggraph:get", serverUrl, id },
-      async (): Promise<DataSource> => {
+      options,
+      async (progressOptions): Promise<DataSource> => {
         const entityCredentialsProvider = getEntityCredentialsProvider(
-          options.chunkManager,
+          options.registry.chunkManager,
           serverUrl,
           id,
         );
-        const { entityType } = (await entityCredentialsProvider.get())
-          .credentials;
+        const { entityType } = (
+          await entityCredentialsProvider.get(undefined, progressOptions)
+        ).credentials;
         if (entityType !== "graph") {
           throw new Error(
             `Unsupported entity type: ${JSON.stringify(entityType)}`,
           );
         }
         const { datasource_url: baseSegmentation } = await nggraphGraphFetch(
-          options.chunkManager,
+          options.registry.chunkManager,
           serverUrl,
           id,
           "/graph/config",
-          { method: "POST" },
+          { method: "POST", ...progressOptions },
         );
         const baseSegmentationDataSource = await options.registry.get({
           ...options,
           url: baseSegmentation,
         });
         const segmentationGraph = new NggraphSegmentationGraphSource(
-          options.chunkManager,
+          options.registry.chunkManager,
           serverUrl,
           id,
         );
@@ -789,13 +795,20 @@ export class NggraphDataSource extends DataSourceProvider {
 
   async completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
     const { serverUrl, id } = parseNggraphUrl(options.providerUrl);
-    const list = await options.chunkManager.memoize.getUncounted(
+    const list = await options.registry.chunkManager.memoize.getAsync(
       { type: "nggraph:list", serverUrl },
-      async () => {
+      options,
+      async (progressOptions) => {
         return parseListResponse(
-          await nggraphServerFetch(options.chunkManager, serverUrl, "/list", {
-            method: "POST",
-          }),
+          await nggraphServerFetch(
+            options.registry.chunkManager,
+            serverUrl,
+            "/list",
+            {
+              method: "POST",
+              ...progressOptions,
+            },
+          ),
         );
       },
     );

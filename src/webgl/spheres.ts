@@ -19,7 +19,7 @@
  */
 
 import { RefCounted } from "#src/util/disposable.js";
-import type { Buffer } from "#src/webgl/buffer.js";
+import type { GLBuffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -71,8 +71,8 @@ export function getSphereIndexArray(
 }
 
 export class SphereRenderHelper extends RefCounted {
-  private vertexBuffer: Buffer;
-  private indexBuffer: Buffer;
+  private vertexBuffer: GLBuffer;
+  private indexBuffer: GLBuffer;
   private numIndices: number;
 
   constructor(gl: GL, latitudeBands: number, longitudeBands: number) {

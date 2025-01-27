@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
-import { ObjDataSource } from "#src/datasource/obj/frontend.js";
+import {
+  registerKvStoreBasedDataProvider,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
+import { SingleMeshDataSource } from "#src/single_mesh/frontend.js";
 
-registerProvider("obj", () => new ObjDataSource());
+const provider = new SingleMeshDataSource("obj", "Wavefront OBJ mesh");
+registerKvStoreBasedDataProvider(provider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));

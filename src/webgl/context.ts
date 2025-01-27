@@ -41,9 +41,13 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
     throw new Error("WebGL not supported.");
   }
   gl.memoize = new Memoize<any, RefCounted>();
-  gl.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  gl.max3dTextureSize = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
-  gl.maxTextureImageUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+  gl.maxTextureSize = gl.getParameter(WebGL2RenderingContext.MAX_TEXTURE_SIZE);
+  gl.max3dTextureSize = gl.getParameter(
+    WebGL2RenderingContext.MAX_3D_TEXTURE_SIZE,
+  );
+  gl.maxTextureImageUnits = gl.getParameter(
+    WebGL2RenderingContext.MAX_TEXTURE_IMAGE_UNITS,
+  );
   gl.tempTextureUnit = gl.maxTextureImageUnits - 1;
 
   // FIXME: verify that we received a stencil buffer

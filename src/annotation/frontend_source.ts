@@ -61,7 +61,7 @@ import { ENDIANNESS, Endianness } from "#src/util/endian.js";
 import * as matrix from "#src/util/matrix.js";
 import type { Signal } from "#src/util/signal.js";
 import { NullarySignal } from "#src/util/signal.js";
-import type { Buffer } from "#src/webgl/buffer.js";
+import type { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
@@ -90,7 +90,7 @@ export function computeNumPickIds(
 }
 
 export class AnnotationGeometryData {
-  buffer: Buffer | undefined;
+  buffer: GLBuffer | undefined;
   bufferValid = false;
   serializedAnnotations: SerializedAnnotations;
   numPickIds = 0;

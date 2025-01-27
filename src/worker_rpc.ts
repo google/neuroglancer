@@ -16,6 +16,12 @@
 
 import { promiseWithResolversAndAbortCallback } from "#src/util/abort.js";
 import { RefCounted } from "#src/util/disposable.js";
+import type {
+  ProgressListener,
+  ProgressOptions,
+  ProgressSpanId,
+} from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 export type RPCHandler = (this: RPC, x: any) => void;
 
@@ -29,6 +35,8 @@ const DEBUG_MESSAGES = false;
 
 const PROMISE_RESPONSE_ID = "rpc.promise.response";
 const PROMISE_CANCEL_ID = "rpc.promise.cancel";
+const PROMISE_PROGRESS_ADD_SPAN_ID = "rpc.promise.addProgressSpan";
+const PROMISE_PROGRESS_REMOVE_SPAN_ID = "rpc.promise.removeProgressSpan";
 const READY_ID = "rpc.ready";
 
 const handlers = new Map<string, RPCHandler>();
@@ -39,27 +47,49 @@ export function registerRPC(key: string, handler: RPCHandler) {
 
 export type RPCPromise<T> = Promise<{ value: T; transfers?: any[] }>;
 
-export class RPCError extends Error {
+class ProxyProgressListener implements ProgressListener {
   constructor(
-    public name: string,
-    public message: string,
-  ) {
-    super(message);
+    private rpc: RPC,
+    private id: number,
+  ) {}
+
+  addSpan(span: ProgressSpan) {
+    this.rpc.invoke(PROMISE_PROGRESS_ADD_SPAN_ID, {
+      id: this.id,
+      span: {
+        id: span.id,
+        message: span.message,
+        startTime: span.startTime,
+      },
+    });
+  }
+  removeSpan(spanId: ProgressSpanId) {
+    this.rpc.invoke(PROMISE_PROGRESS_REMOVE_SPAN_ID, {
+      id: this.id,
+      spanId,
+    });
   }
 }
 
 export function registerPromiseRPC<T>(
   key: string,
-  handler: (this: RPC, x: any, abortSignal: AbortSignal) => RPCPromise<T>,
+  handler: (
+    this: RPC,
+    x: any,
+    progressOptions: Partial<ProgressOptions>,
+  ) => RPCPromise<T>,
 ) {
   registerRPC(key, function (this: RPC, x: any) {
     const id = <number>x.id;
     const abortController = new AbortController();
-    const promise = handler.call(
-      this,
-      x,
-      abortController.signal,
-    ) as RPCPromise<T>;
+    let progressListener: ProgressListener | undefined;
+    if (x.progressListener === true) {
+      progressListener = new ProxyProgressListener(this, id);
+    }
+    const promise = handler.call(this, x, {
+      signal: abortController.signal,
+      progressListener,
+    }) as RPCPromise<T>;
     this.set(id, { promise, abortController });
     promise.then(
       ({ value, transfers }) => {
@@ -70,8 +100,7 @@ export function registerPromiseRPC<T>(
         this.delete(id);
         this.invoke(PROMISE_RESPONSE_ID, {
           id: id,
-          error: error.message,
-          errorName: error.name,
+          error: error,
         });
       },
     );
@@ -94,8 +123,20 @@ registerRPC(PROMISE_RESPONSE_ID, function (this: RPC, x: any) {
   if (Object.prototype.hasOwnProperty.call(x, "value")) {
     resolve(x.value);
   } else {
-    reject(new RPCError(x.errorName, x.error));
+    reject(x.error);
   }
+});
+
+registerRPC(PROMISE_PROGRESS_ADD_SPAN_ID, function (this: RPC, x: any) {
+  const id = <number>x.id;
+  const { progressListener } = this.get(id);
+  new ProgressSpan(progressListener, x.span);
+});
+
+registerRPC(PROMISE_PROGRESS_REMOVE_SPAN_ID, function (this: RPC, x: any) {
+  const id = <number>x.id;
+  const { progressListener } = this.get(id);
+  progressListener.removeSpan(x.spanId);
 });
 
 registerRPC(READY_ID, function (this: RPC, x: any) {
@@ -125,6 +166,10 @@ export class RPC {
       const data = e.data;
       if (DEBUG_MESSAGES) {
         console.log("Received message", data);
+      }
+      const handler = handlers.get(data.functionName);
+      if (handler === undefined) {
+        throw new Error(`Missing RPC function: ${data.functionName}`);
       }
       handlers.get(data.functionName)!.call(this, data);
     };
@@ -193,21 +238,33 @@ export class RPC {
   promiseInvoke<T>(
     name: string,
     x: any,
-    abortSignal?: AbortSignal | undefined,
-    transfers?: any[],
+    options?: {
+      signal?: AbortSignal;
+      progressListener?: ProgressListener;
+      transfers?: any[];
+    },
   ): Promise<T> {
-    if (abortSignal?.aborted) {
-      return Promise.reject(abortSignal.reason);
+    let signal: AbortSignal | undefined;
+    let progressListener: ProgressListener | undefined;
+    let transfers: any[] | undefined;
+    if (options !== undefined) {
+      ({ signal, progressListener, transfers } = options);
+    }
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
+    if (progressListener !== undefined) {
+      x.progressListener = true;
     }
     const id = (x.id = this.newId());
     this.invoke(name, x, transfers);
     const { promise, resolve, reject } =
-      abortSignal === undefined
+      signal === undefined
         ? Promise.withResolvers<T>()
-        : promiseWithResolversAndAbortCallback<T>(abortSignal, () => {
+        : promiseWithResolversAndAbortCallback<T>(signal, () => {
             this.invoke(PROMISE_CANCEL_ID, { id: id });
           });
-    this.set(id, { resolve, reject });
+    this.set(id, { resolve, reject, progressListener });
     return promise;
   }
 

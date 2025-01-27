@@ -55,10 +55,13 @@ export default tseslint.config(
 
       "no-constant-condition": "off",
 
+      "no-unused-disable": "off",
+
       "@typescript-eslint/no-unused-vars": [
         "error",
         {
           argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
           ignoreRestSiblings: true,
         },
       ],
@@ -68,19 +71,16 @@ export default tseslint.config(
       "no-unsafe-finally": "off",
       "require-yield": "off",
       "no-inner-declarations": "off",
+
+      // Supported by oxlint
+      "import/namespace": "off",
+      "import/default": "off",
+
       "import/no-named-as-default": "off",
       "import/no-named-as-default-member": "off",
-      "import/no-cycle": [
-        "error",
-        {
-          ignoreExternal: true,
-          disableScc: true,
-        },
-      ],
       "@typescript-eslint/consistent-type-imports": "error",
       "import/no-unresolved": "error",
       "import/no-extraneous-dependencies": "error",
-      "import/first": "error",
 
       "import/order": [
         "error",

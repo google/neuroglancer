@@ -24,7 +24,7 @@ import type { AttributeIndex } from "#src/webgl/shader.js";
 export type BufferType = number;
 export type WebGLDataType = number;
 export type WebGLBufferUsage = number;
-export class Buffer implements Disposable {
+export class GLBuffer implements Disposable {
   buffer: WebGLBuffer | null;
   constructor(
     public gl: WebGL2RenderingContext,
@@ -98,7 +98,7 @@ export class Buffer implements Disposable {
     bufferType?: BufferType,
     usage?: WebGLBufferUsage,
   ) {
-    const buffer = new Buffer(gl, bufferType);
+    const buffer = new GLBuffer(gl, bufferType);
     buffer.setData(data, usage);
     return buffer;
   }
@@ -118,7 +118,7 @@ export function getMemoizedBuffer(
     }),
     () => {
       const result = new RefCountedValue(
-        Buffer.fromData(
+        GLBuffer.fromData(
           gl,
           getter(...args),
           bufferType,
