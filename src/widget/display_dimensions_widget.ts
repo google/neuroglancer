@@ -145,8 +145,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     const scaleUpdate = () => {
       const { canonicalVoxelFactors, displayDimensionScales } =
         this.displayDimensionRenderInfo.value;
-      // If the scale ends with /px, remove it
-      const formattedScale = scale.value.replace(/\/px$/, "");
+      // If the scale ends with /px or /vh, remove it
+      const formattedScale = scale.value.replace(/\/px$|\/vh$/, "");
       const parsedScale = parseScale(formattedScale);
       console.log(
         parsedScale,
