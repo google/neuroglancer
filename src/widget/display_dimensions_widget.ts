@@ -50,7 +50,7 @@ interface DimensionWidget {
   container: HTMLDivElement;
   name: HTMLInputElement;
   scaleFactor: HTMLInputElement;
-  scale: HTMLSpanElement;
+  scale: HTMLInputElement;
   scaleFactorModified: boolean;
 }
 
@@ -135,12 +135,46 @@ export class DisplayDimensionsWidget extends RefCounted {
     scaleFactorContainer.appendChild(scaleFactor);
     container.appendChild(scaleFactorContainer);
 
-    const scale = document.createElement("span");
+    const scale = document.createElement("input");
     scale.classList.add("neuroglancer-display-dimensions-widget-scale");
     scale.style.gridColumn = "3";
     scale.style.gridRow = `${i + 1}`;
     container.appendChild(scale);
     this.dimensionGridContainer.appendChild(container);
+
+    const scaleUpdate = () => {
+      const { canonicalVoxelFactors, displayDimensionScales } =
+        this.displayDimensionRenderInfo.value;
+      // If the scale ends with /px, remove it
+      const formattedScale = scale.value.replace(/\/px$/, "");
+      const parsedScale = parseScale(formattedScale);
+      console.log(
+        parsedScale,
+        canonicalVoxelFactors[i],
+        displayDimensionScales[i],
+      );
+      if (!parsedScale) {
+        // If the input is invalid, reset the scale to the current value
+        this.updateView();
+        return;
+      }
+      const desiredZoomLevel =
+        (parsedScale.scale * canonicalVoxelFactors[i]) /
+        displayDimensionScales[i];
+      this.zoom.value = desiredZoomLevel;
+    };
+
+    const debouncedScaleUpdate = debounce(scaleUpdate, 1500);
+    // In regular typing, the input event is fired in a debounced manner
+    // If the user presses enter, the input event is fired immediately
+    // And the same if the user leaves the input field
+    scale.addEventListener("input", debouncedScaleUpdate);
+    scale.addEventListener("keyup", ({ key }) => {
+      if (key === "Enter") {
+        debouncedScaleUpdate.flush();
+      }
+    });
+    scale.addEventListener("blur", debouncedScaleUpdate.flush);
 
     const dimWidget: DimensionWidget = {
       name,
@@ -346,26 +380,6 @@ export class DisplayDimensionsWidget extends RefCounted {
     const { depthGridContainer } = this;
     depthGridContainer.classList.add("neuroglancer-depth-range-widget-grid");
     element.appendChild(depthGridContainer);
-
-    // TODO skm combine this into the scale representation box
-    // Takes a scale factor and sets the zoom level to the desired scale
-    // const setScaleInputBox = document.createElement("input");
-    // setScaleInputBox.type = "number";
-    // setScaleInputBox.step = "any";
-    // setScaleInputBox.min = "-1";
-    // setScaleInputBox.max = "Infinity";
-    // element.appendChild(setScaleInputBox);
-    // setScaleInputBox.addEventListener("input", () => {
-    //   const { canonicalVoxelFactors, displayDimensionScales } =
-    //     this.displayDimensionRenderInfo.value;
-    //   const scale = Number(setScaleInputBox.value);
-    //   // TEMP just take the first
-    //   const i = 0;
-    //   const desiredZoomLevel =
-    //     (scale * canonicalVoxelFactors[i]) / displayDimensionScales[i];
-    //   this.zoom.value = desiredZoomLevel;
-    // });
-    // TODO skm - use similar logic to the above to link up the FOV input boxes
 
     const relativeCheckboxLabel = document.createElement("label");
     const relativeCheckbox = document.createElement("input");
@@ -635,7 +649,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       dimElements.container.dataset.isModified = (dim === -1).toString();
       if (dim === -1) {
         dimElements.name.value = "";
-        dimElements.scale.textContent = "";
+        dimElements.scale.value = "";
         dimElements.scaleFactor.value = "";
       } else {
         dimElements.name.value = globalDimensionNames[dim];
@@ -647,9 +661,9 @@ export class DisplayDimensionsWidget extends RefCounted {
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
+          dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
         } else {
-          dimElements.scale.textContent = "";
+          dimElements.scale.value = "";
         }
         dimElements.scaleFactor.value = formatScaleFactor(factors[dim]);
       }
