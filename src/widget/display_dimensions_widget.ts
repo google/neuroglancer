@@ -661,9 +661,12 @@ export class DisplayDimensionsWidget extends RefCounted {
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
+          // TODO clean this up a little if need for the show/hide behaviour
           dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
+          dimElements.scale.style.display = "";
         } else {
           dimElements.scale.value = "";
+          dimElements.scale.style.display = "none";
         }
         dimElements.scaleFactor.value = formatScaleFactor(factors[dim]);
       }
