@@ -21,7 +21,10 @@ import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import {
+  observeWatchable,
+  type WatchableValueInterface,
+} from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -45,6 +48,7 @@ class LayerWidget extends RefCounted {
   prefetchProgress = document.createElement("div");
   labelElementText = document.createTextNode("");
   valueElement = document.createElement("div");
+  layerColorElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
 
@@ -61,6 +65,7 @@ class LayerWidget extends RefCounted {
       visibleProgress,
       prefetchProgress,
       labelElementText,
+      layerColorElement,
     } = this;
     element.className = "neuroglancer-layer-item neuroglancer-noselect";
     element.appendChild(visibleProgress);
@@ -103,7 +108,24 @@ class LayerWidget extends RefCounted {
       deleteLayer(this.layer);
       event.stopPropagation();
     });
+
+    const layerColorElementWrapper = document.createElement("div");
+    layerColorElementWrapper.className =
+      "neuroglancer-layer-color-value-wrapper";
+    layerColorElement.className = "neuroglancer-layer-color-value";
+    layerColorElementWrapper.appendChild(layerColorElement);
+
+    this.registerDisposer(
+      observeWatchable((layerColorEnabled) => {
+        layerColorElementWrapper.style.display = layerColorEnabled
+          ? "block"
+          : "none";
+      }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget),
+    );
+
+    // Compose the layer's title bar
     element.appendChild(layerNumberElement);
+    element.appendChild(layerColorElementWrapper);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
     buttonContainer.appendChild(closeElement);
@@ -151,7 +173,7 @@ class LayerWidget extends RefCounted {
   }
 
   update() {
-    const { layer, element } = this;
+    const { layer, element, panel, layerColorElement } = this;
     this.labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
     element.dataset.selected = (
@@ -168,6 +190,24 @@ class LayerWidget extends RefCounted {
     }
     title += ", drag to move, shift+drag to copy";
     element.title = title;
+    // Color widget updates
+    if (panel.layerGroupViewer.viewerState.enableLayerColorWidget.value) {
+      if (layer.supportsLayerBarColorSyncOption) {
+        const color = this.layer.layerBarColor;
+        if (color) {
+          element.dataset.color = "fixed";
+          layerColorElement.style.backgroundColor = color;
+        } else {
+          element.dataset.color = "rainbow";
+        }
+      } else {
+        layerColorElement.style.backgroundColor = "";
+        element.dataset.color = "unsupported";
+      }
+    }
+    layerColorElement.title =
+      layer.colorWidgetTooltip() ||
+      "The color of this layer cannot be determined";
   }
 
   disposed() {
@@ -212,6 +252,10 @@ export class LayerBar extends RefCounted {
     return this.layerGroupViewer.viewerNavigationState;
   }
 
+  get viewerState() {
+    return this.layerGroupViewer.viewerState;
+  }
+
   constructor(
     public layerGroupViewer: LayerGroupViewer,
     public getLayoutSpecForDrag: () => any,
@@ -229,7 +273,7 @@ export class LayerBar extends RefCounted {
       ),
     );
 
-    const { element, manager, selectedLayer } = this;
+    const { element, manager, selectedLayer, viewerState } = this;
     element.className = "neuroglancer-layer-panel";
     this.registerDisposer(
       manager.layerSelectedValues.changed.add(() => {
@@ -249,6 +293,11 @@ export class LayerBar extends RefCounted {
     this.registerDisposer(
       showLayerHoverValues.changed.add(() => {
         this.handleLayerItemValueChanged();
+      }),
+    );
+    this.registerDisposer(
+      viewerState.enableLayerColorWidget.changed.add(() => {
+        this.handleLayersChanged();
       }),
     );
     this.element.dataset.showHoverValues =
