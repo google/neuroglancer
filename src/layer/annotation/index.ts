@@ -45,7 +45,10 @@ import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import type { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
-import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
+import {
+  makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
+} from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -69,6 +72,12 @@ import {
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
+import {
+  addLayerControlToOptionsTab,
+  type LayerControlDefinition,
+  registerLayerControl,
+} from "#src/widget/layer_control.js";
+import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { RenderScaleWidget } from "#src/widget/render_scale_widget.js";
@@ -87,6 +96,7 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionAnnotationSpacing";
 const PROJECTION_RENDER_SCALE_JSON_KEY = "projectionAnnotationSpacing";
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
 
 function addPointAnnotations(annotations: LocalAnnotationSource, obj: any) {
   if (obj === undefined) {
@@ -455,6 +465,9 @@ export class AnnotationUserLayer extends Base {
     this.annotationDisplayState.shaderControls.restoreState(
       specification[SHADER_CONTROLS_JSON_KEY],
     );
+    this.annotationDisplayState.color.restoreState(
+      specification[ANNOTATION_COLOR_JSON_KEY],
+    );
   }
 
   getLegacyDataSourceSpecifications(
@@ -709,6 +722,7 @@ export class AnnotationUserLayer extends Base {
     x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] =
       this.annotationDisplayState.shaderControls.toJSON();
+    x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;
   }
@@ -742,6 +756,7 @@ class RenderingOptionsTab extends Tab {
     const { element } = this;
     this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-annotation-rendering-tab");
+
     element.appendChild(
       this.registerDisposer(
         new DependentViewWidget(
@@ -778,6 +793,7 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
+
     const topRow = document.createElement("div");
     topRow.className =
       "neuroglancer-segmentation-dropdown-skeleton-shader-header";
@@ -812,7 +828,51 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
+
+    const colorControlToolWidget = element.appendChild(
+      addLayerControlToOptionsTab(
+        this,
+        layer,
+        this.visibility,
+        LAYER_CONTROLS[ANNOTATION_COLOR_JSON_KEY],
+      ),
+    );
+    this.registerDisposer(
+      observeWatchable(
+        (hasDefaultColor) => {
+          if (hasDefaultColor) {
+            colorControlToolWidget.style.display = "";
+          } else {
+            colorControlToolWidget.style.display = "none";
+            this.layer.toolBinder.removeJsonString(ANNOTATION_COLOR_JSON_KEY);
+          }
+        },
+        makeCachedLazyDerivedWatchableValue(
+          (shader) => shader.match(/\bdefaultColor\b/) !== null,
+          layer.annotationDisplayState.shaderControls.processedFragmentMain,
+        ),
+      ),
+    );
   }
+}
+
+const LAYER_CONTROLS: Record<
+  string,
+  LayerControlDefinition<AnnotationUserLayer>
+> = {
+  [ANNOTATION_COLOR_JSON_KEY]: {
+    label: "Annotation color",
+    title:
+      "Annotation shader default color (enabled with 'defaultColor()' in the shader code)",
+    toolJson: ANNOTATION_COLOR_JSON_KEY,
+    ...colorLayerControl(
+      (layer: AnnotationUserLayer) => layer.annotationDisplayState.color,
+    ),
+  },
+};
+
+for (const control of Object.values(LAYER_CONTROLS)) {
+  registerLayerControl(AnnotationUserLayer, control);
 }
 
 registerLayerType(AnnotationUserLayer);
