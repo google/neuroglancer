@@ -15,6 +15,7 @@
  */
 
 import "#src/layer/image/style.css";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
@@ -49,6 +50,10 @@ import {
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { trackableBlendModeValue } from "#src/trackable_blend.js";
+import {
+  TrackableBoolean,
+  ElementVisibilityFromTrackableBoolean,
+} from "#src/trackable_boolean.js";
 import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -79,6 +84,7 @@ import {
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
@@ -105,6 +111,7 @@ import { Tab } from "#src/widget/tab_view.js";
 const OPACITY_JSON_KEY = "opacity";
 const BLEND_JSON_KEY = "blend";
 const SHADER_JSON_KEY = "shader";
+const CODE_VISIBLE_KEY = "codeVisible";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
@@ -124,6 +131,7 @@ const [
 export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
+  codeVisible = new TrackableBoolean(true);
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
@@ -204,6 +212,7 @@ export class ImageUserLayer extends Base {
       isLocalDimension;
     this.blendMode.changed.add(this.specificationChanged.dispatch);
     this.opacity.changed.add(this.specificationChanged.dispatch);
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.volumeRenderingGain.changed.add(this.specificationChanged.dispatch);
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
@@ -293,6 +302,7 @@ export class ImageUserLayer extends Base {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
+    this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     verifyOptionalObjectProperty(specification, BLEND_JSON_KEY, (blendValue) =>
       this.blendMode.restoreState(blendValue),
     );
@@ -338,6 +348,7 @@ export class ImageUserLayer extends Base {
     const x = super.toJSON();
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
+    x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
@@ -541,6 +552,22 @@ class RenderingOptionsTab extends Tab {
     topRow.className = "neuroglancer-image-dropdown-top-row";
     topRow.appendChild(document.createTextNode("Shader"));
     topRow.appendChild(spacer);
+
+    this.registerDisposer(
+      new ElementVisibilityFromTrackableBoolean(
+        this.layer.codeVisible,
+        this.codeWidget.element,
+      ),
+    );
+
+    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
+      enableTitle: "Show code",
+      disableTitle: "Hide code",
+      backgroundScheme: "dark",
+      svg: svgCode,
+    });
+    topRow.appendChild(codeVisibilityControl.element);
+
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
@@ -562,6 +589,7 @@ class RenderingOptionsTab extends Tab {
         new ChannelDimensionsWidget(layer.channelCoordinateSpaceCombiner),
       ).element,
     );
+
     element.appendChild(this.codeWidget.element);
     element.appendChild(
       this.registerDisposer(
