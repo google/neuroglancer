@@ -23,22 +23,35 @@ import { vec3 } from "#src/util/geom.js";
 export class ColorWidget<
   Color extends vec3 | undefined = vec3,
 > extends RefCounted {
-  element = document.createElement("input");
+  static template() {
+    const element = document.createElement("input");
+    element.classList.add("neuroglancer-color-widget");
+    element.type = "color";
+    return element;
+  }
 
   constructor(
     public model: WatchableValueInterface<Color>,
     public getDefaultColor: () => vec3 = () => vec3.fromValues(1, 0, 0),
+    public element = ColorWidget.template(),
+    public unsetHandler = () => {},
+    enableWheel = true,
   ) {
     super();
-    const { element } = this;
-    element.classList.add("neuroglancer-color-widget");
-    element.type = "color";
     element.addEventListener("change", () => this.updateModel());
     element.addEventListener("input", () => this.updateModel());
-    element.addEventListener("wheel", (event) => {
-      event.stopPropagation();
-      event.preventDefault();
-      this.adjustHueViaWheel(event);
+    if (enableWheel) {
+      element.addEventListener("wheel", (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        this.adjustHueViaWheel(event);
+      });
+    }
+    element.addEventListener("mousedown", (evt) => {
+      if (evt.button === 2) {
+        evt.stopPropagation();
+        unsetHandler();
+      }
     });
     this.registerDisposer(model.changed.add(() => this.updateView()));
     this.updateView();
