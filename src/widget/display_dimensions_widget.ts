@@ -125,7 +125,10 @@ export class DisplayDimensionsWidget extends RefCounted {
   fovGridContainer = document.createElement("div");
   defaultCheckbox = document.createElement("input");
 
-  fovElements: HTMLInputElement[] = [];
+  fovInputElements: HTMLInputElement[] = [];
+  fovNameElements: HTMLSpanElement[] = [];
+
+  axes: NamedAxes | undefined | "zy";
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -304,21 +307,30 @@ export class DisplayDimensionsWidget extends RefCounted {
     return this.displayDimensionRenderInfo.relativeDisplayScales;
   }
 
+  /*
+   * Switches the axes between yz and zy
+   * This is because the conventional ordering is first dimension x-axis
+   * second dimension y-axis
+   * The xy and xz layouts both follow this ordering, but the yz layout does not
+   * in the yz layout, z is the x-axis and y is the y-axis, so its zy in this convention
+   */
+  normalizeAxes() {
+    this.axes = this.axes === "yz" ? "zy" : this.axes;
+  }
+
   constructor(
     public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
     public zoom: TrackableZoomInterface,
     public depthRange: Owned<TrackableDepthRange>,
-    public axes: NamedAxes | undefined | "zy",
+    inputAxes: NamedAxes | undefined,
     public panelBoundsUpdated: NullarySignal,
     public panelRenderViewport: RenderViewport,
     public displayUnit = "px",
   ) {
     super();
-    // The yz layout is actually a zy layout, z is the first dimension and y is the second
-    if (axes == "yz") {
-      axes = "zy";
-    }
-    const { element, dimensionGridContainer, defaultCheckbox } = this;
+    this.axes = inputAxes;
+    this.normalizeAxes();
+    const { element, dimensionGridContainer, defaultCheckbox, axes } = this;
     const defaultCheckboxLabel = document.createElement("label");
 
     const hideWidgetDetails = this.registerCancellable(
@@ -389,20 +401,26 @@ export class DisplayDimensionsWidget extends RefCounted {
         "neuroglancer-display-dimensions-widget-fov",
       );
       element.appendChild(fovGridContainer);
+      const topLevelFOVLabel = document.createElement("div");
+      topLevelFOVLabel.textContent = "Field of view:";
+      fovGridContainer.appendChild(topLevelFOVLabel);
       for (let i = 0; i < 2; ++i) {
         const container = document.createElement("div");
         container.classList.add(
           "neuroglancer-display-dimensions-widget-fov-container",
         );
         const label = document.createElement("span");
-        // TODO replace by looking up the actual name
-        label.textContent = axes[i];
+        this.fovNameElements.push(label);
+        const axisIndex = Axis[axes[i] as keyof typeof Axis];
+        console.log(axes, axisIndex);
+        label.textContent = "";
+        label.style.color = dimensionColors[axisIndex];
         container.appendChild(label);
         const input = document.createElement("input");
         input.spellcheck = false;
         input.autocomplete = "off";
         input.title = "Field of view";
-        this.fovElements.push(input);
+        this.fovInputElements.push(input);
         container.appendChild(input);
         fovGridContainer.appendChild(container);
 
@@ -712,7 +730,6 @@ export class DisplayDimensionsWidget extends RefCounted {
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          // TODO (skm) clean this up a little if need for the show/hide behaviour
           dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
         } else {
@@ -733,13 +750,13 @@ export class DisplayDimensionsWidget extends RefCounted {
           (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
         const pixelResolution = j === 0 ? width : height;
         const fieldOfView = totalScale * pixelResolution;
-        // TODO this is temp - needs correct unit
         const formattedFieldOfView = formatScaleWithUnitAsString(
           fieldOfView,
           "m",
           { precision: 3 },
         );
-        this.fovElements[j].value = formattedFieldOfView;
+        this.fovInputElements[j].value = formattedFieldOfView;
+        this.fovNameElements[j].textContent = globalDimensionNames[i];
       }
     }
   }
