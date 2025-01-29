@@ -96,6 +96,7 @@ else:
 class LayerSelectedValues(_LayerSelectedValuesBase):
     """Specifies the data values associated with the current mouse position."""
 
+
 @export
 class PanelResolutionData(JsonObjectWrapper):
     __slots__ = ()
@@ -104,12 +105,14 @@ class PanelResolutionData(JsonObjectWrapper):
     height = wrapped_property("height", int)
     resolution = wrapped_property("resolution", str)
 
+
 @export
 class LayerResolutionData(JsonObjectWrapper):
     __slots__ = ()
     name = wrapped_property("name", str)
     type = wrapped_property("type", str)
     resolution = wrapped_property("resolution", str)
+
 
 @export
 class ScreenshotResolutionMetadata(JsonObjectWrapper):

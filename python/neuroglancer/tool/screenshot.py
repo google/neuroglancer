@@ -626,6 +626,7 @@ def define_state_modification_args(ap: argparse.ArgumentParser):
         "--scale-bar-scale", type=float, help="Scale factor for scale bar", default=1
     )
 
+
 def apply_state_modifications(
     state: neuroglancer.ViewerState, args: argparse.Namespace
 ):
