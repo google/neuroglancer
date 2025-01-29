@@ -1964,14 +1964,11 @@ const GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID = "grapheneMulticutSegments";
 const GRAPHENE_MERGE_SEGMENTS_TOOL_ID = "grapheneMergeSegments";
 
 class MulticutAnnotationLayerView extends AnnotationLayerView {
-  private _annotationStates: MergedAnnotationStates;
-
   constructor(
     public layer: SegmentationUserLayer,
     public displayState: AnnotationDisplayState,
   ) {
-    super(layer, displayState);
-
+    super(layer, displayState, new MergedAnnotationStates());
     const {
       graphConnection: { value: graphConnection },
     } = layer;
@@ -1980,15 +1977,6 @@ class MulticutAnnotationLayerView extends AnnotationLayerView {
         this.annotationStates.add(state);
       }
     }
-  }
-
-  get annotationStates() {
-    if (this._annotationStates === undefined) {
-      this._annotationStates = this.registerDisposer(
-        new MergedAnnotationStates(),
-      );
-    }
-    return this._annotationStates;
   }
 }
 

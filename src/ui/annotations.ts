@@ -256,10 +256,6 @@ export class AnnotationLayerView extends Tab {
   private mutableControls = document.createElement("div");
   private headerRow = document.createElement("div");
 
-  get annotationStates() {
-    return this.layer.annotationStates;
-  }
-
   private attachedAnnotationStates = new Map<
     AnnotationLayerState,
     AnnotationLayerViewAttachedState
@@ -379,6 +375,7 @@ export class AnnotationLayerView extends Tab {
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
     public displayState: AnnotationDisplayState,
+    protected readonly annotationStates: MergedAnnotationStates = layer.annotationStates,
   ) {
     super();
     this.element.classList.add("neuroglancer-annotation-layer-view");
