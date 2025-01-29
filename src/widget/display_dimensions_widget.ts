@@ -348,6 +348,12 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.registerDisposer(
       displayDimensionRenderInfo.changed.add(this.scheduleUpdateView),
     );
+    this.registerDisposer(
+      this.panelPixelResolutionX.changed.add(this.scheduleUpdateView),
+    );
+    this.registerDisposer(
+      this.panelPixelResolutionY.changed.add(this.scheduleUpdateView),
+    );
     const keyboardHandler = this.registerDisposer(
       new KeyboardEventBinder(element, inputEventMap),
     );
@@ -360,7 +366,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         focused.blur();
       }
     });
-    
+
     // TODO need to handle update to this inputs
     if (axes !== undefined) {
       const { fovGridContainer } = this;
@@ -702,7 +708,11 @@ export class DisplayDimensionsWidget extends RefCounted {
           j === 0
             ? this.panel.pixelResolutionX.value
             : this.panel.pixelResolutionY.value;
-        console.log(pixelResolution, totalScale);
+        console.log(
+          this.panel.pixelResolutionX.value,
+          this.panel.pixelResolutionY.value,
+          this.panel.renderViewport,
+        );
         const fieldOfView = totalScale * pixelResolution;
         // TODO this is temp - needs correct unit
         const formattedFieldOfView = formatScaleWithUnitAsString(
@@ -710,7 +720,6 @@ export class DisplayDimensionsWidget extends RefCounted {
           "m",
           { precision: 2 },
         );
-        console.log(fieldOfView);
         this.fovElements[j].value = formattedFieldOfView;
       }
     }

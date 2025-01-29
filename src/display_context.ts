@@ -23,13 +23,20 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
-import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
+import { parseFixedLengthArray, verifyFinitePositiveFloat, verifyFloat01 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
 import { initializeWebGL } from "#src/webgl/context.js";
 
 const DELAY_AFTER_CONTINUOUS_CAMERA_MOTION_MS = 300;
+
+export interface PanelViewport {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
 
 export class RenderViewport {
   // Width of visible portion of panel in canvas pixels.
@@ -114,6 +121,10 @@ export abstract class RenderedPanel extends RefCounted {
   canvasRelativeLogicalTop = 0;
 
   renderViewport = new RenderViewport();
+
+  boundsUpdated = new NullarySignal();
+  pixelResolutionX = new TrackableValue<number>(0.0, verifyFinitePositiveFloat);
+  pixelResolutionY = new TrackableValue<number>(0.0, verifyFinitePositiveFloat);
 
   private monitorState: PanelMonitorState = { isIntersecting: true };
 
@@ -227,6 +238,8 @@ export abstract class RenderedPanel extends RefCounted {
     viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
     viewport.visibleWidthFraction = clippedWidth / logicalWidth;
     viewport.visibleHeightFraction = clippedHeight / logicalHeight;
+    this.boundsUpdated.dispatch();
+    this.updatePixelResolution();
   }
 
   // Sets the viewport to the clipped viewport.  Any drawing must take
@@ -298,6 +311,27 @@ export abstract class RenderedPanel extends RefCounted {
       return false;
     }
     return true;
+  }
+
+  public get panelViewport(): PanelViewport {
+    const viewport = this.renderViewport;
+    const { width, height } = viewport;
+    const panelLeft = this.canvasRelativeClippedLeft;
+    const panelTop = this.canvasRelativeClippedTop;
+    const panelRight = panelLeft + width;
+    const panelBottom = panelTop + height;
+    return {
+      left: panelLeft,
+      right: panelRight,
+      top: panelTop,
+      bottom: panelBottom,
+    };
+  }
+
+  updatePixelResolution() {
+    const panelViewport = this.panelViewport;
+    this.pixelResolutionX.value = panelViewport.right - panelViewport.left;
+    this.pixelResolutionY.value = panelViewport.bottom - panelViewport.top;
   }
 
   // Returns a number that determine the order in which panels are drawn. This is used by CdfPanel
