@@ -90,6 +90,33 @@ const widgetFieldGetters: ((
  */
 const postActivityDisplayPeriod = 2000;
 
+/**
+ * Time in milliseconds to delay updating zoom after input is changed.
+ * To avoid updating zoom while user is typing.
+ */
+const zoomUpdateDelay = 1500;
+
+// In regular typing, the input event is fired in a debounced manner
+// If the user presses enter, the input event is fired immediately
+function handleDelayedZoomUpdate(
+  input: HTMLInputElement,
+  callback: () => void,
+) {
+  const debouncedCallback = debounce(callback, zoomUpdateDelay);
+  input.addEventListener("input", () => {
+    debouncedCallback();
+  });
+  input.addEventListener("keyup", ({ key }) => {
+    if (key === "Enter") {
+      debouncedCallback.flush();
+    }
+  });
+  // And the same if the user leaves the input field if needed
+  //input.addEventListener("blur", () => {
+  //  debouncedCallback.flush();
+  // });
+}
+
 export class DisplayDimensionsWidget extends RefCounted {
   element = document.createElement("div");
 
@@ -153,7 +180,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     container.appendChild(scale);
     this.dimensionGridContainer.appendChild(container);
 
-    const scaleUpdate = () => {
+    handleDelayedZoomUpdate(scale, () => {
       const { canonicalVoxelFactors, displayDimensionScales } =
         this.displayDimensionRenderInfo.value;
       // If the scale ends with /px or /vh, remove it
@@ -168,19 +195,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         (parsedScale.scale * canonicalVoxelFactors[i]) /
         displayDimensionScales[i];
       this.zoom.value = desiredZoomLevel;
-    };
-
-    const debouncedScaleUpdate = debounce(scaleUpdate, 1500);
-    // In regular typing, the input event is fired in a debounced manner
-    // If the user presses enter, the input event is fired immediately
-    // And the same if the user leaves the input field
-    scale.addEventListener("input", debouncedScaleUpdate);
-    scale.addEventListener("keyup", ({ key }) => {
-      if (key === "Enter") {
-        debouncedScaleUpdate.flush();
-      }
     });
-    scale.addEventListener("blur", debouncedScaleUpdate.flush);
 
     const dimWidget: DimensionWidget = {
       name,
@@ -289,18 +304,20 @@ export class DisplayDimensionsWidget extends RefCounted {
     return this.displayDimensionRenderInfo.relativeDisplayScales;
   }
 
-  // TODO skm - the constructor needs info on the panel dimensions shown
-  // This can happen the same way displayUnit is passed in
   constructor(
     public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
     public zoom: TrackableZoomInterface,
     public depthRange: Owned<TrackableDepthRange>,
-    public axes: NamedAxes | undefined,
+    public axes: NamedAxes | undefined | "zy",
     public panelBoundsUpdated: NullarySignal,
     public panelRenderViewport: RenderViewport,
     public displayUnit = "px",
   ) {
     super();
+    // The yz layout is actually a zy layout, z is the first dimension and y is the second
+    if (axes == "yz") {
+      axes = "zy";
+    }
     const { element, dimensionGridContainer, defaultCheckbox } = this;
     const defaultCheckboxLabel = document.createElement("label");
 
@@ -388,6 +405,26 @@ export class DisplayDimensionsWidget extends RefCounted {
         this.fovElements.push(input);
         container.appendChild(input);
         fovGridContainer.appendChild(container);
+
+        handleDelayedZoomUpdate(input, () => {
+          const { displayDimensionScales, canonicalVoxelFactors } =
+            this.displayDimensionRenderInfo.value;
+          const parsedFov = parseScale(input.value);
+          if (!parsedFov) {
+            // If the input is invalid, reset the FOV to the current value
+            this.updateView();
+            return;
+          }
+          const axisIndex = Axis[axes[i] as keyof typeof Axis];
+          const { width, height } = this.panelRenderViewport;
+          const pixelResolution = i === 0 ? width : height;
+          // Determine the desired zoom level
+          const parsedScale = parsedFov.scale / pixelResolution;
+          const desiredZoomLevel =
+            (parsedScale * canonicalVoxelFactors[axisIndex]) /
+            displayDimensionScales[axisIndex];
+          this.zoom.value = desiredZoomLevel;
+        });
       }
     }
 
@@ -675,7 +712,7 @@ export class DisplayDimensionsWidget extends RefCounted {
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          // TODO clean this up a little if need for the show/hide behaviour
+          // TODO (skm) clean this up a little if need for the show/hide behaviour
           dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
         } else {
