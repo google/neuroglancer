@@ -50,6 +50,12 @@ const dimensionColors = ["#f00", "#0f0", "#99f"];
 
 export type NamedAxes = "xy" | "xz" | "yz";
 
+enum Axis {
+  x = 0,
+  y = 1,
+  z = 2,
+}
+
 interface DimensionWidget {
   container: HTMLDivElement;
   name: HTMLInputElement;
@@ -683,16 +689,9 @@ export class DisplayDimensionsWidget extends RefCounted {
     }
     // Update the FOV fields
     if (this.axes !== undefined) {
-      // TODO enum cleaner
-      const axesMap = new Map([
-        ["x", 0],
-        ["y", 1],
-        ["z", 2],
-      ]);
       const { width, height } = this.panelRenderViewport;
       for (let j = 0; j < 2; j++) {
-        const axis = this.axes[j];
-        const i = axesMap.get(axis)!;
+        const i = Axis[this.axes[j] as keyof typeof Axis];
         const totalScale =
           (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
         const pixelResolution = j === 0 ? width : height;
