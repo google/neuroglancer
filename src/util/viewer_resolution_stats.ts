@@ -100,7 +100,7 @@ export function getViewerLayerResolutions(
   ): DimensionResolutionStats[] {
     if (resolution === undefined) return [];
 
-    const resolution_stats: DimensionResolutionStats[] = [];
+    const resolutionStats: DimensionResolutionStats[] = [];
     const {
       globalDimensionNames,
       displayDimensionUnits,
@@ -133,7 +133,7 @@ export function getViewerLayerResolutions(
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          resolution_stats.push({
+          resolutionStats.push({
             panelType: parentType,
             resolutionWithUnit: `${formattedScale}`,
             dimensionName: singleScale ? "All_" : dimensionName,
@@ -141,7 +141,7 @@ export function getViewerLayerResolutions(
         }
       }
     }
-    return resolution_stats;
+    return resolutionStats;
   }
 
   const layers = viewer.layerManager.visibleRenderLayers;
@@ -247,7 +247,7 @@ export function getViewerPanelResolutions(
       panelDimensionUnit,
     }: { panelType: string; panelDimensionUnit: string } =
       determinePanelTypeAndUnit(panel);
-    const panel_resolution: PanelResolutionStats = {
+    const panelResolution: PanelResolutionStats = {
       pixelResolution: {
         left: panelLeft,
         right: panelRight,
@@ -257,7 +257,7 @@ export function getViewerPanelResolutions(
       },
       physicalResolution: [],
     };
-    const { physicalResolution } = panel_resolution;
+    const { physicalResolution } = panelResolution;
     const { navigationState } = panel;
     const {
       displayDimensionIndices,
@@ -303,7 +303,7 @@ export function getViewerPanelResolutions(
         }
       }
     }
-    resolutions.push(panel_resolution);
+    resolutions.push(panelResolution);
   }
 
   // Filter out panels with the same resolution if onlyUniqueResolutions is true.
