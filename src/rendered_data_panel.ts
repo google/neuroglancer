@@ -55,7 +55,6 @@ export interface RenderedDataViewerState extends ViewerState {
   inputEventMap: EventActionMap;
 }
 
-// TODO replace by combined trackable separate x and y
 export class FramePickingData {
   pickIDs = new PickIDManager();
   viewportWidth = 0;

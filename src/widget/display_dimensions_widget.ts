@@ -394,7 +394,6 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     });
 
-    // TODO need to handle update to this inputs
     if (axes !== undefined) {
       const { fovGridContainer } = this;
       fovGridContainer.classList.add(

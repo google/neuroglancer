@@ -210,7 +210,6 @@ function addDisplayDimensionsWidget(
   axes: NamedAxes | undefined,
 ) {
   const { navigationState } = panel;
-  // TODO temp, would rather avoid tying to panel
   panel.element.appendChild(
     layout.registerDisposer(
       new DisplayDimensionsWidget(
