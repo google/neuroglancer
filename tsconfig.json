@@ -34,5 +34,7 @@
     "testdata",
     "examples",
     "config",
+    "docs",
+    "ngauth_server",
   ],
 }

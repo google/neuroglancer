@@ -1,3 +1,5 @@
+.. _python-api:
+
 API Reference
 =============
 
