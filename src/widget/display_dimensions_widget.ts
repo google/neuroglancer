@@ -750,23 +750,26 @@ export class DisplayDimensionsWidget extends RefCounted {
     // Update the FOV fields
     if (this.axes !== undefined) {
       const { width, height } = this.panelRenderViewport;
-      for (let j = 0; j < 2; j++) {
-        const i = Axis[this.axes[j] as keyof typeof Axis];
+      for (let i = 0; i < 2; i++) {
+        const localAxisIndex = Axis[this.axes[i] as keyof typeof Axis];
+        const globalDimIndex = displayDimensionIndices[localAxisIndex];
         const totalScale =
-          (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
-        const pixelResolution = j === 0 ? width : height;
+          (displayDimensionScales[localAxisIndex] * zoom) /
+          canonicalVoxelFactors[localAxisIndex];
+        const pixelResolution = i === 0 ? width : height;
         const fieldOfView = totalScale * pixelResolution;
         const formattedFieldOfView = formatScaleWithUnitAsString(
           fieldOfView,
-          displayDimensionUnits[i],
+          displayDimensionUnits[localAxisIndex],
           { precision: 3, elide1: false },
         );
-        this.fovInputElements[j].value = formattedFieldOfView;
+        this.fovInputElements[i].value = formattedFieldOfView;
         updateInputFieldWidth(
-          this.fovInputElements[j],
+          this.fovInputElements[i],
           formattedFieldOfView.length + 1,
         );
-        this.fovNameElements[j].textContent = globalDimensionNames[i];
+        this.fovNameElements[i].textContent =
+          globalDimensionNames[globalDimIndex];
       }
     }
   }
