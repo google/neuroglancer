@@ -153,7 +153,10 @@ python_apigen_rst_prolog = """
 """
 
 
-json_schemas = ["json_schema/*.yml"]
+json_schemas = [
+    "json_schema/*.yml",
+    "**/json_schema/*.yml",
+]
 
 rst_prolog = """
 .. role:: python(code)
