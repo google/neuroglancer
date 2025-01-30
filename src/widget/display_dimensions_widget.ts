@@ -98,10 +98,7 @@ const zoomUpdateDelay = 1500;
 
 // In regular typing, the input event is fired in a debounced manner
 // If the user presses enter, the input event is fired immediately
-function handleDelayedZoomUpdate(
-  input: HTMLInputElement,
-  callback: () => void,
-) {
+function debouncedZoomUpdate(input: HTMLInputElement, callback: () => void) {
   const debouncedCallback = debounce(callback, zoomUpdateDelay);
   input.addEventListener("input", () => {
     debouncedCallback();
@@ -183,13 +180,16 @@ export class DisplayDimensionsWidget extends RefCounted {
     container.appendChild(scale);
     this.dimensionGridContainer.appendChild(container);
 
-    handleDelayedZoomUpdate(scale, () => {
-      const { canonicalVoxelFactors, displayDimensionScales } =
-        this.displayDimensionRenderInfo.value;
+    debouncedZoomUpdate(scale, () => {
+      const {
+        canonicalVoxelFactors,
+        displayDimensionScales,
+        displayDimensionUnits,
+      } = this.displayDimensionRenderInfo.value;
       // If the scale ends with /px or /vh, remove it
       const formattedScale = scale.value.replace(`/${this.displayUnit}`, "");
       const parsedScale = parseScale(formattedScale);
-      if (!parsedScale) {
+      if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
         // If the input is invalid, reset the scale to the current value
         this.updateView();
         return;
@@ -365,7 +365,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     });
     defaultCheckbox.type = "checkbox";
     defaultCheckboxLabel.appendChild(defaultCheckbox);
-    defaultCheckboxLabel.appendChild(document.createTextNode("Default"));
+    defaultCheckboxLabel.appendChild(document.createTextNode("Default dims"));
     defaultCheckboxLabel.title = "Display first 3 dimensions";
     defaultCheckboxLabel.classList.add(
       "neuroglancer-display-dimensions-widget-default",
@@ -411,7 +411,6 @@ export class DisplayDimensionsWidget extends RefCounted {
         const label = document.createElement("span");
         this.fovNameElements.push(label);
         const axisIndex = Axis[axes[i] as keyof typeof Axis];
-        console.log(axes, axisIndex);
         label.textContent = "";
         label.style.color = dimensionColors[axisIndex];
         container.appendChild(label);
@@ -423,12 +422,16 @@ export class DisplayDimensionsWidget extends RefCounted {
         container.appendChild(input);
         fovGridContainer.appendChild(container);
 
-        handleDelayedZoomUpdate(input, () => {
-          const { displayDimensionScales, canonicalVoxelFactors } =
-            this.displayDimensionRenderInfo.value;
+        debouncedZoomUpdate(input, () => {
+          const {
+            displayDimensionScales,
+            canonicalVoxelFactors,
+            displayDimensionUnits,
+          } = this.displayDimensionRenderInfo.value;
           const parsedFov = parseScale(input.value);
-          if (!parsedFov) {
-            // If the input is invalid, reset the FOV to the current value
+          if (!parsedFov || parsedFov.unit !== displayDimensionUnits[i]) {
+            // If the input is invalid or the wrong unit
+            // reset the input states to the previous values
             this.updateView();
             return;
           }
