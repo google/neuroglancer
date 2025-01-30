@@ -2475,21 +2475,77 @@ export class AutoUserLayer extends UserLayer {
     const bestGuess = detectLayerTypeFromSubsources(subsources);
     const layerConstructor = bestGuess?.layerConstructor;
     const numChannels = bestGuess?.numChannels;
-    console.log(layerConstructor, numChannels);
     if (layerConstructor !== undefined) {
-      if (numChannels !== undefined && numChannels !== 1) {
-        // TODO temp - get real subsource or pass many to FN
-        console.log("Creating new layer");
-        createNewLayerAsMultichannelLayers(
-          this.managedLayer,
-          numChannels,
-          this.manager,
-          layerConstructor,
-        );
-      } else {
-        changeLayerType(this.managedLayer, layerConstructor);
-      }
+      changeLayerType(this.managedLayer, layerConstructor);
+      // if (numChannels !== undefined && numChannels !== 1) {
+      //   // TODO temp - get real subsource or pass many to FN
+      //   console.log("Creating new layer");
+      //   createNewLayerAsMultichannelLayers(
+      //     this.managedLayer,
+      //     numChannels,
+      //     this.manager,
+      //     layerConstructor,
+      //   );
+      // } else {
+      // changeLayerType(this.managedLayer, layerConstructor);
+      // }
     }
+    // Only work on image layers for this
+    if (this.managedLayer.layer?.type === "image") {
+      // console.log("Image layer");
+      // const coordSpace = this.managedLayer.layer.channelCoordinateSpace!;
+      // console.log(coordSpace);
+      console.log(this.managedLayer.layer.localCoordinateSpaceCombiner);
+      // console.log(
+      //   this.managedLayer.layer.localCoordinateSpaceCombiner
+      //     .includeDimensionPredicate,
+      // );
+      // Iterate over the dimensions and check if they are local or channel
+      // const { localCoordinateSpaceCombiner } = this.managedLayer.layer;
+      // const channelMap = localCoordinateSpaceCombiner.dimensionRefCounts;
+
+      // Grab all local dimensions (' or =) TODO this might also capture the local ones
+      const { localCoordinateSpace } = this.managedLayer;
+      console.log(localCoordinateSpace);
+      const localDimensionRank = localCoordinateSpace.value.rank;
+      const { lowerBounds, upperBounds } = localCoordinateSpace.value.bounds;
+      const numLocalsInEachDimension = [];
+      console.log(localDimensionRank, localCoordinateSpace.value);
+      for (let i = 0; i < localDimensionRank; i++) {
+        console.log(lowerBounds[i], upperBounds[i]);
+        numLocalsInEachDimension.push(upperBounds[i] - lowerBounds[i]);
+      }
+
+      // Grab all channel dimensions (^)
+      const { channelCoordinateSpace } = this.managedLayer.layer as unknown as {
+        channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
+      };
+      const channelDimensionRank = channelCoordinateSpace.value.rank;
+      const channelBounds = channelCoordinateSpace.value.bounds;
+      const numChannelsInEachChannelDimension = [];
+      const { lowerBounds: chanLowerBounds, upperBounds: chanUpperBounds } =
+        channelBounds;
+      for (let i = 0; i < channelDimensionRank; i++) {
+        numChannelsInEachChannelDimension.push(
+          chanUpperBounds[i] - chanLowerBounds[i],
+        );
+      }
+      console.log(numLocalsInEachDimension, numChannelsInEachChannelDimension);
+
+      // TODO Loop over these and make a new layer for each one with the appropriate channel
+
+      // for (const [dim, count] of channelMap) {
+      //   console.log(dim, count);
+      //   if (isLocalOrChannelDimension(dim)) {
+      //     console.log("Local or channel dimension");
+      //     // Count the number of channels for this dimension
+      //     // If more than one, create a new layer for each
+      //     // The local - cord
+      //   }
+      // }
+    }
+
+    console.log(this.managedLayer.layer);
   }
 }
 
