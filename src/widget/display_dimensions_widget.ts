@@ -90,30 +90,6 @@ const widgetFieldGetters: ((
  */
 const postActivityDisplayPeriod = 2000;
 
-/**
- * Time in milliseconds to delay updating zoom after input is changed.
- * To avoid updating zoom while user is typing.
- */
-const zoomUpdateDelay = 1500;
-
-// In regular typing, the input event is fired in a debounced manner
-// If the user presses enter, the input event is fired immediately
-function debouncedZoomUpdate(input: HTMLInputElement, callback: () => void) {
-  const debouncedCallback = debounce(callback, zoomUpdateDelay);
-  input.addEventListener("input", () => {
-    debouncedCallback();
-  });
-  input.addEventListener("keyup", ({ key }) => {
-    if (key === "Enter") {
-      debouncedCallback.flush();
-    }
-  });
-  // And the same if the user leaves the input field if needed
-  //input.addEventListener("blur", () => {
-  //  debouncedCallback.flush();
-  // });
-}
-
 export class DisplayDimensionsWidget extends RefCounted {
   element = document.createElement("div");
 
@@ -179,25 +155,14 @@ export class DisplayDimensionsWidget extends RefCounted {
     scale.style.gridRow = `${i + 1}`;
     container.appendChild(scale);
     this.dimensionGridContainer.appendChild(container);
-
-    debouncedZoomUpdate(scale, () => {
-      const {
-        canonicalVoxelFactors,
-        displayDimensionScales,
-        displayDimensionUnits,
-      } = this.displayDimensionRenderInfo.value;
-      // If the scale ends with /px or /vh, remove it
-      const formattedScale = scale.value.replace(`/${this.displayUnit}`, "");
-      const parsedScale = parseScale(formattedScale);
-      if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
-        // If the input is invalid, reset the scale to the current value
-        this.updateView();
-        return;
-      }
-      const desiredZoomLevel =
-        (parsedScale.scale * canonicalVoxelFactors[i]) /
-        displayDimensionScales[i];
-      this.zoom.value = desiredZoomLevel;
+    scale.addEventListener("input", () => {
+      updateInputFieldWidth(scale);
+    });
+    scale.addEventListener("blur", () => {
+      this.updateZoomFromScale(i);
+    });
+    registerActionListener(scale, "commit", () => {
+      this.updateZoomFromScale(i);
     });
 
     const dimWidget: DimensionWidget = {
@@ -267,6 +232,70 @@ export class DisplayDimensionsWidget extends RefCounted {
     const newFactors = new Float64Array(factors);
     newFactors[dim] *= 2 ** -sign;
     relativeDisplayScales.setFactors(newFactors);
+  }
+
+  private updateZoomFromScale(i: number) {
+    const {
+      canonicalVoxelFactors,
+      displayDimensionScales,
+      displayDimensionUnits,
+    } = this.displayDimensionRenderInfo.value;
+    // If the scale ends with /px or /vh, remove it
+    const scale = this.dimensionElements[i].scale;
+    const formattedScale = scale.value.replace(`/${this.displayUnit}`, "");
+    const parsedScale = parseScale(formattedScale);
+    if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
+      // If the input is invalid, reset the scale to the current value
+      this.updateView();
+      return;
+    }
+    const desiredZoomLevel =
+      (parsedScale.scale * canonicalVoxelFactors[i]) /
+      displayDimensionScales[i];
+    this.zoom.value = desiredZoomLevel;
+  }
+
+  private updateZoomFromFOV(i: number) {
+    if (this.axes === undefined) return;
+    const {
+      displayDimensionScales,
+      canonicalVoxelFactors,
+      displayDimensionUnits,
+    } = this.displayDimensionRenderInfo.value;
+    const input = this.fovInputElements[i];
+    const parsedFov = parseScale(input.value);
+    if (!parsedFov || parsedFov.unit !== displayDimensionUnits[i]) {
+      // If the input is invalid or the wrong unit
+      // reset the input states to the previous values
+      this.updateView();
+      return;
+    }
+    const axisIndex = Axis[this.axes[i] as keyof typeof Axis];
+    const { width, height } = this.panelRenderViewport;
+    const pixelResolution = i === 0 ? width : height;
+    // Determine the desired zoom level
+    const parsedScale = parsedFov.scale / pixelResolution;
+    const desiredZoomLevel =
+      (parsedScale * canonicalVoxelFactors[axisIndex]) /
+      displayDimensionScales[axisIndex];
+    this.zoom.value = desiredZoomLevel;
+  }
+
+  private updateScaleTooltip(i: number) {
+    const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
+    let dataUnits = displayDimensionUnits[i];
+    this.dimensionElements[i].scale.title =
+      `Display scale in ${dataUnits}/${this.displayUnit}`;
+  }
+
+  private updateFOVTooltip(i: number) {
+    if (this.axes === undefined) return;
+    const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
+    const dataUnits =
+      displayDimensionUnits[Axis[this.axes[i] as keyof typeof Axis]];
+    const pixelAxis = i === 0 ? "horizontal" : "vertical";
+    this.fovInputElements[i].title =
+      `Panel ${pixelAxis} field of view in ${dataUnits}`;
   }
 
   private updateNameValidity() {
@@ -404,46 +433,43 @@ export class DisplayDimensionsWidget extends RefCounted {
       topLevelFOVLabel.textContent = "Field of view:";
       fovGridContainer.appendChild(topLevelFOVLabel);
       for (let i = 0; i < 2; ++i) {
+        const axisIndex = Axis[axes[i] as keyof typeof Axis];
         const container = document.createElement("div");
         container.classList.add(
           "neuroglancer-display-dimensions-widget-fov-container",
         );
         const label = document.createElement("span");
-        this.fovNameElements.push(label);
-        const axisIndex = Axis[axes[i] as keyof typeof Axis];
-        label.textContent = "";
         label.style.color = dimensionColors[axisIndex];
-        container.appendChild(label);
+        this.fovNameElements.push(label);
+        const directionIndicator = document.createElement("span");
+        directionIndicator.textContent = i === 0 ? "(←→)" : "(↑↓)";
         const input = document.createElement("input");
         input.spellcheck = false;
         input.autocomplete = "off";
-        input.title = "Field of view";
         this.fovInputElements.push(input);
+        container.appendChild(label);
+        container.appendChild(directionIndicator);
         container.appendChild(input);
         fovGridContainer.appendChild(container);
 
-        debouncedZoomUpdate(input, () => {
-          const {
-            displayDimensionScales,
-            canonicalVoxelFactors,
-            displayDimensionUnits,
-          } = this.displayDimensionRenderInfo.value;
-          const parsedFov = parseScale(input.value);
-          if (!parsedFov || parsedFov.unit !== displayDimensionUnits[i]) {
-            // If the input is invalid or the wrong unit
-            // reset the input states to the previous values
-            this.updateView();
-            return;
+        input.addEventListener("input", () => {
+          updateInputFieldWidth(input);
+        });
+        input.addEventListener("blur", () => {
+          this.updateZoomFromFOV(i);
+        });
+        registerActionListener(input, "commit", () => {
+          this.updateZoomFromFOV(i);
+        });
+        registerActionListener(input, "move-up", () => {
+          if (i !== 0) {
+            this.fovInputElements[i - 1].focus();
           }
-          const axisIndex = Axis[axes[i] as keyof typeof Axis];
-          const { width, height } = this.panelRenderViewport;
-          const pixelResolution = i === 0 ? width : height;
-          // Determine the desired zoom level
-          const parsedScale = parsedFov.scale / pixelResolution;
-          const desiredZoomLevel =
-            (parsedScale * canonicalVoxelFactors[axisIndex]) /
-            displayDimensionScales[axisIndex];
-          this.zoom.value = desiredZoomLevel;
+        });
+        registerActionListener(input, "move-down", () => {
+          if (i !== 1) {
+            this.fovInputElements[i + 1].focus();
+          }
         });
       }
     }
@@ -734,6 +760,7 @@ export class DisplayDimensionsWidget extends RefCounted {
           );
           dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
+          this.updateScaleTooltip(i);
         } else {
           dimElements.scale.value = "";
           dimElements.scale.style.display = "none";
@@ -742,10 +769,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
       updateInputFieldWidth(dimElements.name);
       updateInputFieldWidth(dimElements.scaleFactor);
-      updateInputFieldWidth(
-        dimElements.scale,
-        dimElements.scale.value.length + 1,
-      );
+      updateInputFieldWidth(dimElements.scale);
     }
     // Update the FOV fields
     if (this.axes !== undefined) {
@@ -764,12 +788,10 @@ export class DisplayDimensionsWidget extends RefCounted {
           { precision: 3, elide1: false },
         );
         this.fovInputElements[i].value = formattedFieldOfView;
-        updateInputFieldWidth(
-          this.fovInputElements[i],
-          formattedFieldOfView.length + 1,
-        );
+        this.updateFOVTooltip(i);
         this.fovNameElements[i].textContent =
           globalDimensionNames[globalDimIndex];
+        updateInputFieldWidth(this.fovInputElements[i]);
       }
     }
   }
