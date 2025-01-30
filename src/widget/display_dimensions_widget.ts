@@ -739,6 +739,10 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
       updateInputFieldWidth(dimElements.name);
       updateInputFieldWidth(dimElements.scaleFactor);
+      updateInputFieldWidth(
+        dimElements.scale,
+        dimElements.scale.value.length + 1,
+      );
     }
     // Update the FOV fields
     if (this.axes !== undefined) {
@@ -751,10 +755,14 @@ export class DisplayDimensionsWidget extends RefCounted {
         const fieldOfView = totalScale * pixelResolution;
         const formattedFieldOfView = formatScaleWithUnitAsString(
           fieldOfView,
-          "m",
-          { precision: 3 },
+          displayDimensionUnits[i],
+          { precision: 3, elide1: false },
         );
         this.fovInputElements[j].value = formattedFieldOfView;
+        updateInputFieldWidth(
+          this.fovInputElements[j],
+          formattedFieldOfView.length + 1,
+        );
         this.fovNameElements[j].textContent = globalDimensionNames[i];
       }
     }
