@@ -257,6 +257,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private updateZoomFromFOV(i: number) {
     if (this.axes === undefined) return;
+    const axisIndex = Axis[this.axes[i] as keyof typeof Axis];
     const {
       displayDimensionScales,
       canonicalVoxelFactors,
@@ -264,13 +265,12 @@ export class DisplayDimensionsWidget extends RefCounted {
     } = this.displayDimensionRenderInfo.value;
     const input = this.fovInputElements[i];
     const parsedFov = parseScale(input.value);
-    if (!parsedFov || parsedFov.unit !== displayDimensionUnits[i]) {
+    if (!parsedFov || parsedFov.unit !== displayDimensionUnits[axisIndex]) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
       this.updateView();
       return;
     }
-    const axisIndex = Axis[this.axes[i] as keyof typeof Axis];
     const { width, height } = this.panelRenderViewport;
     const pixelResolution = i === 0 ? width : height;
     // Determine the desired zoom level
