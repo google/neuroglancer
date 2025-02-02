@@ -36,12 +36,11 @@ declare const TEST_DATA_SERVER: string;
 
 const BASE_URL = `${TEST_DATA_SERVER}kvstore/ocdbt/files_min_arity.ocdbt/`;
 
-for (const name of ["files_high_arity", "files_min_arity"]) {
+describe.for(["files_high_arity", "files_min_arity"])("%s", (name) => {
   testKvStore(
     async () => `${TEST_DATA_SERVER}kvstore/ocdbt/${name}.ocdbt/|ocdbt:`,
-    name,
   );
-}
+});
 
 describe("completion", () => {
   test("empty prefix", async () => {

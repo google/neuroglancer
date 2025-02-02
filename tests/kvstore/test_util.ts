@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import type { AutoDetectMatch } from "#src/kvstore/auto_detect.js";
 import { autoDetectFormat } from "#src/kvstore/auto_detect.js";
 import type { KvStore } from "#src/kvstore/index.js";
@@ -183,11 +183,9 @@ export function testList(url: Fixture<string>) {
   });
 }
 
-export function testKvStore(url: Fixture<string>, name = "kvstore") {
-  describe(name, () => {
-    testRead(url);
-    testList(url);
-  });
+export function testKvStore(url: Fixture<string>) {
+  testRead(url);
+  testList(url);
 }
 
 export async function readAllFromKvStore(
