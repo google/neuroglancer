@@ -15,22 +15,22 @@
  */
 
 import "#src/kvstore/http/register.js";
+import { http, passthrough } from "msw";
+import { beforeEach, describe } from "vitest";
 import { constantFixture } from "#tests/fixtures/fixture.js";
 import { httpServerFixture } from "#tests/fixtures/http_server.js";
+import { mswFixture } from "#tests/fixtures/msw";
 import { TEST_FILES_DIR } from "#tests/kvstore/test_data.js";
 import { testKvStore } from "#tests/kvstore/test_util.js";
-import { mswFixture } from "#tests/fixtures/msw";
-import { beforeEach, describe } from "vitest";
-import { http, passthrough } from "msw";
 
 const serverFixture = httpServerFixture(constantFixture(TEST_FILES_DIR));
-const msw = mswFixture();
 
 describe("with HEAD support", () => {
   testKvStore(serverFixture.serverUrl);
 });
 
 describe.for([405, 501])("HEAD returns %s", (statusCode) => {
+  const msw = mswFixture();
   beforeEach(async () => {
     const serverUrl = await serverFixture.serverUrl();
     (await msw()).use(

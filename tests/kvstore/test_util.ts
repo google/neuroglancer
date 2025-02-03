@@ -35,8 +35,7 @@ export function testRead(url: Fixture<string>) {
   test("read full", async () => {
     const response = await (
       await sharedKvStoreContext()
-    ).kvStoreContext.read(`${await url()}a`);
-    expect(response).toBeTruthy();
+    ).kvStoreContext.read(`${await url()}a`, { throwIfMissing: true });
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(0);
     expect.soft(response!.length).toEqual(3);
@@ -47,8 +46,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { offset: 1, length: 0 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(1);
     expect.soft(response!.length).toEqual(0);
@@ -59,8 +58,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}empty`, {
       byteRange: { offset: 0, length: 0 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(0);
     expect.soft(response!.offset).toEqual(0);
     expect.soft(response!.length).toEqual(0);
@@ -71,8 +70,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { offset: 1, length: 1 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(1);
     expect.soft(response!.length).toEqual(1);
@@ -83,8 +82,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { suffixLength: 1 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(2);
     expect.soft(response!.length).toEqual(1);
@@ -95,8 +94,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { suffixLength: 0 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(3);
     expect.soft(response!.length).toEqual(0);
@@ -113,6 +112,16 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}baz`);
     expect(response).toEqual(undefined);
+  });
+
+  test("read #", async () => {
+    const response = await (
+      await sharedKvStoreContext()
+    ).kvStoreContext.read(`${await url()}%23`, { throwIfMissing: true });
+    expect.soft(response!.totalSize).toEqual(0);
+    expect.soft(response!.offset).toEqual(0);
+    expect.soft(response!.length).toEqual(0);
+    expect.soft(await response!.response.text()).toEqual("");
   });
 }
 

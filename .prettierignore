@@ -10,3 +10,4 @@ dist
 /.ruff_cache
 package.json
 package-lock.json
+.venv
