@@ -49,6 +49,7 @@
     "**/build",
     "**/.tox",
     "**/.nox",
+    "**/.venv",
     "lib",
     "**/python",
     "**/config",

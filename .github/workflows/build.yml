@@ -36,6 +36,10 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             examples/**/package-lock.json
+      # uv required for javascript tests
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
       # go needed for fake_gcs_server used by the javascript tests
       - name: Setup go
         uses: actions/setup-go@v5

@@ -42,7 +42,7 @@ describe("http completion", () => {
             "value": "baz/",
           },
           {
-            "value": "#|",
+            "value": "%23|",
           },
           {
             "value": "a|",
