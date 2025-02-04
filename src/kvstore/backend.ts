@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import "#src/credentials_provider/shared_counterpart.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import type { SharedCredentialsManagerCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import type { CompletionResult } from "#src/kvstore/context.js";
