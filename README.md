@@ -159,6 +159,7 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
 
 # Related Projects
 
+- [Panel-Neuroglancer](https://github.com/panel-extensions/panel-neuroglancer) - Integrate Neuroglancer into Jupyter notebook workflows and Python web apps with this HoloViz Panel extension.
 - [TensorStore](https://github.com/google/tensorstore) - C++ and Python library for efficiently
   reading and writing multi-dimensional arrays in formats supported by Neuroglancer.
 - [4Quant/neuroglancer-docker](https://github.com/4Quant/neuroglancer-docker) - Example setup for
