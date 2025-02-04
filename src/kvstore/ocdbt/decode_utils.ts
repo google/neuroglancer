@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { buf as crc32cbuf } from "crc-32/crc32c";
+import { buf as crc32cbuf } from "crc-32/crc32c.js";
 import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { decodeLeb128, decodeLeb128Bigint } from "#src/util/leb128.js";
