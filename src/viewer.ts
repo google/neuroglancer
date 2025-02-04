@@ -441,8 +441,8 @@ export class Viewer extends RefCounted implements ViewerState {
 
   resetInitiated = new NullarySignal();
 
-  screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
-  screenshotManager = this.registerDisposer(new ScreenshotManager(this));
+  screenshotHandler: ScreenshotHandler;
+  screenshotManager: ScreenshotManager;
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -494,7 +494,8 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
-
+    this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
+    this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {
       dataContext = new DataManagementContext(display.gl, display),
       visibility = new WatchableVisibilityPriority(

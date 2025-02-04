@@ -29,7 +29,7 @@
 }
 
 /* General headings, labels, and top-level containers */
-.neuroglancer-screenshot-overlay :is(div, table, tr, td, th, ) {
+.neuroglancer-screenshot-overlay :is(div, table, tr, td, th) {
   box-sizing: border-box;
   outline: 0;
 }
