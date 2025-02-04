@@ -13,14 +13,20 @@ URL syntax
 - :file:`https://{host}/{path}`
 - :file:`https://{host}/{path}?{query}`
 
-.. list-table:: Capabilities
+Capabilities
+------------
+
+.. list-table:: Supported capabilities
 
    * - :ref:`kvstore-byte-range-reads`
      - Supported if the server supports `HTTP range requests
        <https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests>`__.
    * - :ref:`kvstore-listing`
-     - Supported if the server provides traditional HTML directory listings in
-       response to :file:`https://{host}/{path}/` GET requests.
+     - Supported if the server supports:
+
+       - traditional HTML directory listings in response to
+         :file:`https://{host}/{path}/` GET requests, or
+       - S3-compatible bucket listing.
 
 CORS
 ----

@@ -19,7 +19,10 @@ For example:
 
 - ``gs://bucket/path/to/data|byte-range:1000-2000``
 
-.. list-table:: Capabilities
+Capabilities
+------------
+
+.. list-table:: Supported capabilities
 
    * - :ref:`kvstore-byte-range-reads`
      - Supported.

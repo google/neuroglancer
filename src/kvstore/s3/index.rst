@@ -9,17 +9,14 @@ accessing S3 buckets hosted by Amazon as well as other S3-compatible servers.
 URL syntax
 ----------
 
-:file:`s3://{bucket}/{path}`
+- :file:`s3://{bucket}/{path}`
 
-  Specifies an Amazon S3 bucket with the endpoint
-  :file:`{bucket}.s3.amazonaws.com`.
+  Specifies an Amazon S3 bucket (with the endpoint
+  :file:`{bucket}.s3.amazonaws.com`).
 
-:file:`s3+http://{host}/{path}`
-:file:`s3+http://{host}/{bucket}/{path}`
-:file:`s3+https://{host}/{path}`
-:file:`s3+https://{host}/{bucket}/{path}`
+- :file:`s3+http{s}://{host}/{path}` or :file:`s3+http{s}://{host}/{bucket}/{path}`
 
-  Specifies an S3-compatible server at :file:`http://{host}`. or
+  Specifies an S3-compatible server at :file:`http://{host}` or
   :file:`https://{host}`.
 
   .. note::
@@ -33,7 +30,10 @@ URL syntax
 
      Neuroglancer automatically detects which of these cases applies.
 
-.. list-table:: Capabilities
+Capabilities
+------------
+
+.. list-table:: Supported capabilities
 
    * - :ref:`kvstore-byte-range-reads`
      - Supported

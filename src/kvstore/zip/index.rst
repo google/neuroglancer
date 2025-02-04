@@ -25,7 +25,10 @@ For example:
    :file:`{path}/{to}/{entry}` must be `percent-encoded
    <https://en.wikipedia.org/wiki/Percent-encoding>`__.
 
-.. list-table:: Capabilities
+Capabilities
+------------
+
+.. list-table:: Supported capabilities
 
    * - :ref:`kvstore-byte-range-reads`
      - General byte ranges supported for STORED (uncompressed) entries. Only

@@ -13,7 +13,10 @@ URL syntax
 - :file:`gs+ngauth+http://{nguath-host}/{bucket}/{path}`
 - :file:`gs+ngauth+https://{nguath-host}/{bucket}/{path}`
 
-.. list-table:: Capabilities
+Capabilities
+------------
+
+.. list-table:: Supported capabilities
 
    * - :ref:`kvstore-byte-range-reads`
      - Supported

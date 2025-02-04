@@ -18,7 +18,10 @@ For example:
 
 - ``gs://bucket/path/to/image.nii.gz|gzip:``
 
-.. list-table:: Capabilities
+Capabilities
+------------
+
+.. list-table:: Supported capabilities
 
    * - :ref:`kvstore-byte-range-reads`
      - Only prefix (byte offset of 0) byte range requests supported, if
