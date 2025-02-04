@@ -35,17 +35,16 @@ jobs:
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
-            examples/**/package-lock.json
       # uv required for javascript tests
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
       # go needed for fake_gcs_server used by the javascript tests
       - name: Setup go
         uses: actions/setup-go@v5
         with:
           go-version: "stable"
-      - run: npm install
+      - run: npm ci
       - run: npm run format:fix
       - name: Check for dirty working directory
         run: git diff --exit-code
@@ -83,6 +82,36 @@ jobs:
           name: client
           path: dist/client
         if: ${{ runner.os == 'Linux' }}
+  example-project-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: "pnpm"
+          cache-dependency-path: |
+            examples/**/pnpm-lock.yaml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+      - run: npm ci
+      - run: npm run example-project-test -- --reporter=html
+      - name: Upload report and built clients
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: example-project-test-results
+          path: |
+            playwright-report/
+            examples/*/*/dist/
 
   # Builds Python package and runs Python tests
   #
@@ -164,7 +193,7 @@ jobs:
         id: pip-cache
         run: |
           echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
-      - run: npm install
+      - run: npm ci
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
           npm run build-python -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"

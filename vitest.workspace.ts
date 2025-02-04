@@ -17,13 +17,13 @@
 import path from "node:path";
 import mswPlugin from "@iodigital/vite-plugin-msw";
 import { defineWorkspace } from "vitest/config";
-import { getFakeGcsServerBin } from "build_tools/vitest/build_fake_gcs_server.ts";
+import { getFakeGcsServerBin } from "./build_tools/vitest/build_fake_gcs_server.js";
+import { startFakeNgauthServer } from "./build_tools/vitest/fake_ngauth_server.js";
 import {
   PYTHON_TEST_TOOLS_PATH,
   syncPythonTools,
-} from "build_tools/vitest/python_tools.ts";
-import { startFakeNgauthServer } from "./build_tools/vitest/fake_ngauth_server.ts";
-import { startTestDataServer } from "./build_tools/vitest/test_data_server.ts";
+} from "./build_tools/vitest/python_tools.js";
+import { startTestDataServer } from "./build_tools/vitest/test_data_server.js";
 
 const fakeNgauthServer = await startFakeNgauthServer();
 const testDataServer = await startTestDataServer(
@@ -62,8 +62,11 @@ export default defineWorkspace([
     },
     plugins: [mswPlugin({ mode: "browser", handlers: [] })],
     optimizeDeps: {
-      include: ["nifti-reader-js"],
-      entries: ["src/util/polyfills.ts"],
+      entries: [
+        "src/**/*.browser_test.ts",
+        "tests/**/*.browser_test.ts",
+        "src/*.bundle.js",
+      ],
     },
     test: {
       name: "browser",

@@ -20,12 +20,12 @@ await execFileAsync("npm", ["run", "build-package"], {
   cwd: rootDir,
 });
 
-// Update package-lock.json files in examples.
+// Update lockfiles in examples.
 await Promise.all(
   (await glob("examples/*/*/package.json", { absolute: true, cwd: rootDir }))
     .map((examplePackageJsonPath) => path.dirname(examplePackageJsonPath))
     .map(async (exampleDir: string) => {
-      await execFileAsync("npm", ["install", "--no-audit", "--no-fund"], {
+      await execFileAsync("pnpm", ["install"], {
         cwd: exampleDir,
       });
     }),
@@ -35,7 +35,7 @@ await execFileAsync(
   "git",
   [
     "add",
-    ...(await glob("examples/*/*/package-lock.json", {
+    ...(await glob("examples/*/*/pnpm-lock.yaml", {
       absolute: false,
       cwd: rootDir,
     })),

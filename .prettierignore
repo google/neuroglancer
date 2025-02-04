@@ -6,8 +6,8 @@ zarr.json
 .parcel-cache
 dist
 /lib
-/docs/_build/
 /.ruff_cache
 package.json
 package-lock.json
 .venv
+pnpm-lock.yaml
