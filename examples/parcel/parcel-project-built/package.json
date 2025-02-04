@@ -12,6 +12,7 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
+    "@parcel/config-default": "^2.13.3",
     "@parcel/transformer-inline-string": "^2.12.0",
     "parcel": "^2.12.0",
     "parcel-namer-rewrite": "^2.10.3-rc.2"
