@@ -178,9 +178,6 @@ export class SliceViewPanel extends RenderedDataPanel {
     );
 
     viewer.wireFrame.changed.add(() => this.scheduleRedraw());
-    viewer.hideCrossSectionBackgroundIn3D.changed.add(() =>
-      this.scheduleRedraw(),
-    );
     registerActionListener(
       element,
       "rotate-via-mouse-drag",
