@@ -23,7 +23,7 @@ await Promise.all(
       await execFileAsync("npx", ["npm-check-updates", "-u"], {
         cwd: exampleDir,
       });
-      await execFileAsync("npm", ["install", "--no-audit", "--no-fund"], {
+      await execFileAsync("pnpm", ["install"], {
         cwd: exampleDir,
       });
     }),

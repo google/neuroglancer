@@ -7,6 +7,8 @@ export default defineConfig({
     mountId: "neuroglancer-container",
   },
   output: {
+    // By default, running the dev-server also clears the dist directory.
+    cleanDistPath: process.env.NODE_ENV === "production",
     assetPrefix: "./",
     distPath: {
       js: "",

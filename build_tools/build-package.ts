@@ -32,7 +32,7 @@ function buildDeclarationFiles(
   program.emit();
 }
 
-async function buildPackage(options: {
+export async function buildPackage(options: {
   inplace?: boolean;
   skipDeclarations?: boolean;
 }) {
