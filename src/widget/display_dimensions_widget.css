@@ -27,7 +27,6 @@
   display: grid;
   grid-template-rows: 0fr 0fr 0fr 0fr;
   grid-template-columns: 0fr 0fr 0fr;
-  grid-row-gap: 2px;
 }
 
 .neuroglancer-display-dimensions-widget input {
@@ -73,6 +72,7 @@
   font-family: monospace;
   color: white;
   font-size: 0.75rem;
+  line-height: 16px;
 }
 
 .neuroglancer-display-dimensions-widget-dimension:hover {
@@ -84,7 +84,7 @@
 }
 
 .neuroglancer-display-dimensions-widget-name {
-  min-width: 8px;
+  min-width: 6px;
 }
 
 .neuroglancer-display-dimensions-widget-scale-factor {
@@ -121,6 +121,7 @@
 .neuroglancer-display-dimensions-widget-fov {
   display: flex;
   flex-direction: column;
+  margin-top: 12px;
 }
 
 .neuroglancer-display-dimensions-widget-fov-container {
@@ -162,23 +163,25 @@
   display: flex;
   align-items: center;
   white-space: nowrap;
+  gap: 4px;
 }
 
 .neuroglancer-display-dimensions-widget input[type="checkbox"] {
-  margin-right: 0.25rem;
+  margin: 0.25rem;
   vertical-align: middle;
 }
 
 .neuroglancer-depth-range-relative-checkbox-label {
   display: flex;
   align-items: center;
+  gap: 4px;
 }
 
 .neuroglancer-depth-range-widget-grid {
   margin-top: 1em;
   display: grid;
   display: grid;
-  grid-template-columns: 0fr 0fr 0fr;
+  grid-template-columns: 1fr;
   grid-auto-rows: 0fr;
 }
 
@@ -191,11 +194,11 @@
 }
 
 .neuroglancer-depth-range-widget-dimension-names {
-  margin-left: 1ch;
   white-space: nowrap;
 }
 
 .neuroglancer-depth-range-container {
   display: flex;
   align-items: center;
+  gap: 4px;
 }
