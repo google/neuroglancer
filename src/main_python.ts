@@ -21,8 +21,7 @@
 
 import { debounce } from "lodash-es";
 import { CachingCredentialsManager } from "#src/credentials_provider/index.js";
-import { getDefaultDataSourceProvider } from "#src/datasource/default_provider.js";
-import { PythonDataSource } from "#src/datasource/python/frontend.js";
+import type { PythonDataSource } from "#src/datasource/python/frontend.js";
 import {
   Client,
   ClientStateReceiver,
@@ -114,21 +113,19 @@ const client = new Client();
 
 const credentialsManager = new PythonCredentialsManager(client);
 
-const dataSourceProvider = getDefaultDataSourceProvider({
+const viewer = ((<any>window).viewer = makeDefaultViewer({
+  showLayerDialog: false,
+  resetStateWhenEmpty: false,
   credentialsManager: new CachingCredentialsManager(credentialsManager),
-});
-const pythonDataSource = new PythonDataSource();
-dataSourceProvider.register("python", pythonDataSource);
+}));
+
+const pythonDataSource = viewer.dataSourceProvider.dataSources.get(
+  "python",
+) as PythonDataSource;
 configState.add(
   "sourceGenerations",
   makeTrackableBasedSourceGenerationHandler(pythonDataSource),
 );
-
-const viewer = ((<any>window).viewer = makeDefaultViewer({
-  showLayerDialog: false,
-  resetStateWhenEmpty: false,
-  dataSourceProvider,
-}));
 setDefaultInputEventBindings(viewer.inputEventBindings);
 configState.add(
   "inputEventBindings",
@@ -151,7 +148,10 @@ let sharedState: Trackable | undefined = viewer.state;
 
 if (window.location.hash) {
   const hashBinding = viewer.registerDisposer(
-    new UrlHashBinding(viewer.state, credentialsManager),
+    new UrlHashBinding(
+      viewer.state,
+      viewer.dataSourceProvider.sharedKvStoreContext,
+    ),
   );
   hashBinding.updateFromUrlHash();
   sharedState = undefined;
@@ -159,7 +159,7 @@ if (window.location.hash) {
 
 const prefetchManager = new PrefetchManager(
   viewer.display,
-  dataSourceProvider,
+  viewer.dataSourceProvider,
   viewer.dataContext.addRef(),
   viewer.uiConfiguration,
 );

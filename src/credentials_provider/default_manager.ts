@@ -18,7 +18,23 @@
  * @file CredentialsManager for globally registering a CredentialsProvider
  */
 
-import { CachingMapBasedCredentialsManager } from "#src/credentials_provider/index.js";
+import {
+  CachingMapBasedCredentialsManager,
+  type ProviderGetter,
+} from "#src/credentials_provider/index.js";
 
-export const defaultCredentialsManager =
-  new CachingMapBasedCredentialsManager();
+const providers = new Map<string, ProviderGetter<unknown>>();
+export function registerDefaultCredentialsProvider<Credentials>(
+  key: string,
+  providerGetter: ProviderGetter<Credentials>,
+) {
+  providers.set(key, providerGetter);
+}
+
+export function getDefaultCredentialsManager() {
+  const manager = new CachingMapBasedCredentialsManager();
+  for (const [key, provider] of providers) {
+    manager.register(key, provider);
+  }
+  return manager;
+}

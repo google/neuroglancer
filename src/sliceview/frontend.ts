@@ -70,6 +70,7 @@ import type { vec4 } from "#src/util/geom.js";
 import { kOneVec, kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import { getObjectId } from "#src/util/object_id.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
@@ -415,7 +416,6 @@ export class SliceView extends Base {
     const { visibleLayers, visibleLayerList } = this;
     const { displayDimensionRenderInfo } = this.projectionParameters.value;
     const rpc = this.rpc!;
-    const rpcMessage: any = { id: this.rpcId };
     let changed = false;
     visibleLayerList.length = 0;
     for (const renderLayer of this.layerManager.readyRenderLayers()) {
@@ -456,20 +456,22 @@ export class SliceView extends Base {
           layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
           layerInfo.transformGeneration = curTransformGeneration;
         }
-        rpcMessage.layerId = renderLayer.rpcId;
-        rpcMessage.sources = serializeAllTransformedSources(
-          layerInfo.allSources,
-        );
-        rpcMessage.displayDimensionRenderInfo = displayDimensionRenderInfo;
         this.flushBackendProjectionParameters();
-        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
+        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
+          id: this.rpcId,
+          layerId: renderLayer.rpcId,
+          sources: serializeAllTransformedSources(layerInfo.allSources),
+          displayDimensionRenderInfo: displayDimensionRenderInfo,
+        });
         changed = true;
       }
     }
     for (const [renderLayer, layerInfo] of visibleLayers) {
       if (layerInfo.lastSeenGeneration === curUpdateGeneration) continue;
-      rpcMessage.layerId = renderLayer.rpcId;
-      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
+      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
+        id: this.rpcId,
+        layerId: renderLayer.rpcId,
+      });
       visibleLayers.delete(renderLayer);
       disposeTransformedSources(renderLayer, layerInfo.allSources);
       invokeDisposers(layerInfo.disposers);
@@ -653,7 +655,7 @@ export abstract class SliceViewChunkSource<
   async fetchChunk<T>(
     chunkGridPosition: Float32Array,
     transform: (chunk: Chunk) => T,
-    abortSignal?: AbortSignal,
+    progressOptions: Partial<ProgressOptions>,
   ): Promise<T> {
     const key = chunkGridPosition.join();
     const existingChunk = this.chunks.get(key);
@@ -682,7 +684,7 @@ export abstract class SliceViewChunkSource<
       await this.rpc!.promiseInvoke(
         SLICEVIEW_REQUEST_CHUNK_RPC_ID,
         { source: this.rpcId, chunkGridPosition },
-        abortSignal,
+        progressOptions,
       );
       return await promise;
     } finally {

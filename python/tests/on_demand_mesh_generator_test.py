@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 from neuroglancer import local_volume, test_util, viewer_state
 
-testdata_dir = os.path.join(os.path.dirname(__file__), "..", "testdata", "mesh")
+testdata_dir = os.path.join(os.path.dirname(__file__), "..", "..", "testdata", "mesh")
 
 
 @pytest.mark.xfail(

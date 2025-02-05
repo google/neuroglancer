@@ -29,6 +29,7 @@ import {
   verifyObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 import { getRandomHexString } from "#src/util/random.js";
 
 export const EMAIL_SCOPE = "email";
@@ -60,11 +61,11 @@ function extractEmailFromIdToken(idToken: string): string {
   }
 }
 
-// Note: `abortSignal` is guaranteed to be aborted once the operation completes.
+// Note: `signal` is guaranteed to be aborted once the operation completes.
 function waitForAuthResponseMessage(
   source: Window,
   state: string,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<OAuth2Token> {
   return new Promise((resolve, reject) => {
     window.addEventListener(
@@ -108,7 +109,7 @@ function waitForAuthResponseMessage(
           console.error("Response received: ", event.data);
         }
       },
-      { signal: abortSignal },
+      { signal: signal },
     );
   });
 }
@@ -193,7 +194,7 @@ export async function authenticateGoogleOAuth2(
     immediate?: boolean;
     authUser?: number;
   },
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
 ) {
   const state = getRandomHexString();
   const nonce = getRandomHexString();
@@ -208,7 +209,7 @@ export async function authenticateGoogleOAuth2(
     authUser: options.authUser,
   });
   const abortController = new AbortController();
-  abortSignal = AbortSignal.any([abortController.signal, abortSignal]);
+  signal = AbortSignal.any([abortController.signal, signal]);
   try {
     let source: Window;
     if (options.immediate) {
@@ -223,7 +224,7 @@ export async function authenticateGoogleOAuth2(
     }
     return await raceWithAbort(
       waitForAuthResponseMessage(source, state, abortController.signal),
-      abortSignal,
+      signal,
     );
   } finally {
     abortController.abort();
@@ -237,12 +238,15 @@ export class GoogleOAuth2CredentialsProvider extends CredentialsProvider<OAuth2T
     super();
   }
 
-  get = makeCredentialsGetter((abortSignal) =>
-    getCredentialsWithStatus(
+  get = makeCredentialsGetter(async (options) => {
+    using _span = new ProgressSpan(options.progressListener, {
+      message: `Requesting ${this.options.description} OAuth2 access token`,
+    });
+    return await getCredentialsWithStatus(
       {
         description: this.options.description,
         supportsImmediate: true,
-        get: (abortSignal, immediate) =>
+        get: (signal, immediate) =>
           authenticateGoogleOAuth2(
             {
               clientId: this.options.clientId,
@@ -250,10 +254,10 @@ export class GoogleOAuth2CredentialsProvider extends CredentialsProvider<OAuth2T
               immediate: immediate,
               authUser: 0,
             },
-            abortSignal,
+            signal,
           ),
       },
-      abortSignal,
-    ),
-  );
+      options.signal,
+    );
+  });
 }

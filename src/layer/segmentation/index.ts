@@ -22,7 +22,7 @@ import type { DataSourceSpecification } from "#src/datasource/index.js";
 import {
   LocalDataSource,
   localEquivalencesUrl,
-} from "#src/datasource/index.js";
+} from "#src/datasource/local.js";
 import type { LayerActionContext, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LinkedLayerGroup,

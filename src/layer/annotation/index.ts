@@ -29,7 +29,7 @@ import {
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
-import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/index.js";
+import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/local.js";
 import type { LayerManager, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LayerReference,

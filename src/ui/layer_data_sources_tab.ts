@@ -19,7 +19,7 @@
  */
 
 import "#src/ui/layer_data_sources_tab.css";
-import { LocalDataSource } from "#src/datasource/index.js";
+import { LocalDataSource } from "#src/datasource/local.js";
 import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
 import {
   changeLayerName,
@@ -50,34 +50,62 @@ import {
 } from "#src/util/dom.js";
 import type { MessageList } from "#src/util/message_list.js";
 import { MessageSeverity } from "#src/util/message_list.js";
+import type { ProgressListener } from "#src/util/progress_listener.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { CoordinateSpaceTransformWidget } from "#src/widget/coordinate_transform.js";
-import type { Completer } from "#src/widget/multiline_autocomplete.js";
+import type {
+  Completer,
+  SyntaxHighlighter,
+} from "#src/widget/multiline_autocomplete.js";
 import {
   AutocompleteTextInput,
   makeCompletionElementWithDescription,
 } from "#src/widget/multiline_autocomplete.js";
+import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
+
+const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
+  splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,
+  getSeparatorNode: (text: string) => {
+    if (text.startsWith("|") && text.length > 1) {
+      // Create an empty span with CSS class that adds `::after` node with
+      // content "\a". This prevents the linebreak from affecting text selection.
+      const node = document.createElement("span");
+      node.classList.add("neuroglancer-multiline-autocomplete-linebreak");
+      return node;
+    } else {
+      return document.createElement("wbr");
+    }
+  },
+};
 
 class SourceUrlAutocomplete extends AutocompleteTextInput {
   dataSourceView: DataSourceView;
   dirty: WatchableValueInterface<boolean>;
   constructor(dataSourceView: DataSourceView) {
     const { manager } = dataSourceView.source.layer;
-    const sourceCompleter: Completer = ({ value }, abortSignal: AbortSignal) =>
-      manager.dataSourceProviderRegistry
-        .completeUrl({
+    const sourceCompleter: Completer = async (
+      { value },
+      signal: AbortSignal,
+      progressListener: ProgressListener,
+    ) => {
+      const originalResult =
+        await manager.dataSourceProviderRegistry.completeUrl({
           url: value,
-          chunkManager: manager.chunkManager,
-          abortSignal,
-        })
-        .then((originalResult) => ({
-          completions: originalResult.completions,
-          makeElement: makeCompletionElementWithDescription,
-          offset: originalResult.offset,
-          showSingleResult: true,
-        }));
-    super({ completer: sourceCompleter, delay: 0 });
+          signal,
+          progressListener,
+        });
+      return {
+        ...originalResult,
+        makeElement: makeCompletionElementWithDescription,
+        showSingleResult: true,
+      };
+    };
+    super({
+      completer: sourceCompleter,
+      syntaxHighlighter: dataSourceUrlSyntaxHighlighter,
+      delay: 0,
+    });
     this.placeholder = "Data source URL";
     this.dataSourceView = dataSourceView;
     this.element.classList.add("neuroglancer-layer-data-source-url-input");
@@ -306,14 +334,6 @@ export class DataSourceView extends RefCounted {
       const { source } = this;
       const existingSpec = source.spec;
       const userLayer = this.source.layer;
-      url = userLayer.manager.dataSourceProviderRegistry.normalizeUrl({ url });
-      if (url !== urlInput.value) {
-        urlInput.disableCompletion();
-        urlInput.setValueAndSelection(url, {
-          begin: url.length,
-          end: url.length,
-        });
-      }
       urlInput.dirty.value = false;
       // If url is non-empty and unchanged, don't set spec, as that would trigger a reload of the
       // data source.  If the url is empty, always set spec in order to possible remove the empty
@@ -330,12 +350,14 @@ export class DataSourceView extends RefCounted {
         try {
           const newName =
             userLayer.manager.dataSourceProviderRegistry.suggestLayerName(url);
-          changeLayerName(userLayer.managedLayer, newName);
+          if (newName) {
+            changeLayerName(userLayer.managedLayer, newName);
+          }
         } catch {
           // Ignore errors obtaining a suggested layer name.
         }
       }
-      source.spec = { ...existingSpec, url };
+      source.spec = { ...existingSpec, url, setManually: true };
     };
     urlInput.onCommit.add(updateUrlFromView);
 
@@ -344,6 +366,12 @@ export class DataSourceView extends RefCounted {
     element.appendChild(urlInput.element);
     element.appendChild(
       this.registerDisposer(new MessagesView(source.messages)).element,
+    );
+    const progressListenerWidget = new ProgressListenerWidget();
+    element.appendChild(progressListenerWidget.element);
+    source.progressListener.addListener(progressListenerWidget);
+    this.registerDisposer(() =>
+      source.progressListener.removeListener(progressListenerWidget),
     );
     this.updateView();
   }

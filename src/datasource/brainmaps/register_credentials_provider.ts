@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { registerDefaultCredentialsProvider } from "#src/credentials_provider/default_manager.js";
 import { credentialsKey } from "#src/datasource/brainmaps/api.js";
 import { BrainmapsCredentialsProvider } from "#src/datasource/brainmaps/credentials_provider.js";
 
@@ -22,7 +22,7 @@ import { BrainmapsCredentialsProvider } from "#src/datasource/brainmaps/credenti
 declare const NEUROGLANCER_BRAINMAPS_CLIENT_ID: string | undefined;
 
 if (typeof NEUROGLANCER_BRAINMAPS_CLIENT_ID !== "undefined") {
-  defaultCredentialsManager.register(
+  registerDefaultCredentialsProvider(
     credentialsKey,
     () => new BrainmapsCredentialsProvider(NEUROGLANCER_BRAINMAPS_CLIENT_ID!),
   );

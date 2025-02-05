@@ -1,0 +1,373 @@
+/**
+ * @license
+ * Copyright 2024 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Color variables for the screenshot */
+.neuroglancer-screenshot-overlay {
+  --gray300: #d0d5dd;
+  --gray600: #141415;
+  --gray500: #f7f7f7;
+  --gray50: #e6e6e6;
+  --gray800: #344054;
+  --gray700: rgba(20, 20, 21, 0.6);
+  --gray400: rgba(20, 20, 21, 0.4);
+  --gray200: rgba(20, 20, 21, 0.8);
+  --primary500: #0069eb;
+  --primary700: #0474ff;
+}
+
+/* General headings, labels, and top-level containers */
+.neuroglancer-screenshot-overlay :is(div, table, tr, td, th) {
+  box-sizing: border-box;
+  outline: 0;
+}
+
+.neuroglancer-screenshot-dialog {
+  width: 48.75rem;
+  padding: 0;
+  margin: 1.25rem auto;
+  position: relative;
+  transform: none;
+  left: auto;
+  top: auto;
+  border-radius: 0.5rem;
+  font-family: sans-serif;
+}
+
+.neuroglancer-screenshot-main-body-container {
+  height: auto;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.neuroglancer-screenshot-title {
+  font-size: 0.938rem;
+  font-weight: 590;
+  color: var(--gray600);
+  margin: 0;
+}
+
+.neuroglancer-screenshot-title-subheading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.neuroglancer-screenshot-label {
+  font-size: 0.813rem;
+  color: var(--gray200);
+  font-weight: 590;
+}
+
+/* Div at the top which contains the close */
+.neuroglancer-screenshot-close {
+  border-bottom: 1px solid var(--gray50);
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  gap: 10px;
+}
+
+/* Filename input menu */
+.neuroglancer-screenshot-filename-container {
+  padding: 1rem 1rem 0.75rem 1rem;
+}
+
+.neuroglancer-screenshot-name-label {
+  color: var(--gray800);
+  font-style: normal;
+  display: block;
+  margin: 0.75rem 0 0.375rem;
+}
+
+.neuroglancer-screenshot-name-input {
+  width: 100%;
+  margin-right: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--gray300);
+  background: white;
+  font-size: 0.813rem;
+  font-style: normal;
+  padding: 8px 12px;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  color: var(--gray700);
+  box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  line-height: 20px;
+  box-sizing: border-box;
+  outline: 0;
+}
+
+.neuroglancer-screenshot-name-input:disabled {
+  background: var(--gray500);
+  color: var(--gray400);
+}
+
+.neuroglancer-screenshot-name-input::placeholder {
+  color: var(--gray700);
+}
+
+/* Scale selection menu */
+.neuroglancer-screenshot-scale-factor-label {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.neuroglancer-screenshot-scale-menu {
+  padding: 0 1rem;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.neuroglancer-screenshot-scale-radio-container {
+  display: flex;
+  flex-direction: row;
+}
+
+.neuroglancer-screenshot-scale-radio-item {
+  margin-right: 2.125rem;
+}
+
+.neuroglancer-screenshot-scale-radio-label {
+  color: var(--gray700);
+  font-size: 0.75rem;
+}
+
+.neuroglancer-screenshot-scale-radio-input {
+  margin: 0 0.188rem 0 0;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.neuroglancer-screenshot-warning {
+  color: red;
+  width: auto;
+  font-size: 0.75rem;
+  margin: 0.12rem 0 0 -1.25rem;
+}
+
+/* Slice FOV fixed selection menu */
+.neuroglancer-screenshot-keep-slice-fov-checkbox {
+  margin: 0;
+}
+
+.neuroglancer-screenshot-keep-slice-label {
+  display: flex;
+  flex-direction: row-reverse;
+  margin: 1rem 0;
+  width: 100%;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Take screenshot and close buttons */
+.neuroglancer-screenshot-button {
+  cursor: pointer;
+  margin: 2px 0px;
+  padding: 0;
+}
+
+.neuroglancer-screenshot-close-button {
+  margin-left: auto;
+  background-color: transparent;
+  border: 0;
+}
+
+/* Screenshot resolution table - voxel resolution, panel resolution */
+.neuroglancer-screenshot-size-text {
+  margin: 0.75rem 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+}
+
+.neuroglancer-screenshot-resolution-size-label {
+  text-align: left;
+  color: var(--gray200);
+  font-size: 0.813rem;
+  font-style: normal;
+  font-weight: 590;
+  width: 33.33%;
+  padding: 0;
+  margin: 0 0;
+}
+
+.neuroglancer-screenshot-resolution-size-value {
+  font-size: 0.813rem;
+  color: var(--gray700);
+  width: 33.33%;
+  padding: 0.25rem;
+  font-weight: 400;
+}
+
+.neuroglancer-screenshot-resolution-preview-container {
+  border-top: 1px solid var(--gray50);
+  border-bottom: 1px solid var(--gray50);
+  background: var(--gray500);
+  width: 100%;
+  padding: 1rem 1rem 0.5rem 1rem;
+}
+
+.neuroglancer-screenshot-resolution-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  padding: 4px 2px 2px 2px;
+  background-color: var(--gray50);
+  margin-bottom: 0.75rem;
+  border-radius: 0.35rem;
+  border: 0;
+}
+
+.neuroglancer-screenshot-resolution-table th {
+  font-size: 0.813rem;
+  width: 33.33%;
+  text-align: left;
+  color: var(--gray200);
+  font-style: normal;
+  font-weight: 590;
+  background: var(--gray50);
+  padding: 0.25rem 0.375rem;
+}
+
+.neuroglancer-screenshot-resolution-table td {
+  font-size: 0.813rem;
+  width: 33.33%;
+  color: var(--gray700);
+  background: white;
+  padding: 0.375rem;
+  line-height: 1.25rem;
+}
+
+.neuroglancer-screenshot-resolution-table-tooltip {
+  vertical-align: top;
+  margin-left: 0.25rem;
+}
+
+.neuroglancer-screenshot-copy-icon {
+  outline: 0;
+  border: 0;
+  cursor: pointer;
+  height: 1rem;
+  margin-left: auto;
+  position: relative;
+  width: 33.33%;
+  justify-content: flex-end;
+}
+
+.neuroglancer-screenshot-dimension {
+  color: var(--gray600);
+}
+
+/* Screenshot statistics table - shows GPU memory etc. */
+.neuroglancer-screenshot-statistics-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.neuroglancer-screenshot-statistics-table th {
+  text-align: left;
+  width: 33.33%;
+  padding: 0 0 0.5rem;
+}
+
+.neuroglancer-screenshot-statistics-table td {
+  text-align: left;
+  width: 33.33%;
+  font-size: 0.813rem;
+  padding: 0.5rem 0;
+}
+
+.neuroglancer-screenshot-statistics-table-data-key {
+  color: var(--gray200);
+  font-weight: 590;
+}
+
+.neuroglancer-screenshot-statistics-table-data-value {
+  color: var(--gray700);
+  font-weight: 400;
+}
+
+.neuroglancer-statistics-table-description-header {
+  font-size: 0.813rem;
+  color: var(--gray700);
+  line-height: 1.25rem;
+  font-weight: 400;
+}
+
+.neuroglancer-statistics-table-description-link {
+  font-weight: 590;
+  cursor: pointer;
+  color: var(--primary500);
+  margin-left: 0.1rem;
+}
+
+/* Icons in the dialog */
+.neuroglancer-screenshot-dialog .neuroglancer-icon svg {
+  stroke: rgba(20, 20, 21, 0.4);
+  width: 1rem;
+  height: 1rem;
+}
+
+.neuroglancer-screenshot-dialog .neuroglancer-icon {
+  width: 1rem;
+  height: 1rem;
+  min-width: inherit;
+  min-height: inherit;
+  padding: 0;
+}
+
+.neuroglancer-screenshot-dialog .neuroglancer-icon:hover {
+  background: none;
+}
+
+/* Footer with progress and buttons */
+.neuroglancer-screenshot-footer-container {
+  margin: 0;
+  display: flex;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--gray50);
+}
+
+.neuroglancer-screenshot-progress-text {
+  margin: 0;
+  flex: 1;
+  font-weight: 590;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.813rem;
+  align-self: center;
+  color: var(--primary700);
+}
+
+.neuroglancer-screenshot-footer-button {
+  border-radius: 0.5rem;
+  border: 1px solid var(--gray300);
+  background: white;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.813rem;
+  font-weight: 590;
+  color: var(--gray800);
+  margin: 0 0 0 0.25rem;
+}
+
+.neuroglancer-screenshot-footer-button:disabled {
+  display: none;
+}

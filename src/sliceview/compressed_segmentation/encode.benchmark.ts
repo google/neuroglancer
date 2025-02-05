@@ -32,7 +32,12 @@ describe("64x64x64 example", async () => {
     "testdata",
   );
   const exampleChunkDataUint8Array = await fs.readFile(
-    path.resolve(testDataDir, "64x64x64-raw-uint64-segmentation.dat"),
+    path.resolve(
+      testDataDir,
+      "codec",
+      "compressed_segmentation",
+      "64x64x64-raw-uint64-segmentation.dat",
+    ),
   );
   const exampleChunkData64 = new Uint32Array(exampleChunkDataUint8Array.buffer);
   const exampleChunkData32 = exampleChunkData64.filter((_element, index) => {

@@ -1,0 +1,208 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:|zarr3:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          -0.5,
+          -0.5,
+        ],
+        "upperBounds": Float64Array [
+          9.5,
+          9.5,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          true,
+          true,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+      ],
+      "names": [
+        "y",
+        "x",
+      ],
+      "scales": Float64Array [
+        4e-9,
+        3.0000000000000004e-8,
+      ],
+      "units": [
+        "m",
+        "m",
+      ],
+      "valid": true,
+    },
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "UINT16",
+          "rank": 2,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:scale0/image/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      10,
+                      10,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      10,
+                      10,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    0,
+                    1,
+                    -0.5,
+                  ],
+                  [
+                    1,
+                    0,
+                    -0.5,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:scale1/image/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      5,
+                      5,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      5,
+                      5,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    0,
+                    2,
+                    -0.5,
+                  ],
+                  [
+                    2,
+                    0,
+                    -0.5,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.5.zip|zip:scale2/image/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      2,
+                      2,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      2,
+                      2,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    0,
+                    4,
+                    -0.5,
+                  ],
+                  [
+                    4,
+                    0,
+                    -0.5,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+              },
+            ],
+          ],
+          "volumeType": "IMAGE",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              -0.5,
+              -0.5,
+            ],
+            "pointB": [
+              9.5,
+              9.5,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}

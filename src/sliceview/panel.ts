@@ -448,7 +448,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   ensureBoundsUpdated() {
-    super.ensureBoundsUpdated();
+    super.ensureBoundsUpdated(true /* canScaleForScreenshot */);
     this.sliceView.projectionParameters.setViewport(this.renderViewport);
   }
 

@@ -23,13 +23,9 @@ const checksumSize = 4;
 registerCodec({
   name: "crc32c",
   kind: CodecKind.bytesToBytes,
-  async decode(
-    configuration: Configuration,
-    encoded,
-    abortSignal: AbortSignal,
-  ) {
+  async decode(configuration: Configuration, encoded, signal: AbortSignal) {
     configuration;
-    abortSignal;
+    signal;
     if (encoded.length < checksumSize) {
       throw new Error(
         `Expected buffer of size at least ${checksumSize} bytes but received: ${encoded.length} bytes`,

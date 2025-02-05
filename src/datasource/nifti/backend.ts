@@ -16,23 +16,20 @@
 
 import type { NIFTI2 } from "nifti-reader-js";
 import { isCompressed, NIFTI1, readHeader, readImage } from "nifti-reader-js";
-import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { ChunkPriorityTier } from "#src/chunk_manager/base.js";
-import type { PriorityGetter } from "#src/chunk_manager/generic_file_source.js";
-import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
-import type { SharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import { getCachedDecodedUrl } from "#src/chunk_manager/generic_file_source.js";
 import type { NiftiVolumeInfo } from "#src/datasource/nifti/base.js";
 import {
   GET_NIFTI_VOLUME_INFO_RPC_ID,
   VolumeSourceParameters,
 } from "#src/datasource/nifti/base.js";
+import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
+import type { ReadResponse } from "#src/kvstore/index.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType } from "#src/sliceview/volume/base.js";
-import type { Borrowed } from "#src/util/disposable.js";
 import { Endianness } from "#src/util/endian.js";
 import {
   kOneVec,
@@ -43,10 +40,7 @@ import {
 } from "#src/util/geom.js";
 import { decodeGzip } from "#src/util/gzip.js";
 import * as matrix from "#src/util/matrix.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import type { RPCPromise } from "#src/worker_rpc.js";
 import { registerPromiseRPC, registerSharedObject } from "#src/worker_rpc.js";
 
@@ -56,11 +50,12 @@ export class NiftiFileData {
 }
 
 async function decodeNiftiFile(
-  buffer: ArrayBuffer,
-  _cancellationToken: AbortSignal,
+  readResponse: ReadResponse,
+  options: ProgressOptions,
 ) {
+  let buffer = await readResponse.response.arrayBuffer();
   if (isCompressed(buffer)) {
-    buffer = await decodeGzip(buffer, "gzip");
+    buffer = await decodeGzip(buffer, "gzip", options.signal);
   }
   const data = new NiftiFileData();
   data.uncompressedData = buffer;
@@ -73,40 +68,24 @@ async function decodeNiftiFile(
 }
 
 function getNiftiFileData(
-  chunkManager: Borrowed<ChunkManager>,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContextCounterpart: SharedKvStoreContextCounterpart,
   url: string,
-  getPriority: PriorityGetter,
-  abortSignal: AbortSignal,
+  options: Partial<ProgressOptions>,
 ) {
-  return GenericSharedDataSource.getUrl(
-    chunkManager,
-    credentialsProvider,
-    decodeNiftiFile,
+  return getCachedDecodedUrl(
+    sharedKvStoreContextCounterpart,
     url,
-    getPriority,
-    abortSignal,
+    decodeNiftiFile,
+    options,
   );
 }
 
-const NIFTI_HEADER_INFO_PRIORITY = 1000;
-
 async function getNiftiHeaderInfo(
-  chunkManager: Borrowed<ChunkManager>,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContextCounterpart,
   url: string,
-  abortSignal: AbortSignal,
+  options: Partial<ProgressOptions>,
 ) {
-  const data = await getNiftiFileData(
-    chunkManager,
-    credentialsProvider,
-    url,
-    () => ({
-      priorityTier: ChunkPriorityTier.VISIBLE,
-      priority: NIFTI_HEADER_INFO_PRIORITY,
-    }),
-    abortSignal,
-  );
+  const data = await getNiftiFileData(sharedKvStoreContext, url, options);
   return data.header;
 }
 
@@ -165,174 +144,161 @@ const DATA_TYPE_CONVERSIONS = new Map([
 
 registerPromiseRPC(
   GET_NIFTI_VOLUME_INFO_RPC_ID,
-  async function (x, abortSignal): RPCPromise<NiftiVolumeInfo> {
-    const chunkManager = this.getRef<ChunkManager>(x.chunkManager);
-    const credentialsProvider = this.getOptionalRef<
-      SharedCredentialsProviderCounterpart<
-        Exclude<SpecialProtocolCredentials, undefined>
-      >
-    >(x.credentialsProvider);
-    try {
-      const header = await getNiftiHeaderInfo(
-        chunkManager,
-        credentialsProvider,
-        x.url,
-        abortSignal,
+  async function (x, progressOptions): RPCPromise<NiftiVolumeInfo> {
+    const sharedKvStoreContext = this.get(
+      x.sharedKvStoreContext,
+    ) as SharedKvStoreContextCounterpart;
+    const header = await getNiftiHeaderInfo(
+      sharedKvStoreContext,
+      x.url,
+      progressOptions,
+    );
+    const dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
+    if (dataTypeInfo === undefined) {
+      throw new Error(
+        "Unsupported data type: " +
+          `${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`,
       );
-      const dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
-      if (dataTypeInfo === undefined) {
-        throw new Error(
-          "Unsupported data type: " +
-            `${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`,
-        );
-      }
-      let spatialInvScale = 1;
-      let spatialUnit = "";
-      switch (header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK) {
-        case NIFTI1.UNITS_METER:
-          spatialInvScale = 1;
-          spatialUnit = "m";
-          break;
-        case NIFTI1.UNITS_MM:
-          spatialInvScale = 1e3;
-          spatialUnit = "m";
-          break;
-        case NIFTI1.UNITS_MICRON:
-          spatialInvScale = 1e6;
-          spatialUnit = "m";
-          break;
-      }
-
-      let timeUnit = "";
-      let timeInvScale = 1;
-      switch (header.xyzt_units & NIFTI1.TEMPORAL_UNITS_MASK) {
-        case NIFTI1.UNITS_SEC:
-          timeUnit = "s";
-          timeInvScale = 1;
-          break;
-        case NIFTI1.UNITS_MSEC:
-          timeUnit = "s";
-          timeInvScale = 1e3;
-          break;
-        case NIFTI1.UNITS_USEC:
-          timeUnit = "s";
-          timeInvScale = 1e6;
-          break;
-        case NIFTI1.UNITS_HZ:
-          timeUnit = "Hz";
-          timeInvScale = 1;
-          break;
-        case NIFTI1.UNITS_RADS:
-          timeUnit = "rad/s";
-          timeInvScale = 1;
-          break;
-      }
-      let units: string[] = [
-        spatialUnit,
-        spatialUnit,
-        spatialUnit,
-        timeUnit,
-        "",
-        "",
-        "",
-      ];
-      let sourceScales = Float64Array.of(
-        header.pixDims[1] / spatialInvScale,
-        header.pixDims[2] / spatialInvScale,
-        header.pixDims[3] / spatialInvScale,
-        header.pixDims[4] / timeInvScale,
-        header.pixDims[5],
-        header.pixDims[6],
-        header.pixDims[7],
-      );
-      let viewScales = Float64Array.of(
-        1 / spatialInvScale,
-        1 / spatialInvScale,
-        1 / spatialInvScale,
-        1 / timeInvScale,
-        1,
-        1,
-        1,
-      );
-      let sourceNames = ["i", "j", "k", "m", "c^", "c1^", "c2^"];
-      let viewNames = ["x", "y", "z", "t", "c^", "c1^", "c2^"];
-      const rank = header.dims[0];
-      sourceNames = sourceNames.slice(0, rank);
-      viewNames = viewNames.slice(0, rank);
-      units = units.slice(0, rank);
-      sourceScales = sourceScales.slice(0, rank);
-      viewScales = viewScales.slice(0, rank);
-      const { quatern_b, quatern_c, quatern_d } = header;
-      const quatern_a = Math.sqrt(
-        1.0 -
-          quatern_b * quatern_b -
-          quatern_c * quatern_c -
-          quatern_d * quatern_d,
-      );
-      const qfac = header.pixDims[0] === -1 ? -1 : 1;
-      const qoffset = vec3.fromValues(
-        header.qoffset_x,
-        header.qoffset_y,
-        header.qoffset_z,
-      );
-      // https://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/qsform.html
-      const method3Transform = convertAffine(header.affine);
-      method3Transform;
-      const method2Transform = translationRotationScaleZReflectionToMat4(
-        mat4.create(),
-        qoffset,
-        quat.fromValues(quatern_b, quatern_c, quatern_d, quatern_a),
-        kOneVec,
-        qfac,
-      );
-      const transform = matrix.createIdentity(Float64Array, rank + 1);
-      const copyRank = Math.min(3, rank);
-      for (let row = 0; row < copyRank; ++row) {
-        for (let col = 0; col < copyRank; ++col) {
-          transform[col * (rank + 1) + row] = method2Transform[col * 4 + row];
-        }
-        transform[rank * (rank + 1) + row] = method2Transform[12 + row];
-      }
-      const info: NiftiVolumeInfo = {
-        rank,
-        sourceNames,
-        viewNames,
-        units,
-        sourceScales,
-        viewScales,
-        description: header.description,
-        transform,
-        dataType: dataTypeInfo.dataType,
-        volumeSize: Uint32Array.from(header.dims.slice(1, 1 + rank)),
-      };
-      return { value: info };
-    } finally {
-      chunkManager.dispose();
-      credentialsProvider?.dispose();
     }
+    let spatialInvScale = 1;
+    let spatialUnit = "";
+    switch (header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK) {
+      case NIFTI1.UNITS_METER:
+        spatialInvScale = 1;
+        spatialUnit = "m";
+        break;
+      case NIFTI1.UNITS_MM:
+        spatialInvScale = 1e3;
+        spatialUnit = "m";
+        break;
+      case NIFTI1.UNITS_MICRON:
+        spatialInvScale = 1e6;
+        spatialUnit = "m";
+        break;
+    }
+
+    let timeUnit = "";
+    let timeInvScale = 1;
+    switch (header.xyzt_units & NIFTI1.TEMPORAL_UNITS_MASK) {
+      case NIFTI1.UNITS_SEC:
+        timeUnit = "s";
+        timeInvScale = 1;
+        break;
+      case NIFTI1.UNITS_MSEC:
+        timeUnit = "s";
+        timeInvScale = 1e3;
+        break;
+      case NIFTI1.UNITS_USEC:
+        timeUnit = "s";
+        timeInvScale = 1e6;
+        break;
+      case NIFTI1.UNITS_HZ:
+        timeUnit = "Hz";
+        timeInvScale = 1;
+        break;
+      case NIFTI1.UNITS_RADS:
+        timeUnit = "rad/s";
+        timeInvScale = 1;
+        break;
+    }
+    let units: string[] = [
+      spatialUnit,
+      spatialUnit,
+      spatialUnit,
+      timeUnit,
+      "",
+      "",
+      "",
+    ];
+    let sourceScales = Float64Array.of(
+      header.pixDims[1] / spatialInvScale,
+      header.pixDims[2] / spatialInvScale,
+      header.pixDims[3] / spatialInvScale,
+      header.pixDims[4] / timeInvScale,
+      header.pixDims[5],
+      header.pixDims[6],
+      header.pixDims[7],
+    );
+    let viewScales = Float64Array.of(
+      1 / spatialInvScale,
+      1 / spatialInvScale,
+      1 / spatialInvScale,
+      1 / timeInvScale,
+      1,
+      1,
+      1,
+    );
+    let sourceNames = ["i", "j", "k", "m", "c^", "c1^", "c2^"];
+    let viewNames = ["x", "y", "z", "t", "c^", "c1^", "c2^"];
+    const rank = header.dims[0];
+    sourceNames = sourceNames.slice(0, rank);
+    viewNames = viewNames.slice(0, rank);
+    units = units.slice(0, rank);
+    sourceScales = sourceScales.slice(0, rank);
+    viewScales = viewScales.slice(0, rank);
+    const { quatern_b, quatern_c, quatern_d } = header;
+    const quatern_a = Math.sqrt(
+      1.0 -
+        quatern_b * quatern_b -
+        quatern_c * quatern_c -
+        quatern_d * quatern_d,
+    );
+    const qfac = header.pixDims[0] === -1 ? -1 : 1;
+    const qoffset = vec3.fromValues(
+      header.qoffset_x,
+      header.qoffset_y,
+      header.qoffset_z,
+    );
+    // https://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/qsform.html
+    const method3Transform = convertAffine(header.affine);
+    method3Transform;
+    const method2Transform = translationRotationScaleZReflectionToMat4(
+      mat4.create(),
+      qoffset,
+      quat.fromValues(quatern_b, quatern_c, quatern_d, quatern_a),
+      kOneVec,
+      qfac,
+    );
+    const transform = matrix.createIdentity(Float64Array, rank + 1);
+    const copyRank = Math.min(3, rank);
+    for (let row = 0; row < copyRank; ++row) {
+      for (let col = 0; col < copyRank; ++col) {
+        transform[col * (rank + 1) + row] = method2Transform[col * 4 + row];
+      }
+      transform[rank * (rank + 1) + row] = method2Transform[12 + row];
+    }
+    const info: NiftiVolumeInfo = {
+      rank,
+      sourceNames,
+      viewNames,
+      units,
+      sourceScales,
+      viewScales,
+      description: header.description,
+      transform,
+      dataType: dataTypeInfo.dataType,
+      volumeSize: Uint32Array.from(header.dims.slice(1, 1 + rank)),
+    };
+    return { value: info };
   },
 );
 
 @registerSharedObject()
 export class NiftiVolumeChunkSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    VolumeChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
   VolumeSourceParameters,
 ) {
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const data = await getNiftiFileData(
-      this.chunkManager,
-      this.credentialsProvider,
+      this.sharedKvStoreContext,
       this.parameters.url,
-      () => ({ priorityTier: chunk.priorityTier, priority: chunk.priority }),
-      abortSignal,
+      { signal },
     );
     const imageBuffer = readImage(data.header, data.uncompressedData);
     await decodeRawChunk(
       chunk,
-      abortSignal,
+      signal,
       imageBuffer,
       data.header.littleEndian ? Endianness.LITTLE : Endianness.BIG,
     );
