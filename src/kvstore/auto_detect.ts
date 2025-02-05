@@ -17,13 +17,13 @@
 import type { KvStoreContext } from "#src/kvstore/context.js";
 import { readKvStore } from "#src/kvstore/index.js";
 import { pathIsDirectory } from "#src/kvstore/url.js";
-import { isGzipFormat } from "#src/util/gzip.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
 export interface AutoDetectDirectoryOptions {
   url: string;
   fileNames: Set<string>;
+  subDirectories: Set<string>;
   signal?: AbortSignal;
 }
 
@@ -33,7 +33,8 @@ export interface AutoDetectMatch {
 }
 
 export interface AutoDetectDirectorySpec {
-  fileNames: Set<string>;
+  fileNames?: Set<string>;
+  subDirectories?: Set<string>;
   match: (options: AutoDetectDirectoryOptions) => Promise<AutoDetectMatch[]>;
 }
 
@@ -91,12 +92,21 @@ export function composeAutoDetectDirectorySpecs(
   specs: AutoDetectDirectorySpec[],
 ): AutoDetectDirectorySpec {
   const fileNames = new Set<string>();
+  const subDirectories = new Set<string>();
   for (const spec of specs) {
-    for (const fileName of spec.fileNames) {
-      fileNames.add(fileName);
+    const { fileNames: curFileNames, subDirectories: curSubDirectories } = spec;
+    if (curFileNames !== undefined) {
+      for (const fileName of curFileNames) {
+        fileNames.add(fileName);
+      }
+    }
+    if (curSubDirectories !== undefined) {
+      for (const subDirectory of curSubDirectories) {
+        subDirectories.add(subDirectory);
+      }
     }
   }
-  return { fileNames, match: composeMatchFunctions(specs) };
+  return { fileNames, subDirectories, match: composeMatchFunctions(specs) };
 }
 
 export function composeAutoDetectFileSpecs(
@@ -114,7 +124,6 @@ export function composeAutoDetectFileSpecs(
 export class AutoDetectRegistry {
   directorySpecs: AutoDetectDirectorySpec[] = [];
   fileSpecs: AutoDetectFileSpec[] = [];
-  gzipFileSpecs: AutoDetectFileSpec[] = [];
   private _directorySpec: AutoDetectDirectorySpec | undefined;
   private _fileSpec: AutoDetectFileSpec | undefined;
 
@@ -123,21 +132,14 @@ export class AutoDetectRegistry {
     this._directorySpec = undefined;
   }
 
-  registerFileFormat(
-    spec: AutoDetectFileSpec,
-    supportedEncodings?: { gzip?: boolean },
-  ) {
+  registerFileFormat(spec: AutoDetectFileSpec) {
     this.fileSpecs.push(spec);
-    if (supportedEncodings?.gzip) {
-      this.gzipFileSpecs.push(spec);
-    }
     this._fileSpec = undefined;
   }
 
   copyTo(registry: AutoDetectRegistry) {
     registry.directorySpecs.push(...this.directorySpecs);
     registry.fileSpecs.push(...this.fileSpecs);
-    registry.gzipFileSpecs.push(...this.gzipFileSpecs);
     registry._fileSpec = undefined;
     registry._directorySpec = undefined;
   }
@@ -157,11 +159,8 @@ export class AutoDetectRegistry {
   }
 
   private getFileSpec() {
-    const { fileSpecs, gzipFileSpecs } = this;
+    const { fileSpecs } = this;
     const specs = [...fileSpecs];
-    if (gzipFileSpecs.length > 0) {
-      specs.push(getGzipFileSpec(composeAutoDetectFileSpecs(gzipFileSpecs)));
-    }
     return composeAutoDetectFileSpecs(specs);
   }
 }
@@ -261,7 +260,7 @@ export async function autoDetectFormat(
   const autoDetectDirectory = options.autoDetectDirectory();
   const detectedFileNames = new Set<string>();
   await Promise.all(
-    Array.from(autoDetectDirectory.fileNames, async (fileName) => {
+    Array.from(autoDetectDirectory.fileNames ?? [], async (fileName) => {
       const response = await kvStore.store.stat(kvStore.path + fileName, {
         signal: options.signal,
         progressListener: options.progressListener,
@@ -275,58 +274,8 @@ export async function autoDetectFormat(
   const matches = await autoDetectDirectory.match({
     url,
     fileNames: detectedFileNames,
+    subDirectories: new Set(),
     signal: options.signal,
   });
   return { matches, url };
-}
-
-function getGzipFileSpec(decodedSpec: AutoDetectFileSpec): AutoDetectFileSpec {
-  // Heuristic, assume gzip adds at most 100 bytes of overhead.
-  const prefixLength = decodedSpec.prefixLength + 100;
-
-  async function detect(
-    options: AutoDetectFileOptions,
-  ): Promise<AutoDetectMatch[]> {
-    if (!isGzipFormat(options.prefix)) return [];
-    const decompressedStream = new Response(options.prefix).body!.pipeThrough(
-      new DecompressionStream("gzip"),
-      { signal: options.signal },
-    );
-    let decodedPrefix = new Uint8Array(decodedSpec.prefixLength);
-    // Decode as much as possible.
-    let totalLength = 0;
-
-    try {
-      const reader = decompressedStream.getReader();
-      while (true) {
-        let { value } = await reader.read();
-        if (value === undefined) break;
-        const remainingLength = decodedPrefix.length - totalLength;
-        if (value.length > remainingLength) {
-          value = value.subarray(0, remainingLength);
-        }
-        decodedPrefix.set(value, totalLength);
-        totalLength += value.length;
-        if (totalLength === decodedPrefix.length) {
-          break;
-        }
-      }
-    } catch {
-      // Ignore failure, likely due to truncated input.
-    }
-    decodedPrefix = decodedPrefix.subarray(0, totalLength);
-
-    const matches = await decodedSpec.match({
-      url: options.url,
-      signal: options.signal,
-      prefix: decodedPrefix,
-      totalSize: undefined,
-    });
-    return matches.map(({ suffix, description }) => ({
-      suffix,
-      description: `${description} (gzip-compressed)`,
-    }));
-  }
-
-  return { prefixLength, suffixLength: 0, match: detect };
 }

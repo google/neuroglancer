@@ -16,8 +16,8 @@
 
 import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import {
-  composeByteRangeRequest,
   FileByteRangeHandle,
+  handleByteRangeRequestFromUint8Array,
 } from "#src/kvstore/byte_range/file_handle.js";
 import type { DriverReadOptions, ReadResponse } from "#src/kvstore/index.js";
 import { KvStoreFileHandle } from "#src/kvstore/index.js";
@@ -138,20 +138,8 @@ export async function readFromLeafNodeEntry(
 ): Promise<ReadResponse | undefined> {
   const { value } = entry;
   if (value instanceof Uint8Array) {
-    const {
-      outer: { offset, length },
-    } = composeByteRangeRequest(
-      { offset: 0, length: value.length },
-      options.byteRange,
-    );
-    return {
-      offset,
-      length,
-      totalSize: value.length,
-      response: new Response(value.subarray(offset, offset + length)),
-    };
+    return handleByteRangeRequestFromUint8Array(value, options.byteRange);
   }
-
   const {
     offset,
     length,

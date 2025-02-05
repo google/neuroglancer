@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import type {
-  ListEntry,
-  DriverListOptions,
-  ListResponse,
+import {
+  type ListEntry,
+  type DriverListOptions,
+  type ListResponse,
+  normalizeListResponse,
 } from "#src/kvstore/index.js";
 import { isS3ListResponse } from "#src/kvstore/s3/list.js";
 import { encodePathForUrl, extractQueryAndFragment } from "#src/kvstore/url.js";
@@ -123,5 +124,5 @@ export async function listFromHtmlDirectoryListing(
       entries.push({ key: p });
     }
   }
-  return { entries, directories };
+  return normalizeListResponse({ entries, directories });
 }
