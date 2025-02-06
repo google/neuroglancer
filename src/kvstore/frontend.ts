@@ -16,6 +16,7 @@
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { SharedCredentialsManager } from "#src/credentials_provider/shared.js";
+import type { CompletionResult } from "#src/kvstore/context.js";
 import { KvStoreContext } from "#src/kvstore/context.js";
 import type {
   DriverListOptions,
@@ -35,7 +36,9 @@ import {
   READ_RPC_ID,
   SHARED_KVSTORE_CONTEXT_RPC_ID,
   STAT_RPC_ID,
+  COMPLETE_URL_RPC_ID,
 } from "#src/kvstore/shared_common.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { registerSharedObjectOwner, SharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObjectOwner(SHARED_KVSTORE_CONTEXT_RPC_ID)
@@ -108,6 +111,21 @@ export function proxyListToBackendKvStore(
 ): Promise<ListResponse> {
   return sharedKvStoreContext.rpc!.promiseInvoke<ListResponse>(
     LIST_RPC_ID,
+    {
+      sharedKvStoreContext: sharedKvStoreContext.rpcId,
+      url,
+    },
+    { signal: options.signal, progressListener: options.progressListener },
+  );
+}
+
+export function proxyCompleteUrlToBackendKvStore(
+  sharedKvStoreContext: SharedKvStoreContext,
+  url: string,
+  options: Partial<ProgressOptions>,
+): Promise<CompletionResult> {
+  return sharedKvStoreContext.rpc!.promiseInvoke<CompletionResult>(
+    COMPLETE_URL_RPC_ID,
     {
       sharedKvStoreContext: sharedKvStoreContext.rpcId,
       url,

@@ -605,7 +605,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   ensureBoundsUpdated() {
-    super.ensureBoundsUpdated();
+    super.ensureBoundsUpdated(true /* canScaleForScreenshot */);
     this.projectionParameters.setViewport(this.renderViewport);
   }
 

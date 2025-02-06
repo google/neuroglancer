@@ -50,6 +50,7 @@ import type {
 } from "#src/util/completion.js";
 import {
   applyCompletionOffset,
+  emptyCompletionResult,
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -402,6 +403,7 @@ export class DataSourceRegistry extends RefCounted {
   ): Promise<DataSourceWithRedirectInfo> {
     const redirectLog = new Set<string>();
     let url: string = options.url;
+    url = url.trim();
     // Trim any trailing "|" characters.
     url = url.replace(/\|+$/, "");
     let originalCanonicalUrl: string | undefined;
@@ -543,7 +545,7 @@ export class DataSourceRegistry extends RefCounted {
       const provider = this.dataSources.get(scheme);
       if (provider !== undefined) {
         // Non-kvstore-based protocol.
-        if (provider.completeUrl === undefined) throw null;
+        if (provider.completeUrl === undefined) return emptyCompletionResult;
         const completions = await provider.completeUrl({
           registry: this,
           url: options.url,
@@ -558,7 +560,7 @@ export class DataSourceRegistry extends RefCounted {
     {
       const provider = this.kvStoreBasedDataSources.get(scheme);
       if (provider !== undefined) {
-        if (provider.completeUrl === undefined) throw null;
+        if (provider.completeUrl === undefined) return emptyCompletionResult;
         const completions = await provider.completeUrl({
           registry: this,
           signal: signal ?? new AbortController().signal,
@@ -653,7 +655,7 @@ export class KvStoreBasedDataSourceLegacyUrlAdapter
         },
       );
     }
-    if (!this.base.completeUrl) throw null;
+    if (!this.base.completeUrl) return emptyCompletionResult;
     return this.base.completeUrl({
       registry: options.registry,
       signal: options.signal,

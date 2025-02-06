@@ -1,0 +1,335 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: PrecomputedVolume
+title: "Precomputed volume metadata"
+type: object
+properties:
+  "@type":
+    const: "neuroglancer_multiscale_volume"
+    title: Precomputed data kind.
+    description: Optional but strongly recommended for new data.
+  "type":
+    title: Specifies how to interpret the volume.
+    oneOf:
+      - const: image
+        title: Generic image volume.
+        description: |-
+          Displays as an :ref:`image layer<image-layer>` by default.
+      - const: segmentation
+        title: Discrete object label volume.
+        description: |-
+          Displays as a :ref:`segmentation layer<segmentation-layer>` by default.
+  data_type:
+    enum:
+      - uint8
+      - int8
+      - uint16
+      - int16
+      - uint32
+      - int32
+      - uint64
+      - float32
+    title: Data type of the volume.
+  num_channels:
+    type: integer
+    minimum: 1
+    title: Number of channels.
+    description: Must be 1 if `.type` is ``"segmentation"``.
+  scales:
+    type: array
+    title: Metadata for each resolution of the data.
+    minItems: 1
+    items:
+      type: object
+      properties:
+        key:
+          type: string
+          title: Relative path to the directory containing the chunk data for this scale.
+          examples:
+            - "8_8_8"
+            - "../other_volume/8_8_8"
+        size:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: integer
+            minimum: 0
+          title: |-
+            Dimensions of the volume in voxels (XYZ order).
+          examples:
+            - [500, 500, 500]
+        voxel_offset:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: integer
+          title: |-
+            Origin of the volume in voxels (XYZ order).
+        chunk_sizes:
+          type: array
+          minItems: 1
+          items:
+            type: array
+            minItems: 3
+            maxItems: 3
+            items:
+              type: integer
+              minimum: 1
+          title: Chunk dimensions (XYZ order).
+          description: |-
+            Typically just a single chunk shape is specified, but more than one
+            chunk shape can be specified to optimize different read access
+            patterns. For each chunk shape specified, a separate copy of the
+            data must be stored.
+          examples:
+            - [[64, 64, 64]]
+            - [[512, 512, 1], [512, 1, 512], [1, 512, 512]]
+        resolution:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: number
+          title: |-
+            Voxel size in nanometers (XYZ order).
+          description: |
+            .. note:: Units other than meters cannot be represented.
+        encoding:
+          title: Encoding of stored chunks.
+          oneOf:
+            - const: raw
+              title: |
+                :ref:`precomputed-volume-encoding-raw`
+            - const: jpeg
+              title: |
+                :ref:`precomputed-volume-encoding-jpeg`
+            - const: compressed_segmentation
+              title: |
+                :ref:`precomputed-volume-encoding-compressed-segmentation`
+            - const: png
+              title: |
+                :ref:`precomputed-volume-encoding-png`
+            - const: compresso
+              title: |
+                :ref:`precomputed-volume-encoding-compresso`
+            - const: jxl
+              title: |
+                :ref:`precomputed-volume-encoding-jxl`
+        jpeg_quality:
+          type: integer
+          minimum: 0
+          maximum: 100
+          title: |-
+            JPEG encoding quality when writing chunks.
+          description: |-
+            Only valid if `.encoding` is ``"jpeg"``. The quality is specified
+            using the IJG (Independent JPEG Group) [0, 100] recommended scale,
+            with 0 having the worst quality (smallest file size) and 100 the
+            best quality (largest file size).
+
+            .. note::
+
+               This option only affects writing and is ignored by Neuroglancer.
+        png_level:
+          type: integer
+          minimum: 0
+          maximum: 9
+          title: |-
+            PNG compression level when writing chunks.
+          description: |-
+            Only valid if `.encoding` is ``"png"``. Specifies the zlib
+            compression level between [0, 9], where 0 is uncompressed, with 1
+            having the fastest compression (largest file size), and 9 the
+            slowest compression (smallest file size).
+
+            .. note::
+
+               This option only affects writing and is ignored by Neuroglancer.
+        compressed_segmentation_block_size:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: number
+            minimum: 1
+          title: |-
+            Block size for compressed segmentation encoding (XYZ order).
+          description: |-
+            Must be specified if, and only if, `.encoding` is ``"compressed_segmentation"``.
+        sharding:
+          $ref: PrecomputedSharding
+          title: Sharding parameters.
+          description: |-
+            If specified, indicates that the chunks are stored in :ref:`sharded
+            format<precomputed-volume-sharded-format>`. If unspecified, chunks
+            are stored in :ref:`unsharded
+            format<precomputed-volume-unsharded-format>`.
+        hidden:
+          type: boolean
+          title: Exclude scale from rendering.
+          default: false
+
+      required:
+        - key
+        - size
+        - chunk_size
+        - resolution
+        - encoding
+  mesh:
+    type: string
+    title: Relative path to associated :ref:`object meshes<precomputed-mesh-format>`.
+    description: |
+      Only valid if `.type` is ``"segmentation"``.
+  skeletons:
+    type: string
+    title: Relative path to associated :ref:`object skeletons<precomputed-skeleton-format>`.
+    description: |
+      Only valid if `.type` is ``"segmentation"``.
+  segment_properties:
+    type: string
+    title: Relative path to associated :ref:`segment properties<precomputed-segment-properties-format>`.
+    description: |
+      Only valid if `.type` is ``"segmentation"``.
+
+required:
+  - "type"
+  - "data_type"
+  - "num_channels"
+examples:
+  - {
+      "data_type": "uint8",
+      "num_channels": 1,
+      "scales":
+        [
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "8_8_8",
+            "resolution": [8, 8, 8],
+            "size": [6446, 6643, 8090],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "16_16_16",
+            "resolution": [16, 16, 16],
+            "size": [3223, 3321, 4045],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "32_32_32",
+            "resolution": [32, 32, 32],
+            "size": [1611, 1660, 2022],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "64_64_64",
+            "resolution": [64, 64, 64],
+            "size": [805, 830, 1011],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "128_128_128",
+            "resolution": [128, 128, 128],
+            "size": [402, 415, 505],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "256_256_256",
+            "resolution": [256, 256, 256],
+            "size": [201, 207, 252],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "encoding": "jpeg",
+            "key": "512_512_512",
+            "resolution": [512, 512, 512],
+            "size": [100, 103, 126],
+            "voxel_offset": [0, 0, 0],
+          },
+        ],
+      "type": "image",
+    }
+  - {
+      "data_type": "uint64",
+      "mesh": "mesh",
+      "num_channels": 1,
+      "scales":
+        [
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "8_8_8",
+            "resolution": [8, 8, 8],
+            "size": [6446, 6643, 8090],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "16_16_16",
+            "resolution": [16, 16, 16],
+            "size": [3223, 3321, 4045],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "32_32_32",
+            "resolution": [32, 32, 32],
+            "size": [1611, 1660, 2022],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "64_64_64",
+            "resolution": [64, 64, 64],
+            "size": [805, 830, 1011],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "128_128_128",
+            "resolution": [128, 128, 128],
+            "size": [402, 415, 505],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "256_256_256",
+            "resolution": [256, 256, 256],
+            "size": [201, 207, 252],
+            "voxel_offset": [0, 0, 0],
+          },
+          {
+            "chunk_sizes": [[64, 64, 64]],
+            "compressed_segmentation_block_size": [8, 8, 8],
+            "encoding": "compressed_segmentation",
+            "key": "512_512_512",
+            "resolution": [512, 512, 512],
+            "size": [100, 103, 126],
+            "voxel_offset": [0, 0, 0],
+          },
+        ],
+      "type": "segmentation",
+    }

@@ -341,6 +341,7 @@ export abstract class SliceViewVolumeRenderLayer<
   >;
   private tempChunkPosition: Float32Array;
   shaderParameters: WatchableValueInterface<ShaderParameters>;
+  highestResolutionLoadedVoxelSize: Float32Array | undefined;
   private vertexIdHelper: VertexIdHelper;
 
   constructor(
@@ -570,6 +571,7 @@ void main() {
         this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber,
       );
     }
+    this.highestResolutionLoadedVoxelSize = undefined;
 
     let shaderResult: ParameterizedShaderGetterResult<
       ShaderParameters,
@@ -692,6 +694,18 @@ void main() {
           effectiveVoxelSize[1],
           effectiveVoxelSize[2],
         );
+        if (presentCount > 0) {
+          const medianStoredVoxelSize = this.highestResolutionLoadedVoxelSize
+            ? medianOf3(
+                this.highestResolutionLoadedVoxelSize[0],
+                this.highestResolutionLoadedVoxelSize[1],
+                this.highestResolutionLoadedVoxelSize[2],
+              )
+            : Infinity;
+          if (medianVoxelSize <= medianStoredVoxelSize) {
+            this.highestResolutionLoadedVoxelSize = effectiveVoxelSize;
+          }
+        }
         renderScaleHistogram.add(
           medianVoxelSize,
           medianVoxelSize / projectionParameters.pixelSize,

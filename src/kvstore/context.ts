@@ -31,6 +31,7 @@ import type {
   BasicCompletionResult,
   CompletionWithDescription,
 } from "#src/util/completion.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 export type CompletionResult = BasicCompletionResult<CompletionWithDescription>;
 
@@ -39,6 +40,14 @@ export interface BaseKvStoreProvider {
   hidden?: boolean;
   description?: string;
   getKvStore(parsedUrl: UrlWithParsedScheme): KvStoreWithPath;
+  completeUrl?: (
+    options: BaseKvStoreCompleteUrlOptions,
+  ) => Promise<CompletionResult | undefined>;
+}
+
+export interface BaseKvStoreCompleteUrlOptions
+  extends Partial<ProgressOptions> {
+  url: UrlWithParsedScheme;
 }
 
 export interface KvStoreAdapterProvider {
@@ -49,6 +58,15 @@ export interface KvStoreAdapterProvider {
     parsedUrl: UrlWithParsedScheme,
     base: KvStoreWithPath,
   ): KvStoreWithPath;
+  completeUrl?: (
+    options: KvStoreAdapterCompleteUrlOptions,
+  ) => Promise<CompletionResult | undefined>;
+}
+
+export interface KvStoreAdapterCompleteUrlOptions
+  extends Partial<ProgressOptions> {
+  url: UrlWithParsedScheme;
+  base: KvStoreWithPath;
 }
 
 export class KvStoreContext {
@@ -61,32 +79,50 @@ export class KvStoreContext {
     let kvStore: KvStoreWithPath;
     {
       const basePart = pipeline[0];
-      const provider = this.baseKvStoreProviders.get(basePart.scheme);
-      if (provider === undefined) {
-        const usage = this.describeProtocolUsage(basePart.scheme);
-        let message = `Invalid base kvstore protocol "${basePart.scheme}:"`;
-        if (usage !== undefined) {
-          message += `; ${usage}`;
-        }
-        throw new Error(message);
-      }
-      kvStore = provider.getKvStore(basePart);
+      kvStore = this.getBaseKvStoreProvider(basePart).getKvStore(basePart);
     }
-
     for (let i = 1; i < pipeline.length; ++i) {
-      const part = pipeline[i];
-      const provider = this.kvStoreAdapterProviders.get(part.scheme);
-      if (provider === undefined) {
-        const usage = this.describeProtocolUsage(part.scheme);
-        let message = `Invalid kvstore adapter protocol "${part.scheme}:" in ${JSON.stringify(url)}`;
-        if (usage !== undefined) {
-          message += `; ${usage}`;
-        }
-        throw new Error(message);
-      }
-      kvStore = provider.getKvStore(part, kvStore);
+      kvStore = this.applyKvStoreAdapterUrl(kvStore, pipeline[i]);
     }
     return kvStore;
+  }
+
+  getBaseKvStoreProvider(url: UrlWithParsedScheme): BaseKvStoreProvider {
+    const provider = this.baseKvStoreProviders.get(url.scheme);
+    if (provider === undefined) {
+      const usage = this.describeProtocolUsage(url.scheme);
+      let message = `Invalid base kvstore protocol "${url.scheme}:"`;
+      if (usage !== undefined) {
+        message += `; ${usage}`;
+      }
+      throw new Error(message);
+    }
+    return provider;
+  }
+
+  getKvStoreAdapterProvider(
+    adapterUrl: UrlWithParsedScheme,
+  ): KvStoreAdapterProvider {
+    const provider = this.kvStoreAdapterProviders.get(adapterUrl.scheme);
+    if (provider === undefined) {
+      const usage = this.describeProtocolUsage(adapterUrl.scheme);
+      let message = `Invalid kvstore adapter protocol "${adapterUrl.scheme}:"`;
+      if (usage !== undefined) {
+        message += `; ${usage}`;
+      }
+      throw new Error(message);
+    }
+    return provider;
+  }
+
+  applyKvStoreAdapterUrl(
+    base: KvStoreWithPath,
+    adapterUrl: UrlWithParsedScheme,
+  ): KvStoreWithPath {
+    return this.getKvStoreAdapterProvider(adapterUrl).getKvStore(
+      adapterUrl,
+      base,
+    );
   }
 
   // Describes valid uses of `protocol`, for error messages indicating an

@@ -39,6 +39,11 @@ napoleon_use_admonition_for_notes = True
 
 html_title = "Neuroglancer"
 
+html_favicon = "_templates/logo.svg"
+
+templates_path = ["_templates"]
+
+
 # Don't include "View page source" links, since they aren't very helpful,
 # especially for generated pages.
 html_show_sourcelink = True
@@ -77,8 +82,9 @@ intersphinx_mapping = {
 html_theme = "sphinx_immaterial"
 
 html_theme_options = {
+    "logo_svg": "logo.svg",
     "icon": {
-        "logo": "material/library",
+        # "logo": "material/library",
         "repo": "fontawesome/brands/github",
     },
     "site_url": "https://google.github.io/neuroglancer/",
@@ -153,7 +159,10 @@ python_apigen_rst_prolog = """
 """
 
 
-json_schemas = ["json_schema/*.yml"]
+json_schemas = [
+    "json_schema/*.yml",
+    "**/json_schema/*.yml",
+]
 
 rst_prolog = """
 .. role:: python(code)

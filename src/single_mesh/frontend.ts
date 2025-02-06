@@ -20,8 +20,18 @@ import {
   ChunkSource,
   WithParameters,
 } from "#src/chunk_manager/frontend.js";
+import {
+  makeCoordinateSpace,
+  makeIdentityTransform,
+} from "#src/coordinate_transform.js";
+import type {
+  DataSource,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
+} from "#src/datasource/index.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import type { PickState, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
@@ -680,4 +690,42 @@ export async function getSingleMeshSource(
     sharedKvStoreContext,
     parameters: { meshSourceUrl: url, info },
   });
+}
+
+export class SingleMeshDataSource implements KvStoreBasedDataSourceProvider {
+  constructor(
+    public scheme: string,
+    public description: string,
+  ) {}
+
+  get singleFile() {
+    return true;
+  }
+
+  async get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureEmptyUrlSuffix(options.url);
+    const meshSource = await getSingleMeshSource(
+      options.registry.sharedKvStoreContext,
+      `${options.url.scheme}://${options.kvStoreUrl}`,
+      options,
+    );
+    const modelSpace = makeCoordinateSpace({
+      rank: 3,
+      names: ["x", "y", "z"],
+      units: ["m", "m", "m"],
+      scales: Float64Array.of(1e-9, 1e-9, 1e-9),
+    });
+    const dataSource: DataSource = {
+      canonicalUrl: `${options.kvStoreUrl}|${options.url.scheme}:`,
+      modelTransform: makeIdentityTransform(modelSpace),
+      subsources: [
+        {
+          id: "default",
+          default: true,
+          subsource: { singleMesh: meshSource },
+        },
+      ],
+    };
+    return dataSource;
+  }
 }

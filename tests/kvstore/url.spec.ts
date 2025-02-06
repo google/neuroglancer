@@ -54,6 +54,12 @@ describe("kvstoreEnsureDirectoryPipelineUrl", () => {
       "http://foo|zarr:",
     );
   });
+
+  test("s3", () => {
+    expect(kvstoreEnsureDirectoryPipelineUrl("s3://bucket/path")).toEqual(
+      "s3://bucket/path/",
+    );
+  });
 });
 
 describe("pipelineUrlJoin", () => {

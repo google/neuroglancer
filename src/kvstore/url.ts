@@ -16,7 +16,7 @@
 
 export function kvstoreEnsureDirectoryPipelineUrl(url: string): string {
   const m = url.match(
-    /^((?:.*?|)?)([a-zA-Z][a-zA-Z0-9-+.]*)(?:(:[^?#|]*)((?:[?#][^|]*)?))?$/,
+    /^((?:.*?\|)?)([a-zA-Z][a-zA-Z0-9-+.]*)(?:(:[^?#|]*)((?:[?#][^|]*)?))?$/,
   );
   if (m === null) {
     throw new Error(`Invalid URL: ${url}`);
@@ -196,7 +196,26 @@ export function pathIsDirectory(path: string) {
 // pipeline, special characters must be percent encoded.
 export function encodePathForUrl(path: string) {
   return encodeURI(path).replace(
-    /[?#]/g,
+    /[?#@]/g,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
+}
+
+export function joinBaseUrlAndPath(baseUrl: string, path: string) {
+  const { base, queryAndFragment } = extractQueryAndFragment(baseUrl);
+  return base + encodePathForUrl(path) + queryAndFragment;
+}
+
+export function getBaseHttpUrlAndPath(url: string) {
+  const parsed = new URL(url);
+  if (parsed.hash) {
+    throw new Error("fragment not supported");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("basic auth credentials not supported");
+  }
+  return {
+    baseUrl: `${parsed.origin}/${parsed.search}`,
+    path: decodeURIComponent(parsed.pathname.substring(1)),
+  };
 }
