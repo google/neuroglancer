@@ -16,12 +16,14 @@
 
 import "#src/datasource/zarr/register_default.js";
 import "#src/kvstore/zip/register_frontend.js";
+import "#src/kvstore/ocdbt/register_frontend.js";
 import "#src/sliceview/uncompressed_chunk_format.js";
 import { datasourceMetadataSnapshotTests } from "#tests/datasource/metadata_snapshot_test_util.js";
 
 datasourceMetadataSnapshotTests("zarr", [
   "zarr_v3/examples/single_res",
   "ome_zarr/simple_0.4",
-  "ome_zarr/simple_0.4.zip",
   "ome_zarr/simple_0.5",
+  "ome_zarr/simple_0.5.zip",
+  "ome_zarr/simple_0.5.ocdbt",
 ]);

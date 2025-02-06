@@ -1,0 +1,223 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: PrecomputedAnnotation
+title: "Precomputed annotation metadata"
+type: object
+properties:
+  "@type":
+    const: "neuroglancer_annotations_v1"
+    title: Precomputed data kind.
+  dimensions:
+    type: object
+    properties:
+      "<dimension-name>":
+        type: array
+        items:
+          - type: number
+          - type: string
+        title: |-
+          Scale coefficient and physical unit corresponding for each dimension.
+    title: Coordinate space over which annotations are defined.
+    description: |-
+      The number of dimensions is called the *rank*.
+  lower_bound:
+    type: array
+    items:
+      type: number
+    title: |-
+      Lower bound (in the coordinate space given by `dimensions`).
+    description: |-
+      Length must match number of `.dimensions`. This is also the origin of the
+      grid used for each spatial index level.
+  upper_bound:
+    type: array
+    items:
+      type: number
+    title: |-
+      Upper bound (in the coordinate space given by `dimensions`).
+    description: |-
+      Length must match number of `.dimensions`. All annotation geometry should
+      be contained with the bounding box defined by `.lower_bound` and
+      `.upper_bound`.
+  annotation_type:
+    title: |-
+      Annotation geometry type.
+    enum:
+      - "point"
+      - "line"
+      - "axis_aligned_bounding_box"
+      - "ellipsoid"
+  properties:
+    title: Additional properties associated with each annotation.
+    type: array
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+          title: |-
+            Unique identifier for the property.
+          description: |-
+            Must match the regular expression :regexp:`^[a-z][a-zA-Z0-9_]*$`.
+        type:
+          title: Property type.
+          oneOf:
+            - const: "rgb"
+              title: Represented as 3 uint8 values.
+            - const: "rgba"
+              title: Represented as 4 uint8 values.
+            - const: uint8
+            - const: int8
+            - const: uint16
+            - const: int16
+            - const: uint32
+            - const: int32
+            - const: float32
+        description:
+          type: string
+          title: Textual description to show in the UI.
+        enum_values:
+          title: |-
+            Numeric values corresponding to the labels in `.enum_labels`.
+          description: |-
+            Only valid if `.type` is a numeric type (not :json:`"rgb"` or
+            :json:`"rgba"`).
+          type: array
+          items:
+            type: number
+        enum_labels:
+          title: |-
+            Labels corresponding to the values in `.enum_values`.
+          description: |-
+            Must be specified if, and only if, `.enum_values` is specified. If
+            specified, the length must match that of `.enum_values`.
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - type
+  relationships:
+    type: array
+    title: Related object indices.
+    description: |-
+      For each specified relationship (which usually corresponds to a specific
+      segmentation volume), there is an associated set of uint64 identifiers for
+      each annotation, and the corresponding :ref:`related object
+      index<precomputed-annotation-format-related-object-index>` can be used to
+      query, for a given relationship, the list of annotations that are
+      associated with a given uint64 identifier.
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+          title: |-
+            Unique identifier for the relationship (displayed in the UI).
+        key:
+          type: string
+          title: |-
+            Relative path to the directory containing the :ref:`related object
+            index<precomputed-annotation-format-related-object-index>` for this
+            relationship.
+        sharding:
+          $ref: PrecomputedSharding
+          title: Sharding parameters.
+          description: |-
+            If specified, indicates that the :ref:`related object
+            index<precomputed-annotation-format-related-object-index>` is stored
+            in sharded format.
+      required:
+        - id
+        - key
+  by_id:
+    title: |-
+      Parameters of the :ref:`annotation id
+      index<precomputed-annotation-format-id-index>`.
+    type: object
+    properties:
+      key:
+        type: string
+        title: |-
+          Relative path to the :ref:`annotation id
+          index<precomputed-annotation-format-id-index>`.
+      sharding:
+        $ref: PrecomputedSharding
+        title: Sharding parameters.
+        description: |-
+          If specified, indicates that the :ref:`annotation id
+          index<precomputed-annotation-format-id-index>` is stored in sharded
+          format.
+    required:
+      - key
+  spatial:
+    type: array
+    title: Spatial index levels, from coarse to fine.
+    items:
+      type: object
+      properties:
+        key:
+          type: string
+          title: |-
+            Relative path to the :ref:`spatial index
+            level<precomputed-annotation-format-spatial-index>`.
+        grid_shape:
+          type: array
+          items:
+            type: integer
+          title: |-
+            Number of cells along each grid dimension for this spatial index level.
+          description: |-
+            The length must match the number of `.dimensions`.
+        chunk_shape:
+          type: array
+          items:
+            type: integer
+          title: |-
+            Number of cells along each grid dimension for this spatial index level.
+          description: |-
+            The length must match the number of `.dimensions`.
+        chunk_size:
+          type: array
+          items:
+            type: number
+          title: |-
+            Size along each dimension of each grid cell (in the coordinate space
+            given by `dimensions`).
+          description: |-
+            The length must match the number of `.dimensions`.
+        limit:
+          type: integer
+          minimum: 1
+          title: |-
+            Maximum number of annotations per grid cell in this level of the
+            spatial index.
+        sharding:
+          $ref: PrecomputedSharding
+          title: Sharding parameters.
+          description: |-
+            If specified, indicates that the :ref:`spatial index
+            level<precomputed-annotation-format-spatial-index>` is stored in
+            sharded format.
+      required:
+        - key
+        - grid_shape
+        - chunk_shape
+        - limit
+  segment_properties:
+    title: |
+      Relative path to the directory containing associated :ref:`segment
+      properties<precomputed-segment-properties-format>`.
+
+      .. note::
+
+        This association does *not* apply transitively when this skeleton
+        dataset itself is referenced via the :ref:`precomputed
+        volume<precomputed-volume-format>` `~PrecomputedVolume.mesh` metadata
+        property. Instead, the associated segment properties must be specified
+        directly in the volume metadata.
+    type: string
+required:
+  - "@type"
+  - vertex_quantization_bits
+  - transform
+  - lod_scale_multiplier

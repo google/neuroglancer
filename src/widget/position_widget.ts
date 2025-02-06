@@ -1380,6 +1380,28 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
     return this.viewer.coordinateSpaceCombiner.combined;
   }
 
+  private adjustDimensionHandler(
+    actionEvent: ActionEvent<WheelEvent>,
+    positionWidget: PositionWidget,
+  ) {
+    actionEvent.stopPropagation();
+    const event = actionEvent.detail;
+    const { deltaY } = event;
+    if (deltaY === 0) {
+      return;
+    }
+    positionWidget.adjustDimensionPosition(this.dimensionId, Math.sign(deltaY));
+  }
+
+  private adjustVelocityHandler(
+    actionEvent: ActionEvent<WheelEvent>,
+    viewer: SupportsDimensionTool<Viewer>,
+  ) {
+    actionEvent.stopPropagation();
+    const factor = getWheelZoomAmount(actionEvent.detail);
+    viewer.velocity.multiplyVelocity(this.dimensionId, factor);
+  }
+
   activate(activation: ToolActivation<this>) {
     const { viewer } = this;
     const { content } = makeToolActivationStatusMessage(activation);
@@ -1391,26 +1413,11 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
     activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
     activation.bindAction<WheelEvent>(
       "adjust-position-via-wheel",
-      (actionEvent) => {
-        actionEvent.stopPropagation();
-        const event = actionEvent.detail;
-        const { deltaY } = event;
-        if (deltaY === 0) {
-          return;
-        }
-        positionWidget.adjustDimensionPosition(
-          this.dimensionId,
-          Math.sign(deltaY),
-        );
-      },
+      (actionEvent) => this.adjustDimensionHandler(actionEvent, positionWidget),
     );
     activation.bindAction<WheelEvent>(
       "adjust-velocity-via-wheel",
-      (actionEvent) => {
-        actionEvent.stopPropagation();
-        const factor = getWheelZoomAmount(actionEvent.detail);
-        viewer.velocity.multiplyVelocity(this.dimensionId, factor);
-      },
+      (actionEvent) => this.adjustVelocityHandler(actionEvent, viewer),
     );
     activation.bindAction<WheelEvent>("toggle-playback", (event) => {
       event.stopPropagation();
@@ -1557,6 +1564,21 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         }),
       ).element,
     );
+
+    this.registerDisposer(new MouseEventBinder(plot.element, inputEventMap));
+
+    registerActionListener<WheelEvent>(
+      plot.element,
+      "adjust-via-wheel",
+      (actionEvent) => this.adjustDimensionHandler(actionEvent, positionWidget),
+    );
+
+    registerActionListener<WheelEvent>(
+      plot.element,
+      "adjust-velocity-via-wheel",
+      (actionEvent) => this.adjustVelocityHandler(actionEvent, viewer),
+    );
+
     return { positionWidget };
   }
 

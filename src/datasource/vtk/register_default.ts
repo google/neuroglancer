@@ -19,8 +19,8 @@ import {
   registerProvider,
 } from "#src/datasource/default_provider.js";
 import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
-import { VtkDataSource } from "#src/datasource/vtk/frontend.js";
+import { SingleMeshDataSource } from "#src/single_mesh/frontend.js";
 
-const provider = new VtkDataSource();
+const provider = new SingleMeshDataSource("vtk", "VTK mesh");
 registerKvStoreBasedDataProvider(provider);
 registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));

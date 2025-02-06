@@ -1964,14 +1964,12 @@ const GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID = "grapheneMulticutSegments";
 const GRAPHENE_MERGE_SEGMENTS_TOOL_ID = "grapheneMergeSegments";
 
 class MulticutAnnotationLayerView extends AnnotationLayerView {
-  private _annotationStates: MergedAnnotationStates;
-
+  declare private _annotationStates: MergedAnnotationStates;
   constructor(
     public layer: SegmentationUserLayer,
     public displayState: AnnotationDisplayState,
   ) {
     super(layer, displayState);
-
     const {
       graphConnection: { value: graphConnection },
     } = layer;

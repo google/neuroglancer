@@ -25,17 +25,15 @@ import type {
   StatOptions,
   StatResponse,
 } from "#src/kvstore/index.js";
-import { extractQueryAndFragment } from "#src/kvstore/url.js";
+import { getS3UrlKind, listS3CompatibleUrl } from "#src/kvstore/s3/list.js";
+import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
 import { fetchOk } from "#src/util/http_request.js";
-
-function joinBaseUrlAndPath(baseUrl: string, path: string) {
-  const { base, queryAndFragment } = extractQueryAndFragment(baseUrl);
-  return base + path + queryAndFragment;
-}
+import type { StringMemoize } from "#src/util/memoize.js";
 
 export class HttpKvStore implements KvStore {
   constructor(
+    private memoize: StringMemoize,
     public baseUrl: string,
     public baseUrlForDisplay: string = baseUrl,
     public fetchOkImpl: FetchOk = fetchOk,
@@ -65,7 +63,39 @@ export class HttpKvStore implements KvStore {
   }
 
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
-    return listFromHtmlDirectoryListing(this.baseUrl, prefix, options);
+    const s3UrlKind = getS3UrlKind(this.memoize, this.baseUrlForDisplay);
+    if (s3UrlKind === null) {
+      return listFromHtmlDirectoryListing(
+        this.baseUrl,
+        prefix,
+        this.fetchOkImpl,
+        options,
+      );
+    }
+    if (s3UrlKind !== undefined) {
+      return listS3CompatibleUrl(
+        joinBaseUrlAndPath(this.baseUrl, prefix),
+        this.baseUrlForDisplay,
+        this.memoize,
+        this.fetchOkImpl,
+        options,
+      );
+    }
+    return Promise.any([
+      listFromHtmlDirectoryListing(
+        this.baseUrl,
+        prefix,
+        this.fetchOkImpl,
+        options,
+      ),
+      listS3CompatibleUrl(
+        joinBaseUrlAndPath(this.baseUrl, prefix),
+        this.baseUrlForDisplay,
+        this.memoize,
+        this.fetchOkImpl,
+        options,
+      ),
+    ]);
   }
 
   getUrl(path: string) {
@@ -78,18 +108,4 @@ export class HttpKvStore implements KvStore {
   get supportsSuffixReads() {
     return true;
   }
-}
-
-export function getBaseUrlAndPath(url: string) {
-  const parsed = new URL(url);
-  if (parsed.hash) {
-    throw new Error("fragment not supported");
-  }
-  if (parsed.username || parsed.password) {
-    throw new Error("basic auth credentials not supported");
-  }
-  return {
-    baseUrl: `${parsed.origin}/${parsed.search}`,
-    path: decodeURI(parsed.pathname.substring(1)),
-  };
 }

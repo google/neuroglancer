@@ -1,0 +1,56 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: PrecomputedMultiresolutionMesh
+title: "Precomputed multi-resolution mesh metadata"
+type: object
+properties:
+  "@type":
+    const: "neuroglancer_multilod_draco"
+    title: Precomputed data kind.
+  vertex_quantization_bits:
+    type: integer
+    title: |-
+      Number of bits needed to represent each vertex position coordinate within
+      a mesh fragment.
+    description: |
+      Must be ``10`` or ``16``.
+  transform:
+    type: array
+    minItems: 12
+    maxItems: 12
+    items:
+      type: number
+    title: |-
+      4x3 homogeneous coordinate transform matrix in row-major order from the
+      *stored model* coordinate space to the *model* coordinate space.
+  lod_scale_multiplier:
+    type: number
+    title: |
+      Factor by which the :literal:`lod_scales` values in each manifest are
+      multiplied.
+  sharding:
+    $ref: PrecomputedSharding
+    title: Sharding parameters.
+    description: |-
+      If specified, indicates that the manifests and fragments are stored in
+      :ref:`sharded format<precomputed-mesh-format-multiresolution-sharded>`. If
+      unspecified, the manifests and fragments are stored in :ref:`unsharded
+      format<precomputed-mesh-format-multiresolution-unsharded>` as separate files.
+  segment_properties:
+    title: |
+      Relative path to the directory containing associated :ref:`segment
+      properties<precomputed-segment-properties-format>`.
+
+      .. note::
+
+        This association does *not* apply transitively when this mesh dataset
+        itself is referenced via the :ref:`precomputed
+        volume<precomputed-volume-format>` `~PrecomputedVolume.mesh` metadata
+        property. Instead, the associated segment properties must be specified
+        directly in the volume metadata.
+    type: string
+
+required:
+  - "@type"
+  - vertex_quantization_bits
+  - transform
+  - lod_scale_multiplier

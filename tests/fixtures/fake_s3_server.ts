@@ -14,32 +14,48 @@
  * limitations under the License.
  */
 
+import { spawn } from "node:child_process";
 import nodeHttp from "node:http";
+import readline from "node:readline";
 import nodeStream from "node:stream";
 import { bypass, http } from "msw";
-import S3rver from "s3rver";
 import { beforeEach } from "vitest";
 import { fetchOk } from "#src/util/http_request.js";
 import { fixture, type Fixture } from "#tests/fixtures/fixture.js";
 import type { mswFixture } from "#tests/fixtures/msw";
-import { tempDirectoryFixture } from "#tests/fixtures/temp_directory.js";
+
+declare const PYTHON_TEST_TOOLS_PATH: string;
 
 export function fakeS3ServerFixture(
   options: {
-    directory?: Fixture<string>;
     msw?: ReturnType<typeof mswFixture>;
   } = {},
 ): Fixture<string> {
-  const { directory = tempDirectoryFixture(), msw } = options;
+  const { msw } = options;
   const s3Server = fixture(async (stack) => {
-    const server = new S3rver({
-      address: "localhost",
-      port: 0,
-      directory: await directory(),
-    });
-    stack.defer(async () => server.close());
-    const address = await server.run();
-    return `http://localhost:${address.port}`;
+    const proc = stack.use(
+      spawn(
+        "uv",
+        ["--project", PYTHON_TEST_TOOLS_PATH, "run", "moto_server", "-p", "0"],
+        { stdio: ["ignore", "ignore", "pipe"] },
+      ),
+    );
+
+    const { resolve, reject, promise } = Promise.withResolvers<string>();
+
+    (async () => {
+      for await (const line of readline.createInterface({
+        input: proc.stderr,
+      })) {
+        console.log(`moto_server: ${line}`);
+        const m = line.match(/Running on (http:\/\/[^\s]+)$/);
+        if (m !== null) {
+          resolve(m[1]);
+        }
+      }
+      reject(new Error("Failed to start server"));
+    })();
+    return await promise;
   });
   if (msw !== undefined) {
     beforeEach(async () => {
@@ -118,6 +134,9 @@ export async function createBucket(s3: Fixture<string>, bucket: string) {
   await fetchOk(
     bypass(`${await s3()}/${bucket}/`, {
       method: "PUT",
+      headers: {
+        "x-amz-acl": "public-read-write",
+      },
     }),
   );
 }

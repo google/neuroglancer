@@ -753,7 +753,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParamete
     const { chunkGridPosition } = chunk;
     if (shardedKvStore === undefined) {
       const { kvStore } = this;
-      const path = `${kvStore.path}/${chunkGridPosition.join("_")}`;
+      const path = `${kvStore.path}${chunkGridPosition.join("_")}`;
       response = await kvStore.store.read(path, { signal });
     } else {
       const { upperChunkBound } = this.spec;

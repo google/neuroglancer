@@ -26,12 +26,9 @@ import type { ProgressOptions } from "#src/util/progress_listener.js";
  * to use.
  */
 async function parse(
-  readResponse: ReadResponse | undefined,
+  readResponse: ReadResponse,
   progressOptions: Partial<ProgressOptions>,
 ) {
-  if (readResponse === undefined) {
-    throw new Error("Not found");
-  }
   const buffer = await readResponse.response.arrayBuffer();
   return requestAsyncComputation(
     parseOBJFromArrayBuffer,

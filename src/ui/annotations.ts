@@ -2043,6 +2043,7 @@ export function UserLayerWithAnnotationsMixin<
         subsourceId: subsourceEntry.id,
         role,
       });
+      this.annotationDisplayState.annotationProperties.value = [];
       this.addAnnotationLayerState(state, loadedSubsource);
     }
 

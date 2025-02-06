@@ -42,7 +42,7 @@ describe("http completion", () => {
             "value": "baz/",
           },
           {
-            "value": "#|",
+            "value": "%23|",
           },
           {
             "value": "a|",
@@ -95,7 +95,13 @@ describe("http completion", () => {
       {
         "completions": [
           {
+            "value": "first|",
+          },
+          {
             "value": "x|",
+          },
+          {
+            "value": "z|",
           },
         ],
         "defaultCompletion": undefined,

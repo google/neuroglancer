@@ -21,9 +21,10 @@ import type {
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { fetchOkWithOAuth2CredentialsAdapter } from "#src/credentials_provider/oauth2.js";
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
-import { getBaseUrlAndPath, HttpKvStore } from "#src/kvstore/http/index.js";
+import { HttpKvStore } from "#src/kvstore/http/index.js";
 import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import { frontendBackendIsomorphicKvStoreProviderRegistry } from "#src/kvstore/register.js";
+import { getBaseHttpUrlAndPath } from "#src/kvstore/url.js";
 
 const SCHEME_PREFIX = "middleauth+";
 
@@ -51,9 +52,10 @@ function middleauthProvider(
         httpUrl,
       );
       try {
-        const { baseUrl, path } = getBaseUrlAndPath(httpUrl);
+        const { baseUrl, path } = getBaseHttpUrlAndPath(httpUrl);
         return {
           store: new HttpKvStore(
+            context.chunkManager.memoize,
             baseUrl,
             SCHEME_PREFIX + baseUrl,
             fetchOkWithOAuth2CredentialsAdapter(credentialsProvider),
