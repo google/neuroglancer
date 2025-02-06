@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
+import "#src/kvstore/http/register_frontend.js";
 import { http, passthrough } from "msw";
 import { beforeEach, describe } from "vitest";
 import { constantFixture } from "#tests/fixtures/fixture.js";

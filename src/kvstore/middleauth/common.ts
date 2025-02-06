@@ -21,9 +21,11 @@ import type {
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { fetchOkWithOAuth2CredentialsAdapter } from "#src/credentials_provider/oauth2.js";
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
-import { HttpKvStore } from "#src/kvstore/http/index.js";
-import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
-import { frontendBackendIsomorphicKvStoreProviderRegistry } from "#src/kvstore/register.js";
+import type { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
+import type {
+  KvStoreProviderRegistry,
+  SharedKvStoreContextBase,
+} from "#src/kvstore/register.js";
 import { getBaseHttpUrlAndPath } from "#src/kvstore/url.js";
 
 const SCHEME_PREFIX = "middleauth+";
@@ -38,9 +40,12 @@ function getMiddleAuthCredentialsProvider(
   );
 }
 
-function middleauthProvider(
+function middleauthProvider<
+  SharedKvStoreContext extends SharedKvStoreContextBase,
+>(
   scheme: string,
-  context: SharedKvStoreContextBase,
+  context: SharedKvStoreContext,
+  httpKvStoreClass: typeof ReadableHttpKvStore<SharedKvStoreContext>,
 ): BaseKvStoreProvider {
   return {
     scheme: SCHEME_PREFIX + scheme,
@@ -54,8 +59,8 @@ function middleauthProvider(
       try {
         const { baseUrl, path } = getBaseHttpUrlAndPath(httpUrl);
         return {
-          store: new HttpKvStore(
-            context.chunkManager.memoize,
+          store: new httpKvStoreClass(
+            context,
             baseUrl,
             SCHEME_PREFIX + baseUrl,
             fetchOkWithOAuth2CredentialsAdapter(credentialsProvider),
@@ -71,6 +76,15 @@ function middleauthProvider(
   };
 }
 
-frontendBackendIsomorphicKvStoreProviderRegistry.registerBaseKvStoreProvider(
-  (context) => middleauthProvider("https", context),
-);
+export function registerProviders<
+  SharedKvStoreContext extends SharedKvStoreContextBase,
+>(
+  registry: KvStoreProviderRegistry<SharedKvStoreContext>,
+  httpKvStoreClass: typeof ReadableHttpKvStore<SharedKvStoreContext>,
+) {
+  for (const httpScheme of ["https"]) {
+    registry.registerBaseKvStoreProvider((context) =>
+      middleauthProvider(httpScheme, context, httpKvStoreClass),
+    );
+  }
+}

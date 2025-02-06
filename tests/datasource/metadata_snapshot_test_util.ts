@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
+import "#src/kvstore/http/register_frontend.js";
 import { describe, test } from "vitest";
 import { getDatasourceMetadata } from "#tests/datasource/test_util.js";
 import { dataSourceProviderFixture } from "#tests/fixtures/datasource_provider.js";

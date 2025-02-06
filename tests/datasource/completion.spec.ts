@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
+import "#src/kvstore/http/register_frontend.js";
 import "#src/kvstore/zip/register_frontend.js";
-import "#src/kvstore/zip/register_backend.js";
 
 import { describe, expect, test } from "vitest";
 import { getKvStoreCompletions } from "#src/datasource/kvstore_completions.js";

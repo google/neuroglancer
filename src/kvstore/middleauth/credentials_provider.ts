@@ -157,10 +157,6 @@ export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAut
     using _span = new ProgressSpan(options.progressListener, {
       message: `Waiting for middleauth login to ${this.serverUrl}`,
     });
-    options.signal.addEventListener("abort", () => {
-      console.log("login aborted");
-    });
-
     token = await getCredentialsWithStatus(
       {
         description: `middleauth server ${this.serverUrl}`,

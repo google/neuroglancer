@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Google Inc.
+ * Copyright 2023 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,48 +14,17 @@
  * limitations under the License.
  */
 
-import { read, stat } from "#src/kvstore/http/read.js";
-import type {
-  KvStore,
-  DriverListOptions,
-  ListResponse,
-  DriverReadOptions,
-  ReadResponse,
-  StatOptions,
-  StatResponse,
-} from "#src/kvstore/index.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import type { DriverListOptions, ListResponse } from "#src/kvstore/index.js";
+import { ReadableS3KvStore } from "#src/kvstore/s3/common.js";
 import {
   getS3BucketListing,
   listS3CompatibleUrl,
 } from "#src/kvstore/s3/list.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
-import type { FetchOk } from "#src/util/http_request.js";
-import { fetchOk } from "#src/util/http_request.js";
-import type { StringMemoize } from "#src/util/memoize.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
-export class S3KvStore implements KvStore {
-  constructor(
-    private memoize: StringMemoize,
-    public baseUrl: string,
-    public baseUrlForDisplay: string,
-    private knownToBeVirtualHostedStyle: boolean,
-    private fetchOkImpl: FetchOk = fetchOk,
-  ) {}
-
-  stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
-    return stat(this, key, url, options, this.fetchOkImpl);
-  }
-
-  read(
-    key: string,
-    options: DriverReadOptions,
-  ): Promise<ReadResponse | undefined> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
-    return read(this, key, url, options, this.fetchOkImpl);
-  }
-
+export class S3KvStore extends ReadableS3KvStore<SharedKvStoreContext> {
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
     const { progressListener } = options;
     using _span =
@@ -75,20 +44,9 @@ export class S3KvStore implements KvStore {
     return listS3CompatibleUrl(
       joinBaseUrlAndPath(this.baseUrl, prefix),
       this.baseUrlForDisplay,
-      this.memoize,
+      this.sharedKvStoreContext.chunkManager.memoize,
       this.fetchOkImpl,
       options,
     );
-  }
-
-  getUrl(path: string) {
-    return joinBaseUrlAndPath(this.baseUrlForDisplay, path);
-  }
-
-  get supportsOffsetReads() {
-    return true;
-  }
-  get supportsSuffixReads() {
-    return true;
   }
 }
