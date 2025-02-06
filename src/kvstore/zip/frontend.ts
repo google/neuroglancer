@@ -15,8 +15,8 @@
  */
 
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import { ProxyKvStore } from "#src/kvstore/frontend.js";
 import type { KvStore, KvStoreFileHandle } from "#src/kvstore/index.js";
+import { ProxyKvStore } from "#src/kvstore/proxy.js";
 import { encodePathForUrl } from "#src/kvstore/url.js";
 
 export class ZipKvStore extends ProxyKvStore implements KvStore {

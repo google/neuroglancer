@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import "#src/kvstore/proxy.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import { makeSimpleAsyncCache } from "#src/chunk_manager/generic_file_source.js";
 import { FileByteRangeHandle } from "#src/kvstore/byte_range/file_handle.js";

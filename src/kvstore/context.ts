@@ -110,6 +110,7 @@ export class KvStoreContext {
       if (usage !== undefined) {
         message += `; ${usage}`;
       }
+      message += `; supported schemes: ${JSON.stringify(Array.from(this.kvStoreAdapterProviders.keys()))}`;
       throw new Error(message);
     }
     return provider;

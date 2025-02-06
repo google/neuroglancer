@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
-import "#src/kvstore/ocdbt/register_backend.js";
+import "#src/kvstore/http/register_frontend.js";
 import "#src/kvstore/ocdbt/register_frontend.js";
 
 import { describe, expect, test } from "vitest";

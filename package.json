@@ -389,17 +389,29 @@
       "neuroglancer/kvstore/gzip:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/gzip/register.ts"
     },
-    "#kvstore/http/register": {
-      "neuroglancer/kvstore/http:enabled": "./src/kvstore/http/register.ts",
+    "#kvstore/http/register_frontend": {
+      "neuroglancer/kvstore/http:enabled": "./src/kvstore/http/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
       "neuroglancer/kvstore/http:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/http/register.ts"
+      "default": "./src/kvstore/http/register_frontend.ts"
     },
-    "#kvstore/middleauth/register": {
-      "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register.ts",
+    "#kvstore/http/register_backend": {
+      "neuroglancer/kvstore/http:enabled": "./src/kvstore/http/register_backend.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/http:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/http/register_backend.ts"
+    },
+    "#kvstore/middleauth/register_frontend": {
+      "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
       "neuroglancer/kvstore/middleauth:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/middleauth/register.ts"
+      "default": "./src/kvstore/middleauth/register_frontend.ts"
+    },
+    "#kvstore/middleauth/register_backend": {
+      "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register_backend.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/middleauth:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/middleauth/register_backend.ts"
     },
     "#kvstore/middleauth/register_credentials_provider": {
       "neuroglancer/python": "./src/util/false.ts",
@@ -433,11 +445,17 @@
       "neuroglancer/kvstore/ocdbt:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/ocdbt/register_backend.ts"
     },
-    "#kvstore/s3/register": {
-      "neuroglancer/kvstore/s3:enabled": "./src/kvstore/s3/register.ts",
+    "#kvstore/s3/register_frontend": {
+      "neuroglancer/kvstore/s3:enabled": "./src/kvstore/s3/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
       "neuroglancer/kvstore/s3:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/s3/register.ts"
+      "default": "./src/kvstore/s3/register_frontend.ts"
+    },
+    "#kvstore/s3/register_backend": {
+      "neuroglancer/kvstore/s3:enabled": "./src/kvstore/s3/register_backend.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/s3:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/s3/register_backend.ts"
     },
     "#kvstore/zip/register_frontend": {
       "neuroglancer/kvstore/zip:enabled": "./src/kvstore/zip/register_frontend.ts",
