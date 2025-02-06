@@ -26,4 +26,6 @@
   font-family: sans-serif;
   line-height: normal;
   height: 1rem;
+  justify-content: center;
+  width: 26px;
 }
