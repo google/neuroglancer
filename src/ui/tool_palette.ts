@@ -20,7 +20,7 @@ import svg_search from "ikonate/icons/search.svg?raw";
 import swap_horizontal from "ikonate/icons/swap-horizontal.svg?raw";
 import swap_vertical from "ikonate/icons/swap-vertical.svg?raw";
 import svg_tool from "ikonate/icons/tool.svg?raw";
-import { debounce } from "lodash-es";
+import { debounce, throttle } from "lodash-es";
 import type { UserLayer } from "#src/layer/index.js";
 import {
   ElementVisibilityFromTrackableBoolean,
@@ -549,7 +549,7 @@ export class ToolPalettePanel extends SidePanel {
       );
     };
 
-    const update = (event: DragEvent, updateDropEffect: boolean) => {
+    const update = throttle((event: DragEvent, updateDropEffect: boolean) => {
       if (!isDragSourceSupported()) {
         return undefined;
       }
@@ -636,7 +636,7 @@ export class ToolPalettePanel extends SidePanel {
         updateToolDragDropEffect(source, dropEffect, samePalette);
       }
       return dropEffect;
-    };
+    }, 200);
 
     const handleDragOver = (event: DragEvent) => {
       const updateResult = update(event, /*updateDropEffect=*/ true);

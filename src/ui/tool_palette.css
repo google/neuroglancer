@@ -114,21 +114,29 @@
 
 .neuroglancer-tool-palette-layer-group-items[tool-stacking="horizontal"] {
   flex-direction: row;
+  align-items: flex-start;
   overflow-x: auto;
+  height: 100%;
 }
 
 .neuroglancer-tool-palette-layer-group-items
   .neuroglancer-tool-palette-layer-group {
   width: 100%;
+  height: 100%;
+}
+
+.neuroglancer-tool-palette-layer-group-content >.neuroglancer-tool-palette-tool-container {
+  align-items: center;
 }
 
 .neuroglancer-tool-palette-tool-container {
   display: grid;
   grid-template-columns: auto 1fr;
-  align-items: center;
+  align-items: flex-start;
   padding-top: 2px;
   padding-bottom: 2px;
   width: 100%;
+  height: 100%;
 }
 
 .neuroglancer-tool-palette-tool-container:hover {
