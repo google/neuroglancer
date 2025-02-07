@@ -69,6 +69,7 @@
     "eslint-plugin-oxlint": "^0.15.9",
     "eslint-rspack-plugin": "^4.2.1",
     "express": "^4.21.2",
+    "fzstd": "^0.1.1",
     "glob": "^11.0.1",
     "http-server": "^14.1.1",
     "jsdom": "^26.0.0",
@@ -114,6 +115,10 @@
   },
   "imports": {
     "#src/third_party/jpgjs/jpg.js": "./src/third_party/jpgjs/jpg.js",
+    "#src/async_computation/decode_zstd.js": {
+      "node": "./src/async_computation/decode_zstd_node.ts",
+      "default": "./src/async_computation/decode_zstd.ts"
+    },
     "#src/*.js": "./src/*.ts",
     "#src/*": "./src/*",
     "#tests/fixtures/msw": {
