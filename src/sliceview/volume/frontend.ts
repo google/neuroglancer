@@ -289,11 +289,4 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
 > {
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
-
-  /**
-   * Heuristic for the number of channels in the chunks
-   */
-  get heuristicNumChannels(): number | undefined {
-    return undefined;
-  }
 }

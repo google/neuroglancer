@@ -2313,8 +2313,6 @@ export interface LayerTypeGuess {
   layerConstructor: UserLayerConstructor;
   // Priority of the guess.  Higher values take precedence.
   priority: number;
-  // Number of channels - for image data
-  numChannels?: number;
 }
 export type LayerTypeDetector = (
   subsource: DataSubsource,
@@ -2325,11 +2323,7 @@ const layerTypeDetectors: LayerTypeDetector[] = [
     if (volume === undefined) return undefined;
     const layerConstructor = volumeLayerTypes.get(volume.volumeType);
     if (layerConstructor === undefined) return undefined;
-    return {
-      layerConstructor,
-      priority: 0,
-      numChannels: volume.heuristicNumChannels,
-    };
+    return { layerConstructor, priority: 0 };
   },
 ];
 
@@ -2408,7 +2402,6 @@ export function detectLayerTypeFromDataSubsource(
       bestGuess = getMaxPriorityGuess(bestGuess, {
         layerConstructor,
         priority: 0,
-        numChannels: volume.heuristicNumChannels,
       });
     }
   }
@@ -2472,30 +2465,18 @@ export class AutoUserLayer extends UserLayer {
   static typeAbbreviation = "auto";
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    const bestGuess = detectLayerTypeFromSubsources(subsources);
-    const layerConstructor = bestGuess?.layerConstructor;
-    const numChannels = bestGuess?.numChannels;
+    const layerConstructor =
+      detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
+      console.log("Activating layer constructor", layerConstructor);
       changeLayerType(this.managedLayer, layerConstructor);
-      // if (numChannels !== undefined && numChannels !== 1) {
-      //   // TODO temp - get real subsource or pass many to FN
-      //   console.log("Creating new layer");
-      //   createNewLayerAsMultichannelLayers(
-      //     this.managedLayer,
-      //     numChannels,
-      //     this.manager,
-      //     layerConstructor,
-      //   );
-      // } else {
-      // changeLayerType(this.managedLayer, layerConstructor);
-      // }
+      return;
     }
-    // Only work on image layers for this
+    // Only work on image layers for multichannel
     if (this.managedLayer.layer?.type === "image") {
-      // console.log("Image layer");
       // const coordSpace = this.managedLayer.layer.channelCoordinateSpace!;
       // console.log(coordSpace);
-      console.log(this.managedLayer.layer.localCoordinateSpaceCombiner);
+      // console.log(this.managedLayer.layer.localCoordinateSpaceCombiner);
       // console.log(
       //   this.managedLayer.layer.localCoordinateSpaceCombiner
       //     .includeDimensionPredicate,
@@ -2506,13 +2487,12 @@ export class AutoUserLayer extends UserLayer {
 
       // Grab all local dimensions (' or =) TODO this might also capture the local ones
       const { localCoordinateSpace } = this.managedLayer;
-      console.log(localCoordinateSpace);
+      // console.log(localCoordinateSpace);
       const localDimensionRank = localCoordinateSpace.value.rank;
       const { lowerBounds, upperBounds } = localCoordinateSpace.value.bounds;
       const numLocalsInEachDimension = [];
-      console.log(localDimensionRank, localCoordinateSpace.value);
+      // console.log(localDimensionRank, localCoordinateSpace.value);
       for (let i = 0; i < localDimensionRank; i++) {
-        console.log(lowerBounds[i], upperBounds[i]);
         numLocalsInEachDimension.push(upperBounds[i] - lowerBounds[i]);
       }
 
@@ -2530,22 +2510,43 @@ export class AutoUserLayer extends UserLayer {
           chanUpperBounds[i] - chanLowerBounds[i],
         );
       }
-      console.log(numLocalsInEachDimension, numChannelsInEachChannelDimension);
+
+      let totalLocalChannels = numLocalsInEachDimension.reduce(
+        (acc, val) => acc * val,
+        1,
+      );
+      totalLocalChannels = Number.isFinite(totalLocalChannels)
+        ? totalLocalChannels
+        : 0;
+      let totalChannelChannels = numChannelsInEachChannelDimension.reduce(
+        (acc, val) => acc * val,
+        1,
+      );
+      totalChannelChannels = Number.isFinite(totalChannelChannels)
+        ? totalChannelChannels
+        : 0;
+      console.log(totalLocalChannels, totalChannelChannels);
 
       // TODO Loop over these and make a new layer for each one with the appropriate channel
+      const spec = this.managedLayer.layer.toJSON();
+      this.managedLayer.name = `${this.managedLayer.name} c0`;
+      for (let i = 0; i < totalLocalChannels; i++) {
+        // if i is 0 we already have the layer, this one
+        // Otherwise we need to create a new layer
+        if (i !== 0) {
+          // Create a new layer
+          const newLayer = makeLayer(
+            this.manager,
+            `${this.managedLayer.name} c${i}`,
+            spec,
+          );
+          this.manager.add(newLayer);
 
-      // for (const [dim, count] of channelMap) {
-      //   console.log(dim, count);
-      //   if (isLocalOrChannelDimension(dim)) {
-      //     console.log("Local or channel dimension");
-      //     // Count the number of channels for this dimension
-      //     // If more than one, create a new layer for each
-      //     // The local - cord
-      //   }
-      // }
+          // Set the channel of the new layer
+          // this
+        }
+      }
     }
-
-    console.log(this.managedLayer.layer);
   }
 }
 
@@ -2557,34 +2558,6 @@ export function addNewLayer(
   manager.add(layer);
   selectedLayer.layer = layer;
   selectedLayer.visible = true;
-}
-
-export function createNewLayerAsMultichannelLayers(
-  managedUserLayer: ManagedUserLayer,
-  numChannels: number,
-  layerManager: Borrowed<LayerListSpecification>,
-  constructor: UserLayerConstructor,
-) {
-  // Create the initial layer as normal (change type)
-  // TODO copied from changeLayerType should think about this more
-  const originalName = managedUserLayer.name;
-  changeLayerType(managedUserLayer, constructor);
-  managedUserLayer.name = `${originalName} chan 1`;
-  const spec = managedUserLayer.layer?.toJSON();
-  console.log(spec);
-  // TODO also set chan1
-
-  // Create subsequent layers for other channels
-  for (let i = 1; i < numChannels; i++) {
-    // First, create a new layer
-    const newLayerName = `${originalName} chan ${i + 1}`;
-    const channelSpec = spec;
-    console.log(spec);
-    // spec["shaderControls"][]
-    const layer = makeLayer(layerManager, newLayerName, spec);
-    layerManager.add(layer);
-    console.log(layer.layer);
-  }
 }
 
 registerLayerType(NewUserLayer);
