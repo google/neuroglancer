@@ -102,6 +102,7 @@ await handleDrivers("datasource", {
 });
 
 await handleDrivers("kvstore", {
+  async_computation: ["async_computation"],
   register: ["frontend", "backend"],
   register_frontend: ["frontend"],
   register_backend: ["backend"],

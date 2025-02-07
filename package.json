@@ -433,6 +433,12 @@
       "neuroglancer/kvstore/ngauth:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/ngauth/register_credentials_provider.ts"
     },
+    "#kvstore/ocdbt/async_computation": {
+      "neuroglancer/kvstore/ocdbt:enabled": "./src/kvstore/ocdbt/async_computation.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/ocdbt:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/ocdbt/async_computation.ts"
+    },
     "#kvstore/ocdbt/register_frontend": {
       "neuroglancer/kvstore/ocdbt:enabled": "./src/kvstore/ocdbt/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
