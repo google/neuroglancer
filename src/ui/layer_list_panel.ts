@@ -147,8 +147,8 @@ class LayerListItem extends RefCounted {
     const { element, numberElement } = this;
     element.classList.add("neuroglancer-layer-list-panel-item");
     numberElement.classList.add("neuroglancer-layer-list-panel-item-number");
-    const layerNameWidget = this.registerDisposer(new LayerNameWidget(layer)).element;
-    layerNameWidget.classList.add("neuroglancer-layer-list-panel-item-name");
+    const layerNameWidget = this.registerDisposer(new LayerNameWidget(layer));
+    layerNameWidget.element.classList.add("neuroglancer-layer-list-panel-item-name");
     element.appendChild(
       this.registerDisposer(
         new TrackableBooleanCheckbox(
@@ -174,7 +174,7 @@ class LayerListItem extends RefCounted {
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
     );
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
-    element.appendChild(layerNameWidget);
+    element.appendChild(layerNameWidget.element);
     element.appendChild(
       this.registerDisposer(makeSelectedLayerSidePanelCheckboxIcon(layer))
         .element,
