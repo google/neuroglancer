@@ -110,9 +110,11 @@ describe("yauzl failure cases", async () => {
   });
 });
 
-testKvStore(
-  async () => (await serverFixture.serverUrl()) + "zip/files.zip|zip:",
-);
+describe("kvstore operations", () => {
+  testKvStore(
+    async () => (await serverFixture.serverUrl()) + "zip/files.zip|zip:",
+  );
+});
 
 describe("completion", () => {
   test("empty prefix", async () => {

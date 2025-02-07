@@ -21,10 +21,12 @@ import type {
   KvStoreAdapterProvider,
   KvStoreContext,
 } from "#src/kvstore/context.js";
+import type { StringMemoize } from "#src/util/memoize.js";
 
 export interface SharedKvStoreContextBase {
   kvStoreContext: KvStoreContext;
   credentialsManager: CredentialsManager;
+  chunkManager: { memoize: StringMemoize };
 }
 
 export class KvStoreProviderRegistry<

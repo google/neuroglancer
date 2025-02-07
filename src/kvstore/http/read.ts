@@ -244,12 +244,22 @@ export async function stat<Key>(
     if (wasRedirectedToDirectoryListing(url, response)) return undefined;
     return { totalSize: getBodyLength(response.headers) };
   } catch (e) {
-    if (e instanceof HttpError && e.status === 405 /* method not allowed */) {
+    if (
+      e instanceof HttpError &&
+      (e.status === 405 /* method not allowed */ ||
+        e.status === 501) /* not implemented */
+    ) {
       // HEAD may not be supported, use GET with one byte range instead.
       //
       // For example,
       // https://data-proxy.ebrains.eu/api/v1/buckets/localizoom/14122_mPPC_BDA_s186.tif/14122_mPPC_BDA_s186.dzi
       // returns HTTP 405 Method Not Allowed in response to HEAD requests.
+      //
+      // Servers are not supposed to return 501 for HEAD requests
+      // (https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/501), but
+      // some do anyway:
+      //
+      // https://github.com/google/neuroglancer/issues/704
     } else {
       return handleThrowIfMissing(store, key, options, e);
     }

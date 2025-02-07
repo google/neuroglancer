@@ -15,7 +15,8 @@
  */
 
 import "#src/kvstore/s3/register.js";
-import { beforeAll } from "vitest";
+import "#src/kvstore/http/register.js";
+import { beforeAll, describe, expect, test } from "vitest";
 import {
   createBucket,
   fakeS3ServerFixture,
@@ -24,12 +25,18 @@ import {
 import { constantFixture } from "#tests/fixtures/fixture.js";
 import { mswFixture } from "#tests/fixtures/msw";
 import { getTestFiles } from "#tests/kvstore/test_data.js";
-import { testKvStore } from "#tests/kvstore/test_util.js";
+import { testKvStore, sharedKvStoreContext } from "#tests/kvstore/test_util.js";
 
 const msw = mswFixture();
 const fakeS3Server = fakeS3ServerFixture({ msw });
 
 const BUCKET = "mybucket";
+const OTHER_BUCKET = "otherbucket";
+
+const SPECIAL_CHAR_CODES: number[] = [];
+for (let i = 1; i <= 9; ++i) {
+  SPECIAL_CHAR_CODES.push(i);
+}
 
 beforeAll(async () => {
   // Add data to S3.
@@ -42,6 +49,62 @@ beforeAll(async () => {
       new Uint8Array(content),
     );
   }
+
+  // Create another bucket for testing special character handling in list
+  // operations.
+  await createBucket(fakeS3Server, OTHER_BUCKET);
+  for (const charCode of SPECIAL_CHAR_CODES) {
+    await writeObject(
+      fakeS3Server,
+      OTHER_BUCKET,
+      String.fromCharCode(charCode),
+      Uint8Array.of(charCode),
+    );
+  }
 });
 
-testKvStore(constantFixture(`s3://${BUCKET}/`));
+describe("s3://", () => {
+  testKvStore(constantFixture(`s3://${BUCKET}/`));
+});
+
+describe("s3+http:// virtual-hosted style URL", () => {
+  testKvStore(constantFixture(`s3+https://${BUCKET}.s3.amazonaws.com/`));
+});
+
+describe("s3+http:// path-style URL", () => {
+  testKvStore(constantFixture(`s3+https://s3.amazonaws.com/${BUCKET}/`));
+});
+
+describe("http:// virtual hosted-style URL", () => {
+  testKvStore(constantFixture(`https://${BUCKET}.s3.amazonaws.com/`));
+});
+
+describe("http:// path-style URL", () => {
+  testKvStore(constantFixture(`https://s3.amazonaws.com/${BUCKET}/`));
+});
+
+describe("special characters", () => {
+  test.for(SPECIAL_CHAR_CODES)("charCode=%s", async (charCode) => {
+    const context = await sharedKvStoreContext();
+    const response = await context.kvStoreContext.read(
+      `s3://${OTHER_BUCKET}/${encodeURIComponent(String.fromCharCode(charCode))}`,
+      { throwIfMissing: true },
+    );
+    expect(await response.response.arrayBuffer()).toEqual(
+      Uint8Array.of(charCode).buffer,
+    );
+  });
+  test("list", async () => {
+    const context = await sharedKvStoreContext();
+    const response = await context.kvStoreContext.list(
+      `s3://${OTHER_BUCKET}/`,
+      { responseKeys: "path" },
+    );
+    expect(response).toEqual({
+      directories: [],
+      entries: SPECIAL_CHAR_CODES.map((charCode) => ({
+        key: String.fromCharCode(charCode),
+      })),
+    });
+  });
+});

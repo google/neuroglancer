@@ -15,22 +15,26 @@
  */
 
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
-import { getBaseUrlAndPath, HttpKvStore } from "#src/kvstore/http/index.js";
+import { HttpKvStore } from "#src/kvstore/http/index.js";
 import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import { frontendBackendIsomorphicKvStoreProviderRegistry } from "#src/kvstore/register.js";
+import { getBaseHttpUrlAndPath } from "#src/kvstore/url.js";
 
 function httpProvider(
   scheme: string,
-  _context: SharedKvStoreContextBase,
+  sharedKvStoreContext: SharedKvStoreContextBase,
 ): BaseKvStoreProvider {
   return {
     scheme,
     description: `${scheme} (unauthenticated)`,
     getKvStore(url) {
       try {
-        const { baseUrl, path } = getBaseUrlAndPath(url.url);
+        const { baseUrl, path } = getBaseHttpUrlAndPath(url.url);
         return {
-          store: new HttpKvStore(baseUrl),
+          store: new HttpKvStore(
+            sharedKvStoreContext.chunkManager.memoize,
+            baseUrl,
+          ),
           path,
         };
       } catch (e) {
@@ -42,8 +46,8 @@ function httpProvider(
   };
 }
 
-for (const protocol of ["http", "https"]) {
+for (const httpScheme of ["http", "https"]) {
   frontendBackendIsomorphicKvStoreProviderRegistry.registerBaseKvStoreProvider(
-    (context) => httpProvider(protocol, context),
+    (context) => httpProvider(httpScheme, context),
   );
 }
