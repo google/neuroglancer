@@ -116,7 +116,7 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding-left: 2px;
+  padding-left: 3px;
 }
 
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
@@ -190,4 +190,5 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  padding-left: 3px;
 }
