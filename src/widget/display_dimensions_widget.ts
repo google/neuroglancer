@@ -448,7 +448,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         label.style.color = dimensionColors[axisIndex];
         this.fovNameElements.push(label);
         const directionIndicator = document.createElement("span");
-        directionIndicator.textContent = i === 0 ? "(↔)" : "(↕)";
+        directionIndicator.textContent = i === 0 ? "(←→)" : "(↑↓)";
         const input = document.createElement("input");
         input.classList.add("input-base");
         input.spellcheck = false;
