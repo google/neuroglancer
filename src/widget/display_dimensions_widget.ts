@@ -122,7 +122,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
     const name = document.createElement("input");
     name.classList.add("neuroglancer-display-dimensions-widget-name");
-    name.classList.add("input-base");
+    name.classList.add("neuroglancer-display-dimensions-input-base");
     name.title = "Change display dimensions";
     name.spellcheck = false;
     name.autocomplete = "off";
@@ -139,7 +139,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       "neuroglancer-display-dimensions-widget-scale-factor",
     );
     const scaleFactor = document.createElement("input");
-    scaleFactor.classList.add("input-base");
+    scaleFactor.classList.add("neuroglancer-display-dimensions-input-base");
     scaleFactor.spellcheck = false;
     scaleFactor.title = "Change relative scale at which dimension is displayed";
     scaleFactor.autocomplete = "off";
@@ -152,10 +152,10 @@ export class DisplayDimensionsWidget extends RefCounted {
     container.appendChild(scaleFactorContainer);
 
     const scaleWrapper = document.createElement("div");
-    scaleWrapper.classList.add("input-wrapper");
+    scaleWrapper.classList.add("neuroglancer-display-dimensions-input-wrapper");
     const scale = document.createElement("input");
     scale.classList.add("neuroglancer-display-dimensions-widget-scale");
-    scale.classList.add("input-base");
+    scale.classList.add("neuroglancer-display-dimensions-input-base");
     scale.style.gridColumn = "3";
     scale.style.gridRow = `${i + 1}`;
     scaleWrapper.appendChild(scale);
@@ -450,7 +450,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         const directionIndicator = document.createElement("span");
         directionIndicator.textContent = i === 0 ? "(↔)" : "(↕)";
         const input = document.createElement("input");
-        input.classList.add("input-base");
+        input.classList.add("neuroglancer-display-dimensions-input-base");
         input.spellcheck = false;
         input.autocomplete = "off";
         this.fovInputElements.push(input);
@@ -590,7 +590,7 @@ export class DisplayDimensionsWidget extends RefCounted {
               plusMinus.textContent = "±";
               container.appendChild(plusMinus);
               const input = document.createElement("input");
-              input.classList.add("input-base");
+              input.classList.add("neuroglancer-display-dimensions-input-base");
               input.spellcheck = false;
               input.autocomplete = "off";
               input.addEventListener("focus", () => {
