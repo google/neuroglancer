@@ -2358,6 +2358,88 @@ export function changeLayerType(
   managedLayer.layer = newUserLayer;
 }
 
+export function createImageLayerAsMultiChannel(
+  managedLayer: Borrowed<ManagedUserLayer>,
+) {
+  if (managedLayer.layer?.type !== "image") return;
+  // const coordSpace = this.managedLayer.layer.channelCoordinateSpace!;
+  // console.log(coordSpace);
+  // console.log(this.managedLayer.layer.localCoordinateSpaceCombiner);
+  // console.log(
+  //   this.managedLayer.layer.localCoordinateSpaceCombiner
+  //     .includeDimensionPredicate,
+  // );
+  // Iterate over the dimensions and check if they are local or channel
+  // const { localCoordinateSpaceCombiner } = this.managedLayer.layer;
+  // const channelMap = localCoordinateSpaceCombiner.dimensionRefCounts;
+
+  // Grab all local dimensions (' or =) TODO this might also capture the local ones
+  const { localCoordinateSpace } = managedLayer;
+  const localDimensionRank = localCoordinateSpace.value.rank;
+  const { lowerBounds, upperBounds } = localCoordinateSpace.value.bounds;
+  const numLocalsInEachDimension = [];
+  // console.log(localDimensionRank, localCoordinateSpace.value);
+  for (let i = 0; i < localDimensionRank; i++) {
+    numLocalsInEachDimension.push(upperBounds[i] - lowerBounds[i]);
+  }
+
+  // Grab all channel dimensions (^)
+  const { channelCoordinateSpace } = managedLayer.layer as unknown as {
+    channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
+  };
+  const channelDimensionRank = channelCoordinateSpace.value.rank;
+  const channelBounds = channelCoordinateSpace.value.bounds;
+  const numChannelsInEachChannelDimension = [];
+  const { lowerBounds: chanLowerBounds, upperBounds: chanUpperBounds } =
+    channelBounds;
+  for (let i = 0; i < channelDimensionRank; i++) {
+    numChannelsInEachChannelDimension.push(
+      chanUpperBounds[i] - chanLowerBounds[i],
+    );
+  }
+
+  let totalLocalChannels =
+    numLocalsInEachDimension.length > 0
+      ? numLocalsInEachDimension.reduce((acc, val) => acc * val, 1)
+      : 0;
+  totalLocalChannels = Number.isFinite(totalLocalChannels)
+    ? totalLocalChannels
+    : 0;
+  let totalChannelChannels =
+    numChannelsInEachChannelDimension.length > 0
+      ? numChannelsInEachChannelDimension.reduce((acc, val) => acc * val, 1)
+      : 0;
+  totalChannelChannels = Number.isFinite(totalChannelChannels)
+    ? totalChannelChannels
+    : 0;
+  console.log(numLocalsInEachDimension, numChannelsInEachChannelDimension);
+  console.log(totalLocalChannels, totalChannelChannels);
+  const totalChannels = totalLocalChannels + totalChannelChannels;
+
+  // TODO Loop over these and make a new layer for each one with the appropriate channel
+  const spec = managedLayer.layer?.toJSON();
+  const startingName = managedLayer.name;
+  managedLayer.name = `${managedLayer.name} c0`;
+  // TODO probably needs two loops, one for local and one for channel
+  // otherwise hard to pull the right pieces
+  for (let i = 0; i < totalChannels; i++) {
+    // if i is 0 we already have the layer, this one
+    // Otherwise we need to create a new layer
+    if (i !== 0) {
+      // Create a new layer
+      const newLayer = makeLayer(
+        managedLayer.manager,
+        `${startingName} c${i}`,
+        spec,
+      );
+      managedLayer.manager.add(newLayer);
+
+      // Set the channel of the new layer
+      // this
+    }
+  }
+}
+
 export function changeLayerName(
   managedLayer: Borrowed<ManagedUserLayer>,
   newName: string,
@@ -2470,83 +2552,10 @@ export class AutoUserLayer extends UserLayer {
     if (layerConstructor !== undefined) {
       console.log("Activating layer constructor", layerConstructor);
       changeLayerType(this.managedLayer, layerConstructor);
-      return;
+      console.log(this.managedLayer.layer?.toJSON());
     }
     // Only work on image layers for multichannel
-    if (this.managedLayer.layer?.type === "image") {
-      // const coordSpace = this.managedLayer.layer.channelCoordinateSpace!;
-      // console.log(coordSpace);
-      // console.log(this.managedLayer.layer.localCoordinateSpaceCombiner);
-      // console.log(
-      //   this.managedLayer.layer.localCoordinateSpaceCombiner
-      //     .includeDimensionPredicate,
-      // );
-      // Iterate over the dimensions and check if they are local or channel
-      // const { localCoordinateSpaceCombiner } = this.managedLayer.layer;
-      // const channelMap = localCoordinateSpaceCombiner.dimensionRefCounts;
-
-      // Grab all local dimensions (' or =) TODO this might also capture the local ones
-      const { localCoordinateSpace } = this.managedLayer;
-      // console.log(localCoordinateSpace);
-      const localDimensionRank = localCoordinateSpace.value.rank;
-      const { lowerBounds, upperBounds } = localCoordinateSpace.value.bounds;
-      const numLocalsInEachDimension = [];
-      // console.log(localDimensionRank, localCoordinateSpace.value);
-      for (let i = 0; i < localDimensionRank; i++) {
-        numLocalsInEachDimension.push(upperBounds[i] - lowerBounds[i]);
-      }
-
-      // Grab all channel dimensions (^)
-      const { channelCoordinateSpace } = this.managedLayer.layer as unknown as {
-        channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
-      };
-      const channelDimensionRank = channelCoordinateSpace.value.rank;
-      const channelBounds = channelCoordinateSpace.value.bounds;
-      const numChannelsInEachChannelDimension = [];
-      const { lowerBounds: chanLowerBounds, upperBounds: chanUpperBounds } =
-        channelBounds;
-      for (let i = 0; i < channelDimensionRank; i++) {
-        numChannelsInEachChannelDimension.push(
-          chanUpperBounds[i] - chanLowerBounds[i],
-        );
-      }
-
-      let totalLocalChannels = numLocalsInEachDimension.reduce(
-        (acc, val) => acc * val,
-        1,
-      );
-      totalLocalChannels = Number.isFinite(totalLocalChannels)
-        ? totalLocalChannels
-        : 0;
-      let totalChannelChannels = numChannelsInEachChannelDimension.reduce(
-        (acc, val) => acc * val,
-        1,
-      );
-      totalChannelChannels = Number.isFinite(totalChannelChannels)
-        ? totalChannelChannels
-        : 0;
-      console.log(totalLocalChannels, totalChannelChannels);
-
-      // TODO Loop over these and make a new layer for each one with the appropriate channel
-      const spec = this.managedLayer.layer.toJSON();
-      this.managedLayer.name = `${this.managedLayer.name} c0`;
-      for (let i = 0; i < totalLocalChannels; i++) {
-        // if i is 0 we already have the layer, this one
-        // Otherwise we need to create a new layer
-        if (i !== 0) {
-          // Create a new layer
-          const newLayer = makeLayer(
-            this.manager,
-            `${this.managedLayer.name} c${i}`,
-            spec,
-          );
-          this.manager.add(newLayer);
-
-          // Set the channel of the new layer
-          // this
-        }
-      }
-    }
+    // if (this.managedLayer.layer?.type === "image") {
   }
 }
 

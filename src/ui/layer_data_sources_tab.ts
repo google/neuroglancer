@@ -24,6 +24,7 @@ import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
 import {
   changeLayerName,
   changeLayerType,
+  createImageLayerAsMultiChannel,
   NewUserLayer,
   USER_LAYER_TABS,
 } from "#src/layer/index.js";
@@ -63,6 +64,7 @@ import {
 } from "#src/widget/multiline_autocomplete.js";
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
+import { delay } from "msw";
 
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
   splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,
@@ -461,6 +463,12 @@ export class LayerDataSourcesTab extends Tab {
       );
       layerTypeDetection.addEventListener("click", () => {
         changeLayerTypeToDetected(layer);
+        // TODO (SKM) this is a hack until a proper way to know when done loading is implemented
+        // For now, just debounce the createImageLayerAsMultiChannel call
+        delay(1000).then(() =>
+          createImageLayerAsMultiChannel(layer.managedLayer),
+        );
+        // TODO (SKM)- only on images
       });
     }
     const reRender = (this.reRender = animationFrameDebounce(() =>
