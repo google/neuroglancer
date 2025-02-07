@@ -294,16 +294,6 @@ export class DisplayDimensionsWidget extends RefCounted {
       `Display scale in ${dataUnits}/${this.displayUnit}`;
   }
 
-  private updateFOVTooltip(i: number) {
-    if (this.axes === undefined) return;
-    const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
-    const dataUnits =
-      displayDimensionUnits[Axis[this.axes[i] as keyof typeof Axis]];
-    const pixelAxis = i === 0 ? "horizontal" : "vertical";
-    this.fovInputElements[i].title =
-      `Panel ${pixelAxis} field of view in ${dataUnits}`;
-  }
-
   private updateNameValidity() {
     const { dimensionElements } = this;
     const { displayDimensionIndices } = this.displayDimensions.value;
@@ -454,6 +444,9 @@ export class DisplayDimensionsWidget extends RefCounted {
         input.spellcheck = false;
         input.autocomplete = "off";
         this.fovInputElements.push(input);
+        const direction = i === 0 ? "horizontal" : "vertical";
+        const tooltip = `Panel ${direction} field of view`;
+        container.title = tooltip;
         container.appendChild(label);
         container.appendChild(directionIndicator);
         container.appendChild(input);
@@ -796,7 +789,6 @@ export class DisplayDimensionsWidget extends RefCounted {
           { precision: 2, elide1: false },
         );
         this.fovInputElements[i].value = formattedFieldOfView;
-        this.updateFOVTooltip(i);
         this.fovNameElements[i].textContent =
           globalDimensionNames[globalDimIndex];
         updateInputFieldWidth(this.fovInputElements[i]);
