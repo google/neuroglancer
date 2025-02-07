@@ -390,7 +390,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     });
     defaultCheckbox.type = "checkbox";
     defaultCheckboxLabel.appendChild(defaultCheckbox);
-    defaultCheckboxLabel.appendChild(document.createTextNode("Default dims"));
+    defaultCheckboxLabel.appendChild(document.createTextNode("Default dimensions"));
     defaultCheckboxLabel.title = "Display first 3 dimensions";
     defaultCheckboxLabel.classList.add(
       "neuroglancer-display-dimensions-widget-default",
