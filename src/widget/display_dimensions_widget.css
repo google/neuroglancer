@@ -109,7 +109,7 @@
 .neuroglancer-display-dimensions-widget-fov {
   display: flex;
   flex-direction: column;
-  margin-top: 12px;
+  margin-top: 6px;
 }
 
 .neuroglancer-display-dimensions-widget-fov-container {
@@ -167,7 +167,7 @@
 }
 
 .neuroglancer-depth-range-widget-grid {
-  margin-top: 1em;
+  margin-top: 6px;
   display: grid;
   display: grid;
   grid-template-columns: 1fr;
