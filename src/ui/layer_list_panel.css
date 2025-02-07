@@ -24,7 +24,7 @@
   margin: 4px;
 }
 
-.neuroglancer-layer-list-panel-item .neuroglancer-eye-icon {
+.neuroglancer-layer-list-panel-eye-icon {
   width: 20px;
   height: 20px;
   margin: 0;
@@ -41,6 +41,8 @@
 
 .neuroglancer-layer-list-panel-item[data-archived="true"]
   .neuroglancer-layer-list-panel-item-name,
+  .neuroglancer-layer-list-panel-item[data-archived="true"]
+    .neuroglancer-layer-type-indicator,
 .neuroglancer-layer-list-panel-item[data-archived="true"]
   .neuroglancer-icon
   svg {

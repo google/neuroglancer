@@ -92,8 +92,8 @@ export class LayerVisibilityWidget extends RefCounted {
         this.layer.setVisible(true);
       },
     });
-    hideIcon.classList.add("neuroglancer-eye-icon");
-    showIcon.classList.add("neuroglancer-eye-icon");
+    hideIcon.classList.add("neuroglancer-layer-list-panel-eye-icon");
+    showIcon.classList.add("neuroglancer-layer-list-panel-eye-icon");
     element.style.display = "flex";
     element.appendChild(showIcon);
     element.appendChild(hideIcon);
