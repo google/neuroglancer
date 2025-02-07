@@ -32,6 +32,11 @@ function getLayerTypeString(type: string | undefined): string {
   return mappedType || type;
 }
 
+function capitalizeFirstLetter(type: string): string {
+  const newType = type.charAt(0).toUpperCase() + type.slice(1);
+  return newType;
+}
+
 export class LayerTypeIndicatorWidget extends RefCounted {
   element = document.createElement("div");
   constructor(public layer: ManagedUserLayer) {
@@ -43,5 +48,7 @@ export class LayerTypeIndicatorWidget extends RefCounted {
   updateView() {
     this.element.textContent =
       getLayerTypeString(this.layer.layer?.type) ?? "n/a";
+    const layerType = capitalizeFirstLetter(this.layer.layer?.type ?? "n/a");
+    this.element.title = `${layerType} layer`;
   }
 }

@@ -92,6 +92,8 @@ export class LayerVisibilityWidget extends RefCounted {
         this.layer.setVisible(true);
       },
     });
+    hideIcon.classList.add("neuroglancer-eye-icon");
+    showIcon.classList.add("neuroglancer-eye-icon");
     element.style.display = "flex";
     element.appendChild(showIcon);
     element.appendChild(hideIcon);
@@ -145,6 +147,8 @@ class LayerListItem extends RefCounted {
     const { element, numberElement } = this;
     element.classList.add("neuroglancer-layer-list-panel-item");
     numberElement.classList.add("neuroglancer-layer-list-panel-item-number");
+    const layerNameWidget = this.registerDisposer(new LayerNameWidget(layer)).element;
+    layerNameWidget.classList.add("neuroglancer-layer-list-panel-item-name");
     element.appendChild(
       this.registerDisposer(
         new TrackableBooleanCheckbox(
@@ -170,9 +174,7 @@ class LayerListItem extends RefCounted {
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
     );
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
-    element.appendChild(
-      this.registerDisposer(new LayerNameWidget(layer)).element,
-    );
+    element.appendChild(layerNameWidget);
     element.appendChild(
       this.registerDisposer(makeSelectedLayerSidePanelCheckboxIcon(layer))
         .element,
