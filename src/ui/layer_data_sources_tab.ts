@@ -64,7 +64,7 @@ import {
 } from "#src/widget/multiline_autocomplete.js";
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
-import { delay } from "msw";
+import { debounce } from "lodash-es";
 
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
   splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,
@@ -465,10 +465,10 @@ export class LayerDataSourcesTab extends Tab {
         changeLayerTypeToDetected(layer);
         // TODO (SKM) this is a hack until a proper way to know when done loading is implemented
         // For now, just debounce the createImageLayerAsMultiChannel call
-        delay(1000).then(() =>
-          createImageLayerAsMultiChannel(layer.managedLayer),
-        );
-        // TODO (SKM)- only on images
+        const debounced = debounce(() => {
+          createImageLayerAsMultiChannel(layer.managedLayer);
+        }, 400);
+        debounced();
       });
     }
     const reRender = (this.reRender = animationFrameDebounce(() =>

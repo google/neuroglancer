@@ -2550,12 +2550,12 @@ export class AutoUserLayer extends UserLayer {
     const layerConstructor =
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
-      console.log("Activating layer constructor", layerConstructor);
       changeLayerType(this.managedLayer, layerConstructor);
-      console.log(this.managedLayer.layer?.toJSON());
+      const debounced = debounce(() => {
+        createImageLayerAsMultiChannel(this.managedLayer);
+      }, 400);
+      debounced();
     }
-    // Only work on image layers for multichannel
-    // if (this.managedLayer.layer?.type === "image") {
   }
 }
 
