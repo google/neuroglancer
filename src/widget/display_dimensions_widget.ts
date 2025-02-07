@@ -793,7 +793,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         const formattedFieldOfView = formatScaleWithUnitAsString(
           fieldOfView,
           displayDimensionUnits[localAxisIndex],
-          { precision: 3, elide1: false },
+          { precision: 2, elide1: false },
         );
         this.fovInputElements[i].value = formattedFieldOfView;
         this.updateFOVTooltip(i);
