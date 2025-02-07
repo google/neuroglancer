@@ -20,7 +20,9 @@ import { frontendBackendIsomorphicKvStoreProviderRegistry } from "#src/kvstore/r
 
 import { S3KvStore } from "#src/kvstore/s3/index.js";
 
-function s3Provider(_context: SharedKvStoreContextBase): BaseKvStoreProvider {
+function amazonS3Provider(
+  sharedKvStoreContext: SharedKvStoreContextBase,
+): BaseKvStoreProvider {
   return {
     scheme: "s3",
     description: "S3 (anonymous)",
@@ -32,8 +34,38 @@ function s3Provider(_context: SharedKvStoreContextBase): BaseKvStoreProvider {
       const [, bucket, path] = m;
       return {
         store: new S3KvStore(
+          sharedKvStoreContext.chunkManager.memoize,
           `https://${bucket}.s3.amazonaws.com/`,
           `s3://${bucket}/`,
+          /*knownToBeVirtualHostedStyle=*/ true,
+        ),
+        path: decodeURIComponent((path ?? "").substring(1)),
+      };
+    },
+  };
+}
+
+function s3Provider(
+  sharedKvStoreContext: SharedKvStoreContextBase,
+  httpScheme: "http" | "https",
+): BaseKvStoreProvider {
+  return {
+    scheme: `s3+${httpScheme}`,
+    description: `S3-compatible ${httpScheme} server`,
+    getKvStore(url) {
+      const m = (url.suffix ?? "").match(/^\/\/([^/]+)(\/.*)?$/);
+      if (m === null) {
+        throw new Error(
+          "Invalid URL, expected `s3+${httpScheme}://<host>/<path>`",
+        );
+      }
+      const [, host, path] = m;
+      return {
+        store: new S3KvStore(
+          sharedKvStoreContext.chunkManager.memoize,
+          `${httpScheme}://${host}/`,
+          `s3+${httpScheme}://${host}/`,
+          /*knownToBeVirtualHostedStyle=*/ false,
         ),
         path: decodeURIComponent((path ?? "").substring(1)),
       };
@@ -42,5 +74,11 @@ function s3Provider(_context: SharedKvStoreContextBase): BaseKvStoreProvider {
 }
 
 frontendBackendIsomorphicKvStoreProviderRegistry.registerBaseKvStoreProvider(
-  s3Provider,
+  amazonS3Provider,
 );
+
+for (const httpScheme of ["http", "https"] as const) {
+  frontendBackendIsomorphicKvStoreProviderRegistry.registerBaseKvStoreProvider(
+    (context) => s3Provider(context, httpScheme),
+  );
+}

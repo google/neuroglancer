@@ -12,7 +12,7 @@
     "strictNullChecks": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "allowImportingTsExtensions": true,
+    "allowImportingTsExtensions": false,
     "esModuleInterop": true,
     "sourceMap": true,
     "moduleResolution": "bundler",
@@ -34,5 +34,7 @@
     "testdata",
     "examples",
     "config",
+    "docs",
+    "ngauth_server",
   ],
 }

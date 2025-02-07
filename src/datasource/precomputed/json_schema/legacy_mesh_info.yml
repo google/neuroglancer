@@ -1,0 +1,23 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: PrecomputedLegacyMesh
+title: "Precomputed legacy single-resolution mesh metadata"
+type: object
+properties:
+  "@type":
+    const: "neuroglancer_legacy_mesh"
+    title: Precomputed data kind.
+  segment_properties:
+    title: |
+      Relative path to the directory containing associated :ref:`segment
+      properties<precomputed-segment-properties-format>`.
+
+      .. note::
+
+        This association does *not* apply transitively when this mesh dataset
+        itself is referenced via the :ref:`precomputed
+        volume<precomputed-volume-format>` `~PrecomputedVolume.mesh` metadata
+        property. Instead, the associated segment properties must be specified
+        directly in the volume metadata.
+    type: string
+required:
+  - "@type"

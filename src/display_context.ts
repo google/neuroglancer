@@ -25,6 +25,10 @@ import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
 import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
+import {
+  TrackableScreenshotMode,
+  ScreenshotMode,
+} from "#src/util/trackable_screenshot_mode.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
 import { initializeWebGL } from "#src/webgl/context.js";
@@ -144,7 +148,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract isReady(): boolean;
 
-  ensureBoundsUpdated() {
+  ensureBoundsUpdated(canScaleForScreenshot: boolean = false) {
     const { context } = this;
     context.ensureBoundsUpdated();
     const { boundsGeneration } = context;
@@ -230,8 +234,18 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    viewport.logicalWidth = logicalWidth;
-    viewport.logicalHeight = logicalHeight;
+    if (
+      this.context.screenshotMode.value !== ScreenshotMode.OFF &&
+      canScaleForScreenshot
+    ) {
+      viewport.width = logicalWidth * screenToCanvasPixelScaleX;
+      viewport.height = logicalHeight * screenToCanvasPixelScaleY;
+      viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;
+      viewport.logicalHeight = logicalHeight * screenToCanvasPixelScaleY;
+    } else {
+      viewport.logicalWidth = logicalWidth;
+      viewport.logicalHeight = logicalHeight;
+    }
     viewport.visibleLeftFraction = (clippedLeft - logicalLeft) / logicalWidth;
     viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
     viewport.visibleWidthFraction = clippedWidth / logicalWidth;
@@ -420,6 +434,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+  screenshotMode: TrackableScreenshotMode = new TrackableScreenshotMode(
+    ScreenshotMode.OFF,
+  );
   force3DHistogramForAutoRange = false;
   private framerateMonitor = new FramerateMonitor();
 
@@ -609,8 +626,10 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
     const { canvas } = this;
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    if (this.screenshotMode.value === ScreenshotMode.OFF) {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
     this.canvasRect = canvas.getBoundingClientRect();
     this.rootRect = this.container.getBoundingClientRect();
     this.boundsGeneration = resizeGeneration;

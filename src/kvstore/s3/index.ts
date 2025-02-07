@@ -24,21 +24,27 @@ import type {
   StatOptions,
   StatResponse,
 } from "#src/kvstore/index.js";
-import { getS3BucketListing } from "#src/kvstore/s3/list.js";
-import { encodePathForUrl } from "#src/kvstore/url.js";
+import {
+  getS3BucketListing,
+  listS3CompatibleUrl,
+} from "#src/kvstore/s3/list.js";
+import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
 import { fetchOk } from "#src/util/http_request.js";
+import type { StringMemoize } from "#src/util/memoize.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
 export class S3KvStore implements KvStore {
   constructor(
+    private memoize: StringMemoize,
     public baseUrl: string,
     public baseUrlForDisplay: string,
+    private knownToBeVirtualHostedStyle: boolean,
     private fetchOkImpl: FetchOk = fetchOk,
   ) {}
 
   stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
-    const url = `${this.baseUrl}${key}`;
+    const url = joinBaseUrlAndPath(this.baseUrl, key);
     return stat(this, key, url, options, this.fetchOkImpl);
   }
 
@@ -46,7 +52,7 @@ export class S3KvStore implements KvStore {
     key: string,
     options: DriverReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const url = `${this.baseUrl}${key}`;
+    const url = joinBaseUrlAndPath(this.baseUrl, key);
     return read(this, key, url, options, this.fetchOkImpl);
   }
 
@@ -58,15 +64,25 @@ export class S3KvStore implements KvStore {
         : new ProgressSpan(progressListener, {
             message: `Listing prefix ${this.getUrl(prefix)}`,
           });
-    return getS3BucketListing(this.baseUrl, prefix, {
-      fetchOkImpl: this.fetchOkImpl,
-      signal: options.signal,
-      progressListener,
-    });
+    if (this.knownToBeVirtualHostedStyle) {
+      return getS3BucketListing(
+        this.baseUrl,
+        prefix,
+        this.fetchOkImpl,
+        options,
+      );
+    }
+    return listS3CompatibleUrl(
+      joinBaseUrlAndPath(this.baseUrl, prefix),
+      this.baseUrlForDisplay,
+      this.memoize,
+      this.fetchOkImpl,
+      options,
+    );
   }
 
   getUrl(path: string) {
-    return this.baseUrlForDisplay + encodePathForUrl(path);
+    return joinBaseUrlAndPath(this.baseUrlForDisplay, path);
   }
 
   get supportsOffsetReads() {
