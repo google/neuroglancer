@@ -124,6 +124,19 @@ const SOURCE_JSON_KEY = "source";
 const TRANSFORM_JSON_KEY = "transform";
 const PICK_JSON_KEY = "pick";
 
+const NEW_FRAGMENT_MAIN = `#uicontrol invlerp contrast
+#uicontrol vec3 color color
+void main() {
+  float contrast_value = contrast();
+  if (VOLUME_RENDERING) {
+    emitRGBA(vec4(color * contrast_value, contrast_value));
+  }
+  else {
+    emitRGB(color * contrast_value);
+  }
+}
+`;
+
 export interface UserLayerSelectionState {
   generation: number;
 
@@ -2449,6 +2462,7 @@ export function createImageLayerAsMultiChannel(
   
   // TODO (skm) if the changing is working properly this can be removed
   // as everything will be a local channel
+  // TODO this doesn't work if the channels are grouped - e.g. one data source has multiple ranks
   let totalChannelChannels =
     numChannelsInEachChannelDimension.length > 0
       ? numChannelsInEachChannelDimension.reduce((acc, val) => acc * val, 1)
@@ -2499,8 +2513,7 @@ export function createImageLayerAsMultiChannel(
     // if i is 0 we already have the layer, this one
     // Otherwise we need to create a new layer
     const localPosition = calculateLocalPosition(i);
-    const thisSpec = { ...spec, localPosition };
-    console.log(thisSpec.localPosition);
+    let addedLayer = managedLayer;
     if (i == 0) {
       // Just change the channel
       // managedLayer.layer.restoreState(thisSpec);
@@ -2510,6 +2523,7 @@ export function createImageLayerAsMultiChannel(
     }
     if (i !== 0) {
       // Create a new layer
+      const thisSpec = { ...spec, localPosition };
       const newLayer = makeLayer(
         managedLayer.manager,
         `${startingName} c${i}`,
@@ -2517,7 +2531,9 @@ export function createImageLayerAsMultiChannel(
       );
       console.log(newLayer);
       managedLayer.manager.add(newLayer);
+      addedLayer = newLayer;
     }
+    addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
   }
 }
 
