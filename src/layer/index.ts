@@ -2459,7 +2459,7 @@ export function createImageLayerAsMultiChannel(
   totalLocalChannels = Number.isFinite(totalLocalChannels)
     ? totalLocalChannels
     : 0;
-  
+
   // TODO (skm) if the changing is working properly this can be removed
   // as everything will be a local channel
   // TODO this doesn't work if the channels are grouped - e.g. one data source has multiple ranks
@@ -2477,7 +2477,7 @@ export function createImageLayerAsMultiChannel(
   // TODO Loop over these and make a new layer for each one with the appropriate channel
   const spec = managedLayer.layer?.toJSON();
   const startingName = managedLayer.name;
-  managedLayer.name = `${managedLayer.name} c0`;
+  managedLayer.name = `${managedLayer.name} chan0`;
   // TODO probably needs two loops, one for local and one for channel
   // otherwise hard to pull the right pieces
 
@@ -2509,32 +2509,82 @@ export function createImageLayerAsMultiChannel(
     return rangeProduct[index];
   }
 
+  // const colors = new Map([
+  //   [0, "#ff0000"],
+  //   [1, "#00ff00"],
+  //   [2, "#0000ff"],
+  // ]);
+
+  const arrayColors = new Map([
+    [0, new Float32Array([1, 0, 0])],
+    [1, new Float32Array([0, 1, 0])],
+    [2, new Float32Array([0, 0, 1])],
+  ]);
+
+  const debouncedSetupFunctions = [];
   for (let i = 0; i < totalChannels; i++) {
     // if i is 0 we already have the layer, this one
     // Otherwise we need to create a new layer
     const localPosition = calculateLocalPosition(i);
-    let addedLayer = managedLayer;
+    let addedLayer: any = managedLayer;
     if (i == 0) {
       // Just change the channel
       // managedLayer.layer.restoreState(thisSpec);
       // managedLayer.layer.initializationDone();
       managedLayer.localPosition.value = new Float32Array(localPosition);
-      console.log(managedLayer);
     }
     if (i !== 0) {
       // Create a new layer
       const thisSpec = { ...spec, localPosition };
       const newLayer = makeLayer(
         managedLayer.manager,
-        `${startingName} c${i}`,
+        `${startingName} chan${i}`,
         thisSpec,
       );
-      console.log(newLayer);
       managedLayer.manager.add(newLayer);
       addedLayer = newLayer;
     }
     addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
+    // Set the color based on the index
+    // console.log(addedLayer.layer.shaderControlState.controls['contrast'])
+    // addedLayer.layer.shaderControlState.controls.controls.get('contrast').autoRangeFinder.autoComputeRange(0.05, 0.95);
+    // TODO (skm) wait until finished processing and then update some defaults
+    const debouncedSetDefaults = debounce(() => {
+      // TODO (SKM) either works
+      // addedLayer.layer.shaderControlState.restoreState({
+      //   color: colors.get(i % 3),
+      // })
+      addedLayer.layer.shaderControlState.value.get("color").trackable.value =
+        arrayColors.get(i % 3);
+      // TODO (SKM) correct the watchable - Fake update for now
+      const trackableContrast =
+        addedLayer.layer.shaderControlState.value.get("contrast").trackable
+          .value;
+      // addedLayer.layer.shaderControlState.value.get(
+      //   "contrast",
+      // ).trackable.value = {
+      //   ...trackableContrast,
+      //   range: [0, 2],
+      // };
+      addedLayer.layer.shaderControlState.value.get(
+        "contrast",
+      ).trackable.value = {
+        ...trackableContrast,
+        autoCompute: true,
+      };
+      addedLayer.layer.shaderControlState.value
+        .get("contrast")
+        .trackable.changed.dispatch();
+    }, 1000);
+    debouncedSetupFunctions.push(debouncedSetDefaults);
   }
+  debouncedSetupFunctions.forEach((fn) => {
+    fn();
+  });
+  // TODO (SKM) not really needed used for debugging
+  // debouncedSetupFunctions.forEach((fn, index) => {
+  //   setTimeout(fn, index * 1000); // Calls each function 1 second apart
+  // });
 }
 
 export function changeLayerName(
