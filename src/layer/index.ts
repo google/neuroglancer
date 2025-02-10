@@ -29,6 +29,7 @@ import {
   isGlobalDimension,
   isLocalDimension,
   isLocalOrChannelDimension,
+  makeCoordinateSpace,
   TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type {
@@ -2352,6 +2353,16 @@ export function changeLayerType(
   const userLayer = managedLayer.layer;
   if (userLayer === null) return;
   const spec = userLayer.toJSON();
+  // TODO (skm) probably won't work because of transform
+  // const localDimensions = spec.localDimensions;
+  // for each key in localDimensions, if it ends with ^ replace with '
+  // for (const key in localDimensions) {
+  //   if (key.endsWith("^")) {
+  //     const newKey = key.slice(0, -1) + "'";
+  //     localDimensions[newKey] = localDimensions[key];
+  //     delete localDimensions[key];
+  //   }
+  // }
   const newUserLayer = new layerConstructor(managedLayer);
   newUserLayer.restoreState(spec);
   newUserLayer.initializationDone();
@@ -2361,7 +2372,37 @@ export function changeLayerType(
 export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
 ) {
+  // remapTransformInputSpace is a possiblity
   if (managedLayer.layer?.type !== "image") return;
+
+  // For each datasource, change the transform to be a local transform
+  for (const dataSource of managedLayer.layer.dataSources) {
+    console.log(dataSource);
+    // rename each output dim with ^ to be ' instead
+    const { loadState } = dataSource;
+    if (loadState === undefined) return;
+    if (loadState.error !== undefined) return;
+    const transformOutputSpace = loadState.transform.value;
+    const names = transformOutputSpace.outputSpace.names;
+    const newNames = [];
+    for (const name of names) {
+      newNames.push(name.replace("^", "'"));
+    }
+    const outputSpace = transformOutputSpace.outputSpace;
+    // see L721 of widget/coordinate_transform.ts
+    // There might be something that makes this a little cleaner
+    // may also need to change modelTransform - depends a little
+    const newOutputSpace = makeCoordinateSpace({
+      ...outputSpace,
+      names: newNames,
+    });
+    loadState.transform.value = {
+      ...loadState.transform.value,
+      outputSpace: newOutputSpace,
+    };
+    console.log(dataSource);
+  }
+
   // const coordSpace = this.managedLayer.layer.channelCoordinateSpace!;
   // console.log(coordSpace);
   // console.log(this.managedLayer.layer.localCoordinateSpaceCombiner);
@@ -2405,6 +2446,9 @@ export function createImageLayerAsMultiChannel(
   totalLocalChannels = Number.isFinite(totalLocalChannels)
     ? totalLocalChannels
     : 0;
+  
+  // TODO (skm) if the changing is working properly this can be removed
+  // as everything will be a local channel
   let totalChannelChannels =
     numChannelsInEachChannelDimension.length > 0
       ? numChannelsInEachChannelDimension.reduce((acc, val) => acc * val, 1)
@@ -2422,20 +2466,57 @@ export function createImageLayerAsMultiChannel(
   managedLayer.name = `${managedLayer.name} c0`;
   // TODO probably needs two loops, one for local and one for channel
   // otherwise hard to pull the right pieces
+
+  // TODO pull out to somewhere else
+  function cartesianProductOfRanges(ranges: number[][]): number[][] {
+    // Start with an array of one empty array
+    // Iteratively capture the cartesian product of the ranges
+    // For the first range, map each value to an array containing that value
+    // For the second range, append each value in that array
+    // to the arrays containing the values from the first range
+    // And so on
+    return ranges.reduce(
+      (acc, range) => acc.flatMap((a) => range.map((b) => [...a, b])),
+      [[]],
+    );
+  }
+
+  function rangeFromBounds(lower: number, upper: number) {
+    return Array.from({ length: upper - lower }, (_, i) => i + lower);
+  }
+
+  const ranges = [];
+  for (let i = 0; i < localDimensionRank; i++) {
+    ranges.push(rangeFromBounds(lowerBounds[i], upperBounds[i]));
+  }
+  const rangeProduct = cartesianProductOfRanges(ranges);
+
+  function calculateLocalPosition(index: number) {
+    return rangeProduct[index];
+  }
+
   for (let i = 0; i < totalChannels; i++) {
     // if i is 0 we already have the layer, this one
     // Otherwise we need to create a new layer
+    const localPosition = calculateLocalPosition(i);
+    const thisSpec = { ...spec, localPosition };
+    console.log(thisSpec.localPosition);
+    if (i == 0) {
+      // Just change the channel
+      // managedLayer.layer.restoreState(thisSpec);
+      // managedLayer.layer.initializationDone();
+      managedLayer.localPosition.value = new Float32Array(localPosition);
+      console.log(managedLayer);
+    }
     if (i !== 0) {
       // Create a new layer
       const newLayer = makeLayer(
         managedLayer.manager,
         `${startingName} c${i}`,
-        spec,
+        thisSpec,
       );
+      console.log(newLayer);
       managedLayer.manager.add(newLayer);
-
-      // Set the channel of the new layer
-      // this
     }
   }
 }
@@ -2551,8 +2632,19 @@ export class AutoUserLayer extends UserLayer {
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
+      // TODO (skm) maybe checking layer.isReady() repeatedly
+      // may be sufficient here. Depends if isReady means
+      // data is loaded or the subsources are setup.
+      // Alternatively iterarting the dataSources
+      // And checking the loadState of each one could be another way
+      // A check on the signals in ManagedUserLayer could also be a way
+      // For example readyStateChanged or specificationChanged
       const debounced = debounce(() => {
         createImageLayerAsMultiChannel(this.managedLayer);
+        const debouncedLog = debounce(() => {
+          console.log(this);
+        }, 1000);
+        debouncedLog();
       }, 400);
       debounced();
     }
