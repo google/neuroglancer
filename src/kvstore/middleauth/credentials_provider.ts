@@ -151,23 +151,25 @@ export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAut
     if (!this.alreadyTriedLocalStorage) {
       this.alreadyTriedLocalStorage = true;
       token = getAuthTokenFromLocalStorage(this.serverUrl);
+      if (token) return token;
     }
 
-    if (!token) {
-      using _span = new ProgressSpan(options.progressListener, {
-        message: "Waiting for middleauth login to ${this.serverUrl}",
-      });
-      token = await getCredentialsWithStatus(
-        {
-          description: `middleauth server ${this.serverUrl}`,
-          requestDescription: "login",
-          get: (signal) => waitForLogin(this.serverUrl, signal),
-        },
-        options.signal,
-      );
-      saveAuthTokenToLocalStorage(this.serverUrl, token);
-    }
+    using _span = new ProgressSpan(options.progressListener, {
+      message: `Waiting for middleauth login to ${this.serverUrl}`,
+    });
+    options.signal.addEventListener("abort", () => {
+      console.log("login aborted");
+    });
 
+    token = await getCredentialsWithStatus(
+      {
+        description: `middleauth server ${this.serverUrl}`,
+        requestDescription: "login",
+        get: (signal) => waitForLogin(this.serverUrl, signal),
+      },
+      options.signal,
+    );
+    saveAuthTokenToLocalStorage(this.serverUrl, token);
     return token;
   });
 }
