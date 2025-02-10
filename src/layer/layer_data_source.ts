@@ -448,7 +448,7 @@ export class LayerDataSource extends RefCounted {
         retainer();
       })
       .catch((error) => {
-        if (this.wasDisposed) return;
+        if (refCounted.wasDisposed) return;
         this.loadState_ = { error };
         this.messages.clearMessages();
         this.messages.addMessage({
