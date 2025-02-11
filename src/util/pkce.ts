@@ -1,5 +1,4 @@
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import { type CancellationToken, CANCELED } from "#src/util/cancellation.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {
   verifyObject,
@@ -63,12 +62,10 @@ export async function generateCodeChallenge(verifier: string) {
 export async function waitForPKCEResponseMessage({
   source,
   state,
-  cancellationToken,
   tokenExchangeCallback,
 }: {
   source: Window;
   state: string;
-  cancellationToken: CancellationToken;
   /**
    * Callback to exchange the received code for OAuth2 credentials.
    * This will be called when a valid message (`code` and origin match) is received from the `source`.
@@ -78,7 +75,6 @@ export async function waitForPKCEResponseMessage({
   const context = new RefCounted();
   try {
     return await new Promise((resolve, reject) => {
-      context.registerDisposer(cancellationToken.add(() => reject(CANCELED)));
       context.registerEventListener(
         window,
         "message",

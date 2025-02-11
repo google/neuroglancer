@@ -4,7 +4,6 @@ import {
 } from "#src/credentials_provider/index.js";
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { StatusMessage } from "#src/status.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import { HttpError } from "#src/util/http_request.js";
 import {
   generateCodeChallenge,
@@ -17,17 +16,13 @@ const GLOBUS_AUTH_HOST = "https://auth.globus.org";
 const REDIRECT_URI = new URL("./globus_oauth2_redirect.html", import.meta.url)
   .href;
 
-function getRequiredScopes(endpoint: string) {
-  return `https://auth.globus.org/scopes/${endpoint}/https`;
-}
-
 function getGlobusAuthorizeURL({
-  endpoint,
+  scope,
   clientId,
   code_challenge,
   state,
 }: {
-  endpoint: string;
+  scope: string[];
   clientId: string;
   code_challenge: string;
   state: string;
@@ -39,7 +34,7 @@ function getGlobusAuthorizeURL({
   url.searchParams.set("code_challenge", code_challenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("state", state);
-  url.searchParams.set("scope", getRequiredScopes(endpoint));
+  url.searchParams.set("scope", scope.join(" "));
   return url.toString();
 }
 
@@ -84,7 +79,7 @@ function getStorage() {
 
 async function waitForAuth(
   clientId: string,
-  gcsHttpsHost: string,
+  globusConnectServerDomain: string,
 ): Promise<OAuth2Credentials> {
   const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
 
@@ -97,44 +92,35 @@ async function waitForAuth(
 
     frag.appendChild(title);
 
-    let identifier = getStorage().domainMappings?.[gcsHttpsHost];
-
     const link = document.createElement("button");
     link.textContent = "Log in to Globus";
-    link.disabled = true;
-
-    if (!identifier) {
-      const label = document.createElement("label");
-      label.textContent = "Globus Collection UUID";
-      label.style.display = "block";
-      label.style.margin = ".5em 0";
-      frag.appendChild(label);
-      const endpoint = document.createElement("input");
-      endpoint.style.width = "100%";
-      endpoint.style.margin = ".5em 0";
-      endpoint.type = "text";
-      endpoint.placeholder = "a17d7fac-ce06-4ede-8318-ad8dc98edd69";
-      endpoint.addEventListener("input", async (e) => {
-        identifier = (e.target as HTMLInputElement).value;
-        link.disabled = !identifier;
-      });
-      frag.appendChild(endpoint);
-    } else {
-      link.disabled = false;
-    }
 
     link.addEventListener("click", async (event) => {
       event.preventDefault();
-      if (!identifier) {
-        status.setText("You must provide a Globus Collection UUID.");
-        return;
-      }
+      /**
+       * We make a request to the Globus Connect Server domain **even though we _know_ we're
+       * unauthorized** to get the required consents for the resource.
+       */
+      console.log(globusConnectServerDomain);
+      const authorizationIntrospectionRequest = await fetch(
+        globusConnectServerDomain,
+        {
+          method: "GET",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        },
+      );
+
+      const { authorization_parameters } =
+        await authorizationIntrospectionRequest.json();
+
       const verifier = generateCodeVerifier();
       const state = getRandomHexString();
       const challenge = await generateCodeChallenge(verifier);
       const url = getGlobusAuthorizeURL({
         clientId,
-        endpoint: identifier,
+        scope: authorization_parameters.required_scopes,
         code_challenge: challenge,
         state,
       });
@@ -154,7 +140,6 @@ async function waitForAuth(
       const token = await waitForPKCEResponseMessage({
         source,
         state,
-        cancellationToken: uncancelableToken,
         tokenExchangeCallback: async (code) => {
           const response = await fetch(
             getGlobusTokenURL({ clientId, code, code_verifier: verifier }),
@@ -195,7 +180,7 @@ async function waitForAuth(
       };
       storage.domainMappings = {
         ...storage.domainMappings,
-        [gcsHttpsHost]: rawToken.resource_server,
+        [globusConnectServerDomain]: rawToken.resource_server,
       };
 
       localStorage.setItem("globus", JSON.stringify(storage));
@@ -215,30 +200,35 @@ async function waitForAuth(
 export class GlobusCredentialsProvider extends CredentialsProvider<OAuth2Credentials> {
   constructor(
     public clientId: string,
-    public gcsHttpsHost: string,
+    public assetUrl: URL,
   ) {
     super();
   }
   get = makeCredentialsGetter(async () => {
-    const resourceServer = getStorage().domainMappings?.[this.gcsHttpsHost];
+    const globusConnectServerDomain = this.assetUrl.origin;
+
+    const resourceServer =
+      getStorage().domainMappings?.[globusConnectServerDomain];
     const token = resourceServer
       ? getStorage().authorizations?.[resourceServer]
       : undefined;
+
     if (!token) {
-      return await waitForAuth(this.clientId, this.gcsHttpsHost);
+      return await waitForAuth(this.clientId, globusConnectServerDomain);
     }
-    const response = await fetch(`${this.gcsHttpsHost}`, {
+    const response = await fetch(this.assetUrl, {
       method: "HEAD",
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         Authorization: `${token?.tokenType} ${token?.accessToken}`,
       },
     });
+
     switch (response.status) {
       case 200:
         return token;
       case 401:
-        return await waitForAuth(this.clientId, this.gcsHttpsHost);
+        return await waitForAuth(this.clientId, globusConnectServerDomain);
       default:
         throw HttpError.fromResponse(response);
     }

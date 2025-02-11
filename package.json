@@ -219,11 +219,17 @@
       "neuroglancer/datasource/dvid:disabled": "./src/util/false.ts",
       "default": "./src/datasource/dvid/register_credentials_provider.ts"
     },
+    "#datasource/globus/register_default": {
+      "neuroglancer/datasource/globus:enabled": "./src/datasource/globus/register_default.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/globus:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/globus/register_default.ts"
+    },
     "#datasource/globus/register_credentials_provider": {
       "neuroglancer/python": "./src/util/false.ts",
       "neuroglancer/datasource/globus:enabled": "./src/datasource/globus/register_credentials_provider.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/globus:disabled": "./src/datasource/globus/register_credentials_provider.ts",
+      "neuroglancer/datasource/globus:disabled": "./src/util/false.ts",
       "default": "./src/datasource/globus/register_credentials_provider.ts"
     },
     "#datasource/graphene/backend": {
