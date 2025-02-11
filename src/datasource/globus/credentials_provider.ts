@@ -81,16 +81,20 @@ async function waitForAuth(
   clientId: string,
   globusConnectServerDomain: string,
 ): Promise<OAuth2Credentials> {
-  const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
+  const status = new StatusMessage(false, true);
 
   const res: Promise<OAuth2Credentials> = new Promise((resolve) => {
     const frag = document.createDocumentFragment();
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.alignItems = "center";
+    frag.appendChild(wrapper);
 
-    const title = document.createElement("h1");
-    title.textContent = "Authenticate with Globus";
-    title.style.fontSize = "1.5em";
-
-    frag.appendChild(title);
+    const msg = document.createElement("div");
+    msg.textContent = "You must log in to Globus to access this resource.";
+    msg.style.marginBottom = ".5em";
+    wrapper.appendChild(msg);
 
     const link = document.createElement("button");
     link.textContent = "Log in to Globus";
@@ -101,7 +105,6 @@ async function waitForAuth(
        * We make a request to the Globus Connect Server domain **even though we _know_ we're
        * unauthorized** to get the required consents for the resource.
        */
-      console.log(globusConnectServerDomain);
       const authorizationIntrospectionRequest = await fetch(
         globusConnectServerDomain,
         {
@@ -186,7 +189,7 @@ async function waitForAuth(
       localStorage.setItem("globus", JSON.stringify(storage));
       resolve(token);
     });
-    frag.appendChild(link);
+    wrapper.appendChild(link);
     status.element.appendChild(frag);
   });
 
