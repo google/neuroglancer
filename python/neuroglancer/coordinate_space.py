@@ -238,18 +238,19 @@ class CoordinateSpace:
                 names_tuple = tuple(names)
                 rank = len(names_tuple)
                 self.names = names_tuple
-                scales_array: np.typing.NDArray[np.float64]
+                scales_array = np.typing.NDArray[np.float64]
+                scales_list_decimal: Interable[Decimal]
                 if scales is None:
-                    scales_array = np.ones(rank, dtype=np.float64)
+                    scales_list_decimal = [Decimal("1.0") for r in range(rank)]
                 else:
-                    scales_array = [Decimal(s) for s in scales]
+                    scales_list_decimal = [Decimal(s) for s in scales]
                 if units is None:
                     units = ""
                 if isinstance(units, str):
                     units = tuple(units for _ in names_tuple)
                 scales_and_units = tuple(
                     parse_unit_and_scale(unit, scale)
-                    for scale, unit in zip(scales_array, units)
+                    for scale, unit in zip(scales_list_decimal, units)
                 )
                 scales_array = np.array(
                     [s[0] for s in scales_and_units], dtype=np.float64
