@@ -179,6 +179,52 @@ export function getBranch(
   return cache.get(url, options);
 }
 
+export function getTag(
+  sharedKvStoreContext: SharedKvStoreContextCounterpart,
+  url: string,
+  options: Partial<ProgressOptions>,
+) {
+  const cache = sharedKvStoreContext.chunkManager.memoize.get(
+    "icechunk:tag",
+    () => {
+      const cache = new SimpleAsyncCache<string, string>(
+        sharedKvStoreContext.chunkManager.addRef(),
+        {
+          get: async (url: string, progressOptions: ProgressOptions) => {
+            using _span = new ProgressSpan(progressOptions.progressListener, {
+              message: `Resolving icechunk tag at ${url}`,
+            });
+            try {
+              const [tagResponse, deletedResponse] = await Promise.all([
+                getRef(
+                  sharedKvStoreContext,
+                  pipelineUrlJoin(url, "ref.json"),
+                  progressOptions,
+                ),
+                sharedKvStoreContext.kvStoreContext.stat(
+                  pipelineUrlJoin(url, "ref.json.deleted"),
+                  progressOptions,
+                ),
+              ]);
+              if (deletedResponse !== undefined) {
+                throw new Error(`Tag is marked as deleted`);
+              }
+              return { data: tagResponse, size: 0 };
+            } catch (e) {
+              throw new Error(`Error resolving icechunk tag at ${url}`, {
+                cause: e,
+              });
+            }
+          },
+        },
+      );
+      cache.registerDisposer(sharedKvStoreContext.addRef());
+      return cache;
+    },
+  );
+  return cache.get(url, options);
+}
+
 export function resolveRefSpec(
   sharedKvStoreContext: SharedKvStoreContextCounterpart,
   url: string,
@@ -195,9 +241,9 @@ export function resolveRefSpec(
       options,
     );
   }
-  return getRef(
+  return getTag(
     sharedKvStoreContext,
-    pipelineUrlJoin(url, `refs/tag.${refSpec.tag}/ref.json`),
+    pipelineUrlJoin(url, `refs/tag.${refSpec.tag}/`),
     options,
   );
 }

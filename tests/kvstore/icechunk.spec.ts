@@ -81,6 +81,38 @@ test.for(["single_array", "hierarchy"])("golden test %s", async (name) => {
   }
 });
 
+describe("ref access", () => {
+  test.for([
+    "@branch.main/",
+    "@branch.other_branch/",
+    "@tag.tag1/",
+    "@tag.tag2/",
+  ])("version %s equivalent to no version", async (version) => {
+    const context = await sharedKvStoreContext();
+    const { response: expectedResponse } = await context.kvStoreContext.read(
+      `${TEST_DATA_SERVER}kvstore/icechunk/single_array.icechunk/|icechunk:zarr.json`,
+      { throwIfMissing: true },
+    );
+    const { response } = await context.kvStoreContext.read(
+      `${TEST_DATA_SERVER}kvstore/icechunk/single_array.icechunk/|icechunk:${version}zarr.json`,
+      { throwIfMissing: true },
+    );
+    await expect(response.json()).resolves.toEqual(
+      await expectedResponse.json(),
+    );
+  });
+
+  test("deleted tag fails", async () => {
+    const context = await sharedKvStoreContext();
+    await expect(
+      context.kvStoreContext.read(
+        `${TEST_DATA_SERVER}kvstore/icechunk/single_array.icechunk/|icechunk:@tag.tag3/zarr.json`,
+        { throwIfMissing: true },
+      ),
+    ).rejects.toMatchObject({ cause: new Error("Tag is marked as deleted") });
+  });
+});
+
 describe("completion", () => {
   test("empty prefix", async () => {
     const url = `${BASE_URL}|icechunk:`;
