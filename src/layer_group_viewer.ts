@@ -564,7 +564,7 @@ export class LayerGroupViewer extends RefCounted {
               if (layout !== "3d") {
                 newLayout = `${layout}-3d`;
               } else {
-                newLayout = "4panel";
+                newLayout = "4panel-alt";
               }
             } else {
               newLayout = layout;
