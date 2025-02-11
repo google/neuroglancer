@@ -16,6 +16,7 @@
 import re
 from collections.abc import Sequence
 from typing import Any, NamedTuple, Optional, Union
+from decimal import Decimal
 
 import numpy as np
 import numpy.typing
@@ -82,11 +83,11 @@ def parse_unit_and_scale(
         raise ValueError("Invalid unit", unit_and_scale)
     scale_str = m.group(1)
     if scale_str is None:
-        scale = 1.0
+        scale = Decimal(1.0)
     else:
-        scale = float(scale_str)
+        scale = Decimal(scale_str)
 
-    scale *= coefficient
+    scale *= Decimal(coefficient)
     unit = ""
     unit_str = m.group(2)
     if unit_str is not None:
@@ -241,7 +242,7 @@ class CoordinateSpace:
                 if scales is None:
                     scales_array = np.ones(rank, dtype=np.float64)
                 else:
-                    scales_array = np.array(scales, dtype=np.float64)
+                    scales_array = [Decimal(s) for s in scales]
                 if units is None:
                     units = ""
                 if isinstance(units, str):
