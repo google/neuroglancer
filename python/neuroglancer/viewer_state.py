@@ -1599,7 +1599,7 @@ def data_panel_layout_wrapper(default_value="xy"):
 
 
 data_panel_layout_types = frozenset(
-    ["xy", "yz", "xz", "xy-3d", "yz-3d", "xz-3d", "4panel", "3d"]
+    ["xy", "yz", "xz", "xy-3d", "yz-3d", "xz-3d", "4panel", "4panel-alt", "3d"]
 )
 
 
