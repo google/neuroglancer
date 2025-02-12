@@ -22,11 +22,14 @@ import type {
   KvStoreContext,
 } from "#src/kvstore/context.js";
 import type { StringMemoize } from "#src/util/memoize.js";
+import type { RPC, RpcId } from "#src/worker_rpc.js";
 
 export interface SharedKvStoreContextBase {
   kvStoreContext: KvStoreContext;
   credentialsManager: CredentialsManager;
   chunkManager: { memoize: StringMemoize };
+  rpc: RPC | null;
+  rpcId: RpcId | null;
 }
 
 export class KvStoreProviderRegistry<

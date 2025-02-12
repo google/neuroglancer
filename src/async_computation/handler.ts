@@ -22,17 +22,23 @@ const handlers = new Map<
 >();
 
 function setupChannel(port: DedicatedWorkerGlobalScope) {
-  self.onmessage = (msg: any) => {
+  self.onmessage = async (msg: any) => {
     const { t, id, args } = msg.data as { t: string; id: number; args: any[] };
-    const handler = handlers.get(t)!;
-    handler(...args).then(
-      ({ value, transfer }) => port.postMessage({ id, value }, { transfer }),
-      (error) =>
-        port.postMessage({
-          id,
-          error: error instanceof Error ? error.message : error.toString(),
-        }),
-    );
+    try {
+      const handler = handlers.get(t)!;
+      if (handler === undefined) {
+        throw new Error(
+          `Internal error: async computation operation ${JSON.stringify(t)} is not registered.  Registered handlers: ${JSON.stringify(Array.from(handlers.keys()))}`,
+        );
+      }
+      const { value, transfer } = await handler(...args);
+      port.postMessage({ id, value }, { transfer });
+    } catch (error) {
+      port.postMessage({
+        id,
+        error,
+      });
+    }
   };
   // Notify that the worker is ready to receive messages.
   self.postMessage(null);

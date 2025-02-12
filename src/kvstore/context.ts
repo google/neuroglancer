@@ -23,8 +23,13 @@ import type {
   ListOptions,
   StatOptions,
   StatResponse,
+  FileHandle,
 } from "#src/kvstore/index.js";
-import { listKvStore, readKvStore } from "#src/kvstore/index.js";
+import {
+  KvStoreFileHandle,
+  listKvStore,
+  readKvStore,
+} from "#src/kvstore/index.js";
 import type { UrlWithParsedScheme } from "#src/kvstore/url.js";
 import { resolveRelativePath, splitPipelineUrl } from "#src/kvstore/url.js";
 import type {
@@ -87,6 +92,11 @@ export class KvStoreContext {
     return kvStore;
   }
 
+  getFileHandle(url: string): FileHandle {
+    const { store, path } = this.getKvStore(url);
+    return new KvStoreFileHandle(store, path);
+  }
+
   getBaseKvStoreProvider(url: UrlWithParsedScheme): BaseKvStoreProvider {
     const provider = this.baseKvStoreProviders.get(url.scheme);
     if (provider === undefined) {
@@ -110,6 +120,7 @@ export class KvStoreContext {
       if (usage !== undefined) {
         message += `; ${usage}`;
       }
+      message += `; supported schemes: ${JSON.stringify(Array.from(this.kvStoreAdapterProviders.keys()))}`;
       throw new Error(message);
     }
     return provider;
