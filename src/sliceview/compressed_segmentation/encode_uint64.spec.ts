@@ -25,18 +25,18 @@ import {
   encodeChannels,
   newCache,
 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
-import { makeRandomUint64Array } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { makeRandomArrayByChoosingWithReplacement } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
 import { prod3, prod4 } from "#src/util/geom.js";
-import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 describe("compressed_segmentation uint64", () => {
   describe("encodeBlock", () => {
     // Test 0-bit encoding.
     it("basic 0-bit", () => {
-      const input = Uint32Array.of(3, 0, 3, 0, 3, 0, 3, 0);
-      const inputStrides = [2, 4, 8];
+      const input = BigUint64Array.of(3n, 3n, 3n, 3n);
+      const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       const expected = Uint32Array.of(3, 0);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -57,10 +57,10 @@ describe("compressed_segmentation uint64", () => {
 
     // // Test 0-bit encoding with existing data in output buffer.
     it("basic 0-bit preserve existing", () => {
-      const input = Uint32Array.of(3, 0, 3, 0, 3, 0, 3, 0);
-      const inputStrides = [2, 4, 8];
+      const input = BigUint64Array.of(3n, 3n, 3n, 3n);
+      const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const expected = Uint32Array.of(1, 2, 3, 3, 0);
       const cache = newCache();
@@ -82,10 +82,10 @@ describe("compressed_segmentation uint64", () => {
 
     // Test 1-bit encoding.
     it("basic 1-bit", () => {
-      const input = Uint32Array.of(4, 0, 3, 0, 4, 0, 4, 0);
-      const inputStrides = [2, 4, 8];
+      const input = BigUint64Array.of(4n, 3n, 4n, 4n);
+      const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -106,11 +106,11 @@ describe("compressed_segmentation uint64", () => {
 
     // Test 1-bit encoding, actual_size != block_size.
     it("size mismatch 1-bit", () => {
-      const input = Uint32Array.of(4, 0, 3, 0, 4, 0, 3, 0);
-      const inputStrides = [2, 4, 8];
+      const input = BigUint64Array.of(4n, 3n, 4n, 3n);
+      const inputStrides = [1, 2, 4];
       const blockSize = [3, 2, 1];
       const actualSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -133,10 +133,10 @@ describe("compressed_segmentation uint64", () => {
 
     // Test 2-bit encoding.
     it("basic 2-bit", () => {
-      const input = Uint32Array.of(4, 0, 3, 0, 5, 0, 4, 0);
-      const inputStrides = [2, 4, 8];
+      const input = BigUint64Array.of(4n, 3n, 5n, 4n);
+      const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -160,27 +160,19 @@ describe("compressed_segmentation uint64", () => {
 
   describe("encodeChannel", () => {
     it("basic", () => {
-      const input = Uint32Array.of(
-        4,
-        0,
-        3,
-        0,
-        5,
-        0,
-        4,
-        0, //
-        1,
-        0,
-        3,
-        0,
-        3,
-        0,
-        3,
-        0, //
+      const input = BigUint64Array.of(
+        4n,
+        3n,
+        5n,
+        4n, //
+        1n,
+        3n,
+        3n,
+        3n, //
       );
       const volumeSize = [2, 2, 2];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
@@ -209,43 +201,27 @@ describe("compressed_segmentation uint64", () => {
     });
 
     it("basic cached 0-bit", () => {
-      const input = Uint32Array.of(
-        4,
-        0,
-        4,
-        0,
-        4,
-        0,
-        4,
-        0, //
-        3,
-        0,
-        3,
-        0,
-        3,
-        0,
-        3,
-        0, //
-        3,
-        0,
-        3,
-        0,
-        3,
-        0,
-        3,
-        0, //
-        4,
-        0,
-        4,
-        0,
-        4,
-        0,
-        4,
-        0, //
+      const input = BigUint64Array.of(
+        4n,
+        4n,
+        4n,
+        4n, //
+        3n,
+        3n,
+        3n,
+        3n, //
+        3n,
+        3n,
+        3n,
+        3n, //
+        4n,
+        4n,
+        4n,
+        4n, //
       );
       const volumeSize = [2, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
@@ -270,43 +246,27 @@ describe("compressed_segmentation uint64", () => {
     });
 
     it("basic cached 2-bit", () => {
-      const input = Uint32Array.of(
-        4,
-        0,
-        3,
-        0,
-        5,
-        0,
-        4,
-        0, //
-        1,
-        0,
-        3,
-        0,
-        3,
-        0,
-        3,
-        0, //
-        3,
-        0,
-        1,
-        0,
-        1,
-        0,
-        1,
-        0, //
-        5,
-        0,
-        5,
-        0,
-        3,
-        0,
-        4,
-        0, //
+      const input = BigUint64Array.of(
+        4n,
+        3n,
+        5n,
+        4n, //
+        1n,
+        3n,
+        3n,
+        3n, //
+        3n,
+        1n,
+        1n,
+        1n, //
+        5n,
+        5n,
+        3n,
+        4n, //
       );
       const volumeSize = [2, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
@@ -348,14 +308,15 @@ describe("compressed_segmentation uint64", () => {
     ]) {
       it(`round trip ${volumeSize.join(",")}`, () => {
         const numPossibleValues = 15;
-        const input = makeRandomUint64Array(
+        const input = makeRandomArrayByChoosingWithReplacement(
+          BigUint64Array,
           prod3(volumeSize),
           numPossibleValues,
         );
         const blockSize = [2, 2, 2];
-        const output = new Uint32ArrayBuilder();
+        const output = new TypedArrayBuilder(Uint32Array);
         encodeChannel(output, blockSize, input, volumeSize);
-        const decoded = new Uint32Array(input.length);
+        const decoded = new BigUint64Array(input.length);
         decodeChannel(decoded, output.view, 0, volumeSize, blockSize);
         expect(decoded).toEqual(input);
       });
@@ -365,18 +326,14 @@ describe("compressed_segmentation uint64", () => {
   describe("encodeChannels", () => {
     it("basic 1-channel 1-block", () => {
       const blockSize = [2, 2, 1];
-      const input = Uint32Array.of(
-        4,
-        0,
-        4,
-        0,
-        4,
-        0,
-        4,
-        0, //
+      const input = BigUint64Array.of(
+        4n,
+        4n,
+        4n,
+        4n, //
       );
       const volumeSize = [2, 2, 1, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       encodeChannels(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
         Uint32Array.of(
@@ -399,14 +356,15 @@ describe("compressed_segmentation uint64", () => {
     ]) {
       it(`round trip ${volumeSize.join(",")}`, () => {
         const numPossibleValues = 15;
-        const input = makeRandomUint64Array(
+        const input = makeRandomArrayByChoosingWithReplacement(
+          BigUint64Array,
           prod4(volumeSize),
           numPossibleValues,
         );
         const blockSize = [2, 2, 2];
-        const output = new Uint32ArrayBuilder();
+        const output = new TypedArrayBuilder(Uint32Array);
         encodeChannels(output, blockSize, input, volumeSize);
-        const decoded = new Uint32Array(input.length);
+        const decoded = new BigUint64Array(input.length);
         decodeChannels(decoded, output.view, 0, volumeSize, blockSize);
         expect(decoded).toEqual(input);
       });

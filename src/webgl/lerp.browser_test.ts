@@ -15,7 +15,7 @@
  */
 
 import { expect, describe, it } from "vitest";
-import type { TypedArrayConstructor } from "#src/util/array.js";
+import type { TypedNumberArrayConstructor } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
@@ -42,7 +42,7 @@ function getRandomValue(dataType: DataType) {
     case DataType.INT32: {
       const buf = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
         dataType
-      ] as TypedArrayConstructor<ArrayBuffer>)(1);
+      ] as TypedNumberArrayConstructor<ArrayBuffer>)(1);
       getRandomValues(buf);
       return buf[0];
     }
@@ -307,8 +307,14 @@ outputValue = doInvlerp(lerpOutput);
               t: number,
             ) => {
               tester.execute({ inputValue: t });
-              const values = tester.values;
-              return { u: values.outputValue, x: values.lerpOutput };
+              const { outputValue, lerpOutput } = tester.values;
+              return {
+                u: outputValue,
+                x:
+                  typeof lerpOutput === "bigint"
+                    ? Uint64.fromBigInt(lerpOutput)
+                    : (lerpOutput as number),
+              };
             };
             testLerpRoundtrip(dataType, interval, 0, roundtrip);
             testLerpRoundtrip(dataType, interval, 1, roundtrip);

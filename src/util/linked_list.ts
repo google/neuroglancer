@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+export type Node<
+  T,
+  Next extends string | symbol,
+  Prev extends string | symbol,
+> = Record<Next | Prev, T | null>;
+
 export interface LinkedListOperations<T> {
   insertAfter: (head: T, x: T) => void;
   pop: (head: T) => T;
@@ -23,4 +29,63 @@ export interface LinkedListOperations<T> {
   iterator: (head: T) => Iterator<T>;
   reverseIterator: (head: T) => Iterator<T>;
   initializeHead: (head: T) => void;
+}
+
+export default function linkedListOperations<
+  Next extends string | symbol,
+  Prev extends string | symbol,
+>(options: { next: Next; prev: Prev }) {
+  const { next: NEXT, prev: PREV } = options;
+  return {
+    insertAfter<T extends Node<T, Next, Prev>>(head: T, x: T) {
+      const next = head[NEXT]!;
+      (x[NEXT] as T) = next;
+      (x[PREV] as T) = head;
+      (head[NEXT] as T) = x;
+      (next[PREV] as T) = x;
+    },
+    insertBefore<T extends Node<T, Next, Prev>>(head: T, x: T) {
+      const prev = <T>head[PREV];
+      (x[PREV] as T) = prev;
+      (x[NEXT] as T) = head;
+      (head[PREV] as T) = x;
+      (prev[NEXT] as T) = x;
+    },
+    front<T extends Node<T, Next, Prev>>(head: T) {
+      const next = head[NEXT];
+      if (next === head) {
+        return null;
+      }
+      return next;
+    },
+    back<T extends Node<T, Next, Prev>>(head: T): T | null {
+      const next = head[PREV];
+      if (next === head) {
+        return null;
+      }
+      return next;
+    },
+    pop<T extends Node<T, Next, Prev>>(x: T) {
+      const next = x[NEXT] as T;
+      const prev = x[PREV] as T;
+      (next[PREV] as T) = prev;
+      (prev[NEXT] as T) = next;
+      (x[NEXT] as T | null) = null;
+      (x[PREV] as T | null) = null;
+      return x;
+    },
+    *iterator<T extends Node<T, Next, Prev>>(head: T) {
+      for (let x = <T>head[NEXT]; x !== head; x = <T>x[NEXT]) {
+        yield x;
+      }
+    },
+    *reverseIterator<T extends Node<T, Next, Prev>>(head: T) {
+      for (let x = <T>head[PREV]; x !== head; x = <T>x[PREV]) {
+        yield x;
+      }
+    },
+    initializeHead<T extends Node<T, Next, Prev>>(head: T) {
+      (head[NEXT] as T) = (head[PREV] as T) = head;
+    },
+  };
 }

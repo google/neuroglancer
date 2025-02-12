@@ -21,9 +21,9 @@ import {
 import { registerAsyncComputation } from "#src/async_computation/handler.js";
 import { encodeChannels as encodeChannelsUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
 import { encodeChannels as encodeChannelsUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
-import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
 
-const tempBuffer = new Uint32ArrayBuilder(20000);
+const tempBuffer = new TypedArrayBuilder(Uint32Array, 20000);
 
 registerAsyncComputation(
   encodeCompressedSegmentationUint32,
@@ -38,7 +38,16 @@ registerAsyncComputation(
   encodeCompressedSegmentationUint64,
   async (rawData, shape, blockSize) => {
     tempBuffer.clear();
-    encodeChannelsUint64(tempBuffer, blockSize, rawData, shape);
+    encodeChannelsUint64(
+      tempBuffer,
+      blockSize,
+      new BigUint64Array(
+        rawData.buffer,
+        rawData.byteOffset,
+        rawData.length / 2,
+      ),
+      shape,
+    );
     return { value: tempBuffer.view };
   },
 );
