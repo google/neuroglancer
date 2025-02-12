@@ -479,15 +479,6 @@ export class AnnotationLayerView extends Tab {
     });
     mutableControls.appendChild(polylineButton);
 
-    // const polygonButton = makeIcon({
-    //   text: annotationTypeHandlers[AnnotationType.POLYGON].icon,
-    //   title: "Annotate polygon",
-    //   onClick: () => {
-    //     this.layer.tool.value = new PlacePolygonTool(this.layer, {});
-    //   },
-    // });
-    // mutableControls.appendChild(polygonButton);
-
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 
@@ -1051,7 +1042,6 @@ const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
-//const ANNOTATE_POLYGON_TOOL_ID = "annotatePolygon";
 
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
