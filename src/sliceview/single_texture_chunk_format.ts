@@ -126,7 +126,7 @@ export abstract class SingleTextureVolumeChunk<
   texture: WebGLTexture | null = null;
   data: Data | null;
   textureLayout: TextureLayout | null;
-  CHUNK_FORMAT_TYPE: SingleTextureChunkFormat<TextureLayout>;
+  declare CHUNK_FORMAT_TYPE: SingleTextureChunkFormat<TextureLayout>;
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);

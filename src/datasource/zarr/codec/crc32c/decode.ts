@@ -17,20 +17,15 @@
 import type { Configuration } from "#src/datasource/zarr/codec/crc32c/resolve.js";
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 const checksumSize = 4;
 
 registerCodec({
   name: "crc32c",
   kind: CodecKind.bytesToBytes,
-  async decode(
-    configuration: Configuration,
-    encoded: Uint8Array,
-    cancellationToken: CancellationToken,
-  ): Promise<Uint8Array> {
+  async decode(configuration: Configuration, encoded, signal: AbortSignal) {
     configuration;
-    cancellationToken;
+    signal;
     if (encoded.length < checksumSize) {
       throw new Error(
         `Expected buffer of size at least ${checksumSize} bytes but received: ${encoded.length} bytes`,

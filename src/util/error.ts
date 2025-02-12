@@ -28,3 +28,19 @@ export function valueOrThrow<T>(x: ValueOrError<T>): T {
   if (x.error !== undefined) throw new Error(x.error);
   return x;
 }
+
+export function formatErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) {
+    const { message, cause } = error;
+    if (cause !== undefined) {
+      return `${message}: ${formatErrorMessage(cause)}`;
+    }
+    return message;
+  }
+  try {
+    return "" + error;
+  } catch {
+    return "Unknown error";
+  }
+}

@@ -107,7 +107,6 @@ abstract class SegmentListSource
   // explicit uint64 ids, and the `matches`, list, specifying the indices into the
   // `segmentPropertyMap` of the matching segments.
   explicitSegments: Uint64[] | undefined;
-  explicitSegmentsVisible = false;
 
   debouncedUpdate = debounce(() => this.update(), 0);
 
@@ -136,8 +135,6 @@ abstract class SegmentListSource
 }
 
 class StarredSegmentsListSource extends SegmentListSource {
-  explicitSegmentsVisible: true;
-
   constructor(
     public segmentationDisplayState: SegmentationDisplayState,
     public parentElement: HTMLElement,
@@ -194,7 +191,6 @@ class SegmentQueryListSource extends SegmentListSource {
   matchStatusTextPrefix = "";
   selectedSegmentsGeneration = -1;
   visibleSegmentsGeneration = -1;
-  explicitSegmentsVisible = false;
 
   get numMatches() {
     return this.queryResult.value?.count ?? 0;
@@ -218,7 +214,7 @@ class SegmentQueryListSource extends SegmentListSource {
     let matchStatusTextPrefix = "";
     const unconstrained = isQueryUnconstrained(queryResult.query);
     if (!unconstrained) {
-      if (this.explicitSegments !== undefined && this.explicitSegmentsVisible) {
+      if (this.explicitSegments !== undefined) {
         splices.push({
           deleteCount: this.explicitSegments.length,
           retainCount: 0,
@@ -232,7 +228,7 @@ class SegmentQueryListSource extends SegmentListSource {
     const { explicitIds } = queryResult;
     if (explicitIds !== undefined) {
       this.explicitSegments = explicitIds;
-    } else if (!this.explicitSegmentsVisible) {
+    } else {
       this.explicitSegments = undefined;
     }
 

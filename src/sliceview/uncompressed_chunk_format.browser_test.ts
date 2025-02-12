@@ -59,7 +59,7 @@ describe("sliceview/uncompressed_chunk_format", () => {
     ]) {
       const numElements = prod4(volumeSize);
       for (const [dataType, arrayConstructor] of <
-        [DataType, TypedArrayConstructor][]
+        [DataType, TypedArrayConstructor<ArrayBuffer>][]
       >[
         [DataType.UINT8, Uint8Array],
         [DataType.UINT16, Uint16Array],

@@ -52,7 +52,7 @@ import { constantWatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import type { ShaderModule } from "#src/webgl/shader.js";
-import type { RpcId, SharedObject } from "#src/worker_rpc.js";
+import type { RpcId } from "#src/worker_rpc.js";
 
 export interface SliceViewRenderLayerOptions {
   /**
@@ -202,7 +202,7 @@ export abstract class SliceViewRenderLayer<
     );
   }
 
-  RPC_TYPE_ID: string;
+  declare RPC_TYPE_ID: string;
 
   initializeCounterpart() {
     const sharedObject = this.registerDisposer(
@@ -292,6 +292,4 @@ export class SliceViewPanelRenderLayer<
     attachment;
     return true;
   }
-
-  backend: SharedObject | undefined;
 }

@@ -49,7 +49,7 @@ export interface VTKHeader {
 
 export interface VertexAttribute {
   name: string;
-  data: Float32Array;
+  data: Float32Array<ArrayBuffer>;
   numComponents: number;
   tableName: string;
   dataType: string;
@@ -59,9 +59,9 @@ export class TriangularMesh {
   constructor(
     public header: VTKHeader,
     public numVertices: number,
-    public vertexPositions: Float32Array,
+    public vertexPositions: Float32Array<ArrayBuffer>,
     public numTriangles: number,
-    public indices: Uint32Array,
+    public indices: Uint32Array<ArrayBuffer>,
     public vertexAttributes: VertexAttribute[],
   ) {}
 }

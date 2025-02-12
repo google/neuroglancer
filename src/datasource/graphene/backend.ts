@@ -22,20 +22,22 @@ import {
   ChunkSource,
 } from "#src/chunk_manager/backend.js";
 import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import type { ChunkedGraphChunkSpecification } from "#src/datasource/graphene/base.js";
 import {
   getGrapheneFragmentKey,
   GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
-  responseIdentity,
   ChunkedGraphSourceParameters,
   MeshSourceParameters,
   CHUNKED_GRAPH_LAYER_RPC_ID,
   CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   RENDER_RATIO_LIMIT,
   isBaseSegmentId,
+  parseGrapheneError,
 } from "#src/datasource/graphene/base.js";
 import { decodeManifestChunk } from "#src/datasource/precomputed/backend.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
+import type { KvStoreWithPath, ReadResponse } from "#src/kvstore/index.js";
+import { readKvStore } from "#src/kvstore/index.js";
 import type { FragmentChunk, ManifestChunk } from "#src/mesh/backend.js";
 import { assignMeshFragmentData, MeshSource } from "#src/mesh/backend.js";
 import { decodeDraco } from "#src/mesh/draco/index.js";
@@ -60,15 +62,8 @@ import {
 } from "#src/sliceview/base.js";
 import { computeChunkBounds } from "#src/sliceview/volume/backend.js";
 import { Uint64Set } from "#src/uint64_set.js";
-import { fetchSpecialHttpByteRange } from "#src/util/byte_range_http_requests.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
-import { responseArrayBuffer, responseJson } from "#src/util/http_request.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
+import { HttpError } from "#src/util/http_request.js";
 import { Uint64 } from "#src/util/uint64.js";
 import {
   getBasePriority,
@@ -78,76 +73,66 @@ import {
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObject, registerRPC } from "#src/worker_rpc.js";
 
-function getVerifiedFragmentPromise(
-  credentialsProvider: SpecialProtocolCredentialsProvider,
-  chunk: FragmentChunk,
-  parameters: MeshSourceParameters,
-  cancellationToken: CancellationToken,
-) {
-  if (chunk.fragmentId && chunk.fragmentId.charAt(0) === "~") {
-    const parts = chunk.fragmentId.substr(1).split(":");
-    const startOffset = Number(parts[1]);
-    const endOffset = startOffset + Number(parts[2]);
-    return fetchSpecialHttpByteRange(
-      credentialsProvider,
-      `${parameters.fragmentUrl}/initial/${parts[0]}`,
-      startOffset,
-      endOffset,
-      cancellationToken,
+function downloadFragmentWithSharding(
+  fragmentKvStore: KvStoreWithPath,
+  fragmentId: string,
+  signal: AbortSignal,
+): Promise<ReadResponse> {
+  if (fragmentId && fragmentId.charAt(0) === "~") {
+    const parts = fragmentId.substring(1).split(":");
+    const byteRange = { offset: Number(parts[1]), length: Number(parts[2]) };
+    return readKvStore(
+      fragmentKvStore.store,
+      `${fragmentKvStore.path}initial/${parts[0]}`,
+      { signal, byteRange, throwIfMissing: true },
     );
   }
-  return cancellableFetchSpecialOk(
-    credentialsProvider,
-    `${parameters.fragmentUrl}/dynamic/${chunk.fragmentId}`,
-    {},
-    responseArrayBuffer,
-    cancellationToken,
+  return readKvStore(
+    fragmentKvStore.store,
+    `${fragmentKvStore.path}dynamic/${fragmentId}`,
+    { signal, throwIfMissing: true },
   );
 }
 
-function getFragmentDownloadPromise(
-  credentialsProvider: SpecialProtocolCredentialsProvider,
-  chunk: FragmentChunk,
+function downloadFragment(
+  fragmentKvStore: KvStoreWithPath,
+  fragmentId: string,
   parameters: MeshSourceParameters,
-  cancellationToken: CancellationToken,
-) {
-  let fragmentDownloadPromise;
+  signal: AbortSignal,
+): Promise<ReadResponse> {
   if (parameters.sharding) {
-    fragmentDownloadPromise = getVerifiedFragmentPromise(
-      credentialsProvider,
-      chunk,
-      parameters,
-      cancellationToken,
-    );
+    return downloadFragmentWithSharding(fragmentKvStore, fragmentId, signal);
   } else {
-    fragmentDownloadPromise = cancellableFetchSpecialOk(
-      credentialsProvider,
-      `${parameters.fragmentUrl}/${chunk.fragmentId}`,
-      {},
-      responseArrayBuffer,
-      cancellationToken,
+    return readKvStore(
+      fragmentKvStore.store,
+      `${fragmentKvStore.path}/${fragmentId}`,
+      { signal, throwIfMissing: true },
     );
   }
-  return fragmentDownloadPromise;
 }
 
 async function decodeDracoFragmentChunk(
   chunk: FragmentChunk,
-  response: ArrayBuffer,
+  response: Uint8Array,
 ) {
-  const rawMesh = await decodeDraco(new Uint8Array(response));
+  const rawMesh = await decodeDraco(response);
   assignMeshFragmentData(chunk, rawMesh);
 }
 
 @registerSharedObject()
 export class GrapheneMeshSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    MeshSource,
-  ),
+  WithSharedKvStoreContextCounterpart(MeshSource),
   MeshSourceParameters,
 ) {
   manifestRequestCount = new Map<string, number>();
   newSegments = new Uint64Set();
+
+  manifestKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.manifestUrl,
+  );
+  fragmentKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.fragmentUrl,
+  );
 
   addNewSegment(segment: Uint64) {
     const { newSegments } = this;
@@ -158,53 +143,49 @@ export class GrapheneMeshSource extends WithParameters(
     }, TEN_MINUTES);
   }
 
-  async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
+  async download(chunk: ManifestChunk, signal: AbortSignal) {
     const { parameters, newSegments, manifestRequestCount } = this;
     if (isBaseSegmentId(chunk.objectId, parameters.nBitsForLayerId)) {
       return decodeManifestChunk(chunk, { fragments: [] });
     }
-    const url = `${parameters.manifestUrl}/manifest`;
-    const manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
-    await cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      manifestUrl,
-      {},
-      responseJson,
-      cancellationToken,
-    ).then((response) => {
-      const chunkIdentifier = manifestUrl;
-      if (newSegments.has(chunk.objectId)) {
-        const requestCount =
-          (manifestRequestCount.get(chunkIdentifier) || 0) + 1;
-        manifestRequestCount.set(chunkIdentifier, requestCount);
-        setTimeout(
-          () => {
-            this.chunkManager.queueManager.updateChunkState(
-              chunk,
-              ChunkState.QUEUED,
-            );
-          },
-          2 ** requestCount * 1000,
-        );
-      } else {
-        manifestRequestCount.delete(chunkIdentifier);
-      }
-      return decodeManifestChunk(chunk, response);
-    });
+    const { manifestKvStore } = this;
+    const manifestPath = `${manifestKvStore.path}/manifest/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
+    const response = await (
+      await readKvStore(manifestKvStore.store, manifestPath, {
+        throwIfMissing: true,
+        signal,
+      })
+    ).response.json();
+    const chunkIdentifier = manifestPath;
+    if (newSegments.has(chunk.objectId)) {
+      const requestCount = (manifestRequestCount.get(chunkIdentifier) ?? 0) + 1;
+      manifestRequestCount.set(chunkIdentifier, requestCount);
+      setTimeout(
+        () => {
+          this.chunkManager.queueManager.updateChunkState(
+            chunk,
+            ChunkState.QUEUED,
+          );
+        },
+        2 ** requestCount * 1000,
+      );
+    } else {
+      manifestRequestCount.delete(chunkIdentifier);
+    }
+    return decodeManifestChunk(chunk, response);
   }
 
-  async downloadFragment(
-    chunk: FragmentChunk,
-    cancellationToken: CancellationToken,
-  ) {
-    const { parameters } = this;
-    const response = await getFragmentDownloadPromise(
-      undefined,
-      chunk,
-      parameters,
-      cancellationToken,
+  async downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
+    const { response } = await downloadFragment(
+      this.fragmentKvStore,
+      chunk.fragmentId!,
+      this.parameters,
+      signal,
     );
-    await decodeDracoFragmentChunk(chunk, response);
+    await decodeDracoFragmentChunk(
+      chunk,
+      new Uint8Array(await response.arrayBuffer()),
+    );
   }
 
   getFragmentKey(objectKey: string | null, fragmentId: string) {
@@ -262,15 +243,17 @@ function decodeChunkedGraphChunk(leaves: string[]) {
 
 @registerSharedObject()
 export class GrapheneChunkedGraphChunkSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    ChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(ChunkSource),
   ChunkedGraphSourceParameters,
 ) {
   spec: ChunkedGraphChunkSpecification;
-  chunks: Map<string, ChunkedGraphChunk>;
+  declare chunks: Map<string, ChunkedGraphChunk>;
   tempChunkDataSize: Uint32Array;
   tempChunkPosition: Float32Array;
+
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -280,11 +263,7 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
     this.tempChunkPosition = new Float32Array(rank);
   }
 
-  async download(
-    chunk: ChunkedGraphChunk,
-    cancellationToken: CancellationToken,
-  ): Promise<void> {
-    const { parameters } = this;
+  async download(chunk: ChunkedGraphChunk, signal: AbortSignal): Promise<void> {
     const chunkPosition = this.computeChunkBounds(chunk);
     const chunkDataSize = chunk.chunkDataSize!;
     const bounds =
@@ -292,22 +271,25 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
       `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
       `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
 
-    const request = cancellableFetchSpecialOk(
-      this.credentialsProvider,
-      `${parameters.url}/${chunk.segment}/leaves?int64_as_str=1&bounds=${bounds}`,
-      {},
-      responseIdentity,
-      cancellationToken,
+    const { kvStore } = this;
+
+    const request = readKvStore(
+      kvStore.store,
+      `${kvStore.path}/${chunk.segment}/leaves?int64_as_str=1&bounds=${bounds}`,
+      { signal, throwIfMissing: true },
     );
     await this.withErrorMessage(
       request,
       `Fetching leaves of segment ${chunk.segment} in region ${bounds}: `,
     )
-      .then((res) => res.json())
+      .then((res) => res.response.json())
       .then((res) => {
         chunk.leaves = decodeChunkedGraphChunk(res.leaf_ids);
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        if (err instanceof Error && err.name === "AbortError") return;
+        console.error(err);
+      });
   }
 
   getChunk(chunkGridPosition: Float32Array, segment: Uint64) {
@@ -326,21 +308,17 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
     return computeChunkBounds(this, chunk);
   }
 
-  async withErrorMessage(
-    promise: Promise<Response>,
+  async withErrorMessage<T>(
+    promise: Promise<T>,
     errorPrefix: string,
-  ): Promise<Response> {
-    const response = await promise;
-    if (response.ok) {
-      return response;
-    }
-    let msg: string;
-    try {
-      msg = (await response.json()).message;
-    } catch {
-      msg = await response.text();
-    }
-    throw new Error(`[${response.status}] ${errorPrefix}${msg}`);
+  ): Promise<T> {
+    return promise.catch(async (e) => {
+      if (e instanceof HttpError && e.response) {
+        const msg = await parseGrapheneError(e);
+        throw new Error(`[${e.response.status}] ${errorPrefix}${msg ?? ""}`);
+      }
+      throw e;
+    });
   }
 }
 

@@ -16,18 +16,17 @@
 
 // Command-line interface for building Neuroglancer.
 
-/// <reference types="webpack-dev-server" />
-
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import path from "path";
-import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
-import type { Configuration } from "webpack";
-import webpackCli from "webpack-cli/lib/bootstrap.js"; // eslint-disable-line import/default
+import { RspackCLI } from "@rspack/cli";
+import type { Configuration } from "@rspack/core";
+import ESLintPlugin from "eslint-rspack-plugin";
+import { TsCheckerRspackPlugin } from "ts-checker-rspack-plugin";
 import * as webpackMerge from "webpack-merge";
 import yargs from "yargs";
-import { normalizeConfigurationWithDefine } from "./webpack/configuration_with_define.js";
-import { setConfig } from "./webpack/webpack_config_from_cli.cjs";
+import { normalizeConfigurationWithDefine } from "./rspack/configuration_with_define.js";
+import { setConfig } from "./rspack/rspack_config_from_cli.js";
 
 export interface WebpackConfigurationWithDefine extends Configuration {
   define?: Record<string, any> | undefined;
@@ -81,7 +80,7 @@ async function getWebpackConfig(
   ...extraConfigs: WebpackConfigurationWithDefine[]
 ): Promise<(...args: any[]) => Configuration> {
   const configPaths = [
-    pathToFileURL(path.resolve(import.meta.dirname, "../webpack.config.js"))
+    pathToFileURL(path.resolve(import.meta.dirname, "../rspack.config.js"))
       .href,
     ...argv.config.map((configPath) => pathToFileURL(configPath).href),
   ];
@@ -109,15 +108,15 @@ async function getWebpackConfig(
       outDir = path.resolve(outDir);
     }
     const plugins = [];
-    if (argv.typecheck || argv.lint) {
+    if (argv.typecheck) {
+      plugins.push(new TsCheckerRspackPlugin());
+    }
+    if (argv.lint) {
       plugins.push(
-        new ForkTsCheckerWebpackPlugin({
-          typescript: argv.typecheck,
-          eslint: argv.lint
-            ? {
-                files: ".",
-              }
-            : undefined,
+        new ESLintPlugin({
+          configType: "flat",
+          files: ".",
+          threads: true,
         }),
       );
     }
@@ -141,12 +140,11 @@ async function getWebpackConfig(
 }
 
 async function runWebpack(...args: string[]) {
-  // @ts-expect-error: no typings available
-  await webpackCli([
+  await new RspackCLI().run([
     ...process.argv.slice(0, 2),
     ...args,
     "--config",
-    path.resolve(import.meta.dirname, "webpack", "webpack_config_from_cli.cjs"),
+    path.resolve(import.meta.dirname, "rspack", "rspack_config_from_cli.js"),
   ]);
 }
 
@@ -211,7 +209,7 @@ function parseArgs() {
             group: "Development server options",
             type: "number",
             nargs: 1,
-            default: 8080,
+            default: 0,
             description: "Port number for the development server",
           },
           host: {
@@ -253,10 +251,19 @@ function parseArgs() {
           mode: {
             default: "production",
           },
+          analyze: {
+            type: "boolean",
+            default: false,
+            description: "Print bundle size analysis.",
+          },
         }),
       handler: async (argv) => {
         setConfig(await getWebpackConfig(argv, { watch: argv.watch }));
-        await runWebpack("build", `--mode=${argv.mode}`);
+        await runWebpack(
+          "build",
+          `--mode=${argv.mode}`,
+          ...(argv.analyze ? [`--analyze`] : []),
+        );
       },
     })
     .strict()

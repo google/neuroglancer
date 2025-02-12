@@ -17,7 +17,7 @@
 import type { ProjectionParameters } from "#src/projection_parameters.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
-import { Buffer } from "#src/webgl/buffer.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderProgram } from "#src/webgl/shader.js";
 import { trivialColorShader } from "#src/webgl/trivial_shaders.js";
@@ -46,14 +46,14 @@ export function computeAxisLineMatrix(
 }
 
 export class AxesLineHelper extends RefCounted {
-  vertexBuffer: Buffer;
-  colorBuffer: Buffer;
+  vertexBuffer: GLBuffer;
+  colorBuffer: GLBuffer;
   trivialColorShader: ShaderProgram;
 
   constructor(public gl: GL) {
     super();
     this.vertexBuffer = this.registerDisposer(
-      Buffer.fromData(
+      GLBuffer.fromData(
         gl,
         new Float32Array([
           0,
@@ -88,7 +88,7 @@ export class AxesLineHelper extends RefCounted {
 
     const alpha = 0.5;
     this.colorBuffer = this.registerDisposer(
-      Buffer.fromData(
+      GLBuffer.fromData(
         gl,
         new Float32Array([
           1,

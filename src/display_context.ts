@@ -25,6 +25,10 @@ import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
 import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
+import {
+  TrackableScreenshotMode,
+  ScreenshotMode,
+} from "#src/util/trackable_screenshot_mode.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
 import { initializeWebGL } from "#src/webgl/context.js";
@@ -115,7 +119,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   renderViewport = new RenderViewport();
 
-  private monitorState: PanelMonitorState = {};
+  private monitorState: PanelMonitorState = { isIntersecting: true };
 
   constructor(
     public context: Borrowed<DisplayContext>,
@@ -135,7 +139,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract isReady(): boolean;
 
-  ensureBoundsUpdated() {
+  ensureBoundsUpdated(canScaleForScreenshot: boolean = false) {
     const { context } = this;
     context.ensureBoundsUpdated();
     const { boundsGeneration } = context;
@@ -221,8 +225,18 @@ export abstract class RenderedPanel extends RefCounted {
       0,
       clippedBottom - clippedTop,
     ));
-    viewport.logicalWidth = logicalWidth;
-    viewport.logicalHeight = logicalHeight;
+    if (
+      this.context.screenshotMode.value !== ScreenshotMode.OFF &&
+      canScaleForScreenshot
+    ) {
+      viewport.width = logicalWidth * screenToCanvasPixelScaleX;
+      viewport.height = logicalHeight * screenToCanvasPixelScaleY;
+      viewport.logicalWidth = logicalWidth * screenToCanvasPixelScaleX;
+      viewport.logicalHeight = logicalHeight * screenToCanvasPixelScaleY;
+    } else {
+      viewport.logicalWidth = logicalWidth;
+      viewport.logicalHeight = logicalHeight;
+    }
     viewport.visibleLeftFraction = (clippedLeft - logicalLeft) / logicalWidth;
     viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
     viewport.visibleWidthFraction = clippedWidth / logicalWidth;
@@ -386,6 +400,13 @@ interface PanelMonitorState {
   // detections due to normalization that the browser may do.
   intersectionObserverMargin?: string;
 
+  // Indicates that the element is intersecting the viewport at all. If `true`,
+  // then the intersection observer margin is set normally to detect any
+  // changes. If `false`, then the intersection observer margin is set to cover
+  // the entire viewport in order to detect when the panel becomes visible
+  // again.
+  isIntersecting: boolean;
+
   // Indicates that the panel element was added to the resize observer.
   addedToResizeObserver?: boolean;
 }
@@ -403,6 +424,10 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   rootRect: DOMRect | undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+  screenshotMode: TrackableScreenshotMode = new TrackableScreenshotMode(
+    ScreenshotMode.OFF,
+  );
+  force3DHistogramForAutoRange = false;
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;
@@ -429,21 +454,37 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       this.resizeObserver.observe(element);
       state.addedToResizeObserver = true;
     }
-    const rootRect = this.rootRect!;
-    const marginTop = rootRect.top - elementClientRect.top;
-    const marginLeft = rootRect.left - elementClientRect.left;
-    const marginRight = elementClientRect.right - rootRect.right;
-    const marginBottom = elementClientRect.bottom - rootRect.bottom;
-    const margin = `${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px`;
+    let margin: string;
+    if (state.isIntersecting) {
+      const rootRect = this.rootRect!;
+      const marginTop = rootRect.top - elementClientRect.top;
+      const marginLeft = rootRect.left - elementClientRect.left;
+      const marginRight = elementClientRect.right - rootRect.right;
+      const marginBottom = elementClientRect.bottom - rootRect.bottom;
+      margin = `${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px`;
+    } else {
+      margin = "";
+    }
     if (state.intersectionObserverMargin !== margin) {
       state.intersectionObserverMargin = margin;
       state.intersectionObserver?.disconnect();
+      const thresholds = new Array(101);
+      for (let i = 0; i <= 100; ++i) {
+        thresholds[i] = 0.01 * i;
+      }
       const intersectionObserver = (state.intersectionObserver =
-        new IntersectionObserver(this.resizeCallback, {
-          root: this.container,
-          rootMargin: margin,
-          threshold: [0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1],
-        }));
+        new IntersectionObserver(
+          (entries) => {
+            const lastEntry = entries[entries.length - 1];
+            state.isIntersecting = lastEntry.isIntersecting;
+            this.resizeCallback();
+          },
+          {
+            root: this.container,
+            rootMargin: margin,
+            threshold: thresholds,
+          },
+        ));
       intersectionObserver.observe(element);
     }
   }
@@ -575,8 +616,10 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
     const { canvas } = this;
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    if (this.screenshotMode.value === ScreenshotMode.OFF) {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
     this.canvasRect = canvas.getBoundingClientRect();
     this.rootRect = this.container.getBoundingClientRect();
     this.boundsGeneration = resizeGeneration;
@@ -587,7 +630,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.updateStarted.dispatch();
     const gl = this.gl;
     const ext = this.framerateMonitor.getTimingExtension(gl);
-    const query = this.framerateMonitor.startFrameTimeQuery(gl, ext);
+    this.framerateMonitor.startFrameTimeQuery(gl, ext, this.frameNumber);
     this.ensureBoundsUpdated();
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -611,7 +654,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.gl.colorMask(true, true, true, true);
     this.updateFinished.dispatch();
-    this.framerateMonitor.endFrameTimeQuery(gl, ext, query);
+    this.framerateMonitor.endLastTimeQuery(gl, ext);
     this.framerateMonitor.grabAnyFinishedQueryResults(gl);
   }
 

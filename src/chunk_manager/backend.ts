@@ -36,8 +36,6 @@ import {
 } from "#src/chunk_manager/base.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { TypedArray } from "#src/util/array.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CancellationTokenSource } from "#src/util/cancellation.js";
 import type { Borrowed, Disposable } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import LinkedList0 from "#src/util/linked_list.0.js";
@@ -127,10 +125,10 @@ export class Chunk implements Disposable {
   newRequestedState = ChunkState.NEW;
 
   /**
-   * Cancellation token used to cancel the pending download.  Set to undefined except when state !==
+   * Abort controller used to cancel the pending download.  Set to undefined except when state !==
    * DOWNLOADING.  This should not be accessed by code outside this module.
    */
-  downloadCancellationToken: CancellationTokenSource | undefined = undefined;
+  downloadAbortController: AbortController | undefined = undefined;
 
   initialize(key: string) {
     this.key = key;
@@ -414,13 +412,12 @@ export interface ChunkSourceBase {
    * Note: This method must be defined by subclasses.
    *
    * @param chunk Chunk to download.
-   * @param cancellationToken If this token is canceled, the download/decoding should be aborted if
-   * possible.
+   * @param signal Used to abort download.
    *
    * TODO(jbms): Move this back to the class definition above and declare this abstract once mixins
    * are compatible with abstract classes.
    */
-  download(chunk: Chunk, cancellationToken: CancellationToken): Promise<void>;
+  download(chunk: Chunk, signal: AbortSignal): Promise<void>;
 }
 
 export class ChunkSource extends ChunkSourceBase {
@@ -434,13 +431,13 @@ export class ChunkSource extends ChunkSourceBase {
 }
 
 function startChunkDownload(chunk: Chunk) {
-  const downloadCancellationToken = (chunk.downloadCancellationToken =
-    new CancellationTokenSource());
+  const downloadAbortController = (chunk.downloadAbortController =
+    new AbortController());
   const startTime = Date.now();
-  chunk.source!.download(chunk, downloadCancellationToken).then(
+  chunk.source!.download(chunk, downloadAbortController.signal).then(
     () => {
-      if (chunk.downloadCancellationToken === downloadCancellationToken) {
-        chunk.downloadCancellationToken = undefined;
+      if (chunk.downloadAbortController === downloadAbortController) {
+        chunk.downloadAbortController = undefined;
         const endTime = Date.now();
         const { statistics } = chunk.source!;
         statistics[
@@ -453,8 +450,8 @@ function startChunkDownload(chunk: Chunk) {
       }
     },
     (error: any) => {
-      if (chunk.downloadCancellationToken === downloadCancellationToken) {
-        chunk.downloadCancellationToken = undefined;
+      if (chunk.downloadAbortController === downloadAbortController) {
+        chunk.downloadAbortController = undefined;
         chunk.downloadFailed(error);
         console.log(`Error retrieving chunk ${chunk}: ${error}`);
       }
@@ -463,9 +460,9 @@ function startChunkDownload(chunk: Chunk) {
 }
 
 function cancelChunkDownload(chunk: Chunk) {
-  const token = chunk.downloadCancellationToken!;
-  chunk.downloadCancellationToken = undefined;
-  token.cancel();
+  const controller = chunk.downloadAbortController!;
+  chunk.downloadAbortController = undefined;
+  controller.abort(new DOMException("chunk download cancelled", "AbortError"));
 }
 
 class ChunkPriorityQueue {
@@ -891,6 +888,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.adjustCapacitiesForChunk(chunk, true);
     this.addChunkToQueues_(chunk);
     this.scheduleUpdate();
+  }
+
+  markRecentlyUsed(chunk: Chunk) {
+    this.removeChunkFromQueues_(chunk);
+    this.addChunkToQueues_(chunk);
   }
 
   private processGPUPromotions_() {

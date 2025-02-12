@@ -18,11 +18,11 @@
  * limitations under the License.
  */
 
-import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { registerDefaultCredentialsProvider } from "#src/credentials_provider/default_manager.js";
 import { credentialsKey } from "#src/datasource/dvid/api.js";
 import { DVIDCredentialsProvider } from "#src/datasource/dvid/credentials_provider.js";
 
-defaultCredentialsManager.register(
+registerDefaultCredentialsProvider(
   credentialsKey,
   (params: { dvidServer: string; authServer: string | undefined }) =>
     new DVIDCredentialsProvider(params.dvidServer, params.authServer),

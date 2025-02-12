@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
+import { raceWithAbort, SharedAbortController } from "#src/util/abort.js";
 import type { RefCounted } from "#src/util/disposable.js";
 import { RefCountedValue } from "#src/util/disposable.js";
 import { stableStringify } from "#src/util/json.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { MultiConsumerProgressListener } from "#src/util/progress_listener.js";
 
 export class Memoize<Key, Value extends RefCounted> {
   private map = new Map<Key, Value>();
@@ -51,4 +54,119 @@ export class StringMemoize extends Memoize<string, RefCounted> {
   getUncounted<T>(x: any, getter: () => T) {
     return this.get(x, () => new RefCountedValue(getter())).value;
   }
+
+  getAsync<T>(
+    x: any,
+    options: Partial<ProgressOptions>,
+    getter: (options: ProgressOptions) => Promise<T>,
+  ) {
+    return this.getUncounted(x, () => asyncMemoizeWithProgress(getter))(
+      options,
+    );
+  }
+}
+
+export interface AsyncMemoize<T> {
+  (options: { signal?: AbortSignal }): Promise<T>;
+}
+
+export interface AsyncMemoizeWithProgress<T> {
+  (options: Partial<ProgressOptions>): Promise<T>;
+}
+
+export function asyncMemoize<T>(
+  getter: (options: { signal: AbortSignal }) => Promise<T>,
+): AsyncMemoize<T> {
+  let abortController: SharedAbortController | undefined;
+  let promise: Promise<T> | undefined;
+  let completed: boolean = false;
+
+  return (options: { signal?: AbortSignal }): Promise<T> => {
+    if (completed) {
+      return promise!;
+    }
+    const { signal } = options;
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
+    if (promise === undefined || abortController!.signal.aborted) {
+      abortController = new SharedAbortController();
+      const curAbortController = abortController;
+      promise = (async () => {
+        try {
+          return await getter({
+            signal: curAbortController.signal,
+          });
+        } catch (e) {
+          if (curAbortController.signal.aborted) {
+            promise = undefined;
+          }
+          throw e;
+        } finally {
+          if (promise !== undefined) {
+            completed = true;
+          }
+          curAbortController[Symbol.dispose]();
+          if (abortController === curAbortController) {
+            abortController = undefined;
+          }
+        }
+      })();
+    }
+    abortController!.addConsumer(signal);
+    return raceWithAbort(promise, signal);
+  };
+}
+
+export function asyncMemoizeWithProgress<T>(
+  getter: (options: ProgressOptions) => Promise<T>,
+): AsyncMemoizeWithProgress<T> {
+  let progressListener: MultiConsumerProgressListener | undefined;
+  let abortController: SharedAbortController | undefined;
+  let promise: Promise<T> | undefined;
+  let completed: boolean = false;
+
+  return async (options: Partial<ProgressOptions>): Promise<T> => {
+    if (completed) {
+      return promise!;
+    }
+    const { signal } = options;
+    signal?.throwIfAborted();
+    if (promise === undefined || abortController!.signal.aborted) {
+      progressListener = new MultiConsumerProgressListener();
+      abortController = new SharedAbortController();
+      const curAbortController = abortController;
+      promise = (async () => {
+        try {
+          return await getter({
+            signal: curAbortController.signal,
+            progressListener: progressListener!,
+          });
+        } catch (e) {
+          if (curAbortController.signal.aborted) {
+            promise = undefined;
+          }
+          throw e;
+        } finally {
+          if (promise !== undefined) {
+            completed = true;
+          }
+          progressListener = undefined;
+          curAbortController[Symbol.dispose]();
+          if (abortController === curAbortController) {
+            abortController = undefined;
+          }
+        }
+      })();
+    }
+    abortController!.addConsumer(signal);
+    const curProgressListener = progressListener!;
+    curProgressListener.addListener(options.progressListener);
+
+    try {
+      return await raceWithAbort(promise, signal);
+    } finally {
+      curProgressListener.removeListener(options.progressListener);
+    }
+  };
 }

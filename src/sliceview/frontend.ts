@@ -62,14 +62,13 @@ import {
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
 import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
 import { kOneVec, kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import { getObjectId } from "#src/util/object_id.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GL } from "#src/webgl/context.js";
@@ -159,10 +158,10 @@ function disposeTransformedSources(
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends Base {
-  gl = this.chunkManager.gl;
+  gl: GL;
   viewChanged = new NullarySignal();
-  rpc: RPC;
-  rpcId: number;
+  declare rpc: RPC;
+  declare rpcId: number;
 
   renderingStale = true;
 
@@ -170,22 +169,17 @@ export class SliceView extends Base {
 
   visibleLayerList = new Array<SliceViewRenderLayer>();
 
-  visibleLayers: Map<SliceViewRenderLayer, FrontendVisibleLayerSources>;
+  declare visibleLayers: Map<SliceViewRenderLayer, FrontendVisibleLayerSources>;
 
-  offscreenFramebuffer = this.registerDisposer(
-    new FramebufferConfiguration(this.gl, {
-      colorBuffers: makeTextureBuffers(this.gl, 1),
-      depthBuffer: new DepthTextureBuffer(this.gl),
-    }),
-  );
+  offscreenFramebuffer;
   histogramInputTextures: TextureBuffer[] = [];
-  offscreenFramebuffersWithHistograms = [this.offscreenFramebuffer];
+  offscreenFramebuffersWithHistograms;
 
   get displayDimensionRenderInfo() {
     return this.navigationState.displayDimensionRenderInfo;
   }
 
-  private histogramGenerator = TextureHistogramGenerator.get(this.gl);
+  private histogramGenerator: TextureHistogramGenerator;
 
   computeHistograms(
     count: number,
@@ -200,7 +194,7 @@ export class SliceView extends Base {
     );
   }
 
-  projectionParameters: Owned<
+  declare projectionParameters: Owned<
     DerivedProjectionParameters<SliceViewProjectionParameters>
   >;
 
@@ -276,6 +270,17 @@ export class SliceView extends Base {
         },
       }),
     );
+    this.gl = chunkManager.gl;
+
+    this.offscreenFramebuffer = this.registerDisposer(
+      new FramebufferConfiguration(this.gl, {
+        colorBuffers: makeTextureBuffers(this.gl, 1),
+        depthBuffer: new DepthTextureBuffer(this.gl),
+      }),
+    );
+    this.offscreenFramebuffersWithHistograms = [this.offscreenFramebuffer];
+    this.histogramGenerator = TextureHistogramGenerator.get(this.gl);
+
     this.registerDisposer(navigationState);
     this.registerDisposer(this.projectionParameters);
     this.registerDisposer(
@@ -408,7 +413,6 @@ export class SliceView extends Base {
     const { visibleLayers, visibleLayerList } = this;
     const { displayDimensionRenderInfo } = this.projectionParameters.value;
     const rpc = this.rpc!;
-    const rpcMessage: any = { id: this.rpcId };
     let changed = false;
     visibleLayerList.length = 0;
     for (const renderLayer of this.layerManager.readyRenderLayers()) {
@@ -449,20 +453,22 @@ export class SliceView extends Base {
           layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
           layerInfo.transformGeneration = curTransformGeneration;
         }
-        rpcMessage.layerId = renderLayer.rpcId;
-        rpcMessage.sources = serializeAllTransformedSources(
-          layerInfo.allSources,
-        );
-        rpcMessage.displayDimensionRenderInfo = displayDimensionRenderInfo;
         this.flushBackendProjectionParameters();
-        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
+        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
+          id: this.rpcId,
+          layerId: renderLayer.rpcId,
+          sources: serializeAllTransformedSources(layerInfo.allSources),
+          displayDimensionRenderInfo: displayDimensionRenderInfo,
+        });
         changed = true;
       }
     }
     for (const [renderLayer, layerInfo] of visibleLayers) {
       if (layerInfo.lastSeenGeneration === curUpdateGeneration) continue;
-      rpcMessage.layerId = renderLayer.rpcId;
-      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
+      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
+        id: this.rpcId,
+        layerId: renderLayer.rpcId,
+      });
       visibleLayers.delete(renderLayer);
       disposeTransformedSources(renderLayer, layerInfo.allSources);
       invokeDisposers(layerInfo.disposers);
@@ -605,9 +611,9 @@ export abstract class SliceViewChunkSource<
   extends ChunkSource
   implements SliceViewChunkSourceInterface
 {
-  chunks: Map<string, ChunkType>;
+  declare chunks: Map<string, ChunkType>;
 
-  OPTIONS: SliceViewChunkSourceOptions<Spec>;
+  declare OPTIONS: SliceViewChunkSourceOptions<Spec>;
 
   spec: Spec;
 
@@ -646,7 +652,7 @@ export abstract class SliceViewChunkSource<
   async fetchChunk<T>(
     chunkGridPosition: Float32Array,
     transform: (chunk: Chunk) => T,
-    cancellationToken: CancellationToken = uncancelableToken,
+    progressOptions: Partial<ProgressOptions>,
   ): Promise<T> {
     const key = chunkGridPosition.join();
     const existingChunk = this.chunks.get(key);
@@ -675,7 +681,7 @@ export abstract class SliceViewChunkSource<
       await this.rpc!.promiseInvoke(
         SLICEVIEW_REQUEST_CHUNK_RPC_ID,
         { source: this.rpcId, chunkGridPosition },
-        cancellationToken,
+        progressOptions,
       );
       return await promise;
     } finally {
@@ -701,7 +707,7 @@ export interface SliceViewChunkSource {
 
 export class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
-  source: SliceViewChunkSource;
+  declare source: SliceViewChunkSource;
 
   constructor(source: SliceViewChunkSource, x: any) {
     super(source);
@@ -714,7 +720,7 @@ export class SliceViewChunk extends Chunk {
  * Helper for rendering a SliceView that has been pre-rendered to a texture.
  */
 export class SliceViewRenderHelper extends RefCounted {
-  private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
+  private copyVertexPositionsBuffer;
   private shader: ShaderProgram;
 
   private textureCoordinateAdjustment = new Float32Array(4);
@@ -724,6 +730,8 @@ export class SliceViewRenderHelper extends RefCounted {
     emitter: ShaderModule,
   ) {
     super();
+    this.copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
+
     const builder = new ShaderBuilder(gl);
     builder.addVarying("vec2", "vTexCoord");
     builder.addUniform("sampler2D", "uSampler");

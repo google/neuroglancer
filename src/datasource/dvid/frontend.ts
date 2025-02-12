@@ -29,14 +29,11 @@ import {
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
-import type {
-  CredentialsManager,
-  CredentialsProvider,
-} from "#src/credentials_provider/index.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { DVIDToken } from "#src/datasource/dvid/api.js";
 import {
   credentialsKey,
-  makeRequestWithCredentials,
+  fetchWithDVIDCredentials,
 } from "#src/datasource/dvid/api.js";
 import type { DVIDSourceParameters } from "#src/datasource/dvid/base.js";
 import {
@@ -50,8 +47,8 @@ import type {
   CompletionResult,
   DataSource,
   GetDataSourceOptions,
+  DataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import { MeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
@@ -65,7 +62,6 @@ import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import { StatusMessage } from "#src/status.js";
 import { transposeNestedArrays } from "#src/util/array.js";
 import {
   applyCompletionOffset,
@@ -85,6 +81,8 @@ import {
   verifyPositiveInt,
   verifyString,
 } from "#src/util/json.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 const serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set("uint8", DataType.UINT8);
@@ -453,22 +451,21 @@ export function getServerInfo(
   chunkManager: ChunkManager,
   baseUrl: string,
   credentialsProvider: CredentialsProvider<DVIDToken>,
+  options: Partial<ProgressOptions>,
 ) {
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     { type: "dvid:getServerInfo", baseUrl },
-    () => {
-      const result = makeRequestWithCredentials(credentialsProvider, {
-        url: `${baseUrl}/api/repos/info`,
-        method: "GET",
-        responseType: "json",
-      }).then((response) => new ServerInfo(response));
-      const description = `repository info for DVID server ${baseUrl}`;
-      StatusMessage.forPromise(result, {
-        initialMessage: `Retrieving ${description}.`,
-        delay: true,
-        errorPrefix: `Error retrieving ${description}: `,
+    options,
+    async (progressOptions) => {
+      using _span = new ProgressSpan(progressOptions.progressListener, {
+        message: `Retrieving repository info for DVID server ${baseUrl}`,
       });
-      return result;
+      const response = await fetchWithDVIDCredentials(
+        credentialsProvider,
+        `${baseUrl}/api/repos/info`,
+        progressOptions,
+      );
+      return new ServerInfo(await response.json());
     },
   );
 }
@@ -568,7 +565,7 @@ function getVolumeSource(
   });
 
   const volume = new DvidMultiscaleVolumeChunkSource(
-    options.chunkManager,
+    options.registry.chunkManager,
     baseUrl,
     nodeKey,
     dataInstanceKey,
@@ -595,7 +592,7 @@ function getVolumeSource(
       id: "meshes",
       default: true,
       subsource: {
-        mesh: options.chunkManager.getChunkSource(DVIDMeshSource, {
+        mesh: options.registry.chunkManager.getChunkSource(DVIDMeshSource, {
           parameters: {
             ...sourceParameters,
             dataInstanceKey: info.meshSrc,
@@ -611,7 +608,7 @@ function getVolumeSource(
       id: "skeletons",
       default: true,
       subsource: {
-        mesh: options.chunkManager.getChunkSource(DVIDSkeletonSource, {
+        mesh: options.registry.chunkManager.getChunkSource(DVIDSkeletonSource, {
           parameters: {
             ...sourceParameters,
             dataInstanceKey: info.skeletonSrc,
@@ -638,16 +635,17 @@ export function getDataSource(
   const sourceParameters = parseSourceUrl(options.providerUrl);
   const { baseUrl, nodeKey, dataInstanceKey } = sourceParameters;
 
-  return options.chunkManager.memoize.getUncounted(
+  return options.registry.chunkManager.memoize.getAsync(
     {
       type: "dvid:MultiscaleVolumeChunkSource",
       baseUrl,
       nodeKey: nodeKey,
       dataInstanceKey,
     },
-    async () => {
+    options,
+    async (progressOptions) => {
       const credentailsProvider =
-        options.credentialsManager.getCredentialsProvider<DVIDToken>(
+        options.registry.credentialsManager.getCredentialsProvider<DVIDToken>(
           credentialsKey,
           {
             dvidServer: sourceParameters.baseUrl,
@@ -655,9 +653,10 @@ export function getDataSource(
           },
         );
       const serverInfo = await getServerInfo(
-        options.chunkManager,
+        options.registry.chunkManager,
         baseUrl,
         credentailsProvider,
+        progressOptions,
       );
       const repositoryInfo = serverInfo.getNode(nodeKey);
       if (repositoryInfo === undefined) {
@@ -740,12 +739,13 @@ export async function completeUrl(
   const authServer = getDefaultAuthServer(baseUrl);
 
   const serverInfo = await getServerInfo(
-    options.chunkManager,
+    options.registry.chunkManager,
     baseUrl,
-    options.credentialsManager.getCredentialsProvider<DVIDToken>(
+    options.registry.credentialsManager.getCredentialsProvider<DVIDToken>(
       credentialsKey,
       { dvidServer: baseUrl, authServer },
     ),
+    options,
   );
   return applyCompletionOffset(
     baseUrl.length + 1,
@@ -753,11 +753,10 @@ export async function completeUrl(
   );
 }
 
-export class DVIDDataSource extends DataSourceProvider {
-  constructor(public credentialsManager: CredentialsManager) {
-    super();
+export class DVIDDataSource implements DataSourceProvider {
+  get scheme() {
+    return "dvid";
   }
-
   get description() {
     return "DVID";
   }

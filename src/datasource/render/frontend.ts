@@ -32,8 +32,8 @@ import type {
   CompletionResult,
   DataSource,
   GetDataSourceOptions,
+  DataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import { TileChunkSourceParameters } from "#src/datasource/render/base.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
@@ -64,6 +64,7 @@ import {
   verifyOptionalString,
   verifyString,
 } from "#src/util/json.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 const VALID_ENCODINGS = new Set<string>(["jpg", "raw16"]);
 
@@ -249,7 +250,7 @@ function parseStackVersionInfo(stackVersionObj: any): vec3 {
       "stackResolutionZ",
       verifyFloat,
     );
-  } catch (ignoredError) {
+  } catch {
     // default is 1, 1, 1
     voxelResolution[0] = 1;
     voxelResolution[1] = 1;
@@ -505,11 +506,13 @@ export function getOwnerInfo(
   chunkManager: ChunkManager,
   hostname: string,
   owner: string,
+  options: Partial<ProgressOptions>,
 ): Promise<OwnerInfo> {
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     { type: "render:getOwnerInfo", hostname, owner },
-    () =>
-      fetchOk(`${hostname}/render-ws/v1/owner/${owner}/stacks`)
+    options,
+    (progressOptions) =>
+      fetchOk(`${hostname}/render-ws/v1/owner/${owner}/stacks`, progressOptions)
         .then((response) => response.json())
         .then(parseOwnerInfo),
   );
@@ -519,7 +522,11 @@ const pathPattern =
   /^([^/?]+)(?:\/([^/?]+))?(?:\/([^/?]+))(?:\/([^/?]*))?(?:\?(.*))?$/;
 const urlPattern = /^((?:(?:(?:http|https):\/\/[^,/]+)[^/?]))\/(.*)$/;
 
-function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
+function getVolume(
+  chunkManager: ChunkManager,
+  datasourcePath: string,
+  options: Partial<ProgressOptions>,
+) {
   let hostname: string;
   let path: string;
   {
@@ -543,10 +550,16 @@ function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
 
   const parameters = parseQueryStringParameters(match[5] || "");
 
-  return chunkManager.memoize.getUncounted(
+  return chunkManager.memoize.getAsync(
     { type: "render:MultiscaleVolumeChunkSource", hostname, path },
-    async () => {
-      const ownerInfo = await getOwnerInfo(chunkManager, hostname, owner);
+    options,
+    async (progressOptions) => {
+      const ownerInfo = await getOwnerInfo(
+        chunkManager,
+        hostname,
+        owner,
+        progressOptions,
+      );
       const volume = new RenderMultiscaleVolumeChunkSource(
         chunkManager,
         hostname,
@@ -599,6 +612,7 @@ export async function stackAndProjectCompleter(
   chunkManager: ChunkManager,
   hostname: string,
   path: string,
+  options: Partial<ProgressOptions>,
 ): Promise<CompletionResult> {
   const stackMatch = path.match(
     /^(?:([^/]+)(?:\/([^/]*))?(?:\/([^/]*))?(\/.*?)?)?$/,
@@ -613,7 +627,12 @@ export async function stackAndProjectCompleter(
   }
   if (stackMatch[3] === undefined) {
     const projectPrefix = stackMatch[2] || "";
-    const ownerInfo = await getOwnerInfo(chunkManager, hostname, stackMatch[1]);
+    const ownerInfo = await getOwnerInfo(
+      chunkManager,
+      hostname,
+      stackMatch[1],
+      options,
+    );
     const completions = getPrefixMatchesWithDescriptions(
       projectPrefix,
       ownerInfo.projects,
@@ -624,7 +643,12 @@ export async function stackAndProjectCompleter(
   }
   if (stackMatch[4] === undefined) {
     const stackPrefix = stackMatch[3] || "";
-    const ownerInfo = await getOwnerInfo(chunkManager, hostname, stackMatch[1]);
+    const ownerInfo = await getOwnerInfo(
+      chunkManager,
+      hostname,
+      stackMatch[1],
+      options,
+    );
     const projectInfo = ownerInfo.projects.get(stackMatch[2]);
     if (projectInfo === undefined) {
       throw null;
@@ -643,7 +667,12 @@ export async function stackAndProjectCompleter(
     };
   }
   const channelPrefix = stackMatch[4].substr(1) || "";
-  const ownerInfo = await getOwnerInfo(chunkManager, hostname, stackMatch[1]);
+  const ownerInfo = await getOwnerInfo(
+    chunkManager,
+    hostname,
+    stackMatch[1],
+    options,
+  );
   const projectInfo = ownerInfo.projects.get(stackMatch[2]);
   if (projectInfo === undefined) {
     throw null;
@@ -673,6 +702,7 @@ export async function stackAndProjectCompleter(
 export async function volumeCompleter(
   url: string,
   chunkManager: ChunkManager,
+  options: Partial<ProgressOptions>,
 ): Promise<CompletionResult> {
   const match = url.match(urlPattern);
   if (match === null) {
@@ -686,18 +716,30 @@ export async function volumeCompleter(
     chunkManager,
     hostname,
     path,
+    options,
   );
   return applyCompletionOffset(match![1].length + 1, completions);
 }
 
-export class RenderDataSource extends DataSourceProvider {
+export class RenderDataSource implements DataSourceProvider {
+  get scheme() {
+    return "render";
+  }
   get description() {
     return "Render";
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    return getVolume(options.chunkManager, options.providerUrl);
+    return getVolume(
+      options.registry.chunkManager,
+      options.providerUrl,
+      options,
+    );
   }
   completeUrl(options: CompleteUrlOptions) {
-    return volumeCompleter(options.providerUrl, options.chunkManager);
+    return volumeCompleter(
+      options.providerUrl,
+      options.registry.chunkManager,
+      options,
+    );
   }
 }

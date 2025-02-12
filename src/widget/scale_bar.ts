@@ -273,13 +273,15 @@ export class ScaleBarTexture extends RefCounted {
 }
 
 export class MultipleScaleBarTextures extends RefCounted {
-  private scaleBarCopyHelper = this.registerDisposer(
-    OffscreenCopyHelper.get(this.gl),
-  );
+  private scaleBarCopyHelper: OffscreenCopyHelper;
   private scaleBars: ScaleBarTexture[] = [];
 
   constructor(public gl: GL) {
     super();
+    this.scaleBarCopyHelper = this.registerDisposer(
+      OffscreenCopyHelper.get(this.gl),
+    );
+
     for (let i = 0; i < 3; ++i) {
       this.scaleBars.push(this.registerDisposer(new ScaleBarTexture(gl)));
     }

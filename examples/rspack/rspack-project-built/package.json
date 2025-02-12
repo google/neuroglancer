@@ -1,0 +1,24 @@
+{
+  "name": "neuroglancer-rspack-project-built",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test of an rspack-bundled project that depends on Neuroglancer.",
+  "scripts": {
+    "build": "rspack build",
+    "dev-server": "rspack serve"
+  },
+  "dependencies": {
+    "neuroglancer": "file:../../../dist/package"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ],
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@rspack/cli": "^1.1.5",
+    "@rspack/core": "^1.1.5"
+  },
+  "type": "module"
+}

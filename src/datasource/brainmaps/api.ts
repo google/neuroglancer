@@ -16,10 +16,8 @@
 
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import { fetchWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { uncancelableToken } from "#src/util/cancellation.js";
-import { responseArrayBuffer, responseJson } from "#src/util/http_request.js";
+import { fetchOkWithOAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import type { RequestInitWithProgress } from "#src/util/http_request.js";
 
 export type { OAuth2Credentials };
 
@@ -96,36 +94,15 @@ export interface BatchMeshFragmentPayload {
   batches: BatchMeshFragment[];
 }
 
-export interface HttpCall {
-  method: "GET" | "POST";
-  path: string;
-  payload?: string;
-}
-
 export function makeRequest(
   instance: BrainmapsInstance,
   credentialsProvider: BrainmapsCredentialsProvider,
-  httpCall: HttpCall & { responseType: "arraybuffer" },
-  cancellationToken?: CancellationToken,
-): Promise<ArrayBuffer>;
-export function makeRequest(
-  instance: BrainmapsInstance,
-  credentialsProvider: BrainmapsCredentialsProvider,
-  httpCall: HttpCall & { responseType: "json" },
-  cancellationToken?: CancellationToken,
-): Promise<any>;
-
-export function makeRequest(
-  instance: BrainmapsInstance,
-  credentialsProvider: BrainmapsCredentialsProvider,
-  httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
-  cancellationToken: CancellationToken = uncancelableToken,
-): any {
-  return fetchWithOAuth2Credentials(
+  path: string,
+  init: RequestInitWithProgress = {},
+): Promise<Response> {
+  return fetchOkWithOAuth2Credentials(
     credentialsProvider,
-    `${instance.serverUrl}${httpCall.path}`,
-    { method: httpCall.method, body: httpCall.payload },
-    httpCall.responseType === "json" ? responseJson : responseArrayBuffer,
-    cancellationToken,
+    `${instance.serverUrl}${path}`,
+    init,
   );
 }

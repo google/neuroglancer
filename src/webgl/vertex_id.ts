@@ -22,7 +22,7 @@
  */
 
 import { RefCounted } from "#src/util/disposable.js";
-import { Buffer } from "#src/webgl/buffer.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder } from "#src/webgl/shader.js";
 
@@ -40,11 +40,11 @@ int getVertexId () {
 
 export class VertexIdHelper extends RefCounted {
   size: number;
-  buffer: Buffer;
+  buffer: GLBuffer;
 
   constructor(gl: WebGL2RenderingContext) {
     super();
-    this.buffer = new Buffer(gl);
+    this.buffer = new GLBuffer(gl);
     this.size = 0;
   }
 

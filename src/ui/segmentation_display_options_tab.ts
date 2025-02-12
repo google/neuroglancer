@@ -123,9 +123,12 @@ export class DisplayOptionsTab extends Tab {
 }
 
 class ShaderCodeOverlay extends Overlay {
-  codeWidget = this.registerDisposer(makeSkeletonShaderCodeWidget(this.layer));
+  codeWidget: ShaderCodeWidget;
   constructor(public layer: SegmentationUserLayer) {
     super();
+    this.codeWidget = this.registerDisposer(
+      makeSkeletonShaderCodeWidget(layer),
+    );
     this.content.classList.add(
       "neuroglancer-segmentation-layer-skeleton-shader-overlay",
     );

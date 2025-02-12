@@ -14,9 +14,25 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
-import { ZarrDataSource } from "#src/datasource/zarr/frontend.js";
+import {
+  registerKvStoreBasedDataProvider,
+  dataSourceAutoDetectRegistry,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
+import {
+  ZarrDataSource,
+  registerAutoDetectV2,
+  registerAutoDetectV3,
+} from "#src/datasource/zarr/frontend.js";
 
-registerProvider("zarr", () => new ZarrDataSource());
-registerProvider("zarr2", () => new ZarrDataSource(2));
-registerProvider("zarr3", () => new ZarrDataSource(3));
+for (const provider of [
+  new ZarrDataSource(),
+  new ZarrDataSource(2),
+  new ZarrDataSource(3),
+]) {
+  registerKvStoreBasedDataProvider(provider);
+  registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
+}
+registerAutoDetectV2(dataSourceAutoDetectRegistry);
+registerAutoDetectV3(dataSourceAutoDetectRegistry);

@@ -16,7 +16,6 @@
 
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { DATA_TYPE_BYTES, makeDataTypeArrayView } from "#src/util/data_type.js";
 import type { Endianness } from "#src/util/endian.js";
 import { convertEndian, ENDIANNESS } from "#src/util/endian.js";
@@ -24,13 +23,13 @@ import * as vector from "#src/util/vector.js";
 
 export async function decodeRawChunk(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  signal: AbortSignal,
   response: ArrayBuffer,
   endianness: Endianness = ENDIANNESS,
   byteOffset = 0,
   byteLength: number = response.byteLength,
 ) {
-  cancellationToken;
+  signal;
   const { spec } = chunk.source!;
   const { dataType } = spec;
   const numElements = vector.prod(chunk.chunkDataSize!);
@@ -49,5 +48,5 @@ export async function decodeRawChunk(
     byteLength,
   );
   convertEndian(data, endianness, bytesPerElement);
-  await postProcessRawData(chunk, cancellationToken, data);
+  await postProcessRawData(chunk, signal, data);
 }

@@ -20,8 +20,8 @@ import "codemirror/lib/codemirror.css";
 import "codemirror/addon/lint/lint.css";
 
 import CodeMirror from "codemirror";
-import glslCodeMirror from "glsl-editor/glsl.js";
 import { debounce } from "lodash-es";
+import glslCodeMirror from "#src/third_party/codemirror-glsl.js";
 import type { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";

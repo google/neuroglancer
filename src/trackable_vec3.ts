@@ -48,7 +48,7 @@ export class TrackableVec3 implements Trackable {
   restoreState(x: any) {
     try {
       this.value = verify3dVec(x.split(","));
-    } catch (e) {
+    } catch {
       this.value = this.defaultValue;
     }
   }

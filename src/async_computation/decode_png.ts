@@ -21,9 +21,11 @@ import { decompressPng } from "#src/sliceview/png/index.js";
 registerAsyncComputation(
   decodePng,
   async (
-    data: Uint8Array,
+    data,
     width: number | undefined,
     height: number | undefined,
+    // Expected width * height
+    area: number | undefined,
     numComponents: number | undefined,
     bytesPerPixel: number,
     convertToGrayscale: boolean,
@@ -32,6 +34,7 @@ registerAsyncComputation(
       data,
       width,
       height,
+      area,
       numComponents,
       bytesPerPixel,
       convertToGrayscale,

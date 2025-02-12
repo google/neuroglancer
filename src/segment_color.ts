@@ -33,9 +33,11 @@ import { glsl_hsvToRgb, glsl_uint64 } from "#src/webgl/shader_lib.js";
 const NUM_COMPONENTS = 2;
 
 export class SegmentColorShaderManager {
-  seedName = this.prefix + "_seed";
+  seedName: string;
 
-  constructor(public prefix: string) {}
+  constructor(public prefix: string) {
+    this.seedName = prefix + "_seed";
+  }
 
   defineShader(builder: ShaderBuilder) {
     const { seedName } = this;

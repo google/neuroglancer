@@ -1,0 +1,61 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "typescript", "oxc", "unicorn", "promise", "vitest"],
+  "env": {
+    "browser": true
+  },
+  "settings": {},
+  "rules": {
+    // Seems to be buggy
+    "no-loss-of-precision": "off",
+    "import/no-cycle": "error",
+    "import/first": "error",
+    "no-unsafe-finally": "off",
+    "require-yield": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-non-null-assertion": "off",
+    "@typescript-eslint/no-inferrable-types": "off",
+    "@typescript-eslint/no-this-alias": "off",
+    "@typescript-eslint/no-empty-function": "off",
+    "@typescript-eslint/no-empty-interface": "off",
+    "erasing-op": "off",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
+    "no-new-array": "off",
+    "no-document-cookie": "off",
+    "@typescript-eslint/consistent-type-imports": "error"
+  },
+  "overrides": [
+    {
+      "files": ["*.test.ts", "*.spec.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/node_modules",
+    "**/dist",
+    "**/python",
+    "templates/neuroglancer/sliceview",
+    "src/third_party/jpgjs/jpg.js",
+    "**/templates",
+    "**/build",
+    "**/.tox",
+    "**/.nox",
+    "**/.venv",
+    "lib",
+    "**/python",
+    "**/config",
+    "**/typings",
+    "src/mesh/draco/stub.js",
+    "**/tsconfig.tsbuildinfo",
+    "examples"
+  ]
+}

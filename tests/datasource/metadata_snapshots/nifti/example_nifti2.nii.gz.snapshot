@@ -1,0 +1,213 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/nifti/example_nifti2.nii.gz|gzip:|nifti:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          0,
+          0,
+          0,
+          0,
+        ],
+        "upperBounds": Float64Array [
+          32,
+          20,
+          12,
+          2,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+        ,
+        ,
+      ],
+      "names": [
+        "i",
+        "j",
+        "k",
+        "m",
+      ],
+      "scales": Float64Array [
+        0.002,
+        0.002,
+        0.0021999990940093994,
+        2000,
+      ],
+      "units": [
+        "m",
+        "m",
+        "m",
+        "s",
+      ],
+      "valid": true,
+    },
+    "outputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          -Infinity,
+          -Infinity,
+          -Infinity,
+          -Infinity,
+        ],
+        "upperBounds": Float64Array [
+          Infinity,
+          Infinity,
+          Infinity,
+          Infinity,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+        ,
+        ,
+      ],
+      "names": [
+        "x",
+        "y",
+        "z",
+        "t",
+      ],
+      "scales": Float64Array [
+        0.001,
+        0.001,
+        0.001,
+        1,
+      ],
+      "units": [
+        "m",
+        "m",
+        "m",
+        "s",
+      ],
+      "valid": true,
+    },
+    "transform": [
+      [
+        -1,
+        0.000005141198016644921,
+        0.00006320902321022004,
+        0,
+        117.8551025390625,
+      ],
+      [
+        -0.000005141198016644921,
+        0.9868557453155518,
+        -0.16160380840301514,
+        0,
+        -35.72294235229492,
+      ],
+      [
+        0.00006320902321022004,
+        0.16160380840301514,
+        0.9868557453155518,
+        0,
+        -7.248798370361328,
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        1,
+      ],
+    ],
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "INT16",
+          "rank": 4,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "url": "http://localhost:*/datasource/nifti/example_nifti2.nii.gz|gzip:",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      32,
+                      20,
+                      12,
+                      2,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "INT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      32,
+                      20,
+                      12,
+                      2,
+                    ],
+                  },
+                },
+              },
+            ],
+          ],
+          "volumeType": "UNKNOWN",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              0,
+              0,
+              0,
+              0,
+            ],
+            "pointB": [
+              32,
+              20,
+              12,
+              2,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}

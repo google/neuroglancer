@@ -82,6 +82,8 @@ def _get_dtype_for_properties(
 class AnnotationWriter:
     annotations: list[Annotation]
     related_annotations: list[dict[int, list[Annotation]]]
+    lower_bound: np.typing.NDArray[np.float64]
+    upper_bound: np.typing.NDArray[np.float64]
 
     def __init__(
         self,
@@ -172,11 +174,11 @@ class AnnotationWriter:
 
     def _add_obj(self, coords: Sequence[float], id: Optional[int], **kwargs):
         encoded = np.zeros(shape=(), dtype=self.dtype)
-        encoded[()]["geometry"] = coords
+        encoded[()]["geometry"] = coords  # type: ignore[call-overload]
 
         for i, p in enumerate(self.properties):
             if p.id in kwargs:
-                encoded[()][f"property{i}"] = kwargs.pop(p.id)
+                encoded[()][f"property{i}"] = kwargs.pop(p.id)  # type: ignore[call-overload]
 
         related_ids = []
         for relationship in self.relationships:
