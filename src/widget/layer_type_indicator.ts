@@ -29,7 +29,7 @@ enum LayerType {
 
 function getLayerTypeString(type: string | undefined): string {
   const mappedType = LayerType[type as keyof typeof LayerType];
-  return mappedType || type;
+  return mappedType || "—";
 }
 
 function capitalizeFirstLetter(type: string): string {
@@ -46,9 +46,8 @@ export class LayerTypeIndicatorWidget extends RefCounted {
     this.updateView();
   }
   updateView() {
-    this.element.textContent =
-      getLayerTypeString(this.layer.layer?.type) ?? "n/a";
-    const layerType = capitalizeFirstLetter(this.layer.layer?.type ?? "n/a");
+    this.element.textContent = getLayerTypeString(this.layer.layer?.type);
+    const layerType = capitalizeFirstLetter(this.layer.layer?.type ?? "Unknown");
     this.element.title = `${layerType} layer`;
   }
 }
