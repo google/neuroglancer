@@ -33,6 +33,7 @@ import {
   RENDER_RATIO_LIMIT,
   isBaseSegmentId,
   parseGrapheneError,
+  getHttpSource,
 } from "#src/datasource/graphene/base.js";
 import { decodeManifestChunk } from "#src/datasource/precomputed/backend.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
@@ -127,7 +128,8 @@ export class GrapheneMeshSource extends WithParameters(
   manifestRequestCount = new Map<string, number>();
   newSegments = new Uint64Set();
 
-  manifestKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+  manifestHttpSource = getHttpSource(
+    this.sharedKvStoreContext.kvStoreContext,
     this.parameters.manifestUrl,
   );
   fragmentKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
@@ -148,14 +150,11 @@ export class GrapheneMeshSource extends WithParameters(
     if (isBaseSegmentId(chunk.objectId, parameters.nBitsForLayerId)) {
       return decodeManifestChunk(chunk, { fragments: [] });
     }
-    const { manifestKvStore } = this;
-    const manifestPath = `${manifestKvStore.path}/manifest/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
+    const { fetchOkImpl, baseUrl } = this.manifestHttpSource;
+    const manifestPath = `/manifest/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
     const response = await (
-      await readKvStore(manifestKvStore.store, manifestPath, {
-        throwIfMissing: true,
-        signal,
-      })
-    ).response.json();
+      await fetchOkImpl(baseUrl + manifestPath, { signal })
+    ).json();
     const chunkIdentifier = manifestPath;
     if (newSegments.has(chunk.objectId)) {
       const requestCount = (manifestRequestCount.get(chunkIdentifier) ?? 0) + 1;
@@ -251,7 +250,8 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
   tempChunkDataSize: Uint32Array;
   tempChunkPosition: Float32Array;
 
-  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+  httpSource = getHttpSource(
+    this.sharedKvStoreContext.kvStoreContext,
     this.parameters.url,
   );
 
@@ -271,18 +271,16 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
       `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
       `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
 
-    const { kvStore } = this;
-
-    const request = readKvStore(
-      kvStore.store,
-      `${kvStore.path}/${chunk.segment}/leaves?int64_as_str=1&bounds=${bounds}`,
-      { signal, throwIfMissing: true },
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const request = fetchOkImpl(
+      `${baseUrl}/${chunk.segment}/leaves?int64_as_str=1&bounds=${bounds}`,
+      { signal },
     );
     await this.withErrorMessage(
       request,
       `Fetching leaves of segment ${chunk.segment} in region ${bounds}: `,
     )
-      .then((res) => res.response.json())
+      .then((res) => res.json())
       .then((res) => {
         chunk.leaves = decodeChunkedGraphChunk(res.leaf_ids);
       })
