@@ -95,6 +95,7 @@ import {
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
   registerNestedSync,
   TrackableValue,
   WatchableValue,
@@ -1282,9 +1283,66 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
+  observeLayerColor(callback: () => void) {
+    const disposer = super.observeLayerColor(callback);
+    const defaultColorDisposer = observeWatchable(
+      callback,
+      this.displayState.segmentDefaultColor,
+    );
+    const visibleSegmentDisposer =
+      this.displayState.segmentationGroupState.value.visibleSegments.changed.add(
+        callback,
+      );
+    const colorHashChangeDisposer =
+      this.displayState.segmentationColorGroupState.value.segmentColorHash.changed.add(
+        callback,
+      );
+    return () => {
+      disposer();
+      defaultColorDisposer();
+      visibleSegmentDisposer();
+      colorHashChangeDisposer();
+    };
+  }
+
+  get automaticLayerBarColor() {
+    if (this.displayState.segmentDefaultColor.value) {
+      const [r, g, b] = this.displayState.segmentDefaultColor.value;
+      return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;
+    }
+
+    const visibleSegments =
+      this.displayState.segmentationGroupState.value.visibleSegments;
+    if (visibleSegments.size === 1) {
+      const id = [...visibleSegments][0];
+      const color =
+        this.displayState.segmentationColorGroupState.value.segmentColorHash.computeCssColor(
+          id,
+        );
+      return color;
+    }
+
+    return undefined;
+  }
+
+  colorWidgetTooltip(): string {
+    if (this.displayState.segmentDefaultColor.value) {
+      return `The color comes from the manually selected color`;
+    }
+
+    const visibleSegments =
+      this.displayState.segmentationGroupState.value.visibleSegments;
+    if (visibleSegments.size === 1) {
+      const id = [...visibleSegments][0];
+      return `The color of the visible segment with id "${id}"`;
+    }
+    return "The segmentation layer has multiple segments visible";
+  }
+
   static type = "segmentation";
   static typeAbbreviation = "seg";
   static supportsPickOption = true;
+  static supportsLayerBarColorSyncOption = true;
 }
 
 registerLayerControls(SegmentationUserLayer);
