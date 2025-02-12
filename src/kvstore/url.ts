@@ -203,7 +203,13 @@ export function encodePathForUrl(path: string) {
 
 export function joinBaseUrlAndPath(baseUrl: string, path: string) {
   const { base, queryAndFragment } = extractQueryAndFragment(baseUrl);
-  return base + encodePathForUrl(path) + queryAndFragment;
+  const { base: pathBase, queryAndFragment: pathQueryAndFragment } =
+    extractQueryAndFragment(path);
+  return (
+    base +
+    encodePathForUrl(pathBase) +
+    (pathQueryAndFragment || queryAndFragment)
+  );
 }
 
 export function getBaseHttpUrlAndPath(url: string) {
