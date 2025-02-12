@@ -94,6 +94,9 @@ export default defineWorkspace([
         name: `kvstore/${name}`,
         include: [`tests/kvstore/${name}.spec.ts`],
         setupFiles: ["#src/kvstore/enabled_frontend_modules.js"],
+        benchmark: {
+          include: [],
+        },
       },
     }),
   ),
@@ -114,7 +117,7 @@ export default defineWorkspace([
       name: "browser",
       include: ["src/**/*.browser_test.ts", "tests/**/*.browser_test.ts"],
       benchmark: {
-        include: [],
+        include: ["src/**/*.browser_benchmark.ts"],
       },
       browser: {
         provider: "playwright",

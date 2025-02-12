@@ -35,7 +35,7 @@ import {
   SINGLE_MESH_LAYER_RPC_ID,
   SingleMeshSourceParametersWithInfo,
 } from "#src/single_mesh/base.js";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { stableStringify } from "#src/util/json.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import {
@@ -149,7 +149,7 @@ export function getMesh(
   return factory.getMesh(sharedKvStoreContext, path, options);
 }
 
-export function getMinMax(array: TypedArray): [number, number] {
+export function getMinMax(array: TypedNumberArray): [number, number] {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   for (const value of array) {

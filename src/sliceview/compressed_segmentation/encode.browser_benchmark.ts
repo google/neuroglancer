@@ -14,38 +14,27 @@
  * limitations under the License.
  */
 
-import fs from "node:fs/promises";
-import path from "node:path";
 import { describe, bench } from "vitest";
 import { encodeChannels as encodeChannelsUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
 import { encodeChannels as encodeChannelsUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
-import { makeRandomUint64Array } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { makeRandomArrayByChoosingWithReplacement } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
 import { prod4, vec3Key } from "#src/util/geom.js";
-import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
+
+declare const TEST_DATA_SERVER: string;
 
 describe("64x64x64 example", async () => {
-  const testDataDir = path.resolve(
-    import.meta.dirname,
-    "..",
-    "..",
-    "..",
-    "testdata",
+  const exampleChunkDataUint8Array = await (
+    await fetch(
+      `${TEST_DATA_SERVER}codec/compressed_segmentation/64x64x64-raw-uint64-segmentation.dat`,
+    )
+  ).arrayBuffer();
+  const exampleChunkData64 = new BigUint64Array(exampleChunkDataUint8Array);
+  const exampleChunkData32 = Uint32Array.from(exampleChunkData64, (x) =>
+    Number(x & 0xffffffffn),
   );
-  const exampleChunkDataUint8Array = await fs.readFile(
-    path.resolve(
-      testDataDir,
-      "codec",
-      "compressed_segmentation",
-      "64x64x64-raw-uint64-segmentation.dat",
-    ),
-  );
-  const exampleChunkData64 = new Uint32Array(exampleChunkDataUint8Array.buffer);
-  const exampleChunkData32 = exampleChunkData64.filter((_element, index) => {
-    return index % 2 === 0;
-  });
-
   const blockSize = [8, 8, 8];
-  const output = new Uint32ArrayBuilder(1000000);
+  const output = new TypedArrayBuilder(Uint32Array, 1000000);
   const volumeSize = [64, 64, 64, 1];
   bench("encode_uint64", () => {
     output.clear();
@@ -59,14 +48,18 @@ describe("64x64x64 example", async () => {
 
 describe("compressed_segmentation", () => {
   const blockSize = [8, 8, 8];
-  const output = new Uint32ArrayBuilder(1000000);
+  const output = new TypedArrayBuilder(Uint32Array, 1000000);
   for (const volumeSize of [
     //
     [16, 16, 16, 1], //
     // [64, 64, 64, 1],  //
   ]) {
     const numPossibleValues = 15;
-    const input = makeRandomUint64Array(prod4(volumeSize), numPossibleValues);
+    const input = makeRandomArrayByChoosingWithReplacement(
+      BigUint64Array,
+      prod4(volumeSize),
+      numPossibleValues,
+    );
     bench(`encode_uint64 ${vec3Key(volumeSize)}`, () => {
       output.clear();
       encodeChannelsUint64(output, blockSize, input, volumeSize);

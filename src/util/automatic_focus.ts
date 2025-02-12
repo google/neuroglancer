@@ -17,14 +17,19 @@
 import { debounce } from "lodash-es";
 import { RefCounted } from "#src/util/disposable.js";
 import { isInputTextTarget } from "#src/util/dom.js";
-import LinkedListOperations from "#src/util/linked_list.0.js";
+import makeLinkedListOperations from "#src/util/linked_list.js";
+
+const linkedListOperations = makeLinkedListOperations({
+  next: "next0",
+  prev: "prev0",
+});
 
 class AutomaticFocusList {
   next0: AutomaticallyFocusedElement | null;
   prev0: AutomaticallyFocusedElement | null;
 
   constructor() {
-    LinkedListOperations.initializeHead(<any>this);
+    linkedListOperations.initializeHead(<any>this);
   }
 }
 
@@ -36,7 +41,7 @@ const maybeUpdateFocus = debounce(() => {
   if (!isTopLevel) return;
   const { activeElement } = document;
   if (activeElement === null || activeElement === document.body) {
-    const node = LinkedListOperations.front<AutomaticallyFocusedElement>(
+    const node = linkedListOperations.front<AutomaticallyFocusedElement>(
       <any>automaticFocusList,
     );
     if (node !== null) {
@@ -102,17 +107,17 @@ export class AutomaticallyFocusedElement extends RefCounted {
       this.scheduleUpdateFocus.cancel();
     });
     // Insert at the end of the list.
-    LinkedListOperations.insertBefore(<any>automaticFocusList, this);
+    linkedListOperations.insertBefore(<any>automaticFocusList, this);
     this.registerEventListener(element, "focus", () => {
       // Move to the beginning of the list.
-      LinkedListOperations.pop<AutomaticallyFocusedElement>(this);
-      LinkedListOperations.insertAfter(<any>automaticFocusList, this);
+      linkedListOperations.pop<AutomaticallyFocusedElement>(this);
+      linkedListOperations.insertAfter(<any>automaticFocusList, this);
     });
     maybeUpdateFocus();
   }
 
   disposed() {
-    LinkedListOperations.pop<AutomaticallyFocusedElement>(this);
+    linkedListOperations.pop<AutomaticallyFocusedElement>(this);
     super.disposed();
   }
 }
