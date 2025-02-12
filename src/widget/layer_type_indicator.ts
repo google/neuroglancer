@@ -15,39 +15,34 @@
  */
 
 import "#src/widget/layer_type_indicator.css";
-import type { ManagedUserLayer } from "#src/layer/index.js";
+import { layerTypes, type ManagedUserLayer } from "#src/layer/index.js";
 import { RefCounted } from "#src/util/disposable.js";
 
-enum LayerType {
-  new = "new",
-  auto = "auto",
-  segmentation = "seg",
-  image = "img",
-  annotation = "ann",
-  mesh = "msh",
-}
-
-function getLayerTypeString(type: string | undefined): string {
-  const mappedType = LayerType[type as keyof typeof LayerType];
-  return mappedType || "—";
-}
-
 function capitalizeFirstLetter(type: string): string {
-  const newType = type.charAt(0).toUpperCase() + type.slice(1);
-  return newType;
+  return type ? type[0].toUpperCase() + type.slice(1) : "";
 }
 
 export class LayerTypeIndicatorWidget extends RefCounted {
   element = document.createElement("div");
+  typeToAbbreviation = new Map<string, string>();
   constructor(public layer: ManagedUserLayer) {
     super();
     this.element.classList.add("neuroglancer-layer-type-indicator");
+    for (const [layerType, layerConstructor] of layerTypes) {
+      this.typeToAbbreviation.set(
+        layerType,
+        layerConstructor.typeAbbreviation === "mesh"
+          ? "msh"
+          : layerConstructor.typeAbbreviation,
+      );
+    }
     this.registerDisposer(layer.layerChanged.add(() => this.updateView()));
     this.updateView();
   }
   updateView() {
-    this.element.textContent = getLayerTypeString(this.layer.layer?.type);
-    const layerType = capitalizeFirstLetter(this.layer.layer?.type ?? "Unknown");
-    this.element.title = `${layerType} layer (you can change the type in the layer settings)`;
+    const layerType = this.layer.layer?.type ?? "unknown";
+    this.element.textContent =
+      this.typeToAbbreviation.get(layerType ?? "") ?? "—";
+    this.element.title = `${capitalizeFirstLetter(layerType)} layer (you can change the type in the layer settings)`;
   }
 }
