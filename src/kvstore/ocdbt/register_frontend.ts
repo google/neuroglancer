@@ -20,13 +20,11 @@ import type {
   KvStoreAdapterCompleteUrlOptions,
 } from "#src/kvstore/context.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import {
-  frontendOnlyKvStoreProviderRegistry,
-  proxyCompleteUrlToBackendKvStore,
-} from "#src/kvstore/frontend.js";
+import { frontendOnlyKvStoreProviderRegistry } from "#src/kvstore/frontend.js";
 import { registerAutoDetect } from "#src/kvstore/ocdbt/auto_detect.js";
 import { OcdbtKvStore } from "#src/kvstore/ocdbt/frontend.js";
 import { parseOcdbtUrl } from "#src/kvstore/ocdbt/url.js";
+import { proxyCompleteUrl } from "#src/kvstore/proxy.js";
 
 function ocdbtProvider(
   sharedKvStoreContext: SharedKvStoreContext,
@@ -45,7 +43,7 @@ function ocdbtProvider(
       options: KvStoreAdapterCompleteUrlOptions,
     ): Promise<CompletionResult> {
       const { base, url } = options;
-      return proxyCompleteUrlToBackendKvStore(
+      return proxyCompleteUrl(
         sharedKvStoreContext,
         `${base.store.getUrl(base.path)}|${url.url}`,
         options,

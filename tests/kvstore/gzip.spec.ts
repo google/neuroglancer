@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
+import "#src/kvstore/http/register_frontend.js";
 import "#src/kvstore/gzip/register.js";
 import { expect, test } from "vitest";
 import { constantFixture } from "#tests/fixtures/fixture.js";

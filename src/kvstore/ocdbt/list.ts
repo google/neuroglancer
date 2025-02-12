@@ -15,7 +15,11 @@
  */
 
 import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
-import type { ListEntry, ListResponse } from "#src/kvstore/index.js";
+import {
+  normalizeListResponse,
+  type ListEntry,
+  type ListResponse,
+} from "#src/kvstore/index.js";
 import type {
   BtreeInteriorNodeEntry,
   BtreeLeafNodeEntry,
@@ -37,7 +41,6 @@ import {
 import { getBtreeNode } from "#src/kvstore/ocdbt/metadata_cache.js";
 import type { BtreeGenerationReference } from "#src/kvstore/ocdbt/version_tree.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
-import { defaultStringCompare } from "#src/util/string.js";
 
 const DEBUG = false;
 
@@ -59,11 +62,10 @@ export async function listRoot(
       progressListener: options.progressListener,
     });
   }
-  entries.sort((a, b) => defaultStringCompare(a.key, b.key));
-  const response = {
+  const response = normalizeListResponse({
     entries,
-    directories: Array.from(directories).sort(defaultStringCompare),
-  };
+    directories: Array.from(directories),
+  });
   if (DEBUG) {
     console.log(JSON.stringify(response));
   }

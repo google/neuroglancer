@@ -15,6 +15,10 @@ const NOOP = "./src/util/false" + JS_EXT;
 
 const imports: Record<string, any> = {};
 imports["#src/third_party/jpgjs/jpg.js"] = "./src/third_party/jpgjs/jpg.js";
+imports["#src/async_computation/decode_zstd.js"] = {
+  node: "./src/async_computation/decode_zstd_node.ts",
+  default: "./src/async_computation/decode_zstd.ts",
+};
 imports["#src/*.js"] = "./src/*.ts";
 imports["#src/*"] = "./src/*";
 imports["#tests/fixtures/msw"] = {
@@ -102,6 +106,7 @@ await handleDrivers("datasource", {
 });
 
 await handleDrivers("kvstore", {
+  async_computation: ["async_computation"],
   register: ["frontend", "backend"],
   register_frontend: ["frontend"],
   register_backend: ["backend"],

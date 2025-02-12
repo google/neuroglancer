@@ -14,56 +14,17 @@
  * limitations under the License.
  */
 
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
 import { listFromHtmlDirectoryListing } from "#src/kvstore/http/html_directory_listing.js";
-import { read, stat } from "#src/kvstore/http/read.js";
-import type {
-  KvStore,
-  DriverListOptions,
-  ListResponse,
-  DriverReadOptions,
-  ReadResponse,
-  StatOptions,
-  StatResponse,
-} from "#src/kvstore/index.js";
+import type { DriverListOptions, ListResponse } from "#src/kvstore/index.js";
 import { getS3UrlKind, listS3CompatibleUrl } from "#src/kvstore/s3/list.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
-import type { FetchOk } from "#src/util/http_request.js";
-import { fetchOk } from "#src/util/http_request.js";
-import type { StringMemoize } from "#src/util/memoize.js";
 
-export class HttpKvStore implements KvStore {
-  constructor(
-    private memoize: StringMemoize,
-    public baseUrl: string,
-    public baseUrlForDisplay: string = baseUrl,
-    public fetchOkImpl: FetchOk = fetchOk,
-  ) {}
-
-  stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
-    return stat(
-      this,
-      key,
-      joinBaseUrlAndPath(this.baseUrl, key),
-      options,
-      this.fetchOkImpl,
-    );
-  }
-
-  read(
-    key: string,
-    options: DriverReadOptions,
-  ): Promise<ReadResponse | undefined> {
-    return read(
-      this,
-      key,
-      joinBaseUrlAndPath(this.baseUrl, key),
-      options,
-      this.fetchOkImpl,
-    );
-  }
-
+export class HttpKvStore extends ReadableHttpKvStore<SharedKvStoreContext> {
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
-    const s3UrlKind = getS3UrlKind(this.memoize, this.baseUrlForDisplay);
+    const { memoize } = this.sharedKvStoreContext.chunkManager;
+    const s3UrlKind = getS3UrlKind(memoize, this.baseUrlForDisplay);
     if (s3UrlKind === null) {
       return listFromHtmlDirectoryListing(
         this.baseUrl,
@@ -76,7 +37,7 @@ export class HttpKvStore implements KvStore {
       return listS3CompatibleUrl(
         joinBaseUrlAndPath(this.baseUrl, prefix),
         this.baseUrlForDisplay,
-        this.memoize,
+        memoize,
         this.fetchOkImpl,
         options,
       );
@@ -91,21 +52,10 @@ export class HttpKvStore implements KvStore {
       listS3CompatibleUrl(
         joinBaseUrlAndPath(this.baseUrl, prefix),
         this.baseUrlForDisplay,
-        this.memoize,
+        memoize,
         this.fetchOkImpl,
         options,
       ),
     ]);
-  }
-
-  getUrl(path: string) {
-    return joinBaseUrlAndPath(this.baseUrlForDisplay, path);
-  }
-
-  get supportsOffsetReads() {
-    return true;
-  }
-  get supportsSuffixReads() {
-    return true;
   }
 }

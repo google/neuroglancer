@@ -1,4 +1,4 @@
-import { HttpKvStore } from "#src/kvstore/http/index.js";
+import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
 import { StatusMessage } from "#src/status.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { Viewer } from "#src/viewer.js";
@@ -79,7 +79,7 @@ export class StateShare extends RefCounted {
           selectedStateServer,
         );
 
-      if (!(store instanceof HttpKvStore)) {
+      if (!(store instanceof ReadableHttpKvStore)) {
         throw new Error(
           `Non-HTTP protocol not supported: ${selectedStateServer}`,
         );

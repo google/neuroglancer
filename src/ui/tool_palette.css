@@ -146,7 +146,7 @@
   display: flex;
   flex-direction: row;
   background-color: #181818;
-  margin-bottom: 2px;
+  border-bottom: 2px solid black;
   position: sticky;
   top: 0px;
   z-index: 1;

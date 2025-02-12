@@ -71,7 +71,7 @@ import {
 } from "#src/datasource/precomputed/frontend.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import { HttpKvStore } from "#src/kvstore/http/index.js";
+import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
 import {
   ensureEmptyUrlSuffix,
   kvstoreEnsureDirectoryPipelineUrl,
@@ -1582,7 +1582,7 @@ class GrapheneGraphServerInterface {
   private url: string;
   constructor(sharedKvStoreContext: SharedKvStoreContext, url: string) {
     const { store, path } = sharedKvStoreContext.kvStoreContext.getKvStore(url);
-    if (store instanceof HttpKvStore) {
+    if (store instanceof ReadableHttpKvStore) {
       this.fetchOkImpl = store.fetchOkImpl;
       this.url = store.baseUrl + path;
     } else {

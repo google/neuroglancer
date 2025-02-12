@@ -85,15 +85,20 @@ export function asyncMemoize<T>(
     if (completed) {
       return promise!;
     }
+    const { signal } = options;
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
     if (promise === undefined || abortController!.signal.aborted) {
       abortController = new SharedAbortController();
+      const curAbortController = abortController;
       promise = (async () => {
         try {
           return await getter({
-            signal: abortController!.signal,
+            signal: curAbortController.signal,
           });
         } catch (e) {
-          if (abortController!.signal.aborted) {
+          if (curAbortController.signal.aborted) {
             promise = undefined;
           }
           throw e;
@@ -101,13 +106,15 @@ export function asyncMemoize<T>(
           if (promise !== undefined) {
             completed = true;
           }
-          abortController![Symbol.dispose]();
-          abortController = undefined;
+          curAbortController[Symbol.dispose]();
+          if (abortController === curAbortController) {
+            abortController = undefined;
+          }
         }
       })();
     }
-    abortController!.addConsumer(options.signal);
-    return raceWithAbort(promise, options.signal);
+    abortController!.addConsumer(signal);
+    return raceWithAbort(promise, signal);
   };
 }
 
@@ -123,17 +130,20 @@ export function asyncMemoizeWithProgress<T>(
     if (completed) {
       return promise!;
     }
+    const { signal } = options;
+    signal?.throwIfAborted();
     if (promise === undefined || abortController!.signal.aborted) {
       progressListener = new MultiConsumerProgressListener();
       abortController = new SharedAbortController();
+      const curAbortController = abortController;
       promise = (async () => {
         try {
           return await getter({
-            signal: abortController!.signal,
+            signal: curAbortController.signal,
             progressListener: progressListener!,
           });
         } catch (e) {
-          if (abortController!.signal.aborted) {
+          if (curAbortController.signal.aborted) {
             promise = undefined;
           }
           throw e;
@@ -142,17 +152,19 @@ export function asyncMemoizeWithProgress<T>(
             completed = true;
           }
           progressListener = undefined;
-          abortController![Symbol.dispose]();
-          abortController = undefined;
+          curAbortController[Symbol.dispose]();
+          if (abortController === curAbortController) {
+            abortController = undefined;
+          }
         }
       })();
     }
-    abortController!.addConsumer(options.signal);
+    abortController!.addConsumer(signal);
     const curProgressListener = progressListener!;
     curProgressListener.addListener(options.progressListener);
 
     try {
-      return await raceWithAbort(promise, options.signal);
+      return await raceWithAbort(promise, signal);
     } finally {
       curProgressListener.removeListener(options.progressListener);
     }
