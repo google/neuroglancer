@@ -18,7 +18,7 @@
  * @file Support for rendering polyline annotations.
  */
 
-import type { Polyline } from "#src/annotation/index.js";
+import type { PolyLine } from "#src/annotation/index.js";
 import { AnnotationType } from "#src/annotation/index.js";
 import type {
   AnnotationRenderContext,
@@ -246,7 +246,7 @@ function snapPositionToEndpoint(
   }
 }
 
-registerAnnotationTypeRenderHandler<Polyline>(AnnotationType.POLYLINE, {
+registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   defineShaderNoOpSetters(builder) {

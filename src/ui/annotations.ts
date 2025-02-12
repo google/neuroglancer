@@ -31,7 +31,7 @@ import type {
   AxisAlignedBoundingBox,
   Ellipsoid,
   Line,
-  Polyline,
+  PolyLine,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -1427,7 +1427,7 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       mouseState,
       annotationLayer,
     );
-    return <Polyline>{
+    return <PolyLine>{
       type: AnnotationType.POLYLINE,
       id: "",
       description: "",
@@ -1438,28 +1438,28 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
   }
 
   getUpdatedAnnotation(
-    oldAnnotation: Polyline,
+    oldAnnotation: PolyLine,
     mouseState: MouseSelectionState,
     annotationLayer: AnnotationLayerState,
     triggered: boolean,
   ) {
-    function annotationWithoutLastPoint(annotation: Polyline) {
-      return <Polyline>{
+    function annotationWithoutLastPoint(annotation: PolyLine) {
+      return <PolyLine>{
         ...annotation,
         points: annotation.points.slice(0, -1),
       };
     }
     function annotationWithUpdatedLastPoint(
-      annotation: Polyline,
+      annotation: PolyLine,
       point: Float32Array,
     ) {
-      return <Polyline>{
+      return <PolyLine>{
         ...annotation,
         points: [...annotation.points.slice(0, -1), point],
       };
     }
-    function annotationWithNewPoint(annotation: Polyline, point: Float32Array) {
-      return <Polyline>{
+    function annotationWithNewPoint(annotation: PolyLine, point: Float32Array) {
+      return <PolyLine>{
         ...annotation,
         points: [...annotation.points, point],
       };

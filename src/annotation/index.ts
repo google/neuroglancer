@@ -661,11 +661,6 @@ export interface Line extends AnnotationBase {
   type: AnnotationType.LINE;
 }
 
-export interface Polyline extends AnnotationBase {
-  points: Float32Array[];
-  type: AnnotationType.POLYLINE;
-}
-
 export interface Point extends AnnotationBase {
   point: Float32Array;
   type: AnnotationType.POINT;
@@ -683,12 +678,17 @@ export interface Ellipsoid extends AnnotationBase {
   type: AnnotationType.ELLIPSOID;
 }
 
+export interface PolyLine extends AnnotationBase {
+  points: Float32Array[];
+  type: AnnotationType.POLYLINE;
+}
+
 export type Annotation =
   | Line
   | Point
   | AxisAlignedBoundingBox
   | Ellipsoid
-  | Polyline;
+  | PolyLine;
 
 export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   icon: string;
@@ -855,12 +855,12 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.POLYLINE]: {
     icon: "⤤",
     description: "Polyline",
-    toJSON(annotation: Polyline) {
+    toJSON(annotation: PolyLine) {
       return {
         points: annotation.points.map((point) => Array.from(point)),
       };
     },
-    restoreState(annotation: Polyline, obj: any, rank: number) {
+    restoreState(annotation: PolyLine, obj: any, rank: number) {
       annotation.points = verifyObjectProperty(obj, "points", (points) =>
         parseArray(points, (point) =>
           parseFixedLengthArray(
@@ -880,7 +880,7 @@ export const annotationTypeHandlers: Record<
       offset: number,
       isLittleEndian: boolean,
       rank: number,
-      annotation: Polyline,
+      annotation: PolyLine,
     ) {
       for (const point of annotation.points) {
         offset = serializeFloatVector(
@@ -898,12 +898,12 @@ export const annotationTypeHandlers: Record<
       isLittleEndian: boolean,
       rank: number,
       id: string,
-    ): Polyline {
+    ): PolyLine {
       const points = new Array<Float32Array>();
       deserializeManyFloatVectors(buffer, offset, isLittleEndian, rank, points);
       return { type: AnnotationType.POLYLINE, points, id, properties: [] };
     },
-    visitGeometry(annotation: Polyline, callback) {
+    visitGeometry(annotation: PolyLine, callback) {
       for (const point of annotation.points) {
         callback(point, false);
       }
@@ -1527,7 +1527,7 @@ export class AnnotationSerializer {
     Line[],
     AxisAlignedBoundingBox[],
     Ellipsoid[],
-    Polyline[],
+    PolyLine[],
   ] = [[], [], [], [], []];
   constructor(public propertySerializers: AnnotationPropertySerializer[]) {}
   add(annotation: Annotation) {
