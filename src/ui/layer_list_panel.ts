@@ -147,7 +147,9 @@ class LayerListItem extends RefCounted {
     element.classList.add("neuroglancer-layer-list-panel-item");
     numberElement.classList.add("neuroglancer-layer-list-panel-item-number");
     const layerNameWidget = this.registerDisposer(new LayerNameWidget(layer));
-    layerNameWidget.element.classList.add("neuroglancer-layer-list-panel-item-name");
+    layerNameWidget.element.classList.add(
+      "neuroglancer-layer-list-panel-item-name",
+    );
     element.appendChild(
       this.registerDisposer(
         new TrackableBooleanCheckbox(
