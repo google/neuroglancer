@@ -22,6 +22,7 @@ import {
   validateDimensionNames,
 } from "#src/coordinate_transform.js";
 import type {
+  OrientationState,
   TrackableDepthRange,
   TrackableZoomInterface,
   WatchableDisplayDimensionRenderInfo,
@@ -45,10 +46,18 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { RenderViewport } from "#src/display_context.js";
+import { quat } from "#src/util/geom.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
 
 export type NamedAxes = "xy" | "xz" | "yz";
+
+export const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
+  ["xy", undefined],
+  ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
+  ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
+]);
 
 enum Axis {
   x = 0,
@@ -101,7 +110,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   fovInputElements: HTMLInputElement[] = [];
   fovNameElements: HTMLSpanElement[] = [];
 
-  axes: NamedAxes | undefined | "zy";
+  namedAxes: NamedAxes | undefined | "zy";
+
+  disableFOV = new TrackableBoolean(false);
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -262,8 +273,8 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateZoomFromFOV(i: number) {
-    if (this.axes === undefined) return;
-    const axisIndex = Axis[this.axes[i] as keyof typeof Axis];
+    if (this.namedAxes === undefined) return;
+    const axisIndex = Axis[this.namedAxes[i] as keyof typeof Axis];
     const {
       displayDimensionScales,
       canonicalVoxelFactors,
@@ -340,22 +351,52 @@ export class DisplayDimensionsWidget extends RefCounted {
    * in the yz layout, z is the x-axis and y is the y-axis, so its zy in this convention
    */
   normalizeAxes() {
-    this.axes = this.axes === "yz" ? "zy" : this.axes;
+    this.namedAxes = this.axes === "yz" ? "zy" : this.axes;
   }
+
+  checkForNonAxisAligned = () => {
+    const { displayDimensionIndices, displayDimensionUnits } =
+      this.displayDimensionRenderInfo.value;
+    const isAxisAligned = () => {
+      if (this.axes === undefined) return false;
+      const defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
+      if (defaultQuaternion === undefined) return false;
+      const currentQuaternion = this.orientation.orientation;
+      return quat.equals(defaultQuaternion, currentQuaternion);
+    };
+    const { factors } = this.relativeDisplayScales.value;
+    const firstDim = displayDimensionIndices[0];
+    let singleScale = true;
+    if (firstDim !== -1) {
+      const unit = displayDimensionUnits[0];
+      const factor = factors[firstDim];
+      for (let i = 1; i < 3; ++i) {
+        const dim = displayDimensionIndices[i];
+        if (dim === -1) continue;
+        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
+          singleScale = false;
+          break;
+        }
+      }
+    }
+    this.disableFOV.value = !singleScale && !isAxisAligned();
+    console.log("isAxisAligned", this.disableFOV.value);
+  };
 
   constructor(
     public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
     public zoom: TrackableZoomInterface,
     public depthRange: Owned<TrackableDepthRange>,
-    inputAxes: NamedAxes | undefined,
+    public orientation: Owned<OrientationState>,
+    public axes: NamedAxes | undefined,
     public panelBoundsUpdated: NullarySignal,
     public panelRenderViewport: RenderViewport,
     public displayUnit = "px",
   ) {
     super();
-    this.axes = inputAxes;
     this.normalizeAxes();
-    const { element, dimensionGridContainer, defaultCheckbox, axes } = this;
+    const { element, dimensionGridContainer, defaultCheckbox, namedAxes } =
+      this;
     const defaultCheckboxLabel = document.createElement("label");
 
     const hideWidgetDetails = this.registerCancellable(
@@ -390,7 +431,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     });
     defaultCheckbox.type = "checkbox";
     defaultCheckboxLabel.appendChild(defaultCheckbox);
-    defaultCheckboxLabel.appendChild(document.createTextNode("Default dimensions"));
+    defaultCheckboxLabel.appendChild(document.createTextNode("Default dims"));
     defaultCheckboxLabel.title = "Display first 3 dimensions";
     defaultCheckboxLabel.classList.add(
       "neuroglancer-display-dimensions-widget-default",
@@ -406,6 +447,14 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionRenderInfo.changed.add(this.scheduleUpdateView),
     );
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
+    if (axes !== undefined) {
+      this.registerDisposer(
+        this.orientation.changed.add(this.checkForNonAxisAligned),
+      );
+      this.registerDisposer(
+        this.disableFOV.changed.add(this.scheduleUpdateView),
+      );
+    }
     const keyboardHandler = this.registerDisposer(
       new KeyboardEventBinder(element, inputEventMap),
     );
@@ -419,7 +468,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     });
 
-    if (axes !== undefined) {
+    if (namedAxes !== undefined) {
       const { fovGridContainer } = this;
       fovGridContainer.classList.add(
         "neuroglancer-display-dimensions-widget-fov",
@@ -429,7 +478,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       topLevelFOVLabel.textContent = "Field of view:";
       fovGridContainer.appendChild(topLevelFOVLabel);
       for (let i = 0; i < 2; ++i) {
-        const axisIndex = Axis[axes[i] as keyof typeof Axis];
+        const axisIndex = Axis[namedAxes[i] as keyof typeof Axis];
         const container = document.createElement("div");
         container.classList.add(
           "neuroglancer-display-dimensions-widget-fov-container",
@@ -711,6 +760,8 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
+    // TODO (SKM) - this is needed but the change signal call needs to change
+    this.checkForNonAxisAligned();
     const {
       dimensionElements,
       displayDimensions: { default: isDefault },
@@ -773,10 +824,11 @@ export class DisplayDimensionsWidget extends RefCounted {
       updateInputFieldWidth(dimElements.scale);
     }
     // Update the FOV fields
-    if (this.axes !== undefined) {
+    if (this.namedAxes !== undefined) {
+      this.fovGridContainer.style.display = this.disableFOV.value ? "none" : "";
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
-        const localAxisIndex = Axis[this.axes[i] as keyof typeof Axis];
+        const localAxisIndex = Axis[this.namedAxes[i] as keyof typeof Axis];
         const globalDimIndex = displayDimensionIndices[localAxisIndex];
         const totalScale =
           (displayDimensionScales[localAxisIndex] * zoom) /

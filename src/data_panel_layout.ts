@@ -70,6 +70,7 @@ import type { VisibilityPrioritySpecification } from "#src/viewer_state.js";
 import {
   DisplayDimensionsWidget,
   NamedAxes,
+  AXES_RELATIVE_ORIENTATION,
 } from "#src/widget/display_dimensions_widget.js";
 import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
 
@@ -109,12 +110,6 @@ export interface DataDisplayLayout extends RefCounted {
   rootElement: HTMLElement;
   container: DataPanelLayoutContainer;
 }
-
-const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
-  ["xy", undefined],
-  ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
-  ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
-]);
 
 const oneSquareSymbol = "◻";
 
@@ -216,6 +211,7 @@ function addDisplayDimensionsWidget(
         navigationState.pose.displayDimensionRenderInfo.addRef(),
         navigationState.zoomFactor,
         navigationState.depthRange.addRef(),
+        navigationState.pose.orientation.addRef(),
         axes,
         panel.boundsUpdated,
         panel.renderViewport,
