@@ -32,7 +32,8 @@ export class LayerTypeIndicatorWidget extends RefCounted {
   }
   updateView() {
     const layerType = this.layer.layer?.type ?? "unknown";
-    this.element.textContent = layerTypes.get(layerType)?.typeAbbreviation ?? "—";
+    this.element.textContent =
+      layerTypes.get(layerType)?.typeAbbreviation ?? "—";
     this.element.title = `${capitalizeFirstLetter(layerType)} layer (modifiable in the layer settings)`;
   }
 }
