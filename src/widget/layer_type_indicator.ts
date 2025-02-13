@@ -24,25 +24,15 @@ function capitalizeFirstLetter(type: string): string {
 
 export class LayerTypeIndicatorWidget extends RefCounted {
   element = document.createElement("div");
-  typeToAbbreviation = new Map<string, string>();
   constructor(public layer: ManagedUserLayer) {
     super();
     this.element.classList.add("neuroglancer-layer-type-indicator");
-    for (const [layerType, layerConstructor] of layerTypes) {
-      this.typeToAbbreviation.set(
-        layerType,
-        layerConstructor.typeAbbreviation === "mesh"
-          ? "msh"
-          : layerConstructor.typeAbbreviation,
-      );
-    }
     this.registerDisposer(layer.layerChanged.add(() => this.updateView()));
     this.updateView();
   }
   updateView() {
     const layerType = this.layer.layer?.type ?? "unknown";
-    this.element.textContent =
-      this.typeToAbbreviation.get(layerType ?? "") ?? "—";
-    this.element.title = `${capitalizeFirstLetter(layerType)} layer (you can change the type in the layer settings)`;
+    this.element.textContent = layerTypes.get(layerType)?.typeAbbreviation ?? "—";
+    this.element.title = `${capitalizeFirstLetter(layerType)} layer (modifiable in the layer settings)`;
   }
 }
