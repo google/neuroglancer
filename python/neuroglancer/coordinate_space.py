@@ -15,7 +15,7 @@
 
 import re
 from collections.abc import Sequence
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, NamedTuple, Optional, Union, Iterable
 from decimal import Decimal
 
 import numpy as np
@@ -72,10 +72,10 @@ def parse_unit(scale, unit):
 
 
 def parse_unit_and_scale(
-    unit_and_scale: str, coefficient: float = 1.0
+    unit_and_scale: str, coefficient: Decimal = Decimal("1.0")
 ) -> tuple[float, str]:
     if unit_and_scale == "":
-        return (coefficient, "")
+        return (float(coefficient), "")
     m = re.fullmatch(
         r"^((?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)?([µa-zA-Z]+)?$", unit_and_scale
     )
@@ -87,7 +87,7 @@ def parse_unit_and_scale(
     else:
         scale = Decimal(scale_str)
 
-    scale *= Decimal(coefficient)
+    scale *= coefficient
     unit = ""
     unit_str = m.group(2)
     if unit_str is not None:
@@ -96,7 +96,7 @@ def parse_unit_and_scale(
             scale *= 10**exponent
         else:
             scale /= 10 ** (-exponent)
-    return (scale, unit)
+    return (float(scale), unit)
 
 
 @export
@@ -238,8 +238,7 @@ class CoordinateSpace:
                 names_tuple = tuple(names)
                 rank = len(names_tuple)
                 self.names = names_tuple
-                scales_array = np.typing.NDArray[np.float64]
-                scales_list_decimal: Interable[Decimal]
+                scales_list_decimal: Iterable[Decimal]
                 if scales is None:
                     scales_list_decimal = [Decimal("1.0") for r in range(rank)]
                 else:
@@ -252,8 +251,9 @@ class CoordinateSpace:
                     parse_unit_and_scale(unit, scale)
                     for scale, unit in zip(scales_list_decimal, units)
                 )
-                scales_array = np.array(
-                    [s[0] for s in scales_and_units], dtype=np.float64
+                scales_array: np.typing.NDArray[np.float64] = np.array(
+                    [s[0] for s in scales_and_units],
+                    dtype=np.float64
                 )
                 units = tuple(s[1] for s in scales_and_units)
                 if coordinate_arrays is None:
