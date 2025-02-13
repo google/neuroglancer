@@ -62,10 +62,10 @@ void main() {
 
 ### Volume rendering mode switching
 
-In some cases, the shader code may need to be aware of the volume rendering mode. This can be done via the `VOLUME_RENDERING` flag. For example:
+In some cases, the shader code may need to be aware of the volume rendering mode. This can be done via the `VOLUME_RENDERING` flag, which is set to 1 if doing Volume rendering, and 0 otherwise. For example:
 
 ```glsl
-if (VOLUME_RENDERING) {
+if (VOLUME_RENDERING==1) {
   // Volume rendering code
 } else {
   // Slice rendering code
