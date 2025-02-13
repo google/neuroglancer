@@ -14,12 +14,11 @@
 """Wrappers for representing a Neuroglancer coordinate space."""
 
 import re
-from collections.abc import Sequence
-from typing import Any, NamedTuple, Optional, Union, Iterable
+from collections.abc import Iterable, Sequence
 from decimal import Decimal
+from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
-import numpy.typing
 
 __all__ = []
 
@@ -252,8 +251,7 @@ class CoordinateSpace:
                     for scale, unit in zip(scales_list_decimal, units)
                 )
                 scales_array: np.typing.NDArray[np.float64] = np.array(
-                    [s[0] for s in scales_and_units],
-                    dtype=np.float64
+                    [s[0] for s in scales_and_units], dtype=np.float64
                 )
                 units = tuple(s[1] for s in scales_and_units)
                 if coordinate_arrays is None:
