@@ -173,7 +173,8 @@ export class DisplayDimensionsWidget extends RefCounted {
       updateInputFieldWidth(scale);
     });
     scale.addEventListener("blur", () => {
-      this.updateZoomFromScale(i);
+      // Reset the input if moved off of without committing
+      this.updateView();
     });
     registerActionListener(scale, "commit", () => {
       this.updateZoomFromScale(i);
@@ -351,7 +352,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.namedAxes = this.axes === "yz" ? "zy" : this.axes;
   }
 
-  disableFOVIfNonAxisAligned = () => {
+  disableFovIfNonAxisAligned = () => {
     const { displayDimensionIndices, displayDimensionUnits } =
       this.displayDimensionRenderInfo.value;
     const isAxisAligned = () => {
@@ -445,7 +446,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
     if (axes !== undefined) {
       this.registerDisposer(
-        this.orientation.changed.add(this.disableFOVIfNonAxisAligned),
+        this.orientation.changed.add(this.disableFovIfNonAxisAligned),
       );
       this.registerDisposer(
         this.disableFOV.changed.add(this.scheduleUpdateView),
@@ -499,7 +500,8 @@ export class DisplayDimensionsWidget extends RefCounted {
           updateInputFieldWidth(input);
         });
         input.addEventListener("blur", () => {
-          this.updateZoomFromFOV(i);
+          // Reset the input if moved off of without committing
+          this.updateView();
         });
         registerActionListener(input, "commit", () => {
           this.updateZoomFromFOV(i);
@@ -595,7 +597,7 @@ export class DisplayDimensionsWidget extends RefCounted {
               input.value = formatScaleWithUnitAsString(
                 rangeValue * widget.scale,
                 widget.unit,
-                { precision: 3, elide1: false },
+                { precision: 2, elide1: false },
               );
               updateInputFieldWidth(input);
             }
@@ -757,7 +759,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
-    this.disableFOVIfNonAxisAligned();
+    this.disableFovIfNonAxisAligned();
     const {
       dimensionElements,
       displayDimensions: { default: isDefault },
@@ -804,7 +806,7 @@ export class DisplayDimensionsWidget extends RefCounted {
           const formattedScale = formatScaleWithUnitAsString(
             totalScale,
             displayDimensionUnits[i],
-            { precision: 3, elide1: false },
+            { precision: 2, elide1: false },
           );
           dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
@@ -833,7 +835,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         const formattedFieldOfView = formatScaleWithUnitAsString(
           fieldOfView,
           displayDimensionUnits[localAxisIndex],
-          { precision: 3, elide1: false },
+          { precision: 2, elide1: false },
         );
         this.fovInputElements[i].value = formattedFieldOfView;
         updateInputFieldWidth(this.fovInputElements[i]);
