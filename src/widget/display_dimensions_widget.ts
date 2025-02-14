@@ -106,12 +106,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   depthGridContainer = document.createElement("div");
   fovGridContainer = document.createElement("div");
   defaultCheckbox = document.createElement("input");
-
   fovInputElements: HTMLInputElement[] = [];
-  fovNameElements: HTMLSpanElement[] = [];
 
   namedAxes: NamedAxes | undefined | "zy";
-
   disableFOV = new TrackableBoolean(false);
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
@@ -354,7 +351,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.namedAxes = this.axes === "yz" ? "zy" : this.axes;
   }
 
-  checkForNonAxisAligned = () => {
+  disableFOVIfNonAxisAligned = () => {
     const { displayDimensionIndices, displayDimensionUnits } =
       this.displayDimensionRenderInfo.value;
     const isAxisAligned = () => {
@@ -380,7 +377,6 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     }
     this.disableFOV.value = !singleScale && !isAxisAligned();
-    console.log("isAxisAligned", this.disableFOV.value);
   };
 
   constructor(
@@ -449,7 +445,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
     if (axes !== undefined) {
       this.registerDisposer(
-        this.orientation.changed.add(this.checkForNonAxisAligned),
+        this.orientation.changed.add(this.disableFOVIfNonAxisAligned),
       );
       this.registerDisposer(
         this.disableFOV.changed.add(this.scheduleUpdateView),
@@ -477,17 +473,13 @@ export class DisplayDimensionsWidget extends RefCounted {
       const topLevelFOVLabel = document.createElement("div");
       topLevelFOVLabel.textContent = "Field of view:";
       fovGridContainer.appendChild(topLevelFOVLabel);
+      const fovInputContainer = document.createElement("div");
+      fovGridContainer.appendChild(fovInputContainer);
       for (let i = 0; i < 2; ++i) {
-        const axisIndex = Axis[namedAxes[i] as keyof typeof Axis];
         const container = document.createElement("div");
         container.classList.add(
           "neuroglancer-display-dimensions-widget-fov-container",
         );
-        const label = document.createElement("span");
-        label.style.color = dimensionColors[axisIndex];
-        this.fovNameElements.push(label);
-        const directionIndicator = document.createElement("span");
-        directionIndicator.textContent = i === 0 ? "(←→)" : "(↑↓)";
         const input = document.createElement("input");
         input.classList.add("neuroglancer-display-dimensions-input-base");
         input.spellcheck = false;
@@ -495,11 +487,13 @@ export class DisplayDimensionsWidget extends RefCounted {
         this.fovInputElements.push(input);
         const direction = i === 0 ? "horizontal" : "vertical";
         const tooltip = `Panel ${direction} field of view`;
-        container.title = tooltip;
-        container.appendChild(label);
-        container.appendChild(directionIndicator);
-        container.appendChild(input);
-        fovGridContainer.appendChild(container);
+        input.title = tooltip;
+        fovInputContainer.appendChild(input);
+        if (i == 0) {
+          const separatorElement = document.createElement("span");
+          separatorElement.textContent = "x";
+          fovInputContainer.appendChild(separatorElement);
+        }
 
         input.addEventListener("input", () => {
           updateInputFieldWidth(input);
@@ -569,6 +563,9 @@ export class DisplayDimensionsWidget extends RefCounted {
       registerNested(
         (context, displayDimensionRenderInfoValue, { factors }) => {
           removeChildren(depthGridContainer);
+          const depthGridLabel = document.createElement("div");
+          depthGridLabel.textContent = "Depth range:";
+          depthGridContainer.appendChild(depthGridLabel);
           interface DepthWidget {
             unit: string;
             factor: number;
@@ -598,7 +595,7 @@ export class DisplayDimensionsWidget extends RefCounted {
               input.value = formatScaleWithUnitAsString(
                 rangeValue * widget.scale,
                 widget.unit,
-                { precision: 2, elide1: false },
+                { precision: 3, elide1: false },
               );
               updateInputFieldWidth(input);
             }
@@ -760,8 +757,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
-    // TODO (SKM) - this is needed but the change signal call needs to change
-    this.checkForNonAxisAligned();
+    this.disableFOVIfNonAxisAligned();
     const {
       dimensionElements,
       displayDimensions: { default: isDefault },
@@ -808,7 +804,7 @@ export class DisplayDimensionsWidget extends RefCounted {
           const formattedScale = formatScaleWithUnitAsString(
             totalScale,
             displayDimensionUnits[i],
-            { precision: 2, elide1: false },
+            { precision: 3, elide1: false },
           );
           dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
@@ -829,7 +825,6 @@ export class DisplayDimensionsWidget extends RefCounted {
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
         const localAxisIndex = Axis[this.namedAxes[i] as keyof typeof Axis];
-        const globalDimIndex = displayDimensionIndices[localAxisIndex];
         const totalScale =
           (displayDimensionScales[localAxisIndex] * zoom) /
           canonicalVoxelFactors[localAxisIndex];
@@ -838,11 +833,9 @@ export class DisplayDimensionsWidget extends RefCounted {
         const formattedFieldOfView = formatScaleWithUnitAsString(
           fieldOfView,
           displayDimensionUnits[localAxisIndex],
-          { precision: 2, elide1: false },
+          { precision: 3, elide1: false },
         );
         this.fovInputElements[i].value = formattedFieldOfView;
-        this.fovNameElements[i].textContent =
-          globalDimensionNames[globalDimIndex];
         updateInputFieldWidth(this.fovInputElements[i]);
       }
     }
