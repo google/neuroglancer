@@ -352,19 +352,11 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.namedAxes = this.axes === "yz" ? "zy" : this.axes;
   }
 
-  disableFovIfNonAxisAligned = () => {
+  determineSingleScale() {
     const { displayDimensionIndices, displayDimensionUnits } =
       this.displayDimensionRenderInfo.value;
-    const isAxisAligned = () => {
-      if (this.axes === undefined) return false;
-      const defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
-      if (defaultQuaternion === undefined) return false;
-      const currentQuaternion = this.orientation.orientation;
-      return quat.equals(defaultQuaternion, currentQuaternion);
-    };
     const { factors } = this.relativeDisplayScales.value;
     const firstDim = displayDimensionIndices[0];
-    let singleScale = true;
     if (firstDim !== -1) {
       const unit = displayDimensionUnits[0];
       const factor = factors[firstDim];
@@ -372,11 +364,22 @@ export class DisplayDimensionsWidget extends RefCounted {
         const dim = displayDimensionIndices[i];
         if (dim === -1) continue;
         if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
-          singleScale = false;
-          break;
+          return false;
         }
       }
     }
+    return true;
+  }
+
+  disableFovIfNonAxisAligned = () => {
+    const isAxisAligned = () => {
+      if (this.axes === undefined) return false;
+      const defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
+      if (defaultQuaternion === undefined) return false;
+      const currentQuaternion = this.orientation.orientation;
+      return quat.equals(defaultQuaternion, currentQuaternion);
+    };
+    const singleScale = this.determineSingleScale();
     this.disableFOV.value = !singleScale && !isAxisAligned();
   };
 
@@ -775,20 +778,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
     // Check if all units and factors are the same.
-    const firstDim = displayDimensionIndices[0];
-    let singleScale = true;
-    if (firstDim !== -1) {
-      const unit = displayDimensionUnits[0];
-      const factor = factors[firstDim];
-      for (let i = 1; i < 3; ++i) {
-        const dim = displayDimensionIndices[i];
-        if (dim === -1) continue;
-        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
-          singleScale = false;
-          break;
-        }
-      }
-    }
+    const singleScale = this.determineSingleScale();
     for (let i = 0; i < 3; ++i) {
       const dim = displayDimensionIndices[i];
       const dimElements = dimensionElements[i];
