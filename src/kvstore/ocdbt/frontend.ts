@@ -15,10 +15,10 @@
  */
 
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import { ProxyKvStore } from "#src/kvstore/frontend.js";
 import type { KvStore } from "#src/kvstore/index.js";
 import { getOcdbtUrl } from "#src/kvstore/ocdbt/url.js";
 import type { VersionSpecifier } from "#src/kvstore/ocdbt/version_specifier.js";
+import { ProxyKvStore } from "#src/kvstore/proxy.js";
 
 export class OcdbtKvStore extends ProxyKvStore implements KvStore {
   constructor(

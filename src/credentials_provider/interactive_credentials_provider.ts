@@ -31,12 +31,10 @@ export function getCredentialsWithStatus<Token>(
   let abortController: AbortController | undefined;
   return new Promise<Token>((resolve, reject) => {
     const disposeAbortCallback = scopedAbortCallback(signal, (reason) => {
-      if (abortController !== undefined) {
-        abortController.abort(reason);
-        abortController = undefined;
-        status.dispose();
-        reject(reason);
-      }
+      abortController?.abort(reason);
+      abortController = undefined;
+      status.dispose();
+      reject(reason);
     });
     function dispose() {
       if (abortController === undefined) return;

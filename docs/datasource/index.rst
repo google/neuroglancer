@@ -87,6 +87,7 @@ kvstore<root-kvstores>` with zero or more other
 
    zip/index
    ocdbt/index
+   icechunk/index
    gzip/index
    byte_range/index
 

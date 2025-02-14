@@ -143,12 +143,17 @@ export async function getKvStoreCompletions(
 
       if (autoDetectDirectory !== undefined && namePrefix === "") {
         const names = new Set<string>();
+        const subDirectories = new Set<string>();
         for (const entry of results.entries) {
           names.add(entry.key.substring(directoryOffset));
+        }
+        for (const subDirectory of results.directories) {
+          subDirectories.add(subDirectory.substring(directoryOffset));
         }
         const pipelineMatches = await autoDetectDirectory().match({
           url,
           fileNames: names,
+          subDirectories,
           signal: options.signal,
         });
         for (const match of pipelineMatches) {
@@ -164,14 +169,10 @@ export async function getKvStoreCompletions(
       return { offset, completions: matches, defaultCompletion };
     })();
   }
-
-  // Ensure any errors from the provider completions are shown to user.
-  const providerCompletions = await providerCompletionsPromise;
-
-  return await concatCompletions(url, [
-    providerCompletions,
-    genericCompletionsPromise,
-  ]);
+  return await concatCompletions(
+    url,
+    await Promise.all([providerCompletionsPromise, genericCompletionsPromise]),
+  );
 }
 
 export async function getKvStorePathCompletions(

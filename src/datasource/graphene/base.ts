@@ -15,6 +15,9 @@
  */
 
 import type { ShardingParameters } from "#src/datasource/precomputed/base.js";
+import type { KvStoreContext } from "#src/kvstore/context.js";
+import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
+import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type {
   ChunkLayoutOptions,
   SliceViewChunkSource,
@@ -25,8 +28,7 @@ import type {
 } from "#src/sliceview/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import type { mat4 } from "#src/util/geom.js";
-import type { HttpError } from "#src/util/http_request.js";
-
+import type { FetchOk, HttpError } from "#src/util/http_request.js";
 import { Uint64 } from "#src/util/uint64.js";
 
 export const PYCG_APP_VERSION = 1;
@@ -150,4 +152,24 @@ export async function parseGrapheneError(e: HttpError) {
     return msg;
   }
   return undefined;
+}
+
+export interface HttpSource {
+  fetchOkImpl: FetchOk;
+  baseUrl: string;
+}
+
+export function getHttpSource(
+  kvStoreContext: KvStoreContext,
+  url: string,
+): HttpSource {
+  const { store, path } = kvStoreContext.getKvStore(url);
+  if (!(store instanceof ReadableHttpKvStore)) {
+    throw new Error(`Non-HTTP URL ${JSON.stringify(url)} not supported`);
+  }
+  const { fetchOkImpl, baseUrl } = store;
+  if (baseUrl.includes("?")) {
+    throw new Error(`Invalid URL ${baseUrl}: query parameters not supported`);
+  }
+  return { fetchOkImpl, baseUrl: joinBaseUrlAndPath(baseUrl, path) };
 }

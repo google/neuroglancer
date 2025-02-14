@@ -37,6 +37,7 @@ import { makeIdentityTransform } from "#src/coordinate_transform.js";
 import type {
   ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface,
   ChunkedGraphChunkSpecification,
+  HttpSource,
   MultiscaleMeshMetadata,
 } from "#src/datasource/graphene/base.js";
 import {
@@ -50,6 +51,7 @@ import {
   makeChunkedGraphChunkSpecification,
   MeshSourceParameters,
   PYCG_APP_VERSION,
+  getHttpSource,
 } from "#src/datasource/graphene/base.js";
 import type {
   DataSource,
@@ -71,7 +73,6 @@ import {
 } from "#src/datasource/precomputed/frontend.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import { HttpKvStore } from "#src/kvstore/http/index.js";
 import {
   ensureEmptyUrlSuffix,
   kvstoreEnsureDirectoryPipelineUrl,
@@ -165,7 +166,6 @@ import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { mat4, vec3, vec4 } from "#src/util/geom.js";
-import type { FetchOk } from "#src/util/http_request.js";
 import { HttpError, isNotFoundError } from "#src/util/http_request.js";
 import {
   parseArray,
@@ -1578,27 +1578,23 @@ async function withErrorMessageHTTP<T>(
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol("Graph Server Not Specified.");
 
 class GrapheneGraphServerInterface {
-  private fetchOkImpl: FetchOk;
-  private url: string;
+  private httpSource: HttpSource;
   constructor(sharedKvStoreContext: SharedKvStoreContext, url: string) {
-    const { store, path } = sharedKvStoreContext.kvStoreContext.getKvStore(url);
-    if (store instanceof HttpKvStore) {
-      this.fetchOkImpl = store.fetchOkImpl;
-      this.url = store.baseUrl + path;
-    } else {
-      throw new Error(`Non-HTTP protocol not supported: ${url}`);
-    }
+    this.httpSource = getHttpSource(sharedKvStoreContext.kvStoreContext, url);
   }
 
   async getRoot(segment: Uint64, timestamp = "") {
     const timestampEpoch = new Date(timestamp).valueOf() / 1000;
 
-    const url = `${this.url}/node/${String(segment)}/root?int64_as_str=1${
-      Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
-    }`;
+    const { fetchOkImpl, baseUrl } = this.httpSource;
 
     const jsonResp = await withErrorMessageHTTP(
-      this.fetchOkImpl(url).then((response) => response.json()),
+      fetchOkImpl(
+        `${baseUrl}/node/${String(segment)}/root?int64_as_str=1${
+          Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
+        }`,
+        {},
+      ).then((response) => response.json()),
       {
         initialMessage: `Retrieving root for segment ${segment}`,
         errorPrefix: "Could not fetch root: ",
@@ -1612,12 +1608,8 @@ class GrapheneGraphServerInterface {
     second: SegmentSelection,
     annotationToNanometers: Float64Array,
   ): Promise<Uint64> {
-    const { url } = this;
-    if (url === "") {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    const promise = this.fetchOkImpl(`${url}/merge?int64_as_str=1`, {
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(`${baseUrl}/merge?int64_as_str=1`, {
       method: "POST",
       body: JSON.stringify([
         [
@@ -1649,12 +1641,8 @@ class GrapheneGraphServerInterface {
     second: SegmentSelection[],
     annotationToNanometers: Float64Array,
   ): Promise<Uint64[]> {
-    const { url } = this;
-    if (url === "") {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    const promise = this.fetchOkImpl(`${url}/split?int64_as_str=1`, {
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(`${baseUrl}/split?int64_as_str=1`, {
       method: "POST",
       body: JSON.stringify({
         sources: first.map((x) => [
@@ -1681,9 +1669,10 @@ class GrapheneGraphServerInterface {
   }
 
   async filterLatestRoots(segments: Uint64[]): Promise<Uint64[]> {
-    const url = `${this.url}/is_latest_roots`;
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const url = `${baseUrl}/is_latest_roots`;
 
-    const promise = this.fetchOkImpl(url, {
+    const promise = fetchOkImpl(url, {
       method: "POST",
       body: JSON.stringify({
         node_ids: segments.map((x) => x.toJSON()),
