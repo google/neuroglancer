@@ -46,7 +46,7 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { RenderViewport } from "#src/display_context.js";
-import { quat } from "#src/util/geom.js";
+import { quat, vec3 } from "#src/util/geom.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
@@ -57,6 +57,12 @@ export const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
   ["xy", undefined],
   ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
   ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
+]);
+
+const AXES_NORMALS = new Map<NamedAxes, vec3>([
+  ["xy", vec3.fromValues(0, 0, 1)],
+  ["xz", vec3.fromValues(0, 1, 0)],
+  ["yz", vec3.fromValues(1, 0, 0)],
 ]);
 
 enum Axis {
@@ -371,16 +377,30 @@ export class DisplayDimensionsWidget extends RefCounted {
     return true;
   }
 
+  determineAxisAligned() {
+    if (this.axes === undefined) return false;
+    let defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
+    defaultQuaternion = defaultQuaternion ?? quat.create();
+    const currentQuaternion = this.orientation.orientation;
+    console.log(defaultQuaternion, currentQuaternion);
+    console.log(quat.exactEquals(defaultQuaternion, currentQuaternion));
+    // if (quat.exactEquals(defaultQuaternion, currentQuaternion)) return true;
+    // Need to check if the current orientation leaves the plane in the same orientation
+    // But with a potentially flipped normal
+    // Still the normal should be parallel
+    const currentNormal = vec3.create();
+    const defaultNormal = AXES_NORMALS.get(this.axes);
+    if (defaultNormal === undefined) return false;
+    vec3.transformQuat(currentNormal, [0, 0, 1], currentQuaternion);
+    console.log(currentNormal, defaultNormal);
+    // Check if the current normal is parallel to the default normal
+    return Math.abs(vec3.dot(currentNormal, defaultNormal)) < 0.9999;
+  }
+
   disableFovIfNonAxisAligned = () => {
-    const isAxisAligned = () => {
-      if (this.axes === undefined) return false;
-      const defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
-      if (defaultQuaternion === undefined) return false;
-      const currentQuaternion = this.orientation.orientation;
-      return quat.equals(defaultQuaternion, currentQuaternion);
-    };
-    const singleScale = this.determineSingleScale();
-    this.disableFOV.value = !singleScale && !isAxisAligned();
+    console.log("test", this.determineAxisAligned());
+    this.disableFOV.value =
+      !this.determineSingleScale() && !this.determineAxisAligned();
   };
 
   constructor(
