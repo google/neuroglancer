@@ -223,7 +223,7 @@ class GrapheneMeshSource extends WithParameters(
 }
 
 class GrapheneMultiscaleMeshSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(MultiscaleMeshSource),
+  WithSharedKvStoreContext(MultiscaleMeshSource),
   MultiscaleMeshSourceParameters,
 ) {}
 
@@ -539,17 +539,44 @@ async function getMeshSource(
     fragmentUrl,
     options,
   );
-  const parameters: MeshSourceParameters = {
+  if (metadata === undefined) {
+    throw new Error("Mesh metadata is missing");
+  }
+  if (metadata.lodScaleMultiplier === 0) {
+    const parameters: MeshSourceParameters = {
+      manifestUrl: url,
+      fragmentUrl: fragmentUrl,
+      lod: 0,
+      sharding: metadata?.sharding,
+      nBitsForLayerId,
+    };
+    const transform = metadata?.transform || mat4.create();
+    return {
+      source: getShardedMeshSource(sharedKvStoreContext, parameters),
+      transform,
+      segmentPropertyMap,
+    };
+  }
+
+  const parameters: MultiscaleMeshSourceParameters = {
     manifestUrl: url,
     fragmentUrl: fragmentUrl,
-    lod: 0,
-    sharding: metadata?.sharding,
-    nBitsForLayerId,
+    metadata: metadata,
+    sharding: metadata.sharding,
+    nBitsForLayerId: nBitsForLayerId,
   };
-  const transform = metadata?.transform || mat4.create();
+
+  const { chunkManager } = sharedKvStoreContext;
   return {
-    source: getShardedMeshSource(sharedKvStoreContext, parameters),
-    transform,
+    source: chunkManager.getChunkSource(GrapheneMultiscaleMeshSource, {
+      sharedKvStoreContext,
+      parameters: parameters,
+      format: {
+        fragmentRelativeVertices: false,
+        vertexPositionFormat: VertexPositionFormat.float32,
+      },
+    }),
+    transform: metadata.transform,
     segmentPropertyMap,
   };
 }
