@@ -56,7 +56,7 @@ import {
   EventActionMap,
   registerActionListener,
 } from "#src/util/event_action_map.js";
-import { quat } from "#src/util/geom.js";
+import type { quat } from "#src/util/geom.js";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -67,9 +67,9 @@ import type { Trackable } from "#src/util/trackable.js";
 import { optionallyRestoreFromJsonMember } from "#src/util/trackable.js";
 import { WatchableMap } from "#src/util/watchable_map.js";
 import type { VisibilityPrioritySpecification } from "#src/viewer_state.js";
+import type { NamedAxes } from "#src/widget/display_dimensions_widget.js";
 import {
   DisplayDimensionsWidget,
-  NamedAxes,
   AXES_RELATIVE_ORIENTATION,
 } from "#src/widget/display_dimensions_widget.js";
 import type { ScaleBarOptions } from "#src/widget/scale_bar.js";

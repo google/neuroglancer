@@ -21,6 +21,7 @@ import {
   getDimensionNameValidity,
   validateDimensionNames,
 } from "#src/coordinate_transform.js";
+import type { RenderViewport } from "#src/display_context.js";
 import type {
   OrientationState,
   TrackableDepthRange,
@@ -37,6 +38,7 @@ import {
   removeFromParent,
   updateInputFieldWidth,
 } from "#src/util/dom.js";
+import { quat, vec3 } from "#src/util/geom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
@@ -44,9 +46,7 @@ import {
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
-import { NullarySignal } from "#src/util/signal.js";
-import { RenderViewport } from "#src/display_context.js";
-import { quat, vec3 } from "#src/util/geom.js";
+import type { NullarySignal } from "#src/util/signal.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
 
@@ -306,7 +306,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private updateScaleTooltip(i: number) {
     const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
-    let dataUnits = displayDimensionUnits[i];
+    const dataUnits = displayDimensionUnits[i];
     this.dimensionElements[i].scale.title =
       `Display scale in ${dataUnits}/${this.displayUnit}`;
   }
