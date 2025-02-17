@@ -420,7 +420,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   ) {
     super();
     this.normalizeAxes();
-    const { element, dimensionGridContainer, defaultCheckbox, fovAxesLabels: namedAxes } =
+    const { element, dimensionGridContainer, defaultCheckbox, fovAxesLabels } =
       this;
     const defaultCheckboxLabel = document.createElement("label");
 
@@ -490,7 +490,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     });
 
-    if (namedAxes !== undefined) {
+    if (fovAxesLabels !== undefined) {
       const { fovGridContainer } = this;
       fovGridContainer.classList.add(
         "neuroglancer-display-dimensions-widget-fov",
@@ -836,7 +836,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     if (this.checkFovInputVisibilityConditions()) {
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
-        const localAxisIndex = Axis[this.fovAxesLabels![i] as keyof typeof Axis];
+        const localAxisIndex =
+          Axis[this.fovAxesLabels![i] as keyof typeof Axis];
         const totalScale =
           (displayDimensionScales[localAxisIndex] * zoom) /
           canonicalVoxelFactors[localAxisIndex];

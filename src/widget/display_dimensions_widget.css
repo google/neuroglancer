@@ -46,7 +46,9 @@
   align-items: center;
 }
 
-.neuroglancer-display-dimensions-input-wrapper:has(input[style*="display: none"]) {
+.neuroglancer-display-dimensions-input-wrapper:has(
+    input[style*="display: none"]
+  ) {
   display: none;
 }
 
