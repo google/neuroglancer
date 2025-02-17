@@ -81,6 +81,8 @@ interface DimensionWidget {
 const inputEventMap = EventActionMap.fromObject({
   arrowup: { action: "move-up" },
   arrowdown: { action: "move-down" },
+  arrowleft: { action: "move-left" },
+  arrowright: { action: "move-right" },
   wheel: { action: "adjust-via-wheel" },
   enter: { action: "commit" },
   escape: { action: "cancel" },
@@ -113,7 +115,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   defaultCheckbox = document.createElement("input");
   fovInputElements: HTMLInputElement[] = [];
 
-  namedAxes: NamedAxes | undefined | "zy";
+  fovAxesLabels: NamedAxes | undefined | "zy";
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -178,6 +180,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     });
     scale.addEventListener("blur", () => {
       // Reset the input if moved off of without committing
+      // Without this, it can cause the zoom to change unexpectedly
+      // Especially due to rounding errors when just clicking on the input
       this.updateView();
     });
     registerActionListener(scale, "commit", () => {
@@ -259,12 +263,13 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionScales,
       displayDimensionUnits,
     } = this.displayDimensionRenderInfo.value;
-    // If the scale ends with /px or /vh, remove it
     const scale = this.dimensionElements[i].scale;
+    // Remove the display unit from the input
     const formattedScale = scale.value.replace(`/${this.displayUnit}`, "");
     const parsedScale = parseScale(formattedScale);
     if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
-      // If the input is invalid, reset the scale to the current value
+      // If the input is invalid or the wrong unit
+      // reset the input states to the previous values
       this.updateView();
       return;
     }
@@ -275,8 +280,8 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateZoomFromFOV(i: number) {
-    if (this.namedAxes === undefined) return;
-    const axisIndex = Axis[this.namedAxes[i] as keyof typeof Axis];
+    if (this.fovAxesLabels === undefined) return;
+    const axisIndex = Axis[this.fovAxesLabels[i] as keyof typeof Axis];
     const {
       displayDimensionScales,
       canonicalVoxelFactors,
@@ -292,10 +297,9 @@ export class DisplayDimensionsWidget extends RefCounted {
     }
     const { width, height } = this.panelRenderViewport;
     const pixelResolution = i === 0 ? width : height;
-    // Determine the desired zoom level
-    const parsedScale = parsedFov.scale / pixelResolution;
+    const desiredPerPixelScale = parsedFov.scale / pixelResolution;
     const desiredZoomLevel =
-      (parsedScale * canonicalVoxelFactors[axisIndex]) /
+      (desiredPerPixelScale * canonicalVoxelFactors[axisIndex]) /
       displayDimensionScales[axisIndex];
     this.zoom.value = desiredZoomLevel;
   }
@@ -347,13 +351,13 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   /**
    * Switches the axes between yz and zy
-   * This is because the conventional ordering is first dimension x-axis
+   * This is because the FOV ordering is first dimension x-axis
    * second dimension y-axis
-   * The xy and xz layouts both follow this ordering, but the yz layout does not
-   * in the yz layout, z is the x-axis and y is the y-axis, so its zy in this convention
+   * The xy and xz layouts both follow this ordering, but the yz layout does not.
+   * In the yz layout, z is the x-axis and y is the y-axis, so its zy in this convention
    */
   normalizeAxes() {
-    this.namedAxes = this.axes === "yz" ? "zy" : this.axes;
+    this.fovAxesLabels = this.axes === "yz" ? "zy" : this.axes;
   }
 
   isUniformDisplayScale() {
@@ -398,7 +402,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   checkFovInputVisibilityConditions = () => {
     const enableFovInputs =
-      this.namedAxes !== undefined &&
+      this.fovAxesLabels !== undefined &&
       (this.isOrientationAxisAligned() || this.isUniformDisplayScale());
     this.fovGridContainer.style.display = enableFovInputs ? "" : "none";
     return enableFovInputs;
@@ -416,7 +420,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   ) {
     super();
     this.normalizeAxes();
-    const { element, dimensionGridContainer, defaultCheckbox, namedAxes } =
+    const { element, dimensionGridContainer, defaultCheckbox, fovAxesLabels: namedAxes } =
       this;
     const defaultCheckboxLabel = document.createElement("label");
 
@@ -527,12 +531,12 @@ export class DisplayDimensionsWidget extends RefCounted {
         registerActionListener(input, "commit", () => {
           this.updateZoomFromFOV(i);
         });
-        registerActionListener(input, "move-up", () => {
+        registerActionListener(input, "move-left", () => {
           if (i !== 0) {
             this.fovInputElements[i - 1].focus();
           }
         });
-        registerActionListener(input, "move-down", () => {
+        registerActionListener(input, "move-right", () => {
           if (i !== 1) {
             this.fovInputElements[i + 1].focus();
           }
@@ -832,7 +836,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     if (this.checkFovInputVisibilityConditions()) {
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
-        const localAxisIndex = Axis[this.namedAxes![i] as keyof typeof Axis];
+        const localAxisIndex = Axis[this.fovAxesLabels![i] as keyof typeof Axis];
         const totalScale =
           (displayDimensionScales[localAxisIndex] * zoom) /
           canonicalVoxelFactors[localAxisIndex];
