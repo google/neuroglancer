@@ -392,8 +392,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     const defaultNormal = AXES_NORMALS.get(this.axes);
     if (defaultNormal === undefined) return false;
     vec3.transformQuat(currentNormal, [0, 0, 1], currentQuaternion);
-    const epsilon = 1e-5;
-    return Math.abs(vec3.dot(currentNormal, defaultNormal)) - 1 < epsilon;
+    const epsilon = 1e-7;
+    return 1 - Math.abs(vec3.dot(currentNormal, defaultNormal)) <= epsilon;
   }
 
   disableFovIfNonAxisAlignedNonIsomorphic = () => {
