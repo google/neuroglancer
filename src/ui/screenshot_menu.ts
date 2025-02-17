@@ -68,6 +68,8 @@ const TOOLTIPS = {
     "The highest loaded resolution of 2D image slices, 3D volume renderings, and 2D segmentation slices are shown here. Other layers are not shown.",
   scaleFactorHelpTooltip:
     "Adjusting the scale will zoom out 2D cross-section panels by that factor unless the box is ticked to keep the slice FOV fixed with scale changes. 3D panels always have fixed FOV regardless of the scale factor.",
+  panelScaleTooltip:
+    "Set the display scale or the 2D panel FOV (pixel resolution x physical scale) by hovering over the top left dimension indicator in the main viewer panels.",
 };
 
 interface UIScreenshotStatistics {
@@ -190,6 +192,7 @@ export class ScreenshotDialog extends Overlay {
     orthographicSettingsTooltip: HTMLElement;
     layerDataTooltip: HTMLElement;
     scaleFactorHelpTooltip: HTMLElement;
+    panelScaleTooltip: HTMLElement;
   };
   private statisticsKeyToCellMap: Map<string, HTMLTableCellElement> = new Map();
   private layerResolutionKeyToCellMap: Map<string, HTMLTableCellElement> =
@@ -263,11 +266,20 @@ export class ScreenshotDialog extends Overlay {
       title: splitIntoLines(TOOLTIPS.scaleFactorHelpTooltip),
     });
 
+    const panelScaleTooltip = makeIcon({
+      svg: svg_help,
+      title: splitIntoLines(TOOLTIPS.panelScaleTooltip),
+    });
+    panelScaleTooltip.classList.add(
+      "neuroglancer-screenshot-resolution-table-tooltip",
+    );
+
     return (this.helpTooltips = {
       generalSettingsTooltip,
       orthographicSettingsTooltip,
       layerDataTooltip,
       scaleFactorHelpTooltip,
+      panelScaleTooltip,
     });
   }
 
@@ -630,6 +642,7 @@ export class ScreenshotDialog extends Overlay {
     const physicalValueHeader = document.createElement("th");
     physicalValueHeader.textContent =
       PANEL_TABLE_HEADER_STRINGS.physicalResolution;
+    physicalValueHeader.appendChild(this.helpTooltips.panelScaleTooltip);
     headerRow.appendChild(physicalValueHeader);
     return resolutionTable;
   }
