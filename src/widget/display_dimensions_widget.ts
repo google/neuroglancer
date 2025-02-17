@@ -47,7 +47,6 @@ import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { RenderViewport } from "#src/display_context.js";
 import { quat, vec3 } from "#src/util/geom.js";
-import { TrackableBoolean } from "#src/trackable_boolean.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
 
@@ -115,7 +114,6 @@ export class DisplayDimensionsWidget extends RefCounted {
   fovInputElements: HTMLInputElement[] = [];
 
   namedAxes: NamedAxes | undefined | "zy";
-  disableFOV = new TrackableBoolean(false);
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -358,7 +356,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.namedAxes = this.axes === "yz" ? "zy" : this.axes;
   }
 
-  determineSingleScale() {
+  isUniformDisplayScale() {
     const { displayDimensionIndices, displayDimensionUnits } =
       this.displayDimensionRenderInfo.value;
     const { factors } = this.relativeDisplayScales.value;
@@ -381,7 +379,7 @@ export class DisplayDimensionsWidget extends RefCounted {
    * Check if the current orientation is equal to the default orientation
    * or if the current normal is parallel to the default normal
    */
-  determineAxisAligned() {
+  isOrientationAxisAligned() {
     if (this.axes === undefined) return false;
     let defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
     defaultQuaternion = defaultQuaternion ?? quat.create();
@@ -393,12 +391,17 @@ export class DisplayDimensionsWidget extends RefCounted {
     if (defaultNormal === undefined) return false;
     vec3.transformQuat(currentNormal, [0, 0, 1], currentQuaternion);
     const epsilon = 1e-7;
-    return 1 - Math.abs(vec3.dot(currentNormal, defaultNormal)) <= epsilon;
+    return (
+      Math.abs(1 - Math.abs(vec3.dot(currentNormal, defaultNormal))) <= epsilon
+    );
   }
 
-  disableFovIfNonAxisAlignedNonIsomorphic = () => {
-    this.disableFOV.value =
-      !this.determineSingleScale() && !this.determineAxisAligned();
+  checkFovInputVisibilityConditions = () => {
+    const enableFovInputs =
+      this.namedAxes !== undefined &&
+      (this.isOrientationAxisAligned() || this.isUniformDisplayScale());
+    this.fovGridContainer.style.display = enableFovInputs ? "" : "none";
+    return enableFovInputs;
   };
 
   constructor(
@@ -467,10 +470,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
     if (axes !== undefined) {
       this.registerDisposer(
-        this.orientation.changed.add(this.disableFovIfNonAxisAlignedNonIsomorphic),
-      );
-      this.registerDisposer(
-        this.disableFOV.changed.add(this.scheduleUpdateView),
+        this.orientation.changed.add(this.checkFovInputVisibilityConditions),
       );
     }
     const keyboardHandler = this.registerDisposer(
@@ -780,7 +780,6 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
-    this.disableFovIfNonAxisAlignedNonIsomorphic();
     const {
       dimensionElements,
       displayDimensions: { default: isDefault },
@@ -796,7 +795,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
     // Check if all units and factors are the same.
-    const singleScale = this.determineSingleScale();
+    const singleScale = this.isUniformDisplayScale();
     for (let i = 0; i < 3; ++i) {
       const dim = displayDimensionIndices[i];
       const dimElements = dimensionElements[i];
@@ -830,11 +829,10 @@ export class DisplayDimensionsWidget extends RefCounted {
       updateInputFieldWidth(dimElements.scale);
     }
     // Update the FOV fields
-    if (this.namedAxes !== undefined) {
-      this.fovGridContainer.style.display = this.disableFOV.value ? "none" : "";
+    if (this.checkFovInputVisibilityConditions()) {
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
-        const localAxisIndex = Axis[this.namedAxes[i] as keyof typeof Axis];
+        const localAxisIndex = Axis[this.namedAxes![i] as keyof typeof Axis];
         const totalScale =
           (displayDimensionScales[localAxisIndex] * zoom) /
           canonicalVoxelFactors[localAxisIndex];

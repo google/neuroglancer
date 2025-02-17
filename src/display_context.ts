@@ -35,13 +35,6 @@ import { initializeWebGL } from "#src/webgl/context.js";
 
 const DELAY_AFTER_CONTINUOUS_CAMERA_MOTION_MS = 300;
 
-export interface PanelViewport {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
-
 export class RenderViewport {
   // Width of visible portion of panel in canvas pixels.
   width = 0;
