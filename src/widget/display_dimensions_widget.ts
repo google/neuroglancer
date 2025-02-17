@@ -347,7 +347,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     return this.displayDimensionRenderInfo.relativeDisplayScales;
   }
 
-  /*
+  /**
    * Switches the axes between yz and zy
    * This is because the conventional ordering is first dimension x-axis
    * second dimension y-axis
@@ -377,28 +377,26 @@ export class DisplayDimensionsWidget extends RefCounted {
     return true;
   }
 
+  /**
+   * Check if the current orientation is equal to the default orientation
+   * or if the current normal is parallel to the default normal
+   */
   determineAxisAligned() {
     if (this.axes === undefined) return false;
     let defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
     defaultQuaternion = defaultQuaternion ?? quat.create();
     const currentQuaternion = this.orientation.orientation;
-    console.log(defaultQuaternion, currentQuaternion);
-    console.log(quat.exactEquals(defaultQuaternion, currentQuaternion));
-    // if (quat.exactEquals(defaultQuaternion, currentQuaternion)) return true;
-    // Need to check if the current orientation leaves the plane in the same orientation
-    // But with a potentially flipped normal
-    // Still the normal should be parallel
+    if (quat.equals(defaultQuaternion, currentQuaternion)) return true;
+
     const currentNormal = vec3.create();
     const defaultNormal = AXES_NORMALS.get(this.axes);
     if (defaultNormal === undefined) return false;
     vec3.transformQuat(currentNormal, [0, 0, 1], currentQuaternion);
-    console.log(currentNormal, defaultNormal);
-    // Check if the current normal is parallel to the default normal
-    return Math.abs(vec3.dot(currentNormal, defaultNormal)) < 0.9999;
+    const epsilon = 1e-5;
+    return Math.abs(vec3.dot(currentNormal, defaultNormal)) - 1 < epsilon;
   }
 
-  disableFovIfNonAxisAligned = () => {
-    console.log("test", this.determineAxisAligned());
+  disableFovIfNonAxisAlignedNonIsomorphic = () => {
     this.disableFOV.value =
       !this.determineSingleScale() && !this.determineAxisAligned();
   };
@@ -469,7 +467,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
     if (axes !== undefined) {
       this.registerDisposer(
-        this.orientation.changed.add(this.disableFovIfNonAxisAligned),
+        this.orientation.changed.add(this.disableFovIfNonAxisAlignedNonIsomorphic),
       );
       this.registerDisposer(
         this.disableFOV.changed.add(this.scheduleUpdateView),
@@ -782,7 +780,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
-    this.disableFovIfNonAxisAligned();
+    this.disableFovIfNonAxisAlignedNonIsomorphic();
     const {
       dimensionElements,
       displayDimensions: { default: isDefault },
