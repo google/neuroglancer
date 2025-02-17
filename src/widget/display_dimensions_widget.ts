@@ -392,14 +392,14 @@ export class DisplayDimensionsWidget extends RefCounted {
     );
   }
 
-  private checkFovInputVisibilityConditions(triggerUpdate = true) {
+  private updateFovInputVisibility(triggerUpdateViewOnChange = true) {
     if (this.fovAxesLabels === undefined) return false;
     const enableFovInputs =
       this.isOrientationAxisAligned() || this.isUniformDisplayScale();
     const wasEnabled = this.fovGridContainer.style.display !== "none";
     if (enableFovInputs !== wasEnabled) {
       this.fovGridContainer.style.display = enableFovInputs ? "" : "none";
-      if (triggerUpdate) {
+      if (triggerUpdateViewOnChange) {
         this.scheduleUpdateView();
       }
     }
@@ -480,9 +480,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
     if (fovAxesLabels !== undefined) {
       this.registerDisposer(
-        this.orientation.changed.add(() =>
-          this.checkFovInputVisibilityConditions(),
-        ),
+        this.orientation.changed.add(() => this.updateFovInputVisibility()),
       );
     }
     const keyboardHandler = this.registerDisposer(
@@ -841,7 +839,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       updateInputFieldWidth(dimElements.scale);
     }
     // Update the FOV fields
-    if (this.checkFovInputVisibilityConditions(false /* triggerUpdate */)) {
+    if (this.updateFovInputVisibility(false /* triggerUpdate */)) {
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
         const localAxisIndex =
