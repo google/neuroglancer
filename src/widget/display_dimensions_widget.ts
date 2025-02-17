@@ -341,14 +341,6 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private scheduleUpdateView = animationFrameDebounce(() => this.updateView());
 
-  get displayDimensions() {
-    return this.displayDimensionRenderInfo.displayDimensions;
-  }
-
-  get relativeDisplayScales() {
-    return this.displayDimensionRenderInfo.relativeDisplayScales;
-  }
-
   /**
    * Switches the axes between yz and zy
    * This is because the FOV ordering is first dimension x-axis
@@ -356,11 +348,11 @@ export class DisplayDimensionsWidget extends RefCounted {
    * The xy and xz layouts both follow this ordering, but the yz layout does not.
    * In the yz layout, z is the x-axis and y is the y-axis, so its zy in this convention
    */
-  normalizeAxes() {
+  private normalizeAxes() {
     this.fovAxesLabels = this.axes === "yz" ? "zy" : this.axes;
   }
 
-  isUniformDisplayScale() {
+  private isUniformDisplayScale() {
     const { displayDimensionIndices, displayDimensionUnits } =
       this.displayDimensionRenderInfo.value;
     const { factors } = this.relativeDisplayScales.value;
@@ -383,7 +375,7 @@ export class DisplayDimensionsWidget extends RefCounted {
    * Check if the current orientation is equal to the default orientation
    * or if the current normal is parallel to the default normal
    */
-  isOrientationAxisAligned() {
+  private isOrientationAxisAligned() {
     if (this.axes === undefined) return false;
     let defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
     defaultQuaternion = defaultQuaternion ?? quat.create();
@@ -400,7 +392,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     );
   }
 
-  checkFovInputVisibilityConditions(triggerUpdate = true) {
+  private checkFovInputVisibilityConditions(triggerUpdate = true) {
     if (this.fovAxesLabels === undefined) return false;
     const enableFovInputs =
       this.isOrientationAxisAligned() || this.isUniformDisplayScale();
@@ -412,6 +404,14 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     }
     return enableFovInputs;
+  }
+
+  get displayDimensions() {
+    return this.displayDimensionRenderInfo.displayDimensions;
+  }
+
+  get relativeDisplayScales() {
+    return this.displayDimensionRenderInfo.relativeDisplayScales;
   }
 
   constructor(
