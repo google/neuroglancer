@@ -66,7 +66,6 @@ import {
   vec3,
 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
@@ -587,7 +586,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
   }
 
   getObjectPosition(
-    id: Uint64,
+    id: bigint,
     nearestTo: Float32Array,
   ): Float32Array | undefined {
     const transform = this.displayState.transform.value;
@@ -1061,7 +1060,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     return hasAllChunks;
   }
 
-  getObjectPosition(id: Uint64): Float32Array | undefined {
+  getObjectPosition(id: bigint): Float32Array | undefined {
     const transform = this.displayState.transform.value;
     if (transform.error !== undefined) return undefined;
     const chunk = this.source.chunks.get(getObjectKey(id));

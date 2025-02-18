@@ -24,6 +24,7 @@
  */
 
 import type {
+  TypedArray,
   TypedNumberArray,
   TypedNumberArrayConstructor,
 } from "#src/util/array.js";
@@ -295,7 +296,7 @@ export function computeTextureFormat(
 export function setOneDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
-  data: TypedNumberArray,
+  data: TypedArray,
 ) {
   const {
     arrayConstructor,
@@ -305,7 +306,11 @@ export function setOneDimensionalTextureData(
     texelsPerElement,
   } = format;
   const { maxTextureSize } = gl;
-  const numElements = data.length / arrayElementsPerTexel;
+  const sourceArrayElementsPerTexel =
+    data.BYTES_PER_ELEMENT /
+    arrayConstructor.BYTES_PER_ELEMENT /
+    arrayElementsPerTexel;
+  const numElements = data.length * sourceArrayElementsPerTexel;
   if (numElements * texelsPerElement > maxTextureSize * maxTextureSize) {
     throw new Error(
       "Number of elements exceeds maximum texture size: " +
@@ -380,7 +385,7 @@ export function setTwoDimensionalTextureData(
 export function setThreeDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
-  data: TypedNumberArray,
+  data: TypedArray,
   width: number,
   height: number,
   depth: number,

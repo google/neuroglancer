@@ -29,7 +29,6 @@ import type {
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import type { mat4 } from "#src/util/geom.js";
 import type { FetchOk, HttpError } from "#src/util/http_request.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export const PYCG_APP_VERSION = 1;
 export const GRAPHENE_MESH_NEW_SEGMENT_RPC_ID = "GrapheneMeshSource:NewSegment";
@@ -71,9 +70,9 @@ export class MultiscaleMeshMetadata {
   sharding: Array<ShardingParameters> | undefined;
 }
 
-export function isBaseSegmentId(segmentId: Uint64, nBitsForLayerId: number) {
-  const layerId = Uint64.rshift(new Uint64(), segmentId, 64 - nBitsForLayerId);
-  return Uint64.equal(layerId, Uint64.ONE);
+export function isBaseSegmentId(segmentId: bigint, nBitsForLayerId: number) {
+  const layerId = segmentId >> BigInt(64 - nBitsForLayerId);
+  return layerId == 1n;
 }
 
 export function getGrapheneFragmentKey(fragmentId: string) {

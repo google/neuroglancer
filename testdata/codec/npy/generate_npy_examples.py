@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "numpy",
+# ]
+# ///
 
 # @license
 # Copyright 2016 Google Inc.
@@ -34,18 +40,13 @@ def write_array(array):
         new_array = np.array(array, dtype=dtype.newbyteorder(byte_order))
         name = f"npy_test.{dtype.name}{byte_order_name}"
         np.save(name, new_array)
-    array_for_json = array
-    if dtype == np.uint64:
-        array_for_json = np.asarray(array, dtype=np.dtype("<u8")).view("<u4")
-    if dtype == np.float32:
-        array_for_json = np.asarray(array_for_json, dtype=float)
-    else:
-        array_for_json = np.asarray(array_for_json, dtype=int)
     json_type = float if dtype.kind == "f" else int
+    if dtype == np.uint64:
+        json_type = str
     json_obj = dict(
         dataType=dtype.name,
         shape=array.shape,
-        data=list(json_type(x) for x in array_for_json.ravel()),
+        data=list(json_type(x) for x in array.ravel()),
     )
     with open("npy_test.%s.json" % dtype.name, "w") as f:
         f.write(json.dumps(json_obj))
@@ -58,7 +59,7 @@ shape = (3, 4, 5)
 def write_int_array(dtype):
     dtype = np.dtype(dtype)
     info = np.iinfo(dtype)
-    write_array(gen.randint(low=info.min, high=info.max + 1, size=shape, dtype=dtype))
+    write_array(gen.integers(low=info.min, high=info.max + 1, size=shape, dtype=dtype))
 
 
 write_int_array(np.uint8)
