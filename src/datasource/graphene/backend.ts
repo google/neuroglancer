@@ -213,6 +213,7 @@ interface ShardInfo {
 }
 
 interface GrapheneMultiscaleManifestChunk extends MultiscaleManifestChunk {
+  fragments: Array<FragmentId[]> | null;
   fragmentIds: FragmentId[] | null;
   shardInfo?: ShardInfo;
 }
@@ -231,7 +232,7 @@ function decodeMultiscaleManifestChunk(
     clipLowerBound: vec3.clone(response.clipLowerBound),
     clipUpperBound: vec3.clone(response.clipUpperBound),
   };
-  chunk.fragmentIds = response.fragments;
+  chunk.fragments = response.fragments;
   chunk.manifest.clipLowerBound.fill(0);
   chunk.manifest.clipUpperBound.fill(10000000);
   chunk.manifest.octree[5 * (response.fragments.length - 1) + 4] &= 0x7fffffff;
@@ -292,6 +293,19 @@ async function decodeMultiscaleFragmentChunk(
   );
 }
 
+function mergeArrayBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
+  const totalLength = buffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+  const mergedBuffer = new ArrayBuffer(totalLength);
+  const mergedView = new Uint8Array(mergedBuffer);
+
+  let offset = 0;
+  for (const buffer of buffers) {
+      mergedView.set(new Uint8Array(buffer), offset);
+      offset += buffer.byteLength;
+  }
+  return mergedBuffer;
+}
+
 @registerSharedObject()
 export class GrapheneMultiscaleMeshSource extends WithParameters(
   WithSharedKvStoreContextCounterpart(MultiscaleMeshSource),
@@ -326,7 +340,7 @@ export class GrapheneMultiscaleMeshSource extends WithParameters(
       return decodeManifestChunk(chunk, { fragments: [] });
     }
     const { fetchOkImpl, baseUrl } = this.manifestHttpSource;
-    const manifestPath = `/manifest/multiscale/${chunk.objectId}?verify=1&prepend_seg_ids=1`;
+    const manifestPath = `/manifest/multiscale/${chunk.objectId}?verify=1`;
     const response = await (
       await fetchOkImpl(baseUrl + manifestPath, { signal })
     ).json();
@@ -354,21 +368,23 @@ export class GrapheneMultiscaleMeshSource extends WithParameters(
     const manifestChunk =
       chunk.manifestChunk! as GrapheneMultiscaleManifestChunk;
     const chunkIndex = chunk.chunkIndex;
-    const { fragmentIds } = manifestChunk;
+    const { fragments } = manifestChunk;
 
     try {
-      let fragmentId = null;
-      if (fragmentIds !== null) {
-        fragmentId = fragmentIds[chunkIndex];
-        fragmentId = fragmentId.substring(fragmentId.indexOf(":") + 1);
+      if (fragments !== null) {
+        const fragmentsIds = fragments[chunkIndex];
+        let result: ArrayBuffer[] = new Array();
+        for (const fragmentId of fragmentsIds) {
+          let { response } = await downloadFragment(
+            this.fragmentKvStore,
+            fragmentId,
+            parameters,
+            signal,
+          );
+          result.push(await response.arrayBuffer())
+        }
+        await decodeMultiscaleFragmentChunk(chunk, mergeArrayBuffers(result));
       }
-      const { response } = await downloadFragment(
-        this.fragmentKvStore,
-        fragmentId,
-        parameters,
-        signal,
-      );
-      await decodeMultiscaleFragmentChunk(chunk, await response.arrayBuffer());
     } catch (e) {
       if (isNotFoundError(e)) {
         chunk.source!.removeChunk(chunk);
