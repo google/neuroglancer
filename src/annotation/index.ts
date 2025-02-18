@@ -695,7 +695,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   description: string;
   toJSON: (annotation: T, rank: number) => any;
   restoreState: (annotation: T, obj: any, rank: number) => void;
-  serializedBytes: (rank: number) => number;
+  serializedBytes: (rank: number, annotation?: T) => number;
   serialize: (
     buffer: DataView,
     offset: number,
@@ -871,9 +871,9 @@ export const annotationTypeHandlers: Record<
         ),
       );
     },
-    // TODO need to pull the count into this
-    serializedBytes(rank: number) {
-      return 4 * 2 * rank;
+    serializedBytes(rank: number, annotation: PolyLine | undefined) {
+      if (annotation === undefined) return 0;
+      return 4 * rank * annotation.points.length;
     },
     serialize(
       buffer: DataView,
@@ -1460,8 +1460,10 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
   return annotationSource;
 }
 
+// TODO (SKM) make index non optional
 export interface SerializedAnnotations {
   data: Uint8Array<ArrayBuffer>;
+  index?: Uint8Array<ArrayBuffer>;
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];
@@ -1472,19 +1474,41 @@ function serializeAnnotations(
   propertySerializers: AnnotationPropertySerializer[],
 ): SerializedAnnotations {
   let totalBytes = 0;
+  let indexBytes = 0;
   const typeToOffset: number[] = [];
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
-    const serializedPropertiesBytes = propertySerializer.serializedBytes;
+    let serializedPropertiesBytes = propertySerializer.serializedBytes;
+    // TODO (SKM) temp - make the handler be the one to report the index
+    // bytes
+    // Start offset and number of points both as uint32
+    // TODO (SKM) temp - this is not a good way to set the bytes
+    // It needs to be instead combined into the property serializer
     typeToOffset[annotationType] = totalBytes;
     const annotations: Annotation[] = allAnnotations[annotationType];
+    const handler = annotationTypeHandlers[annotationType];
     const count = annotations.length;
-    totalBytes += serializedPropertiesBytes * count;
+    if (annotationType === AnnotationType.POLYLINE) {
+      console.log(annotations);
+      for (const annotation of annotations) {
+        const bytes = handler.serializedBytes(
+          propertySerializer.rank,
+          annotation,
+        );
+        totalBytes += bytes;
+      }
+      indexBytes += count * 4;
+    } else {
+      totalBytes += serializedPropertiesBytes * count;
+    }
   }
   const typeToIds: string[][] = [];
   const typeToIdMaps: Map<string, number>[] = [];
+  console.log(totalBytes);
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
+  const index = new ArrayBuffer(indexBytes);
+  const indexView = new DataView(index);
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
@@ -1499,8 +1523,18 @@ function serializeAnnotations(
     const serialize = handler.serialize;
     const offset = typeToOffset[annotationType];
     const geometryDataStride = propertySerializer.propertyGroupBytes[0];
+    let indexOffset = 0;
     for (let i = 0, count = annotations.length; i < count; ++i) {
       const annotation = annotations[i];
+      // First store the number of points in the index buffer
+      // TODO (SKM) the handler should be the one to report this
+      if (annotationType === AnnotationType.POLYLINE) {
+        // TODO (SKM) better to directly store offset or n points?
+        indexOffset += handler.serializedBytes(rank, annotation); 
+        // TODO (SKM) this also needs the serialized property pieces
+        indexView.setUint32(i * 4, indexOffset, isLittleEndian);
+      }
+      // TODO (SKM) make serialize accept the IndexView and handle both
       serialize(
         dataView,
         offset + i * geometryDataStride,
@@ -1518,7 +1552,13 @@ function serializeAnnotations(
       );
     }
   }
-  return { data: new Uint8Array(data), typeToIds, typeToOffset, typeToIdMaps };
+  return {
+    data: new Uint8Array(data),
+    index: new Uint8Array(index),
+    typeToIds,
+    typeToOffset,
+    typeToIdMaps,
+  };
 }
 
 export class AnnotationSerializer {
