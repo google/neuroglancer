@@ -17,9 +17,8 @@
 import type { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
-import { parseArray } from "#src/util/json.js";
+import { parseArray, parseUint64 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
@@ -67,16 +66,14 @@ export class SharedDisjointUint64Sets
     return obj;
   }
 
-  link(a: Uint64, b: Uint64) {
+  link(a: bigint, b: bigint) {
     if (this.disjointSets.link(a, b)) {
       const { rpc } = this;
       if (rpc) {
         rpc.invoke(ADD_METHOD_ID, {
           id: this.rpcId,
-          al: a.low,
-          ah: a.high,
-          bl: b.low,
-          bh: b.high,
+          a: a,
+          b: b,
         });
       }
       this.changed.dispatch();
@@ -85,17 +82,17 @@ export class SharedDisjointUint64Sets
     return false;
   }
 
-  linkAll(ids: Uint64[]) {
+  linkAll(ids: bigint[]) {
     for (let i = 1, length = ids.length; i < length; ++i) {
       this.link(ids[0], ids[i]);
     }
   }
 
-  has(x: Uint64): boolean {
+  has(x: bigint): boolean {
     return this.disjointSets.has(x);
   }
 
-  get(x: Uint64): Uint64 {
+  get(x: bigint): bigint {
     return this.disjointSets.get(x);
   }
 
@@ -109,18 +106,17 @@ export class SharedDisjointUint64Sets
     }
   }
 
-  setElements(a: Uint64) {
+  setElements(a: bigint) {
     return this.disjointSets.setElements(a);
   }
 
-  deleteSet(x: Uint64) {
+  deleteSet(x: bigint) {
     if (this.disjointSets.deleteSet(x)) {
       const { rpc } = this;
       if (rpc) {
         rpc.invoke(DELETE_SET_METHOD_ID, {
           id: this.rpcId,
-          l: x.low,
-          h: x.high,
+          x,
         });
       }
       this.changed.dispatch();
@@ -140,13 +136,14 @@ export class SharedDisjointUint64Sets
    */
   restoreState(obj: any) {
     if (obj !== undefined) {
-      const ids = [new Uint64(), new Uint64()];
       parseArray(obj, (z) => {
-        parseArray(z, (s, index) => {
-          ids[index % 2].parseString(String(s), 10);
-          if (index !== 0) {
-            this.link(ids[0], ids[1]);
+        let prev: bigint | undefined;
+        parseArray(z, (s) => {
+          const cur = parseUint64(s);
+          if (prev !== undefined) {
+            this.link(prev, cur);
           }
+          prev = cur;
         });
       });
     }
@@ -163,16 +160,9 @@ export class SharedDisjointUint64Sets
   }
 }
 
-const tempA = new Uint64();
-const tempB = new Uint64();
-
 registerRPC(ADD_METHOD_ID, function (x) {
   const obj = <SharedDisjointUint64Sets>this.get(x.id);
-  tempA.low = x.al;
-  tempA.high = x.ah;
-  tempB.low = x.bl;
-  tempB.high = x.bh;
-  if (obj.disjointSets.link(tempA, tempB)) {
+  if (obj.disjointSets.link(x.a, x.b)) {
     obj.changed.dispatch();
   }
 });
@@ -198,9 +188,7 @@ registerRPC(HIGH_BIT_REPRESENTATIVE_CHANGED_ID, function (x) {
 
 registerRPC(DELETE_SET_METHOD_ID, function (x) {
   const obj = <SharedDisjointUint64Sets>this.get(x.id);
-  tempA.low = x.l;
-  tempA.high = x.h;
-  if (obj.disjointSets.deleteSet(tempA)) {
+  if (obj.disjointSets.deleteSet(x.x)) {
     obj.changed.dispatch();
   }
 });

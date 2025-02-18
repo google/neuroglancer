@@ -25,7 +25,6 @@ import { hsvToRgb } from "#src/util/colorspace.js";
 import { getRandomUint32 } from "#src/util/random.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_hsvToRgb, glsl_uint64 } from "#src/webgl/shader_lib.js";
@@ -95,16 +94,16 @@ export class SegmentColorHash implements Trackable {
     }
   }
 
-  compute(out: Float32Array, x: Uint64) {
-    let h = hashCombine(this.hashSeed, x.low);
-    h = hashCombine(h, x.high);
+  compute(out: Float32Array, x: bigint) {
+    let h = hashCombine(this.hashSeed, Number(x & 0xffffffffn));
+    h = hashCombine(h, Number(x >> 32n));
     const c0 = (h & 0xff) / 255;
     const c1 = ((h >> 8) & 0xff) / 255;
     hsvToRgb(out, c0, 0.5 + 0.5 * c1, 1.0);
     return out;
   }
 
-  computeCssColor(x: Uint64) {
+  computeCssColor(x: bigint) {
     this.compute(tempColor, x);
     return getCssColor(tempColor);
   }
