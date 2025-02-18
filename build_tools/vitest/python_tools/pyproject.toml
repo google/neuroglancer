@@ -1,0 +1,8 @@
+[project]
+name = "python-tools"
+description = "Python tools used by the test suite"
+version = "0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "moto[s3,server]>=5.0.28",
+]

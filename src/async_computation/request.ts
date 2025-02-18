@@ -15,21 +15,18 @@
  */
 
 import type { AsyncComputationSpec } from "#src/async_computation/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { CANCELED } from "#src/util/cancellation.js";
 
 let numWorkers = 0;
 const freeWorkers: Worker[] = [];
 const pendingTasks = new Map<
   number,
-  { msg: any; transfer: Transferable[] | undefined }
+  { msg: any; transfer: Transferable[] | undefined; cleanup?: () => void }
 >();
 const tasks = new Map<
   number,
   {
     resolve: (value: any) => void;
     reject: (error: any) => void;
-    cleanup: () => void;
   }
 >();
 // On Safari, `navigator.hardwareConcurrency` is not defined.
@@ -42,6 +39,7 @@ let nextTaskId = 0;
 function returnWorker(worker: Worker) {
   for (const [id, task] of pendingTasks) {
     pendingTasks.delete(id);
+    task.cleanup?.();
     worker.postMessage(task.msg, task.transfer as Transferable[]);
     return;
   }
@@ -75,9 +73,8 @@ function launchWorker() {
     const callbacks = tasks.get(id)!;
     tasks.delete(id);
     if (callbacks === undefined) return;
-    callbacks.cleanup();
     if (error !== undefined) {
-      callbacks.reject(new Error(error));
+      callbacks.reject(error);
     } else {
       callbacks.resolve(value);
     }
@@ -88,27 +85,40 @@ export function requestAsyncComputation<
   Signature extends (...args: any) => any,
 >(
   request: AsyncComputationSpec<Signature>,
-  cancellationToken: CancellationToken,
+  signal: AbortSignal | undefined,
   transfer: Transferable[] | undefined,
   ...args: Parameters<Signature>
 ): Promise<ReturnType<Signature>> {
-  if (cancellationToken.isCanceled) return Promise.reject(CANCELED);
   const id = nextTaskId++;
   const msg = { t: request.id, id, args: args };
-  const cleanup = cancellationToken.add(() => {
-    pendingTasks.delete(id);
-    tasks.delete(id);
-  });
+
+  signal?.throwIfAborted();
+
   const promise = new Promise<ReturnType<Signature>>((resolve, reject) => {
-    tasks.set(id, { resolve, reject, cleanup });
+    tasks.set(id, { resolve, reject });
   });
+
   if (freeWorkers.length !== 0) {
     freeWorkers.pop()!.postMessage(msg, transfer as Transferable[]);
   } else {
-    pendingTasks.set(id, { msg, transfer });
+    let cleanup: (() => void) | undefined;
+    if (signal !== undefined) {
+      function abortHandler() {
+        pendingTasks.delete(id);
+        const task = tasks.get(id)!;
+        tasks.delete(id);
+        task.reject(signal!.reason);
+      }
+      signal.addEventListener("abort", abortHandler, { once: true });
+      cleanup = () => {
+        signal.removeEventListener("abort", abortHandler);
+      };
+    }
+    pendingTasks.set(id, { msg, transfer, cleanup });
     if (tasks.size > numWorkers && numWorkers < maxWorkers) {
       launchWorker();
     }
   }
+
   return promise;
 }

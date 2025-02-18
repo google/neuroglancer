@@ -130,7 +130,7 @@ class BundleClientCommand(
 ):
     editable_mode: bool = False
 
-    user_options = [
+    user_options = [  # type: ignore[assignment]
         (
             "client-bundle-type=",
             None,

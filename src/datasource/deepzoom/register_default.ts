@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-import { DeepzoomDataSource } from "#src/datasource/deepzoom/frontend.js";
-import { registerProvider } from "#src/datasource/default_provider.js";
+import {
+  DeepzoomDataSource,
+  registerAutoDetect,
+} from "#src/datasource/deepzoom/frontend.js";
+import {
+  dataSourceAutoDetectRegistry,
+  registerKvStoreBasedDataProvider,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
 
-registerProvider("deepzoom", () => new DeepzoomDataSource());
+const provider = new DeepzoomDataSource();
+registerKvStoreBasedDataProvider(provider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
+registerAutoDetect(dataSourceAutoDetectRegistry);

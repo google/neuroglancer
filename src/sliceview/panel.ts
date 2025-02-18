@@ -100,7 +100,7 @@ const tempVec3b = vec3.create();
 const tempVec4 = vec4.create();
 
 export class SliceViewPanel extends RenderedDataPanel {
-  viewer: SliceViewerState;
+  declare viewer: SliceViewerState;
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   private sliceViewRenderHelper = this.registerDisposer(
@@ -435,7 +435,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   ensureBoundsUpdated() {
-    super.ensureBoundsUpdated();
+    super.ensureBoundsUpdated(true /* canScaleForScreenshot */);
     this.sliceView.projectionParameters.setViewport(this.renderViewport);
   }
 

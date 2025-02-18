@@ -46,7 +46,7 @@ const OME_UNITS = new Map<string, { unit: string; scale: number }>([
   ["foot", { unit: "m", scale: 0.3048 }],
   ["inch", { unit: "m", scale: 0.0254 }],
   ["mile", { unit: "m", scale: 1609.34 }],
-  // eslint-disable-next-line @typescript-eslint/no-loss-of-precision
+  // eslint-disable-next-line no-loss-of-precision
   ["parsec", { unit: "m", scale: 3.0856775814913673e16 }],
   ["yard", { unit: "m", scale: 0.9144 }],
   ["minute", { unit: "s", scale: 60 }],
@@ -138,7 +138,7 @@ const coordinateTransformParsers = new Map([
 function parseOmeCoordinateTransform(
   rank: number,
   transformJson: unknown,
-): Float64Array {
+): Float64Array<ArrayBuffer> {
   verifyObject(transformJson);
   const transformType = verifyObjectProperty(
     transformJson,
@@ -163,7 +163,7 @@ function parseOmeCoordinateTransforms(
   parseArray(transforms, (transformJson) => {
     const newTransform = parseOmeCoordinateTransform(rank, transformJson);
     transform = matrix.multiply(
-      new Float64Array(transform.length),
+      new Float64Array(transform.length) as Float64Array<ArrayBuffer>,
       rank + 1,
       newTransform,
       rank + 1,
@@ -188,7 +188,7 @@ function parseMultiscaleScale(
     "coordinateTransformations",
     (x) => parseOmeCoordinateTransforms(rank, x),
   );
-  const scaleUrl = `${url}/${path}`;
+  const scaleUrl = `${url}${path}/`;
   return { url: scaleUrl, transform };
 }
 
@@ -211,7 +211,7 @@ function parseOmeMultiscale(
     parseArray(obj, (x) => {
       const scale = parseMultiscaleScale(rank, url, x);
       scale.transform = matrix.multiply(
-        new Float64Array((rank + 1) ** 2),
+        new Float64Array((rank + 1) ** 2) as Float64Array<ArrayBuffer>,
         rank + 1,
         transform,
         rank + 1,

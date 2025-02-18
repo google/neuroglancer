@@ -287,7 +287,7 @@ export function getRenderLayerTransform(
       subspaceRank + 1,
       subspaceRank + 1,
       subspaceRank + 1,
-    );
+    ) as Float32Array<ArrayBuffer>;
   }
   const channelSpaceShape = new Uint32Array(channelRank);
   const {

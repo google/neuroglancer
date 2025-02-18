@@ -51,8 +51,7 @@ import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { Uint64 } from "#src/util/uint64.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import type { Buffer } from "#src/webgl/buffer.js";
-import { getMemoizedBuffer } from "#src/webgl/buffer.js";
+import { GLBuffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
@@ -594,7 +593,7 @@ abstract class BaseLookupTexture extends RefCounted {
  */
 class DirectLookupTableTexture extends BaseLookupTexture {
   texture: WebGLTexture | null = null;
-  protected priorOptions: LookupTableTextureOptions | undefined = undefined;
+  declare protected priorOptions: LookupTableTextureOptions | undefined;
 
   constructor(public gl: GL | null) {
     super(gl);
@@ -623,7 +622,7 @@ class DirectLookupTableTexture extends BaseLookupTexture {
 }
 
 export class ControlPointTexture extends BaseLookupTexture {
-  protected priorOptions: ControlPointTextureOptions | undefined;
+  declare protected priorOptions: ControlPointTextureOptions | undefined;
   constructor(public gl: GL | null) {
     super(gl);
   }
@@ -666,80 +665,88 @@ export class ControlPointTexture extends BaseLookupTexture {
   }
 }
 
+function getDataValuesArray() {
+  const array = new Uint8Array(NUM_CDF_LINES * VERTICES_PER_LINE);
+  for (let i = 0; i < NUM_CDF_LINES; ++i) {
+    for (let j = 0; j < VERTICES_PER_LINE; ++j) {
+      array[i * VERTICES_PER_LINE + j] = i;
+    }
+  }
+  return array;
+}
+
+function getTextureVertexBufferArray() {
+  return createGriddedRectangleArray(TRANSFER_FUNCTION_PANEL_SIZE);
+}
+
 /**
  * Display the UI canvas for the transfer function widget and
  * handle shader updates for elements of the canvas
  */
 class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: DirectLookupTableTexture;
-  private textureVertexBuffer: Buffer;
-  private textureVertexBufferArray: Float32Array;
-  private controlPointsVertexBuffer: Buffer;
+  private textureVertexBuffer: GLBuffer;
+  private controlPointsVertexBuffer: GLBuffer;
   private controlPointsPositionArray = new Float32Array();
-  private controlPointsColorBuffer: Buffer;
+  private controlPointsColorBuffer: GLBuffer;
   private controlPointsColorArray = new Float32Array();
-  private linePositionBuffer: Buffer;
+  private linePositionBuffer: GLBuffer;
   private linePositionArray = new Float32Array();
   get drawOrder() {
     return 1;
   }
-  transferFunction = this.registerDisposer(
-    new TransferFunction(
-      this.parent.dataType,
-      this.parent.trackable,
-      TRANSFER_FUNCTION_PANEL_SIZE,
-    ),
-  );
-  controller = this.registerDisposer(
-    new TransferFunctionController(
-      this.element,
-      this.parent.dataType,
-      this.transferFunction,
-      () => this.parent.trackable.value,
-      (value: TransferFunctionParameters) => {
-        this.parent.trackable.value = value;
-      },
-    ),
-  );
-  private dataValuesBuffer = this.registerDisposer(
-    getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => {
-      const array = new Uint8Array(NUM_CDF_LINES * VERTICES_PER_LINE);
-      for (let i = 0; i < NUM_CDF_LINES; ++i) {
-        for (let j = 0; j < VERTICES_PER_LINE; ++j) {
-          array[i * VERTICES_PER_LINE + j] = i;
-        }
-      }
-      return array;
-    }),
-  ).value;
+  transferFunction: TransferFunction;
+  controller: TransferFunctionController;
+  private dataValuesBuffer;
 
   constructor(public parent: TransferFunctionWidget) {
     super(parent.display, document.createElement("div"), parent.visibility);
     const { element, gl } = this;
-    element.classList.add("neuroglancer-transfer-function-panel");
-    this.textureVertexBufferArray = createGriddedRectangleArray(
-      TRANSFER_FUNCTION_PANEL_SIZE,
-    );
-    this.texture = this.registerDisposer(new DirectLookupTableTexture(gl));
 
-    function createBuffer(dataArray: Float32Array) {
-      return getMemoizedBuffer(
+    this.transferFunction = this.registerDisposer(
+      new TransferFunction(
+        parent.dataType,
+        parent.trackable,
+        TRANSFER_FUNCTION_PANEL_SIZE,
+      ),
+    );
+    this.controller = this.registerDisposer(
+      new TransferFunctionController(
+        element,
+        parent.dataType,
+        this.transferFunction,
+        () => parent.trackable.value,
+        (value: TransferFunctionParameters) => {
+          parent.trackable.value = value;
+        },
+      ),
+    );
+    this.dataValuesBuffer = this.registerDisposer(
+      getMemoizedBuffer(
         gl,
         WebGL2RenderingContext.ARRAY_BUFFER,
-        () => dataArray,
-      ).value;
-    }
+        getDataValuesArray,
+      ),
+    ).value;
+
+    element.classList.add("neuroglancer-transfer-function-panel");
+    this.texture = this.registerDisposer(new DirectLookupTableTexture(gl));
+
     this.textureVertexBuffer = this.registerDisposer(
-      createBuffer(this.textureVertexBufferArray),
-    );
+      getMemoizedBuffer(
+        gl,
+        WebGL2RenderingContext.ARRAY_BUFFER,
+        getTextureVertexBufferArray,
+      ),
+    ).value;
     this.controlPointsVertexBuffer = this.registerDisposer(
-      createBuffer(this.controlPointsPositionArray),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
     this.controlPointsColorBuffer = this.registerDisposer(
-      createBuffer(this.controlPointsColorArray),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
     this.linePositionBuffer = this.registerDisposer(
-      createBuffer(this.linePositionArray),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
   }
 

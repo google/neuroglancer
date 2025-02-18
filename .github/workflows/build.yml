@@ -7,6 +7,13 @@ on:
     tags:
       - v**
   pull_request:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: "Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)"
+        required: false
+        default: false
 
 jobs:
   client:
@@ -24,12 +31,20 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
-            examples/**/package-lock.json
-      - run: npm install
+      # uv required for javascript tests
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
+      # go needed for fake_gcs_server used by the javascript tests
+      - name: Setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - run: npm ci
       - run: npm run format:fix
       - name: Check for dirty working directory
         run: git diff --exit-code
@@ -47,7 +62,6 @@ jobs:
       - run: npm run build-package
       - run: npm publish --dry-run
         working-directory: dist/package
-      - uses: ./.github/actions/setup-firefox
       - name: Run JavaScript tests (including WebGL)
         run: npm test
         if: ${{ runner.os != 'macOS' }}
@@ -68,6 +82,36 @@ jobs:
           name: client
           path: dist/client
         if: ${{ runner.os == 'Linux' }}
+  example-project-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: "pnpm"
+          cache-dependency-path: |
+            examples/**/pnpm-lock.yaml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+      - run: npm ci
+      - run: npm run example-project-test -- --reporter=html
+      - name: Upload report and built clients
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: example-project-test-results
+          path: |
+            playwright-report/
+            examples/*/*/dist/
 
   # Builds Python package and runs Python tests
   #
@@ -92,17 +136,17 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # Uncomment the action below for an interactive shell
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
+      - uses: ./.github/actions/setup-firefox
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
       - name: Install Python packaging/test tools
         run: pip install tox nox wheel numpy -r python/requirements-test.txt
-      - uses: ./.github/actions/setup-firefox
       - run: nox -s lint format mypy
       - name: Check for dirty working directory
         run: git diff --exit-code
@@ -139,7 +183,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: "npm"
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -149,7 +193,7 @@ jobs:
         id: pip-cache
         run: |
           echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
-      - run: npm install
+      - run: npm ci
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
           npm run build-python -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"
@@ -214,7 +258,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           registry-url: "https://registry.npmjs.org"
       - uses: actions/download-artifact@v4
         with:

@@ -21,7 +21,7 @@ import { decompressPng } from "#src/sliceview/png/index.js";
 registerAsyncComputation(
   decodePng,
   async (
-    data: Uint8Array,
+    data,
     width: number | undefined,
     height: number | undefined,
     // Expected width * height

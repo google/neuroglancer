@@ -18,28 +18,21 @@ import { decodeBlosc } from "#src/async_computation/decode_blosc_request.js";
 import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import {
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
 } from "#src/datasource/n5/base.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 import { Endianness } from "#src/util/endian.js";
 import { decodeGzip } from "#src/util/gzip.js";
-import {
-  isNotFoundError,
-  responseArrayBuffer,
-} from "#src/util/http_request.js";
-import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
-import { cancellableFetchSpecialOk } from "#src/util/special_protocol_request.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 async function decodeChunk(
   chunk: VolumeChunk,
-  cancellationToken: CancellationToken,
+  signal: AbortSignal,
   response: ArrayBuffer,
   encoding: VolumeChunkEncoding,
 ) {
@@ -61,13 +54,16 @@ async function decodeChunk(
   chunk.chunkDataSize = shape;
   let buffer = new Uint8Array(response, offset);
   switch (encoding) {
+    case VolumeChunkEncoding.ZLIB:
+      buffer = new Uint8Array(await decodeGzip(buffer, "deflate"));
+      break;
     case VolumeChunkEncoding.GZIP:
-      buffer = new Uint8Array(await decodeGzip(buffer));
+      buffer = new Uint8Array(await decodeGzip(buffer, "gzip"));
       break;
     case VolumeChunkEncoding.BLOSC:
       buffer = await requestAsyncComputation(
         decodeBlosc,
-        cancellationToken,
+        signal,
         [buffer.buffer],
         buffer,
       );
@@ -75,7 +71,7 @@ async function decodeChunk(
     case VolumeChunkEncoding.ZSTD:
       buffer = await requestAsyncComputation(
         decodeZstd,
-        cancellationToken,
+        signal,
         [buffer.buffer],
         buffer,
       );
@@ -83,7 +79,7 @@ async function decodeChunk(
   }
   await decodeRawChunk(
     chunk,
-    cancellationToken,
+    signal,
     buffer.buffer,
     Endianness.BIG,
     buffer.byteOffset,
@@ -93,35 +89,32 @@ async function decodeChunk(
 
 @registerSharedObject()
 export class PrecomputedVolumeChunkSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    VolumeChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {
-  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
-    const { parameters } = this;
+  private chunkKvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
+    const { parameters, chunkKvStore } = this;
     const { chunkGridPosition } = chunk;
-    let url = parameters.url;
+    let path = chunkKvStore.path;
     const rank = this.spec.rank;
     for (let i = 0; i < rank; ++i) {
-      url += `/${chunkGridPosition[i]}`;
+      if (i !== 0) {
+        path += "/";
+      }
+      path += `${chunkGridPosition[i]}`;
     }
-    try {
-      const response = await cancellableFetchSpecialOk(
-        this.credentialsProvider,
-        url,
-        {},
-        responseArrayBuffer,
-        cancellationToken,
-      );
-      await decodeChunk(
-        chunk,
-        cancellationToken,
-        response,
-        parameters.encoding,
-      );
-    } catch (e) {
-      if (!isNotFoundError(e)) throw e;
-    }
+    const response = await chunkKvStore.store.read(path, {
+      signal,
+    });
+    if (response === undefined) return;
+    await decodeChunk(
+      chunk,
+      signal,
+      await response.response.arrayBuffer(),
+      parameters.encoding,
+    );
   }
 }

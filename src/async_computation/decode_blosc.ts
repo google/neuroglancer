@@ -17,9 +17,9 @@
 import { decodeBlosc } from "#src/async_computation/decode_blosc_request.js";
 import { registerAsyncComputation } from "#src/async_computation/handler.js";
 
-registerAsyncComputation(decodeBlosc, async (data: Uint8Array) => {
+registerAsyncComputation(decodeBlosc, async (data) => {
   const { default: Blosc } = await import("numcodecs/blosc");
   const codec = Blosc.fromConfig({ id: "blosc" });
-  const result = await codec.decode(data);
+  const result = (await codec.decode(data)) as Uint8Array<ArrayBuffer>;
   return { value: result, transfer: [result.buffer] };
 });

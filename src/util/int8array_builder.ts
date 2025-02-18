@@ -1,4 +1,4 @@
-// DO NOT EDIT.  Generated from templates/neuroglancer/util/typedarray_builder.template.ts.
+// DO NOT EDIT.  Generated from templates/util/typedarray_builder.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
@@ -17,9 +17,9 @@
 
 export class Int8ArrayBuilder {
   length = 0;
-  data: Int8Array;
+  data: Int8Array<ArrayBuffer>;
 
-  constructor(initialCapacity = 16) {
+  constructor(initialCapacity: number = 16) {
     this.data = new Int8Array(initialCapacity);
   }
 
@@ -35,7 +35,11 @@ export class Int8ArrayBuilder {
 
   get view() {
     const { data } = this;
-    return new Int8Array(data.buffer, data.byteOffset, this.length);
+    return new Int8Array<ArrayBuffer>(
+      data.buffer,
+      data.byteOffset,
+      this.length,
+    );
   }
 
   shrinkToFit() {

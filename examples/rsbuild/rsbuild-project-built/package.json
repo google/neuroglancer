@@ -1,0 +1,23 @@
+{
+  "name": "neuroglancer-rsbuild-project-built",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test of an rsbuild project that depends on Neuroglancer.",
+  "scripts": {
+    "build": "rsbuild build",
+    "dev-server": "rsbuild dev"
+  },
+  "dependencies": {
+    "neuroglancer": "file:../../../dist/package"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ],
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@rsbuild/core": "^1.1.9"
+  },
+  "type": "module"
+}

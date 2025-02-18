@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
-import { NiftiDataSource } from "#src/datasource/nifti/frontend.js";
+import {
+  dataSourceAutoDetectRegistry,
+  registerKvStoreBasedDataProvider,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
+import {
+  NiftiDataSource,
+  registerAutoDetect,
+} from "#src/datasource/nifti/frontend.js";
 
-registerProvider("nifti", () => new NiftiDataSource());
+const provider = new NiftiDataSource();
+registerKvStoreBasedDataProvider(provider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
+registerAutoDetect(dataSourceAutoDetectRegistry);

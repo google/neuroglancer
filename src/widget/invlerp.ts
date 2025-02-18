@@ -347,20 +347,21 @@ class CdfPanel extends IndirectRenderedPanel {
   get drawOrder() {
     return 100;
   }
-  controller = this.registerDisposer(
-    new CdfController(
-      this.element,
-      this.parent.dataType,
-      () => this.parent.trackable.value,
-      (value: InvlerpParameters) => {
-        this.parent.trackable.value = value;
-      },
-    ),
-  );
+  controller;
   constructor(public parent: InvlerpWidget) {
     super(parent.display, document.createElement("div"), parent.visibility);
     const { element } = this;
     element.classList.add("neuroglancer-invlerp-cdfpanel");
+    this.controller = this.registerDisposer(
+      new CdfController(
+        element,
+        parent.dataType,
+        () => parent.trackable.value,
+        (value: InvlerpParameters) => {
+          parent.trackable.value = value;
+        },
+      ),
+    );
   }
 
   private dataValuesBuffer = this.registerDisposer(
@@ -730,10 +731,7 @@ export function adjustInvlerpBrightnessContrast(
 
 export class InvlerpWidget extends Tab {
   cdfPanel = this.registerDisposer(new CdfPanel(this));
-  boundElements = {
-    range: createRangeBoundInputs("range", this.dataType, this.trackable),
-    window: createRangeBoundInputs("window", this.dataType, this.trackable),
-  };
+  boundElements;
   invertArrows: HTMLElement[];
   autoRangeFinder: AutoRangeFinder;
   get texture() {
@@ -754,6 +752,11 @@ export class InvlerpWidget extends Tab {
     public legendShaderOptions: LegendShaderOptions | undefined,
   ) {
     super(visibility);
+    this.boundElements = {
+      range: createRangeBoundInputs("range", dataType, trackable),
+      window: createRangeBoundInputs("window", dataType, trackable),
+    };
+
     this.registerDisposer(
       histogramSpecifications.visibility.add(this.visibility),
     );

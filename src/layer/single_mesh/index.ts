@@ -120,7 +120,7 @@ export class SingleMeshUserLayer extends UserLayer {
   }
 
   static type = "mesh";
-  static typeAbbreviation = "mesh";
+  static typeAbbreviation = "msh";
 }
 
 function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
@@ -193,13 +193,16 @@ function makeVertexAttributeWidget(layer: SingleMeshUserLayer) {
 }
 
 class DisplayOptionsTab extends Tab {
-  attributeWidget = this.registerDisposer(
-    makeVertexAttributeWidget(this.layer),
-  );
-  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  attributeWidget: VertexAttributeWidget;
+  codeWidget: ShaderCodeWidget;
+
   constructor(public layer: SingleMeshUserLayer) {
     super();
     const { element } = this;
+    this.attributeWidget = this.registerDisposer(
+      makeVertexAttributeWidget(layer),
+    );
+    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(layer));
     element.classList.add("neuroglancer-single-mesh-dropdown");
     const topRow = document.createElement("div");
     topRow.className = "neuroglancer-single-mesh-dropdown-top-row";
@@ -239,12 +242,14 @@ class DisplayOptionsTab extends Tab {
 }
 
 class ShaderCodeOverlay extends Overlay {
-  attributeWidget = this.registerDisposer(
-    makeVertexAttributeWidget(this.layer),
-  );
-  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  attributeWidget: VertexAttributeWidget;
+  codeWidget: ShaderCodeWidget;
   constructor(public layer: SingleMeshUserLayer) {
     super();
+    this.attributeWidget = this.registerDisposer(
+      makeVertexAttributeWidget(layer),
+    );
+    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(layer));
     this.content.classList.add("neuroglancer-single-mesh-layer-shader-overlay");
     this.content.appendChild(this.attributeWidget.element);
     this.content.appendChild(this.codeWidget.element);

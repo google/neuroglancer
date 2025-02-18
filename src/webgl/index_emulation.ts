@@ -15,7 +15,7 @@
  */
 
 import { RefCounted } from "#src/util/disposable.js";
-import { Buffer } from "#src/webgl/buffer.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_uint32 } from "#src/webgl/shader_lib.js";
@@ -23,11 +23,11 @@ import { glsl_uint32 } from "#src/webgl/shader_lib.js";
 export class CountingBuffer extends RefCounted {
   length: number | undefined;
   webglType: number | undefined;
-  buffer: Buffer;
+  buffer: GLBuffer;
 
   constructor(public gl: GL) {
     super();
-    this.buffer = this.registerDisposer(new Buffer(gl));
+    this.buffer = this.registerDisposer(new GLBuffer(gl));
   }
 
   resize(length: number) {
@@ -115,7 +115,7 @@ export class IndexBufferAttributeHelper {
     builder.addAttribute("highp uint", this.name);
   }
 
-  bind(buffer: Buffer, shader: ShaderProgram) {
+  bind(buffer: GLBuffer, shader: ShaderProgram) {
     const attrib = shader.attribute(this.name);
     buffer.bindToVertexAttribI(
       attrib,
@@ -130,7 +130,7 @@ export class IndexBufferAttributeHelper {
 }
 
 export function makeIndexBuffer(gl: WebGL2RenderingContext, data: Uint32Array) {
-  return Buffer.fromData(
+  return GLBuffer.fromData(
     gl,
     data,
     WebGL2RenderingContext.ARRAY_BUFFER,

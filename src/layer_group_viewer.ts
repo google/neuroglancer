@@ -60,11 +60,7 @@ import { registerNested } from "#src/trackable_value.js";
 import { ContextMenu } from "#src/ui/context_menu.js";
 import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
 import { LayerBar } from "#src/ui/layer_bar.js";
-import {
-  endLayerDrag,
-  getDropEffectFromModifiers,
-  startLayerDrag,
-} from "#src/ui/layer_drag_and_drop.js";
+import { endLayerDrag, startLayerDrag } from "#src/ui/layer_drag_and_drop.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
 import { LocalToolBinder } from "#src/ui/tool.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
@@ -72,6 +68,7 @@ import type { TrackableRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
+import { getDropEffectFromModifiers } from "#src/util/drag_and_drop.js";
 import {
   dispatchEventAction,
   registerActionListener,
@@ -567,7 +564,7 @@ export class LayerGroupViewer extends RefCounted {
               if (layout !== "3d") {
                 newLayout = `${layout}-3d`;
               } else {
-                newLayout = "4panel";
+                newLayout = "4panel-alt";
               }
             } else {
               newLayout = layout;
@@ -581,6 +578,7 @@ export class LayerGroupViewer extends RefCounted {
       const layerPanelElement = layerPanel.element;
       layerPanelElement.addEventListener("dragstart", (event: DragEvent) => {
         pushDragStatus(
+          event,
           layerPanel.element,
           "drag",
           "Drag layer group to the left/top/right/bottom edge of a layer group, or to another layer bar/panel (including in another Neuroglancer window)",
@@ -606,8 +604,8 @@ export class LayerGroupViewer extends RefCounted {
           layerPanel.element.style.backgroundColor = "";
         }, 0);
       });
-      layerPanel.element.addEventListener("dragend", () => {
-        popDragStatus(layerPanelElement, "drag");
+      layerPanel.element.addEventListener("dragend", (event: DragEvent) => {
+        popDragStatus(event, layerPanelElement, "drag");
         endLayerDrag();
         if (dragSource !== undefined && dragSource.viewer === this) {
           dragSource.disposer();

@@ -47,10 +47,11 @@ export const LAYER_SIDE_PANEL_DEFAULT_LOCATION = {
 };
 
 export class UserLayerSidePanelState extends RefCounted {
-  layer = this.panels.layer;
+  layer: UserLayer;
   location = new TrackableSidePanelLocation(LAYER_SIDE_PANEL_DEFAULT_LOCATION);
   constructor(public panels: UserLayerSidePanelsState) {
     super();
+    this.layer = this.panels.layer;
   }
 
   initialize() {

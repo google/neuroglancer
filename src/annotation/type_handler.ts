@@ -31,7 +31,7 @@ import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js"
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { mat4 } from "#src/util/geom.js";
-import type { Buffer } from "#src/webgl/buffer.js";
+import type { GLBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
@@ -65,7 +65,7 @@ export type AnnotationShaderGetter = ParameterizedContextDependentShaderGetter<
 >;
 
 export interface AnnotationRenderContext {
-  buffer: Buffer;
+  buffer: GLBuffer;
   annotationLayer: AnnotationLayer;
   renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext;
   bufferOffset: number;

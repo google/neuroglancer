@@ -269,7 +269,7 @@ class PerspectiveViewState extends PerspectiveViewStateBase {
 }
 
 export class PerspectivePanel extends RenderedDataPanel {
-  viewer: PerspectiveViewerState;
+  declare viewer: PerspectiveViewerState;
 
   projectionParameters: Owned<DerivedProjectionParameters>;
 
@@ -605,7 +605,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   ensureBoundsUpdated() {
-    super.ensureBoundsUpdated();
+    super.ensureBoundsUpdated(true /* canScaleForScreenshot */);
     this.projectionParameters.setViewport(this.renderViewport);
   }
 

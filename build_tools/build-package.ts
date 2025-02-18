@@ -32,8 +32,11 @@ function buildDeclarationFiles(
   program.emit();
 }
 
-async function buildPackage(options: { inplace?: boolean }) {
-  const { inplace = false } = options;
+export async function buildPackage(options: {
+  inplace?: boolean;
+  skipDeclarations?: boolean;
+}) {
+  const { inplace = false, skipDeclarations = false } = options;
 
   const srcDir = path.resolve(rootDir, "src");
   const outDir = inplace ? rootDir : path.resolve(rootDir, "dist", "package");
@@ -68,6 +71,7 @@ async function buildPackage(options: { inplace?: boolean }) {
     outbase: srcDir,
     bundle: false,
     outdir: libDir,
+    target: "es2022",
   });
 
   let compilerOptionsFromConfigFile: ts.CompilerOptions = {};
@@ -80,10 +84,12 @@ async function buildPackage(options: { inplace?: boolean }) {
       "./",
     ).options;
   }
-  buildDeclarationFiles(entryPoints, {
-    ...compilerOptionsFromConfigFile,
-    outDir: libDir,
-  });
+  if (!skipDeclarations) {
+    buildDeclarationFiles(entryPoints, {
+      ...compilerOptionsFromConfigFile,
+      outDir: libDir,
+    });
+  }
 
   const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
     cwd: srcDir,
@@ -117,26 +123,41 @@ async function buildPackage(options: { inplace?: boolean }) {
     const { postpack } = packageJson["scripts"];
     delete packageJson["scripts"];
     packageJson["scripts"] = { postpack };
+    packageJson["files"] = ["lib/**/*"];
   } else {
     delete packageJson["private"];
     packageJson["scripts"] = {};
     delete packageJson["files"];
   }
 
-  function convertExportMap(map: Record<string, any>) {
-    for (const [key, value] of Object.entries(map)) {
+  const EXCLUDED_EXPORT_KEYS = /^#test/;
+
+  function convertExportMap(
+    map: Record<string, any>,
+    isConditions: boolean = false,
+  ) {
+    const entries = Object.entries(map);
+    map = {};
+    for (const [key, value] of entries) {
+      if (!isConditions && key.match(EXCLUDED_EXPORT_KEYS) !== null) {
+        continue;
+      }
+      if (isConditions && key === "node") {
+        continue;
+      }
       if (typeof value === "string") {
         map[key] = value
           .replace(/\.ts$/, ".js")
           .replace(/^\.\/src\//, "./lib/");
       } else {
-        convertExportMap(value);
+        map[key] = convertExportMap(value, /*isConditions=*/ true);
       }
     }
+    return map;
   }
 
-  convertExportMap(packageJson["imports"]);
-  convertExportMap(packageJson["exports"]);
+  packageJson["imports"] = convertExportMap(packageJson["imports"]);
+  packageJson["exports"] = convertExportMap(packageJson["exports"]);
 
   const outputPackageJson = path.resolve(outDir, "package.json");
   const tempPackageJsonPath = outputPackageJson + ".tmp";
@@ -155,6 +176,11 @@ async function parseArgsAndRunMain() {
         type: "boolean",
         default: false,
         description: "Convert package to built format inplace.",
+      },
+      ["skip-declarations"]: {
+        type: "boolean",
+        default: false,
+        description: "Skip generating .d.ts files.",
       },
       ["if-not-toplevel"]: {
         type: "boolean",
@@ -193,7 +219,10 @@ async function parseArgsAndRunMain() {
       return;
     }
   }
-  buildPackage({ inplace: argv.inplace });
+  buildPackage({
+    inplace: argv.inplace,
+    skipDeclarations: argv.skipDeclarations,
+  });
 }
 
 if (process.argv[1] === import.meta.filename) {

@@ -1,0 +1,1 @@
+{"chunks":[2,2],"compressor":{"blocksize":0,"clevel":5,"cname":"lz4","id":"blosc","shuffle":-1},"dimension_separator":"/","dtype":"<u2","fill_value":null,"filters":null,"order":"C","shape":[2,2],"zarr_format":2}

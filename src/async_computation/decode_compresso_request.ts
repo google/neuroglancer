@@ -17,4 +17,6 @@
 import { asyncComputation } from "#src/async_computation/index.js";
 
 export const decodeCompresso =
-  asyncComputation<(data: Uint8Array) => Uint8Array>("decodeCompresso");
+  asyncComputation<(data: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer>>(
+    "decodeCompresso",
+  );

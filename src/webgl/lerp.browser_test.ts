@@ -15,6 +15,7 @@
  */
 
 import { expect, describe, it } from "vitest";
+import type { TypedArrayConstructor } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
@@ -39,7 +40,9 @@ function getRandomValue(dataType: DataType) {
     case DataType.INT16:
     case DataType.UINT32:
     case DataType.INT32: {
-      const buf = new DATA_TYPE_ARRAY_CONSTRUCTOR[dataType](1);
+      const buf = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
+        dataType
+      ] as TypedArrayConstructor<ArrayBuffer>)(1);
       getRandomValues(buf);
       return buf[0];
     }

@@ -268,9 +268,9 @@ export class VolumeChunkSource
 }
 
 export abstract class VolumeChunk extends SliceViewChunk {
-  source: VolumeChunkSource;
+  declare source: VolumeChunkSource;
   chunkDataSize: Uint32Array;
-  CHUNK_FORMAT_TYPE: ChunkFormat;
+  declare CHUNK_FORMAT_TYPE: ChunkFormat;
 
   get chunkFormat(): this["CHUNK_FORMAT_TYPE"] {
     return this.source.chunkFormat;

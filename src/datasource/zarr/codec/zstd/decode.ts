@@ -19,20 +19,15 @@ import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import type { Configuration } from "#src/datasource/zarr/codec/zstd/resolve.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
 
 registerCodec({
   name: "zstd",
   kind: CodecKind.bytesToBytes,
-  decode(
-    configuration: Configuration,
-    encoded: Uint8Array,
-    cancellationToken: CancellationToken,
-  ): Promise<Uint8Array> {
+  decode(configuration: Configuration, encoded, signal: AbortSignal) {
     configuration;
     return requestAsyncComputation(
       decodeZstd,
-      cancellationToken,
+      signal,
       [encoded.buffer],
       encoded,
     );

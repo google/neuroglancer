@@ -18,32 +18,25 @@ import type {
   CredentialsProvider,
   CredentialsWithGeneration,
 } from "#src/credentials_provider/index.js";
-import type { CancellationToken } from "#src/util/cancellation.js";
-import { throwIfCanceled, uncancelableToken } from "#src/util/cancellation.js";
-import type { ResponseTransform } from "#src/util/http_request.js";
-import {
-  cancellableFetchOk,
-  HttpError,
-  pickDelay,
-} from "#src/util/http_request.js";
+import type { FetchOk } from "#src/util/http_request.js";
+import { fetchOk, HttpError, pickDelay } from "#src/util/http_request.js";
+import type { ProgressListener } from "#src/util/progress_listener.js";
 
 const maxCredentialsAttempts = 3;
 
-export async function fetchWithCredentials<Credentials, T>(
+export async function fetchOkWithCredentials<Credentials>(
   credentialsProvider: CredentialsProvider<Credentials>,
   input: RequestInfo | ((credentials: Credentials) => RequestInfo),
-  init: RequestInit,
-  transformResponse: ResponseTransform<T>,
+  init: RequestInit & { progressListener?: ProgressListener },
   applyCredentials: (
     credentials: Credentials,
-    requestInit: RequestInit,
-  ) => RequestInit,
+    requestInit: RequestInit & { progressListener?: ProgressListener },
+  ) => RequestInit & { progressListener?: ProgressListener },
   errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
-  cancellationToken: CancellationToken = uncancelableToken,
-): Promise<T> {
+): Promise<Response> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
   for (let credentialsAttempt = 0; ; ) {
-    throwIfCanceled(cancellationToken);
+    init.signal?.throwIfAborted();
     if (credentialsAttempt > 1) {
       // Don't delay on the first attempt, and also don't delay on the second attempt, since if the
       // credentials have expired and there is no problem on the server there is no reason to delay
@@ -52,13 +45,14 @@ export async function fetchWithCredentials<Credentials, T>(
         setTimeout(resolve, pickDelay(credentialsAttempt - 2)),
       );
     }
-    credentials = await credentialsProvider.get(credentials, cancellationToken);
+    credentials = await credentialsProvider.get(credentials, {
+      signal: init.signal ?? undefined,
+      progressListener: init.progressListener,
+    });
     try {
-      return await cancellableFetchOk(
+      return await fetchOk(
         typeof input === "function" ? input(credentials.credentials) : input,
         applyCredentials(credentials.credentials, init),
-        transformResponse,
-        cancellationToken,
       );
     } catch (error) {
       if (error instanceof HttpError) {
@@ -70,4 +64,22 @@ export async function fetchWithCredentials<Credentials, T>(
       throw error;
     }
   }
+}
+
+export function fetchOkWithCredentialsAdapter<Credentials>(
+  credentialsProvider: CredentialsProvider<Credentials>,
+  applyCredentials: (
+    credentials: Credentials,
+    requestInit: RequestInit & { progressListener?: ProgressListener },
+  ) => RequestInit & { progressListener?: ProgressListener },
+  errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
+): FetchOk {
+  return (input, init = {}) =>
+    fetchOkWithCredentials(
+      credentialsProvider,
+      input,
+      init,
+      applyCredentials,
+      errorHandler,
+    );
 }
