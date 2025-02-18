@@ -235,8 +235,6 @@ function decodeMultiscaleManifestChunk(
   chunk.fragments = response.fragments;
   chunk.manifest.clipLowerBound.fill(0);
   chunk.manifest.clipUpperBound.fill(10000000);
-  chunk.manifest.octree[5 * (response.fragments.length - 1) + 4] &= 0x7fffffff;
-  chunk.manifest.octree[5 * (response.fragments.length - 1) + 3] |= 0x80000000;
 }
 
 async function decodeMultiscaleFragmentChunk(

@@ -202,14 +202,9 @@ export function getDesiredMultiscaleMeshChunks(
       const pixelSize = minW / scaleFactor;
 
       if (priorLodScale === 0 || pixelSize * detailCutoff < priorLodScale) {
-        let lodScale = lodScales[lod];
+        const lodScale = lodScales[lod];
         if (lodScale !== 0) {
-          const virtual = childBeginAndVirtual >>> 31;
-          if (virtual) {
-            lodScale = 0;
-          }
-          const empty = childEndAndEmpty >>> 31;
-          callback(lod, row, lodScale / pixelSize, empty | virtual);
+          callback(lod, row, lodScale / pixelSize, childEndAndEmpty >>> 31);
         }
 
         if (lod > 0 && (lodScale === 0 || pixelSize * detailCutoff < lodScale)) {
