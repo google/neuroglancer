@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import "#src/kvstore/proxy.js";
 import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import type {
   DriverListOptions,

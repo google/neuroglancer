@@ -1,4 +1,5 @@
-import { HttpKvStore } from "#src/kvstore/http/index.js";
+import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
+import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { StatusMessage } from "#src/status.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { Viewer } from "#src/viewer.js";
@@ -79,7 +80,7 @@ export class StateShare extends RefCounted {
           selectedStateServer,
         );
 
-      if (!(store instanceof HttpKvStore)) {
+      if (!(store instanceof ReadableHttpKvStore)) {
         throw new Error(
           `Non-HTTP protocol not supported: ${selectedStateServer}`,
         );
@@ -87,7 +88,7 @@ export class StateShare extends RefCounted {
 
       StatusMessage.forPromise(
         store
-          .fetchOkImpl(store.baseUrl + path, {
+          .fetchOkImpl(joinBaseUrlAndPath(store.baseUrl, path), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(viewer.state.toJSON()),

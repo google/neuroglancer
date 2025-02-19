@@ -17,27 +17,14 @@
 import "#src/credentials_provider/shared_counterpart.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import type { SharedCredentialsManagerCounterpart } from "#src/credentials_provider/shared_counterpart.js";
-import type { CompletionResult } from "#src/kvstore/context.js";
 import { KvStoreContext } from "#src/kvstore/context.js";
-import type { ByteRange } from "#src/kvstore/index.js";
 import {
   frontendBackendIsomorphicKvStoreProviderRegistry,
   KvStoreProviderRegistry,
 } from "#src/kvstore/register.js";
-import {
-  COMPLETE_URL_RPC_ID,
-  LIST_RPC_ID,
-  READ_RPC_ID,
-  SHARED_KVSTORE_CONTEXT_RPC_ID,
-  STAT_RPC_ID,
-} from "#src/kvstore/shared_common.js";
-import {
-  finalPipelineUrlComponent,
-  parsePipelineUrlComponent,
-} from "#src/kvstore/url.js";
+import { SHARED_KVSTORE_CONTEXT_RPC_ID } from "#src/kvstore/shared_common.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
-  registerPromiseRPC,
   registerSharedObject,
   SharedObjectCounterpart,
 } from "#src/worker_rpc.js";
@@ -76,122 +63,3 @@ export function WithSharedKvStoreContextCounterpart<
     }
   };
 }
-
-registerPromiseRPC(
-  STAT_RPC_ID,
-  async function (
-    this: RPC,
-    options: { sharedKvStoreContext: number; url: string },
-    progressOptions,
-  ) {
-    const sharedKvStoreContext: SharedKvStoreContextCounterpart = this.get(
-      options.sharedKvStoreContext,
-    );
-    return {
-      value: await sharedKvStoreContext.kvStoreContext.stat(
-        options.url,
-        progressOptions,
-      ),
-    };
-  },
-);
-
-registerPromiseRPC(
-  READ_RPC_ID,
-  async function (
-    this: RPC,
-    options: {
-      sharedKvStoreContext: number;
-      url: string;
-      byteRange?: ByteRange;
-      throwIfMissing?: boolean;
-    },
-    progressOptions,
-  ) {
-    const sharedKvStoreContext: SharedKvStoreContextCounterpart = this.get(
-      options.sharedKvStoreContext,
-    );
-    const readResponse = await sharedKvStoreContext.kvStoreContext.read(
-      options.url,
-      {
-        ...progressOptions,
-        byteRange: options.byteRange,
-        throwIfMissing: options.throwIfMissing,
-      },
-    );
-    if (readResponse === undefined) {
-      return { value: undefined };
-    }
-    const arrayBuffer = await readResponse.response.arrayBuffer();
-    return {
-      value: {
-        data: arrayBuffer,
-        offset: readResponse.offset,
-        totalSize: readResponse.totalSize,
-      },
-      transfers: [arrayBuffer],
-    };
-  },
-);
-
-registerPromiseRPC(
-  LIST_RPC_ID,
-  async function (
-    this: RPC,
-    options: { sharedKvStoreContext: number; url: string },
-    progressOptions,
-  ) {
-    const sharedKvStoreContext: SharedKvStoreContextCounterpart = this.get(
-      options.sharedKvStoreContext,
-    );
-    const { store, path } = sharedKvStoreContext.kvStoreContext.getKvStore(
-      options.url,
-    );
-    return {
-      value: await store.list!(path, progressOptions),
-    };
-  },
-);
-
-registerPromiseRPC(
-  COMPLETE_URL_RPC_ID,
-  async function (
-    this: RPC,
-    options: { sharedKvStoreContext: number; url: string },
-    progressOptions,
-  ) {
-    const sharedKvStoreContext: SharedKvStoreContextCounterpart = this.get(
-      options.sharedKvStoreContext,
-    );
-    const { kvStoreContext } = sharedKvStoreContext;
-    const { url } = options;
-    const finalComponent = finalPipelineUrlComponent(url);
-    let result: CompletionResult | undefined;
-    if (finalComponent === url) {
-      // Base kvstore
-      const parsedUrl = parsePipelineUrlComponent(finalComponent);
-      const provider = kvStoreContext.getBaseKvStoreProvider(parsedUrl);
-      if (provider.completeUrl !== undefined) {
-        result = await provider.completeUrl({
-          url: parsedUrl,
-          ...progressOptions,
-        });
-      }
-    } else {
-      const adapterUrl = parsePipelineUrlComponent(finalComponent);
-      const provider = kvStoreContext.getKvStoreAdapterProvider(adapterUrl);
-      const baseUrl = url.slice(0, url.length - finalComponent.length - 1);
-      const base = kvStoreContext.getKvStore(baseUrl);
-      if (provider.completeUrl !== undefined) {
-        result = await provider.completeUrl({
-          url: adapterUrl,
-          base,
-          ...progressOptions,
-        });
-      }
-    }
-    return {
-      value: result,
-    };
-  },
-);

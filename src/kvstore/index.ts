@@ -15,6 +15,7 @@
  */
 
 import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { defaultStringCompare } from "#src/util/string.js";
 
 export interface ByteRange {
   offset: number;
@@ -229,7 +230,7 @@ export async function listKvStoreRecursively(
   }
   await process(prefix);
   return transformListResponse(
-    { entries, directories: [] },
+    normalizeListResponse({ entries, directories: [] }),
     prefix,
     kvStore,
     options.responseKeys,
@@ -266,4 +267,10 @@ export class KvStoreFileHandle<Key> implements FileHandle {
   getUrl() {
     return this.store.getUrl(this.key);
   }
+}
+
+export function normalizeListResponse(response: ListResponse): ListResponse {
+  response.entries.sort(({ key: a }, { key: b }) => defaultStringCompare(a, b));
+  response.directories.sort(defaultStringCompare);
+  return response;
 }

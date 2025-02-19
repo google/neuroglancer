@@ -610,6 +610,7 @@ export class Viewer extends RefCounted implements ViewerState {
           this.navigationState.reset();
           this.perspectiveNavigationState.pose.orientation.reset();
           this.perspectiveNavigationState.zoomFactor.reset();
+          this.layout.restoreState("4panel-alt");
           this.resetInitiated.dispatch();
           if (
             !overlaysOpen &&
@@ -907,6 +908,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     gridContainer.appendChild(topRow);
 
+    // Note: for new states, the actual default layout is 4panel-alt.
     this.layout = this.registerDisposer(
       new RootLayoutContainer(this, "4panel"),
     );
