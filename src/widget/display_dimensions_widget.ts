@@ -81,8 +81,6 @@ interface DimensionWidget {
 const inputEventMap = EventActionMap.fromObject({
   arrowup: { action: "move-up" },
   arrowdown: { action: "move-down" },
-  arrowleft: { action: "move-left" },
-  arrowright: { action: "move-right" },
   wheel: { action: "adjust-via-wheel" },
   enter: { action: "commit" },
   escape: { action: "cancel" },
@@ -537,12 +535,12 @@ export class DisplayDimensionsWidget extends RefCounted {
         registerActionListener(input, "commit", () => {
           this.updateZoomFromFOV(i);
         });
-        registerActionListener(input, "move-left", () => {
+        registerActionListener(input, "move-up", () => {
           if (i !== 0) {
             this.fovInputElements[i - 1].focus();
           }
         });
-        registerActionListener(input, "move-right", () => {
+        registerActionListener(input, "move-down", () => {
           if (i !== 1) {
             this.fovInputElements[i + 1].focus();
           }
