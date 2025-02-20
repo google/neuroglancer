@@ -4,10 +4,19 @@
 
 cd "$(dirname "$0")"
 
-docker build .
+docker build -f compile.Dockerfile .
 docker run \
        --rm \
        -v ${PWD}:/src \
        -u $(id -u):$(id -g) \
-       $(docker build -q .) \
+       $(docker build -f compile.Dockerfile -q .) \
        /src/build_wasm.sh
+
+docker build -f optimize.Dockerfile .
+docker run \
+       --rm \
+       -v ${PWD}:/src \
+       -u $(id -u):$(id -g) \
+       $(docker build -f optimize.Dockerfile -q .) \
+       /src/optimize_wasm.sh
+
