@@ -14,11 +14,11 @@
 """Wrappers for representing a Neuroglancer coordinate space."""
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from decimal import Decimal
 from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
-import numpy.typing
 
 __all__ = []
 
@@ -71,10 +71,10 @@ def parse_unit(scale, unit):
 
 
 def parse_unit_and_scale(
-    unit_and_scale: str, coefficient: float = 1.0
+    unit_and_scale: str, coefficient: Decimal = Decimal("1.0")
 ) -> tuple[float, str]:
     if unit_and_scale == "":
-        return (coefficient, "")
+        return (float(coefficient), "")
     m = re.fullmatch(
         r"^((?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)?([µa-zA-Z]+)?$", unit_and_scale
     )
@@ -82,9 +82,9 @@ def parse_unit_and_scale(
         raise ValueError("Invalid unit", unit_and_scale)
     scale_str = m.group(1)
     if scale_str is None:
-        scale = 1.0
+        scale = Decimal(1.0)
     else:
-        scale = float(scale_str)
+        scale = Decimal(scale_str)
 
     scale *= coefficient
     unit = ""
@@ -95,7 +95,7 @@ def parse_unit_and_scale(
             scale *= 10**exponent
         else:
             scale /= 10 ** (-exponent)
-    return (scale, unit)
+    return (float(scale), unit)
 
 
 @export
@@ -237,20 +237,20 @@ class CoordinateSpace:
                 names_tuple = tuple(names)
                 rank = len(names_tuple)
                 self.names = names_tuple
-                scales_array: np.typing.NDArray[np.float64]
+                scales_list_decimal: Iterable[Decimal]
                 if scales is None:
-                    scales_array = np.ones(rank, dtype=np.float64)
+                    scales_list_decimal = [Decimal("1.0") for r in range(rank)]
                 else:
-                    scales_array = np.array(scales, dtype=np.float64)
+                    scales_list_decimal = [Decimal(s) for s in scales]
                 if units is None:
                     units = ""
                 if isinstance(units, str):
                     units = tuple(units for _ in names_tuple)
                 scales_and_units = tuple(
                     parse_unit_and_scale(unit, scale)
-                    for scale, unit in zip(scales_array, units)
+                    for scale, unit in zip(scales_list_decimal, units)
                 )
-                scales_array = np.array(
+                scales_array: np.typing.NDArray[np.float64] = np.array(
                     [s[0] for s in scales_and_units], dtype=np.float64
                 )
                 units = tuple(s[1] for s in scales_and_units)
