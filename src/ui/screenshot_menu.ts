@@ -40,6 +40,7 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
+import { parseScale } from "#src/util/si_units.js";
 
 // If DEBUG_ALLOW_MENU_CLOSE is true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
@@ -375,8 +376,8 @@ export class ScreenshotDialog extends Overlay {
         const result = setClipboard(this.getResolutionText());
         StatusMessage.showTemporaryMessage(
           result
-            ? "Resolution table copied to clipboard"
-            : "Failed to copy resolution table to clipboard",
+            ? "Resolution metadata JSON copied to clipboard"
+            : "Failed to copy resolution JSON to clipboard",
         );
       },
     });
@@ -796,28 +797,114 @@ export class ScreenshotDialog extends Overlay {
 
   /**
   Private function to copy the resolution of the screenshot to the clipboard
-  This will be in tsv format, with the width and height separated by an 'x'
+  This will be in JSON format.
     */
   private getResolutionText() {
-    // Processing the Screenshot size
-    const screenshotSizeText = `Screenshot size\t${this.screenshotWidth} x ${this.screenshotHeight} px\n`;
+    interface Data {
+      scaleWithPrefix: boolean | number | string; // Adjust as needed
+      dimension: string;
+      scale: number | object; // Adjust type accordingly
+      unit: string;
+      panelViewportUnit?: any; // Optional property with a flexible type
+    }
 
-    // Process the panel resolution table
+    const screenshotMetadata = {
+      width: this.screenshotWidth,
+      height: this.screenshotHeight,
+      unit: "px",
+    };
     const { panelResolutionData, layerResolutionData } =
       getViewerResolutionMetadata(this.screenshotManager.viewer);
+    function formatPhysicalResolution(
+      fullResolution: string,
+      PanelResolution: boolean = true,
+    ) {
+      // If it is in the format RESOLUTION then process just that
+      // Split into two parts on /
+      const splitIntoParts = (x: string) => {
+        if (PanelResolution) {
+          const split = x.split("/");
+          return { scale: split[0], unit: split[1] };
+        }
+        return { scale: x, unit: "" };
+      };
+      const uniformName = PanelResolution ? "Isotropic" : "Isomorphic";
+      const result = [];
+      if (!fullResolution.includes(" ")) {
+        const resolutionParts = splitIntoParts(fullResolution);
+        const scale = parseScale(resolutionParts.scale);
+        if (scale === undefined) {
+          throw new Error(`Invalid scale: ${fullResolution}`);
+        }
+        const data: Data = {
+          scaleWithPrefix: fullResolution,
+          dimension: uniformName,
+          scale: scale.scale,
+          unit: scale.unit,
+        };
+        if (PanelResolution) {
+          data.panelViewportUnit = resolutionParts.unit;
+        }
+        result.push(data);
+        return result;
+      }
+      // otherwise it will be name1 res1 name2 res2 name3 res3
+      const splitResolution = fullResolution.split(" ");
+      for (let i = 0; i < splitResolution.length; i += 2) {
+        const name = splitResolution[i];
+        const resolution = splitResolution[i + 1];
+        const resolutionParts = splitIntoParts(resolution);
+        const scale = parseScale(resolutionParts.scale);
+        if (scale === undefined) {
+          throw new Error(`Invalid scale: ${splitResolution[i]}`);
+        }
+        const data: Data = {
+          scaleWithPrefix: resolution,
+          dimension: name,
+          scale: scale.scale,
+          unit: scale.unit,
+        };
+        if (PanelResolution) {
+          data.panelViewportUnit = resolutionParts.unit;
+        }
+        result.push(data);
+      }
+      return result;
+    }
 
-    let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type}\t${PANEL_TABLE_HEADER_STRINGS.pixelResolution}\t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
+    const panelMetadata = [];
     for (const resolution of panelResolutionData) {
-      panelResolutionText += `${resolution.type}\t${resolution.width} x ${resolution.height} px\t${resolution.resolution}\n`;
+      const panelMetadataItem = {
+        type: resolution.type,
+        pixelResolution: {
+          width: resolution.width,
+          height: resolution.height,
+          unit: "px",
+        },
+        physicalScale: formatPhysicalResolution(resolution.resolution),
+      };
+      panelMetadata.push(panelMetadataItem);
     }
 
-    // Process the layer resolution table
-    let layerResolutionText = `${LAYER_TABLE_HEADER_STRINGS.name}\t${LAYER_TABLE_HEADER_STRINGS.type}\t${LAYER_TABLE_HEADER_STRINGS.resolution}\n`;
+    const layerMetadata = [];
     for (const resolution of layerResolutionData) {
-      layerResolutionText += `${resolution.name}\t${layerNamesForUI[resolution.type as keyof typeof layerNamesForUI]}\t${resolution.resolution}\n`;
+      const layerMetadataItem = {
+        name: resolution.name,
+        type: resolution.type,
+        voxelResolution: formatPhysicalResolution(resolution.resolution, false),
+      };
+      layerMetadata.push(layerMetadataItem);
     }
 
-    return `${screenshotSizeText}\n${panelResolutionText}\n${layerResolutionText}`;
+    return JSON.stringify(
+      {
+        screenshotSize: screenshotMetadata,
+        panels: panelMetadata,
+        layers: layerMetadata,
+      },
+      null,
+      2,
+    );
   }
 
   private updateUIBasedOnMode() {
