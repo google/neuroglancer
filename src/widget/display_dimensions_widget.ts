@@ -87,7 +87,7 @@ const inputEventMap = EventActionMap.fromObject({
 });
 
 function formatScaleFactor(x: number) {
-  if (x < 1 || x > 1024) {
+  if (x < 0.01 || x > 1024) {
     const exponent = Math.log2(x) | 0;
     const coeff = x / 2 ** exponent;
     return `${numberToStringFixed(coeff, 1)}p${exponent}`;
