@@ -77,6 +77,44 @@ interface UIScreenshotStatistics {
   downloadSpeedDescription: string;
 }
 
+// Define the structure for size with a unit
+interface ScreenshotOrPanelSize {
+  width: number;
+  height: number;
+}
+
+// Define the scale structure
+interface ResolutionMetadata {
+  scaleWithPrefix: string; // Human-readable format (e.g., "8.75nm/px")
+  dimension: string; // E.g., "Isotropic", "x", "y", "z"
+  scale: number; // Actual scale value in SI unit
+  unit: string; // SI unit
+}
+
+interface PanelResolutionMetadata extends ResolutionMetadata {
+  panelViewportUnit: string; // applies only to panels
+}
+
+interface PanelMetadata {
+  type: string;
+  pixelResolution: ScreenshotOrPanelSize;
+  physicalScale: PanelResolutionMetadata[];
+}
+
+interface LayerMetadata {
+  name: string;
+  type: string;
+  voxelResolution: ResolutionMetadata[];
+}
+
+interface ScreenshotMetadata {
+  date: string;
+  name: string;
+  screenshotSize: ScreenshotOrPanelSize;
+  panels: PanelMetadata[];
+  layers: LayerMetadata[];
+}
+
 const statisticsNamesForUI = {
   chunkUsageDescription: "Number of loaded chunks",
   gpuMemoryUsageDescription: "Visible chunk GPU memory usage",
@@ -800,79 +838,91 @@ export class ScreenshotDialog extends Overlay {
   This will be in JSON format.
     */
   private getResolutionText() {
-    interface Data {
-      scaleWithPrefix: boolean | number | string; // Adjust as needed
-      dimension: string;
-      scale: number | object; // Adjust type accordingly
-      unit: string;
-      panelViewportUnit?: any; // Optional property with a flexible type
+    function formatPanelResolution(
+      fullResolution: string,
+    ): PanelResolutionMetadata[] {
+      return formatPhysicalResolution<PanelResolutionMetadata>(
+        fullResolution,
+        true,
+      );
     }
 
-    const screenshotMetadata = {
+    function formatLayerResolution(
+      fullResolution: string,
+    ): ResolutionMetadata[] {
+      return formatPhysicalResolution<ResolutionMetadata>(
+        fullResolution,
+        false,
+      );
+    }
+
+    function formatPhysicalResolution<T extends ResolutionMetadata>(
+      fullResolution: string,
+      panelResolution: boolean = true,
+    ): T[] {
+      {
+        // If it is in the format RESOLUTION then process just that
+        // Split into two parts on /
+        const splitIntoParts = (x: string) => {
+          if (panelResolution) {
+            const split = x.split("/");
+            return { scale: split[0], unit: split[1] };
+          }
+          return { scale: x, unit: "" };
+        };
+        const uniformName = panelResolution ? "Isotropic" : "Isomorphic";
+        const result = [];
+        if (!fullResolution.includes(" ")) {
+          const resolutionParts = splitIntoParts(fullResolution);
+          const scale = parseScale(resolutionParts.scale);
+          if (scale === undefined) {
+            throw new Error(`Invalid scale: ${fullResolution}`);
+          }
+          const data: any = {
+            scaleWithPrefix: fullResolution,
+            dimension: uniformName,
+            scale: scale.scale,
+            unit: scale.unit,
+          };
+          if (panelResolution) {
+            data.panelViewportUnit = resolutionParts.unit;
+          }
+          result.push(data);
+          return result;
+        }
+        // otherwise it will be name1 res1 name2 res2 name3 res3
+        const splitResolution = fullResolution.split(" ");
+        for (let i = 0; i < splitResolution.length; i += 2) {
+          const name = splitResolution[i];
+          const resolution = splitResolution[i + 1];
+          const resolutionParts = splitIntoParts(resolution);
+          const scale = parseScale(resolutionParts.scale);
+          if (scale === undefined) {
+            throw new Error(`Invalid scale: ${splitResolution[i]}`);
+          }
+          const data: any = {
+            scaleWithPrefix: resolution,
+            dimension: name,
+            scale: scale.scale,
+            unit: scale.unit,
+          };
+          if (panelResolution) {
+            data.panelViewportUnit = resolutionParts.unit;
+          }
+          result.push(data);
+        }
+        return result;
+      }
+    }
+
+    const screenshotSize = {
       width: this.screenshotWidth,
       height: this.screenshotHeight,
-      unit: "px",
     };
     const { panelResolutionData, layerResolutionData } =
       getViewerResolutionMetadata(this.screenshotManager.viewer);
-    function formatPhysicalResolution(
-      fullResolution: string,
-      PanelResolution: boolean = true,
-    ) {
-      // If it is in the format RESOLUTION then process just that
-      // Split into two parts on /
-      const splitIntoParts = (x: string) => {
-        if (PanelResolution) {
-          const split = x.split("/");
-          return { scale: split[0], unit: split[1] };
-        }
-        return { scale: x, unit: "" };
-      };
-      const uniformName = PanelResolution ? "Isotropic" : "Isomorphic";
-      const result = [];
-      if (!fullResolution.includes(" ")) {
-        const resolutionParts = splitIntoParts(fullResolution);
-        const scale = parseScale(resolutionParts.scale);
-        if (scale === undefined) {
-          throw new Error(`Invalid scale: ${fullResolution}`);
-        }
-        const data: Data = {
-          scaleWithPrefix: fullResolution,
-          dimension: uniformName,
-          scale: scale.scale,
-          unit: scale.unit,
-        };
-        if (PanelResolution) {
-          data.panelViewportUnit = resolutionParts.unit;
-        }
-        result.push(data);
-        return result;
-      }
-      // otherwise it will be name1 res1 name2 res2 name3 res3
-      const splitResolution = fullResolution.split(" ");
-      for (let i = 0; i < splitResolution.length; i += 2) {
-        const name = splitResolution[i];
-        const resolution = splitResolution[i + 1];
-        const resolutionParts = splitIntoParts(resolution);
-        const scale = parseScale(resolutionParts.scale);
-        if (scale === undefined) {
-          throw new Error(`Invalid scale: ${splitResolution[i]}`);
-        }
-        const data: Data = {
-          scaleWithPrefix: resolution,
-          dimension: name,
-          scale: scale.scale,
-          unit: scale.unit,
-        };
-        if (PanelResolution) {
-          data.panelViewportUnit = resolutionParts.unit;
-        }
-        result.push(data);
-      }
-      return result;
-    }
 
-    const panelMetadata = [];
+    const panels = [];
     for (const resolution of panelResolutionData) {
       const panelMetadataItem = {
         type: resolution.type,
@@ -881,30 +931,32 @@ export class ScreenshotDialog extends Overlay {
           height: resolution.height,
           unit: "px",
         },
-        physicalScale: formatPhysicalResolution(resolution.resolution),
+        physicalScale: formatPanelResolution(resolution.resolution),
       };
-      panelMetadata.push(panelMetadataItem);
+      panels.push(panelMetadataItem);
     }
 
-    const layerMetadata = [];
+    const layers = [];
     for (const resolution of layerResolutionData) {
       const layerMetadataItem = {
         name: resolution.name,
         type: resolution.type,
-        voxelResolution: formatPhysicalResolution(resolution.resolution, false),
+        voxelResolution: formatLayerResolution(resolution.resolution),
       };
-      layerMetadata.push(layerMetadataItem);
+      layers.push(layerMetadataItem);
     }
 
-    return JSON.stringify(
-      {
-        screenshotSize: screenshotMetadata,
-        panels: panelMetadata,
-        layers: layerMetadata,
-      },
-      null,
-      2,
-    );
+    const date = new Date().toISOString();
+    const name = this.nameInput.value;
+    const screenshotMetadata: ScreenshotMetadata = {
+      date,
+      name,
+      screenshotSize,
+      panels,
+      layers,
+    };
+
+    return JSON.stringify(screenshotMetadata, null, 2);
   }
 
   private updateUIBasedOnMode() {
