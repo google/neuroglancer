@@ -59,7 +59,7 @@
     "@vitest/web-worker": "^3.0.5",
     "cookie": "^1.0.2",
     "css-loader": "^7.1.2",
-    "esbuild": "^0.24.2",
+    "esbuild": "^0.25.0",
     "eslint": "^9.19.0",
     "eslint-formatter-codeframe": "^7.32.1",
     "eslint-import-resolver-typescript": "^3.7.0",
