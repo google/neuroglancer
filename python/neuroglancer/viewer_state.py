@@ -1797,7 +1797,7 @@ class ViewerState(JsonObjectWrapper):
         "projectionOrientation", optional(array_wrapper(np.float32, 4))
     )
     show_slices = showSlices = wrapped_property("showSlices", optional(bool, True))
-    hide_slice_background = hideSliceBackground = wrapped_property(
+    hide_cross_section_background_3d = hideCrossSectionBackground3D = wrapped_property(
         "hideCrossSectionBackground3D", optional(bool, False)
     )
     show_axis_lines = showAxisLines = wrapped_property(

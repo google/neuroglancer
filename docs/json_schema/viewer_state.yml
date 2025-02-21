@@ -57,7 +57,7 @@ properties:
     type: boolean
     title: "Indicates whether to show cross sections in the 3-d view of `~DataPanelLayoutType.4panel` and `~DataPanelLayoutType.4panel-alt` layouts."
     default: true
-  hideSliceBackground:
+  hideCrossSectionBackground3D:
     type: boolean
     title: "Indicates whether to hide the background of cross-section views in the 3-d view of `~DataPanelLayoutType.4panel` and `~DataPanelLayoutType.4panel-alt` layouts."
     default: false
