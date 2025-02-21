@@ -152,8 +152,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     );
     const scaleFactor = document.createElement("input");
     scaleFactor.classList.add("neuroglancer-display-dimensions-input-base");
-    scaleFactor.spellcheck = false;
     scaleFactor.title = "Change relative scale at which dimension is displayed";
+    scaleFactor.spellcheck = false;
     scaleFactor.autocomplete = "off";
     scaleFactorContainer.style.gridColumn = "2";
     scaleFactorContainer.style.gridRow = `${i + 1}`;
@@ -168,6 +168,8 @@ export class DisplayDimensionsWidget extends RefCounted {
     const scale = document.createElement("input");
     scale.classList.add("neuroglancer-display-dimensions-widget-scale");
     scale.classList.add("neuroglancer-display-dimensions-input-base");
+    scale.spellcheck = false;
+    scale.autocomplete = "off";
     scale.style.gridColumn = "3";
     scale.style.gridRow = `${i + 1}`;
     scaleWrapper.appendChild(scale);
