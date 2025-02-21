@@ -53,8 +53,8 @@ def export(obj):
 @export
 class SegmentIdMapEntry(typing.NamedTuple):
     key: int
-    value: typing.Optional[int] = None
-    label: typing.Optional[str] = None
+    value: int | None = None
+    label: str | None = None
 
 
 @export
@@ -71,9 +71,7 @@ def layer_selected_value(x):
     return None
 
 
-_set_type_annotation(
-    layer_selected_value, typing.Union[None, numbers.Number, SegmentIdMapEntry]
-)
+_set_type_annotation(layer_selected_value, None | numbers.Number | SegmentIdMapEntry)
 
 
 @export

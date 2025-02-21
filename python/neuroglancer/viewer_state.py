@@ -462,7 +462,7 @@ class CoordinateSpaceTransform(JsonObjectWrapper):
 
 
 def data_source_url(x):
-    if isinstance(x, (local_volume.LocalVolume, skeleton.SkeletonSource)):
+    if isinstance(x, local_volume.LocalVolume | skeleton.SkeletonSource):
         return x
     if not isinstance(x, str):
         raise TypeError
@@ -488,7 +488,7 @@ class LayerDataSource(JsonObjectWrapper):
 
     def __init__(self, json_data=None, *args, **kwargs):
         if isinstance(json_data, str) or isinstance(
-            json_data, (local_volume.LocalVolume, skeleton.SkeletonSource)
+            json_data, local_volume.LocalVolume | skeleton.SkeletonSource
         ):
             json_data = {"url": json_data}
         super().__init__(json_data, *args, **kwargs)
@@ -514,13 +514,11 @@ class LayerDataSources(_LayerDataSourcesBase):
     def __init__(self, json_data=None, **kwargs):
         if isinstance(
             json_data,
-            (
-                LayerDataSource,
-                str,
-                local_volume.LocalVolume,
-                skeleton.SkeletonSource,
-                dict,
-            ),
+            LayerDataSource
+            | str
+            | local_volume.LocalVolume
+            | skeleton.SkeletonSource
+            | dict,
         ):
             json_data = [json_data]
         elif isinstance(json_data, LayerDataSources):
@@ -576,7 +574,7 @@ def _shader_control_parameters(v, _readonly=False):
 
 _set_type_annotation(
     _shader_control_parameters,
-    typing.Union[numbers.Number, str, InvlerpParameters, TransferFunctionParameters],
+    numbers.Number | str | InvlerpParameters | TransferFunctionParameters,
 )
 
 
@@ -751,10 +749,10 @@ class StarredSegments(collections.abc.MutableMapping[int, bool]):
         self.setdefault(segment_id, True)
 
     @typing.overload
-    def get(self, segment_id: int) -> typing.Optional[bool]: ...
+    def get(self, segment_id: int) -> bool | None: ...
 
     @typing.overload
-    def get(self, segment_id: int, default: T) -> typing.Union[bool, T]: ...
+    def get(self, segment_id: int, default: T) -> bool | T: ...
 
     def get(self, segment_id: int, default=None):
         """Checks if a segment is visible.
@@ -825,7 +823,7 @@ class StarredSegments(collections.abc.MutableMapping[int, bool]):
         other: typing.Union[
             "StarredSegments",
             collections.abc.MutableMapping[int, bool],
-            typing.Iterable[typing.Union[int, str, tuple[int, bool]]],
+            typing.Iterable[int | str | tuple[int, bool]],
         ],
     ):
         """Merges in additional starred segments."""
@@ -1608,7 +1606,7 @@ def layout_specification(x, _readonly=False):
         x = "4panel"
     if isinstance(x, str):
         x = {"type": str(x)}
-    if isinstance(x, (StackLayout, LayerGroupViewer, DataPanelLayout)):
+    if isinstance(x, StackLayout | LayerGroupViewer | DataPanelLayout):
         return type(x)(x.to_json(), _readonly=_readonly)
     if not isinstance(x, dict):
         raise ValueError

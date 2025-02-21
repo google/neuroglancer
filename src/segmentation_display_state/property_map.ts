@@ -19,7 +19,7 @@ import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
-import type { TypedArray, WritableArrayLike } from "#src/util/array.js";
+import type { TypedNumberArray, WritableArrayLike } from "#src/util/array.js";
 import { mergeSequences } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -64,7 +64,7 @@ export interface InlineSegmentNumericalProperty {
   type: "number";
   dataType: DataType;
   description: string | undefined;
-  values: TypedArray<ArrayBuffer>;
+  values: TypedNumberArray<ArrayBuffer>;
   bounds: DataTypeInterval;
 }
 
@@ -98,7 +98,7 @@ export class IndexedSegmentPropertySource extends ChunkSource {
 }
 
 function insertIntoLinearChainingTable(
-  table: TypedArray,
+  table: TypedNumberArray,
   hashCode: number,
   value: number,
 ) {
@@ -144,7 +144,7 @@ function makeUint64PermutationHashMap(values: Uint32Array): IndicesArray {
 }
 
 function queryUint64PermutationHashMap(
-  table: TypedArray,
+  table: TypedNumberArray,
   values: Uint32Array,
   low: number,
   high: number,
@@ -1044,7 +1044,7 @@ export function executeSegmentQuery(
         (a, b) => defaultStringCompare(values[a], values[b]) * orderCoeff,
       );
     } else {
-      const values = property.values as TypedArray;
+      const values = property.values as TypedNumberArray;
       indices.sort((a, b) => (values[a] - values[b]) * orderCoeff);
     }
   };
