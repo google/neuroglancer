@@ -15,6 +15,7 @@
  */
 
 import "#src/layer/single_mesh/style.css";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import {
@@ -31,11 +32,16 @@ import {
   SingleMeshDisplayState,
   SingleMeshLayer,
 } from "#src/single_mesh/frontend.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
+} from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, removeFromParent } from "#src/util/dom.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
@@ -47,14 +53,18 @@ import { Tab } from "#src/widget/tab_view.js";
 
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+const CODE_VISIBLE_KEY = "codeVisible";
 
 export class SingleMeshUserLayer extends UserLayer {
   displayState = new SingleMeshDisplayState();
+  codeVisible = new TrackableBoolean(true);
+
   vertexAttributes = new WatchableValue<VertexAttributeInfo[] | undefined>(
     undefined,
   );
   constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.registerDisposer(
       this.displayState.shaderControlState.changed.add(
         this.specificationChanged.dispatch,
@@ -75,6 +85,7 @@ export class SingleMeshUserLayer extends UserLayer {
 
   restoreState(specification: any) {
     super.restoreState(specification);
+    this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.displayState.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     this.displayState.shaderControlState.restoreState(
       specification[SHADER_CONTROLS_JSON_KEY],
@@ -116,6 +127,7 @@ export class SingleMeshUserLayer extends UserLayer {
     const x = super.toJSON();
     x[SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.displayState.shaderControlState.toJSON();
+    x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     return x;
   }
 
@@ -210,6 +222,21 @@ class DisplayOptionsTab extends Tab {
     spacer.style.flex = "1";
 
     topRow.appendChild(spacer);
+
+    this.registerDisposer(
+      new ElementVisibilityFromTrackableBoolean(
+        this.layer.codeVisible,
+        this.codeWidget.element,
+      ),
+    );
+    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
+      enableTitle: "Show code",
+      disableTitle: "Hide code",
+      backgroundScheme: "dark",
+      svg: svgCode,
+    });
+    topRow.appendChild(codeVisibilityControl.element);
+
     topRow.appendChild(
       makeMaximizeButton({
         title: "Show larger editor view",
