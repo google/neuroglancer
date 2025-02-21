@@ -75,6 +75,7 @@ interface DimensionWidget {
   name: HTMLInputElement;
   scaleFactor: HTMLInputElement;
   scale: HTMLInputElement;
+  scaleUnit: HTMLSpanElement;
   scaleFactorModified: boolean;
 }
 
@@ -173,6 +174,10 @@ export class DisplayDimensionsWidget extends RefCounted {
     scale.style.gridColumn = "3";
     scale.style.gridRow = `${i + 1}`;
     scaleWrapper.appendChild(scale);
+    const scaleUnit = document.createElement("span");
+    scaleUnit.classList.add("neuroglancer-display-dimensions-widget-scale-unit");
+    scaleUnit.textContent = `/${this.displayUnit}`;
+    scaleWrapper.appendChild(scaleUnit);
     container.appendChild(scaleWrapper);
     this.dimensionGridContainer.appendChild(container);
     scale.addEventListener("input", () => {
@@ -193,6 +198,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       container,
       scaleFactor,
       scale,
+      scaleUnit,
       scaleFactorModified: false,
     };
     name.addEventListener("input", () => {
@@ -264,9 +270,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionUnits,
     } = this.displayDimensionRenderInfo.value;
     const scale = this.dimensionElements[i].scale;
-    // Remove the display unit from the input
-    const formattedScale = scale.value.replace(`/${this.displayUnit}`, "");
-    const parsedScale = parseScale(formattedScale);
+    const parsedScale = parseScale(scale.value);
     if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
@@ -307,8 +311,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   private updateScaleTooltip(i: number) {
     const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
     const dataUnits = displayDimensionUnits[i];
-    this.dimensionElements[i].scale.title =
-      `Display scale in ${dataUnits}/${this.displayUnit}`;
+    const tooltip = `Display scale in ${dataUnits}/${this.displayUnit}`;
+    this.dimensionElements[i].scale.title = tooltip;
+    this.dimensionElements[i].scaleUnit.title = tooltip;
   }
 
   private updateNameValidity() {
@@ -825,7 +830,7 @@ export class DisplayDimensionsWidget extends RefCounted {
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          dimElements.scale.value = `${formattedScale}/${this.displayUnit}`;
+          dimElements.scale.value = `${formattedScale}`;
           dimElements.scale.style.display = "";
           this.updateScaleTooltip(i);
         } else {
