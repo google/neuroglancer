@@ -175,7 +175,9 @@ export class DisplayDimensionsWidget extends RefCounted {
     scale.style.gridRow = `${i + 1}`;
     scaleWrapper.appendChild(scale);
     const scaleUnit = document.createElement("span");
-    scaleUnit.classList.add("neuroglancer-display-dimensions-widget-scale-unit");
+    scaleUnit.classList.add(
+      "neuroglancer-display-dimensions-widget-scale-unit",
+    );
     scaleUnit.textContent = `/${this.displayUnit}`;
     scaleWrapper.appendChild(scaleUnit);
     container.appendChild(scaleWrapper);
