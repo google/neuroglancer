@@ -254,8 +254,8 @@ class TrackableViewerState extends CompoundTrackable {
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
     this.add(
-      "hideCrossSectionBackgroundIn3D",
-      viewer.hideCrossSectionBackgroundIn3D,
+      "hideCrossSectionBackground3D",
+      viewer.hideCrossSectionBackground3D,
     );
     this.add(
       "gpuMemoryLimit",
@@ -420,7 +420,7 @@ export class Viewer extends RefCounted implements ViewerState {
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
-  hideCrossSectionBackgroundIn3D = new TrackableBoolean(false, false);
+  hideCrossSectionBackground3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(

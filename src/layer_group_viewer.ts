@@ -102,7 +102,7 @@ export interface LayerGroupViewerState {
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
-  hideCrossSectionBackgroundIn3D: TrackableBoolean;
+  hideCrossSectionBackground3D: TrackableBoolean;
 }
 
 export interface LayerGroupViewerOptions {
@@ -358,8 +358,8 @@ export class LayerGroupViewer extends RefCounted {
   get enableAdaptiveDownsampling() {
     return this.viewerState.enableAdaptiveDownsampling;
   }
-  get hideCrossSectionBackgroundIn3D() {
-    return this.viewerState.hideCrossSectionBackgroundIn3D;
+  get hideCrossSectionBackground3D() {
+    return this.viewerState.hideCrossSectionBackground3D;
   }
   get showScaleBar() {
     return this.viewerState.showScaleBar;

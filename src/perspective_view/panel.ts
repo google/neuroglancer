@@ -95,7 +95,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
-  hideCrossSectionBackgroundIn3D: TrackableBoolean;
+  hideCrossSectionBackground3D: TrackableBoolean;
   rpc: RPC;
 }
 
@@ -588,7 +588,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       viewer.wireFrame.changed.add(() => this.scheduleRedraw()),
     );
     this.registerDisposer(
-      viewer.hideCrossSectionBackgroundIn3D.changed.add(() =>
+      viewer.hideCrossSectionBackground3D.changed.add(() =>
         this.scheduleRedraw(),
       ),
     );
