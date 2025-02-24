@@ -98,6 +98,7 @@ from .viewer_state import (
     Annotation,  # noqa: F401
     PointAnnotation,  # noqa: F401
     LineAnnotation,  # noqa: F401
+    PolyLineAnnotation, # noqa: F401
     AxisAlignedBoundingBoxAnnotation,  # noqa: F401
     EllipsoidAnnotation,  # noqa: F401
     AnnotationPropertySpec,  # noqa: F401

@@ -1094,6 +1094,16 @@ class LineAnnotation(Annotation):
 
 
 @export
+class PolyLineAnnotation(Annotation):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, type="polyline", **kwargs)
+
+    points = wrapped_property("points", typed_list(array_wrapper(np.float32)))
+
+
+@export
 class AxisAlignedBoundingBoxAnnotation(Annotation):
     __slots__ = ()
 
@@ -1120,6 +1130,7 @@ annotation_types = {
     "line": LineAnnotation,
     "axis_aligned_bounding_box": AxisAlignedBoundingBoxAnnotation,
     "ellipsoid": EllipsoidAnnotation,
+    "polyline": PolyLineAnnotation,
 }
 
 
