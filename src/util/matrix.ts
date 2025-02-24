@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 
 /**
  * Sets the `m * k` matrix `c` to the product of `m * n` matrix `a` and `n * k` matrix `b`.
@@ -22,7 +22,7 @@ import type { TypedArray } from "#src/util/array.js";
  * `a`, `b` and `c` are column-major with column strides of `lda`, `ldb`, and `ldc`, respectively.
  * `c` must not overlap `a` or `b`.
  */
-export function multiply<T extends TypedArray>(
+export function multiply<T extends TypedNumberArray>(
   c: T,
   ldc: number,
   a: T,
@@ -45,7 +45,7 @@ export function multiply<T extends TypedArray>(
   return c;
 }
 
-export function identity<T extends TypedArray>(
+export function identity<T extends TypedNumberArray>(
   a: T,
   lda: number,
   n: number,
@@ -58,7 +58,7 @@ export function identity<T extends TypedArray>(
   return a;
 }
 
-export function createIdentity<T extends TypedArray>(
+export function createIdentity<T extends TypedNumberArray>(
   c: { new (n: number): T },
   rows: number,
   cols: number = rows,
@@ -66,7 +66,7 @@ export function createIdentity<T extends TypedArray>(
   return identity(new c(rows * cols), rows, Math.min(rows, cols));
 }
 
-export function createHomogeneousScaleMatrix<T extends TypedArray>(
+export function createHomogeneousScaleMatrix<T extends TypedNumberArray>(
   c: { new (length: number): T },
   scales: ArrayLike<number>,
   square = true,
@@ -83,7 +83,7 @@ export function createHomogeneousScaleMatrix<T extends TypedArray>(
   return m;
 }
 
-export function createHomogeneousTranslationMatrix<T extends TypedArray>(
+export function createHomogeneousTranslationMatrix<T extends TypedNumberArray>(
   c: { new (length: number): T },
   translation: ArrayLike<number>,
   square = true,
@@ -97,7 +97,11 @@ export function createHomogeneousTranslationMatrix<T extends TypedArray>(
   return m;
 }
 
-export function isIdentity<T extends TypedArray>(a: T, lda: number, n: number) {
+export function isIdentity<T extends TypedNumberArray>(
+  a: T,
+  lda: number,
+  n: number,
+) {
   for (let i = 0; i < n; ++i) {
     for (let j = 0; j < n; ++j) {
       if (a[i * lda + j] !== (i === j ? 1 : 0)) return false;
@@ -106,7 +110,7 @@ export function isIdentity<T extends TypedArray>(a: T, lda: number, n: number) {
   return true;
 }
 
-export function copy<T extends TypedArray>(
+export function copy<T extends TypedNumberArray>(
   b: T,
   ldb: number,
   a: T,
@@ -124,7 +128,7 @@ export function copy<T extends TypedArray>(
   return b;
 }
 
-export function extendHomogeneousTransform<T extends TypedArray>(
+export function extendHomogeneousTransform<T extends TypedNumberArray>(
   b: T,
   bRank: number,
   a: T,
@@ -146,7 +150,7 @@ let pivots: Uint32Array | undefined;
 /**
  * Computes the inverse of a square matrix in place, and returns the determinant.
  */
-export function inverseInplace<T extends TypedArray>(
+export function inverseInplace<T extends TypedNumberArray>(
   a: T,
   lda: number,
   n: number,
@@ -238,7 +242,7 @@ export function inverseInplace<T extends TypedArray>(
 /**
  * Computes the inverse and returns the determinant.
  */
-export function inverse<T extends TypedArray>(
+export function inverse<T extends TypedNumberArray>(
   b: T,
   ldb: number,
   a: T,
@@ -249,7 +253,7 @@ export function inverse<T extends TypedArray>(
   return inverseInplace(b, ldb, n);
 }
 
-export function equal<T extends TypedArray>(
+export function equal<T extends TypedNumberArray>(
   a: T,
   lda: number,
   b: T,
@@ -267,7 +271,7 @@ export function equal<T extends TypedArray>(
   return true;
 }
 
-export function transpose<T extends TypedArray>(
+export function transpose<T extends TypedNumberArray>(
   b: T,
   ldb: number,
   a: T,
@@ -284,9 +288,9 @@ export function transpose<T extends TypedArray>(
 }
 
 export function transformPoint<
-  Out extends TypedArray,
-  Matrix extends TypedArray,
-  Vector extends TypedArray,
+  Out extends TypedNumberArray,
+  Matrix extends TypedNumberArray,
+  Vector extends TypedNumberArray,
 >(out: Out, mat: Matrix, matrixStride: number, vec: Vector, rank: number): Out {
   for (let i = 0; i < rank; ++i) {
     let sum = mat[matrixStride * rank + i];
@@ -299,9 +303,9 @@ export function transformPoint<
 }
 
 export function transformVector<
-  Out extends TypedArray,
-  Matrix extends TypedArray,
-  Vector extends TypedArray,
+  Out extends TypedNumberArray,
+  Matrix extends TypedNumberArray,
+  Vector extends TypedNumberArray,
 >(out: Out, mat: Matrix, matrixStride: number, vec: Vector, rank: number): Out {
   for (let i = 0; i < rank; ++i) {
     let sum = 0;
@@ -314,8 +318,8 @@ export function transformVector<
 }
 
 export function permuteRows<
-  Output extends TypedArray,
-  Input extends TypedArray,
+  Output extends TypedNumberArray,
+  Input extends TypedNumberArray,
 >(
   output: Output,
   outputStride: number,
@@ -335,8 +339,8 @@ export function permuteRows<
 }
 
 export function permuteCols<
-  Output extends TypedArray,
-  Input extends TypedArray,
+  Output extends TypedNumberArray,
+  Input extends TypedNumberArray,
 >(
   output: Output,
   outputStride: number,

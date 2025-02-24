@@ -320,16 +320,15 @@ export class CompressedSegmentationVolumeChunk extends SingleTextureVolumeChunk<
     }
     const offset = data[dataPosition[3] || 0];
     if (chunkFormat.dataType === DataType.UINT64) {
-      const result = new Uint64();
-      readSingleChannelValueUint64(
-        result,
-        data,
-        /*baseOffset=*/ offset,
-        chunkDataSize,
-        chunkFormat.subchunkSize,
-        dataPosition,
+      return Uint64.fromBigInt(
+        readSingleChannelValueUint64(
+          data,
+          /*baseOffset=*/ offset,
+          chunkDataSize,
+          chunkFormat.subchunkSize,
+          dataPosition,
+        ),
       );
-      return result;
     }
     return readSingleChannelValueUint32(
       data,

@@ -36,7 +36,7 @@ def json_encoder_default(obj):
         return float(obj)
     elif isinstance(obj, np.ndarray):
         return list(obj)
-    elif isinstance(obj, (set, frozenset)):
+    elif isinstance(obj, set | frozenset):
         return list(obj)
     raise TypeError
 

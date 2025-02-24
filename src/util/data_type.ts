@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { TypedArrayConstructor } from "#src/util/array.js";
+import type { TypedNumberArrayConstructor } from "#src/util/array.js";
 
 /**
  * If this is updated, DATA_TYPE_BYTES must also be updated.
@@ -54,7 +54,7 @@ export const DATA_TYPE_BYTES: Record<DataType, number> = {
 
 export const DATA_TYPE_ARRAY_CONSTRUCTOR: Record<
   DataType,
-  TypedArrayConstructor
+  TypedNumberArrayConstructor
 > = {
   [DataType.UINT8]: Uint8Array,
   [DataType.INT8]: Int8Array,
@@ -91,7 +91,7 @@ export function makeDataTypeArrayView<TArrayBuffer extends ArrayBufferLike>(
     DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType];
   return new (DATA_TYPE_ARRAY_CONSTRUCTOR[
     dataType
-  ] as TypedArrayConstructor<TArrayBuffer>)(
+  ] as TypedNumberArrayConstructor<TArrayBuffer>)(
     buffer,
     byteOffset,
     (byteLength / bytesPerElement) * javascriptElementsPerArrayElement,
