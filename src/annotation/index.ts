@@ -701,7 +701,8 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     offset: number,
     isLittleEndian: boolean,
     rank: number,
-    annotation: T,
+    annotation?: T,
+    geometryDataStride?: number,
   ) => void;
   deserialize: (
     buffer: DataView,
@@ -880,7 +881,8 @@ export const annotationTypeHandlers: Record<
       );
     },
     serializedBytes(rank: number, annotation?: PolyLine) {
-      if (annotation === undefined) return 0;
+      // If no annotation, can assume broken down
+      if (annotation === undefined) return 4 * rank * 2;
       return 4 * rank * 2 * (annotation.points.length - 1);
     },
     serialize(
@@ -889,28 +891,21 @@ export const annotationTypeHandlers: Record<
       isLittleEndian: boolean,
       rank: number,
       annotation: PolyLine,
+      geometryDataStride: number,
     ) {
       // Build buffer like
       // P1 P2 PROPERTIES P3 P4 PROPERTIES ...
       for (let i = 0; i < annotation.points.length - 1; i++) {
-        console.log("before serializing", offset);
         const firstPoint = annotation.points[i];
-        offset = serializeFloatVector(
+        const secondPoint = annotation.points[i + 1];
+        serializeTwoFloatVectors(
           buffer,
-          offset,
+          offset + i * geometryDataStride,
           isLittleEndian,
           rank,
           firstPoint,
-        );
-        const secondPoint = annotation.points[i + 1];
-        offset = serializeFloatVector(
-          buffer,
-          offset,
-          isLittleEndian,
-          rank,
           secondPoint,
         );
-        console.log("After serializing", offset);
       }
     },
     // TODO (SKM) how to make the calls to this give the index offset?
@@ -1501,7 +1496,7 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
 // TODO (SKM) make index non optional
 export interface SerializedAnnotations {
   data: Uint8Array<ArrayBuffer>;
-  index?: Uint8Array<ArrayBuffer>;
+  idToSize: Map<string, number>;
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];
@@ -1532,16 +1527,16 @@ function serializeAnnotations(
           propertySerializer.rank,
           annotation,
         );
-        console.log("annotation polyline bytes", bytes)
         totalBytes += bytes;
       }
-      // indexBytes += count * 8;
     } else {
       totalBytes += serializedPropertiesBytes * count;
     }
   }
   const typeToIds: string[][] = [];
   const typeToIdMaps: Map<string, number>[] = [];
+  // TODO (SKM) make this more generic
+  const idToSize = new Map<string, number>();
   console.log(totalBytes);
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
@@ -1561,6 +1556,7 @@ function serializeAnnotations(
     const serialize = handler.serialize;
     const offset = typeToOffset[annotationType];
     const geometryDataStride = propertySerializer.propertyGroupBytes[0];
+    console.log("stride", annotationType, geometryDataStride);
     // let indexOffset = 0;
     for (let i = 0, count = annotations.length; i < count; ++i) {
       const annotation = annotations[i];
@@ -1580,27 +1576,49 @@ function serializeAnnotations(
       // TODO (SKM) make serialize accept the IndexView and handle both
       // TODO handle polyline properly here, for now assume length two
       // polyline just to debug the rendering
+      // TODO (SKM) let the annotation type indicate this
+      // TODO (SKM) expand this
       serialize(
-        dataView,
-        offset + i * geometryDataStride,
-        isLittleEndian,
-        rank,
-        annotation,
-      );
-      serializeProperties(
-        dataView,
-        offset,
-        i,
-        count,
-        isLittleEndian,
-        annotation.properties,
-      );
+          dataView,
+          offset + i * geometryDataStride,
+          isLittleEndian,
+          rank,
+          annotation,
+          geometryDataStride,
+        );
+      if (annotationType === AnnotationType.POLYLINE) {
+        const polyline = annotation as PolyLine;
+        // Store the size of the polyline in the map
+        idToSize.set(polyline.id, polyline.points.length - 1);
+        // Loop over each pair of points
+        for (let j = 0; j < polyline.points.length - 1; j++) {
+          // Need to serialize properties multiple times
+          // TODO (SKM) improve on this
+          serializeProperties(
+            dataView,
+            offset,
+            i,
+            count,
+            isLittleEndian,
+            polyline.properties,
+          );
+        }
+      } else {
+        serializeProperties(
+          dataView,
+          offset,
+          i,
+          count,
+          isLittleEndian,
+          annotation.properties,
+        );
+      }
     }
   }
   console.log("totalBytes", totalBytes);
   return {
     data: new Uint8Array(data),
-    index: new Uint8Array(),
+    idToSize,
     typeToIds,
     typeToOffset,
     typeToIdMaps,

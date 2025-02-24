@@ -231,12 +231,6 @@ export class AnnotationLayer extends RefCounted {
    */
   buffer: GLBuffer | undefined;
 
-  /**
-   * Stores a buffer that points into the buffer containing the serialized annotations.
-   * This buffer is used to index into the serialized annotations.
-   */
-  indexBuffer: GLBuffer | undefined;
-
   numPickIds = 0;
 
   /**
@@ -371,14 +365,9 @@ export class AnnotationLayer extends RefCounted {
     if (source instanceof AnnotationSource) {
       const generation = source.changed.count;
       if (this.generation !== generation) {
-        let { buffer, indexBuffer } = this;
+        let { buffer } = this;
         if (buffer === undefined) {
           buffer = this.buffer = this.registerDisposer(
-            new GLBuffer(this.chunkManager.gl),
-          );
-        }
-        if (indexBuffer === undefined) {
-          indexBuffer = this.indexBuffer = this.registerDisposer(
             new GLBuffer(this.chunkManager.gl),
           );
         }
@@ -389,9 +378,6 @@ export class AnnotationLayer extends RefCounted {
             segmentationFilter(this.segmentationStates.value),
           ));
         buffer.setData(this.serializedAnnotations.data);
-        if (this.serializedAnnotations.index !== undefined) {
-        indexBuffer.setData(this.serializedAnnotations.index);
-        }
         this.numPickIds = computeNumPickIds(serializedAnnotations);
       }
     }
@@ -648,7 +634,7 @@ function AnnotationRenderLayer<
       const { base } = this;
       const { chunkDisplayTransform } = state;
       const { serializedAnnotations } = chunk;
-      const { typeToIdMaps, typeToOffset } = serializedAnnotations;
+      const { typeToIdMaps, typeToOffset, idToSize } = serializedAnnotations;
       let pickId = 0;
       if (renderContext.emitPickID) {
         pickId = renderContext.pickIDs.register(
@@ -687,7 +673,12 @@ function AnnotationRenderLayer<
           .visibleHistograms > 0;
       for (const annotationType of annotationTypes) {
         const idMap = typeToIdMaps[annotationType];
-        let count = idMap.size;
+        let count = 0;
+        // For each id in idMap, get the size from idToSize.
+        for (const id of idMap.keys()) {
+          const size = idToSize.get(id) ?? 1;
+          count += size;
+        }
         if (count > 0) {
           const handler = getAnnotationTypeRenderHandler(annotationType);
           let selectedIndex = 0xffffffff;
