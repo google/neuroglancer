@@ -77,15 +77,13 @@ interface UIScreenshotStatistics {
   downloadSpeedDescription: string;
 }
 
-// Define the structure for size with a unit
 interface ScreenshotOrPanelSize {
   width: number;
   height: number;
 }
 
-// Define the scale structure
 interface ResolutionMetadata {
-  scaleWithPrefix: string; // Human-readable format (e.g., "8.75nm/px")
+  formattedScale: string; // Human-readable format (e.g., "8.75nm/px")
   dimension: string; // E.g., "Isotropic", "x", "y", "z"
   scale: number; // Actual scale value in SI unit
   unit: string; // SI unit
@@ -861,31 +859,29 @@ export class ScreenshotDialog extends Overlay {
       panelResolution: boolean = true,
     ): T[] {
       {
-        // If it is in the format RESOLUTION then process just that
-        // Split into two parts on /
-        const splitIntoParts = (x: string) => {
+        const extractScaleAndUnit = (resolution: string) => {
           if (panelResolution) {
-            const split = x.split("/");
+            const split = resolution.split("/");
             return { scale: split[0], unit: split[1] };
           }
-          return { scale: x, unit: "" };
+          return { scale: resolution, unit: "" };
         };
         const uniformName = panelResolution ? "Isotropic" : "Isomorphic";
         const result = [];
         if (!fullResolution.includes(" ")) {
-          const resolutionParts = splitIntoParts(fullResolution);
-          const scale = parseScale(resolutionParts.scale);
+          const formattedScale = extractScaleAndUnit(fullResolution);
+          const scale = parseScale(formattedScale.scale);
           if (scale === undefined) {
             throw new Error(`Invalid scale: ${fullResolution}`);
           }
           const data: any = {
-            scaleWithPrefix: fullResolution,
+            formattedScale: formattedScale.scale,
             dimension: uniformName,
             scale: scale.scale,
             unit: scale.unit,
           };
           if (panelResolution) {
-            data.panelViewportUnit = resolutionParts.unit;
+            data.panelViewportUnit = formattedScale.unit;
           }
           result.push(data);
           return result;
@@ -895,19 +891,19 @@ export class ScreenshotDialog extends Overlay {
         for (let i = 0; i < splitResolution.length; i += 2) {
           const name = splitResolution[i];
           const resolution = splitResolution[i + 1];
-          const resolutionParts = splitIntoParts(resolution);
-          const scale = parseScale(resolutionParts.scale);
+          const formattedScale = extractScaleAndUnit(resolution);
+          const scale = parseScale(formattedScale.scale);
           if (scale === undefined) {
             throw new Error(`Invalid scale: ${splitResolution[i]}`);
           }
           const data: any = {
-            scaleWithPrefix: resolution,
+            formattedScale: formattedScale.scale,
             dimension: name,
             scale: scale.scale,
             unit: scale.unit,
           };
           if (panelResolution) {
-            data.panelViewportUnit = resolutionParts.unit;
+            data.panelViewportUnit = formattedScale.unit;
           }
           result.push(data);
         }
@@ -924,12 +920,11 @@ export class ScreenshotDialog extends Overlay {
 
     const panels = [];
     for (const resolution of panelResolutionData) {
-      const panelMetadataItem = {
+      const panelMetadataItem: PanelMetadata = {
         type: resolution.type,
         pixelResolution: {
           width: resolution.width,
           height: resolution.height,
-          unit: "px",
         },
         physicalScale: formatPanelResolution(resolution.resolution),
       };
@@ -938,7 +933,7 @@ export class ScreenshotDialog extends Overlay {
 
     const layers = [];
     for (const resolution of layerResolutionData) {
-      const layerMetadataItem = {
+      const layerMetadataItem: LayerMetadata = {
         name: resolution.name,
         type: resolution.type,
         voxelResolution: formatLayerResolution(resolution.resolution),
