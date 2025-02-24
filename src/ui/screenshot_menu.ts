@@ -28,6 +28,7 @@ import type {
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { MAX_RENDER_AREA_PIXELS } from "#src/util/screenshot_manager.js";
+import { parseScale } from "#src/util/si_units.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type {
   DimensionResolutionStats,
@@ -40,7 +41,6 @@ import {
 } from "#src/util/viewer_resolution_stats.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
-import { parseScale } from "#src/util/si_units.js";
 
 // If DEBUG_ALLOW_MENU_CLOSE is true, the menu can be closed by clicking the close button
 // Usually the user is locked into the screenshot menu until the screenshot is taken or cancelled
@@ -186,7 +186,6 @@ function formatPixelResolution(panelArea: PanelViewport) {
 
 function resolutionToJson<T extends ResolutionMetadata>(
   fullResolution: string,
-  panelResolution: boolean = true,
 ): T[] {
   const extractScaleAndUnit = (resolution: string) => {
     const [formattedScale, unit = ""] = resolution.split("/");
@@ -208,12 +207,7 @@ function resolutionToJson<T extends ResolutionMetadata>(
   };
 
   if (!fullResolution.includes(" ")) {
-    return [
-      createResolutionData(
-        panelResolution ? "Isotropic" : "Isomorphic",
-        fullResolution,
-      ),
-    ];
+    return [createResolutionData("Isomorphic", fullResolution)];
   }
 
   return fullResolution
@@ -892,7 +886,7 @@ export class ScreenshotDialog extends Overlay {
           width: resolution.width,
           height: resolution.height,
         },
-        physicalScale: resolutionToJson(resolution.resolution, true),
+        physicalScale: resolutionToJson(resolution.resolution),
       };
       panelsJson.push(panelMetadataItem);
     }
@@ -902,7 +896,7 @@ export class ScreenshotDialog extends Overlay {
       const layerMetadataItem: LayerMetadata = {
         name: resolution.name,
         type: resolution.type,
-        voxelResolution: resolutionToJson(resolution.resolution, false),
+        voxelResolution: resolutionToJson(resolution.resolution),
       };
       layersJson.push(layerMetadataItem);
     }
