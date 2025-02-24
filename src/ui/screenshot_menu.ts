@@ -184,7 +184,7 @@ function formatPixelResolution(panelArea: PanelViewport) {
   return { width, height, type };
 }
 
-function resolutionToJson<T extends ResolutionMetadata>(
+function parseResolution<T extends ResolutionMetadata>(
   fullResolution: string,
 ): T[] {
   const extractScaleAndUnit = (resolution: string) => {
@@ -444,7 +444,7 @@ export class ScreenshotDialog extends Overlay {
     const screenshotCopyButton = makeCopyButton({
       title: "Copy table to clipboard",
       onClick: () => {
-        const result = setClipboard(this.getResolutionText());
+        const result = setClipboard(this.generateScreenshotMetadataJson());
         StatusMessage.showTemporaryMessage(
           result
             ? "Resolution metadata JSON copied to clipboard"
@@ -866,11 +866,7 @@ export class ScreenshotDialog extends Overlay {
     };
   }
 
-  /**
-  Private function to copy the resolution of the screenshot to the clipboard
-  This will be in JSON format.
-    */
-  private getResolutionText() {
+  private generateScreenshotMetadataJson() {
     const screenshotSize = {
       width: this.screenshotWidth,
       height: this.screenshotHeight,
@@ -878,7 +874,7 @@ export class ScreenshotDialog extends Overlay {
     const { panelResolutionData, layerResolutionData } =
       getViewerResolutionMetadata(this.screenshotManager.viewer);
 
-    const panelsJson = [];
+    const panelsMetadata = [];
     for (const resolution of panelResolutionData) {
       const panelMetadataItem: PanelMetadata = {
         type: resolution.type,
@@ -886,27 +882,27 @@ export class ScreenshotDialog extends Overlay {
           width: resolution.width,
           height: resolution.height,
         },
-        physicalScale: resolutionToJson(resolution.resolution),
+        physicalScale: parseResolution(resolution.resolution),
       };
-      panelsJson.push(panelMetadataItem);
+      panelsMetadata.push(panelMetadataItem);
     }
 
-    const layersJson = [];
+    const layersMetadata = [];
     for (const resolution of layerResolutionData) {
       const layerMetadataItem: LayerMetadata = {
         name: resolution.name,
         type: resolution.type,
-        voxelResolution: resolutionToJson(resolution.resolution),
+        voxelResolution: parseResolution(resolution.resolution),
       };
-      layersJson.push(layerMetadataItem);
+      layersMetadata.push(layerMetadataItem);
     }
 
     const screenshotMetadata: ScreenshotMetadata = {
       date: new Date().toISOString(),
       name: this.nameInput.value,
       size: screenshotSize,
-      panels: panelsJson,
-      layers: layersJson,
+      panels: panelsMetadata,
+      layers: layersMetadata,
     };
 
     return JSON.stringify(screenshotMetadata, null, 2);
