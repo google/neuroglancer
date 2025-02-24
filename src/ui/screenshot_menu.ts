@@ -77,20 +77,28 @@ interface UIScreenshotStatistics {
   downloadSpeedDescription: string;
 }
 
+interface ScreenshotMetadata {
+  date: string;
+  name: string;
+  size: ScreenshotOrPanelSize;
+  panels: PanelMetadata[];
+  layers: LayerMetadata[];
+}
+
 interface ScreenshotOrPanelSize {
   width: number;
   height: number;
 }
 
 interface ResolutionMetadata {
-  formattedScale: string; // Human-readable format (e.g., "8.75nm/px")
+  formattedScale: string; // Human-readable format (e.g., "8.75nm")
   dimension: string; // E.g., "Isotropic", "x", "y", "z"
   scale: number; // Actual scale value in SI unit
   unit: string; // SI unit
 }
 
 interface PanelResolutionMetadata extends ResolutionMetadata {
-  panelViewportUnit: string; // applies only to panels
+  panelViewportUnit: string;
 }
 
 interface PanelMetadata {
@@ -103,14 +111,6 @@ interface LayerMetadata {
   name: string;
   type: string;
   voxelResolution: ResolutionMetadata[];
-}
-
-interface ScreenshotMetadata {
-  date: string;
-  name: string;
-  screenshotSize: ScreenshotOrPanelSize;
-  panels: PanelMetadata[];
-  layers: LayerMetadata[];
 }
 
 const statisticsNamesForUI = {
@@ -182,6 +182,47 @@ function formatPixelResolution(panelArea: PanelViewport) {
   const height = Math.round(panelArea.bottom - panelArea.top);
   const type = panelArea.panelType;
   return { width, height, type };
+}
+
+function resolutionToJson<T extends ResolutionMetadata>(
+  fullResolution: string,
+  panelResolution: boolean = true,
+): T[] {
+  const extractScaleAndUnit = (resolution: string) => {
+    const [formattedScale, unit = ""] = resolution.split("/");
+    return { formattedScale, unit };
+  };
+
+  const createResolutionData = (dimension: string, resolution: string): T => {
+    const { formattedScale, unit } = extractScaleAndUnit(resolution);
+    const scale = parseScale(formattedScale);
+    if (!scale) throw new Error(`Invalid scale: ${resolution}`);
+
+    return {
+      formattedScale,
+      dimension,
+      scale: scale.scale,
+      unit: scale.unit,
+      ...(unit && { panelViewportUnit: unit }),
+    } as T;
+  };
+
+  if (!fullResolution.includes(" ")) {
+    return [
+      createResolutionData(
+        panelResolution ? "Isotropic" : "Isomorphic",
+        fullResolution,
+      ),
+    ];
+  }
+
+  return fullResolution
+    .split(" ")
+    .reduce<T[]>((result, value, index, array) => {
+      if (index % 2 === 0)
+        result.push(createResolutionData(value, array[index + 1]));
+      return result;
+    }, []);
 }
 
 /**
@@ -836,81 +877,6 @@ export class ScreenshotDialog extends Overlay {
   This will be in JSON format.
     */
   private getResolutionText() {
-    function formatPanelResolution(
-      fullResolution: string,
-    ): PanelResolutionMetadata[] {
-      return formatPhysicalResolution<PanelResolutionMetadata>(
-        fullResolution,
-        true,
-      );
-    }
-
-    function formatLayerResolution(
-      fullResolution: string,
-    ): ResolutionMetadata[] {
-      return formatPhysicalResolution<ResolutionMetadata>(
-        fullResolution,
-        false,
-      );
-    }
-
-    function formatPhysicalResolution<T extends ResolutionMetadata>(
-      fullResolution: string,
-      panelResolution: boolean = true,
-    ): T[] {
-      {
-        const extractScaleAndUnit = (resolution: string) => {
-          if (panelResolution) {
-            const split = resolution.split("/");
-            return { scale: split[0], unit: split[1] };
-          }
-          return { scale: resolution, unit: "" };
-        };
-        const uniformName = panelResolution ? "Isotropic" : "Isomorphic";
-        const result = [];
-        if (!fullResolution.includes(" ")) {
-          const formattedScale = extractScaleAndUnit(fullResolution);
-          const scale = parseScale(formattedScale.scale);
-          if (scale === undefined) {
-            throw new Error(`Invalid scale: ${fullResolution}`);
-          }
-          const data: any = {
-            formattedScale: formattedScale.scale,
-            dimension: uniformName,
-            scale: scale.scale,
-            unit: scale.unit,
-          };
-          if (panelResolution) {
-            data.panelViewportUnit = formattedScale.unit;
-          }
-          result.push(data);
-          return result;
-        }
-        // otherwise it will be name1 res1 name2 res2 name3 res3
-        const splitResolution = fullResolution.split(" ");
-        for (let i = 0; i < splitResolution.length; i += 2) {
-          const name = splitResolution[i];
-          const resolution = splitResolution[i + 1];
-          const formattedScale = extractScaleAndUnit(resolution);
-          const scale = parseScale(formattedScale.scale);
-          if (scale === undefined) {
-            throw new Error(`Invalid scale: ${splitResolution[i]}`);
-          }
-          const data: any = {
-            formattedScale: formattedScale.scale,
-            dimension: name,
-            scale: scale.scale,
-            unit: scale.unit,
-          };
-          if (panelResolution) {
-            data.panelViewportUnit = formattedScale.unit;
-          }
-          result.push(data);
-        }
-        return result;
-      }
-    }
-
     const screenshotSize = {
       width: this.screenshotWidth,
       height: this.screenshotHeight,
@@ -918,7 +884,7 @@ export class ScreenshotDialog extends Overlay {
     const { panelResolutionData, layerResolutionData } =
       getViewerResolutionMetadata(this.screenshotManager.viewer);
 
-    const panels = [];
+    const panelsJson = [];
     for (const resolution of panelResolutionData) {
       const panelMetadataItem: PanelMetadata = {
         type: resolution.type,
@@ -926,29 +892,27 @@ export class ScreenshotDialog extends Overlay {
           width: resolution.width,
           height: resolution.height,
         },
-        physicalScale: formatPanelResolution(resolution.resolution),
+        physicalScale: resolutionToJson(resolution.resolution, true),
       };
-      panels.push(panelMetadataItem);
+      panelsJson.push(panelMetadataItem);
     }
 
-    const layers = [];
+    const layersJson = [];
     for (const resolution of layerResolutionData) {
       const layerMetadataItem: LayerMetadata = {
         name: resolution.name,
         type: resolution.type,
-        voxelResolution: formatLayerResolution(resolution.resolution),
+        voxelResolution: resolutionToJson(resolution.resolution, false),
       };
-      layers.push(layerMetadataItem);
+      layersJson.push(layerMetadataItem);
     }
 
-    const date = new Date().toISOString();
-    const name = this.nameInput.value;
     const screenshotMetadata: ScreenshotMetadata = {
-      date,
-      name,
-      screenshotSize,
-      panels,
-      layers,
+      date: new Date().toISOString(),
+      name: this.nameInput.value,
+      size: screenshotSize,
+      panels: panelsJson,
+      layers: layersJson,
     };
 
     return JSON.stringify(screenshotMetadata, null, 2);
