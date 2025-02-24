@@ -25,7 +25,6 @@ import type { DataType } from "#src/util/data_type.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
   DATA_TYPE_BYTES,
-  DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT,
 } from "#src/util/data_type.js";
 import { convertEndian } from "#src/util/endian.js";
 import { pythonLiteralParse } from "#src/util/json.js";
@@ -83,17 +82,14 @@ export function parseNpy(x: Uint8Array<ArrayBuffer>) {
   }
   const { dataType, endianness } = parseNumpyDtype(dtype);
   const bytesPerElement = DATA_TYPE_BYTES[dataType];
-  const javascriptElementsPerArrayElement =
-    DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType];
   const arrayConstructor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType];
-  const javascriptElements = javascriptElementsPerArrayElement * numElements;
   if (bytesPerElement * numElements + dataOffset !== x.byteLength) {
     throw new Error("Expected length does not match length of data");
   }
   const data = new arrayConstructor(
     x.buffer,
     x.byteOffset + dataOffset,
-    javascriptElements,
+    numElements,
   ) as TypedNumberArray<ArrayBuffer>;
   convertEndian(data, endianness, bytesPerElement);
   return new NumpyArray(

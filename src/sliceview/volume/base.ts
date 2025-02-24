@@ -31,7 +31,6 @@ import { DATA_TYPE_BYTES, DataType } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import { getDependentTransformInputDimensions } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
-import { Uint64 } from "#src/util/uint64.js";
 import * as vector from "#src/util/vector.js";
 
 export { DATA_TYPE_BYTES, DataType };
@@ -76,7 +75,7 @@ export interface VolumeChunkSpecificationBaseOptions
    */
   baseVoxelOffset?: Float32Array;
   dataType: DataType;
-  fillValue?: number | Uint64;
+  fillValue?: number | bigint;
 
   /**
    * If set, indicates that the chunk is in compressed segmentation format with the specified block
@@ -132,7 +131,7 @@ export interface VolumeChunkSpecification
   baseVoxelOffset: Float32Array;
   dataType: DataType;
   compressedSegmentationBlockSize: vec3 | undefined;
-  fillValue: number | Uint64;
+  fillValue: number | bigint;
 }
 
 export function makeVolumeChunkSpecification(
@@ -141,7 +140,7 @@ export function makeVolumeChunkSpecification(
   const {
     rank,
     dataType,
-    fillValue = dataType === DataType.UINT64 ? Uint64.ZERO : 0,
+    fillValue = dataType === DataType.UINT64 ? 0n : 0,
     compressedSegmentationBlockSize,
   } = options;
   const { baseVoxelOffset = new Float32Array(rank) } = options;

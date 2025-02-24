@@ -30,6 +30,7 @@ import {
   setDropEffect,
 } from "#src/util/drag_and_drop.js";
 import {
+  bigintToStringJsonReplacer,
   parseArray,
   verifyBoolean,
   verifyObjectProperty,
@@ -64,10 +65,13 @@ export function startLayerDrag(
         visible: layer.visible,
       })),
     ),
-    JSON.stringify({
-      layers: sourceInfo.layers.map((layer) => layer.toJSON()),
-      layout: sourceInfo.layoutSpec,
-    }),
+    JSON.stringify(
+      {
+        layers: sourceInfo.layers.map((layer) => layer.toJSON()),
+        layout: sourceInfo.layoutSpec,
+      },
+      bigintToStringJsonReplacer,
+    ),
   );
   if (dragSource !== undefined) {
     dragSource.disposer();

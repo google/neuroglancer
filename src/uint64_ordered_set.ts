@@ -16,13 +16,12 @@
 
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { Signal } from "#src/util/signal.js";
-import type { Uint64 } from "#src/util/uint64.js";
 
 export class Uint64OrderedSet
   implements WatchableValueInterface<Uint64OrderedSet>
 {
-  changed = new Signal<(x: Uint64 | Uint64[] | null, add: boolean) => void>();
-  private data = new Map<bigint, Uint64>();
+  changed = new Signal<(x: bigint | bigint[] | null, add: boolean) => void>();
+  private data = new Set<bigint>();
 
   dispose() {
     this.data.clear();
@@ -36,30 +35,27 @@ export class Uint64OrderedSet
     return this;
   }
 
-  has(x: Uint64) {
-    return this.data.has(BigInt(x.toString()));
+  has(x: bigint) {
+    return this.data.has(x);
   }
 
-  add(x: Uint64 | Uint64[]) {
+  add(x: bigint | bigint[] | BigUint64Array) {
     const { data } = this;
-    if (Array.isArray(x)) {
-      const added: Uint64[] = [];
-      for (let num of x) {
-        const bignum = BigInt(num.toString());
-        if (data.has(bignum)) continue;
-        num = num.clone();
+    if (typeof x !== "bigint") {
+      const added: bigint[] = [];
+      for (const num of x) {
+        if (data.has(num)) continue;
         added.push(num);
-        data.set(bignum, num);
+        data.add(num);
       }
       if (added.length !== 0) {
         this.changed.dispatch(added, true);
       }
     } else {
-      const bignum = BigInt(x.toString());
-      if (data.has(bignum)) {
+      if (data.has(x)) {
         return;
       }
-      data.set(bignum, x.clone());
+      data.add(x);
       this.changed.dispatch(x, true);
     }
   }
@@ -68,30 +64,28 @@ export class Uint64OrderedSet
     return this.data.values();
   }
 
-  delete(x: Uint64 | Uint64[]) {
+  delete(x: bigint | bigint[] | BigUint64Array) {
     const { data } = this;
-    if (Array.isArray(x)) {
-      const removed: Uint64[] = [];
+    if (typeof x !== "bigint") {
+      const removed: bigint[] = [];
       for (const num of x) {
-        const bignum = BigInt(num.toString());
-        if (!data.has(bignum)) continue;
-        data.delete(bignum);
+        if (!data.has(num)) continue;
+        data.delete(num);
         removed.push(num);
       }
       if (removed.length !== 0) {
         this.changed.dispatch(removed, false);
       }
     } else {
-      const bignum = BigInt(x.toString());
-      if (!data.has(bignum)) {
+      if (!data.has(x)) {
         return;
       }
-      data.delete(bignum);
+      data.delete(x);
       this.changed.dispatch(x, false);
     }
   }
 
-  set(x: Uint64 | Uint64[], value: boolean) {
+  set(x: bigint | bigint[] | BigUint64Array, value: boolean) {
     if (!value) {
       this.delete(x);
     } else {
@@ -107,16 +101,16 @@ export class Uint64OrderedSet
   }
 
   toJSON() {
-    return Array.from(this.data.keys(), (x) => x.toString());
+    return Array.from(this.data, (x) => x.toString());
   }
 
   assignFrom(other: Uint64OrderedSet) {
     this.clear();
     const otherData = other.data;
     const { data } = this;
-    const added = Array.from(otherData.values());
-    for (const [key, value] of otherData) {
-      data.set(key, value);
+    const added = Array.from(otherData);
+    for (const x of otherData) {
+      data.add(x);
     }
     this.changed.dispatch(added, true);
   }

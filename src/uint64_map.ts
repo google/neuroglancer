@@ -21,7 +21,6 @@
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { Signal } from "#src/util/signal.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
@@ -35,7 +34,7 @@ export class Uint64Map
   implements WatchableValueInterface<Uint64Map>
 {
   hashTable = new HashMapUint64();
-  changed = new Signal<(x: Uint64 | null, add: boolean) => void>();
+  changed = new Signal<(x: bigint | null, add: boolean) => void>();
 
   get value() {
     return this;
@@ -47,11 +46,11 @@ export class Uint64Map
     return obj;
   }
 
-  set_(key: Uint64, value: Uint64) {
+  set_(key: bigint, value: bigint) {
     return this.hashTable.set(key, value);
   }
 
-  set(key: Uint64, value: Uint64) {
+  set(key: bigint, value: bigint) {
     if (this.set_(key, value)) {
       const { rpc } = this;
       if (rpc) {
@@ -61,27 +60,23 @@ export class Uint64Map
     }
   }
 
-  has(key: Uint64) {
+  has(key: bigint) {
     return this.hashTable.has(key);
   }
 
-  get(key: Uint64, value: Uint64): boolean {
-    return this.hashTable.get(key, value);
+  get(key: bigint): bigint | undefined {
+    return this.hashTable.get(key);
   }
 
   [Symbol.iterator]() {
     return this.hashTable.entries();
   }
 
-  unsafeEntries() {
-    return this.hashTable.unsafeEntries();
-  }
-
-  delete_(key: Uint64) {
+  delete_(key: bigint) {
     return this.hashTable.delete(key);
   }
 
-  delete(key: Uint64) {
+  delete(key: bigint) {
     if (this.delete_(key)) {
       const { rpc } = this;
       if (rpc) {
@@ -97,7 +92,7 @@ export class Uint64Map
 
   assignFrom(other: Uint64Map) {
     this.clear();
-    for (const [key, value] of other.unsafeEntries()) {
+    for (const [key, value] of other) {
       this.set(key, value);
     }
   }
@@ -114,7 +109,7 @@ export class Uint64Map
 
   toJSON() {
     const result: { [key: string]: string } = {};
-    for (const [key, value] of this.hashTable.unsafeEntries()) {
+    for (const [key, value] of this.hashTable.entries()) {
       result[key.toString()] = value.toString();
     }
     return result;

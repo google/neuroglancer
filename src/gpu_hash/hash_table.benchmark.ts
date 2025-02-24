@@ -17,20 +17,16 @@
 import { describe, bench } from "vitest";
 import { HashSetUint64 } from "#src/gpu_hash/hash_table.js";
 import { getRandomValues } from "#src/util/random.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 describe("gpu_hash/hash_table", () => {
   const ht = new HashSetUint64();
   const numValues = 100;
-  const values = new Uint32Array(numValues * 2);
-  const temp = new Uint64();
+  const values = new BigUint64Array(numValues);
   getRandomValues(values);
   bench("insert", () => {
     ht.clear();
-    for (let i = 0, length = values.length; i < length; i += 2) {
-      temp.low = values[i];
-      temp.high = values[i + 1];
-      ht.add(temp);
+    for (const value of values) {
+      ht.add(value);
     }
   });
 });

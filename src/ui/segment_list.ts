@@ -59,6 +59,7 @@ import { makeToolButton } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import { getFixedOrderMergeSplices } from "#src/util/array.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
@@ -79,7 +80,6 @@ import {
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { neverSignal, NullarySignal, Signal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
@@ -94,8 +94,6 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 
-const tempUint64 = new Uint64();
-
 abstract class SegmentListSource
   extends RefCounted
   implements VirtualListSource
@@ -106,7 +104,7 @@ abstract class SegmentListSource
   // The segment list is the concatenation of two lists: the `explicitSegments` list, specified as
   // explicit uint64 ids, and the `matches`, list, specifying the indices into the
   // `segmentPropertyMap` of the matching segments.
-  explicitSegments: Uint64[] | undefined;
+  explicitSegments: bigint[] | undefined;
 
   debouncedUpdate = debounce(() => this.update(), 0);
 
@@ -165,7 +163,7 @@ class StarredSegmentsListSource extends SegmentListSource {
         ...getFixedOrderMergeSplices(
           explicitSegments,
           newSelectedSegments,
-          Uint64.equal,
+          (a, b) => a === b,
         ),
       );
     }
@@ -334,16 +332,14 @@ class SegmentQueryListSource extends SegmentListSource {
 
   render = (index: number) => {
     const { explicitSegments } = this;
-    let id: Uint64;
+    let id: bigint;
     if (explicitSegments !== undefined) {
       id = explicitSegments[index];
     } else {
-      id = tempUint64;
       const propIndex = this.queryResult.value!.indices![index];
       const { ids } =
         this.segmentPropertyMap!.segmentPropertyMap.inlineProperties!;
-      id.low = ids[propIndex * 2];
-      id.high = ids[propIndex * 2 + 1];
+      id = ids[propIndex];
     }
     return this.segmentWidgetFactory.get(id);
   };
@@ -581,12 +577,11 @@ class NumericalPropertiesSummary extends RefCounted {
     }
     const newWindow = getClampedInterval(property.bounds, value.window);
     const oldValue = this.getBounds(propertyIndex);
-    const { dataType } = this.properties[propertyIndex].property;
-    if (!dataTypeIntervalEqual(dataType, newWindow, oldValue.window)) {
+    if (!dataTypeIntervalEqual(newWindow, oldValue.window)) {
       this.bounds.window.value[propertyIndex] = newWindow;
       this.bounds.window.changed.dispatch();
     }
-    if (!dataTypeIntervalEqual(dataType, newRange, oldValue.range)) {
+    if (!dataTypeIntervalEqual(newRange, oldValue.range)) {
       this.bounds.range.value[propertyIndex] = newRange;
       this.bounds.range.changed.dispatch();
     }
@@ -829,16 +824,8 @@ class NumericalPropertiesSummary extends RefCounted {
     // Check if we need to update the image.
     if (
       summary.propertyHistogram === propertyHistogram &&
-      dataTypeIntervalEqual(
-        property.dataType,
-        prevWindowBounds,
-        windowBounds,
-      ) &&
-      dataTypeIntervalEqual(
-        property.dataType,
-        prevConstraintBounds,
-        constraintBounds,
-      )
+      dataTypeIntervalEqual(prevWindowBounds, windowBounds) &&
+      dataTypeIntervalEqual(prevConstraintBounds, constraintBounds)
     ) {
       return;
     }
@@ -904,13 +891,7 @@ class NumericalPropertiesSummary extends RefCounted {
       }
     }
 
-    if (
-      !dataTypeIntervalEqual(
-        property.dataType,
-        property.bounds,
-        constraintBounds,
-      )
-    ) {
+    if (!dataTypeIntervalEqual(property.bounds, constraintBounds)) {
       // Also plot CDF restricted to data that satisfies the constraint.
       const constraintStartBin = Math.floor(
         Math.max(
@@ -1093,15 +1074,15 @@ abstract class SegmentListGroupBase extends RefCounted {
 
   makeSegmentsVisible(visible: boolean) {
     const { visibleSegments } = this.group;
-    const segments = Array.from(this.listSegments(true));
+    const segments = Array.from(this.listSegments());
     visibleSegments.set(segments, visible);
   }
 
   invertVisibility() {
-    const markVisible: Uint64[] = [];
-    const markNonVisible: Uint64[] = [];
+    const markVisible: bigint[] = [];
+    const markNonVisible: bigint[] = [];
     const { visibleSegments } = this.group;
-    for (const segment of this.listSegments(true)) {
+    for (const segment of this.listSegments()) {
       if (visibleSegments.has(segment)) {
         markNonVisible.push(segment);
       } else {
@@ -1114,7 +1095,7 @@ abstract class SegmentListGroupBase extends RefCounted {
 
   selectSegments(select: boolean, changeVisibility = false) {
     const { selectedSegments, visibleSegments } = this.group;
-    const segments = Array.from(this.listSegments(true));
+    const segments = Array.from(this.listSegments());
     if (select || !changeVisibility) {
       selectedSegments.set(segments, select);
     }
@@ -1124,11 +1105,11 @@ abstract class SegmentListGroupBase extends RefCounted {
   }
 
   copySegments(onlyVisible = false) {
-    let ids = [...this.listSegments(true)];
+    let ids = [...this.listSegments()];
     if (onlyVisible) {
       ids = ids.filter((segment) => this.group.visibleSegments.has(segment));
     }
-    ids.sort(Uint64.compare);
+    ids.sort(bigintCompare);
     setClipboard(ids.join(", "));
   }
 
@@ -1148,7 +1129,7 @@ abstract class SegmentListGroupBase extends RefCounted {
           "neuroglancer-starred",
         );
         if (event.shiftKey) {
-          const nonVisibleSegments: Uint64[] = [];
+          const nonVisibleSegments: bigint[] = [];
           for (const segment of this.group.selectedSegments) {
             if (!this.group.visibleSegments.has(segment)) {
               nonVisibleSegments.push(segment);
@@ -1205,9 +1186,7 @@ abstract class SegmentListGroupBase extends RefCounted {
     this.registerDisposer(listSource.changed.add(this.debouncedUpdateStatus));
   }
 
-  *listSegments(safe = false): IterableIterator<Uint64> {
-    safe;
-  }
+  *listSegments(): IterableIterator<bigint> {}
 
   updateStatus() {
     const {
@@ -1300,8 +1279,7 @@ class SegmentListGroupSelected extends SegmentListGroupBase {
     super(listSource, group);
   }
 
-  listSegments(safe = false) {
-    safe;
+  listSegments() {
     return this.group.selectedSegments[Symbol.iterator](); // TODO, better way to call the iterator?
   }
 }
@@ -1314,14 +1292,13 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
     listSource.debouncedUpdate.flush();
   }
 
-  listSegments(safe = false): IterableIterator<Uint64> {
+  listSegments(): IterableIterator<bigint> {
     const { listSource, segmentPropertyMap } = this;
     this.updateQuery();
     const queryResult = listSource.queryResult.value;
     return forEachQueryResultSegmentIdGenerator(
       segmentPropertyMap,
       queryResult,
-      safe,
     );
   }
 

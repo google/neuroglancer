@@ -18,23 +18,21 @@ import {
   SingleTextureChunkFormat,
   SingleTextureVolumeChunk,
 } from "#src/sliceview/single_texture_chunk_format.js";
-import type { VolumeChunkSpecification } from "#src/sliceview/volume/base.js";
-import { DataType } from "#src/sliceview/volume/base.js";
+import type {
+  VolumeChunkSpecification,
+  DataType,
+} from "#src/sliceview/volume/base.js";
 import type {
   ChunkFormatHandler,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { registerChunkFormatHandler } from "#src/sliceview/volume/frontend.js";
 import type {
-  TypedNumberArray,
+  TypedArray,
   TypedNumberArrayConstructor,
 } from "#src/util/array.js";
-import {
-  DATA_TYPE_ARRAY_CONSTRUCTOR,
-  DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT,
-} from "#src/util/data_type.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ShaderBuilder,
@@ -266,7 +264,7 @@ ${shaderType} getDataValueAt(highp ivec3 p`;
     return TextureLayout.get(gl, chunkDataSize, this.textureDims);
   }
 
-  setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedNumberArray) {
+  setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray) {
     const { textureShape } = textureLayout;
     (this.textureDims === 3
       ? setThreeDimensionalTextureData
@@ -286,7 +284,7 @@ interface Source extends VolumeChunkSource {
 }
 
 export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<
-  Uint8Array,
+  TypedArray,
   TextureLayout
 > {
   declare CHUNK_FORMAT_TYPE: ChunkFormat;
@@ -310,12 +308,11 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<
     this.chunkFormat.setTextureData(gl, textureLayout, this.data!);
   }
 
-  getValueAt(dataPosition: Uint32Array): number | Uint64 {
+  getValueAt(dataPosition: Uint32Array): number | bigint {
     const { data } = this;
     if (data === null) {
       return this.source.spec.fillValue;
     }
-    const { chunkFormat } = this;
     const { chunkDataSize } = this;
     let index = 0;
     let stride = 1;
@@ -324,21 +321,7 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<
       index += stride * dataPosition[i];
       stride *= chunkDataSize[i];
     }
-    const dataType = chunkFormat.dataType;
-    switch (dataType) {
-      case DataType.UINT8:
-      case DataType.INT8:
-      case DataType.FLOAT32:
-      case DataType.UINT16:
-      case DataType.INT16:
-      case DataType.UINT32:
-      case DataType.INT32:
-        return data[index];
-      case DataType.UINT64: {
-        const index2 = index * 2;
-        return new Uint64(data[index2], data[index2 + 1]);
-      }
-    }
+    return data[index];
   }
 }
 
@@ -349,26 +332,15 @@ class FillValueChunk extends RefCounted {
 
 export function getFillValueArray(
   dataType: DataType,
-  fillValue: number | Uint64,
+  fillValue: number | bigint,
 ) {
-  const array = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
-    dataType
-  ] as TypedNumberArrayConstructor<ArrayBuffer>)(
-    DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType],
-  );
-  if (dataType === DataType.UINT64) {
-    array[0] = (fillValue as Uint64).low;
-    array[1] = (fillValue as Uint64).high;
-  } else {
-    array[0] = fillValue as number;
-  }
-  return array;
+  return (DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any).of(fillValue);
 }
 
 function getFillValueChunk(
   gl: GL,
   chunkFormat: ChunkFormat,
-  fillValue: number | Uint64,
+  fillValue: number | bigint,
   rank: number,
   textureDims: number,
 ): FillValueChunk {

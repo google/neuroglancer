@@ -19,8 +19,8 @@ import {
   SegmentColorHash,
   SegmentColorShaderManager,
 } from "#src/segment_color.js";
+import { randomUint64 } from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 
 describe("segment_color", () => {
@@ -44,7 +44,7 @@ outB = color.b;
         shader.bind();
         shaderManager.enable(gl, shader, colorHash.value);
 
-        function testValue(x: Uint64) {
+        function testValue(x: bigint) {
           tester.execute({ inputValue: x });
           const expected = new Float32Array(3);
           colorHash.compute(expected, x);
@@ -54,11 +54,11 @@ outB = color.b;
           expect(values.outB).toBeCloseTo(expected[2]);
         }
 
-        testValue(Uint64.parseString("0"));
-        testValue(Uint64.parseString("8"));
+        testValue(0n);
+        testValue(8n);
         const COUNT = 100;
         for (let iter = 0; iter < COUNT; ++iter) {
-          const x = Uint64.random();
+          const x = randomUint64();
           testValue(x);
         }
       },

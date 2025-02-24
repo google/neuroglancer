@@ -22,7 +22,10 @@ import { debounce } from "lodash-es";
 import { TrackableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
-import { verifyStringArray } from "#src/util/json.js";
+import {
+  bigintToStringJsonReplacer,
+  verifyStringArray,
+} from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
 import type { Viewer } from "#src/viewer.js";
@@ -78,7 +81,7 @@ export class RemoteActionHandler extends RefCounted {
     actionState.viewerState = getCachedJson(this.viewer.state).value;
     this.sendActionRequested.dispatch(
       action,
-      JSON.parse(JSON.stringify(actionState)),
+      JSON.parse(JSON.stringify(actionState, bigintToStringJsonReplacer)),
     );
   }
 }

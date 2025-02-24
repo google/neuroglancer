@@ -95,6 +95,7 @@ import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
+import type { TypedNumberArrayConstructor } from "#src/util/array.js";
 import { transposeNestedArrays } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import { mat4, vec3 } from "#src/util/geom.js";
@@ -115,11 +116,11 @@ import {
   verifyString,
   verifyStringArray,
   verifyOptionalBoolean,
+  parseUint64,
 } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export class PrecomputedVolumeChunkSource extends WithParameters(
   WithSharedKvStoreContext(VolumeChunkSource),
@@ -1132,21 +1133,16 @@ async function getMeshDataSource(
 
 function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
   verifyObject(data);
-  const tempUint64 = new Uint64();
   const ids = verifyObjectProperty(data, "ids", (idsObj) => {
     idsObj = verifyStringArray(idsObj);
     const numIds = idsObj.length;
-    const ids = new Uint32Array(numIds * 2);
+    const ids = new BigUint64Array(numIds);
     for (let i = 0; i < numIds; ++i) {
-      if (!tempUint64.tryParseString(idsObj[i])) {
-        throw new Error(`Invalid uint64 id: ${JSON.stringify(idsObj[i])}`);
-      }
-      ids[2 * i] = tempUint64.low;
-      ids[2 * i + 1] = tempUint64.high;
+      ids[i] = parseUint64(idsObj[i]);
     }
     return ids;
   });
-  const numIds = ids.length / 2;
+  const numIds = ids.length;
   const properties = verifyObjectProperty(data, "properties", (propertiesObj) =>
     parseArray(propertiesObj, (propertyObj): InlineSegmentProperty => {
       verifyObject(propertyObj);
@@ -1221,7 +1217,11 @@ function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
                 `Expected ${numIds} values, but received: ${valuesObj.length}`,
               );
             }
-            return DATA_TYPE_ARRAY_CONSTRUCTOR[dataType].from(valuesObj);
+            return (
+              DATA_TYPE_ARRAY_CONSTRUCTOR[
+                dataType
+              ] as TypedNumberArrayConstructor
+            ).from(valuesObj);
           },
         );
         let min = Infinity;

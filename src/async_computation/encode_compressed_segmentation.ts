@@ -38,16 +38,7 @@ registerAsyncComputation(
   encodeCompressedSegmentationUint64,
   async (rawData, shape, blockSize) => {
     tempBuffer.clear();
-    encodeChannelsUint64(
-      tempBuffer,
-      blockSize,
-      new BigUint64Array(
-        rawData.buffer,
-        rawData.byteOffset,
-        rawData.length / 2,
-      ),
-      shape,
-    );
+    encodeChannelsUint64(tempBuffer, blockSize, rawData, shape);
     return { value: tempBuffer.view };
   },
 );

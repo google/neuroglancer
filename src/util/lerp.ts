@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
+import {
+  bigintAbs,
+  bigintMax,
+  bigintMin,
+  clampToUint64,
+  roundToUint64,
+  UINT64_MAX,
+} from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
 import { nextAfterFloat64 } from "#src/util/float.js";
-import { parseFixedLengthArray } from "#src/util/json.js";
-import { Uint64 } from "#src/util/uint64.js";
+import { parseFixedLengthArray, parseUint64 } from "#src/util/json.js";
 
-export type DataTypeInterval = [number, number] | [Uint64, Uint64];
+export type DataTypeInterval = [number, number] | [bigint, bigint];
 
-export type UnknownDataTypeInterval = [number | Uint64, number | Uint64];
+export type UnknownDataTypeInterval = [number | bigint, number | bigint];
 
 export const defaultDataTypeRange: Record<DataType, DataTypeInterval> = {
   [DataType.UINT8]: [0, 0xff],
@@ -30,7 +37,7 @@ export const defaultDataTypeRange: Record<DataType, DataTypeInterval> = {
   [DataType.INT16]: [-0x8000, 0x7fff],
   [DataType.UINT32]: [0, 0xffffffff],
   [DataType.INT32]: [-0x80000000, 0x7fffffff],
-  [DataType.UINT64]: [Uint64.ZERO, new Uint64(0xffffffff, 0xffffffff)],
+  [DataType.UINT64]: [0n, 0xffffffffffffffffn],
   [DataType.FLOAT32]: [0, 1],
 };
 
@@ -42,28 +49,10 @@ export const defaultDataTypeRange: Record<DataType, DataTypeInterval> = {
  */
 export function computeInvlerp(
   range: DataTypeInterval,
-  value: number | Uint64,
+  value: number | bigint,
 ): number {
-  if (typeof value === "number") {
-    const minValue = range[0] as number;
-    const maxValue = range[1] as number;
-    return (value - minValue) / (maxValue - minValue);
-  }
-  const minValue = range[0] as Uint64;
-  const maxValue = range[1] as Uint64;
-  let numerator: number;
-  if (Uint64.compare(value, minValue) < 0) {
-    numerator = -Uint64.subtract(tempUint64, minValue, value).toNumber();
-  } else {
-    numerator = Uint64.subtract(tempUint64, value, minValue).toNumber();
-  }
-  let denominator = Uint64.absDifference(
-    tempUint64,
-    maxValue,
-    minValue,
-  ).toNumber();
-  if (Uint64.compare(minValue, maxValue) > 0) denominator *= -1;
-  return numerator / denominator;
+  const [minValue, maxValue] = range as [any, any];
+  return Number((value as any) - minValue) / Number(maxValue - minValue);
 }
 
 /**
@@ -77,7 +66,7 @@ export function computeLerp(
   range: DataTypeInterval,
   dataType: DataType,
   value: number,
-): number | Uint64 {
+): number | bigint {
   if (typeof range[0] === "number") {
     const minValue = range[0] as number;
     const maxValue = range[1] as number;
@@ -90,41 +79,26 @@ export function computeLerp(
     }
     return result;
   }
-  let minValue = range[0] as Uint64;
-  let maxValue = range[1] as Uint64;
-  if (Uint64.compare(minValue, maxValue) > 0) {
-    [minValue, maxValue] = [maxValue, minValue];
-    value = 1 - value;
-  }
-  const scalar = Uint64.subtract(tempUint64, maxValue, minValue).toNumber();
-  const result = new Uint64();
-  if (value <= 0) {
-    tempUint64.setFromNumber(scalar * -value);
-    Uint64.subtract(result, minValue, Uint64.min(tempUint64, minValue));
-  } else if (value >= 1) {
-    tempUint64.setFromNumber(scalar * (value - 1));
-    Uint64.add(result, maxValue, tempUint64);
-    if (Uint64.less(result, maxValue)) {
-      result.low = result.high = 0xffffffff;
-    }
+  const minValue = range[0] as bigint;
+  const maxValue = range[1] as bigint;
+  const scalar = Number(maxValue - minValue);
+  let result: bigint;
+  if (value >= 1) {
+    result = maxValue + BigInt(Math.round(scalar * (value - 1)));
   } else {
-    tempUint64.setFromNumber(scalar * value);
-    Uint64.add(result, minValue, tempUint64);
-    if (Uint64.less(result, minValue)) {
-      result.low = result.high = 0xffffffff;
-    }
+    result = minValue + BigInt(Math.round(scalar * value));
   }
-  return result;
+  return clampToUint64(result);
 }
 
 export function clampToInterval(
   range: DataTypeInterval,
-  value: number | Uint64,
-): number | Uint64 {
+  value: number | bigint,
+): number | bigint {
   if (typeof value === "number") {
     return Math.min(Math.max(range[0] as number, value), range[1] as number);
   }
-  return Uint64.min(Uint64.max(range[0] as Uint64, value), range[1] as Uint64);
+  return bigintMin(bigintMax(range[0] as bigint, value), range[1] as bigint);
 }
 
 export function getClampedInterval(
@@ -153,19 +127,13 @@ export function normalizeDataTypeInterval(
   return [interval[1], interval[0]] as DataTypeInterval;
 }
 
-export function dataTypeCompare(a: number | Uint64, b: number | Uint64) {
-  if (typeof a === "number") {
-    return (a as number) - (b as number);
-  }
-  return Uint64.compare(a as Uint64, b as Uint64);
+export function dataTypeCompare(a: number | bigint, b: number | bigint) {
+  return (a as any) < (b as any) ? -1 : (a as any) > (b as any) ? 1 : 0;
 }
-
-const tempUint64 = new Uint64();
-const temp2Uint64 = new Uint64();
 
 export function getClosestEndpoint(
   range: DataTypeInterval,
-  value: number | Uint64,
+  value: number | bigint,
 ): number {
   if (typeof value === "number") {
     return Math.abs(value - (range[0] as number)) <
@@ -173,10 +141,8 @@ export function getClosestEndpoint(
       ? 0
       : 1;
   }
-  return Uint64.less(
-    Uint64.absDifference(tempUint64, range[0] as Uint64, value as Uint64),
-    Uint64.absDifference(temp2Uint64, range[1] as Uint64, value as Uint64),
-  )
+  return bigintAbs((range[0] as bigint) - value) <
+    bigintAbs((range[1] as bigint) - value)
     ? 0
     : 1;
 }
@@ -184,7 +150,7 @@ export function getClosestEndpoint(
 export function parseDataTypeValue(
   dataType: DataType,
   x: unknown,
-): number | Uint64 {
+): number | bigint {
   let s: string;
   if (typeof x !== "string") {
     s = "" + x;
@@ -193,7 +159,7 @@ export function parseDataTypeValue(
   }
   switch (dataType) {
     case DataType.UINT64:
-      return Uint64.parseString(s);
+      return parseUint64(s);
     case DataType.FLOAT32: {
       const value = parseFloat(s);
       if (!Number.isFinite(value)) {
@@ -220,16 +186,18 @@ export function parseDataTypeValue(
   }
 }
 
-export function parseUnknownDataTypeValue(x: unknown): number | Uint64 {
+export function parseUnknownDataTypeValue(x: unknown): number | bigint {
   if (typeof x === "number") return x;
   if (typeof x === "string") {
-    const num64 = new Uint64();
     const num = Number(x);
-    if (num64.tryParseString(x)) {
-      if (num.toString() === num64.toString()) {
+    try {
+      const num64 = parseUint64(x);
+      if (num64.toString() === num.toString()) {
         return num;
       }
       return num64;
+    } catch {
+      // Ignore failure to parse as uint64.
     }
     if (!Number.isFinite(num)) {
       throw new Error(`Invalid value: ${JSON.stringify(x)}`);
@@ -257,16 +225,9 @@ export function parseUnknownDataTypeInterval(
 }
 
 export function dataTypeIntervalEqual(
-  dataType: DataType,
   a: DataTypeInterval,
   b: DataTypeInterval,
 ) {
-  if (dataType === DataType.UINT64) {
-    return (
-      Uint64.equal(a[0] as Uint64, b[0] as Uint64) &&
-      Uint64.equal(a[1] as Uint64, b[1] as Uint64)
-    );
-  }
   return a[0] === b[0] && a[1] === b[1];
 }
 
@@ -275,7 +236,7 @@ export function dataTypeIntervalToJson(
   dataType: DataType,
   defaultRange = defaultDataTypeRange[dataType],
 ) {
-  if (dataTypeIntervalEqual(dataType, range, defaultRange)) return undefined;
+  if (dataTypeIntervalEqual(range, defaultRange)) return undefined;
   if (dataType === DataType.UINT64) {
     return [range[0].toString(), range[1].toString()];
   }
@@ -284,20 +245,14 @@ export function dataTypeIntervalToJson(
 
 export function dataTypeValueNextAfter(
   dataType: DataType,
-  value: number | Uint64,
+  value: number | bigint,
   sign: 1 | -1,
-): number | Uint64 {
+): number | bigint {
   switch (dataType) {
     case DataType.FLOAT32:
       return nextAfterFloat64(value as number, sign * Infinity);
     case DataType.UINT64: {
-      const v = value as Uint64;
-      if (sign === -1) {
-        if (v.low === 0 && v.high === 0) return v;
-        return Uint64.decrement(new Uint64(), v);
-      }
-      if (v.low === 0xffffffff && v.high === 0xffffffff) return v;
-      return Uint64.increment(new Uint64(), v);
+      return clampToUint64((value as bigint) + BigInt(sign));
     }
     default: {
       const range = defaultDataTypeRange[dataType] as [number, number];
@@ -322,11 +277,7 @@ export function getIntervalBoundsEffectiveOffset(
     case DataType.UINT64:
       return (
         0.5 /
-        Uint64.absDifference(
-          tempUint64,
-          interval[0] as Uint64,
-          interval[1] as Uint64,
-        ).toNumber()
+        Number(bigintAbs((interval[0] as bigint) - (interval[1] as bigint)))
       );
     default:
       return 0.5 / Math.abs((interval[0] as number) - (interval[1] as number));
@@ -341,11 +292,9 @@ export function getIntervalBoundsEffectiveFraction(
     case DataType.FLOAT32:
       return 1;
     case DataType.UINT64: {
-      const diff = Uint64.absDifference(
-        tempUint64,
-        interval[0] as Uint64,
-        interval[1] as Uint64,
-      ).toNumber();
+      const diff = Number(
+        bigintAbs((interval[0] as bigint) - (interval[1] as bigint)),
+      );
       return diff / (diff + 1);
     }
     default: {
@@ -364,21 +313,13 @@ export function convertDataTypeInterval(
   }
   let [lower, upper] = interval;
   if (dataType === DataType.UINT64) {
-    if (typeof lower === "number") {
-      lower = Uint64.fromNumber(lower);
-    }
-    if (typeof upper === "number") {
-      upper = Uint64.fromNumber(upper);
-    }
-    return [lower, upper];
+    return [
+      roundToUint64(Number.isNaN(lower) ? 0n : lower),
+      roundToUint64(Number.isNaN(upper) ? UINT64_MAX : upper),
+    ];
   }
-  // Ensure that neither lower nor upper is a `Uint64`.
-  if (typeof lower !== "number") {
-    lower = lower.toNumber();
-  }
-  if (typeof upper !== "number") {
-    upper = upper.toNumber();
-  }
+  lower = Number(lower);
+  upper = Number(upper);
   if (dataType !== DataType.FLOAT32) {
     lower = Math.round(lower);
     upper = Math.round(upper);

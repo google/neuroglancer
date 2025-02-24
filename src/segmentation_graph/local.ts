@@ -24,32 +24,32 @@ import {
 } from "#src/segmentation_graph/source.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import type { Uint64Set } from "#src/uint64_set.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
-import { parseArray } from "#src/util/json.js";
+import { parseArray, parseUint64 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export class LocalSegmentationGraphSource extends SegmentationGraphSource {
-  spanningTreeEdges = new Map<string, Set<string>>();
+  spanningTreeEdges = new Map<bigint, Set<bigint>>();
   equivalences = new SharedDisjointUint64Sets();
   connections = new Set<LocalSegmentationGraphSourceConnection>();
   changed = new Signal();
 
-  private link(a: Uint64, b: Uint64) {
+  private link(a: bigint, b: bigint) {
     this.equivalences.link(a, b);
     for (const connection of this.connections) {
       connection.segmentsState.segmentEquivalences.link(a, b);
     }
   }
 
-  private linkAll(ids: Uint64[]) {
+  private linkAll(ids: bigint[]) {
     this.equivalences.linkAll(ids);
     for (const connection of this.connections) {
       connection.segmentsState.segmentEquivalences.linkAll(ids);
     }
   }
 
-  private deleteSet(a: Uint64) {
+  private deleteSet(a: bigint) {
     this.equivalences.deleteSet(a);
     for (const connection of this.connections) {
       connection.segmentsState.segmentEquivalences.deleteSet(a);
@@ -65,48 +65,40 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     }
   }
 
-  private addSpanningTreeEdge(a: Uint64, b: Uint64) {
-    const aString = a.toString();
-    const bString = b.toString();
+  private addSpanningTreeEdge(a: bigint, b: bigint) {
     const { spanningTreeEdges } = this;
-    let aEdges = spanningTreeEdges.get(aString);
+    let aEdges = spanningTreeEdges.get(a);
     if (aEdges === undefined) {
       aEdges = new Set();
-      spanningTreeEdges.set(aString, aEdges);
+      spanningTreeEdges.set(a, aEdges);
     }
-    let bEdges = spanningTreeEdges.get(bString);
+    let bEdges = spanningTreeEdges.get(b);
     if (bEdges === undefined) {
       bEdges = new Set();
-      spanningTreeEdges.set(bString, bEdges);
+      spanningTreeEdges.set(b, bEdges);
     }
-    aEdges.add(bString);
-    bEdges.add(aString);
+    aEdges.add(b);
+    bEdges.add(a);
   }
 
-  private removeSpanningTreeEdge(a: Uint64, b: Uint64) {
-    const aString = a.toString();
-    const bString = b.toString();
+  private removeSpanningTreeEdge(a: bigint, b: bigint) {
     const { spanningTreeEdges } = this;
-    const aEdges = spanningTreeEdges.get(aString)!;
-    const bEdges = spanningTreeEdges.get(bString)!;
-    aEdges.delete(bString);
+    const aEdges = spanningTreeEdges.get(a)!;
+    const bEdges = spanningTreeEdges.get(b)!;
+    aEdges.delete(b);
     if (aEdges.size === 0) {
-      spanningTreeEdges.delete(aString);
+      spanningTreeEdges.delete(a);
     }
-    bEdges.delete(aString);
+    bEdges.delete(a);
     if (bEdges.size === 0) {
-      spanningTreeEdges.delete(bString);
+      spanningTreeEdges.delete(b);
     }
   }
 
-  private *getSpanningTreeNeighbors(a: Uint64): IterableIterator<Uint64> {
-    const b = new Uint64();
-    const neighbors = this.spanningTreeEdges.get(a.toString());
+  private *getSpanningTreeNeighbors(a: bigint): IterableIterator<bigint> {
+    const neighbors = this.spanningTreeEdges.get(a);
     if (neighbors === undefined) return;
-    for (const neighborString of neighbors) {
-      b.parseString(neighborString);
-      yield b;
-    }
+    yield* neighbors;
   }
 
   restoreState(obj: unknown) {
@@ -116,15 +108,16 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     if (obj === undefined) {
       return;
     }
-    const ids = [new Uint64(), new Uint64()];
     parseArray(obj, (groupObj) => {
-      parseArray(groupObj, (s, index) => {
-        ids[index % 2].parseString(String(s), 10);
-        if (index !== 0) {
-          if (equivalences.link(ids[0], ids[1])) {
-            this.addSpanningTreeEdge(ids[0], ids[1]);
+      let prev: bigint | undefined;
+      parseArray(groupObj, (s) => {
+        const id = parseUint64(s);
+        if (prev !== undefined) {
+          if (equivalences.link(prev, id)) {
+            this.addSpanningTreeEdge(prev, id);
           }
         }
+        prev = id;
       });
     });
   }
@@ -132,18 +125,14 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
   toJSON() {
     const { spanningTreeEdges } = this;
     if (spanningTreeEdges.size === 0) return undefined;
-    const sets = new Array<Uint64[]>();
-    for (const [idString, neighbors] of spanningTreeEdges) {
-      const a = Uint64.parseString(idString);
-      for (const neighborString of neighbors) {
-        const b = Uint64.parseString(neighborString);
-        if (Uint64.compare(a, b) > 0) continue;
+    const sets = new Array<bigint[]>();
+    for (const [a, neighbors] of spanningTreeEdges) {
+      for (const b of neighbors) {
+        if (a > b) continue;
         sets.push([a, b]);
       }
     }
-    sets.sort(
-      (a, b) => Uint64.compare(a[0], b[0]) || Uint64.compare(a[1], b[1]),
-    );
+    sets.sort((a, b) => bigintCompare(a[0], b[0]) || bigintCompare(a[1], b[1]));
     return sets.map((set) => set.map((element) => element.toString()));
   }
 
@@ -151,9 +140,9 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     return VisibleSegmentEquivalencePolicy.MIN_REPRESENTATIVE;
   }
 
-  async merge(a: Uint64, b: Uint64): Promise<Uint64> {
+  async merge(a: bigint, b: bigint): Promise<bigint> {
     const { equivalences } = this;
-    if (Uint64.equal(equivalences.get(a), equivalences.get(b))) {
+    if (equivalences.get(a) === equivalences.get(b)) {
       // Already merged.
       return a;
     }
@@ -165,9 +154,9 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
   }
 
   async split(
-    a: Uint64,
-    b: Uint64,
-  ): Promise<{ include: Uint64; exclude: Uint64 }> {
+    a: bigint,
+    b: bigint,
+  ): Promise<{ include: bigint; exclude: bigint }> {
     const result = this.computeSplit(a, b);
     if (result === undefined) {
       throw new Error("Segments are already split");
@@ -182,10 +171,10 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     this.deleteSet(a);
     this.linkAll(includeBaseSegments);
     this.linkAll(excludeBaseSegments);
-    const removeSplitEdges = (segments: Uint64[], expectedRoot: Uint64) => {
+    const removeSplitEdges = (segments: bigint[], expectedRoot: bigint) => {
       for (const id of segments) {
         for (const neighbor of this.getSpanningTreeNeighbors(id)) {
-          if (!Uint64.equal(equivalences.get(neighbor), expectedRoot)) {
+          if (equivalences.get(neighbor) !== expectedRoot) {
             this.removeSpanningTreeEdge(id, neighbor);
           }
         }
@@ -208,46 +197,48 @@ export class LocalSegmentationGraphSource extends SegmentationGraphSource {
     return { include: includeRoot, exclude: excludeRoot };
   }
 
-  trackSegment(id: Uint64, callback: (id: Uint64 | null) => void): () => void {
+  trackSegment(id: bigint, callback: (id: bigint | null) => void): () => void {
     // FIXME: implement
     id;
     callback;
     return () => {};
   }
 
-  computeSplit(include: Uint64, exclude: Uint64): ComputedSplit | undefined {
+  computeSplit(include: bigint, exclude: bigint): ComputedSplit | undefined {
     const { equivalences } = this;
     const root = equivalences.get(include);
-    if (!Uint64.equal(root, equivalences.get(exclude))) {
+    if (root !== equivalences.get(exclude)) {
       // Already split.
       return undefined;
     }
     const ds = new DisjointUint64Sets();
     for (const baseSegment of equivalences.setElements(root)) {
-      if (Uint64.equal(baseSegment, exclude)) continue;
+      if (baseSegment === exclude) continue;
       for (const neighbor of this.getSpanningTreeNeighbors(baseSegment)) {
-        if (Uint64.equal(neighbor, exclude)) continue;
+        if (neighbor === exclude) continue;
         ds.link(baseSegment, neighbor);
       }
     }
-    const includeSegments: Uint64[] = [];
-    const excludeSegments: Uint64[] = [];
+    const includeSegments: bigint[] = [];
+    const excludeSegments: bigint[] = [];
     const includeRoot = ds.get(include);
     let includeRep = include;
     let excludeRep = exclude;
     for (const baseSegment of equivalences.setElements(root)) {
-      if (Uint64.equal(ds.get(baseSegment), includeRoot)) {
+      if (ds.get(baseSegment) === includeRoot) {
         includeSegments.push(baseSegment);
-        if (Uint64.compare(baseSegment, includeRep) < 0)
+        if (baseSegment < includeRep) {
           includeRep = baseSegment;
+        }
       } else {
         excludeSegments.push(baseSegment);
-        if (Uint64.compare(baseSegment, excludeRep) < 0)
+        if (baseSegment < excludeRep) {
           excludeRep = baseSegment;
+        }
       }
     }
-    includeSegments.sort(Uint64.compare);
-    excludeSegments.sort(Uint64.compare);
+    includeSegments.sort(bigintCompare);
+    excludeSegments.sort(bigintCompare);
     return {
       includeBaseSegments: includeSegments,
       includeRepresentative: includeRep,
@@ -293,10 +284,10 @@ function normalizeSegmentSet(
   segmentSet: Uint64Set,
   equivalences: DisjointUint64Sets,
 ) {
-  const add: Uint64[] = [];
-  for (const id of segmentSet.unsafeKeys()) {
+  const add: bigint[] = [];
+  for (const id of segmentSet.keys()) {
     const rootId = equivalences.get(id);
-    if (!Uint64.equal(id, rootId)) {
+    if (id !== rootId) {
       add.push(rootId);
       segmentSet.delete(id);
     }
@@ -307,7 +298,7 @@ function normalizeSegmentSet(
 }
 
 class LocalSegmentationGraphSourceConnection extends SegmentationGraphSourceConnection<LocalSegmentationGraphSource> {
-  computeSplit(include: Uint64, exclude: Uint64): ComputedSplit | undefined {
+  computeSplit(include: bigint, exclude: bigint): ComputedSplit | undefined {
     return this.graph.computeSplit(include, exclude);
   }
 }

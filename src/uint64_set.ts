@@ -17,7 +17,6 @@
 import { HashSetUint64 } from "#src/gpu_hash/hash_table.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { Signal } from "#src/util/signal.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
@@ -31,7 +30,9 @@ export class Uint64Set
   implements WatchableValueInterface<Uint64Set>
 {
   hashTable = new HashSetUint64();
-  changed = new Signal<(x: Uint64 | Uint64[] | null, add: boolean) => void>();
+  changed = new Signal<
+    (x: bigint | bigint[] | BigUint64Array | null, add: boolean) => void
+  >();
 
   get value() {
     return this;
@@ -43,7 +44,7 @@ export class Uint64Set
     return obj;
   }
 
-  set(x: Uint64 | Uint64[], value: boolean) {
+  set(x: bigint | bigint[] | BigUint64Array, value: boolean) {
     if (!value) {
       this.delete(x);
     } else {
@@ -64,7 +65,7 @@ export class Uint64Set
     }
   }
 
-  add_(x: Uint64[]) {
+  add_(x: bigint[] | BigUint64Array) {
     let changed = false;
     for (const v of x) {
       changed = this.hashTable.add(v) || changed;
@@ -72,8 +73,8 @@ export class Uint64Set
     return changed;
   }
 
-  add(x: Uint64 | Uint64[]) {
-    const tmp = Array<Uint64>().concat(x);
+  add(x: bigint | bigint[] | BigUint64Array) {
+    const tmp = typeof x === "bigint" ? [x] : x;
     if (this.add_(tmp)) {
       const { rpc } = this;
       if (rpc) {
@@ -83,7 +84,7 @@ export class Uint64Set
     }
   }
 
-  has(x: Uint64) {
+  has(x: bigint) {
     return this.hashTable.has(x);
   }
 
@@ -91,11 +92,11 @@ export class Uint64Set
     return this.hashTable.keys();
   }
 
-  unsafeKeys() {
-    return this.hashTable.unsafeKeys();
+  keys() {
+    return this.hashTable.keys();
   }
 
-  delete_(x: Uint64[]) {
+  delete_(x: bigint[] | BigUint64Array) {
     let changed = false;
     for (const v of x) {
       changed = this.hashTable.delete(v) || changed;
@@ -103,9 +104,9 @@ export class Uint64Set
     return changed;
   }
 
-  delete(x: Uint64 | Uint64[]) {
-    const tmp = Array<Uint64>().concat(x);
-    if (this.delete_(Array<Uint64>().concat(x))) {
+  delete(x: bigint | bigint[] | BigUint64Array) {
+    const tmp = typeof x === "bigint" ? [x] : x;
+    if (this.delete_(tmp)) {
       const { rpc } = this;
       if (rpc) {
         rpc.invoke("Uint64Set.delete", { id: this.rpcId, value: tmp });
@@ -130,7 +131,7 @@ export class Uint64Set
 
   toJSON() {
     const result = new Array<string>();
-    for (const id of this.unsafeKeys()) {
+    for (const id of this.keys()) {
       result.push(id.toString());
     }
     // Need to sort entries, otherwise serialization changes every time.
@@ -140,7 +141,7 @@ export class Uint64Set
 
   assignFrom(other: Uint64Set) {
     this.clear();
-    for (const key of other.unsafeKeys()) {
+    for (const key of other.keys()) {
       this.add(key);
     }
   }

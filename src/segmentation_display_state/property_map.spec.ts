@@ -22,21 +22,20 @@ import {
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import { DataType } from "#src/util/data_type.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 describe("PreprocessedSegmentPropertyMap", () => {
   test("handles lookups correctly", () => {
     const map = new PreprocessedSegmentPropertyMap({
       inlineProperties: {
-        ids: Uint32Array.of(5, 0, 15, 0, 20, 5),
+        ids: BigUint64Array.of(5n, 15n, 0x500000014n),
         properties: [],
       },
     });
-    expect(map.getSegmentInlineIndex(new Uint64(5, 0))).toEqual(0);
-    expect(map.getSegmentInlineIndex(new Uint64(15, 0))).toEqual(1);
-    expect(map.getSegmentInlineIndex(new Uint64(20, 5))).toEqual(2);
-    expect(map.getSegmentInlineIndex(new Uint64(30, 5))).toEqual(-1);
-    expect(map.getSegmentInlineIndex(new Uint64(0, 0))).toEqual(-1);
+    expect(map.getSegmentInlineIndex(5n)).toEqual(0);
+    expect(map.getSegmentInlineIndex(15n)).toEqual(1);
+    expect(map.getSegmentInlineIndex(0x500000014n)).toEqual(2);
+    expect(map.getSegmentInlineIndex(0x50000001en)).toEqual(-1);
+    expect(map.getSegmentInlineIndex(0n)).toEqual(-1);
   });
 });
 
@@ -44,13 +43,13 @@ describe("mergeSegmentPropertyMaps", () => {
   test("works correctly for 2 maps", () => {
     const a = new SegmentPropertyMap({
       inlineProperties: {
-        ids: Uint32Array.of(5, 0, 6, 0, 8, 0),
+        ids: BigUint64Array.of(5n, 6n, 8n),
         properties: [{ type: "string", id: "prop1", values: ["x", "y", "z"] }],
       },
     });
     const b = new SegmentPropertyMap({
       inlineProperties: {
-        ids: Uint32Array.of(5, 0, 7, 0),
+        ids: BigUint64Array.of(5n, 7n),
         properties: [{ type: "string", id: "prop2", values: ["a", "b"] }],
       },
     });
@@ -59,7 +58,7 @@ describe("mergeSegmentPropertyMaps", () => {
     expect(mergeSegmentPropertyMaps([b])).toBe(b);
     const c = mergeSegmentPropertyMaps([a, b]);
     expect(c?.inlineProperties).toEqual({
-      ids: Uint32Array.of(5, 0, 6, 0, 7, 0, 8, 0),
+      ids: BigUint64Array.of(5n, 6n, 7n, 8n),
       properties: [
         { type: "string", id: "prop1", values: ["x", "y", "", "z"] },
         { type: "string", id: "prop2", values: ["a", "", "b", ""] },
@@ -71,7 +70,7 @@ describe("mergeSegmentPropertyMaps", () => {
 describe("parseSegmentQuery", () => {
   const map = new PreprocessedSegmentPropertyMap({
     inlineProperties: {
-      ids: Uint32Array.of(),
+      ids: BigUint64Array.of(),
       properties: [
         { type: "label", id: "label", values: [] },
         {
@@ -116,7 +115,7 @@ describe("parseSegmentQuery", () => {
     expect(parseSegmentQuery(undefined, "123")).toMatchInlineSnapshot(`
       {
         "ids": [
-          "123",
+          123n,
         ],
       }
     `);
@@ -126,8 +125,8 @@ describe("parseSegmentQuery", () => {
     expect(parseSegmentQuery(undefined, "123 456")).toMatchInlineSnapshot(`
       {
         "ids": [
-          "123",
-          "456",
+          123n,
+          456n,
         ],
       }
     `);

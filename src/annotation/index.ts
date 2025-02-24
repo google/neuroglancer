@@ -40,6 +40,7 @@ import {
   expectArray,
   parseArray,
   parseFixedLengthArray,
+  parseUint64,
   verifyEnumString,
   verifyFiniteFloat,
   verifyFiniteNonNegativeFloat,
@@ -54,7 +55,6 @@ import {
 import { parseDataTypeValue } from "#src/util/lerp.js";
 import { getRandomHexString } from "#src/util/random.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export type AnnotationId = string;
 
@@ -642,7 +642,7 @@ export interface AnnotationBase {
   id: AnnotationId;
   type: AnnotationType;
 
-  relatedSegments?: Uint64[][];
+  relatedSegments?: BigUint64Array[];
   properties: any[];
 }
 
@@ -1017,7 +1017,7 @@ export function annotationToJson(
   const { relatedSegments } = annotation;
   if (relatedSegments?.some((x) => x.length !== 0)) {
     result.segments = relatedSegments.map((segments) =>
-      segments.map((x) => x.toString()),
+      Array.from(segments, (x) => x.toString()),
     );
   }
   if (schema.properties.length !== 0) {
@@ -1053,11 +1053,20 @@ function restoreAnnotation(
       return schema.relationships.map(() => []);
     }
     if (schema.relationships.length === 1 && !Array.isArray(a[0])) {
-      return [parseArray(a, (x) => Uint64.parseString(x))];
+      return [
+        parseFixedLengthArray(new BigUint64Array(a.length), a, parseUint64),
+      ];
     }
     return parseArray(
       expectArray(relObj, schema.relationships.length),
-      (segments) => parseArray(segments, (y) => Uint64.parseString(y)),
+      (segments) => {
+        segments = expectArray(segments);
+        return parseFixedLengthArray(
+          new BigUint64Array(segments.length),
+          segments,
+          parseUint64,
+        );
+      },
     );
   });
   const properties = verifyObjectProperty(obj, "props", (propsObj) => {
@@ -1437,25 +1446,4 @@ export class AnnotationSerializer {
   serialize(): SerializedAnnotations {
     return serializeAnnotations(this.annotations, this.propertySerializers);
   }
-}
-
-export function fixAnnotationAfterStructuredCloning(obj: Annotation | null) {
-  if (obj == null) {
-    return obj;
-  }
-  const { relatedSegments } = obj;
-  if (relatedSegments !== undefined) {
-    for (
-      let i = 0, numRelationships = relatedSegments.length;
-      i < numRelationships;
-      ++i
-    ) {
-      const segments = relatedSegments[i];
-      if (segments === undefined) continue;
-      relatedSegments[i] = segments.map(
-        (x: { low: number; high: number }) => new Uint64(x.low, x.high),
-      );
-    }
-  }
-  return obj;
 }

@@ -24,12 +24,12 @@ import type {
   VersionQuery,
 } from "#src/kvstore/ocdbt/version_tree.js";
 import {
-  bigintCompare,
   findLeafVersionIndexByLowerBound,
   findVersionNodeIndexByLowerBound,
   findVersionNodeIndexByUpperBound,
   validateVersionTreeNodeReference,
 } from "#src/kvstore/ocdbt/version_tree.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 const DEBUG = false;

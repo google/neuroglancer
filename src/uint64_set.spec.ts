@@ -20,27 +20,27 @@
 
 import { describe, it, expect } from "vitest";
 import { Uint64Set } from "#src/uint64_set.js";
-import { Uint64 } from "#src/util/uint64.js";
+import { uint64FromLowHigh } from "#src/util/bigint.js";
 
 describe("Uint64Set", () => {
   it("basic", () => {
     const s = new Uint64Set();
 
-    const v1 = new Uint64(1);
+    const v1 = 1n;
     expect(s.has(v1)).toBe(false);
     expect(s.size).toBe(0);
     s.add(v1);
     expect(s.has(v1)).toBe(true);
     expect(s.size).toBe(1);
 
-    const v2 = new Uint64(2, 3);
+    const v2 = uint64FromLowHigh(2, 3);
     expect(s.has(v2)).toBe(false);
     s.add(v2);
     expect(s.has(v1)).toBe(true);
     expect(s.has(v2)).toBe(true);
     expect(s.size).toBe(2);
 
-    const v1a = new Uint64(1);
+    const v1a = 1n;
     s.add(v1a);
     expect(s.has(v1)).toBe(true);
     expect(s.has(v2)).toBe(true);
@@ -52,7 +52,7 @@ describe("Uint64Set", () => {
     expect(s.has(v2)).toBe(true);
     expect(s.size).toBe(1);
 
-    const v3 = new Uint64(3, 4);
+    const v3 = uint64FromLowHigh(3, 4);
     expect(s.has(v3)).toBe(false);
     s.add(v3);
     expect(s.has(v1)).toBe(false);
@@ -70,16 +70,16 @@ describe("Uint64Set", () => {
   it("iterate", () => {
     const s = new Uint64Set();
 
-    const v1 = new Uint64(1);
-    const v2 = new Uint64(2, 3);
-    const v3 = new Uint64(3, 4);
+    const v1 = 1n;
+    const v2 = uint64FromLowHigh(2, 3);
+    const v3 = uint64FromLowHigh(3, 4);
     s.add(v2);
     s.add(v1);
     s.add(v3);
 
     const iterated = [];
-    for (const v of s.unsafeKeys()) {
-      iterated.push(v.clone());
+    for (const v of s.keys()) {
+      iterated.push(v);
     }
     iterated.sort();
     expect(iterated).toEqual([v1, v2, v3]);
@@ -88,9 +88,9 @@ describe("Uint64Set", () => {
   it("toJSON", () => {
     const s = new Uint64Set();
 
-    const v1 = new Uint64(1);
-    const v2 = new Uint64(2, 3);
-    const v3 = new Uint64(3, 4);
+    const v1 = 1n;
+    const v2 = uint64FromLowHigh(2, 3);
+    const v3 = uint64FromLowHigh(3, 4);
     s.add(v2);
     s.add(v1);
     s.add(v3);

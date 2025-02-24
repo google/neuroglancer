@@ -18,7 +18,6 @@ import { expect, describe, it } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
-import { Uint64 } from "#src/util/uint64.js";
 import {
   TrackableTransferFunctionParameters,
   parseShaderUiControls,
@@ -860,15 +859,9 @@ void main() {
 }
 `;
     const controlPoints = [
-      new ControlPoint(
-        Uint64.parseString("9223372111111111111"),
-        vec4.fromValues(255, 0, 0, 128),
-      ),
-      new ControlPoint(Uint64.fromNumber(0), vec4.fromValues(0, 0, 0, 0)),
-      new ControlPoint(
-        Uint64.parseString("18446744073709551615"),
-        vec4.fromValues(0, 255, 0, 26),
-      ),
+      new ControlPoint(9223372111111111111n, vec4.fromValues(255, 0, 0, 128)),
+      new ControlPoint(0n, vec4.fromValues(0, 0, 0, 0)),
+      new ControlPoint(18446744073709551615n, vec4.fromValues(0, 255, 0, 26)),
     ];
     const sortedControlPoints = new SortedControlPoints(
       controlPoints,
@@ -892,7 +885,7 @@ void main() {
               sortedControlPoints: sortedControlPoints,
               channel: [],
               defaultColor: vec3.fromValues(0, 0, 1),
-              window: [Uint64.fromNumber(0), Uint64.fromNumber(2000)],
+              window: [0n, 2000n],
             },
           },
         ],
@@ -958,9 +951,9 @@ void main() {
     // Test setting a new control point
     const sortedControlPoints = new SortedControlPoints(
       [
-        new ControlPoint(Uint64.fromNumber(0), vec4.fromValues(0, 0, 0, 10)),
+        new ControlPoint(0n, vec4.fromValues(0, 0, 0, 10)),
         new ControlPoint(
-          Uint64.parseString("18446744073709551615"),
+          18446744073709551615n,
           vec4.fromValues(255, 255, 255, 255),
         ),
       ],

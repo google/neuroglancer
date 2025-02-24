@@ -15,8 +15,8 @@
  */
 
 import { hashCombine } from "#src/gpu_hash/hash_function.js";
+import { randomUint64 } from "#src/util/bigint.js";
 import { getRandomValues } from "#src/util/random.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export const NUM_ALTERNATIVES = 3;
 
@@ -28,30 +28,27 @@ const DEBUG = false;
 
 // Key that needs to be inserted.  Temporary variables used during insert.  These can safely be
 // global because control never leaves functions defined in this module while these are in use.
-let pendingLow = 0;
-let pendingHigh = 0;
-let backupPendingLow = 0;
-let backupPendingHigh = 0;
+let pending = 0n;
+let backupPending = 0n;
 
 export abstract class HashTableBase {
   loadFactor = DEFAULT_LOAD_FACTOR;
   size = 0;
-  table: Uint32Array;
+  table: BigUint64Array;
   tableSize: number;
-  emptyLow = 4294967295;
-  emptyHigh = 4294967295;
+  empty = 0xffffffffffffffffn;
   maxRehashAttempts = 5;
   maxAttempts = 5;
   capacity: number;
 
   /**
-   * Number of uint32 elements per entry in hash table.
+   * Number of uint64 elements per entry in hash table.
    */
   declare entryStride: number;
 
   generation = 0;
 
-  mungedEmptyKey = -1;
+  mungedEmptyKey: bigint | undefined;
 
   constructor(
     public hashSeeds = HashTableBase.generateHashSeeds(NUM_ALTERNATIVES),
@@ -67,35 +64,32 @@ export abstract class HashTableBase {
 
   private updateHashFunctions(numHashes: number) {
     this.hashSeeds = HashTableBase.generateHashSeeds(numHashes);
-    this.mungedEmptyKey = -1;
+    this.mungedEmptyKey = undefined;
   }
 
   /**
    * Invokes callback with a modified version of the hash table data array.
    *
-   * Replaces all slots that appear to be valid entries for (emptyLow, emptyHigh), i.e. slots that
-   * contain (emptyLow, emptyHigh) and to which (emptyLow, emptyHigh) hashes, with (mungedEmptyKey,
-   * mungedEmptyKey).
+   * Replaces all slots that appear to be valid entries for `empty`, i.e. slots that
+   * contain `empty` and to which `empty` hashes, with `mungedEmptyKey`.
    *
-   * mungedEmptyKey is chosen to be a 32-bit value with the property that the 64-bit value
-   * (mungedEmptyKey, mungedEmptyKey) does not hash to any of the same slots as (emptyLow,
-   * emptyHigh).
+   * mungedEmptyKey is chosen such that it does not to any of the same slots as `empty`.
    *
    * This allows the modified data array to be used for lookups without special casing the empty
    * key.
    */
-  tableWithMungedEmptyKey(callback: (table: Uint32Array) => void) {
+  tableWithMungedEmptyKey(callback: (table: BigUint64Array) => void) {
     const numHashes = this.hashSeeds.length;
     const emptySlots = new Array<number>(numHashes);
     for (let i = 0; i < numHashes; ++i) {
-      emptySlots[i] = this.getHash(i, this.emptyLow, this.emptyHigh);
+      emptySlots[i] = this.getHash(i, this.empty);
     }
     let { mungedEmptyKey } = this;
-    if (mungedEmptyKey === -1) {
+    if (mungedEmptyKey === undefined) {
       chooseMungedEmptyKey: while (true) {
-        mungedEmptyKey = (Math.random() * 0x1000000) >>> 0;
+        mungedEmptyKey = randomUint64();
         for (let i = 0; i < numHashes; ++i) {
-          const h = this.getHash(i, mungedEmptyKey, mungedEmptyKey);
+          const h = this.getHash(i, mungedEmptyKey);
           for (let j = 0; j < numHashes; ++j) {
             if (emptySlots[j] === h) {
               continue chooseMungedEmptyKey;
@@ -106,12 +100,11 @@ export abstract class HashTableBase {
         break;
       }
     }
-    const { table, emptyLow, emptyHigh } = this;
+    const { table, empty } = this;
     for (let i = 0; i < numHashes; ++i) {
       const h = emptySlots[i];
-      if (table[h] === emptyLow && table[h + 1] === emptyHigh) {
+      if (table[h] === empty) {
         table[h] = mungedEmptyKey;
-        table[h + 1] = mungedEmptyKey;
       }
     }
     try {
@@ -119,9 +112,8 @@ export abstract class HashTableBase {
     } finally {
       for (let i = 0; i < numHashes; ++i) {
         const h = emptySlots[i];
-        if (table[h] === mungedEmptyKey && table[h + 1] === mungedEmptyKey) {
-          table[h] = emptyLow;
-          table[h + 1] = emptyHigh;
+        if (table[h] === mungedEmptyKey) {
+          table[h] = empty;
         }
       }
     }
@@ -131,69 +123,43 @@ export abstract class HashTableBase {
     return getRandomValues(new Uint32Array(numAlternatives));
   }
 
-  getHash(hashIndex: number, low: number, high: number) {
+  getHash(hashIndex: number, x: bigint) {
     let hash = this.hashSeeds[hashIndex];
-    hash = hashCombine(hash, low);
-    hash = hashCombine(hash, high);
+    hash = hashCombine(hash, Number(x & 0xffffffffn));
+    hash = hashCombine(hash, Number(x >> 32n));
     return this.entryStride * (hash & (this.tableSize - 1));
   }
 
   /**
-   * Iterates over the Uint64 keys contained in the hash set.
-   *
-   * Creates a new Uint64 object at every iteration (otherwise spread and Array.from() fail)
+   * Iterates over the uint64 keys contained in the hash set.
    */
-  *keys(): IterableIterator<Uint64> {
-    const { emptyLow, emptyHigh, entryStride } = this;
+  *keys(): IterableIterator<bigint> {
+    const { empty, entryStride } = this;
     const { table } = this;
     for (let i = 0, length = table.length; i < length; i += entryStride) {
-      const low = table[i];
-      const high = table[i + 1];
-      if (low !== emptyLow || high !== emptyHigh) {
-        yield new Uint64(low, high);
+      const key = table[i];
+      if (key !== empty) {
+        yield key;
       }
     }
-  }
-
-  /**
-   * Iterates over the Uint64 keys contained in the hash set.
-   *
-   * The same temp value will be modified and yielded at every iteration.
-   */
-  *unsafeKeys(temp = new Uint64()): IterableIterator<Uint64> {
-    const { emptyLow, emptyHigh, entryStride } = this;
-    const { table } = this;
-    for (let i = 0, length = table.length; i < length; i += entryStride) {
-      const low = table[i];
-      const high = table[i + 1];
-      if (low !== emptyLow || high !== emptyHigh) {
-        temp.low = low;
-        temp.high = high;
-        yield temp;
-      }
-    }
-  }
-
-  indexOfPair(low: number, high: number) {
-    const { table, emptyLow, emptyHigh } = this;
-    if (low === emptyLow && high === emptyHigh) {
-      return -1;
-    }
-    for (let i = 0, numHashes = this.hashSeeds.length; i < numHashes; ++i) {
-      const h = this.getHash(i, low, high);
-      if (table[h] === low && table[h + 1] === high) {
-        return h;
-      }
-    }
-    return -1;
   }
 
   /**
    * Returns the offset into the hash table of the specified element, or -1 if the element is not
    * present.
    */
-  indexOf(x: Uint64) {
-    return this.indexOfPair(x.low, x.high);
+  indexOf(x: bigint) {
+    const { table, empty } = this;
+    if (x === empty) {
+      return -1;
+    }
+    for (let i = 0, numHashes = this.hashSeeds.length; i < numHashes; ++i) {
+      const h = this.getHash(i, x);
+      if (table[h] === x) {
+        return h;
+      }
+    }
+    return -1;
   }
 
   /**
@@ -203,29 +169,25 @@ export abstract class HashTableBase {
    * This is called when an attempt is made to insert the empty key.
    */
   private chooseAnotherEmptyKey() {
-    const { emptyLow, emptyHigh, table, entryStride } = this;
-    let newLow: number;
-    let newHigh: number;
+    const { empty, table, entryStride } = this;
+    let newKey: bigint;
     while (true) {
-      newLow = (Math.random() * 0x100000000) >>> 0;
-      newHigh = (Math.random() * 0x100000000) >>> 0;
-      if (newLow === emptyLow && newHigh === emptyHigh) {
+      newKey = randomUint64();
+      if (newKey === empty) {
         continue;
       }
-      if (this.hasPair(newLow, newHigh)) {
+      if (this.has(newKey)) {
         continue;
       }
       break;
     }
 
-    this.emptyLow = newLow;
-    this.emptyHigh = newHigh;
+    this.empty = newKey;
 
     // Replace empty keys in the table.
     for (let h = 0, length = table.length; h < length; h += entryStride) {
-      if (table[h] === emptyLow && table[h + 1] === emptyHigh) {
-        table[h] = newLow;
-        table[h + 1] = newHigh;
+      if (table[h] === empty) {
+        table[h] = newKey;
       }
     }
   }
@@ -233,23 +195,15 @@ export abstract class HashTableBase {
   /**
    * Returns true iff the specified element is present.
    */
-  has(x: Uint64) {
+  has(x: bigint) {
     return this.indexOf(x) !== -1;
   }
 
-  /**
-   * Returns true iff the specified element is present.
-   */
-  hasPair(low: number, high: number) {
-    return this.indexOfPair(low, high) !== -1;
-  }
-
-  delete(x: Uint64) {
+  delete(x: bigint) {
     const index = this.indexOf(x);
     if (index !== -1) {
       const { table } = this;
-      table[index] = this.emptyLow;
-      table[index + 1] = this.emptyHigh;
+      table[index] = this.empty;
       ++this.generation;
       this.size--;
       return true;
@@ -258,13 +212,8 @@ export abstract class HashTableBase {
   }
 
   private clearTable() {
-    const { table, entryStride, emptyLow, emptyHigh } = this;
-    const length = table.length;
-
-    for (let h = 0; h < length; h += entryStride) {
-      table[h] = emptyLow;
-      table[h + 1] = emptyHigh;
-    }
+    const { table, empty } = this;
+    table.fill(empty);
   }
 
   clear() {
@@ -287,42 +236,37 @@ export abstract class HashTableBase {
     return false;
   }
 
-  protected swapPending(table: Uint32Array, offset: number) {
-    const tempLow = pendingLow;
-    const tempHigh = pendingHigh;
+  protected swapPending(table: BigUint64Array, offset: number) {
+    const temp = pending;
     this.storePending(table, offset);
-    table[offset] = tempLow;
-    table[offset + 1] = tempHigh;
+    table[offset] = temp;
   }
 
-  protected storePending(table: Uint32Array, offset: number) {
-    pendingLow = table[offset];
-    pendingHigh = table[offset + 1];
+  protected storePending(table: BigUint64Array, offset: number) {
+    pending = table[offset];
   }
 
   protected backupPending() {
-    backupPendingLow = pendingLow;
-    backupPendingHigh = pendingHigh;
+    backupPending = pending;
   }
 
   protected restorePending() {
-    pendingLow = backupPendingLow;
-    pendingHigh = backupPendingHigh;
+    pending = backupPending;
   }
 
   private tryToInsert() {
     if (DEBUG) {
-      console.log(`tryToInsert: ${pendingLow}, ${pendingHigh}`);
+      console.log(`tryToInsert: ${pending}`);
     }
     let attempt = 0;
-    const { emptyLow, emptyHigh, maxAttempts, table } = this;
+    const { empty, maxAttempts, table } = this;
     const numHashes = this.hashSeeds.length;
 
     let tableIndex = Math.floor(Math.random() * numHashes);
     while (true) {
-      const h = this.getHash(tableIndex, pendingLow, pendingHigh);
+      const h = this.getHash(tableIndex, pending);
       this.swapPending(table, h);
-      if (pendingLow === emptyLow && pendingHigh === emptyHigh) {
+      if (pending === empty) {
         return true;
       }
       if (++attempt === maxAttempts) {
@@ -338,24 +282,23 @@ export abstract class HashTableBase {
   private allocate(tableSize: number) {
     this.tableSize = tableSize;
     const { entryStride } = this;
-    this.table = new Uint32Array(tableSize * entryStride);
+    this.table = new BigUint64Array(tableSize * entryStride);
     this.maxAttempts = tableSize;
     this.clearTable();
     this.capacity = tableSize * this.loadFactor;
-    this.mungedEmptyKey = -1;
+    this.mungedEmptyKey = undefined;
   }
 
-  private rehash(oldTable: Uint32Array, tableSize: number) {
+  private rehash(oldTable: BigUint64Array, tableSize: number) {
     if (DEBUG) {
       console.log("rehash begin");
     }
     this.allocate(tableSize);
     this.updateHashFunctions(this.hashSeeds.length);
-    const { emptyLow, emptyHigh, entryStride } = this;
+    const { empty, entryStride } = this;
     for (let h = 0, length = oldTable.length; h < length; h += entryStride) {
-      const low = oldTable[h];
-      const high = oldTable[h + 1];
-      if (low !== emptyLow || high !== emptyHigh) {
+      const key = oldTable[h];
+      if (key !== empty) {
         this.storePending(oldTable, h);
         if (!this.tryToInsert()) {
           if (DEBUG) {
@@ -400,7 +343,7 @@ export abstract class HashTableBase {
   protected insertInternal() {
     ++this.generation;
 
-    if (pendingLow === this.emptyLow && pendingHigh === this.emptyHigh) {
+    if (pending === this.empty) {
       this.chooseAnotherEmptyKey();
     }
 
@@ -419,136 +362,95 @@ export abstract class HashTableBase {
 }
 
 export class HashSetUint64 extends HashTableBase {
-  add(x: Uint64) {
-    const { low, high } = x;
-    if (this.hasPair(low, high)) {
+  add(x: bigint) {
+    if (this.has(x)) {
       return false;
     }
     if (DEBUG) {
-      console.log(`add: ${low},${high}`);
+      console.log(`add: ${x}`);
     }
-    pendingLow = low;
-    pendingHigh = high;
+    pending = x;
     this.insertInternal();
     return true;
   }
 
   /**
    * Iterates over the keys.
-   * Creates a new Uint64 object at every iteration (otherwise spread and Array.from() fail)
    */
   [Symbol.iterator]() {
-    return this.unsafeKeys();
+    return this.keys();
   }
 }
-HashSetUint64.prototype.entryStride = 2;
+HashSetUint64.prototype.entryStride = 1;
 
 // Value that needs to be inserted.  Temporary variables used during insert.  These can safely be
 // global because control never leaves functions defined in this module while these are in use.
-let pendingValueLow = 0;
-let pendingValueHigh = 0;
-let backupPendingValueLow = 0;
-let backupPendingValueHigh = 0;
+let pendingValue = 0n;
+let backupPendingValue = 0n;
 
 export class HashMapUint64 extends HashTableBase {
-  set(key: Uint64, value: Uint64) {
-    const { low, high } = key;
-    if (this.hasPair(low, high)) {
+  set(key: bigint, value: bigint) {
+    if (this.has(key)) {
       return false;
     }
     if (DEBUG) {
-      console.log(`add: ${low},${high} -> ${value.low},${value.high}`);
+      console.log(`add: ${key} -> ${value}`);
     }
-    pendingLow = low;
-    pendingHigh = high;
-    pendingValueLow = value.low;
-    pendingValueHigh = value.high;
+    pending = key;
+    pendingValue = value;
     this.insertInternal();
     return true;
   }
 
-  get(key: Uint64, value: Uint64): boolean {
+  get(key: bigint): bigint | undefined {
     const h = this.indexOf(key);
     if (h === -1) {
-      return false;
+      return undefined;
     }
-    const { table } = this;
-    value.low = table[h + 2];
-    value.high = table[h + 3];
-    return true;
+    return this.table[h + 1];
   }
 
-  protected swapPending(table: Uint32Array, offset: number) {
-    const tempLow = pendingValueLow;
-    const tempHigh = pendingValueHigh;
+  protected swapPending(table: BigUint64Array, offset: number) {
+    const temp = pendingValue;
     super.swapPending(table, offset);
-    table[offset + 2] = tempLow;
-    table[offset + 3] = tempHigh;
+    table[offset + 1] = temp;
   }
 
-  protected storePending(table: Uint32Array, offset: number) {
+  protected storePending(table: BigUint64Array, offset: number) {
     super.storePending(table, offset);
-    pendingValueLow = table[offset + 2];
-    pendingValueHigh = table[offset + 3];
+    pendingValue = table[offset + 1];
   }
 
   protected backupPending() {
     super.backupPending();
-    backupPendingValueLow = pendingValueLow;
-    backupPendingValueHigh = pendingValueHigh;
+    backupPendingValue = pendingValue;
   }
 
   protected restorePending() {
     super.restorePending();
-    pendingValueLow = backupPendingValueLow;
-    pendingValueHigh = backupPendingValueHigh;
-  }
-
-  /**
-   * Iterates over entries.  The same temporary value will be modified and yielded at every
-   * iteration.
-   */
-  [Symbol.iterator]() {
-    return this.unsafeEntries();
+    pendingValue = backupPendingValue;
   }
 
   /**
    * Iterates over entries.
-   * Creates new Uint64 objects at every iteration (otherwise spread and Array.from() fail)
+   */
+  [Symbol.iterator]() {
+    return this.entries();
+  }
+
+  /**
+   * Iterates over entries.
    */
   *entries() {
-    const { emptyLow, emptyHigh, entryStride } = this;
+    const { empty, entryStride } = this;
     const { table } = this;
     for (let i = 0, length = table.length; i < length; i += entryStride) {
-      const low = table[i];
-      const high = table[i + 1];
-      if (low !== emptyLow || high !== emptyHigh) {
-        const key = new Uint64(low, high);
-        const value = new Uint64(table[i + 2], table[i + 3]);
+      const key = table[i];
+      if (key !== empty) {
+        const value = table[i + 1];
         yield [key, value];
       }
     }
   }
-
-  /**
-   * Iterates over entries.  The same temporary value will be modified and yielded at every
-   * iteration.
-   */
-  *unsafeEntries(temp: [Uint64, Uint64] = [new Uint64(), new Uint64()]) {
-    const { emptyLow, emptyHigh, entryStride } = this;
-    const { table } = this;
-    const [key, value] = temp;
-    for (let i = 0, length = table.length; i < length; i += entryStride) {
-      const low = table[i];
-      const high = table[i + 1];
-      if (low !== emptyLow || high !== emptyHigh) {
-        key.low = low;
-        key.high = high;
-        value.low = table[i + 2];
-        value.high = table[i + 3];
-        yield temp;
-      }
-    }
-  }
 }
-HashMapUint64.prototype.entryStride = 4;
+HashMapUint64.prototype.entryStride = 2;

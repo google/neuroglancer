@@ -39,6 +39,7 @@ import {
 import type { Config } from "#src/kvstore/ocdbt/manifest.js";
 import type { VersionSpecifier } from "#src/kvstore/ocdbt/version_specifier.js";
 import { binarySearch, binarySearchLowerBound } from "#src/util/array.js";
+import { bigintCompare } from "#src/util/bigint.js";
 
 export type GenerationNumber = bigint;
 export type GenerationIndex = bigint;
@@ -348,10 +349,6 @@ export function compareVersionSpecToVersion(
   return "generationNumber" in versionSpec
     ? bigintCompare(versionSpec.generationNumber, ref.generationNumber)
     : bigintCompare(versionSpec.commitTime, ref.commitTime);
-}
-
-export function bigintCompare(a: bigint, b: bigint) {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export function findLeafVersion(

@@ -18,6 +18,7 @@ import { debounce, throttle } from "lodash-es";
 import { StatusMessage } from "#src/status.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { HttpError } from "#src/util/http_request.js";
+import { bigintToStringJsonReplacer } from "#src/util/json.js";
 import { getRandomHexString } from "#src/util/random.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { getCachedJson } from "#src/util/trackable.js";
@@ -85,7 +86,10 @@ export class ClientStateSynchronizer extends RefCounted {
           return;
         }
         const newStateJson = getCachedJson(this.state).value;
-        const newStateEncoded = JSON.stringify(newStateJson);
+        const newStateEncoded = JSON.stringify(
+          newStateJson,
+          bigintToStringJsonReplacer,
+        );
         if (newStateEncoded === this.lastServerState) {
           // Avoid sending back the exact same state just received from or sent to the server.  This
           // is also important for making things work in the presence of multiple simultaneous
@@ -230,14 +234,14 @@ export class Client {
   sendActionNotification(action: string, state: any) {
     fetch(this.urls.action, {
       method: "POST",
-      body: JSON.stringify({ action, state }),
+      body: JSON.stringify({ action, state }, bigintToStringJsonReplacer),
     });
   }
 
   sendVolumeInfoNotification(requestId: string, info: any) {
     fetch(`${this.urls.volumeInfo}/${requestId}/info`, {
       method: "POST",
-      body: JSON.stringify(info),
+      body: JSON.stringify(info, bigintToStringJsonReplacer),
     });
   }
 
@@ -245,7 +249,7 @@ export class Client {
     const { data, ...params } = info;
     fetch(
       `${this.urls.volumeInfo}/${requestId}/chunk?p=${encodeURIComponent(
-        JSON.stringify(params),
+        JSON.stringify(params, bigintToStringJsonReplacer),
       )}`,
       { method: "POST", body: data },
     );

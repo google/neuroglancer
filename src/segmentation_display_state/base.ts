@@ -20,7 +20,6 @@ import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type { RefCounted } from "#src/util/disposable.js";
-import type { Uint64 } from "#src/util/uint64.js";
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
@@ -73,15 +72,14 @@ export function onTemporaryVisibleSegmentsStateChanged(
 }
 
 /**
- * Returns a string key for identifying a uint64 object id.  This is faster than
- * Uint64.prototype.toString().
+ * Returns a string key for identifying a uint64 object id.
  */
-export function getObjectKey(objectId: Uint64): string {
-  return `${objectId.low},${objectId.high}`;
+export function getObjectKey(objectId: bigint): string {
+  return objectId.toString();
 }
 
-function isHighBitSegment(segmentId: Uint64): boolean {
-  return segmentId.high >>> 31 ? true : false;
+function isHighBitSegment(segmentId: bigint): boolean {
+  return (segmentId & 0x8000000000000000n) !== 0n;
 }
 
 export function getVisibleSegments(state: VisibleSegmentsState) {
@@ -98,13 +96,13 @@ export function getSegmentEquivalences(state: VisibleSegmentsState) {
 
 export function forEachVisibleSegment(
   state: VisibleSegmentsState,
-  callback: (objectId: Uint64, rootObjectId: Uint64) => void,
+  callback: (objectId: bigint, rootObjectId: bigint) => void,
 ) {
   const visibleSegments = getVisibleSegments(state);
   const segmentEquivalences = getSegmentEquivalences(state);
   const equivalencePolicy =
     segmentEquivalences.disjointSets.visibleSegmentEquivalencePolicy.value;
-  for (const rootObjectId of visibleSegments.unsafeKeys()) {
+  for (const rootObjectId of visibleSegments.keys()) {
     if (
       equivalencePolicy &
       VisibleSegmentEquivalencePolicy.NONREPRESENTATIVE_EXCLUDED

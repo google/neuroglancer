@@ -17,152 +17,144 @@
 import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { Uint64 } from "#src/util/uint64.js";
+import { bigintCompare } from "#src/util/bigint.js";
 
-const rankSymbol = Symbol("disjoint_sets:rank");
-const parentSymbol = Symbol("disjoint_sets:parent");
-const nextSymbol = Symbol("disjoint_sets:next");
-const prevSymbol = Symbol("disjoint_sets:prev");
+class Entry {
+  rank: number = 0;
+  parent: Entry = this;
+  next: Entry = this;
+  prev: Entry = this;
+  min: bigint;
 
-function findRepresentative(v: any): any {
+  constructor(public value: bigint) {
+    this.min = value;
+  }
+}
+
+function findRepresentative(v: Entry): Entry {
   // First pass: find the root, which will be stored in ancestor.
   let old = v;
-  let ancestor = v[parentSymbol];
+  let ancestor = v.parent;
   while (ancestor !== v) {
     v = ancestor;
-    ancestor = v[parentSymbol];
+    ancestor = v.parent;
   }
   // Second pass: set all of the parent pointers along the path from the
   // original element `old' to refer directly to the root `ancestor'.
-  v = old[parentSymbol];
+  v = old.parent;
   while (ancestor !== v) {
-    old[parentSymbol] = ancestor;
+    old.parent = ancestor;
     old = v;
-    v = old[parentSymbol];
+    v = old.parent;
   }
   return ancestor;
 }
 
-function linkUnequalSetRepresentatives(i: any, j: any): any {
-  const iRank = i[rankSymbol];
-  const jRank = j[rankSymbol];
+function linkUnequalSetRepresentatives(i: Entry, j: Entry): Entry {
+  const iRank = i.rank;
+  const jRank = j.rank;
   if (iRank > jRank) {
-    j[parentSymbol] = i;
+    j.parent = i;
     return i;
   }
 
-  i[parentSymbol] = j;
+  i.parent = j;
   if (iRank === jRank) {
-    j[rankSymbol] = jRank + 1;
+    j.rank = jRank + 1;
   }
   return j;
 }
 
-function spliceCircularLists(i: any, j: any) {
-  const iPrev = i[prevSymbol];
-  const jPrev = j[prevSymbol];
+function spliceCircularLists(i: Entry, j: Entry) {
+  const iPrev = i.prev;
+  const jPrev = j.prev;
 
   // Connect end of i to beginning of j.
-  j[prevSymbol] = iPrev;
-  iPrev[nextSymbol] = j;
+  j.prev = iPrev;
+  iPrev.next = j;
 
   // Connect end of j to beginning of i.
-  i[prevSymbol] = jPrev;
-  jPrev[nextSymbol] = i;
+  i.prev = jPrev;
+  jPrev.next = i;
 }
 
-function* setElementIterator(i: any) {
+function* setElementIterator(i: Entry): Generator<bigint> {
   let j = i;
   do {
-    yield j;
-    j = j[nextSymbol];
+    yield j.value;
+    j = j.next;
   } while (j !== i);
 }
 
-function initializeElement(v: any) {
-  v[parentSymbol] = v;
-  v[rankSymbol] = 0;
-  v[nextSymbol] = v[prevSymbol] = v;
-}
-
-const minSymbol = Symbol("disjoint_sets:min");
-
-function isRootElement(v: any) {
-  return v[parentSymbol] === v;
+function isRootElement(v: Entry) {
+  return v.parent === v;
 }
 
 /**
- * Represents a collection of disjoint sets of Uint64 values.
+ * Represents a collection of disjoint sets of uint64 values.
  *
- * Supports merging sets, retrieving the minimum Uint64 value contained in a set (the representative
+ * Supports merging sets, retrieving the minimum uint64 value contained in a set (the representative
  * value), and iterating over the elements contained in a set.
  */
 export class DisjointUint64Sets {
-  private map = new Map<string, Uint64>();
+  private map = new Map<bigint, Entry>();
   visibleSegmentEquivalencePolicy: WatchableValueInterface<VisibleSegmentEquivalencePolicy> =
     new WatchableValue<VisibleSegmentEquivalencePolicy>(
       VisibleSegmentEquivalencePolicy.MIN_REPRESENTATIVE,
     );
   generation = 0;
 
-  has(x: Uint64): boolean {
-    const key = x.toString();
-    const element = this.map.get(key);
-    return element !== undefined;
+  has(x: bigint): boolean {
+    return this.map.has(x);
   }
 
-  get(x: Uint64): Uint64 {
-    const key = x.toString();
-    const element = this.map.get(key);
-    if (element === undefined) {
+  get(x: bigint): bigint {
+    const entry = this.map.get(x);
+    if (entry === undefined) {
       return x;
     }
-    return findRepresentative(element)[minSymbol];
+    return findRepresentative(entry).min;
   }
 
-  isMinElement(x: Uint64) {
-    const y = this.get(x);
-    return y === x || Uint64.equal(y, x);
+  isMinElement(x: bigint) {
+    return x === this.get(x);
   }
 
-  private makeSet(x: Uint64): Uint64 {
-    const key = x.toString();
+  private makeSet(x: bigint): Entry {
     const { map } = this;
-    let element = map.get(key);
-    if (element === undefined) {
-      element = x.clone();
-      initializeElement(element);
-      (<any>element)[minSymbol] = element;
-      map.set(key, element);
-      return element;
+    let entry = map.get(x);
+    if (entry === undefined) {
+      entry = new Entry(x);
+      map.set(x, entry);
+      return entry;
     }
-    return findRepresentative(element);
+    return findRepresentative(entry);
   }
 
   /**
    * Union the sets containing `a` and `b`.
    * @returns `false` if `a` and `b` are already in the same set, otherwise `true`.
    */
-  link(a: Uint64, b: Uint64): boolean {
-    a = this.makeSet(a);
-    b = this.makeSet(b);
-    if (a === b) {
+  link(a: bigint, b: bigint): boolean {
+    const aEntry = this.makeSet(a);
+    const bEntry = this.makeSet(b);
+    if (aEntry === bEntry) {
       return false;
     }
     this.generation++;
-    const newNode = linkUnequalSetRepresentatives(a, b);
-    spliceCircularLists(a, b);
-    const aMin = (<any>a)[minSymbol];
-    const bMin = (<any>b)[minSymbol];
+    const newNode = linkUnequalSetRepresentatives(aEntry, bEntry);
+    spliceCircularLists(aEntry, bEntry);
+    const aMin = aEntry.min;
+    const bMin = bEntry.min;
     const isMax =
       (this.visibleSegmentEquivalencePolicy.value &
         VisibleSegmentEquivalencePolicy.MAX_REPRESENTATIVE) !==
       0;
-    newNode[minSymbol] = Uint64.less(aMin, bMin) === isMax ? bMin : aMin;
+    newNode.min = aMin < bMin === isMax ? bMin : aMin;
     return true;
   }
 
-  linkAll(ids: Uint64[]) {
+  linkAll(ids: bigint[]) {
     for (let i = 1, length = ids.length; i < length; ++i) {
       this.link(ids[0], ids[i]);
     }
@@ -171,11 +163,11 @@ export class DisjointUint64Sets {
   /**
    * Unlinks all members of the specified set.
    */
-  deleteSet(x: Uint64) {
+  deleteSet(x: bigint) {
     const { map } = this;
     let changed = false;
     for (const y of this.setElements(x)) {
-      map.delete(y.toString());
+      map.delete(y);
       changed = true;
     }
     if (changed) {
@@ -184,13 +176,12 @@ export class DisjointUint64Sets {
     return changed;
   }
 
-  *setElements(a: Uint64): IterableIterator<Uint64> {
-    const key = a.toString();
-    const element = this.map.get(key);
-    if (element === undefined) {
+  *setElements(a: bigint): IterableIterator<bigint> {
+    const entry = this.map.get(a);
+    if (entry === undefined) {
       yield a;
     } else {
-      yield* setElementIterator(element);
+      yield* setElementIterator(entry);
     }
   }
 
@@ -208,23 +199,21 @@ export class DisjointUint64Sets {
     return this.map.size;
   }
 
-  *mappings(temp = <[Uint64, Uint64]>new Array<Uint64>(2)) {
-    for (const element of this.map.values()) {
-      temp[0] = element;
-      temp[1] = findRepresentative(element)[minSymbol];
-      yield temp;
+  *mappings(): IterableIterator<[bigint, bigint]> {
+    for (const entry of this.map.values()) {
+      yield [entry.value, findRepresentative(entry).min];
     }
   }
 
-  *roots() {
-    for (const element of this.map.values()) {
-      if (isRootElement(element)) {
-        yield element;
+  *roots(): IterableIterator<bigint> {
+    for (const entry of this.map.values()) {
+      if (isRootElement(entry)) {
+        yield entry.value;
       }
     }
   }
 
-  [Symbol.iterator]() {
+  [Symbol.iterator](): IterableIterator<[bigint, bigint]> {
     return this.mappings();
   }
 
@@ -235,18 +224,18 @@ export class DisjointUint64Sets {
    * order of their smallest elements.
    */
   toJSON(): string[][] {
-    const sets = new Array<Uint64[]>();
-    for (const element of this.map.values()) {
-      if (isRootElement(element)) {
-        const members = new Array<Uint64>();
-        for (const member of setElementIterator(element)) {
+    const sets = new Array<bigint[]>();
+    for (const entry of this.map.values()) {
+      if (isRootElement(entry)) {
+        const members = new Array<bigint>();
+        for (const member of setElementIterator(entry)) {
           members.push(member);
         }
-        members.sort(Uint64.compare);
+        members.sort(bigintCompare);
         sets.push(members);
       }
     }
-    sets.sort((a, b) => Uint64.compare(a[0], b[0]));
+    sets.sort((a, b) => bigintCompare(a[0], b[0]));
     return sets.map((set) => set.map((element) => element.toString()));
   }
 }

@@ -16,7 +16,7 @@
 
 import type { MouseSelectionState } from "#src/layer/index.js";
 import type { RenderLayer } from "#src/renderlayer.js";
-import type { Uint64 } from "#src/util/uint64.js";
+import { uint64FromLowHigh } from "#src/util/bigint.js";
 
 const DEBUG_PICKING = false;
 
@@ -46,18 +46,17 @@ export class PickIDManager {
 
   registerUint64(
     renderLayer: RenderLayer,
-    x: Uint64,
+    x: bigint,
     count = 1,
     data: any = null,
   ): number {
-    return this.register(renderLayer, count, x.low, x.high, data);
+    return this.register(renderLayer, count, x, data);
   }
 
   register(
     renderLayer: RenderLayer,
     count = 1,
-    low = 0,
-    high = 0,
+    x: bigint = 0n,
     data: any = null,
   ): number {
     const { renderLayers, values } = this;
@@ -67,8 +66,8 @@ export class PickIDManager {
     renderLayers[index] = renderLayer;
     const valuesOffset = index * 3;
     values[valuesOffset] = pickID;
-    values[valuesOffset + 1] = low;
-    values[valuesOffset + 2] = high;
+    values[valuesOffset + 1] = Number(x & 0xffffffffn);
+    values[valuesOffset + 2] = Number(x >> 32n);
     this.pickData[index] = data;
     return pickID;
   }
@@ -101,9 +100,10 @@ export class PickIDManager {
         `offset=${pickedOffset}`,
       );
     }
-    const { pickedValue } = mouseState;
-    pickedValue.low = values[valuesOffset + 1];
-    pickedValue.high = values[valuesOffset + 2];
+    const pickedValue = (mouseState.pickedValue = uint64FromLowHigh(
+      values[valuesOffset + 1],
+      values[valuesOffset + 2],
+    ));
     mouseState.pickedAnnotationId = undefined;
     mouseState.pickedAnnotationLayer = undefined;
     mouseState.pickedAnnotationBuffer = undefined;

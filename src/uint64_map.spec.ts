@@ -20,41 +20,36 @@
 
 import { describe, it, expect } from "vitest";
 import { Uint64Map } from "#src/uint64_map.js";
-import { Uint64 } from "#src/util/uint64.js";
+import { bigintCompare, uint64FromLowHigh } from "#src/util/bigint.js";
 
 describe("Uint64Map", () => {
   it("basic", () => {
     const m = new Uint64Map();
 
-    const k1 = new Uint64(1);
-    const v1 = new Uint64(11);
+    const k1 = 1n;
+    const v1 = 11n;
     expect(m.has(k1)).toBe(false);
     expect(m.size).toBe(0);
     m.set(k1, v1);
     expect(m.has(k1)).toBe(true);
     expect(m.size).toBe(1);
-    const k1Gotten = new Uint64();
-    m.get(k1, k1Gotten);
-    expect(k1Gotten).toEqual(v1);
+    expect(m.get(k1)).toEqual(v1);
 
-    const k2 = new Uint64(2, 3);
-    const v2 = new Uint64(22, 33);
+    const k2 = uint64FromLowHigh(2, 3);
+    const v2 = uint64FromLowHigh(22, 33);
     expect(m.has(k2)).toBe(false);
     m.set(k2, v2);
     expect(m.has(k1)).toBe(true);
     expect(m.has(k2)).toBe(true);
     expect(m.size).toBe(2);
-    const k2Gotten = new Uint64();
-    m.get(k2, k2Gotten);
-    expect(k2Gotten).toEqual(v2);
+    expect(m.get(k2)).toEqual(v2);
 
-    const v2a = new Uint64(222, 333);
+    const v2a = uint64FromLowHigh(222, 333);
     m.set(k2, v2a);
     expect(m.has(k1)).toBe(true);
     expect(m.has(k2)).toBe(true);
     expect(m.size).toBe(2);
-    m.get(k2, k2Gotten);
-    expect(k2Gotten).toEqual(v2);
+    expect(m.get(k2)).toEqual(v2);
 
     m.delete(k2);
     expect(m.has(k1)).toBe(true);
@@ -64,8 +59,7 @@ describe("Uint64Map", () => {
     expect(m.has(k1)).toBe(true);
     expect(m.has(k2)).toBe(true);
     expect(m.size).toBe(2);
-    m.get(k2, k2Gotten);
-    expect(k2Gotten).toEqual(v2a);
+    expect(m.get(k2)).toEqual(v2a);
 
     m.clear();
     expect(m.has(k1)).toBe(false);
@@ -76,21 +70,21 @@ describe("Uint64Map", () => {
   it("iterate", () => {
     const m = new Uint64Map();
 
-    const k1 = new Uint64(1);
-    const v1 = new Uint64(11);
-    const k2 = new Uint64(2, 3);
-    const v2 = new Uint64(22, 33);
-    const k3 = new Uint64(3, 4);
-    const v3 = new Uint64(33, 44);
+    const k1 = 1n;
+    const v1 = 11n;
+    const k2 = uint64FromLowHigh(2, 3);
+    const v2 = uint64FromLowHigh(22, 33);
+    const k3 = uint64FromLowHigh(3, 4);
+    const v3 = uint64FromLowHigh(33, 44);
     m.set(k2, v2);
     m.set(k1, v1);
     m.set(k3, v3);
 
     const iterated = [];
-    for (const [k, v] of m.unsafeEntries()) {
-      iterated.push([k.clone(), v.clone()]);
+    for (const [k, v] of m) {
+      iterated.push([k, v]);
     }
-    iterated.sort((a, b) => Uint64.compare(a[0], b[0]));
+    iterated.sort((a, b) => bigintCompare(a[0], b[0]));
     expect(iterated).toEqual([
       [k1, v1],
       [k2, v2],
@@ -101,12 +95,12 @@ describe("Uint64Map", () => {
   it("toJSON", () => {
     const m = new Uint64Map();
 
-    const k1 = new Uint64(1);
-    const v1 = new Uint64(11);
-    const k2 = new Uint64(2, 3);
-    const v2 = new Uint64(22, 33);
-    const k3 = new Uint64(3, 4);
-    const v3 = new Uint64(33, 44);
+    const k1 = 1n;
+    const v1 = 11n;
+    const k2 = uint64FromLowHigh(2, 3);
+    const v2 = uint64FromLowHigh(22, 33);
+    const k3 = uint64FromLowHigh(3, 4);
+    const v3 = uint64FromLowHigh(33, 44);
     m.set(k2, v2);
     m.set(k1, v1);
     m.set(k3, v3);

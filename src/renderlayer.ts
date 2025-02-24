@@ -46,7 +46,6 @@ import { RefCounted } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner, SharedObject } from "#src/worker_rpc.js";
@@ -95,7 +94,7 @@ export class RenderLayer extends RefCounted {
    */
   updateMouseState(
     _mouseState: MouseSelectionState,
-    _pickedValue: Uint64,
+    _pickedValue: bigint,
     _pickedOffset: number,
     _data: any,
   ) {}

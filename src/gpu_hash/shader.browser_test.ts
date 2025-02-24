@@ -22,9 +22,9 @@ import {
   HashMapShaderManager,
   HashSetShaderManager,
 } from "#src/gpu_hash/shader.js";
+import { randomUint64 } from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
 import { getRandomUint32 } from "#src/util/random.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 
 const COUNT = 100;
@@ -65,11 +65,14 @@ describe("gpu_hash.shader", () => {
           "outputValue = hashCombine(hashSeed, inputValue);",
         );
         for (let k = 0; k < 20; ++k) {
-          const inputValue = Uint64.random();
+          const inputValue = randomUint64();
           const hashSeed = getRandomUint32();
           tester.execute({ hashSeed, inputValue });
-          let expected = hashCombine(hashSeed, inputValue.low);
-          expected = hashCombine(expected, inputValue.high);
+          let expected = hashCombine(
+            hashSeed,
+            Number(inputValue & 0xffffffffn),
+          );
+          expected = hashCombine(expected, Number(inputValue >> 32n));
           expect(tester.values.outputValue).toEqual(expected);
         }
       },
@@ -91,27 +94,25 @@ describe("gpu_hash.shader", () => {
         const gpuHashTable = tester.registerDisposer(
           GPUHashTable.get(gl, hashTable),
         );
-        const testValues = new Array<Uint64>();
+        const testValues = new Array<bigint>();
         while (testValues.length < COUNT) {
-          const x = Uint64.random();
+          const x = randomUint64();
           if (hashTable.has(x)) {
             continue;
           }
           testValues.push(x);
           hashTable.add(x);
         }
-        const notPresentValues = new Array<Uint64>();
-        notPresentValues.push(
-          new Uint64(hashTable.emptyLow, hashTable.emptyHigh),
-        );
+        const notPresentValues = new Array<bigint>();
+        notPresentValues.push(hashTable.empty);
         while (notPresentValues.length < COUNT) {
-          const x = Uint64.random();
+          const x = randomUint64();
           if (hashTable.has(x)) {
             continue;
           }
           notPresentValues.push(x);
         }
-        function checkPresent(x: Uint64) {
+        function checkPresent(x: bigint) {
           hashTableShaderManager.enable(gl, shader, gpuHashTable);
           tester.execute({ inputValue: x });
           return tester.values.outputValue;
@@ -145,38 +146,33 @@ describe("gpu_hash.shader", () => {
         const gpuHashTable = tester.registerDisposer(
           GPUHashTable.get(gl, hashTable),
         );
-        const testValues = new Array<Uint64>();
+        const testValues = new Array<bigint>();
         while (testValues.length < COUNT) {
-          const x = Uint64.random();
+          const x = randomUint64();
           if (hashTable.has(x)) {
             continue;
           }
           testValues.push(x);
-          hashTable.set(x, Uint64.random());
+          hashTable.set(x, randomUint64());
         }
-        const notPresentValues = new Array<Uint64>();
-        notPresentValues.push(
-          new Uint64(hashTable.emptyLow, hashTable.emptyHigh),
-        );
+        const notPresentValues = new Array<bigint>();
+        notPresentValues.push(hashTable.empty);
         while (notPresentValues.length < COUNT) {
-          const x = Uint64.random();
+          const x = randomUint64();
           if (hashTable.has(x)) {
             continue;
           }
           notPresentValues.push(x);
         }
-        function checkPresent(x: Uint64) {
+        function checkPresent(x: bigint) {
           shaderManager.enable(gl, shader, gpuHashTable);
           tester.execute({ key: x });
           const { values } = tester;
-          const expectedValue = new Uint64();
-          const expectedHas = hashTable.get(x, expectedValue);
+          const value = hashTable.get(x);
           const has = values.isPresent;
-          expect(has, `x=${x}`).toBe(expectedHas);
+          expect(value !== undefined, `x=${x}`).toBe(values.isPresent);
           if (has) {
-            expect(values.outputValue.toString(), `x=${x}`).toBe(
-              expectedValue.toString(),
-            );
+            expect(values.outputValue, `x=${x}`).toBe(value);
           }
         }
         testValues.forEach((x, i) => {

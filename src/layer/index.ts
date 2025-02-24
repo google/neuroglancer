@@ -106,7 +106,6 @@ import {
   removeSignalBinding,
 } from "#src/util/signal_binding_updater.js";
 import type { Trackable } from "#src/util/trackable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { kEmptyFloat32Vec } from "#src/util/vector.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
@@ -1076,7 +1075,7 @@ export class LayerManager extends RefCounted {
 
 export interface PickState {
   pickedRenderLayer: RenderLayer | null;
-  pickedValue: Uint64;
+  pickedValue: bigint;
   pickedOffset: number;
   pickedAnnotationLayer: AnnotationLayerState | undefined;
   pickedAnnotationId: string | undefined;
@@ -1095,7 +1094,7 @@ export class MouseSelectionState implements PickState {
   active = false;
   displayDimensions: DisplayDimensions | undefined = undefined;
   pickedRenderLayer: RenderLayer | null = null;
-  pickedValue = new Uint64(0, 0);
+  pickedValue = 0n;
   pickedOffset = 0;
   pickedAnnotationLayer: AnnotationLayerState | undefined = undefined;
   pickedAnnotationId: string | undefined = undefined;

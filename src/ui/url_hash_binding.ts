@@ -19,7 +19,11 @@ import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { urlSafeParse, verifyObject } from "#src/util/json.js";
+import {
+  bigintToStringJsonReplacer,
+  urlSafeParse,
+  verifyObject,
+} from "#src/util/json.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { getCachedJson } from "#src/util/trackable.js";
 
@@ -92,7 +96,9 @@ export class UrlHashBinding extends RefCounted {
     const { generation } = cacheState;
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
-      const stateString = encodeFragment(JSON.stringify(cacheState.value));
+      const stateString = encodeFragment(
+        JSON.stringify(cacheState.value, bigintToStringJsonReplacer),
+      );
       if (stateString !== this.prevStateString) {
         this.prevStateString = stateString;
         if (decodeURIComponent(stateString) === "{}") {

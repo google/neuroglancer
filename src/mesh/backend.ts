@@ -53,7 +53,6 @@ import {
   verifyObjectProperty,
   verifyStringArray,
 } from "#src/util/json.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { zorder3LessThan } from "#src/util/zorder.js";
 import {
   getBasePriority,
@@ -72,13 +71,13 @@ export type FragmentId = string;
 
 // Chunk that contains the list of fragments that make up a single object.
 export class ManifestChunk extends Chunk {
-  objectId = new Uint64();
+  objectId: bigint = 0n;
   fragmentIds: FragmentId[] | null;
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk(key: string, objectId: Uint64) {
+  initializeManifestChunk(key: string, objectId: bigint) {
     super.initialize(key);
-    this.objectId.assign(objectId);
+    this.objectId = objectId;
   }
 
   freeSystemMemory() {
@@ -384,7 +383,7 @@ export class MeshSource extends ChunkSource {
     fragmentSource.meshSource = this;
   }
 
-  getChunk(objectId: Uint64) {
+  getChunk(objectId: bigint) {
     const key = getObjectKey(objectId);
     let chunk = <ManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
@@ -498,13 +497,13 @@ export class MeshLayer extends withSegmentationLayerBackendState(
 
 // Chunk that contains the list of fragments that make up a single object.
 export class MultiscaleManifestChunk extends Chunk {
-  objectId = new Uint64();
+  objectId: bigint = 0n;
   manifest: MultiscaleMeshManifest | undefined;
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk(key: string, objectId: Uint64) {
+  initializeManifestChunk(key: string, objectId: bigint) {
     super.initialize(key);
-    this.objectId.assign(objectId);
+    this.objectId = objectId;
   }
 
   freeSystemMemory() {
@@ -584,7 +583,7 @@ export class MultiscaleMeshSource extends ChunkSource {
     fragmentSource.meshSource = this;
   }
 
-  getChunk(objectId: Uint64) {
+  getChunk(objectId: bigint) {
     const key = getObjectKey(objectId);
     let chunk = <MultiscaleManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
