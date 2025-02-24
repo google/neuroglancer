@@ -56,7 +56,7 @@ import {
   EventActionMap,
   registerActionListener,
 } from "#src/util/event_action_map.js";
-import { quat } from "#src/util/geom.js";
+import type { quat } from "#src/util/geom.js";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -67,7 +67,11 @@ import type { Trackable } from "#src/util/trackable.js";
 import { optionallyRestoreFromJsonMember } from "#src/util/trackable.js";
 import { WatchableMap } from "#src/util/watchable_map.js";
 import type { VisibilityPrioritySpecification } from "#src/viewer_state.js";
-import { DisplayDimensionsWidget } from "#src/widget/display_dimensions_widget.js";
+import type { NamedAxes } from "#src/widget/display_dimensions_widget.js";
+import {
+  DisplayDimensionsWidget,
+  AXES_RELATIVE_ORIENTATION,
+} from "#src/widget/display_dimensions_widget.js";
 import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
 
 export interface SliceViewViewerState {
@@ -107,14 +111,6 @@ export interface DataDisplayLayout extends RefCounted {
   rootElement: HTMLElement;
   container: DataPanelLayoutContainer;
 }
-
-type NamedAxes = "xy" | "xz" | "yz";
-
-const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
-  ["xy", undefined],
-  ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
-  ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
-]);
 
 const oneSquareSymbol = "◻";
 
@@ -209,6 +205,7 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 function addDisplayDimensionsWidget(
   layout: DataDisplayLayout,
   panel: RenderedDataPanel,
+  axes: NamedAxes | undefined,
 ) {
   const { navigationState } = panel;
   panel.element.appendChild(
@@ -217,6 +214,10 @@ function addDisplayDimensionsWidget(
         navigationState.pose.displayDimensionRenderInfo.addRef(),
         navigationState.zoomFactor,
         navigationState.depthRange.addRef(),
+        navigationState.pose.orientation.addRef(),
+        axes,
+        panel.boundsUpdated,
+        panel.renderViewport,
         panel instanceof SliceViewPanel ? "px" : "vh",
       ),
     ).element,
@@ -365,7 +366,7 @@ export class FourPanelLayout extends RefCounted {
         new SliceViewPanel(display, element, sliceViews.get(axes)!, state),
       );
       if (displayDimensionsWidget) {
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, axes);
       }
       registerRelatedLayouts(this, panel, [axes, `${axes}-3d`]);
       return panel;
@@ -404,7 +405,7 @@ export class FourPanelLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
-                addDisplayDimensionsWidget(this, panel);
+                addDisplayDimensionsWidget(this, panel, undefined);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
               }),
@@ -468,7 +469,7 @@ export class FourPanelAltLayout extends RefCounted {
         new SliceViewPanel(display, element, sliceViews.get(axes)!, state),
       );
       if (displayDimensionsWidget) {
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, axes);
       }
       registerRelatedLayouts(this, panel, [axes, `${axes}-3d`]);
       return panel;
@@ -515,7 +516,7 @@ export class FourPanelAltLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
-                addDisplayDimensionsWidget(this, panel);
+                addDisplayDimensionsWidget(this, panel, undefined);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d", "4panel"]);
               }),
@@ -565,7 +566,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           const panel = this.registerDisposer(
             new SliceViewPanel(display, element, sliceView, sliceViewerState),
           );
-          addDisplayDimensionsWidget(this, panel);
+          addDisplayDimensionsWidget(this, panel, axes);
           registerRelatedLayouts(this, panel, [axes, "4panel-alt"]);
         }),
         L.withFlex(1, (element) => {
@@ -574,7 +575,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           );
           panel.sliceViews.set(sliceView.addRef(), false);
           addUnconditionalSliceViews(viewer, panel, crossSections);
-          addDisplayDimensionsWidget(this, panel);
+          addDisplayDimensionsWidget(this, panel, undefined);
           registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
         }),
       ]),
@@ -611,7 +612,7 @@ export class SinglePanelLayout extends RefCounted {
             sliceViewerState,
           ),
         );
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, axes);
         registerRelatedLayouts(this, panel, ["4panel-alt", `${axes}-3d`]);
       }),
     ])(rootElement);
@@ -642,7 +643,7 @@ export class SinglePerspectiveLayout extends RefCounted {
           new PerspectivePanel(viewer.display, element, perspectiveViewerState),
         );
         addUnconditionalSliceViews(viewer, panel, crossSections);
-        addDisplayDimensionsWidget(this, panel);
+        addDisplayDimensionsWidget(this, panel, undefined);
         registerRelatedLayouts(this, panel, ["4panel-alt"]);
       }),
     ])(rootElement);
