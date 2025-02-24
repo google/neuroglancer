@@ -691,6 +691,7 @@ function AnnotationRenderLayer<
             }
           }
           count = Math.round(count * drawFraction);
+          console.log("Draw count", count);
           context.count = count;
           context.bufferOffset = typeToOffset[annotationType];
           context.selectedIndex = selectedIndex;
