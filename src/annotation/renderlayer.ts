@@ -371,7 +371,6 @@ export class AnnotationLayer extends RefCounted {
     if (source instanceof AnnotationSource) {
       const generation = source.changed.count;
       if (this.generation !== generation) {
-        console.log("updating buffer");
         let { buffer, indexBuffer } = this;
         if (buffer === undefined) {
           buffer = this.buffer = this.registerDisposer(
@@ -389,7 +388,6 @@ export class AnnotationLayer extends RefCounted {
             source,
             segmentationFilter(this.segmentationStates.value),
           ));
-        console.log("serializedAnnotations", this.serializedAnnotations);
         buffer.setData(this.serializedAnnotations.data);
         if (this.serializedAnnotations.index !== undefined) {
         indexBuffer.setData(this.serializedAnnotations.index);

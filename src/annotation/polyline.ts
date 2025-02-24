@@ -28,7 +28,7 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
-import { projectPointToLineSegment } from "#src/util/geom.js";
+// import { projectPointToLineSegment } from "#src/util/geom.js";
 import {
   defineCircleShader,
   drawCircles,
@@ -50,17 +50,17 @@ const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
 
 function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
-void setPEndpointMarkerSize(float startSize, float endSize) {}
-void setPEndpointMarkerBorderWidth(float startSize, float endSize) {}
-void setPEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
-void setPEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
+void setPolyEndpointMarkerSize(float startSize, float endSize) {}
+void setPolyEndpointMarkerBorderWidth(float startSize, float endSize) {}
+void setPolyEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
+void setPolyEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
 `);
 }
 
 function defineNoOpLineSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
-void setPLineWidth(float width) {}
-void setPLineColor(vec4 startColor, vec4 endColor) {}
+void setPolyLineWidth(float width) {}
+void setPolyLineColor(vec4 startColor, vec4 endColor) {}
 `);
 }
 
@@ -90,14 +90,14 @@ class RenderHelper extends AnnotationRenderHelper {
       defineLineShader(builder);
       builder.addVarying(`highp float[${rank}]`, "vModelPosition");
       builder.addVertexCode(`
-  float ng_LineWidth;
+  float ng_PolyLineWidth;
   `);
       defineNoOpEndpointMarkerSetters(builder);
       builder.addVertexCode(`
-  void setLineWidth(float width) {
-    ng_LineWidth = width;
+  void setPolyLineWidth(float width) {
+    ng_PolyLineWidth = width;
   }
-  void setLineColor(vec4 startColor, vec4 endColor) {
+  void setPolyLineColor(vec4 startColor, vec4 endColor) {
     vColor = mix(startColor, endColor, getLineEndpointCoefficient());
   }
   `);
@@ -107,12 +107,12 @@ class RenderHelper extends AnnotationRenderHelper {
   for (int i = 0; i < ${rank}; ++i) {
     vModelPosition[i] = mix(modelPositionA[i], modelPositionB[i], getLineEndpointCoefficient());
   }
-  ng_LineWidth = 1.0;
+  ng_PolyLineWidth = 1.0;
   vColor = vec4(0.0, 0.0, 0.0, 0.0);
   ${this.invokeUserMain}
   emitLine(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionA), 1.0),
            uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionB), 1.0),
-           ng_LineWidth);
+           ng_PolyLineWidth);
   ${this.setPartIndex(builder)};
   `);
       builder.setFragmentMain(`
@@ -134,21 +134,21 @@ class RenderHelper extends AnnotationRenderHelper {
       builder.addVarying("highp vec4", "vBorderColor");
       defineNoOpLineSetters(builder);
       builder.addVertexCode(`
-  float ng_markerDiameter;
-  float ng_markerBorderWidth;
+  float ng_PolyMarkerDiameter;
+  float ng_PolyMarkerBorderWidth;
   int getEndpointIndex() {
     return gl_VertexID / ${VERTICES_PER_CIRCLE};
   }
-  void setEndpointMarkerSize(float startSize, float endSize) {
-    ng_markerDiameter = mix(startSize, endSize, float(getEndpointIndex()));
+  void setPolyEndpointMarkerSize(float startSize, float endSize) {
+    ng_PolyMarkerDiameter = mix(startSize, endSize, float(getEndpointIndex()));
   }
-  void setEndpointMarkerBorderWidth(float startSize, float endSize) {
-    ng_markerBorderWidth = mix(startSize, endSize, float(getEndpointIndex()));
+  void setPolyEndpointMarkerBorderWidth(float startSize, float endSize) {
+    ng_PolyMarkerBorderWidth = mix(startSize, endSize, float(getEndpointIndex()));
   }
-  void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
+  void setPolyEndpointMarkerColor(vec4 startColor, vec4 endColor) {
     vColor = mix(startColor, endColor, float(getEndpointIndex()));
   }
-  void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
+  void setPolyEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
     vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
   }
   `);
@@ -161,10 +161,10 @@ class RenderHelper extends AnnotationRenderHelper {
   vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
   vColor = vec4(0.0, 0.0, 0.0, 0.0);
   vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
-  ng_markerDiameter = 5.0;
-  ng_markerBorderWidth = 1.0;
+  ng_PolyMarkerDiameter = 5.0;
+  ng_PolyMarkerBorderWidth = 1.0;
   ${this.invokeUserMain}
-  emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
+  emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_PolyMarkerDiameter, ng_PolyMarkerBorderWidth);
   ${this.setPartIndex(builder, "uint(getEndpointIndex()) + 1u")};
   `);
       builder.setFragmentMain(`
@@ -224,27 +224,27 @@ class RenderHelper extends AnnotationRenderHelper {
   }
 }
 
-function snapPositionToLine(position: Float32Array, endpoints: Float32Array) {
-  const rank = position.length;
-  projectPointToLineSegment(
-    position,
-    endpoints.subarray(0, rank),
-    endpoints.subarray(rank),
-    position,
-  );
-}
+// function snapPositionToLine(position: Float32Array, endpoints: Float32Array) {
+//   const rank = position.length;
+//   projectPointToLineSegment(
+//     position,
+//     endpoints.subarray(0, rank),
+//     endpoints.subarray(rank),
+//     position,
+//   );
+// }
 
-function snapPositionToEndpoint(
-  position: Float32Array,
-  endpoints: Float32Array,
-  endpointIndex: number,
-) {
-  const rank = position.length;
-  const startOffset = rank * endpointIndex;
-  for (let i = 0; i < rank; ++i) {
-    position[i] = endpoints[startOffset + i];
-  }
-}
+// function snapPositionToEndpoint(
+//   position: Float32Array,
+//   endpoints: Float32Array,
+//   endpointIndex: number,
+// ) {
+//   const rank = position.length;
+//   const startOffset = rank * endpointIndex;
+//   for (let i = 0; i < rank; ++i) {
+//     position[i] = endpoints[startOffset + i];
+//   }
+// }
 
 registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
   sliceViewRenderHelper: RenderHelper,
@@ -253,14 +253,23 @@ registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
     defineNoOpEndpointMarkerSetters(builder);
     defineNoOpLineSetters(builder);
   },
-  pickIdsPerInstance: 0,
+  pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
   snapPosition(position, data, offset, partIndex) {
     // TODO (skm) See line for reference, but needs to pick the correct line
+    position;
+    data;
+    offset;
+    partIndex;
   },
   getRepresentativePoint(out, ann, partIndex) {
     // TODO (skm) See line for reference
+    out;
+    ann;
+    partIndex;
   },
   updateViaRepresentativePoint(oldAnnotation, position, partIndex) {
+    position;
+    partIndex;
     return oldAnnotation;
   },
 });

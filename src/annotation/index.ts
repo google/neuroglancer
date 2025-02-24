@@ -881,7 +881,7 @@ export const annotationTypeHandlers: Record<
     },
     serializedBytes(rank: number, annotation?: PolyLine) {
       if (annotation === undefined) return 0;
-      return 4 * rank * annotation.points.length;
+      return 4 * rank * 2 * (annotation.points.length - 1);
     },
     serialize(
       buffer: DataView,
@@ -890,14 +890,27 @@ export const annotationTypeHandlers: Record<
       rank: number,
       annotation: PolyLine,
     ) {
-      for (const point of annotation.points) {
+      // Build buffer like
+      // P1 P2 PROPERTIES P3 P4 PROPERTIES ...
+      for (let i = 0; i < annotation.points.length - 1; i++) {
+        console.log("before serializing", offset);
+        const firstPoint = annotation.points[i];
         offset = serializeFloatVector(
           buffer,
           offset,
           isLittleEndian,
           rank,
-          point,
+          firstPoint,
         );
+        const secondPoint = annotation.points[i + 1];
+        offset = serializeFloatVector(
+          buffer,
+          offset,
+          isLittleEndian,
+          rank,
+          secondPoint,
+        );
+        console.log("After serializing", offset);
       }
     },
     // TODO (SKM) how to make the calls to this give the index offset?
@@ -1499,7 +1512,7 @@ function serializeAnnotations(
   propertySerializers: AnnotationPropertySerializer[],
 ): SerializedAnnotations {
   let totalBytes = 0;
-  let indexBytes = 0;
+  // let indexBytes = 0;
   const typeToOffset: number[] = [];
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
@@ -1514,15 +1527,15 @@ function serializeAnnotations(
     const handler = annotationTypeHandlers[annotationType];
     const count = annotations.length;
     if (annotationType === AnnotationType.POLYLINE) {
-      console.log(annotations);
       for (const annotation of annotations) {
         const bytes = handler.serializedBytes(
           propertySerializer.rank,
           annotation,
         );
+        console.log("annotation polyline bytes", bytes)
         totalBytes += bytes;
       }
-      indexBytes += count * 8;
+      // indexBytes += count * 8;
     } else {
       totalBytes += serializedPropertiesBytes * count;
     }
@@ -1532,8 +1545,8 @@ function serializeAnnotations(
   console.log(totalBytes);
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
-  const index = new ArrayBuffer(indexBytes);
-  const indexView = new DataView(index);
+  // const index = new ArrayBuffer(indexBytes);
+  // const indexView = new DataView(index);
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
@@ -1548,23 +1561,25 @@ function serializeAnnotations(
     const serialize = handler.serialize;
     const offset = typeToOffset[annotationType];
     const geometryDataStride = propertySerializer.propertyGroupBytes[0];
-    let indexOffset = 0;
+    // let indexOffset = 0;
     for (let i = 0, count = annotations.length; i < count; ++i) {
       const annotation = annotations[i];
       // First store the number of points in the index buffer
       // TODO (SKM) the handler should be the one to report this
-      if (annotationType === AnnotationType.POLYLINE) {
-        // TODO (SKM) better to directly store offset or n points?
-        indexOffset += handler.serializedBytes(rank, annotation);
-        // TODO (SKM) this also needs the serialized property pieces
-        indexView.setUint32(i * 8, indexOffset, isLittleEndian);
-        indexView.setUint32(
-          i * 8 + 4,
-          (annotation as PolyLine).points.length,
-          isLittleEndian,
-        );
-      }
+      // if (annotationType === AnnotationType.POLYLINE) {
+      //   // TODO (SKM) better to directly store offset or n points?
+      //   indexOffset += handler.serializedBytes(rank, annotation);
+      //   // TODO (SKM) this also needs the serialized property pieces
+      //   indexView.setUint32(i * 8, indexOffset, isLittleEndian);
+      //   indexView.setUint32(
+      //     i * 8 + 4,
+      //     (annotation as PolyLine).points.length,
+      //     isLittleEndian,
+      //   );
+      // }
       // TODO (SKM) make serialize accept the IndexView and handle both
+      // TODO handle polyline properly here, for now assume length two
+      // polyline just to debug the rendering
       serialize(
         dataView,
         offset + i * geometryDataStride,
@@ -1582,9 +1597,10 @@ function serializeAnnotations(
       );
     }
   }
+  console.log("totalBytes", totalBytes);
   return {
     data: new Uint8Array(data),
-    index: new Uint8Array(index),
+    index: new Uint8Array(),
     typeToIds,
     typeToOffset,
     typeToIdMaps,
