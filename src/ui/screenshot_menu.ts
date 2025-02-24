@@ -207,7 +207,7 @@ function parseResolution<T extends ResolutionMetadata>(
   };
 
   if (!fullResolution.includes(" ")) {
-    return [createResolutionData("Isomorphic", fullResolution)];
+    return [createResolutionData("Uniform", fullResolution)];
   }
 
   return fullResolution
