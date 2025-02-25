@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 
-export function equal<T extends TypedArray, U extends TypedArray>(a: T, b: U) {
+export function equal<T extends TypedNumberArray, U extends TypedNumberArray>(
+  a: T,
+  b: U,
+) {
   const n = a.length;
   for (let i = 0; i < n; ++i) {
     if (a[i] !== b[i]) return false;
@@ -25,9 +28,9 @@ export function equal<T extends TypedArray, U extends TypedArray>(a: T, b: U) {
 }
 
 export function add<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {
@@ -36,9 +39,9 @@ export function add<
   return out;
 }
 export function subtract<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {
@@ -47,9 +50,9 @@ export function subtract<
   return out;
 }
 export function multiply<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {
@@ -58,9 +61,9 @@ export function multiply<
   return out;
 }
 export function divide<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {
@@ -69,9 +72,9 @@ export function divide<
   return out;
 }
 export function scaleAndAdd<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B, scale: number) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {
@@ -79,7 +82,7 @@ export function scaleAndAdd<
   }
   return out;
 }
-export function scale<Out extends TypedArray, A extends TypedArray>(
+export function scale<Out extends TypedNumberArray, A extends TypedNumberArray>(
   out: Out,
   a: A,
   scale: number,
@@ -100,9 +103,9 @@ export function prod(array: ArrayLike<number>) {
 }
 
 export function min<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {
@@ -112,9 +115,9 @@ export function min<
 }
 
 export function max<
-  Out extends TypedArray,
-  A extends TypedArray,
-  B extends TypedArray,
+  Out extends TypedNumberArray,
+  A extends TypedNumberArray,
+  B extends TypedNumberArray,
 >(out: Out, a: A, b: B) {
   const rank = out.length;
   for (let i = 0; i < rank; ++i) {

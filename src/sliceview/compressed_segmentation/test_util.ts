@@ -14,28 +14,18 @@
  * limitations under the License.
  */
 
-export function makeRandomUint64Array(
-  length: number,
-  numPossibleValues: number,
-) {
-  const possibleValues = new Uint32Array(numPossibleValues * 2);
-  crypto.getRandomValues(possibleValues);
-  const data = new Uint32Array(length * 2);
-  for (let i = 0; i < length; ++i) {
-    const index = Math.floor(Math.random() * numPossibleValues);
-    data[i * 2] = possibleValues[index * 2];
-    data[i * 2 + 1] = possibleValues[index * 2 + 1];
-  }
-  return data;
-}
+import type { TypedArray } from "#src/util/array.js";
 
-export function makeRandomUint32Array(
+export function makeRandomArrayByChoosingWithReplacement<
+  TArray extends TypedArray<ArrayBuffer>,
+>(
+  cls: { new (count: number): TArray },
   length: number,
   numPossibleValues: number,
 ) {
-  const possibleValues = new Uint32Array(numPossibleValues);
+  const possibleValues = new cls(numPossibleValues);
   crypto.getRandomValues(possibleValues);
-  const data = new Uint32Array(length);
+  const data = new cls(length);
   for (let i = 0; i < length; ++i) {
     const index = Math.floor(Math.random() * numPossibleValues);
     data[i] = possibleValues[index];

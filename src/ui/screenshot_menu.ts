@@ -28,6 +28,7 @@ import type {
   ScreenshotManager,
 } from "#src/util/screenshot_manager.js";
 import { MAX_RENDER_AREA_PIXELS } from "#src/util/screenshot_manager.js";
+import { parseScale } from "#src/util/si_units.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import type {
   DimensionResolutionStats,
@@ -76,6 +77,42 @@ interface UIScreenshotStatistics {
   chunkUsageDescription: string;
   gpuMemoryUsageDescription: string;
   downloadSpeedDescription: string;
+}
+
+interface ScreenshotMetadata {
+  date: string;
+  name: string;
+  size: ScreenshotOrPanelSize;
+  panels: PanelMetadata[];
+  layers: LayerMetadata[];
+}
+
+interface ScreenshotOrPanelSize {
+  width: number;
+  height: number;
+}
+
+interface ResolutionMetadata {
+  formattedScale: string; // Human-readable format (e.g., "8.75nm")
+  dimension: string; // E.g., "Isotropic", "x", "y", "z"
+  scale: number; // Actual scale value in SI unit
+  unit: string; // SI unit
+}
+
+interface PanelResolutionMetadata extends ResolutionMetadata {
+  panelViewportUnit: string;
+}
+
+interface PanelMetadata {
+  type: string;
+  pixelResolution: ScreenshotOrPanelSize;
+  physicalScale: PanelResolutionMetadata[];
+}
+
+interface LayerMetadata {
+  name: string;
+  type: string;
+  voxelResolution: ResolutionMetadata[];
 }
 
 const statisticsNamesForUI = {
@@ -147,6 +184,41 @@ function formatPixelResolution(panelArea: PanelViewport) {
   const height = Math.round(panelArea.bottom - panelArea.top);
   const type = panelArea.panelType;
   return { width, height, type };
+}
+
+function parseResolution<T extends ResolutionMetadata>(
+  fullResolution: string,
+): T[] {
+  const extractScaleAndUnit = (resolution: string) => {
+    const [formattedScale, unit = ""] = resolution.split("/");
+    return { formattedScale, unit };
+  };
+
+  const createResolutionData = (dimension: string, resolution: string): T => {
+    const { formattedScale, unit } = extractScaleAndUnit(resolution);
+    const scale = parseScale(formattedScale);
+    if (!scale) throw new Error(`Invalid scale: ${resolution}`);
+
+    return {
+      formattedScale,
+      dimension,
+      scale: scale.scale,
+      unit: scale.unit,
+      ...(unit && { panelViewportUnit: unit }),
+    } as T;
+  };
+
+  if (!fullResolution.includes(" ")) {
+    return [createResolutionData("Uniform", fullResolution)];
+  }
+
+  return fullResolution
+    .split(" ")
+    .reduce<T[]>((result, value, index, array) => {
+      if (index % 2 === 0)
+        result.push(createResolutionData(value, array[index + 1]));
+      return result;
+    }, []);
 }
 
 /**
@@ -384,11 +456,11 @@ export class ScreenshotDialog extends Overlay {
     const screenshotCopyButton = makeCopyButton({
       title: "Copy table to clipboard",
       onClick: () => {
-        const result = setClipboard(this.getResolutionText());
+        const result = setClipboard(this.generateScreenshotMetadataJson());
         StatusMessage.showTemporaryMessage(
           result
-            ? "Resolution table copied to clipboard"
-            : "Failed to copy resolution table to clipboard",
+            ? "Resolution metadata JSON copied to clipboard"
+            : "Failed to copy resolution JSON to clipboard",
         );
       },
     });
@@ -807,30 +879,46 @@ export class ScreenshotDialog extends Overlay {
     };
   }
 
-  /**
-  Private function to copy the resolution of the screenshot to the clipboard
-  This will be in tsv format, with the width and height separated by an 'x'
-    */
-  private getResolutionText() {
-    // Processing the Screenshot size
-    const screenshotSizeText = `Screenshot size\t${this.screenshotWidth} x ${this.screenshotHeight} px\n`;
-
-    // Process the panel resolution table
+  private generateScreenshotMetadataJson() {
+    const screenshotSize = {
+      width: this.screenshotWidth,
+      height: this.screenshotHeight,
+    };
     const { panelResolutionData, layerResolutionData } =
       getViewerResolutionMetadata(this.screenshotManager.viewer);
 
-    let panelResolutionText = `${PANEL_TABLE_HEADER_STRINGS.type}\t${PANEL_TABLE_HEADER_STRINGS.pixelResolution}\t${PANEL_TABLE_HEADER_STRINGS.physicalResolution}\n`;
+    const panelsMetadata = [];
     for (const resolution of panelResolutionData) {
-      panelResolutionText += `${resolution.type}\t${resolution.width} x ${resolution.height} px\t${resolution.resolution}\n`;
+      const panelMetadataItem: PanelMetadata = {
+        type: resolution.type,
+        pixelResolution: {
+          width: resolution.width,
+          height: resolution.height,
+        },
+        physicalScale: parseResolution(resolution.resolution),
+      };
+      panelsMetadata.push(panelMetadataItem);
     }
 
-    // Process the layer resolution table
-    let layerResolutionText = `${LAYER_TABLE_HEADER_STRINGS.name}\t${LAYER_TABLE_HEADER_STRINGS.type}\t${LAYER_TABLE_HEADER_STRINGS.resolution}\n`;
+    const layersMetadata = [];
     for (const resolution of layerResolutionData) {
-      layerResolutionText += `${resolution.name}\t${layerNamesForUI[resolution.type as keyof typeof layerNamesForUI]}\t${resolution.resolution}\n`;
+      const layerMetadataItem: LayerMetadata = {
+        name: resolution.name,
+        type: resolution.type,
+        voxelResolution: parseResolution(resolution.resolution),
+      };
+      layersMetadata.push(layerMetadataItem);
     }
 
-    return `${screenshotSizeText}\n${panelResolutionText}\n${layerResolutionText}`;
+    const screenshotMetadata: ScreenshotMetadata = {
+      date: new Date().toISOString(),
+      name: this.nameInput.value,
+      size: screenshotSize,
+      panels: panelsMetadata,
+      layers: layersMetadata,
+    };
+
+    return JSON.stringify(screenshotMetadata, null, 2);
   }
 
   private updateUIBasedOnMode() {

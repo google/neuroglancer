@@ -18,16 +18,20 @@ import copy
 import inspect
 import numbers
 import threading
-from collections.abc import ItemsView, Iterable, Iterator, KeysView, ValuesView
+from collections.abc import (
+    Callable,
+    ItemsView,
+    Iterable,
+    Iterator,
+    KeysView,
+    ValuesView,
+)
 from typing import (
     Any,
-    Callable,
     ClassVar,
     Generic,
     Literal,
-    Optional,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -250,7 +254,7 @@ def optional(wrapper, default_value=None, validator=None):
     modified_wrapper.supports_validation = modified_validator
 
     if default_value is None:
-        _map_type_annotation(modified_wrapper, wrapper, lambda t: Optional[t])
+        _map_type_annotation(modified_wrapper, wrapper, lambda t: t | None)
     else:
         _map_type_annotation(modified_wrapper, wrapper, lambda t: t)
 
@@ -310,13 +314,13 @@ class Map(Generic[K, V], JsonObjectWrapper):
         return _MapItemsView(self)
 
     @overload
-    def get(self, key: K) -> Optional[V]: ...
+    def get(self, key: K) -> V | None: ...
 
     @overload
     def get(self, key: K, default: V) -> V: ...
 
     @overload
-    def get(self, key: K, default: T) -> Union[V, T]: ...
+    def get(self, key: K, default: T) -> V | T: ...
 
     def get(self, key: K, default=None):
         """Returns the mapped value, or the specified default."""
@@ -450,7 +454,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
 
 
 def typed_set(wrapped_type: Callable[[Any], T]):
-    def wrapper(x, _readonly=False) -> Union[set[T], frozenset[T]]:
+    def wrapper(x, _readonly=False) -> set[T] | frozenset[T]:
         set_type = frozenset if _readonly else set
         kwargs: dict[str, Any] = dict()
         if hasattr(wrapped_type, "supports_readonly"):
@@ -490,7 +494,7 @@ class List(Generic[T]):
     def __init__(self, json_data=None, _readonly=False):
         if json_data is None:
             json_data = []
-        if not isinstance(json_data, (list, tuple, np.ndarray)):
+        if not isinstance(json_data, list | tuple | np.ndarray):
             raise ValueError
         self._readonly = _readonly
         validator = type(self)._validator
@@ -516,7 +520,7 @@ class List(Generic[T]):
     @overload
     def __setitem__(self, key: slice, value: Iterable[T]): ...
 
-    def __setitem__(self, key: Union[int, slice], value: Union[T, Iterable[T]]):
+    def __setitem__(self, key: int | slice, value: T | Iterable[T]):
         """Assigns to the specified index or slice."""
         if self._readonly:
             raise AttributeError
@@ -575,18 +579,18 @@ def typed_list(wrapped_type: Callable[[Any], T], validator=None) -> type[List[T]
 
 
 def number_or_string(value):
-    if not isinstance(value, numbers.Real) and not isinstance(value, str):
+    if not isinstance(value, numbers.Real | str):
         raise TypeError
     return value
 
 
-_set_type_annotation(number_or_string, Union[numbers.Real, str])
+_set_type_annotation(number_or_string, numbers.Real | str)
 
 
 def bool_or_string(value):
-    if not isinstance(value, (bool, str)):
+    if not isinstance(value, bool | str):
         raise TypeError
     return value
 
 
-_set_type_annotation(bool_or_string, Union[bool, str])
+_set_type_annotation(bool_or_string, bool | str)

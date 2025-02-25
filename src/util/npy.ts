@@ -20,7 +20,7 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
@@ -33,14 +33,14 @@ import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
 
 export class NumpyArray {
   constructor(
-    public data: TypedArray,
+    public data: TypedNumberArray<ArrayBuffer>,
     public shape: number[],
     public dataType: DataType,
     public fortranOrder: boolean,
   ) {}
 }
 
-export function parseNpy(x: Uint8Array) {
+export function parseNpy(x: Uint8Array<ArrayBuffer>) {
   // Verify 6-byte magic sequence: 147, 78, 85, 77, 80, 89
   if (
     x[0] !== 147 ||
@@ -94,7 +94,7 @@ export function parseNpy(x: Uint8Array) {
     x.buffer,
     x.byteOffset + dataOffset,
     javascriptElements,
-  );
+  ) as TypedNumberArray<ArrayBuffer>;
   convertEndian(data, endianness, bytesPerElement);
   return new NumpyArray(
     data,
