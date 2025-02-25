@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { mat3 } from "gl-matrix";
+import { mat3 } from "gl-matrix";
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
@@ -477,4 +477,73 @@ export function getViewFrustrumWorldBounds(
       bounds[j + 3] = Math.max(bounds[j + 3], x);
     }
   }
+}
+
+/**
+ * Check whether the given orientation quaternion is axis-aligned.
+ * If it is, returns the indices of the axis (0, 1, or 2) that the orientation is aligned with.
+ */
+export function isOrientationAxisAligned(
+  orientation: quat | undefined,
+  tolerance: number = 1e-6,
+) {
+  if (orientation === undefined) {
+    orientation = kIdentityQuat;
+  }
+  const currentNormal = vec3.create();
+  vec3.transformQuat(currentNormal, [0, 0, 1], orientation);
+
+  const axisVectors = [
+    vec3.fromValues(1, 0, 0),
+    vec3.fromValues(0, 1, 0),
+    vec3.fromValues(0, 0, 1),
+  ];
+
+  // Convert the quaternion to a 3x3 rotation matrix
+  const rotationMatrix = mat3.create();
+  mat3.fromQuat(rotationMatrix, orientation);
+
+  // Check which axes are aligned by examining matrix coefficients
+  // Iterate through each column (each axis in the transformed space)
+
+  // Check if the transformed vectors are still aligned with their original axes
+  const isAligned = (v: vec3, axis: vec3) => {
+    return Math.abs(1 - Math.abs(vec3.dot(v, axis))) <= tolerance;
+  };
+
+  let alignedAxis = null;
+  for (let i = 0; i < 3; i++) {
+    if (isAligned(currentNormal, axisVectors[i])) {
+      alignedAxis = i;
+      break;
+    }
+  }
+  if (alignedAxis == null) {
+    return null;
+  }
+  // For the remaining axes, return which one is up/down and which one is left/right
+  let otherAxes = [0, 1, 2].filter((x) => x !== alignedAxis);
+  const firstAxisDefault = Array.from({length: 3}, (_, index) =>
+    index === otherAxes[0] ? 1 : 0,
+  );
+  console.log(firstAxisDefault);
+  const firstAxis = vec3.create();
+  vec3.transformQuat(firstAxis, firstAxisDefault, orientation);
+  const actualUpAxis = vec3.fromValues(0, 1, 0);
+  const alignedWithUp = isAligned(actualUpAxis, firstAxis);
+  console.log(firstAxis, actualUpAxis, alignedWithUp);
+  // console.log(alignedAxis, orientation, rotationMatrix);
+  // TODO what about in 2D?
+  if (alignedWithUp) {
+    return {
+      alignedAxis,
+      verticalAxis: otherAxes[0],
+      horizontalAxis: otherAxes[1],
+    };
+  }
+  return {
+    alignedAxis,
+    verticalAxis: otherAxes[1],
+    horizontalAxis: otherAxes[0],
+  };
 }

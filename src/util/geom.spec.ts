@@ -15,7 +15,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { getFrustrumPlanes, isAABBVisible, mat4 } from "#src/util/geom.js";
+import {
+  getFrustrumPlanes,
+  isAABBVisible,
+  mat4,
+  quat,
+  isOrientationAxisAligned,
+} from "#src/util/geom.js";
+import { AXES_RELATIVE_ORIENTATION } from "#src/widget/display_dimensions_widget.js";
 
 describe("getFrustrumPlanes", () => {
   it("works for simple example", () => {
@@ -50,5 +57,47 @@ describe("isAABBVisible", () => {
     expect(isAABBVisible(-1, 40, -8, 1, 50, -7, planes)).toBe(false);
     expect(isAABBVisible(-1, -1, -112, 1, 1, -113, planes)).toBe(true);
     expect(isAABBVisible(-1, -1, -114, 1, 1, -118, planes)).toBe(false);
+  });
+});
+
+describe("isOrientationAxisAligned", () => {
+  it("identifies axis-aligned orientations for default", () => {
+    const xyOrientation = AXES_RELATIVE_ORIENTATION.get("xy");
+    const xyResult = {
+      alignedAxis: 2,
+      verticalAxis: 1,
+      horizontalAxis: 0,
+    };
+    expect(isOrientationAxisAligned(xyOrientation)).toStrictEqual(xyResult);
+    const xzOrientation = AXES_RELATIVE_ORIENTATION.get("xz");
+    const xzResult = {
+      alignedAxis: 1,
+      verticalAxis: 2,
+      horizontalAxis: 0,
+    };
+    expect(isOrientationAxisAligned(xzOrientation)).toStrictEqual(xzResult);
+    const yzOrientation = AXES_RELATIVE_ORIENTATION.get("yz");
+    const yzResult = {
+      alignedAxis: 0,
+      verticalAxis: 1,
+      horizontalAxis: 2,
+    };
+    expect(isOrientationAxisAligned(yzOrientation)).toStrictEqual(yzResult);
+  });
+  it("identifies non-axis-aligned orientations", () => {
+    const default_orientation = quat.create();
+    const q1 = quat.create();
+    quat.rotateX(q1, default_orientation, Math.PI / 4); // Rotate 45° around X
+    expect(isOrientationAxisAligned(q1)).toBe(null);
+    quat.rotateY(q1, default_orientation, Math.PI / 4); // Rotate 45° around Y
+    expect(isOrientationAxisAligned(q1)).toBe(null);
+  });
+  it("identifies non default axis aligned orientations", () => {
+    const alt_yz_orientation = quat.fromValues(0.5, 0.5, 0.5, 0.5);
+    expect(isOrientationAxisAligned(alt_yz_orientation)).toStrictEqual({
+      alignedAxis: 0,
+      verticalAxis: 2,
+      horizontalAxis: 1,
+    });
   });
 });
