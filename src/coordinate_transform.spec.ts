@@ -438,3 +438,80 @@ describe("WatchableCoordinateSpaceTransform.spec", () => {
     );
   });
 });
+
+describe("voxel center at integer coordinates", () => {
+  const commonProperties = {
+    names: ["x", "y", "z"],
+    units: ["m", "m", "m"],
+    scales: Float64Array.of(
+      0.000029999999999999997,
+      6.500000000000001e-7,
+      6.500000000000001e-7,
+    ),
+  };
+
+  const box = {
+    lowerBounds: Float64Array.of(-0.5, -0.5, -0.5, -0.5),
+    upperBounds: Float64Array.of(2.5, 0.5, 59039.5, 28959.5),
+  };
+
+  const transformMatrix = (xCoeff: number) =>
+    Float64Array.of(0, 0, 0, xCoeff, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0);
+
+  it.for([-0.0001, 0, 0.0001])(
+    "handle half integer bounds detected with epsilon=%s",
+    (epsilon) => {
+      const coordinateSpace = makeCoordinateSpace({
+        ...commonProperties,
+        boundingBoxes: [
+          {
+            box,
+            transform: transformMatrix(1 + epsilon),
+          },
+        ],
+      });
+      expect(coordinateSpace.bounds).toEqual({
+        lowerBounds: Float64Array.from([-0.5, -0.5, -0.5]),
+        upperBounds: Float64Array.from([0.5, 59039.5, 28959.5]),
+        voxelCenterAtIntegerCoordinates: [true, true, true],
+      });
+    },
+  );
+
+  it.for([-0.01, 0.01])(
+    "handle half integer bounds not detected with epsilon=%s",
+    (epsilon) => {
+      const coordinateSpace = makeCoordinateSpace({
+        ...commonProperties,
+        boundingBoxes: [
+          {
+            box,
+            transform: transformMatrix(1 + epsilon),
+          },
+        ],
+      });
+      expect(coordinateSpace.bounds).toMatchObject({
+        voxelCenterAtIntegerCoordinates: [false, true, true],
+      });
+    },
+  );
+
+  it("inconsistent bounds", () => {
+    const coordinateSpace = makeCoordinateSpace({
+      ...commonProperties,
+      boundingBoxes: [
+        {
+          box,
+          transform: transformMatrix(1),
+        },
+        {
+          box,
+          transform: transformMatrix(1.01),
+        },
+      ],
+    });
+    expect(coordinateSpace.bounds).toMatchObject({
+      voxelCenterAtIntegerCoordinates: [true, true, true],
+    });
+  });
+});
