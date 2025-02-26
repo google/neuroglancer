@@ -107,13 +107,13 @@ describe("calculateOrientedSliceScales", () => {
       "yz",
       { width: { scale: -1, unit: "" }, height: { scale: 3, unit: "Hz" } },
     ],
-  ])("works for 2D dataset orientation: %s", (key, expectedResult) => {
+  ])("works for 2D dataset default axis-aligned orientation: %s", (key, expectedResult) => {
     const scales = vec3.fromValues(1, 3, -1);
     const units = ["m", "Hz", ""];
     validateOrientation(key, scales, units, expectedResult);
   });
 
-  it("works for uniform scale and units orientations regardless of orientation", () => {
+  it("works for uniform scale and units regardless of orientation", () => {
     const scales = vec3.fromValues(1, 1, 1);
     const units = ["m", "m", "m"];
     const orientation = quat.create();
