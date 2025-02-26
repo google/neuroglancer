@@ -490,61 +490,38 @@ export function calculateOrientedSliceScales(
   units: readonly string[],
   tolerance: number = 1e-6,
 ): OrientedSliceScales | null {
-  if (orientation === undefined) {
-    orientation = kIdentityQuat;
-  }
+  function extractContributingScales(
+    matrixRow: 0 | 1 | 2,
+  ): { scale: number; unit: string } | null {
+    const indices = [0, 1, 2].map((i) => i + 3 * matrixRow);
+    const contributingScales: number[] = [];
+    const contributingUnits: string[] = [];
 
-  // Convert the quaternion to a 3x3 rotation matrix
+    for (const index of indices) {
+      if (Math.abs(rotationMatrix[index]) > tolerance) {
+        contributingScales.push(scales[index % 3]);
+        contributingUnits.push(units[index % 3]);
+      }
+    }
+
+    // Ensure all scales and units are consistent
+    if (
+      new Set(contributingScales).size > 1 ||
+      new Set(contributingUnits).size > 1
+    ) {
+      return null;
+    }
+
+    // As they are all the same, we can just return the first one
+    return { scale: contributingScales[0], unit: contributingUnits[0] };
+  }
+  if (orientation === undefined) orientation = kIdentityQuat;
+
   const rotationMatrix = mat3.create();
   mat3.fromQuat(rotationMatrix, orientation);
 
-  const widthComponent = vec3.fromValues(
-    rotationMatrix[0],
-    rotationMatrix[1],
-    rotationMatrix[2],
-  );
-  const contributingWidthScales = [];
-  const contributingWidthUnits = [];
-  for (let i = 0; i < 3; i++) {
-    if (Math.abs(widthComponent[i]) > tolerance) {
-      contributingWidthScales.push(scales[i]);
-      contributingWidthUnits.push(units[i]);
-    }
-  }
-  // Check if they are all the same
-  for (let i = 1; i < contributingWidthScales.length; i++) {
-    if (contributingWidthScales[i] !== contributingWidthScales[0]) return null;
-    if (contributingWidthUnits[i] !== contributingWidthUnits[0]) return null;
-  }
+  const width = extractContributingScales(0 /* matrixRow */);
+  const height = extractContributingScales(1 /* matrixRow */);
 
-  const heightComponent = vec3.fromValues(
-    rotationMatrix[3],
-    rotationMatrix[4],
-    rotationMatrix[5],
-  );
-  const contributingHeightScales = [];
-  const contributingHeightUnits = [];
-  for (let i = 0; i < 3; i++) {
-    if (Math.abs(heightComponent[i]) > tolerance) {
-      contributingHeightScales.push(scales[i]);
-      contributingHeightUnits.push(units[i]);
-    }
-  }
-  // Check if they are all the same
-  for (let i = 1; i < contributingHeightScales.length; i++) {
-    if (contributingHeightScales[i] !== contributingHeightScales[0])
-      return null;
-    if (contributingHeightUnits[i] !== contributingHeightUnits[0]) return null;
-  }
-
-  return {
-    width: {
-      scale: contributingWidthScales[0],
-      unit: contributingWidthUnits[0],
-    },
-    height: {
-      scale: contributingHeightScales[0],
-      unit: contributingHeightUnits[0],
-    },
-  };
+  return width && height ? { width, height } : null;
 }

@@ -70,7 +70,7 @@ describe("calculateOrientedSliceScales", () => {
     inputOrientation: string | quat,
     inputScales: vec3,
     inputUnits: readonly string[],
-    expected: OrientedSliceScales,
+    expected: OrientedSliceScales | null,
   ) => {
     const orientation =
       typeof inputOrientation === "string"
@@ -128,6 +128,30 @@ describe("calculateOrientedSliceScales", () => {
       quat.rotateZ(orientation, orientation, Math.random() * Math.PI * 2);
       validateOrientation(orientation, scales, units, uniformResult);
     }
+  });
+
+  it("rejects non-uniform scale non-axis-aligned orientations", () => {
+    const scales = vec3.fromValues(1, 2, 1);
+    const units = ["m", "m", "Hz"];
+    const orientation = quat.create();
+    quat.rotateX(orientation, orientation, Math.PI / 4);
+    validateOrientation(orientation, scales, units, null);
+    quat.rotateY(orientation, orientation, Math.PI / 4);
+    validateOrientation(orientation, scales, units, null);
+    quat.rotateZ(orientation, orientation, Math.PI / 4);
+    validateOrientation(orientation, scales, units, null);
+  });
+
+  it("rejects very close non-uniform scale non-axis-aligned orientations", () => {
+    const scales = vec3.fromValues(1e-20, 1e-21, 1.01e-20);
+    const units = ["m", "m", "m"];
+    const orientation = quat.create();
+    quat.rotateX(orientation, orientation, Math.PI / 4);
+    validateOrientation(orientation, scales, units, null);
+    quat.rotateY(orientation, orientation, Math.PI / 4);
+    validateOrientation(orientation, scales, units, null);
+    quat.rotateZ(orientation, orientation, Math.PI / 4);
+    validateOrientation(orientation, scales, units, null);
   });
 
   it("works for non-default axis-aligned orientations", () => {
