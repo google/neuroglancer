@@ -395,7 +395,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   ) {
     const sliceScales = inputSliceScales ?? this.getFOVScales();
     const enable =
-      sliceScales?.width.scale !== -1 && sliceScales?.height.scale !== -1;
+      sliceScales !== null &&
+      sliceScales.width.scale !== -1 &&
+      sliceScales.height.scale !== -1;
     const wasEnabled = this.fovGridContainer.style.display !== "none";
     if (enable !== wasEnabled) {
       this.fovGridContainer.style.display = enable ? "" : "none";
