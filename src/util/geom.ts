@@ -36,6 +36,11 @@ export const kOneVec = vec3.fromValues(1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 export const kIdentityQuat = quat.create();
 
+export interface OrientedSliceScales {
+  width: { scale: number; unit: string };
+  height: { scale: number; unit: string };
+}
+
 export function prod3(x: ArrayLike<number>) {
   return x[0] * x[1] * x[2];
 }
@@ -479,16 +484,12 @@ export function getViewFrustrumWorldBounds(
   }
 }
 
-/**
- * Check whether the given orientation quaternion is axis-aligned.
- * If it is, returns the indices of the axis (0, 1, or 2) that the orientation is aligned with.
- */
-export function computeScalesAndUnits(
+export function calculateOrientedSliceScales(
   orientation: quat | undefined,
   scales: vec3,
   units: readonly string[],
   tolerance: number = 1e-6,
-) {
+): OrientedSliceScales | null {
   if (orientation === undefined) {
     orientation = kIdentityQuat;
   }

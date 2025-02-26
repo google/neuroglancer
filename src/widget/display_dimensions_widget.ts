@@ -38,7 +38,7 @@ import {
   removeFromParent,
   updateInputFieldWidth,
 } from "#src/util/dom.js";
-import { computeScalesAndUnits, quat, vec3 } from "#src/util/geom.js";
+import { calculateOrientedSliceScales, quat, vec3 } from "#src/util/geom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
@@ -375,7 +375,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       scaleValues[1],
       scaleValues[2],
     );
-    const xyScaleAndUnit = computeScalesAndUnits(
+    const xyScaleAndUnit = calculateOrientedSliceScales(
       this.orientation.orientation,
       vec3Scale,
       displayDimensionUnits,
