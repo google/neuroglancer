@@ -50,7 +50,11 @@ import {
 } from "#src/util/keyboard_bindings.js";
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
+import {
+  formatScaleWithUnit,
+  formatScaleWithUnitAsString,
+  parseScale,
+} from "#src/util/si_units.js";
 import type { NullarySignal } from "#src/util/signal.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
@@ -70,6 +74,12 @@ interface DimensionWidget {
   scale: HTMLInputElement;
   scaleUnit: HTMLSpanElement;
   scaleFactorModified: boolean;
+}
+
+interface fovControl {
+  container: HTMLDivElement;
+  input: HTMLInputElement;
+  unit: HTMLSpanElement;
 }
 
 const inputEventMap = EventActionMap.fromObject({
@@ -105,7 +115,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   depthGridContainer = document.createElement("div");
   fovGridContainer = document.createElement("div");
   defaultCheckbox = document.createElement("input");
-  fovInputElements: HTMLInputElement[] = [];
+  fovControls: fovControl[] = [];
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -277,15 +287,21 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateZoomFromFOV(i: number) {
-    // TODO (SKM) temp not very efficient naming
     const sliceScales = this.getFOVScales();
     if (sliceScales == null) {
       return;
     }
-    const input = this.fovInputElements[i];
-    const parsedFov = parseScale(input.value);
-    const unit = i == 0 ? sliceScales.width.unit : sliceScales.height.unit;
+    const control = this.fovControls[i];
+    // If the user accidentally enters a unit, just keep it
+    let input: string;
+    if (control.input.value.endsWith(control.unit.textContent ?? "")) {
+      input = control.input.value;
+    } else {
+      input = control.input.value + control.unit.textContent;
+    }
+    const parsedFov = parseScale(input);
     const scale = i == 0 ? sliceScales.width.scale : sliceScales.height.scale;
+    const unit = i == 0 ? sliceScales.width.unit : sliceScales.height.unit;
     if (!parsedFov || parsedFov.unit !== unit) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
@@ -508,20 +524,27 @@ export class DisplayDimensionsWidget extends RefCounted {
       fovGridContainer.appendChild(topLevelFOVLabel);
       const fovInputContainer = document.createElement("div");
       fovGridContainer.appendChild(fovInputContainer);
+      fovInputContainer.classList.add(
+        "neuroglancer-display-dimensions-widget-fov-container",
+      );
       for (let i = 0; i < 2; ++i) {
         const container = document.createElement("div");
-        container.classList.add(
-          "neuroglancer-display-dimensions-widget-fov-container",
-        );
         const input = document.createElement("input");
         input.classList.add("neuroglancer-display-dimensions-input-base");
         input.spellcheck = false;
         input.autocomplete = "off";
-        this.fovInputElements.push(input);
         const direction = i === 0 ? "horizontal" : "vertical";
         const tooltip = `Panel ${direction} field of view`;
         input.title = tooltip;
-        fovInputContainer.appendChild(input);
+        input.classList.add(`neuroglancer-display-dimensions-widget-fov-input`);
+        const scaleUnit = document.createElement("span");
+        scaleUnit.classList.add(
+          "neuroglancer-display-dimensions-widget-fov-unit",
+        );
+        container.appendChild(input);
+        container.appendChild(scaleUnit);
+        fovInputContainer.appendChild(container);
+        this.fovControls.push({ container, input, unit: scaleUnit });
         if (i == 0) {
           const separatorElement = document.createElement("span");
           separatorElement.textContent = "x";
@@ -540,12 +563,12 @@ export class DisplayDimensionsWidget extends RefCounted {
         });
         registerActionListener(input, "move-up", () => {
           if (i !== 0) {
-            this.fovInputElements[i - 1].focus();
+            this.fovControls[i - 1].input.focus();
           }
         });
         registerActionListener(input, "move-down", () => {
           if (i !== 1) {
-            this.fovInputElements[i + 1].focus();
+            this.fovControls[i + 1].input.focus();
           }
         });
       }
@@ -849,13 +872,13 @@ export class DisplayDimensionsWidget extends RefCounted {
         const totalScale = axis.scale * zoom;
         const pixelResolution = i === 0 ? width : height;
         const fieldOfView = totalScale * pixelResolution;
-        const formattedFieldOfView = formatScaleWithUnitAsString(
-          fieldOfView,
-          axis.unit,
-          { precision: 2, elide1: false },
-        );
-        this.fovInputElements[i].value = formattedFieldOfView;
-        updateInputFieldWidth(this.fovInputElements[i]);
+        const fov = formatScaleWithUnit(fieldOfView, axis.unit, {
+          precision: 2,
+          elide1: false,
+        });
+        this.fovControls[i].input.value = `${fov.scale}${fov.prefix}`;
+        this.fovControls[i].unit.textContent = fov.unit;
+        updateInputFieldWidth(this.fovControls[i].input);
       }
     }
   }

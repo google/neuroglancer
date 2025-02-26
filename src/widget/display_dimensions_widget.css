@@ -120,11 +120,15 @@
   margin-top: 6px;
 }
 
+.neuroglancer-display-dimensions-widget-fov-input {
+  padding: 2px 0;
+}
+
 .neuroglancer-display-dimensions-widget-fov-container {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding-left: 3px;
+  gap: 0.3rem;
+  padding-left: 2px;
 }
 
 .neuroglancer-display-dimensions-widget:not(:hover):not([data-active="true"])
