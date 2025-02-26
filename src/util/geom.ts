@@ -512,8 +512,8 @@ export function computeScalesAndUnits(
   }
   // Check if they are all the same
   for (let i = 1; i < contributingWidthScales.length; i++) {
-    if (contributingWidthScales[i] !== contributingWidthScales[0]) return null
-    if (contributingWidthUnits[i] !== contributingWidthUnits[0]) return null
+    if (contributingWidthScales[i] !== contributingWidthScales[0]) return null;
+    if (contributingWidthUnits[i] !== contributingWidthUnits[0]) return null;
   }
 
   const heightComponent = vec3.fromValues(
@@ -531,8 +531,9 @@ export function computeScalesAndUnits(
   }
   // Check if they are all the same
   for (let i = 1; i < contributingHeightScales.length; i++) {
-    if (contributingHeightScales[i] !== contributingHeightScales[0]) return null
-    if (contributingHeightUnits[i] !== contributingHeightUnits[0]) return null
+    if (contributingHeightScales[i] !== contributingHeightScales[0])
+      return null;
+    if (contributingHeightUnits[i] !== contributingHeightUnits[0]) return null;
   }
 
   return {

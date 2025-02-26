@@ -76,9 +76,9 @@ describe("isOrientationAxisAligned", () => {
         unit: "Hz",
       },
     };
-    expect(
-      computeScalesAndUnits(xyOrientation, scales, units),
-    ).toStrictEqual(xyResult);
+    expect(computeScalesAndUnits(xyOrientation, scales, units)).toStrictEqual(
+      xyResult,
+    );
     const xzOrientation = AXES_RELATIVE_ORIENTATION.get("xz");
     const xzResult = {
       width: {
@@ -90,9 +90,9 @@ describe("isOrientationAxisAligned", () => {
         unit: "s",
       },
     };
-    expect(
-      computeScalesAndUnits(xzOrientation, scales, units),
-    ).toStrictEqual(xzResult);
+    expect(computeScalesAndUnits(xzOrientation, scales, units)).toStrictEqual(
+      xzResult,
+    );
     const yzOrientation = AXES_RELATIVE_ORIENTATION.get("yz");
     const yzResult = {
       width: {
@@ -104,9 +104,9 @@ describe("isOrientationAxisAligned", () => {
         unit: "Hz",
       },
     };
-    expect(
-      computeScalesAndUnits(yzOrientation, scales, units),
-    ).toStrictEqual(yzResult);
+    expect(computeScalesAndUnits(yzOrientation, scales, units)).toStrictEqual(
+      yzResult,
+    );
   });
   it("works for uniform scale and units orientations", () => {
     const scales = vec3.fromValues(1, 1, 1);
@@ -150,5 +150,51 @@ describe("isOrientationAxisAligned", () => {
     expect(
       computeScalesAndUnits(alt_yz_orientation, scales, units),
     ).toStrictEqual(alt_yz_result);
+  });
+  it("works for 2D datasets", () => {
+    const scales = vec3.fromValues(1, 3, -1);
+    const units = ["m", "Hz", ""];
+    const xyOrientation = AXES_RELATIVE_ORIENTATION.get("xy");
+    const xyResult = {
+      width: {
+        scale: 1,
+        unit: "m",
+      },
+      height: {
+        scale: 3,
+        unit: "Hz",
+      },
+    };
+    expect(computeScalesAndUnits(xyOrientation, scales, units)).toStrictEqual(
+      xyResult,
+    );
+    const xzOrientation = AXES_RELATIVE_ORIENTATION.get("xz");
+    const xzResult = {
+      width: {
+        scale: 1,
+        unit: "m",
+      },
+      height: {
+        scale: -1,
+        unit: "",
+      },
+    };
+    expect(computeScalesAndUnits(xzOrientation, scales, units)).toStrictEqual(
+      xzResult,
+    );
+    const yzOrientation = AXES_RELATIVE_ORIENTATION.get("yz");
+    const yzResult = {
+      width: {
+        scale: -1,
+        unit: "",
+      },
+      height: {
+        scale: 3,
+        unit: "Hz",
+      },
+    };
+    expect(computeScalesAndUnits(yzOrientation, scales, units)).toStrictEqual(
+      yzResult,
+    );
   });
 });

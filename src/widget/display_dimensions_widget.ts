@@ -280,13 +280,13 @@ export class DisplayDimensionsWidget extends RefCounted {
     const input = this.fovInputElements[i];
     const parsedFov = parseScale(input.value);
     const unit = i == 0 ? axes.width.unit : axes.height.unit;
+    const scale = i == 0 ? axes.width.scale : axes.height.scale;
     if (!parsedFov || parsedFov.unit !== unit) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
       this.updateView();
       return;
     }
-    const scale = i == 0 ? axes.width.scale : axes.height.scale;
     const { width, height } = this.panelRenderViewport;
     const pixelResolution = i === 0 ? width : height;
     const desiredPerPixelScale = parsedFov.scale / pixelResolution;
@@ -359,10 +359,13 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionScales,
       canonicalVoxelFactors,
       displayDimensionUnits,
+      displayDimensionIndices,
     } = this.displayDimensionRenderInfo.value;
-    const scaleValues = [0, 0, 0];
-    // TODO (SKM) what about 2D
-    for (let i = 0; i < displayDimensionScales.length; ++i) {
+    const scaleValues = [-1, -1, -1];
+    for (let i = 0; i < displayDimensionIndices.length; ++i) {
+      if (displayDimensionIndices[i] === -1) {
+        break;
+      }
       const scale = displayDimensionScales[i];
       const factor = canonicalVoxelFactors[i];
       scaleValues[i] = scale / factor;
@@ -377,9 +380,10 @@ export class DisplayDimensionsWidget extends RefCounted {
       vec3Scale,
       displayDimensionUnits,
     );
-    console.log(xyScaleAndUnit);
-    console.log(this);
-    const enableFovInputs = xyScaleAndUnit != null;
+    const enableFovInputs =
+      xyScaleAndUnit != null &&
+      xyScaleAndUnit.width.scale !== -1 &&
+      xyScaleAndUnit.height.scale !== -1;
     const wasEnabled = this.fovGridContainer.style.display !== "none";
     if (enableFovInputs !== wasEnabled) {
       this.fovGridContainer.style.display = enableFovInputs ? "" : "none";
