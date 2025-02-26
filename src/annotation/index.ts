@@ -54,7 +54,9 @@ import {
 import { parseDataTypeValue } from "#src/util/lerp.js";
 import { getRandomHexString } from "#src/util/random.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
+import { formatLength } from "#src/util/spatial_units.js";
 import { Uint64 } from "#src/util/uint64.js";
+import { ALLOWED_UNITS } from "#src/widget/scale_bar.js";
 
 export type AnnotationId = string;
 
@@ -106,6 +108,7 @@ export interface AnnotationNumericPropertySpec
   min?: number;
   max?: number;
   step?: number;
+  format?: (x: number) => string;
 }
 
 export const propertyTypeDataType: Record<
@@ -496,6 +499,9 @@ export function formatNumericProperty(
   property: AnnotationNumericPropertySpec,
   value: number,
 ): string {
+  if (property.format) {
+    return property.format(value);
+  }
   const formattedValue =
     property.type === "float32" ? value.toPrecision(6) : value.toString();
   const { enumValues, enumLabels } = property;
@@ -695,6 +701,15 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     annotation: T,
     callback: (vec: Float32Array, isVector: boolean) => void,
   ) => void;
+  defaultProperties: (
+    annotation: T,
+    layerPosition: Float32Array<ArrayBufferLike>[],
+    scales: Float64Array,
+    units: readonly string[],
+  ) => {
+    properties: AnnotationNumericPropertySpec[];
+    values: number[];
+  };
 }
 
 function serializeFloatVector(
@@ -749,6 +764,32 @@ function deserializeTwoFloatVectors(
   offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vecA);
   offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vecB);
   return offset;
+}
+
+function lineLength(
+  annotationLayerPositions: Float32Array<ArrayBufferLike>[],
+  scales: Float64Array,
+  units: readonly string[],
+) {
+  if (annotationLayerPositions.length !== 2) {
+    return;
+  }
+  const [pointA, pointB] = annotationLayerPositions;
+  const scalesRank = scales.length;
+  const lineRank = pointA.length;
+  if (scalesRank < lineRank) {
+    return;
+  }
+  let lengthSquared = 0;
+  for (let dim = 0; dim < lineRank; dim++) {
+    const unitInfo = ALLOWED_UNITS.find((x) => x.unit === units[dim]);
+    if (!unitInfo) {
+      return;
+    }
+    const voxelToNanometers = scales[dim] * unitInfo.lengthInNanometers;
+    lengthSquared += ((pointA[dim] - pointB[dim]) * voxelToNanometers) ** 2;
+  }
+  return Math.sqrt(lengthSquared);
 }
 
 export const annotationTypeHandlers: Record<
@@ -814,6 +855,28 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
+    defaultProperties(
+      annotation: Line,
+      annotationLayerPositions: Float32Array<ArrayBufferLike>[],
+      scales: Float64Array,
+      units: readonly string[],
+    ) {
+      annotation;
+      const properties: AnnotationNumericPropertySpec[] = [];
+      const values: number[] = [];
+      const length = lineLength(annotationLayerPositions, scales, units);
+      if (length) {
+        properties.push({
+          type: "float32",
+          identifier: "Length",
+          default: 0,
+          description: "Length of the line annotation in nanometers",
+          format: formatLength,
+        });
+        values.push(length);
+      }
+      return { properties, values };
+    },
   },
   [AnnotationType.POINT]: {
     icon: "⚬",
@@ -857,6 +920,18 @@ export const annotationTypeHandlers: Record<
     },
     visitGeometry(annotation: Point, callback) {
       callback(annotation.point, false);
+    },
+    defaultProperties(
+      annotation: Point,
+      layerPosition: Float32Array<ArrayBufferLike>[],
+      scales: Float64Array,
+      units: string[],
+    ) {
+      annotation;
+      layerPosition;
+      scales;
+      units;
+      return { properties: [], values: [] };
     },
   },
   [AnnotationType.AXIS_ALIGNED_BOUNDING_BOX]: {
@@ -926,6 +1001,18 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
+    defaultProperties(
+      annotation: AxisAlignedBoundingBox,
+      layerPosition: Float32Array<ArrayBufferLike>[],
+      scales: Float64Array,
+      units: string[],
+    ) {
+      annotation;
+      layerPosition;
+      scales;
+      units;
+      return { properties: [], values: [] };
+    },
   },
   [AnnotationType.ELLIPSOID]: {
     icon: "◎",
@@ -993,6 +1080,18 @@ export const annotationTypeHandlers: Record<
     visitGeometry(annotation: Ellipsoid, callback) {
       callback(annotation.center, false);
       callback(annotation.radii, true);
+    },
+    defaultProperties(
+      annotation: Ellipsoid,
+      layerPosition: Float32Array<ArrayBufferLike>[],
+      scales: Float64Array,
+      units: string[],
+    ) {
+      annotation;
+      layerPosition;
+      scales;
+      units;
+      return { properties: [], values: [] };
     },
   },
 };

@@ -1783,6 +1783,8 @@ export function UserLayerWithAnnotationsMixin<
                 icon.textContent = handler.icon;
                 positionGrid.appendChild(icon);
 
+                const annotationLayerPositions: Float32Array<ArrayBufferLike>[] =
+                  [];
                 if (layerRank !== 0) {
                   const { layerDimensionNames } = (
                     chunkTransform as ChunkTransformParameters
@@ -1800,6 +1802,7 @@ export function UserLayerWithAnnotationsMixin<
                     annotation,
                     chunkTransform as ChunkTransformParameters,
                     (layerPosition, isVector) => {
+                      annotationLayerPositions.push(layerPosition);
                       const copyButton = makeCopyButton({
                         title: "Copy position",
                         onClick: () => {
@@ -1854,6 +1857,24 @@ export function UserLayerWithAnnotationsMixin<
 
                 const { relationships, properties } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
+                const globalCoordinateSpace =
+                  this.manager.root.coordinateSpace.value;
+                const defaultProperties = annotationTypeHandlers[
+                  annotation.type
+                ].defaultProperties(
+                  annotation,
+                  annotationLayerPositions,
+                  globalCoordinateSpace.scales,
+                  globalCoordinateSpace.units,
+                );
+                const allProperties = [
+                  ...defaultProperties.properties,
+                  ...properties,
+                ];
+                const allValues = [
+                  ...defaultProperties.values,
+                  ...annotation.properties,
+                ];
 
                 // Add the ID to the annotation details.
                 const label = document.createElement("label");
@@ -1872,8 +1893,10 @@ export function UserLayerWithAnnotationsMixin<
                 label.appendChild(valueElement);
                 parent.appendChild(label);
 
-                for (let i = 0, count = properties.length; i < count; ++i) {
-                  const property = properties[i];
+                for (let i = 0, count = allProperties.length; i < count; ++i) {
+                  const property = allProperties[i];
+                  const value = allValues[i];
+
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
                   const idElement = document.createElement("span");
@@ -1886,7 +1909,6 @@ export function UserLayerWithAnnotationsMixin<
                   if (description !== undefined) {
                     label.title = description;
                   }
-                  const value = annotation.properties[i];
                   const valueElement = document.createElement("span");
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
