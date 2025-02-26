@@ -62,7 +62,7 @@ describe("isAABBVisible", () => {
 });
 
 describe("isOrientationAxisAligned", () => {
-  it("works for axis-aligned orientations", () => {
+  it("works for default axis-aligned orientations", () => {
     const scales = vec3.fromValues(1, 2, 3);
     const units = ["m", "Hz", "s"];
     const xyOrientation = AXES_RELATIVE_ORIENTATION.get("xy");
@@ -133,7 +133,7 @@ describe("isOrientationAxisAligned", () => {
       );
     }
   });
-  it("identifies non default axis aligned orientations", () => {
+  it("works for non default axis aligned orientations", () => {
     const alt_yz_orientation = quat.fromValues(0.5, 0.5, 0.5, 0.5);
     const scales = vec3.fromValues(1, 2, 3);
     const units = ["m", "Hz", "s"];
