@@ -216,7 +216,7 @@ function addDisplayDimensionsWidget(
         navigationState.pose.orientation.addRef(),
         panel.boundsUpdated,
         panel.renderViewport,
-        panel instanceof SliceViewPanel ? "px" : "vh",
+        panel instanceof SliceViewPanel,
       ),
     ).element,
   );

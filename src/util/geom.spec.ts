@@ -20,7 +20,8 @@ import {
   isAABBVisible,
   mat4,
   quat,
-  isOrientationAxisAligned,
+  computeScalesAndUnits,
+  vec3,
 } from "#src/util/geom.js";
 import { AXES_RELATIVE_ORIENTATION } from "#src/widget/display_dimensions_widget.js";
 
@@ -61,43 +62,93 @@ describe("isAABBVisible", () => {
 });
 
 describe("isOrientationAxisAligned", () => {
-  it("identifies axis-aligned orientations for default", () => {
+  it("works for axis-aligned orientations", () => {
+    const scales = vec3.fromValues(1, 2, 3);
+    const units = ["m", "Hz", "s"];
     const xyOrientation = AXES_RELATIVE_ORIENTATION.get("xy");
     const xyResult = {
-      alignedAxis: 2,
-      verticalAxis: 1,
-      horizontalAxis: 0,
+      width: {
+        scale: 1,
+        unit: "m",
+      },
+      height: {
+        scale: 2,
+        unit: "Hz",
+      },
     };
-    expect(isOrientationAxisAligned(xyOrientation)).toStrictEqual(xyResult);
+    expect(
+      computeScalesAndUnits(xyOrientation, scales, units),
+    ).toStrictEqual(xyResult);
     const xzOrientation = AXES_RELATIVE_ORIENTATION.get("xz");
     const xzResult = {
-      alignedAxis: 1,
-      verticalAxis: 2,
-      horizontalAxis: 0,
+      width: {
+        scale: 1,
+        unit: "m",
+      },
+      height: {
+        scale: 3,
+        unit: "s",
+      },
     };
-    expect(isOrientationAxisAligned(xzOrientation)).toStrictEqual(xzResult);
+    expect(
+      computeScalesAndUnits(xzOrientation, scales, units),
+    ).toStrictEqual(xzResult);
     const yzOrientation = AXES_RELATIVE_ORIENTATION.get("yz");
     const yzResult = {
-      alignedAxis: 0,
-      verticalAxis: 1,
-      horizontalAxis: 2,
+      width: {
+        scale: 3,
+        unit: "s",
+      },
+      height: {
+        scale: 2,
+        unit: "Hz",
+      },
     };
-    expect(isOrientationAxisAligned(yzOrientation)).toStrictEqual(yzResult);
+    expect(
+      computeScalesAndUnits(yzOrientation, scales, units),
+    ).toStrictEqual(yzResult);
   });
-  it("identifies non-axis-aligned orientations", () => {
+  it("works for uniform scale and units orientations", () => {
+    const scales = vec3.fromValues(1, 1, 1);
+    const units = ["m", "m", "m"];
     const default_orientation = quat.create();
     const q1 = quat.create();
-    quat.rotateX(q1, default_orientation, Math.PI / 4); // Rotate 45° around X
-    expect(isOrientationAxisAligned(q1)).toBe(null);
-    quat.rotateY(q1, default_orientation, Math.PI / 4); // Rotate 45° around Y
-    expect(isOrientationAxisAligned(q1)).toBe(null);
+    const uniformResult = {
+      width: {
+        scale: 1,
+        unit: "m",
+      },
+      height: {
+        scale: 1,
+        unit: "m",
+      },
+    };
+    // For any rotation, you get the same result
+    for (let i = 0; i < 10; i++) {
+      quat.rotateX(q1, default_orientation, Math.random() * Math.PI * 2);
+      quat.rotateY(q1, q1, Math.random() * Math.PI * 2);
+      quat.rotateZ(q1, q1, Math.random() * Math.PI * 2);
+      expect(computeScalesAndUnits(q1, scales, units)).toStrictEqual(
+        uniformResult,
+      );
+    }
   });
   it("identifies non default axis aligned orientations", () => {
     const alt_yz_orientation = quat.fromValues(0.5, 0.5, 0.5, 0.5);
-    expect(isOrientationAxisAligned(alt_yz_orientation)).toStrictEqual({
-      alignedAxis: 0,
-      verticalAxis: 2,
-      horizontalAxis: 1,
-    });
+    const scales = vec3.fromValues(1, 2, 3);
+    const units = ["m", "Hz", "s"];
+    const alt_yz_result = {
+      width: {
+        scale: 2,
+        unit: "Hz",
+      },
+      height: {
+        scale: 3,
+        unit: "s",
+      },
+    };
+    expect(
+      computeScalesAndUnits(alt_yz_orientation, scales, units),
+    ).toStrictEqual(alt_yz_result);
   });
 });
