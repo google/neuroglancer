@@ -814,10 +814,8 @@ export class DisplayDimensionsWidget extends RefCounted {
         dimElements.name.value = "";
         dimElements.scale.value = "";
         dimElements.scaleFactor.value = "";
-        dimElements.name.style.display = "none";
       } else {
         dimElements.name.value = globalDimensionNames[dim];
-        dimElements.name.style.display = "";
         const totalScale =
           (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
         if (i === 0 || !singleScale) {
