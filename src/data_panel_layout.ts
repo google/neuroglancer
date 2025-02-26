@@ -205,7 +205,6 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 function addDisplayDimensionsWidget(
   layout: DataDisplayLayout,
   panel: RenderedDataPanel,
-  axes: NamedAxes | undefined,
 ) {
   const { navigationState } = panel;
   panel.element.appendChild(
@@ -215,7 +214,6 @@ function addDisplayDimensionsWidget(
         navigationState.zoomFactor,
         navigationState.depthRange.addRef(),
         navigationState.pose.orientation.addRef(),
-        axes,
         panel.boundsUpdated,
         panel.renderViewport,
         panel instanceof SliceViewPanel ? "px" : "vh",
@@ -366,7 +364,7 @@ export class FourPanelLayout extends RefCounted {
         new SliceViewPanel(display, element, sliceViews.get(axes)!, state),
       );
       if (displayDimensionsWidget) {
-        addDisplayDimensionsWidget(this, panel, axes);
+        addDisplayDimensionsWidget(this, panel);
       }
       registerRelatedLayouts(this, panel, [axes, `${axes}-3d`]);
       return panel;
@@ -405,7 +403,7 @@ export class FourPanelLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
-                addDisplayDimensionsWidget(this, panel, undefined);
+                addDisplayDimensionsWidget(this, panel);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
               }),
@@ -469,7 +467,7 @@ export class FourPanelAltLayout extends RefCounted {
         new SliceViewPanel(display, element, sliceViews.get(axes)!, state),
       );
       if (displayDimensionsWidget) {
-        addDisplayDimensionsWidget(this, panel, axes);
+        addDisplayDimensionsWidget(this, panel);
       }
       registerRelatedLayouts(this, panel, [axes, `${axes}-3d`]);
       return panel;
@@ -516,7 +514,7 @@ export class FourPanelAltLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
-                addDisplayDimensionsWidget(this, panel, undefined);
+                addDisplayDimensionsWidget(this, panel);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d", "4panel"]);
               }),
@@ -566,7 +564,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           const panel = this.registerDisposer(
             new SliceViewPanel(display, element, sliceView, sliceViewerState),
           );
-          addDisplayDimensionsWidget(this, panel, axes);
+          addDisplayDimensionsWidget(this, panel);
           registerRelatedLayouts(this, panel, [axes, "4panel-alt"]);
         }),
         L.withFlex(1, (element) => {
@@ -575,7 +573,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           );
           panel.sliceViews.set(sliceView.addRef(), false);
           addUnconditionalSliceViews(viewer, panel, crossSections);
-          addDisplayDimensionsWidget(this, panel, undefined);
+          addDisplayDimensionsWidget(this, panel);
           registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
         }),
       ]),
@@ -612,7 +610,7 @@ export class SinglePanelLayout extends RefCounted {
             sliceViewerState,
           ),
         );
-        addDisplayDimensionsWidget(this, panel, axes);
+        addDisplayDimensionsWidget(this, panel);
         registerRelatedLayouts(this, panel, ["4panel-alt", `${axes}-3d`]);
       }),
     ])(rootElement);
@@ -643,7 +641,7 @@ export class SinglePerspectiveLayout extends RefCounted {
           new PerspectivePanel(viewer.display, element, perspectiveViewerState),
         );
         addUnconditionalSliceViews(viewer, panel, crossSections);
-        addDisplayDimensionsWidget(this, panel, undefined);
+        addDisplayDimensionsWidget(this, panel);
         registerRelatedLayouts(this, panel, ["4panel-alt"]);
       }),
     ])(rootElement);
