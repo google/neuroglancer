@@ -17,12 +17,11 @@
 import { it, expect } from "vitest";
 import type { SingleTextureChunkFormat } from "#src/sliceview/single_texture_chunk_format.js";
 import { defineChunkDataShaderAccess } from "#src/sliceview/volume/frontend.js";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedArray, TypedNumberArray } from "#src/util/array.js";
 import { getFortranOrderStrides } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import { textureTargetForSamplerType } from "#src/webgl/shader.js";
 import type { FragmentShaderTestOutputs } from "#src/webgl/shader_testing.js";
@@ -35,7 +34,7 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
     gl: GL,
   ) => [SingleTextureChunkFormat<TextureLayout>, TextureLayout],
   rawData: TypedArray,
-  encodedData: TypedArray,
+  encodedData: TypedNumberArray,
 ) {
   const numChannels = volumeSize[3];
   const strides = getFortranOrderStrides(volumeSize);
@@ -119,22 +118,9 @@ output${channel} = getDataValue(${channel});
             const msg =
               `volumeSize = ${vec3Key(volumeSize)}, ` +
               `positionInChunk = ${vec3Key(positionInChunk)}, ` +
-              `channel = ${channel}, offset = ${curOffset}`;
-            switch (dataType) {
-              case DataType.UINT64: {
-                const result = values[`output${channel}`] as Uint64;
-                expect([result.low, result.high], msg).toEqual([
-                  rawData[curOffset * 2],
-                  rawData[curOffset * 2 + 1],
-                ]);
-                break;
-              }
-              default: {
-                const result = values[`output${channel}`];
-                expect(result, msg).toBe(rawData[curOffset]);
-                break;
-              }
-            }
+              `channel = ${channel}, offset = ${curOffset}, expected = ${typeof rawData[curOffset]}`;
+            const result = values[`output${channel}`];
+            expect(result, msg).toBe(rawData[curOffset]);
           }
         }
         checkPosition(vec3.fromValues(0, 0, 0));

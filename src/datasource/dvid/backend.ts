@@ -64,7 +64,7 @@ export class DVIDSkeletonSource extends DVIDSource(
   SkeletonSource,
   SkeletonSourceParameters,
 ) {
-  download(chunk: SkeletonChunk, abortSignal: AbortSignal) {
+  download(chunk: SkeletonChunk, signal: AbortSignal) {
     const { parameters } = this;
     const bodyid = `${chunk.objectId}`;
     const url =
@@ -76,7 +76,7 @@ export class DVIDSkeletonSource extends DVIDSource(
       this.credentialsProvider,
       appendQueryStringForDvid(url, parameters.user),
       {
-        signal: abortSignal,
+        signal: signal,
       },
     )
       .then((response) => response.arrayBuffer())
@@ -117,7 +117,7 @@ export class DVIDMeshSource extends DVIDSource(
     return Promise.resolve(undefined);
   }
 
-  downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
+  downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
     const { parameters } = this;
     const dvidInstance = new DVIDInstance(
       parameters.baseUrl,
@@ -132,7 +132,7 @@ export class DVIDMeshSource extends DVIDSource(
       this.credentialsProvider,
       appendQueryStringForDvid(meshUrl, parameters.user),
       {
-        signal: abortSignal,
+        signal: signal,
       },
     )
       .then((response) => response.arrayBuffer())
@@ -145,7 +145,7 @@ export class DVIDVolumeChunkSource extends DVIDSource(
   VolumeChunkSource,
   VolumeChunkSourceParameters,
 ) {
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
     const params = this.parameters;
     let path: string;
     {
@@ -161,11 +161,11 @@ export class DVIDVolumeChunkSource extends DVIDSource(
     const response = await fetchWithDVIDCredentials(
       this.credentialsProvider,
       appendQueryStringForDvid(`${params.baseUrl}${path}`, params.user),
-      { signal: abortSignal },
+      { signal: signal },
     ).then((response) => response.arrayBuffer());
     await decoder(
       chunk,
-      abortSignal,
+      signal,
       params.encoding === VolumeChunkEncoding.JPEG
         ? response.slice(16)
         : response,

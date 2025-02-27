@@ -1,0 +1,156 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/nifti/standard.nii|nifti:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          0,
+          0,
+          0,
+        ],
+        "upperBounds": Float64Array [
+          4,
+          5,
+          7,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+        ,
+      ],
+      "names": [
+        "i",
+        "j",
+        "k",
+      ],
+      "scales": Float64Array [
+        1,
+        3,
+        2,
+      ],
+      "units": [
+        "",
+        "",
+        "",
+      ],
+      "valid": true,
+    },
+    "outputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          -Infinity,
+          -Infinity,
+          -Infinity,
+        ],
+        "upperBounds": Float64Array [
+          Infinity,
+          Infinity,
+          Infinity,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+        ,
+      ],
+      "names": [
+        "x",
+        "y",
+        "z",
+      ],
+      "scales": Float64Array [
+        1,
+        1,
+        1,
+      ],
+      "units": [
+        "",
+        "",
+        "",
+      ],
+      "valid": true,
+    },
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "UINT8",
+          "rank": 3,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "url": "http://localhost:*/datasource/nifti/standard.nii",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      4,
+                      5,
+                      7,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT8",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      4,
+                      5,
+                      7,
+                    ],
+                  },
+                },
+              },
+            ],
+          ],
+          "volumeType": "UNKNOWN",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              0,
+              0,
+              0,
+            ],
+            "pointB": [
+              4,
+              5,
+              7,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}

@@ -16,17 +16,23 @@
 
 import { parseOBJFromArrayBuffer } from "#src/async_computation/obj_mesh_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
-import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
+import { getCachedDecodedUrl } from "#src/chunk_manager/generic_file_source.js";
+import type { ReadResponse } from "#src/kvstore/index.js";
 import { registerSingleMeshFactory } from "#src/single_mesh/backend.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 /**
- * This needs to be a global function, because it identifies the instance of GenericSharedDataSource
+ * This needs to be a global function, because it identifies the instance of SimpleAsyncCache
  * to use.
  */
-function parse(buffer: ArrayBuffer, abortSignal: AbortSignal) {
+async function parse(
+  readResponse: ReadResponse,
+  progressOptions: Partial<ProgressOptions>,
+) {
+  const buffer = await readResponse.response.arrayBuffer();
   return requestAsyncComputation(
     parseOBJFromArrayBuffer,
-    abortSignal,
+    progressOptions.signal,
     [buffer],
     buffer,
   );
@@ -34,13 +40,6 @@ function parse(buffer: ArrayBuffer, abortSignal: AbortSignal) {
 
 registerSingleMeshFactory("obj", {
   description: "OBJ",
-  getMesh: (chunkManager, credentialsProvider, url, getPriority, abortSignal) =>
-    GenericSharedDataSource.getUrl(
-      chunkManager,
-      credentialsProvider,
-      parse,
-      url,
-      getPriority,
-      abortSignal,
-    ),
+  getMesh: (sharedKvStoreContext, url, options) =>
+    getCachedDecodedUrl(sharedKvStoreContext, url, parse, options),
 });

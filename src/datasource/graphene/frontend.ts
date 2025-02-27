@@ -34,14 +34,14 @@ import { LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import { makeIdentityTransform } from "#src/coordinate_transform.js";
-import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
-import type { CredentialsManager } from "#src/credentials_provider/index.js";
 import type {
   ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface,
   ChunkedGraphChunkSpecification,
+  HttpSource,
   MultiscaleMeshMetadata,
 } from "#src/datasource/graphene/base.js";
 import {
+  parseGrapheneError,
   CHUNKED_GRAPH_LAYER_RPC_ID,
   CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   ChunkedGraphSourceParameters,
@@ -51,13 +51,15 @@ import {
   makeChunkedGraphChunkSpecification,
   MeshSourceParameters,
   PYCG_APP_VERSION,
+  getHttpSource,
 } from "#src/datasource/graphene/base.js";
 import type {
   DataSource,
+  DataSourceLookupResult,
   DataSubsourceEntry,
-  GetDataSourceOptions,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { RedirectError } from "#src/datasource/index.js";
 import type { ShardingParameters } from "#src/datasource/precomputed/base.js";
 import {
   DataEncoding,
@@ -67,11 +69,15 @@ import type { MultiscaleVolumeInfo } from "#src/datasource/precomputed/frontend.
 import {
   getSegmentPropertyMap,
   parseMultiscaleVolumeInfo,
-  parseProviderUrl,
-  PrecomputedDataSource,
   PrecomputedMultiscaleVolumeChunkSource,
-  resolvePath,
 } from "#src/datasource/precomputed/frontend.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import {
+  ensureEmptyUrlSuffix,
+  kvstoreEnsureDirectoryPipelineUrl,
+  pipelineUrlJoin,
+} from "#src/kvstore/url.js";
 import type {
   LayerView,
   MouseSelectionState,
@@ -178,16 +184,9 @@ import {
   verifyPositiveInt,
   verifyString,
 } from "#src/util/json.js";
-import { getObjectId } from "#src/util/object_id.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 import { NullarySignal } from "#src/util/signal.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { Uint64 } from "#src/util/uint64.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
@@ -213,7 +212,7 @@ const TRANSPARENT_COLOR_PACKED = new Uint64(packColor(TRANSPARENT_COLOR));
 const MULTICUT_OFF_COLOR = vec4.fromValues(0, 0, 0, 0.5);
 
 class GrapheneMeshSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource),
+  WithSharedKvStoreContext(MeshSource),
   MeshSourceParameters,
 ) {
   getFragmentKey(objectKey: string | null, fragmentId: string) {
@@ -230,7 +229,7 @@ class AppInfo {
     // .../1.0/... is the legacy link style
     // .../table/... is the current, version agnostic link style (for retrieving the info file)
     const linkStyle =
-      /^(https?:\/\/[.\w:\-/]+)\/segmentation\/(?:1\.0|table)\/([^/]+)\/?$/;
+      /^((?:middleauth\+)?https?:\/\/[.\w:\-/]+)\/segmentation\/(?:1\.0|table)\/([^/]+)\/?$/;
     const match = infoUrl.match(linkStyle);
     if (match === null) {
       throw Error(`Graph URL invalid: ${infoUrl}`);
@@ -249,7 +248,7 @@ class AppInfo {
       // Dealing with a prehistoric graph server with no version information
       this.supported_api_versions = [0];
     }
-    if (PYCG_APP_VERSION in this.supported_api_versions === false) {
+    if (this.supported_api_versions.includes(PYCG_APP_VERSION) === false) {
       const redirectMsg = `This Neuroglancer branch requires Graph Server version ${PYCG_APP_VERSION}, but the server only supports version(s) ${this.supported_api_versions}.`;
       throw new Error(redirectMsg);
     }
@@ -284,12 +283,9 @@ interface GrapheneMultiscaleVolumeInfo extends MultiscaleVolumeInfo {
 function parseGrapheneMultiscaleVolumeInfo(
   obj: unknown,
   url: string,
-  credentialsManager: CredentialsManager,
 ): GrapheneMultiscaleVolumeInfo {
   const volumeInfo = parseMultiscaleVolumeInfo(obj);
-  const dataUrl = verifyObjectProperty(obj, "data_dir", (x) =>
-    parseSpecialUrl(x, credentialsManager),
-  ).url;
+  const dataUrl = verifyObjectProperty(obj, "data_dir", verifyString);
   const app = verifyObjectProperty(obj, "app", (x) => new AppInfo(url, x));
   const graph = verifyObjectProperty(obj, "graph", (x) => new GraphInfo(x));
   return {
@@ -302,11 +298,10 @@ function parseGrapheneMultiscaleVolumeInfo(
 
 class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChunkSource {
   constructor(
-    chunkManager: ChunkManager,
-    public chunkedGraphCredentialsProvider: SpecialProtocolCredentialsProvider,
+    sharedKvStoreContext: SharedKvStoreContext,
     public info: GrapheneMultiscaleVolumeInfo,
   ) {
-    super(chunkManager, undefined, info.dataUrl, info);
+    super(sharedKvStoreContext, info.dataUrl, info);
   }
 
   getChunkedGraphSource() {
@@ -341,7 +336,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
         GrapheneChunkedGraphChunkSource,
         {
           spec,
-          credentialsProvider: this.chunkedGraphCredentialsProvider,
+          sharedKvStoreContext: this.sharedKvStoreContext,
           parameters: { url: `${this.info.app!.segmentationUrl}/node` },
         },
       ),
@@ -430,13 +425,18 @@ function parseMeshMetadata(data: any): ParsedMeshMetadata {
 }
 
 async function getMeshMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ParsedMeshMetadata> {
   let metadata: any;
   try {
-    metadata = await getJsonMetadata(chunkManager, credentialsProvider, url);
+    metadata = await getJsonMetadata(
+      sharedKvStoreContext,
+      url,
+      /*required=*/ false,
+      options,
+    );
   } catch (e) {
     if (isNotFoundError(e)) {
       // If we fail to fetch the info file, assume it is the legacy
@@ -512,27 +512,26 @@ function parseGrapheneShardingParameters(
 }
 
 function getShardedMeshSource(
-  chunkManager: ChunkManager,
+  sharedKvStoreContext: SharedKvStoreContext,
   parameters: MeshSourceParameters,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
 ) {
-  return chunkManager.getChunkSource(GrapheneMeshSource, {
+  return sharedKvStoreContext.chunkManager.getChunkSource(GrapheneMeshSource, {
+    sharedKvStoreContext,
     parameters,
-    credentialsProvider,
   });
 }
 
 async function getMeshSource(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   fragmentUrl: string,
   nBitsForLayerId: number,
+  options: ProgressOptions,
 ) {
   const { metadata, segmentPropertyMap } = await getMeshMetadata(
-    chunkManager,
-    undefined,
+    sharedKvStoreContext,
     fragmentUrl,
+    options,
   );
   const parameters: MeshSourceParameters = {
     manifestUrl: url,
@@ -543,27 +542,35 @@ async function getMeshSource(
   };
   const transform = metadata?.transform || mat4.create();
   return {
-    source: getShardedMeshSource(chunkManager, parameters, credentialsProvider),
+    source: getShardedMeshSource(sharedKvStoreContext, parameters),
     transform,
     segmentPropertyMap,
   };
 }
 
-function getJsonMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+export function getJsonMetadata(
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  required: boolean,
+  options: Partial<ProgressOptions>,
 ): Promise<any> {
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     {
-      type: "graphene:metadata",
+      type: "precomputed:metadata",
       url,
-      credentialsProvider: getObjectId(credentialsProvider),
     },
-    async () => {
-      return await fetchSpecialOk(credentialsProvider, `${url}/info`, {}).then(
-        (response) => response.json(),
-      );
+    options,
+    async (options) => {
+      const infoUrl = pipelineUrlJoin(url, "info");
+      using _span = new ProgressSpan(options.progressListener, {
+        message: `Reading graphene metadata from ${infoUrl}`,
+      });
+      const response = await sharedKvStoreContext.kvStoreContext.read(infoUrl, {
+        ...options,
+        throwIfMissing: required,
+      });
+      if (response === undefined) return undefined;
+      return await response.response.json();
     },
   );
 }
@@ -578,31 +585,22 @@ function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
 }
 
 async function getVolumeDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   metadata: any,
+  options: ProgressOptions,
+  stateJson: any,
 ): Promise<DataSource> {
-  const info = parseGrapheneMultiscaleVolumeInfo(
-    metadata,
-    url,
-    options.credentialsManager,
-  );
+  const info = parseGrapheneMultiscaleVolumeInfo(metadata, url);
   const volume = new GrapheneMultiscaleVolumeChunkSource(
-    options.chunkManager,
-    credentialsProvider,
+    sharedKvStoreContext,
     info,
   );
   const state = new GrapheneState();
-  if (options.state) {
-    state.restoreState(options.state);
+  if (stateJson) {
+    state.restoreState(stateJson);
   }
-  const segmentationGraph = new GrapheneGraphSource(
-    info,
-    credentialsProvider,
-    volume,
-    state,
-  );
+  const segmentationGraph = new GrapheneGraphSource(info, volume, state);
   const { modelSpace } = info;
   const subsources: DataSubsourceEntry[] = [
     {
@@ -626,18 +624,19 @@ async function getVolumeDataSource(
     },
   ];
   if (info.segmentPropertyMap !== undefined) {
-    const mapUrl = resolvePath(url, info.segmentPropertyMap);
+    const mapUrl = kvstoreEnsureDirectoryPipelineUrl(
+      sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+        url,
+        info.segmentPropertyMap,
+      ),
+    );
     const metadata = await getJsonMetadata(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       mapUrl,
+      /*required=*/ true,
+      options,
     );
-    const segmentPropertyMap = getSegmentPropertyMap(
-      options.chunkManager,
-      credentialsProvider,
-      metadata,
-      mapUrl,
-    );
+    const segmentPropertyMap = getSegmentPropertyMap(metadata);
     subsources.push({
       id: "properties",
       default: true,
@@ -646,11 +645,16 @@ async function getVolumeDataSource(
   }
   if (info.mesh !== undefined) {
     const { source: meshSource, transform } = await getMeshSource(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       info.app!.meshingUrl,
-      resolvePath(info.dataUrl, info.mesh),
+      kvstoreEnsureDirectoryPipelineUrl(
+        sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+          info.dataUrl,
+          info.mesh,
+        ),
+      ),
       info.graph.nBitsForLayerId,
+      options,
     );
     const subsourceToModelSubspaceTransform =
       getSubsourceToModelSubspaceTransform(info);
@@ -673,56 +677,56 @@ async function getVolumeDataSource(
   };
 }
 
-export class GrapheneDataSource extends PrecomputedDataSource {
+// Note: Graphene is not really a kvstore-based data source, since it relies on
+// making arbitrary HTTP requests rather than just kvstore. It fails if the
+// provided kvstore does not inherit from HttpKvStore.
+export class GrapheneDataSource implements KvStoreBasedDataSourceProvider {
+  get scheme() {
+    return "graphene";
+  }
   get description() {
-    return "Graphene file-backed data source";
+    return "Graphene data source";
   }
 
-  get(options: GetDataSourceOptions): Promise<DataSource> {
-    const { url: providerUrl, parameters } = parseProviderUrl(
-      options.providerUrl,
-    );
-    return options.chunkManager.memoize.getUncounted(
-      { type: "graphene:get", providerUrl, parameters },
-      async (): Promise<DataSource> => {
-        const { url, credentialsProvider } = parseSpecialUrl(
-          providerUrl,
-          options.credentialsManager,
+  get(
+    options: GetKvStoreBasedDataSourceOptions,
+  ): Promise<DataSourceLookupResult> {
+    ensureEmptyUrlSuffix(options.url);
+    const url = kvstoreEnsureDirectoryPipelineUrl(options.kvStoreUrl);
+    return options.registry.chunkManager.memoize.getAsync(
+      { type: "graphene:get", url },
+      options,
+      async (progressOptions) => {
+        const metadata = await getJsonMetadata(
+          options.registry.sharedKvStoreContext,
+          url,
+          /*required=*/ true,
+          progressOptions,
         );
-        let metadata: any;
-        try {
-          metadata = await getJsonMetadata(
-            options.chunkManager,
-            credentialsProvider,
-            url,
-          );
-        } catch (e) {
-          if (isNotFoundError(e)) {
-            if (parameters.type === "mesh") {
-              console.log("does this happen?");
-            }
-          }
-          throw e;
-        }
         verifyObject(metadata);
         const redirect = verifyOptionalObjectProperty(
           metadata,
           "redirect",
           verifyString,
         );
+        const canonicalUrl = `${options.url.scheme}://${url}`;
         if (redirect !== undefined) {
-          throw new RedirectError(redirect);
+          return { canonicalUrl, targetUrl: redirect };
         }
         const t = verifyOptionalObjectProperty(metadata, "@type", verifyString);
         switch (t) {
           case "neuroglancer_multiscale_volume":
-          case undefined:
-            return await getVolumeDataSource(
-              options,
-              credentialsProvider,
+          case undefined: {
+            const dataSource = await getVolumeDataSource(
+              options.registry.sharedKvStoreContext,
               url,
               metadata,
+              progressOptions,
+              options.state,
             );
+            dataSource.canonicalUrl = canonicalUrl;
+            return dataSource;
+          }
           default:
             throw new Error(`Invalid type: ${JSON.stringify(t)}`);
         }
@@ -1536,26 +1540,13 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   }
 }
 
-async function parseGrapheneError(e: HttpError) {
-  if (e.response) {
-    let msg: string;
-    if (e.response.headers.get("content-type") === "application/json") {
-      msg = (await e.response.json()).message;
-    } else {
-      msg = await e.response.text();
-    }
-    return msg;
-  }
-  return undefined;
-}
-
-async function withErrorMessageHTTP(
-  promise: Promise<Response>,
+async function withErrorMessageHTTP<T>(
+  promise: Promise<T>,
   options: {
     initialMessage?: string;
     errorPrefix: string;
   },
-): Promise<Response> {
+): Promise<T> {
   let status: StatusMessage | undefined = undefined;
   let dispose = () => {};
   if (options.initialMessage) {
@@ -1587,25 +1578,28 @@ async function withErrorMessageHTTP(
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol("Graph Server Not Specified.");
 
 class GrapheneGraphServerInterface {
-  constructor(
-    private url: string,
-    private credentialsProvider: SpecialProtocolCredentialsProvider,
-  ) {}
+  private httpSource: HttpSource;
+  constructor(sharedKvStoreContext: SharedKvStoreContext, url: string) {
+    this.httpSource = getHttpSource(sharedKvStoreContext.kvStoreContext, url);
+  }
 
   async getRoot(segment: Uint64, timestamp = "") {
     const timestampEpoch = new Date(timestamp).valueOf() / 1000;
 
-    const url = `${this.url}/node/${String(segment)}/root?int64_as_str=1${
-      Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
-    }`;
+    const { fetchOkImpl, baseUrl } = this.httpSource;
 
-    const promise = fetchSpecialOk(this.credentialsProvider, url, {});
-
-    const response = await withErrorMessageHTTP(promise, {
-      initialMessage: `Retrieving root for segment ${segment}`,
-      errorPrefix: "Could not fetch root: ",
-    });
-    const jsonResp = await response.json();
+    const jsonResp = await withErrorMessageHTTP(
+      fetchOkImpl(
+        `${baseUrl}/node/${String(segment)}/root?int64_as_str=1${
+          Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
+        }`,
+        {},
+      ).then((response) => response.json()),
+      {
+        initialMessage: `Retrieving root for segment ${segment}`,
+        errorPrefix: "Could not fetch root: ",
+      },
+    );
     return Uint64.parseString(jsonResp.root_id);
   }
 
@@ -1614,28 +1608,20 @@ class GrapheneGraphServerInterface {
     second: SegmentSelection,
     annotationToNanometers: Float64Array,
   ): Promise<Uint64> {
-    const { url } = this;
-    if (url === "") {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    const promise = fetchSpecialOk(
-      this.credentialsProvider,
-      `${url}/merge?int64_as_str=1`,
-      {
-        method: "POST",
-        body: JSON.stringify([
-          [
-            String(first.segmentId),
-            ...first.position.map((val, i) => val * annotationToNanometers[i]),
-          ],
-          [
-            String(second.segmentId),
-            ...second.position.map((val, i) => val * annotationToNanometers[i]),
-          ],
-        ]),
-      },
-    );
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(`${baseUrl}/merge?int64_as_str=1`, {
+      method: "POST",
+      body: JSON.stringify([
+        [
+          String(first.segmentId),
+          ...first.position.map((val, i) => val * annotationToNanometers[i]),
+        ],
+        [
+          String(second.segmentId),
+          ...second.position.map((val, i) => val * annotationToNanometers[i]),
+        ],
+      ]),
+    });
 
     try {
       const response = await promise;
@@ -1655,28 +1641,20 @@ class GrapheneGraphServerInterface {
     second: SegmentSelection[],
     annotationToNanometers: Float64Array,
   ): Promise<Uint64[]> {
-    const { url } = this;
-    if (url === "") {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    const promise = fetchSpecialOk(
-      this.credentialsProvider,
-      `${url}/split?int64_as_str=1`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          sources: first.map((x) => [
-            String(x.segmentId),
-            ...x.position.map((val, i) => val * annotationToNanometers[i]),
-          ]),
-          sinks: second.map((x) => [
-            String(x.segmentId),
-            ...x.position.map((val, i) => val * annotationToNanometers[i]),
-          ]),
-        }),
-      },
-    );
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(`${baseUrl}/split?int64_as_str=1`, {
+      method: "POST",
+      body: JSON.stringify({
+        sources: first.map((x) => [
+          String(x.segmentId),
+          ...x.position.map((val, i) => val * annotationToNanometers[i]),
+        ]),
+        sinks: second.map((x) => [
+          String(x.segmentId),
+          ...x.position.map((val, i) => val * annotationToNanometers[i]),
+        ]),
+      }),
+    });
 
     const response = await withErrorMessageHTTP(promise, {
       initialMessage: `Splitting ${first.length} sources from ${second.length} sinks`,
@@ -1691,19 +1669,22 @@ class GrapheneGraphServerInterface {
   }
 
   async filterLatestRoots(segments: Uint64[]): Promise<Uint64[]> {
-    const url = `${this.url}/is_latest_roots`;
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const url = `${baseUrl}/is_latest_roots`;
 
-    const promise = fetchSpecialOk(this.credentialsProvider, url, {
+    const promise = fetchOkImpl(url, {
       method: "POST",
       body: JSON.stringify({
         node_ids: segments.map((x) => x.toJSON()),
       }),
     });
 
-    const response = await withErrorMessageHTTP(promise, {
-      errorPrefix: "Could not check latest: ",
-    });
-    const jsonResp = await response.json();
+    const jsonResp = await withErrorMessageHTTP(
+      promise.then((response) => response.json()),
+      {
+        errorPrefix: "Could not check latest: ",
+      },
+    );
 
     const res: Uint64[] = [];
     for (const [i, isLatest] of jsonResp.is_latest.entries()) {
@@ -1721,14 +1702,13 @@ class GrapheneGraphSource extends SegmentationGraphSource {
 
   constructor(
     public info: GrapheneMultiscaleVolumeInfo,
-    credentialsProvider: SpecialProtocolCredentialsProvider,
     private chunkSource: GrapheneMultiscaleVolumeChunkSource,
     public state: GrapheneState,
   ) {
     super();
     this.graphServer = new GrapheneGraphServerInterface(
+      chunkSource.sharedKvStoreContext,
       info.app!.segmentationUrl,
-      credentialsProvider,
     );
   }
 
@@ -1827,9 +1807,7 @@ class ChunkedGraphChunkSource
 }
 
 class GrapheneChunkedGraphChunkSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(
-    ChunkedGraphChunkSource,
-  ),
+  WithSharedKvStoreContext(ChunkedGraphChunkSource),
   ChunkedGraphSourceParameters,
 ) {}
 
@@ -1975,14 +1953,12 @@ const GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID = "grapheneMulticutSegments";
 const GRAPHENE_MERGE_SEGMENTS_TOOL_ID = "grapheneMergeSegments";
 
 class MulticutAnnotationLayerView extends AnnotationLayerView {
-  private _annotationStates: MergedAnnotationStates;
-
+  declare private _annotationStates: MergedAnnotationStates;
   constructor(
     public layer: SegmentationUserLayer,
     public displayState: AnnotationDisplayState,
   ) {
     super(layer, displayState);
-
     const {
       graphConnection: { value: graphConnection },
     } = layer;

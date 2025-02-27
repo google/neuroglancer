@@ -15,17 +15,23 @@
  */
 
 import { ChunkState } from "#src/chunk_manager/base.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import {
   Chunk,
   ChunkSource,
   WithParameters,
 } from "#src/chunk_manager/frontend.js";
 import {
-  getCredentialsProviderCounterpart,
-  WithCredentialsProvider,
-} from "#src/credentials_provider/chunk_source_frontend.js";
-import type { CredentialsManager } from "#src/credentials_provider/index.js";
+  makeCoordinateSpace,
+  makeIdentityTransform,
+} from "#src/coordinate_transform.js";
+import type {
+  DataSource,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
+} from "#src/datasource/index.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import type { PickState, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
@@ -47,10 +53,9 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import type { mat4 } from "#src/util/geom.js";
 import { vec3 } from "#src/util/geom.js";
-import type { SpecialProtocolCredentials } from "#src/util/special_protocol_request.js";
-import { parseSpecialUrl } from "#src/util/special_protocol_request.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
-import type { Buffer } from "#src/webgl/buffer.js";
+import type { GLBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import {
@@ -401,7 +406,7 @@ export class VertexChunkData {
 
 export class SingleMeshChunk extends Chunk {
   declare source: SingleMeshSource;
-  indexBuffer: Buffer;
+  indexBuffer: GLBuffer;
   numIndices: number;
   indices: Uint32Array;
   vertexData: VertexChunkData;
@@ -439,7 +444,7 @@ export function getAttributeTextureFormats(
 }
 
 export class SingleMeshSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkSource),
+  WithSharedKvStoreContext(ChunkSource),
   SingleMeshSourceParametersWithInfo,
 ) {
   attributeTextureFormats = getAttributeTextureFormats(
@@ -650,46 +655,77 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
 }
 
 function getSingleMeshInfo(
-  chunkManager: ChunkManager,
-  credentialsManager: CredentialsManager,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ) {
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     { type: "single_mesh:getMeshInfo", url },
-    async () => {
-      const { url: parsedUrl, credentialsProvider } = parseSpecialUrl(
-        url,
-        credentialsManager,
-      );
-      const info = await chunkManager.rpc!.promiseInvoke<SingleMeshInfo>(
-        GET_SINGLE_MESH_INFO_RPC_ID,
-        {
-          chunkManager: chunkManager.addCounterpartRef(),
-          credentialsProvider:
-            getCredentialsProviderCounterpart<SpecialProtocolCredentials>(
-              chunkManager,
-              credentialsProvider,
-            ),
-          parameters: { meshSourceUrl: parsedUrl },
-        },
-      );
-      return { info, url: parsedUrl, credentialsProvider };
+    options,
+    async (progressOptions) => {
+      const info =
+        await sharedKvStoreContext.chunkManager.rpc!.promiseInvoke<SingleMeshInfo>(
+          GET_SINGLE_MESH_INFO_RPC_ID,
+          {
+            sharedKvStoreContext: sharedKvStoreContext.rpcId,
+            parameters: { meshSourceUrl: url },
+          },
+          {
+            signal: progressOptions.signal,
+            progressListener: options.progressListener,
+          },
+        );
+      return info;
     },
   );
 }
 
 export async function getSingleMeshSource(
-  chunkManager: ChunkManager,
-  credentialsManager: CredentialsManager,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ) {
-  const {
-    info,
-    url: parsedUrl,
-    credentialsProvider,
-  } = await getSingleMeshInfo(chunkManager, credentialsManager, url);
-  return chunkManager.getChunkSource(SingleMeshSource, {
-    credentialsProvider,
-    parameters: { meshSourceUrl: parsedUrl, info },
+  const info = await getSingleMeshInfo(sharedKvStoreContext, url, options);
+  return sharedKvStoreContext.chunkManager.getChunkSource(SingleMeshSource, {
+    sharedKvStoreContext,
+    parameters: { meshSourceUrl: url, info },
   });
+}
+
+export class SingleMeshDataSource implements KvStoreBasedDataSourceProvider {
+  constructor(
+    public scheme: string,
+    public description: string,
+  ) {}
+
+  get singleFile() {
+    return true;
+  }
+
+  async get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureEmptyUrlSuffix(options.url);
+    const meshSource = await getSingleMeshSource(
+      options.registry.sharedKvStoreContext,
+      `${options.url.scheme}://${options.kvStoreUrl}`,
+      options,
+    );
+    const modelSpace = makeCoordinateSpace({
+      rank: 3,
+      names: ["x", "y", "z"],
+      units: ["m", "m", "m"],
+      scales: Float64Array.of(1e-9, 1e-9, 1e-9),
+    });
+    const dataSource: DataSource = {
+      canonicalUrl: `${options.kvStoreUrl}|${options.url.scheme}:`,
+      modelTransform: makeIdentityTransform(modelSpace),
+      subsources: [
+        {
+          id: "default",
+          default: true,
+          subsource: { singleMesh: meshSource },
+        },
+      ],
+    };
+    return dataSource;
+  }
 }

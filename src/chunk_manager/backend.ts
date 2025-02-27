@@ -35,19 +35,17 @@ import {
   REQUEST_CHUNK_STATISTICS_RPC_ID,
 } from "#src/chunk_manager/base.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import type { Borrowed, Disposable } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import LinkedList0 from "#src/util/linked_list.0.js";
-import LinkedList1 from "#src/util/linked_list.1.js";
 import type { LinkedListOperations } from "#src/util/linked_list.js";
+import makeLinkedListOperations from "#src/util/linked_list.js";
 import { StringMemoize } from "#src/util/memoize.js";
-import PairingHeap0 from "#src/util/pairing_heap.0.js";
-import PairingHeap1 from "#src/util/pairing_heap.1.js";
 import type {
   ComparisonFunction,
   PairingHeapOperations,
 } from "#src/util/pairing_heap.js";
+import makePairingHeapOperations from "#src/util/pairing_heap.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
@@ -412,12 +410,12 @@ export interface ChunkSourceBase {
    * Note: This method must be defined by subclasses.
    *
    * @param chunk Chunk to download.
-   * @param abortSignal Used to abort download.
+   * @param signal Used to abort download.
    *
    * TODO(jbms): Move this back to the class definition above and declare this abstract once mixins
    * are compatible with abstract classes.
    */
-  download(chunk: Chunk, abortSignal: AbortSignal): Promise<void>;
+  download(chunk: Chunk, signal: AbortSignal): Promise<void>;
 }
 
 export class ChunkSource extends ChunkSourceBase {
@@ -462,7 +460,7 @@ function startChunkDownload(chunk: Chunk) {
 function cancelChunkDownload(chunk: Chunk) {
   const controller = chunk.downloadAbortController!;
   chunk.downloadAbortController = undefined;
-  controller.abort();
+  controller.abort(new DOMException("chunk download cancelled", "AbortError"));
 }
 
 class ChunkPriorityQueue {
@@ -564,12 +562,31 @@ class ChunkPriorityQueue {
   }
 }
 
+const linkedList0 = makeLinkedListOperations({ next: "next0", prev: "prev0" });
+const linkedList1 = makeLinkedListOperations({ next: "next1", prev: "prev1" });
+
 function makeChunkPriorityQueue0(compare: ComparisonFunction<Chunk>) {
-  return new ChunkPriorityQueue(new PairingHeap0(compare), LinkedList0);
+  return new ChunkPriorityQueue(
+    makePairingHeapOperations({
+      compare,
+      child: "child0",
+      next: "next0",
+      prev: "prev0",
+    }),
+    linkedList0,
+  );
 }
 
 function makeChunkPriorityQueue1(compare: ComparisonFunction<Chunk>) {
-  return new ChunkPriorityQueue(new PairingHeap1(compare), LinkedList1);
+  return new ChunkPriorityQueue(
+    makePairingHeapOperations({
+      compare,
+      child: "child1",
+      next: "next1",
+      prev: "prev1",
+    }),
+    linkedList1,
+  );
 }
 
 function tryToFreeCapacity(
@@ -890,6 +907,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.scheduleUpdate();
   }
 
+  markRecentlyUsed(chunk: Chunk) {
+    this.removeChunkFromQueues_(chunk);
+    this.addChunkToQueues_(chunk);
+  }
+
   private processGPUPromotions_() {
     const queueManager = this;
     function evictFromGPUMemory(chunk: Chunk) {
@@ -948,7 +970,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   retrieveChunkData(chunk: Chunk) {
-    return this.rpc!.promiseInvoke<TypedArray>("Chunk.retrieve", {
+    return this.rpc!.promiseInvoke<TypedNumberArray>("Chunk.retrieve", {
       key: chunk.key!,
       source: chunk.source!.rpcId,
     });

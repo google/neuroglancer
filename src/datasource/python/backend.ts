@@ -55,7 +55,7 @@ export class PythonVolumeChunkSource extends WithParameters(
   chunkDecoder = chunkDecoders.get(this.parameters["encoding"])!;
   encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
 
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal) {
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
     const { parameters } = this;
     let path = `../../neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
@@ -71,9 +71,9 @@ export class PythonVolumeChunkSource extends WithParameters(
       }
     }
     const response = await fetchOk(new URL(path, parameters.baseUrl).href, {
-      signal: abortSignal,
+      signal: signal,
     });
-    await this.chunkDecoder(chunk, abortSignal, await response.arrayBuffer());
+    await this.chunkDecoder(chunk, signal, await response.arrayBuffer());
   }
 }
 
@@ -105,13 +105,13 @@ export class PythonMeshSource extends WithParameters(
     return Promise.resolve(undefined);
   }
 
-  downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
+  downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
     const { parameters } = this;
     const requestPath = `../../neuroglancer/mesh/${parameters.key}/${
       chunk.manifestChunk!.objectId
     }`;
     return fetchOk(new URL(requestPath, parameters.baseUrl).href, {
-      signal: abortSignal,
+      signal: signal,
     })
       .then((response) => response.arrayBuffer())
       .then((response) => decodeFragmentChunk(chunk, response));
@@ -123,11 +123,11 @@ export class PythonSkeletonSource extends WithParameters(
   SkeletonSource,
   SkeletonSourceParameters,
 ) {
-  download(chunk: SkeletonChunk, abortSignal: AbortSignal) {
+  download(chunk: SkeletonChunk, signal: AbortSignal) {
     const { parameters } = this;
     const requestPath = `../../neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
     return fetchOk(new URL(requestPath, parameters.baseUrl).href, {
-      signal: abortSignal,
+      signal: signal,
     })
       .then((response) => response.arrayBuffer())
       .then((response) =>

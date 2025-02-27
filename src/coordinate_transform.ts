@@ -16,7 +16,7 @@
 
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import {
   arraysEqual,
   arraysEqualWithPredicate,
@@ -1710,9 +1710,9 @@ export class CoordinateSpaceCombiner {
   }
 }
 
-export function homogeneousTransformSubmatrix<T extends TypedArray>(
+export function homogeneousTransformSubmatrix<T extends TypedNumberArray>(
   arrayConstructor: { new (n: number): T },
-  oldTransform: TypedArray,
+  oldTransform: TypedNumberArray,
   oldRank: number,
   oldRows: readonly number[],
   oldCols: readonly number[],

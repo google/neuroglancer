@@ -15,15 +15,11 @@
  */
 
 import { debounce } from "lodash-es";
-import type { CredentialsManager } from "#src/credentials_provider/index.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { urlSafeParse, verifyObject } from "#src/util/json.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { getCachedJson } from "#src/util/trackable.js";
 
@@ -70,7 +66,7 @@ export class UrlHashBinding extends RefCounted {
 
   constructor(
     public root: Trackable,
-    public credentialsManager: CredentialsManager,
+    public sharedKvStoreContext: SharedKvStoreContext,
     options: UrlHashBindingOptions = {},
   ) {
     super();
@@ -121,13 +117,10 @@ export class UrlHashBinding extends RefCounted {
       // Handle remote JSON state
       if (s.match(/^#!([a-z][a-z\d+-.]*):\/\//)) {
         const url = s.substring(2);
-        const { url: parsedUrl, credentialsProvider } = parseSpecialUrl(
-          url,
-          this.credentialsManager,
-        );
         StatusMessage.forPromise(
-          fetchSpecialOk(credentialsProvider, parsedUrl, {})
-            .then((response) => response.json())
+          this.sharedKvStoreContext.kvStoreContext
+            .read(url, { throwIfMissing: true })
+            .then((response) => response.response.json())
             .then((json) => {
               verifyObject(json);
               this.root.reset();

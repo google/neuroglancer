@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import {
   Chunk,
   ChunkSource,
   withChunkManager,
   WithParameters,
 } from "#src/chunk_manager/backend.js";
-import { ChunkPriorityTier } from "#src/chunk_manager/base.js";
-import type { PriorityGetter } from "#src/chunk_manager/generic_file_source.js";
-import type { SharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
+import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { computeVertexNormals } from "#src/mesh/backend.js";
 import type {
   SingleMeshData,
@@ -38,12 +35,9 @@ import {
   SINGLE_MESH_LAYER_RPC_ID,
   SingleMeshSourceParametersWithInfo,
 } from "#src/single_mesh/base.js";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { stableStringify } from "#src/util/json.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import {
   getBasePriority,
   getPriorityTier,
@@ -112,11 +106,9 @@ export interface SingleMeshVertexAttributes {
 interface SingleMeshFactory {
   description?: string;
   getMesh: (
-    chunkManager: ChunkManager,
-    credentialsProvider: SpecialProtocolCredentialsProvider,
+    sharedKvStoreContext: SharedKvStoreContextCounterpart,
     url: string,
-    getPriority: PriorityGetter,
-    abortSignal: AbortSignal,
+    options: Partial<ProgressOptions>,
   ) => Promise<SingleMesh>;
 }
 
@@ -149,23 +141,15 @@ function getDataSource<T>(
 }
 
 export function getMesh(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContextCounterpart,
   url: string,
-  getPriority: PriorityGetter,
-  abortSignal: AbortSignal,
+  options: Partial<ProgressOptions>,
 ) {
   const [factory, path] = getDataSource(singleMeshFactories, url);
-  return factory.getMesh(
-    chunkManager,
-    credentialsProvider,
-    path,
-    getPriority,
-    abortSignal,
-  );
+  return factory.getMesh(sharedKvStoreContext, path, options);
 }
 
-export function getMinMax(array: TypedArray): [number, number] {
+export function getMinMax(array: TypedNumberArray): [number, number] {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   for (const value of array) {
@@ -176,26 +160,16 @@ export function getMinMax(array: TypedArray): [number, number] {
 }
 
 export function getCombinedMesh(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContextCounterpart,
   parameters: SingleMeshSourceParameters,
-  getPriority: PriorityGetter,
-  abortSignal: AbortSignal,
+  options: Partial<ProgressOptions>,
 ) {
-  return getMesh(
-    chunkManager,
-    credentialsProvider,
-    parameters.meshSourceUrl,
-    getPriority,
-    abortSignal,
-  );
+  return getMesh(sharedKvStoreContext, parameters.meshSourceUrl, options);
 }
 
 @registerSharedObject()
 export class SingleMeshSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    ChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(ChunkSource),
   SingleMeshSourceParametersWithInfo,
 ) {
   getChunk() {
@@ -209,31 +183,24 @@ export class SingleMeshSource extends WithParameters(
     return chunk;
   }
 
-  download(chunk: SingleMeshChunk, abortSignal: AbortSignal) {
-    const getPriority = () => ({
-      priorityTier: chunk.priorityTier,
-      priority: chunk.priority,
-    });
-    return getCombinedMesh(
-      this.chunkManager,
-      this.credentialsProvider,
+  async download(chunk: SingleMeshChunk, signal: AbortSignal) {
+    const data = await getCombinedMesh(
+      this.sharedKvStoreContext,
       this.parameters,
-      getPriority,
-      abortSignal,
-    ).then((data) => {
-      if (
-        stableStringify(data.info) !== stableStringify(this.parameters.info)
-      ) {
-        throw new Error("Mesh info has changed.");
-      }
-      if (data.vertexNormals === undefined) {
-        data.vertexNormals = computeVertexNormals(
-          data.vertexPositions,
-          data.indices,
-        );
-      }
-      chunk.data = data;
-    });
+      {
+        signal,
+      },
+    );
+    if (stableStringify(data.info) !== stableStringify(this.parameters.info)) {
+      throw new Error("Mesh info has changed.");
+    }
+    if (data.vertexNormals === undefined) {
+      data.vertexNormals = computeVertexNormals(
+        data.vertexPositions,
+        data.indices,
+      );
+    }
+    chunk.data = data;
   }
 }
 
@@ -273,33 +240,18 @@ export class SingleMeshLayer extends SingleMeshLayerBase {
   }
 }
 
-const INFO_PRIORITY = 1000;
-
 registerPromiseRPC(
   GET_SINGLE_MESH_INFO_RPC_ID,
-  async function (x, abortSignal): RPCPromise<SingleMeshInfo> {
-    const chunkManager = this.getRef<ChunkManager>(x.chunkManager);
-    const credentialsProvider = this.getOptionalRef<
-      SharedCredentialsProviderCounterpart<
-        Exclude<SpecialProtocolCredentials, undefined>
-      >
-    >(x.credentialsProvider);
-    try {
-      const parameters = <SingleMeshSourceParameters>x.parameters;
-      const mesh = await getCombinedMesh(
-        chunkManager,
-        credentialsProvider,
-        parameters,
-        () => ({
-          priorityTier: ChunkPriorityTier.VISIBLE,
-          priority: INFO_PRIORITY,
-        }),
-        abortSignal,
-      );
-      return { value: mesh.info };
-    } finally {
-      chunkManager.dispose();
-      credentialsProvider?.dispose();
-    }
+  async function (x, progressOptions): RPCPromise<SingleMeshInfo> {
+    const sharedKvStoreContext = this.get(
+      x.sharedKvStoreContext,
+    ) as SharedKvStoreContextCounterpart;
+    const parameters = <SingleMeshSourceParameters>x.parameters;
+    const mesh = await getCombinedMesh(
+      sharedKvStoreContext,
+      parameters,
+      progressOptions,
+    );
+    return { value: mesh.info };
   },
 );

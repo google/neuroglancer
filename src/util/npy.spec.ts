@@ -26,7 +26,7 @@ interface ExampleSpec {
   data: number[];
 }
 
-async function checkNpy(spec: ExampleSpec, encoded: Uint8Array) {
+async function checkNpy(spec: ExampleSpec, encoded: Uint8Array<ArrayBuffer>) {
   const decoded = parseNpy(encoded);
   expect(decoded.shape).toEqual(spec.shape);
   expect(DataType[decoded.dataType].toLowerCase()).toBe(spec.dataType);
@@ -48,6 +48,8 @@ describe("parseNpy", () => {
           "..",
           "..",
           "testdata",
+          "codec",
+          "npy",
         );
         const example = JSON.parse(
           await fs.readFile(`${testDataDir}/npy_test.${json}.json`, {

@@ -420,7 +420,7 @@ export class VolumeRequestHandler extends RefCounted {
 
   private maybeHandleRequest(
     request: VolumeRequest,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): boolean {
     const layer = this.viewer.layerManager.getLayerByName(request.layer);
     if (layer === undefined) {
@@ -586,7 +586,7 @@ export class VolumeRequestHandler extends RefCounted {
               order: info.order,
             };
           },
-          abortSignal,
+          { signal },
         );
       } catch (e) {
         response = { error: e.message };

@@ -48,8 +48,9 @@
   font-size: medium;
 }
 
-.neuroglancer-multiline-autocomplete-dropdown {
-  color: #fff;
+.neuroglancer-multiline-autocomplete-dropdown,
+.neuroglancer-multiline-autocomplete-error,
+.neuroglancer-multiline-autocomplete-progress {
   background-color: #181818;
   position: fixed;
   display: block;
@@ -65,6 +66,19 @@
   border-color: #aaa;
   overflow-y: scroll;
   word-wrap: break-word;
+}
+
+.neuroglancer-multiline-autocomplete-dropdown {
+  color: #fff;
+}
+
+.neuroglancer-multiline-autocomplete-error {
+  color: red;
+}
+
+.neuroglancer-multiline-autocomplete-progress {
+  font-style: italic;
+  color: #ccc;
 }
 
 .neuroglancer-multiline-autocomplete-completion:nth-child(even):not(
@@ -87,4 +101,9 @@
 .neuroglancer-multiline-autocomplete-completion-description {
   font-style: italic;
   color: #f9f;
+}
+
+.neuroglancer-multiline-autocomplete-linebreak::after {
+  content: "\a";
+  white-space: pre;
 }

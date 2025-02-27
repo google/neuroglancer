@@ -14,7 +14,17 @@
  * limitations under the License.
  */
 
-import { registerProvider } from "#src/datasource/default_provider.js";
-import { PrecomputedDataSource } from "#src/datasource/precomputed/frontend.js";
+import {
+  dataSourceAutoDetectRegistry,
+  registerKvStoreBasedDataProvider,
+  registerProvider,
+} from "#src/datasource/default_provider.js";
+import {
+  PrecomputedDataSource,
+  PrecomputedLegacyUrlDataSource,
+  registerAutoDetect,
+} from "#src/datasource/precomputed/frontend.js";
 
-registerProvider("precomputed", () => new PrecomputedDataSource());
+registerKvStoreBasedDataProvider(new PrecomputedDataSource());
+registerProvider(new PrecomputedLegacyUrlDataSource());
+registerAutoDetect(dataSourceAutoDetectRegistry);

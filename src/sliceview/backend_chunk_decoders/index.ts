@@ -22,6 +22,6 @@
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 export type ChunkDecoder = (
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   response: ArrayBuffer,
 ) => Promise<void>;

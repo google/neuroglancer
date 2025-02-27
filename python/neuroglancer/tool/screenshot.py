@@ -79,8 +79,8 @@ import itertools
 import os
 import threading
 import time
-from collections.abc import Iterator
-from typing import Callable, NamedTuple, Optional
+from collections.abc import Callable, Iterator
+from typing import NamedTuple
 
 import numpy as np
 import PIL
@@ -293,8 +293,8 @@ def capture_screenshots_in_parallel(
     request_iter: Iterator[CaptureScreenshotRequest],
     refresh_browser_timeout: float,
     num_to_prefetch: int,
-    total_requests: Optional[int] = None,
-    buffer_size: Optional[int] = None,
+    total_requests: int | None = None,
+    buffer_size: int | None = None,
 ):
     if buffer_size is None:
         if total_requests is None:
@@ -597,6 +597,11 @@ def define_state_modification_args(ap: argparse.ArgumentParser):
         help="Multiply projection view scale by specified factor.",
     )
     ap.add_argument(
+        "--resolution-scale-factor",
+        type=float,
+        help="Divide cross section view scale by specified factor. E.g. a 2000x2000 output with a resolution scale factor of 2 will have the same FOV as a 1000x1000 output.",
+    )
+    ap.add_argument(
         "--system-memory-limit",
         type=int,
         default=3 * 1024 * 1024 * 1024,
@@ -635,6 +640,8 @@ def apply_state_modifications(
         state.show_default_annotations = args.show_default_annotations
     if args.projection_scale_multiplier is not None:
         state.projection_scale *= args.projection_scale_multiplier
+    if args.resolution_scale_factor is not None:
+        state.cross_section_scale /= args.resolution_scale_factor
     if args.cross_section_background_color is not None:
         state.cross_section_background_color = args.cross_section_background_color
 

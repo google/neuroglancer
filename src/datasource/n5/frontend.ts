@@ -21,10 +21,11 @@
  *
  * https://github.com/saalfeldlab/n5-viewer
  * https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
+ *
+ * https://github.com/janelia-cellmap/schemas/blob/master/multiscale.md
  */
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type {
   CoordinateArray,
@@ -34,17 +35,28 @@ import {
   makeCoordinateSpace,
   makeIdentityTransform,
 } from "#src/coordinate_transform.js";
-import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import type {
-  CompleteUrlOptions,
   DataSource,
-  GetDataSourceOptions,
+  GetKvStoreBasedDataSourceOptions,
+  KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
+import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import {
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
 } from "#src/datasource/n5/base.js";
+import type { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
+import { simpleFilePresenceAutoDetectDirectorySpec } from "#src/kvstore/auto_detect.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { CompletionResult, KvStoreContext } from "#src/kvstore/context.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import {
+  ensureNoQueryOrFragmentParameters,
+  ensurePathIsDirectory,
+  joinPath,
+  kvstoreEnsureDirectoryPipelineUrl,
+  pipelineUrlJoin,
+} from "#src/kvstore/url.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
@@ -57,9 +69,6 @@ import {
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { transposeNestedArrays } from "#src/util/array.js";
-import type { Borrowed } from "#src/util/disposable.js";
-import { completeHttpPath } from "#src/util/http_path_completion.js";
-import { isNotFoundError, parseUrl } from "#src/util/http_request.js";
 import {
   expectArray,
   parseArray,
@@ -75,19 +84,12 @@ import {
   verifyStringArray,
 } from "#src/util/json.js";
 import { createHomogeneousScaleMatrix } from "#src/util/matrix.js";
-import { getObjectId } from "#src/util/object_id.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 import { scaleByExp10, unitFromJson } from "#src/util/si_units.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
 
 class N5VolumeChunkSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),
+  WithSharedKvStoreContext(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {}
 
@@ -103,12 +105,11 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   }
 
   constructor(
-    chunkManager: Borrowed<ChunkManager>,
-    public credentialsProvider: SpecialProtocolCredentialsProvider,
+    public sharedKvStoreContext: SharedKvStoreContext,
     public multiscaleMetadata: MultiscaleMetadata,
     public scales: (ScaleMetadata | undefined)[],
   ) {
-    super(chunkManager);
+    super(sharedKvStoreContext.chunkManager);
     let dataType: DataType | undefined;
     let baseScaleIndex: number | undefined;
     scales.forEach((scale, i) => {
@@ -128,7 +129,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
     if (dataType === undefined) {
       throw new Error("At least one scale must be specified.");
     }
-    const baseDownsamplingInfo = multiscaleMetadata.scales[baseScaleIndex!]!;
+    const baseDownsamplingInfo = scales[baseScaleIndex!]!;
     const baseScale = scales[baseScaleIndex!]!;
     this.dataType = dataType;
     this.volumeType = VolumeType.IMAGE;
@@ -143,7 +144,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
         {
           transform: createHomogeneousScaleMatrix(
             Float64Array,
-            baseDownsamplingInfo.downsamplingFactor,
+            baseDownsamplingInfo.downsamplingFactors,
             /*square=*/ false,
           ),
           box: {
@@ -158,14 +159,12 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     const { scales, rank } = this;
-    const scalesDownsamplingInfo = this.multiscaleMetadata.scales;
     return transposeNestedArrays(
       (scales.filter((scale) => scale !== undefined) as ScaleMetadata[]).map(
-        (scale, i) => {
-          const scaleDownsamplingInfo = scalesDownsamplingInfo[i];
+        (scale) => {
           const transform = createHomogeneousScaleMatrix(
             Float32Array,
-            scaleDownsamplingInfo.downsamplingFactor,
+            scale.downsamplingFactors,
           );
           return makeDefaultVolumeChunkSpecifications({
             rank,
@@ -180,10 +179,10 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
               chunkSource: this.chunkManager.getChunkSource(
                 N5VolumeChunkSource,
                 {
-                  credentialsProvider: this.credentialsProvider,
+                  sharedKvStoreContext: this.sharedKvStoreContext,
                   spec,
                   parameters: {
-                    url: scaleDownsamplingInfo.url,
+                    url: scale.url,
                     encoding: scale.encoding,
                   },
                 },
@@ -201,146 +200,209 @@ interface MultiscaleMetadata {
   url: string;
   attributes: any;
   modelSpace: CoordinateSpace;
-  scales: { readonly url: string; readonly downsamplingFactor: Float64Array }[];
+  scales: (
+    | {
+        readonly url: string;
+        readonly downsamplingFactors?: Float64Array<ArrayBuffer>;
+      }
+    | undefined
+  )[];
 }
-class ScaleMetadata {
+interface ScaleMetadata {
+  url: string;
   dataType: DataType;
   encoding: VolumeChunkEncoding;
-  size: Float32Array;
-  chunkSize: Uint32Array;
+  size: Float32Array<ArrayBuffer>;
+  chunkSize: Uint32Array<ArrayBuffer>;
+  downsamplingFactors: Float64Array<ArrayBuffer>;
+}
 
-  constructor(obj: any) {
-    verifyObject(obj);
-    this.dataType = verifyObjectProperty(obj, "dataType", (x) =>
-      verifyEnumString(x, DataType),
-    );
-    this.size = Float32Array.from(
-      verifyObjectProperty(obj, "dimensions", (x) =>
-        parseArray(x, verifyPositiveInt),
-      ),
-    );
-    this.chunkSize = verifyObjectProperty(obj, "blockSize", (x) =>
-      parseFixedLengthArray(
-        new Uint32Array(this.size.length),
-        x,
-        verifyPositiveInt,
-      ),
-    );
+function parseScaleMetadata(
+  url: string,
+  obj: any,
+  scaleIndex: number,
+  downsamplingFactors?: Float64Array<ArrayBuffer>,
+): ScaleMetadata {
+  verifyObject(obj);
+  const dataType = verifyObjectProperty(obj, "dataType", (x) =>
+    verifyEnumString(x, DataType),
+  );
+  const size = Float32Array.from(
+    verifyObjectProperty(obj, "dimensions", (x) =>
+      parseArray(x, verifyPositiveInt),
+    ),
+  );
+  const chunkSize = verifyObjectProperty(obj, "blockSize", (x) =>
+    parseFixedLengthArray(new Uint32Array(size.length), x, verifyPositiveInt),
+  );
 
-    let encoding: VolumeChunkEncoding | undefined;
-    verifyOptionalObjectProperty(obj, "compression", (compression) => {
-      encoding = verifyObjectProperty(compression, "type", (x) =>
-        verifyEnumString(x, VolumeChunkEncoding),
-      );
-      if (
-        encoding === VolumeChunkEncoding.GZIP &&
-        verifyOptionalObjectProperty(
-          compression,
-          "useZlib",
-          verifyBoolean,
-          false,
-        ) === true
-      ) {
-        encoding = VolumeChunkEncoding.ZLIB;
-      }
-    });
-    if (encoding === undefined) {
-      encoding = verifyObjectProperty(obj, "compressionType", (x) =>
-        verifyEnumString(x, VolumeChunkEncoding),
-      );
+  let encoding: VolumeChunkEncoding | undefined;
+  verifyOptionalObjectProperty(obj, "compression", (compression) => {
+    encoding = verifyObjectProperty(compression, "type", (x) =>
+      verifyEnumString(x, VolumeChunkEncoding),
+    );
+    if (
+      encoding === VolumeChunkEncoding.GZIP &&
+      verifyOptionalObjectProperty(
+        compression,
+        "useZlib",
+        verifyBoolean,
+        false,
+      ) === true
+    ) {
+      encoding = VolumeChunkEncoding.ZLIB;
     }
-    this.encoding = encoding;
+  });
+  if (encoding === undefined) {
+    encoding = verifyObjectProperty(obj, "compressionType", (x) =>
+      verifyEnumString(x, VolumeChunkEncoding),
+    );
   }
+
+  if (downsamplingFactors === undefined) {
+    downsamplingFactors = verifyOptionalObjectProperty(
+      obj,
+      "downsamplingFactors",
+      (x) =>
+        parseFixedLengthArray(
+          new Float64Array(size.length),
+          x,
+          verifyFinitePositiveFloat,
+        ),
+    );
+    if (downsamplingFactors === undefined) {
+      if (scaleIndex === 0) {
+        downsamplingFactors = new Float64Array(size.length);
+        downsamplingFactors.fill(1);
+      } else {
+        throw new Error("Expected downsamplingFactors attribute");
+      }
+    }
+  }
+
+  return { url, dataType, encoding, size, chunkSize, downsamplingFactors };
 }
 
 function getAllScales(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   multiscaleMetadata: MultiscaleMetadata,
+  options: Partial<ProgressOptions>,
 ): Promise<(ScaleMetadata | undefined)[]> {
   return Promise.all(
-    multiscaleMetadata.scales.map(async (scale) => {
-      const attributes = await getAttributes(
-        chunkManager,
-        credentialsProvider,
+    multiscaleMetadata.scales.map(async (scale, scaleIndex) => {
+      if (scale === undefined) return undefined;
+      const { attributes } = (await getAttributes(
+        sharedKvStoreContext,
         scale.url,
         true,
-      );
+        options,
+      ))!;
       if (attributes === undefined) return undefined;
-      return new ScaleMetadata(attributes);
+      try {
+        return parseScaleMetadata(
+          scale.url,
+          attributes,
+          scaleIndex,
+          scale.downsamplingFactors,
+        );
+      } catch (e) {
+        throw new Error(`Error parsing array metadata at ${scale.url}`, {
+          cause: e,
+        });
+      }
     }),
   );
 }
 
-function getAttributesJsonUrls(url: string): string[] {
-  let { protocol, host, path } = parseUrl(url);
-  if (path.endsWith("/")) {
-    path = path.substring(0, path.length - 1);
-  }
-  const urls: string[] = [];
+function getAttributesJsonUrls(
+  kvStoreContext: KvStoreContext,
+  url: string,
+): { attributesJsonUrl: string; directoryUrl: string; relativePath: string }[] {
+  const kvStore = kvStoreContext.getKvStore(url);
+  const urls: {
+    attributesJsonUrl: string;
+    directoryUrl: string;
+    relativePath: string;
+  }[] = [];
+  let path = kvStore.path.substring(0, kvStore.path.length - 1);
   while (true) {
-    urls.push(`${protocol}://${host}${path}/attributes.json`);
+    const directoryPath = ensurePathIsDirectory(path);
+    urls.push({
+      attributesJsonUrl: kvStore.store.getUrl(
+        joinPath(path, "attributes.json"),
+      ),
+      directoryUrl: kvStore.store.getUrl(directoryPath),
+      relativePath: kvStore.path.substring(directoryPath.length),
+    });
+    if (path === "") break;
     const index = path.lastIndexOf("/");
-    if (index === -1) break;
     path = path.substring(0, index);
   }
   return urls;
 }
 
 function getIndividualAttributesJson(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   required: boolean,
+  options: Partial<ProgressOptions>,
 ): Promise<any> {
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     {
       type: "n5:attributes.json",
       url,
-      credentialsProvider: getObjectId(credentialsProvider),
     },
-    () =>
-      fetchSpecialOk(credentialsProvider, url, {})
-        .then((response) => response.json())
-        .then((j) => {
-          try {
-            return verifyObject(j);
-          } catch (e) {
-            throw new Error(
-              `Error reading attributes from ${url}: ${e.message}`,
-            );
-          }
-        })
-        .catch((e) => {
-          if (isNotFoundError(e)) {
-            if (required) return undefined;
-            return {};
-          }
-          throw e;
-        }),
+    options,
+    async (progressOptions) => {
+      using _span = new ProgressSpan(progressOptions.progressListener, {
+        message: `Reading n5 metadata from ${url}`,
+      });
+      const response = await sharedKvStoreContext.kvStoreContext.read(url, {
+        ...progressOptions,
+        throwIfMissing: required,
+      });
+      if (response === undefined) return undefined;
+      const json = await response.response.json();
+      try {
+        return verifyObject(json);
+      } catch (e) {
+        throw new Error(`Error reading attributes from ${url}`, { cause: e });
+      }
+    },
   );
 }
 
 async function getAttributes(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   required: boolean,
-): Promise<unknown> {
-  const attributesJsonUrls = getAttributesJsonUrls(url);
+  options: Partial<ProgressOptions>,
+): Promise<
+  { attributes: unknown; rootUrl: string; pathFromRoot: string } | undefined
+> {
+  const attributesJsonUrls = getAttributesJsonUrls(
+    sharedKvStoreContext.kvStoreContext,
+    url,
+  );
   const metadata = await Promise.all(
     attributesJsonUrls.map((u, i) =>
       getIndividualAttributesJson(
-        chunkManager,
-        credentialsProvider,
-        u,
+        sharedKvStoreContext,
+        u.attributesJsonUrl,
         required && i === attributesJsonUrls.length - 1,
+        options,
       ),
     ),
   );
-  if (metadata.indexOf(undefined) !== -1) return undefined;
+  const rootIndex = metadata.findLastIndex((x) => x !== undefined);
+  if (rootIndex === -1) return undefined;
   metadata.reverse();
-  return Object.assign({}, ...metadata);
+  const rootInfo = attributesJsonUrls[rootIndex];
+  return {
+    attributes: Object.assign({}, ...metadata.filter((x) => x !== undefined)),
+    rootUrl: rootInfo.directoryUrl,
+    pathFromRoot: rootInfo.relativePath,
+  };
 }
 
 function verifyRank(existing: number, n: number) {
@@ -386,10 +448,12 @@ function getDefaultAxes(rank: number) {
   return axes;
 }
 
-function getMultiscaleMetadata(
+async function getMultiscaleMetadata(
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   attributes: any,
-): MultiscaleMetadata {
+  progressOptions: ProgressOptions,
+): Promise<MultiscaleMetadata> {
   verifyObject(attributes);
   let rank = -1;
 
@@ -409,8 +473,8 @@ function getMultiscaleMetadata(
     return units;
   });
   let defaultUnit = { unit: "m", exponent: -9 };
-  let singleDownsamplingFactors: Float64Array | undefined;
-  let allDownsamplingFactors: Float64Array[] | undefined;
+  let singleDownsamplingFactors: Float64Array<ArrayBuffer> | undefined;
+  let allDownsamplingFactors: Float64Array<ArrayBuffer>[] | undefined;
   verifyOptionalObjectProperty(attributes, "downsamplingFactors", (dObj) => {
     const { single, all, rank: curRank } = parseDownsamplingFactors(dObj);
     rank = verifyRank(rank, curRank);
@@ -499,17 +563,33 @@ function getMultiscaleMetadata(
   });
   if (dimensions === undefined) {
     if (allDownsamplingFactors === undefined) {
-      throw new Error(
-        "Not valid single-resolution or multi-resolution dataset",
+      const scaleDirectories = await findScaleDirectories(
+        sharedKvStoreContext,
+        url,
+        progressOptions,
       );
+      if (scaleDirectories.length === 0) {
+        throw new Error(
+          "Not valid single-resolution or multi-resolution dataset",
+        );
+      }
+      return {
+        modelSpace,
+        url,
+        attributes,
+        scales: scaleDirectories.map((name) => ({
+          url: `${url}${name}/`,
+          downsamplingFactors: undefined,
+        })),
+      };
     }
     return {
       modelSpace,
       url,
       attributes,
       scales: allDownsamplingFactors.map((f, i) => ({
-        url: `${url}/s${i}`,
-        downsamplingFactor: f,
+        url: `${url}s${i}/`,
+        downsamplingFactors: f,
       })),
     };
   }
@@ -521,45 +601,80 @@ function getMultiscaleMetadata(
     modelSpace,
     url,
     attributes,
-    scales: [{ url, downsamplingFactor: singleDownsamplingFactors }],
+    scales: [{ url, downsamplingFactors: singleDownsamplingFactors }],
   };
 }
 
-export class N5DataSource extends DataSourceProvider {
+async function findScaleDirectories(
+  sharedKvStoreContext: SharedKvStoreContext,
+  url: string,
+  progressOptions: ProgressOptions,
+): Promise<string[]> {
+  const result = await sharedKvStoreContext.kvStoreContext.list(url, {
+    responseKeys: "suffix",
+    ...progressOptions,
+  });
+  const scaleDirectories: string[] = [];
+  for (const directory of result.directories) {
+    if (directory.match(/^s(?:0|[1-9][0-9]*)$/)) {
+      const scale = Number(directory.substring(1));
+      scaleDirectories[scale] = directory;
+    }
+  }
+  return scaleDirectories;
+}
+
+export class N5DataSource implements KvStoreBasedDataSourceProvider {
+  get scheme() {
+    return "n5";
+  }
+  get expectsDirectory() {
+    return true;
+  }
   get description() {
     return "N5 data source";
   }
-  get(options: GetDataSourceOptions): Promise<DataSource> {
-    let { providerUrl } = options;
-    if (providerUrl.endsWith("/")) {
-      providerUrl = providerUrl.substring(0, providerUrl.length - 1);
-    }
-    return options.chunkManager.memoize.getUncounted(
-      { type: "n5:MultiscaleVolumeChunkSource", providerUrl },
-      async () => {
-        const { url, credentialsProvider } = parseSpecialUrl(
-          providerUrl,
-          options.credentialsManager,
-        );
-        const attributes = await getAttributes(
-          options.chunkManager,
-          credentialsProvider,
+  get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+    ensureNoQueryOrFragmentParameters(options.url);
+    const url = kvstoreEnsureDirectoryPipelineUrl(
+      pipelineUrlJoin(
+        kvstoreEnsureDirectoryPipelineUrl(options.kvStoreUrl),
+        options.url.suffix ?? "",
+      ),
+    );
+    const { sharedKvStoreContext } = options.registry;
+    return options.registry.chunkManager.memoize.getAsync(
+      { type: "n5:MultiscaleVolumeChunkSource", url },
+      options,
+      async (progressOptions) => {
+        const attributeResult = await getAttributes(
+          sharedKvStoreContext,
           url,
           false,
+          progressOptions,
         );
-        const multiscaleMetadata = getMultiscaleMetadata(url, attributes);
+        if (attributeResult === undefined) {
+          throw new Error("N5 metadata not found");
+        }
+        const { attributes, rootUrl, pathFromRoot } = attributeResult;
+        const multiscaleMetadata = await getMultiscaleMetadata(
+          sharedKvStoreContext,
+          url,
+          attributes,
+          progressOptions,
+        );
         const scales = await getAllScales(
-          options.chunkManager,
-          credentialsProvider,
+          sharedKvStoreContext,
           multiscaleMetadata,
+          progressOptions,
         );
         const volume = new MultiscaleVolumeChunkSource(
-          options.chunkManager,
-          credentialsProvider,
+          sharedKvStoreContext,
           multiscaleMetadata,
           scales,
         );
         return {
+          canonicalUrl: `${rootUrl}|${options.url.scheme}:${pathFromRoot}`,
           modelTransform: makeIdentityTransform(volume.modelSpace),
           subsources: [
             {
@@ -584,11 +699,25 @@ export class N5DataSource extends DataSourceProvider {
     );
   }
 
-  completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(
-      options.credentialsManager,
-      options.providerUrl,
-      options.abortSignal,
-    );
+  async completeUrl(
+    options: GetKvStoreBasedDataSourceOptions,
+  ): Promise<CompletionResult> {
+    ensureNoQueryOrFragmentParameters(options.url);
+    return getKvStorePathCompletions(options.registry.sharedKvStoreContext, {
+      baseUrl: kvstoreEnsureDirectoryPipelineUrl(options.kvStoreUrl),
+      path: options.url.suffix ?? "",
+      directoryOnly: true,
+      signal: options.signal,
+      progressListener: options.progressListener,
+    });
   }
+}
+
+export function registerAutoDetect(registry: AutoDetectRegistry) {
+  registry.registerDirectoryFormat(
+    simpleFilePresenceAutoDetectDirectorySpec(new Set(["attributes.json"]), {
+      suffix: "n5:",
+      description: "N5",
+    }),
+  );
 }

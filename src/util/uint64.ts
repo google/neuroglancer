@@ -97,22 +97,12 @@ export class Uint64 {
   }
 
   toString(base = 10): string {
-    let vLow = this.low;
-    let vHigh = this.high;
+    const vLow = this.low;
+    const vHigh = this.high;
     if (vHigh === 0) {
       return vLow.toString(base);
     }
-    vHigh *= trueBase;
-    const { lowBase, lowDigits } = stringConversionData[base];
-    const vHighExtra = vHigh % lowBase;
-    vHigh = Number(BigInt(vHigh) / BigInt(lowBase));
-    vLow += vHighExtra;
-    vHigh += Math.floor(vLow / lowBase);
-    vLow = vLow % lowBase;
-    const vLowStr = vLow.toString(base);
-    return (
-      vHigh.toString(base) + "0".repeat(lowDigits - vLowStr.length) + vLowStr
-    );
+    return this.toBigInt().toString(base);
   }
 
   /**
@@ -338,6 +328,10 @@ export class Uint64 {
     return this.low + this.high * 0x100000000;
   }
 
+  toBigInt() {
+    return BigInt(this.low) | (BigInt(this.high) << 32n);
+  }
+
   setFromNumber(value: number) {
     value = Math.round(value);
     if (value < 0) {
@@ -350,9 +344,18 @@ export class Uint64 {
     }
   }
 
+  setFromBigInt(value: bigint) {
+    this.low = Number(value & 0xffffffffn);
+    this.high = Number(value >> 32n);
+  }
+
   static fromNumber(value: number) {
     const x = new Uint64();
     x.setFromNumber(value);
     return x;
+  }
+
+  static fromBigInt(value: bigint) {
+    return new Uint64(Number(value & 0xffffffffn), Number(value >> 32n));
   }
 }

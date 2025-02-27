@@ -17,7 +17,4 @@
 import { registerProvider } from "#src/datasource/default_provider.js";
 import { DVIDDataSource } from "#src/datasource/dvid/frontend.js";
 
-registerProvider(
-  "dvid",
-  (options) => new DVIDDataSource(options.credentialsManager),
-);
+registerProvider(new DVIDDataSource());

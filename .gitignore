@@ -21,3 +21,8 @@ tsconfig.tsbuildinfo
 .eslintcache
 /lib
 /.firebase
+/test-results
+/playwright-report
+-/docs/python/api/index.rst
+/docs/python/api/*.rst
+/.vite

@@ -95,6 +95,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  hideCrossSectionBackground3D: TrackableBoolean;
   rpc: RPC;
 }
 
@@ -270,6 +271,7 @@ class PerspectiveViewState extends PerspectiveViewStateBase {
 
 export class PerspectivePanel extends RenderedDataPanel {
   declare viewer: PerspectiveViewerState;
+  sliceViewRenderHelper: SliceViewRenderHelper;
 
   projectionParameters: Owned<DerivedProjectionParameters>;
 
@@ -321,10 +323,6 @@ export class PerspectivePanel extends RenderedDataPanel {
   );
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
-  sliceViewRenderHelper = this.registerDisposer(
-    SliceViewRenderHelper.get(this.gl, perspectivePanelEmit),
-  );
-
   protected offscreenFramebuffer = this.registerDisposer(
     new FramebufferConfiguration(this.gl, {
       colorBuffers: [
@@ -406,6 +404,15 @@ export class PerspectivePanel extends RenderedDataPanel {
     viewer: PerspectiveViewerState,
   ) {
     super(context, element, viewer);
+    this.sliceViewRenderHelper = this.registerDisposer(
+      SliceViewRenderHelper.get(
+        this.gl,
+        perspectivePanelEmit,
+        this.viewer,
+        true /*perspectivePanel*/,
+      ),
+    );
+
     this.projectionParameters = this.registerDisposer(
       new DerivedProjectionParameters({
         navigationState: this.navigationState,
@@ -580,6 +587,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(
       viewer.wireFrame.changed.add(() => this.scheduleRedraw()),
     );
+    this.registerDisposer(
+      viewer.hideCrossSectionBackground3D.changed.add(() =>
+        this.scheduleRedraw(),
+      ),
+    );
     this.sliceViews.changed.add(() => this.scheduleRedraw());
   }
 
@@ -605,7 +617,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   ensureBoundsUpdated() {
-    super.ensureBoundsUpdated();
+    super.ensureBoundsUpdated(true /* canScaleForScreenshot */);
     this.projectionParameters.setViewport(this.renderViewport);
   }
 

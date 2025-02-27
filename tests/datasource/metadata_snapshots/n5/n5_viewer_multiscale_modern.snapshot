@@ -1,0 +1,194 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/n5/n5_viewer_multiscale_modern/|n5:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          0,
+          0,
+        ],
+        "upperBounds": Float64Array [
+          10,
+          20,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+      ],
+      "names": [
+        "x",
+        "y",
+      ],
+      "scales": Float64Array [
+        1e-8,
+        20,
+      ],
+      "units": [
+        "m",
+        "s",
+      ],
+      "valid": true,
+    },
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "UINT16",
+          "rank": 2,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 3,
+                    "url": "http://localhost:*/datasource/n5/n5_viewer_multiscale_modern/s0/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      10,
+                      20,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      10,
+                      20,
+                    ],
+                  },
+                },
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 3,
+                    "url": "http://localhost:*/datasource/n5/n5_viewer_multiscale_modern/s1/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      5,
+                      10,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      5,
+                      10,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    2,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    2,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+              },
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "encoding": 3,
+                    "url": "http://localhost:*/datasource/n5/n5_viewer_multiscale_modern/s2/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      3,
+                      5,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      0,
+                      0,
+                    ],
+                    "upperVoxelBound": [
+                      3,
+                      5,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    4,
+                    0,
+                    0,
+                  ],
+                  [
+                    0,
+                    4,
+                    0,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+              },
+            ],
+          ],
+          "volumeType": "IMAGE",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              0,
+              0,
+            ],
+            "pointB": [
+              10,
+              20,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}

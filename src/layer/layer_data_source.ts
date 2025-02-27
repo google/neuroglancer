@@ -28,6 +28,7 @@ import {
 import type {
   DataSource,
   DataSourceSpecification,
+  DataSourceWithRedirectInfo,
   DataSubsourceEntry,
   DataSubsourceSpecification,
 } from "#src/datasource/index.js";
@@ -39,6 +40,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
+import { formatErrorMessage } from "#src/util/error.js";
 import {
   verifyBoolean,
   verifyObject,
@@ -49,6 +51,7 @@ import {
 } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
+import { MultiConsumerProgressListener } from "#src/util/progress_listener.js";
 import { NullarySignal } from "#src/util/signal.js";
 
 export function parseDataSubsourceSpecificationFromJson(
@@ -308,6 +311,7 @@ export type LayerDataSourceLoadState =
 export class LayerDataSource extends RefCounted {
   changed = new NullarySignal();
   messages = new MessageList();
+  progressListener = new MultiConsumerProgressListener();
   private loadState_: LayerDataSourceLoadState = undefined;
   private spec_: DataSourceSpecification;
   private specGeneration = -1;
@@ -396,23 +400,18 @@ export class LayerDataSource extends RefCounted {
     }
     this.refCounted_ = refCounted;
     this.spec_ = spec;
-    const chunkManager = layer.manager.chunkManager;
     const registry = layer.manager.dataSourceProviderRegistry;
     const abortController = new AbortController();
-    this.messages.addMessage({
-      severity: MessageSeverity.info,
-      message: "Loading data source",
-    });
     registry
       .get({
-        chunkManager,
         url: spec.url,
-        abortSignal: abortController.signal,
+        signal: abortController.signal,
         globalCoordinateSpace: layer.manager.root.coordinateSpace,
         transform: spec.transform,
         state: spec.state,
+        progressListener: this.progressListener,
       })
-      .then((source: DataSource) => {
+      .then((source: DataSourceWithRedirectInfo) => {
         if (refCounted.wasDisposed) return;
         this.messages.clearMessages();
         const loaded = refCounted.registerDisposer(
@@ -437,15 +436,24 @@ export class LayerDataSource extends RefCounted {
             }),
           );
         }
+        const { originalCanonicalUrl } = source;
+        const layerType = this.layer.type;
+        if (
+          (layerType === "auto" || layerType === "new" || spec.setManually) &&
+          originalCanonicalUrl !== undefined &&
+          originalCanonicalUrl !== spec.url
+        ) {
+          this.spec = { ...spec, url: originalCanonicalUrl };
+        }
         retainer();
       })
-      .catch((error: Error) => {
-        if (this.wasDisposed) return;
+      .catch((error) => {
+        if (refCounted.wasDisposed) return;
         this.loadState_ = { error };
         this.messages.clearMessages();
         this.messages.addMessage({
           severity: MessageSeverity.error,
-          message: error.message,
+          message: formatErrorMessage(error),
         });
         this.changed.dispatch();
       });

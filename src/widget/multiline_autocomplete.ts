@@ -25,13 +25,16 @@ import type {
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, removeFromParent } from "#src/util/dom.js";
 import { positionDropdown } from "#src/util/dropdown.js";
+import { formatErrorMessage } from "#src/util/error.js";
 import {
   EventActionMap,
   KeyboardEventBinder,
   registerActionListener,
 } from "#src/util/keyboard_bindings.js";
 import { longestCommonPrefix } from "#src/util/longest_common_prefix.js";
+import type { ProgressListener } from "#src/util/progress_listener.js";
 import { Signal } from "#src/util/signal.js";
+import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 
 export type {
@@ -56,18 +59,15 @@ export function makeDefaultCompletionElement(completion: Completion) {
   return element;
 }
 
-function* splitByWordBreaks(value: string) {
-  while (value.length > 0) {
-    const m = value.match(/[:/_]+/);
-    if (m === null) {
-      yield value;
-      return;
-    }
-    const endOffset = m.index! + m[0].length;
-    yield value.substring(0, endOffset);
-    value = value.substring(endOffset);
-  }
+export interface SyntaxHighlighter {
+  splitPattern: RegExp;
+  getSeparatorNode: (text: string) => HTMLElement;
 }
+
+const DEFAULT_SYNTAX_HIGHLIGHTER: SyntaxHighlighter = {
+  splitPattern: /.*/gs,
+  getSeparatorNode: () => document.createElement("wbr"),
+};
 
 export function makeCompletionElementWithDescription(
   completion: CompletionWithDescription,
@@ -100,7 +100,8 @@ export interface CompletionRequest {
 }
 export type Completer = (
   request: CompletionRequest,
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
+  progressListener: ProgressListener,
 ) => Promise<CompletionResult> | null;
 
 const DEFAULT_COMPLETION_DELAY = 200; // milliseconds
@@ -117,6 +118,9 @@ export class AutocompleteTextInput extends RefCounted {
   private activeCompletionPromise: Promise<CompletionResult> | null = null;
   private activeCompletionAbortController: AbortController | undefined =
     undefined;
+  private activeCompletionProgressListener: ProgressListenerWidget | undefined =
+    undefined;
+  private completionErrorElement: HTMLElement | undefined;
   private hasFocus = false;
   private completionResult: CompletionResult | null = null;
   private dropdownContentsStale = true;
@@ -161,14 +165,15 @@ export class AutocompleteTextInput extends RefCounted {
   ) {
     const completionDisabled = this.completionDisabled !== -1;
     this.onInput.dispatch(value);
-    const { inputElement } = this;
+    const { inputElement, syntaxHighlighter } = this;
     removeChildren(inputElement);
     let outputOffset = 0;
     const r = selection !== undefined ? document.createRange() : undefined;
     let isFirst = true;
-    for (const text of splitByWordBreaks(value)) {
+    for (const text of value.match(syntaxHighlighter.splitPattern)!) {
+      if (!text) continue;
       if (!isFirst) {
-        inputElement.appendChild(document.createElement("wbr"));
+        inputElement.appendChild(syntaxHighlighter.getSeparatorNode(text));
       }
       isFirst = false;
       const newOutputOffset = outputOffset + text.length;
@@ -216,21 +221,31 @@ export class AutocompleteTextInput extends RefCounted {
   completer: Completer;
 
   private resizeHandler = () => {
-    if (!this.completionsVisible) return;
     this.updateDropdownStyle();
   };
 
   private resizeObserver = new ResizeObserver(this.resizeHandler);
 
-  constructor(options: { completer: Completer; delay?: number }) {
+  private syntaxHighlighter: SyntaxHighlighter;
+
+  constructor(options: {
+    completer: Completer;
+    syntaxHighlighter?: SyntaxHighlighter;
+    delay?: number;
+  }) {
     super();
     this.completer = options.completer;
-    const { delay = DEFAULT_COMPLETION_DELAY } = options;
+    const {
+      delay = DEFAULT_COMPLETION_DELAY,
+      syntaxHighlighter = DEFAULT_SYNTAX_HIGHLIGHTER,
+    } = options;
+    this.syntaxHighlighter = syntaxHighlighter;
 
     const debouncedCompleter = (this.scheduleUpdateCompletions = debounce(
       () => {
         const abortController = (this.activeCompletionAbortController =
           new AbortController());
+        const progressListener = this.makeCompletionProgressListener();
         const activeCompletionPromise = (this.activeCompletionPromise =
           this.completer(
             {
@@ -238,14 +253,24 @@ export class AutocompleteTextInput extends RefCounted {
               selectionRange: this.getSelectionRange(),
             },
             abortController.signal,
+            progressListener,
           ));
         if (activeCompletionPromise !== null) {
-          activeCompletionPromise.then((completionResult) => {
-            if (this.activeCompletionPromise === activeCompletionPromise) {
-              this.setCompletions(completionResult);
-              this.activeCompletionPromise = null;
-            }
-          });
+          activeCompletionPromise.then(
+            (completionResult) => {
+              if (this.activeCompletionPromise === activeCompletionPromise) {
+                this.setCompletions(completionResult);
+                this.activeCompletionPromise = null;
+                this.removeProgressListener();
+              }
+            },
+            (reason) => {
+              if (this.activeCompletionPromise === activeCompletionPromise) {
+                this.removeProgressListener();
+                this.showCompletionError(reason);
+              }
+            },
+          );
         }
       },
       delay,
@@ -263,9 +288,9 @@ export class AutocompleteTextInput extends RefCounted {
 
     inputElement.contentEditable = "true";
     inputElement.spellcheck = false;
-    element.appendChild(document.createTextNode("\u200b")); // Prevent input area from collapsing
     element.appendChild(inputElement);
     element.appendChild(hintElement);
+    element.appendChild(document.createTextNode("\u200b")); // Prevent input area from collapsing
     inputElement.classList.add("neuroglancer-multiline-autocomplete-input");
     hintElement.classList.add("neuroglancer-multiline-autocomplete-hint");
     inputElement.addEventListener("input", () => {
@@ -349,21 +374,32 @@ export class AutocompleteTextInput extends RefCounted {
         this.debouncedUpdateHintState();
       }
     });
-    this.registerEventListener(this.inputElement, "blur", () => {
-      if (this.hasFocus) {
-        if (DEBUG_DROPDOWN) return;
-        this.hasFocus = false;
-        this.updateDropdown();
-      }
-      this.debouncedUpdateHintState();
-      const s = window.getSelection();
-      if (s !== null) {
-        if (s.containsNode(this.inputElement, true)) {
-          s.removeAllRanges();
+
+    // Debounce blur handling to avoid spuriously closing the completions.
+    const debouncedBlur = this.registerCancellable(
+      debounce(() => {
+        if (document.activeElement === this.inputElement) {
+          // Ignore spurious blur events, or blur events from the browser
+          // tab/window itself losing focus.
+          return;
         }
-      }
-      this.onCommit.dispatch(this.value, false);
-    });
+        if (this.hasFocus) {
+          if (DEBUG_DROPDOWN) return;
+          this.hasFocus = false;
+          this.updateDropdown();
+        }
+        this.debouncedUpdateHintState();
+        const s = window.getSelection();
+        if (s !== null) {
+          if (s.containsNode(this.inputElement, true)) {
+            s.removeAllRanges();
+          }
+        }
+        this.onCommit.dispatch(this.value, false);
+      }),
+    );
+
+    this.registerEventListener(this.inputElement, "blur", debouncedBlur);
     this.registerEventListener(window, "resize", () => {
       this.dropdownStyleStale = true;
     });
@@ -419,6 +455,34 @@ export class AutocompleteTextInput extends RefCounted {
         event.detail.stopPropagation();
       }
     });
+  }
+
+  private removeProgressListener() {
+    if (this.activeCompletionProgressListener !== undefined) {
+      this.element.removeChild(this.activeCompletionProgressListener.element);
+      this.activeCompletionProgressListener = undefined;
+    }
+  }
+
+  private makeCompletionProgressListener(): ProgressListenerWidget {
+    const widget = new ProgressListenerWidget();
+    this.element.appendChild(widget.element);
+    widget.element.classList.add(
+      "neuroglancer-multiline-autocomplete-progress",
+    );
+    this.activeCompletionProgressListener = widget;
+    this.updateDropdownStyle();
+    return widget;
+  }
+
+  private showCompletionError(reason: unknown) {
+    if (reason === null) return;
+    const element = document.createElement("div");
+    this.completionErrorElement = element;
+    element.classList.add("neuroglancer-multiline-autocomplete-error");
+    element.textContent = formatErrorMessage(reason);
+    this.element.appendChild(element);
+    this.updateDropdownStyle();
   }
 
   private shouldAttemptCompletion() {
@@ -503,9 +567,12 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private updateDropdownStyle() {
-    const { completionsVirtualList, element } = this;
-    if (completionsVirtualList !== undefined) {
-      positionDropdown(completionsVirtualList.element, element, {
+    const widget =
+      this.completionsVirtualList?.element ??
+      this.activeCompletionProgressListener?.element ??
+      this.completionErrorElement;
+    if (widget !== undefined) {
+      positionDropdown(widget, this.element, {
         horizontal: false,
       });
     }
@@ -610,13 +677,15 @@ export class AutocompleteTextInput extends RefCounted {
     } else {
       this.hasResultForDropdown = true;
       // Check for a common prefix.
-      const commonResultPrefix = longestCommonPrefix(
-        (function* () {
-          for (const completion of completionResult.completions) {
-            yield completion.value;
-          }
-        })(),
-      );
+      const commonResultPrefix =
+        completionResult.defaultCompletion ??
+        longestCommonPrefix(
+          (function* () {
+            for (const completion of completionResult.completions) {
+              yield completion.value;
+            }
+          })(),
+        );
       const commonPrefix = this.getCompletedValue(commonResultPrefix);
       if (commonPrefix.startsWith(value)) {
         this.commonPrefix = commonPrefix;
@@ -635,12 +704,13 @@ export class AutocompleteTextInput extends RefCounted {
       hintValue = "";
     }
     hintValue = hintValue.substring(value.length);
-    const { hintElement } = this;
+    const { hintElement, syntaxHighlighter } = this;
     removeChildren(hintElement);
     let isFirst = true;
-    for (const text of splitByWordBreaks(hintValue)) {
+    for (const text of hintValue.match(syntaxHighlighter.splitPattern)!) {
+      if (!text) continue;
       if (!isFirst) {
-        hintElement.appendChild(document.createElement("wbr"));
+        hintElement.appendChild(syntaxHighlighter.getSeparatorNode(text));
       }
       isFirst = false;
       const node = document.createTextNode(text);
@@ -774,14 +844,15 @@ export class AutocompleteTextInput extends RefCounted {
     this.activeCompletionAbortController?.abort();
     this.activeCompletionAbortController = undefined;
     this.activeCompletionPromise = null;
+    this.removeProgressListener();
   }
 
   private clearCompletions() {
+    this.dropdownContentsStale = true;
+    this.dropdownStyleStale = true;
     if (this.completionResult !== null) {
       this.activeIndex = -1;
       this.completionResult = null;
-      this.dropdownContentsStale = true;
-      this.dropdownStyleStale = true;
       this.commonPrefix = "";
       const { completionsVirtualList } = this;
       if (completionsVirtualList !== undefined) {
@@ -789,6 +860,12 @@ export class AutocompleteTextInput extends RefCounted {
         this.completionsVirtualList = undefined;
       }
       this.updateDropdown();
+    }
+
+    const { completionErrorElement } = this;
+    if (completionErrorElement !== undefined) {
+      this.element.removeChild(completionErrorElement);
+      this.completionErrorElement = undefined;
     }
   }
 
