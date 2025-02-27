@@ -15,8 +15,6 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { NamedAxes } from "#src/data_panel_layout.js";
-import { AXES_RELATIVE_ORIENTATION } from "#src/data_panel_layout.js";
 import type { OrientedSliceScales } from "#src/util/geom.js";
 import {
   getFrustrumPlanes,
@@ -26,6 +24,14 @@ import {
   calculateOrientedSliceScales,
   vec3,
 } from "#src/util/geom.js";
+
+// This is copied from data_panel_layout.ts to avoid the dependency.
+type NamedAxes = "xy" | "xz" | "yz";
+const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
+  ["xy", undefined],
+  ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
+  ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
+]);
 
 describe("getFrustrumPlanes", () => {
   it("works for simple example", () => {

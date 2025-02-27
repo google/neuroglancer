@@ -108,9 +108,9 @@ export interface DataDisplayLayout extends RefCounted {
   container: DataPanelLayoutContainer;
 }
 
-export type NamedAxes = "xy" | "xz" | "yz";
+type NamedAxes = "xy" | "xz" | "yz";
 
-export const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
+const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
   ["xy", undefined],
   ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
   ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
