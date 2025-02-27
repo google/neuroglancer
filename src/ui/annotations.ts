@@ -64,6 +64,7 @@ import {
   registerCallbackWhenSegmentationDisplayStateChanged,
   SegmentWidgetFactory,
 } from "#src/segmentation_display_state/frontend.js";
+import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
@@ -416,6 +417,27 @@ export class AnnotationLayerView extends Tab {
     toolbox.className = "neuroglancer-annotation-toolbox";
 
     layer.initializeAnnotationLayerViewTab(this);
+
+    const annotationColorPickerEnabled = (
+      layer.constructor as unknown as UserLayerWithAnnotationsClass
+    ).supportColorPickerInAnnotationTab;
+    if (annotationColorPickerEnabled) {
+      const colorPicker = this.registerDisposer(
+        new ColorWidget(this.displayState.color),
+      );
+      colorPicker.element.title = "Change annotation display color";
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          makeCachedLazyDerivedWatchableValue(
+            (shader) => shader.match(/\bdefaultColor\b/) !== null,
+            displayState.shaderControls.processedFragmentMain,
+          ),
+          colorPicker.element,
+        ),
+      );
+      toolbox.appendChild(colorPicker.element);
+    }
+
     const { mutableControls } = this;
     const pointButton = makeIcon({
       text: annotationTypeHandlers[AnnotationType.POINT].icon,
@@ -2035,6 +2057,7 @@ export function UserLayerWithAnnotationsMixin<
         subsourceId: subsourceEntry.id,
         role,
       });
+      this.annotationDisplayState.annotationProperties.value = [];
       this.addAnnotationLayerState(state, loadedSubsource);
     }
 
@@ -2146,6 +2169,9 @@ export function UserLayerWithAnnotationsMixin<
   return C;
 }
 
-export type UserLayerWithAnnotations = InstanceType<
-  ReturnType<typeof UserLayerWithAnnotationsMixin>
+type UserLayerWithAnnotationsClass = ReturnType<
+  typeof UserLayerWithAnnotationsMixin
 >;
+
+export type UserLayerWithAnnotations =
+  InstanceType<UserLayerWithAnnotationsClass>;
