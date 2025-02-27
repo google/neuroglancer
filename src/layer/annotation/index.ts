@@ -45,10 +45,7 @@ import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import type { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
-import {
-  makeCachedLazyDerivedWatchableValue,
-  observeWatchable,
-} from "#src/trackable_value.js";
+import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -827,30 +824,12 @@ class RenderingOptionsTab extends Tab {
       ).element,
     );
 
-    const colorControlToolWidget = element.appendChild(
+    element.appendChild(
       addLayerControlToOptionsTab(
         this,
         layer,
         this.visibility,
         LAYER_CONTROLS[ANNOTATION_COLOR_JSON_KEY],
-      ),
-    );
-    this.registerDisposer(
-      observeWatchable(
-        (hasDefaultColor) => {
-          if (hasDefaultColor) {
-            colorControlToolWidget.style.display = "";
-          } else {
-            colorControlToolWidget.style.display = "none";
-            this.layer.toolBinder.removeJsonString(
-              JSON.stringify(ANNOTATION_COLOR_JSON_KEY),
-            );
-          }
-        },
-        makeCachedLazyDerivedWatchableValue(
-          (shader) => shader.match(/\bdefaultColor\b/) !== null,
-          layer.annotationDisplayState.shaderControls.processedFragmentMain,
-        ),
       ),
     );
   }
@@ -868,6 +847,11 @@ const LAYER_CONTROLS: Record<
     ...colorLayerControl(
       (layer: AnnotationUserLayer) => layer.annotationDisplayState.color,
     ),
+    isValid: (layer) =>
+      makeCachedLazyDerivedWatchableValue(
+        (shader) => shader.match(/\bdefaultColor\b/) !== null,
+        layer.annotationDisplayState.shaderControls.processedFragmentMain,
+      ),
   },
 };
 
