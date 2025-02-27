@@ -861,7 +861,7 @@ const LAYER_CONTROLS: Record<
   LayerControlDefinition<AnnotationUserLayer>
 > = {
   [ANNOTATION_COLOR_JSON_KEY]: {
-    label: "Annotation default color",
+    label: "Annotation color",
     title:
       "Annotation shader default color (enabled with 'defaultColor()' in the shader code)",
     toolJson: ANNOTATION_COLOR_JSON_KEY,
