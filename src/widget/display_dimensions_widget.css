@@ -37,7 +37,7 @@
   text-align: right;
   padding: 2px;
   border: 1px solid transparent;
-  min-width: 26px;
+  min-width: 10px;
 }
 
 .neuroglancer-display-dimensions-input-wrapper {

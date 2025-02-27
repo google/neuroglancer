@@ -272,8 +272,10 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionScales,
       displayDimensionUnits,
     } = this.displayDimensionRenderInfo.value;
-    const scale = this.dimensionElements[i].scale;
-    const parsedScale = parseScale(scale.value);
+    const dimElement = this.dimensionElements[i];
+    const unit = dimElement.scaleUnit.textContent?.split("/")[0];
+    const input = dimElement.scale.value + unit;
+    const parsedScale = parseScale(input);
     if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
@@ -292,13 +294,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       return;
     }
     const control = this.fovControls[i];
-    // If the user accidentally enters a unit, just keep it
-    let input: string;
-    if (control.input.value.endsWith(control.unit.textContent ?? "")) {
-      input = control.input.value;
-    } else {
-      input = control.input.value + control.unit.textContent;
-    }
+    const input = control.input.value + control.unit.textContent;
     const parsedFov = parseScale(input);
     const scale = i == 0 ? sliceScales.width.scale : sliceScales.height.scale;
     const unit = i == 0 ? sliceScales.width.unit : sliceScales.height.unit;
@@ -318,7 +314,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   private updateScaleTooltip(i: number) {
     const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
     const dataUnits = displayDimensionUnits[i];
-    const tooltip = `Display scale in ${dataUnits}/${this.displayUnit}`;
+    const tooltip = `Change display scale in ${dataUnits}/${this.displayUnit}`;
     this.dimensionElements[i].scale.title = tooltip;
     this.dimensionElements[i].scaleUnit.title = tooltip;
   }
@@ -534,13 +530,14 @@ export class DisplayDimensionsWidget extends RefCounted {
         input.spellcheck = false;
         input.autocomplete = "off";
         const direction = i === 0 ? "horizontal" : "vertical";
-        const tooltip = `Panel ${direction} field of view`;
+        const tooltip = `Change panel ${direction} field of view`;
         input.title = tooltip;
         input.classList.add(`neuroglancer-display-dimensions-widget-fov-input`);
         const scaleUnit = document.createElement("span");
         scaleUnit.classList.add(
           "neuroglancer-display-dimensions-widget-fov-unit",
         );
+        scaleUnit.title = tooltip;
         container.appendChild(input);
         container.appendChild(scaleUnit);
         fovInputContainer.appendChild(container);
@@ -844,12 +841,13 @@ export class DisplayDimensionsWidget extends RefCounted {
         const totalScale =
           (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
         if (i === 0 || !singleScale) {
-          const formattedScale = formatScaleWithUnitAsString(
+          const formattedScale = formatScaleWithUnit(
             totalScale,
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          dimElements.scale.value = `${formattedScale}`;
+          dimElements.scale.value = `${formattedScale.scale}${formattedScale.prefix}`;
+          dimElements.scaleUnit.textContent = `${formattedScale.unit}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
           this.updateScaleTooltip(i);
         } else {
