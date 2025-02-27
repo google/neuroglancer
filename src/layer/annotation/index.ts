@@ -735,6 +735,50 @@ function makeShaderCodeWidget(layer: AnnotationUserLayer) {
   });
 }
 
+function makeShaderCodeWidgetTopRow(
+  layer: AnnotationUserLayer,
+  codeWidget: ShaderCodeWidget,
+) {
+  const spacer = document.createElement("div");
+  spacer.style.flex = "1";
+
+  const topRow = document.createElement("div");
+  topRow.className = "neuroglancer-annotation-dropdown-shader-top-row";
+  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(spacer);
+
+  layer.registerDisposer(
+    new ElementVisibilityFromTrackableBoolean(
+      layer.codeVisible,
+      codeWidget.element,
+    ),
+  );
+
+  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+    enableTitle: "Show code",
+    disableTitle: "Hide code",
+    backgroundScheme: "dark",
+    svg: svgCode,
+  });
+  topRow.appendChild(codeVisibilityControl.element);
+
+  topRow.appendChild(
+    makeMaximizeButton({
+      title: "Show larger editor view",
+      onClick: () => {
+        new ShaderCodeOverlay(layer);
+      },
+    }),
+  );
+  topRow.appendChild(
+    makeHelpButton({
+      title: "Documentation on image layer rendering",
+      href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
+    }),
+  );
+  return topRow;
+}
+
 class ShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
@@ -788,49 +832,9 @@ class RenderingOptionsTab extends Tab {
     ).element;
 
     element.appendChild(shaderProperties);
-    const topRow = document.createElement("div");
-    topRow.className =
-      "neuroglancer-segmentation-dropdown-skeleton-shader-header";
-    const label = document.createElement("div");
-    label.style.flex = "1";
-    label.textContent = "Annotation shader:";
-    topRow.appendChild(label);
-
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        this.layer.codeVisible,
-        this.codeWidget.element,
-      ),
+    element.appendChild(
+      makeShaderCodeWidgetTopRow(this.layer, this.codeWidget),
     );
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        this.layer.codeVisible,
-        shaderProperties,
-      ),
-    );
-    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
-      enableTitle: "Show code",
-      disableTitle: "Hide code",
-      backgroundScheme: "dark",
-      svg: svgCode,
-    });
-    topRow.appendChild(codeVisibilityControl.element);
-
-    topRow.appendChild(
-      makeMaximizeButton({
-        title: "Show larger editor view",
-        onClick: () => {
-          new ShaderCodeOverlay(this.layer);
-        },
-      }),
-    );
-    topRow.appendChild(
-      makeHelpButton({
-        title: "Documentation on annotation rendering",
-        href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
-      }),
-    );
-    element.appendChild(topRow);
 
     element.appendChild(this.codeWidget.element);
     element.appendChild(

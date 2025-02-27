@@ -470,6 +470,50 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
   });
 }
 
+function makeShaderCodeWidgetTopRow(
+  layer: ImageUserLayer,
+  codeWidget: ShaderCodeWidget,
+) {
+  const spacer = document.createElement("div");
+  spacer.style.flex = "1";
+
+  const topRow = document.createElement("div");
+  topRow.className = "neuroglancer-image-dropdown-top-row";
+  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(spacer);
+
+  layer.registerDisposer(
+    new ElementVisibilityFromTrackableBoolean(
+      layer.codeVisible,
+      codeWidget.element,
+    ),
+  );
+
+  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+    enableTitle: "Show code",
+    disableTitle: "Hide code",
+    backgroundScheme: "dark",
+    svg: svgCode,
+  });
+  topRow.appendChild(codeVisibilityControl.element);
+
+  topRow.appendChild(
+    makeMaximizeButton({
+      title: "Show larger editor view",
+      onClick: () => {
+        new ShaderCodeOverlay(layer);
+      },
+    }),
+  );
+  topRow.appendChild(
+    makeHelpButton({
+      title: "Documentation on image layer rendering",
+      href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+    }),
+  );
+  return topRow;
+}
+
 const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Resolution (slice)",
@@ -545,45 +589,9 @@ class RenderingOptionsTab extends Tab {
       );
     }
 
-    const spacer = document.createElement("div");
-    spacer.style.flex = "1";
-
-    const topRow = document.createElement("div");
-    topRow.className = "neuroglancer-image-dropdown-top-row";
-    topRow.appendChild(document.createTextNode("Shader"));
-    topRow.appendChild(spacer);
-
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        this.layer.codeVisible,
-        this.codeWidget.element,
-      ),
+    element.appendChild(
+      makeShaderCodeWidgetTopRow(this.layer, this.codeWidget),
     );
-
-    const codeVisibilityControl = new CheckboxIcon(this.layer.codeVisible, {
-      enableTitle: "Show code",
-      disableTitle: "Hide code",
-      backgroundScheme: "dark",
-      svg: svgCode,
-    });
-    topRow.appendChild(codeVisibilityControl.element);
-
-    topRow.appendChild(
-      makeMaximizeButton({
-        title: "Show larger editor view",
-        onClick: () => {
-          new ShaderCodeOverlay(this.layer);
-        },
-      }),
-    );
-    topRow.appendChild(
-      makeHelpButton({
-        title: "Documentation on image layer rendering",
-        href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
-      }),
-    );
-
-    element.appendChild(topRow);
     element.appendChild(
       this.registerDisposer(
         new ChannelDimensionsWidget(layer.channelCoordinateSpaceCombiner),
