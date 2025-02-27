@@ -39,7 +39,7 @@ import {
   updateInputFieldWidth,
 } from "#src/util/dom.js";
 import type { OrientedSliceScales } from "#src/util/geom.js";
-import { calculateOrientedSliceScales, quat, vec3 } from "#src/util/geom.js";
+import { calculateOrientedSliceScales, vec3 } from "#src/util/geom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
@@ -54,14 +54,6 @@ import {
 import type { NullarySignal } from "#src/util/signal.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
-
-export type NamedAxes = "xy" | "xz" | "yz";
-
-export const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
-  ["xy", undefined],
-  ["xz", quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
-  ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
-]);
 
 interface DimensionWidget {
   container: HTMLDivElement;
@@ -344,25 +336,6 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private scheduleUpdateView = animationFrameDebounce(() => this.updateView());
-
-  private isUniformDisplayScale() {
-    const { displayDimensionIndices, displayDimensionUnits } =
-      this.displayDimensionRenderInfo.value;
-    const { factors } = this.relativeDisplayScales.value;
-    const firstDim = displayDimensionIndices[0];
-    if (firstDim !== -1) {
-      const unit = displayDimensionUnits[0];
-      const factor = factors[firstDim];
-      for (let i = 1; i < 3; ++i) {
-        const dim = displayDimensionIndices[i];
-        if (dim === -1) continue;
-        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
 
   private getFOVScales() {
     if (!this.isSliceView) return null;
@@ -817,7 +790,20 @@ export class DisplayDimensionsWidget extends RefCounted {
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
     // Check if all units and factors are the same.
-    const singleScale = this.isUniformDisplayScale();
+    const firstDim = displayDimensionIndices[0];
+    let singleScale = true;
+    if (firstDim !== -1) {
+      const unit = displayDimensionUnits[0];
+      const factor = factors[firstDim];
+      for (let i = 1; i < 3; ++i) {
+        const dim = displayDimensionIndices[i];
+        if (dim === -1) continue;
+        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
+          singleScale = false;
+          break;
+        }
+      }
+    }
     for (let i = 0; i < 3; ++i) {
       const dim = displayDimensionIndices[i];
       const dimElements = dimensionElements[i];
