@@ -24,6 +24,12 @@
   flex-shrink: 0;
 }
 
+.neuroglancer-annotation-dropdown-shader-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
 .neuroglancer-annotation-shader-property-list {
   max-height: 8em;
   overflow: auto;

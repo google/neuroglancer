@@ -15,6 +15,7 @@
  */
 
 import "#src/layer/annotation/style.css";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import { AnnotationLayerState } from "#src/annotation/annotation_layer_state.js";
@@ -43,8 +44,11 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
-import type { TrackableBoolean } from "#src/trackable_boolean.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+  ElementVisibilityFromTrackableBoolean,
+} from "#src/trackable_boolean.js";
 import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
@@ -67,6 +71,7 @@ import {
   verifyStringArray,
 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
@@ -138,6 +143,7 @@ interface LinkedSegmentationLayer {
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = "linkedSegmentationLayer";
 const FILTER_BY_SEGMENTATION_JSON_KEY = "filterBySegmentation";
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = "ignoreNullSegmentFilter";
+const CODE_VISIBLE_KEY = "codeVisible";
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -382,6 +388,7 @@ class LinkedSegmentationLayersWidget extends RefCounted {
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
+  codeVisible = new TrackableBoolean(true);
   private localAnnotationProperties: AnnotationPropertySpec[] | undefined;
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
@@ -407,6 +414,7 @@ export class AnnotationUserLayer extends Base {
     this.linkedSegmentationLayers.changed.add(
       this.specificationChanged.dispatch,
     );
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
       this.specificationChanged.dispatch,
     );
@@ -427,6 +435,7 @@ export class AnnotationUserLayer extends Base {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
+    this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     this.localAnnotationProperties = verifyOptionalObjectProperty(
       specification,
@@ -688,6 +697,7 @@ export class AnnotationUserLayer extends Base {
     const x = super.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationCrossSectionRenderScaleTarget.toJSON();
+    x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     x[PROJECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationProjectionRenderScaleTarget.toJSON();
     if (this.localAnnotations !== undefined) {
@@ -725,6 +735,50 @@ function makeShaderCodeWidget(layer: AnnotationUserLayer) {
   });
 }
 
+function makeShaderCodeWidgetTopRow(
+  layer: AnnotationUserLayer,
+  codeWidget: ShaderCodeWidget,
+) {
+  const spacer = document.createElement("div");
+  spacer.style.flex = "1";
+
+  const topRow = document.createElement("div");
+  topRow.className = "neuroglancer-annotation-dropdown-shader-top-row";
+  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(spacer);
+
+  layer.registerDisposer(
+    new ElementVisibilityFromTrackableBoolean(
+      layer.codeVisible,
+      codeWidget.element,
+    ),
+  );
+
+  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+    enableTitle: "Show code",
+    disableTitle: "Hide code",
+    backgroundScheme: "dark",
+    svg: svgCode,
+  });
+  topRow.appendChild(codeVisibilityControl.element);
+
+  topRow.appendChild(
+    makeMaximizeButton({
+      title: "Show larger editor view",
+      onClick: () => {
+        new ShaderCodeOverlay(layer);
+      },
+    }),
+  );
+  topRow.appendChild(
+    makeHelpButton({
+      title: "Documentation on image layer rendering",
+      href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
+    }),
+  );
+  return topRow;
+}
+
 class ShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
@@ -742,64 +796,45 @@ class RenderingOptionsTab extends Tab {
     const { element } = this;
     this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-annotation-rendering-tab");
-    element.appendChild(
-      this.registerDisposer(
-        new DependentViewWidget(
-          layer.annotationDisplayState.annotationProperties,
-          (properties, parent) => {
-            if (properties === undefined || properties.length === 0) return;
-            const propertyList = document.createElement("div");
-            parent.appendChild(propertyList);
-            propertyList.classList.add(
-              "neuroglancer-annotation-shader-property-list",
+    const shaderProperties = this.registerDisposer(
+      new DependentViewWidget(
+        layer.annotationDisplayState.annotationProperties,
+        (properties, parent) => {
+          if (properties === undefined || properties.length === 0) return;
+          const propertyList = document.createElement("div");
+          parent.appendChild(propertyList);
+          propertyList.classList.add(
+            "neuroglancer-annotation-shader-property-list",
+          );
+          for (const property of properties) {
+            const div = document.createElement("div");
+            div.classList.add("neuroglancer-annotation-shader-property");
+            const typeElement = document.createElement("span");
+            typeElement.classList.add(
+              "neuroglancer-annotation-shader-property-type",
             );
-            for (const property of properties) {
-              const div = document.createElement("div");
-              div.classList.add("neuroglancer-annotation-shader-property");
-              const typeElement = document.createElement("span");
-              typeElement.classList.add(
-                "neuroglancer-annotation-shader-property-type",
-              );
-              typeElement.textContent = property.type;
-              const nameElement = document.createElement("span");
-              nameElement.classList.add(
-                "neuroglancer-annotation-shader-property-identifier",
-              );
-              nameElement.textContent = `prop_${property.identifier}`;
-              div.appendChild(typeElement);
-              div.appendChild(nameElement);
-              const { description } = property;
-              if (description !== undefined) {
-                div.title = description;
-              }
-              propertyList.appendChild(div);
+            typeElement.textContent = property.type;
+            const nameElement = document.createElement("span");
+            nameElement.classList.add(
+              "neuroglancer-annotation-shader-property-identifier",
+            );
+            nameElement.textContent = `prop_${property.identifier}`;
+            div.appendChild(typeElement);
+            div.appendChild(nameElement);
+            const { description } = property;
+            if (description !== undefined) {
+              div.title = description;
             }
-          },
-        ),
-      ).element,
-    );
-    const topRow = document.createElement("div");
-    topRow.className =
-      "neuroglancer-segmentation-dropdown-skeleton-shader-header";
-    const label = document.createElement("div");
-    label.style.flex = "1";
-    label.textContent = "Annotation shader:";
-    topRow.appendChild(label);
-    topRow.appendChild(
-      makeMaximizeButton({
-        title: "Show larger editor view",
-        onClick: () => {
-          new ShaderCodeOverlay(this.layer);
+            propertyList.appendChild(div);
+          }
         },
-      }),
+      ),
+    ).element;
+
+    element.appendChild(shaderProperties);
+    element.appendChild(
+      makeShaderCodeWidgetTopRow(this.layer, this.codeWidget),
     );
-    topRow.appendChild(
-      makeHelpButton({
-        title: "Documentation on annotation rendering",
-        href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
-      }),
-    );
-    element.appendChild(topRow);
 
     element.appendChild(this.codeWidget.element);
     element.appendChild(

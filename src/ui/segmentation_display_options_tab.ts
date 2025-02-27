@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
 import { Overlay } from "#src/overlay.js";
+import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
@@ -34,6 +37,51 @@ function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
     shaderControlState:
       layer.displayState.skeletonRenderingOptions.shaderControlState,
   });
+}
+
+function makeShaderCodeWidgetTopRow(
+  layer: SegmentationUserLayer,
+  codeWidget: ShaderCodeWidget,
+) {
+  const spacer = document.createElement("div");
+  spacer.style.flex = "1";
+
+  const topRow = document.createElement("div");
+  topRow.className =
+    "neuroglancer-segmentation-dropdown-skeleton-shader-header";
+  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(spacer);
+
+  layer.registerDisposer(
+    new ElementVisibilityFromTrackableBoolean(
+      layer.codeVisible,
+      codeWidget.element,
+    ),
+  );
+
+  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+    enableTitle: "Show code",
+    disableTitle: "Hide code",
+    backgroundScheme: "dark",
+    svg: svgCode,
+  });
+  topRow.appendChild(codeVisibilityControl.element);
+
+  topRow.appendChild(
+    makeMaximizeButton({
+      title: "Show larger editor view",
+      onClick: () => {
+        new ShaderCodeOverlay(layer);
+      },
+    }),
+  );
+  topRow.appendChild(
+    makeHelpButton({
+      title: "Documentation on image layer rendering",
+      href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+    }),
+  );
+  return topRow;
 }
 
 export class DisplayOptionsTab extends Tab {
@@ -73,31 +121,11 @@ export class DisplayOptionsTab extends Tab {
         layer.hasSkeletonsLayer,
         (hasSkeletonsLayer, parent, refCounted) => {
           if (!hasSkeletonsLayer) return;
-          const topRow = document.createElement("div");
-          topRow.className =
-            "neuroglancer-segmentation-dropdown-skeleton-shader-header";
-          const label = document.createElement("div");
-          label.style.flex = "1";
-          label.textContent = "Skeleton shader:";
-          topRow.appendChild(label);
-          topRow.appendChild(
-            makeMaximizeButton({
-              title: "Show larger editor view",
-              onClick: () => {
-                new ShaderCodeOverlay(this.layer);
-              },
-            }),
-          );
-          topRow.appendChild(
-            makeHelpButton({
-              title: "Documentation on skeleton rendering",
-              href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
-            }),
-          );
-          parent.appendChild(topRow);
-
           const codeWidget = refCounted.registerDisposer(
             makeSkeletonShaderCodeWidget(this.layer),
+          );
+          parent.appendChild(
+            makeShaderCodeWidgetTopRow(this.layer, codeWidget),
           );
           parent.appendChild(codeWidget.element);
           parent.appendChild(
