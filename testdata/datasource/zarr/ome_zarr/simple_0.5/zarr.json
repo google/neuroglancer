@@ -86,7 +86,7 @@
     "kind": "inline",
     "must_understand": false,
     "metadata": {
-      "scale0": {
+      "scale1": {
         "attributes": {
           "_ARRAY_DIMENSIONS": [
             "y",
@@ -101,18 +101,18 @@
         },
         "node_type": "group"
       },
-      "scale0/image": {
+      "scale1/image": {
         "shape": [
-          10,
-          10
+          5,
+          5
         ],
         "data_type": "uint16",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              10,
-              10
+              5,
+              5
             ]
           }
         },
@@ -194,7 +194,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "scale1": {
+      "scale0": {
         "attributes": {
           "_ARRAY_DIMENSIONS": [
             "y",
@@ -209,18 +209,18 @@
         },
         "node_type": "group"
       },
-      "scale1/image": {
+      "scale0/image": {
         "shape": [
-          5,
-          5
+          10,
+          10
         ],
         "data_type": "uint16",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5,
-              5
+              10,
+              10
             ]
           }
         },

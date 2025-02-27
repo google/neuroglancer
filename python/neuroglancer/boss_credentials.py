@@ -34,7 +34,7 @@ class BossCredentialsProvider(credentials_provider.CredentialsProvider):
                 if os.path.isfile(os.path.expanduser(config_path)):
                     with open(os.path.expanduser(config_path)) as config_file_handle:
                         config_parser = ConfigParser()
-                        config_parser.readfp(config_file_handle)
+                        config_parser.read_file(config_file_handle)
                         # Try Default section first
                         try:
                             self._credentials = config_parser["Default"]["token"]

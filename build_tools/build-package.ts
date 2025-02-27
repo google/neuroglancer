@@ -32,7 +32,7 @@ function buildDeclarationFiles(
   program.emit();
 }
 
-async function buildPackage(options: {
+export async function buildPackage(options: {
   inplace?: boolean;
   skipDeclarations?: boolean;
 }) {
@@ -130,20 +130,34 @@ async function buildPackage(options: {
     delete packageJson["files"];
   }
 
-  function convertExportMap(map: Record<string, any>) {
-    for (const [key, value] of Object.entries(map)) {
+  const EXCLUDED_EXPORT_KEYS = /^#test/;
+
+  function convertExportMap(
+    map: Record<string, any>,
+    isConditions: boolean = false,
+  ) {
+    const entries = Object.entries(map);
+    map = {};
+    for (const [key, value] of entries) {
+      if (!isConditions && key.match(EXCLUDED_EXPORT_KEYS) !== null) {
+        continue;
+      }
+      if (isConditions && key === "node") {
+        continue;
+      }
       if (typeof value === "string") {
         map[key] = value
           .replace(/\.ts$/, ".js")
           .replace(/^\.\/src\//, "./lib/");
       } else {
-        convertExportMap(value);
+        map[key] = convertExportMap(value, /*isConditions=*/ true);
       }
     }
+    return map;
   }
 
-  convertExportMap(packageJson["imports"]);
-  convertExportMap(packageJson["exports"]);
+  packageJson["imports"] = convertExportMap(packageJson["imports"]);
+  packageJson["exports"] = convertExportMap(packageJson["exports"]);
 
   const outputPackageJson = path.resolve(outDir, "package.json");
   const tempPackageJsonPath = outputPackageJson + ".tmp";

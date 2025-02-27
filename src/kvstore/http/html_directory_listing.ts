@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-import type {
-  ListEntry,
-  DriverListOptions,
-  ListResponse,
+import {
+  type ListEntry,
+  type DriverListOptions,
+  type ListResponse,
+  normalizeListResponse,
 } from "#src/kvstore/index.js";
-import { extractQueryAndFragment } from "#src/kvstore/url.js";
+import { isS3ListResponse } from "#src/kvstore/s3/list.js";
+import { encodePathForUrl, extractQueryAndFragment } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
 import { fetchOk } from "#src/util/http_request.js";
 import {
@@ -48,9 +50,17 @@ export async function getHtmlDirectoryListing(
   );
   const contentType = response.headers.get("content-type");
   if (contentType === null || /\btext\/html\b/i.exec(contentType) === null) {
-    return [];
+    throw new Error(`HTML directory listing not supported`);
   }
   const text = await response.text();
+  // Verify that the response is a not an S3 ListObjects response. Per
+  // https://github.com/getmoto/moto/issues/8560, moto responds with
+  // `content-type: text/html`.
+  if (isS3ListResponse(text)) {
+    throw new Error(
+      `HTML directory listing not supported, S3-compatible API detected`,
+    );
+  }
   const doc = new DOMParser().parseFromString(text, "text/html");
   const nodes = doc.evaluate(
     "//a/@href",
@@ -78,6 +88,7 @@ export async function getHtmlDirectoryListing(
 export async function listFromHtmlDirectoryListing(
   baseUrl: string,
   prefix: string,
+  fetchOkImpl: FetchOk,
   options: DriverListOptions,
 ): Promise<ListResponse> {
   const { progressListener } = options;
@@ -87,14 +98,17 @@ export async function listFromHtmlDirectoryListing(
       message: `Requesting HTML directory listing for ${baseUrl}`,
     });
   const { base, queryAndFragment } = extractQueryAndFragment(baseUrl);
-  const baseAndPrefix = base + prefix;
+  const baseAndPrefix = base + encodePathForUrl(prefix);
   const fullUrl = baseAndPrefix + queryAndFragment;
   const m = fullUrl.match(/^([a-z]+:\/\/.*\/)([^/?#]*)$/);
-  if (m === null) throw null;
+  if (m === null) {
+    throw new Error(`Invalid HTTP URL: ${fullUrl}`);
+  }
   const [, directoryUrl] = m;
   const listing = await getHtmlDirectoryListing(
     directoryUrl + queryAndFragment,
     {
+      fetchOkImpl,
       signal: options.signal,
       progressListener: options.progressListener,
     },
@@ -110,5 +124,5 @@ export async function listFromHtmlDirectoryListing(
       entries.push({ key: p });
     }
   }
-  return { entries, directories };
+  return normalizeListResponse({ entries, directories });
 }

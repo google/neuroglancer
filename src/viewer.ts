@@ -17,6 +17,7 @@
 import "#src/viewer.css";
 import "#src/ui/layer_data_sources_tab.js";
 import "#src/noselect.css";
+import svg_camera from "ikonate/icons/camera.svg?raw";
 import svg_controls_alt from "ikonate/icons/controls-alt.svg?raw";
 import svg_layers from "ikonate/icons/layers.svg?raw";
 import svg_list from "ikonate/icons/list.svg?raw";
@@ -68,6 +69,7 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import { overlaysOpen } from "#src/overlay.js";
+import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
 import { StatusMessage } from "#src/status.js";
 import {
@@ -87,6 +89,7 @@ import {
 } from "#src/ui/layer_list_panel.js";
 import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
+import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
@@ -120,6 +123,7 @@ import {
   EventActionMap,
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
+import { ScreenshotManager } from "#src/util/screenshot_manager.js";
 import { NullarySignal } from "#src/util/signal.js";
 import {
   CompoundTrackable,
@@ -249,6 +253,10 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
+    this.add(
+      "hideCrossSectionBackground3D",
+      viewer.hideCrossSectionBackground3D,
+    );
     this.add(
       "gpuMemoryLimit",
       viewer.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit,
@@ -412,6 +420,7 @@ export class Viewer extends RefCounted implements ViewerState {
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
+  hideCrossSectionBackground3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(
@@ -436,6 +445,9 @@ export class Viewer extends RefCounted implements ViewerState {
   layerListPanelState = new LayerListPanelState();
 
   resetInitiated = new NullarySignal();
+
+  screenshotHandler: ScreenshotHandler;
+  screenshotManager: ScreenshotManager;
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -487,7 +499,8 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
-
+    this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
+    this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {
       dataContext = new DataManagementContext(display.gl, display),
       visibility = new WatchableVisibilityPriority(
@@ -597,6 +610,7 @@ export class Viewer extends RefCounted implements ViewerState {
           this.navigationState.reset();
           this.perspectiveNavigationState.pose.orientation.reset();
           this.perspectiveNavigationState.zoomFactor.reset();
+          this.layout.restoreState("4panel-alt");
           this.resetInitiated.dispatch();
           if (
             !overlaysOpen &&
@@ -835,6 +849,14 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const button = makeIcon({ svg: svg_camera, title: "Screenshot" });
+      this.registerEventListener(button, "click", () => {
+        this.showScreenshotDialog();
+      });
+      topRow.appendChild(button);
+    }
+
+    {
       const { helpPanelState } = this;
       const button = this.registerDisposer(
         new CheckboxIcon(helpPanelState.location.watchableVisible, {
@@ -886,6 +908,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     gridContainer.appendChild(topRow);
 
+    // Note: for new states, the actual default layout is 4panel-alt.
     this.layout = this.registerDisposer(
       new RootLayoutContainer(this, "4panel"),
     );
@@ -1116,8 +1139,18 @@ export class Viewer extends RefCounted implements ViewerState {
     this.globalToolBinder.activate(uppercase);
   }
 
+  deactivateTools() {
+    this.globalToolBinder.deactivate();
+  }
+
   editJsonState() {
+    this.deactivateTools();
     new StateEditorDialog(this);
+  }
+
+  showScreenshotDialog() {
+    this.deactivateTools();
+    new ScreenshotDialog(this.screenshotManager);
   }
 
   showStatistics(value: boolean | undefined = undefined) {

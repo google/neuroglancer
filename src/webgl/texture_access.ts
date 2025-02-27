@@ -23,7 +23,10 @@
  * require padding.
  */
 
-import type { TypedArray, TypedArrayConstructor } from "#src/util/array.js";
+import type {
+  TypedNumberArray,
+  TypedNumberArrayConstructor,
+} from "#src/util/array.js";
 import { maybePadArray } from "#src/util/array.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
@@ -82,7 +85,7 @@ export class TextureFormat {
   /**
    * TypedArray type that must be used when uploading the texture data.
    */
-  arrayConstructor: TypedArrayConstructor;
+  arrayConstructor: TypedNumberArrayConstructor;
 
   samplerPrefix: ShaderSamplerPrefix;
 }
@@ -292,7 +295,7 @@ export function computeTextureFormat(
 export function setOneDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
-  data: TypedArray,
+  data: TypedNumberArray,
 ) {
   const {
     arrayConstructor,
@@ -342,7 +345,7 @@ export function setOneDimensionalTextureData(
 export function setTwoDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
-  data: TypedArray,
+  data: TypedNumberArray,
   width: number,
   height: number,
 ) {
@@ -377,7 +380,7 @@ export function setTwoDimensionalTextureData(
 export function setThreeDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
-  data: TypedArray,
+  data: TypedNumberArray,
   width: number,
   height: number,
   depth: number,

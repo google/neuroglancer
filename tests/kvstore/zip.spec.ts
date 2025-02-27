@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
-import "#src/kvstore/zip/register_backend.js";
+import "#src/kvstore/http/register_frontend.js";
 import "#src/kvstore/zip/register_frontend.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -110,9 +109,11 @@ describe("yauzl failure cases", async () => {
   });
 });
 
-testKvStore(
-  async () => (await serverFixture.serverUrl()) + "zip/files.zip|zip:",
-);
+describe("kvstore operations", () => {
+  testKvStore(
+    async () => (await serverFixture.serverUrl()) + "zip/files.zip|zip:",
+  );
+});
 
 describe("completion", () => {
   test("empty prefix", async () => {

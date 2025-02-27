@@ -17,25 +17,12 @@
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { SharedCredentialsManager } from "#src/credentials_provider/shared.js";
 import { KvStoreContext } from "#src/kvstore/context.js";
-import type {
-  DriverListOptions,
-  DriverReadOptions,
-  ListResponse,
-  ReadResponse,
-  StatOptions,
-  StatResponse,
-} from "#src/kvstore/index.js";
 import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import {
   frontendBackendIsomorphicKvStoreProviderRegistry,
   KvStoreProviderRegistry,
 } from "#src/kvstore/register.js";
-import {
-  LIST_RPC_ID,
-  READ_RPC_ID,
-  SHARED_KVSTORE_CONTEXT_RPC_ID,
-  STAT_RPC_ID,
-} from "#src/kvstore/shared_common.js";
+import { SHARED_KVSTORE_CONTEXT_RPC_ID } from "#src/kvstore/shared_common.js";
 import { registerSharedObjectOwner, SharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObjectOwner(SHARED_KVSTORE_CONTEXT_RPC_ID)
@@ -61,91 +48,3 @@ export class SharedKvStoreContext
 
 export const frontendOnlyKvStoreProviderRegistry =
   new KvStoreProviderRegistry<SharedKvStoreContext>();
-
-export function proxyStatToBackendKvStore(
-  sharedKvStoreContext: SharedKvStoreContext,
-  url: string,
-  options: StatOptions,
-): Promise<StatResponse | undefined> {
-  return sharedKvStoreContext.rpc!.promiseInvoke<StatResponse | undefined>(
-    STAT_RPC_ID,
-    { sharedKvStoreContext: sharedKvStoreContext.rpcId, url },
-    { signal: options.signal, progressListener: options.progressListener },
-  );
-}
-
-export async function proxyReadToBackendKvStore(
-  sharedKvStoreContext: SharedKvStoreContext,
-  url: string,
-  options: DriverReadOptions,
-): Promise<ReadResponse | undefined> {
-  const response = await sharedKvStoreContext.rpc!.promiseInvoke<
-    | { data: ArrayBuffer; offset: number; totalSize: number | undefined }
-    | undefined
-  >(
-    READ_RPC_ID,
-    {
-      sharedKvStoreContext: sharedKvStoreContext.rpcId,
-      url,
-      byteRange: options.byteRange,
-      throwIfMissing: options.throwIfMissing,
-    },
-    { signal: options.signal, progressListener: options.progressListener },
-  );
-  if (response === undefined) return undefined;
-  return {
-    response: new Response(response.data),
-    offset: response.offset,
-    length: response.data.byteLength,
-    totalSize: response.totalSize,
-  };
-}
-
-export function proxyListToBackendKvStore(
-  sharedKvStoreContext: SharedKvStoreContext,
-  url: string,
-  options: DriverListOptions,
-): Promise<ListResponse> {
-  return sharedKvStoreContext.rpc!.promiseInvoke<ListResponse>(
-    LIST_RPC_ID,
-    {
-      sharedKvStoreContext: sharedKvStoreContext.rpcId,
-      url,
-    },
-    { signal: options.signal, progressListener: options.progressListener },
-  );
-}
-
-export abstract class ProxyReadableKvStore<Key> {
-  constructor(public sharedKvStoreContext: SharedKvStoreContext) {}
-
-  abstract getUrl(key: Key): string;
-
-  stat(key: Key, options: StatOptions): Promise<StatResponse | undefined> {
-    return proxyStatToBackendKvStore(
-      this.sharedKvStoreContext,
-      this.getUrl(key),
-      options,
-    );
-  }
-  read(
-    key: Key,
-    options: DriverReadOptions,
-  ): Promise<ReadResponse | undefined> {
-    return proxyReadToBackendKvStore(
-      this.sharedKvStoreContext,
-      this.getUrl(key),
-      options,
-    );
-  }
-}
-
-export abstract class ProxyKvStore extends ProxyReadableKvStore<string> {
-  list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
-    return proxyListToBackendKvStore(
-      this.sharedKvStoreContext,
-      this.getUrl(prefix),
-      options,
-    );
-  }
-}

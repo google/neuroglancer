@@ -18,16 +18,15 @@ import re
 import sys
 import threading
 import time
-from collections.abc import Sequence
-from typing import Callable, NamedTuple, Optional
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from selenium.webdriver.common.bidi.script import ConsoleLogEntry
+else:
+    ConsoleLogEntry = None
 
-class LogMessage(NamedTuple):
-    message: str
-    level: Optional[str]
-
-
-LogListener = Callable[[LogMessage], None]
+LogListener = Callable[[ConsoleLogEntry], None]
 
 
 class WebdriverBase:
@@ -35,12 +34,12 @@ class WebdriverBase:
         self,
         headless=True,
         browser="chrome",
-        browser_binary_path: Optional[str] = None,
+        browser_binary_path: str | None = None,
         window_size=(1920, 1080),
         debug=False,
         docker=False,
         print_logs=True,
-        extra_command_line_args: Optional[Sequence[str]] = None,
+        extra_command_line_args: Sequence[str] | None = None,
     ):
         self.headless = headless
         self.browser = browser
@@ -52,23 +51,20 @@ class WebdriverBase:
         )
         self.debug = debug
         self.browser_binary_path = browser_binary_path
-        self._log_listeners_lock = threading.Lock()
-        self._log_listeners: dict[LogListener, None] = {}
-
-        if print_logs:
-            self.add_log_listener(
-                lambda log: print(
-                    f"console.{log.level}: {log.message}", file=sys.stderr
-                )
-            )
 
         self._closed = False
         self._init_driver()
+
+        if print_logs:
+            self.add_log_listener(
+                lambda log: print(f"console.{log.level}: {log.text}", file=sys.stderr)
+            )
 
     def _init_chrome(self):
         import selenium.webdriver
 
         chrome_options = selenium.webdriver.ChromeOptions()
+        chrome_options.enable_bidi = True
         if self.headless:
             chrome_options.add_argument("--headless=new")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -96,13 +92,12 @@ class WebdriverBase:
         options.arguments.extend(self.extra_command_line_args)
         if self.browser_binary_path:
             options.binary_location = self.browser_binary_path
+        options.enable_bidi = True
         self.driver = selenium.webdriver.Firefox(
             options=options,
         )
 
     def _init_driver(self):
-        import trio
-
         if self.browser == "chrome":
             self._init_chrome()
         elif self.browser == "firefox":
@@ -112,49 +107,6 @@ class WebdriverBase:
                 f'unsupported browser: {self.browser}, must be "chrome" or "firefox"'
             )
 
-        def log_handler(driver):
-            async def start_listening(listener):
-                async for event in listener:
-                    message = LogMessage(message=event.args[0].value, level=event.type_)
-                    with self._log_listeners_lock:
-                        for listener in self._log_listeners:
-                            listener(message)
-
-            async def start_listening_for_exceptions(listener):
-                async for event in listener:
-                    message = LogMessage(
-                        message=event.exception_details.text, level="exception"
-                    )
-                    with self._log_listeners_lock:
-                        for listener in self._log_listeners:
-                            listener(message)
-
-            async def run():
-                async with self.driver.bidi_connection() as connection:
-                    session, devtools = connection.session, connection.devtools
-                    await session.execute(devtools.page.enable())
-                    await session.execute(devtools.runtime.enable())
-                    listener = session.listen(devtools.runtime.ConsoleAPICalled)
-                    exception_listener = session.listen(
-                        devtools.runtime.ExceptionThrown
-                    )
-                    with trio.CancelScope() as cancel_scope:
-                        async with trio.open_nursery() as nursery:
-                            nursery.start_soon(start_listening, listener)
-                            nursery.start_soon(
-                                start_listening_for_exceptions, exception_listener
-                            )
-                            while True:
-                                await trio.sleep(2)
-                                if not driver.service.is_connectable():
-                                    cancel_scope.cancel()
-
-            trio.run(run)
-
-        t = threading.Thread(target=log_handler, args=(self.driver,))
-        t.daemon = True
-        t.start()
-
     def __enter__(self):
         return self
 
@@ -162,30 +114,32 @@ class WebdriverBase:
         self.driver.quit()
         self._closed = True
 
-    def add_log_listener(self, listener: LogListener):
-        with self._log_listeners_lock:
-            self._log_listeners[listener] = None
+    def add_log_listener(self, listener: LogListener) -> Callable[[], None]:
+        console_id = self.driver.script.add_console_message_handler(listener)
+        error_id = self.driver.script.add_javascript_error_handler(listener)
 
-    def remove_log_listener(self, listener: LogListener):
-        with self._log_listeners_lock:
-            return self._log_listeners.pop(listener, True) is None
+        def unregister():
+            self.driver.script.remove_console_message_handler(console_id)
+            self.driver.script.remove_javascript_error_handler(error_id)
+
+        return unregister
 
     @contextlib.contextmanager
     def log_listener(self, listener: LogListener):
+        unregister = self.add_log_listener(listener)
         try:
-            self.add_log_listener(listener)
             yield
         finally:
-            self.remove_log_listener(listener)
+            unregister()
 
     @contextlib.contextmanager
-    def wait_for_log_message(self, pattern: str, timeout: Optional[float] = None):
+    def wait_for_log_message(self, pattern: str, timeout: float | None = None):
         event = threading.Event()
 
         def handle_message(msg):
             if event.is_set():
                 return
-            if re.fullmatch(pattern, msg.message):
+            if re.fullmatch(pattern, msg.text):
                 event.set()
 
         with self.log_listener(handle_message):

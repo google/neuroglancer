@@ -16,7 +16,7 @@
 
 import type { mat3 } from "gl-matrix";
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
 
 export { mat2, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
@@ -380,7 +380,11 @@ export function getDependentTransformInputDimensions(
   return findMatchingIndices(isDependentInputDimension, true);
 }
 
-export function scaleMat3Input(out: mat3, input: mat3, scales: TypedArray) {
+export function scaleMat3Input(
+  out: mat3,
+  input: mat3,
+  scales: TypedNumberArray,
+) {
   for (let j = 0; j < 3; ++j) {
     const s = scales[j];
     for (let i = 0; i < 3; ++i) {
@@ -390,7 +394,11 @@ export function scaleMat3Input(out: mat3, input: mat3, scales: TypedArray) {
   return out;
 }
 
-export function scaleMat3Output(out: mat3, input: mat3, scales: TypedArray) {
+export function scaleMat3Output(
+  out: mat3,
+  input: mat3,
+  scales: TypedNumberArray,
+) {
   for (let i = 0; i < 3; ++i) {
     const s = scales[i];
     for (let j = 0; j < 3; ++j) {

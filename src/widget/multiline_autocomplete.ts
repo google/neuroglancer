@@ -374,21 +374,32 @@ export class AutocompleteTextInput extends RefCounted {
         this.debouncedUpdateHintState();
       }
     });
-    this.registerEventListener(this.inputElement, "blur", () => {
-      if (this.hasFocus) {
-        if (DEBUG_DROPDOWN) return;
-        this.hasFocus = false;
-        this.updateDropdown();
-      }
-      this.debouncedUpdateHintState();
-      const s = window.getSelection();
-      if (s !== null) {
-        if (s.containsNode(this.inputElement, true)) {
-          s.removeAllRanges();
+
+    // Debounce blur handling to avoid spuriously closing the completions.
+    const debouncedBlur = this.registerCancellable(
+      debounce(() => {
+        if (document.activeElement === this.inputElement) {
+          // Ignore spurious blur events, or blur events from the browser
+          // tab/window itself losing focus.
+          return;
         }
-      }
-      this.onCommit.dispatch(this.value, false);
-    });
+        if (this.hasFocus) {
+          if (DEBUG_DROPDOWN) return;
+          this.hasFocus = false;
+          this.updateDropdown();
+        }
+        this.debouncedUpdateHintState();
+        const s = window.getSelection();
+        if (s !== null) {
+          if (s.containsNode(this.inputElement, true)) {
+            s.removeAllRanges();
+          }
+        }
+        this.onCommit.dispatch(this.value, false);
+      }),
+    );
+
+    this.registerEventListener(this.inputElement, "blur", debouncedBlur);
     this.registerEventListener(window, "resize", () => {
       this.dropdownStyleStale = true;
     });

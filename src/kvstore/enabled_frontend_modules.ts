@@ -2,10 +2,12 @@
 import "#kvstore/byte_range/register";
 import "#kvstore/gcs/register";
 import "#kvstore/gzip/register";
-import "#kvstore/http/register";
-import "#kvstore/middleauth/register";
+import "#kvstore/http/register_frontend";
+import "#kvstore/icechunk/register_frontend";
+import "#kvstore/middleauth/register_frontend";
 import "#kvstore/middleauth/register_credentials_provider";
 import "#kvstore/ngauth/register";
 import "#kvstore/ngauth/register_credentials_provider";
-import "#kvstore/s3/register";
+import "#kvstore/ocdbt/register_frontend";
+import "#kvstore/s3/register_frontend";
 import "#kvstore/zip/register_frontend";

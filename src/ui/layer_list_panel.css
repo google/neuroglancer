@@ -11,9 +11,24 @@
 .neuroglancer-layer-list-panel-item {
   display: flex;
   flex-direction: row;
-  padding: 2px;
+  padding: 2px 4px;
   border: 1px solid #aaa;
   margin: 2px;
+  align-items: center;
+  gap: 0px 2px;
+}
+
+.neuroglancer-layer-list-panel-item input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+}
+
+.neuroglancer-layer-list-panel-eye-icon {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  display: flex;
 }
 
 .neuroglancer-layer-list-panel-item[data-selected="true"] {
@@ -25,12 +40,20 @@
 }
 
 .neuroglancer-layer-list-panel-item[data-archived="true"]
-  .neuroglancer-layer-side-panel-name,
+  .neuroglancer-layer-list-panel-item-name,
+.neuroglancer-layer-list-panel-item[data-archived="true"]
+  .neuroglancer-layer-type-indicator,
 .neuroglancer-layer-list-panel-item[data-archived="true"]
   .neuroglancer-icon
   svg {
   color: #999;
   stroke: #999;
+}
+
+.neuroglancer-layer-list-panel-item-name {
+  line-height: 20px;
+  padding: 0;
+  margin-left: 4px;
 }
 
 .neuroglancer-layer-list-panel-item:hover {
@@ -39,10 +62,11 @@
 
 .neuroglancer-layer-list-panel-item-number {
   font-family: sans-serif;
-  background-color: var(--layer-number-color);
   color: white;
   font-weight: bold;
   display: inline-block;
+  text-align: right;
+  line-height: 18px;
 }
 
 .neuroglancer-layer-list-panel-item:not(:hover)

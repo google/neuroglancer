@@ -17,6 +17,7 @@ export default tseslint.config(
       "**/build",
       "**/.tox",
       "**/.nox",
+      "**/.venv",
       "lib",
       "**/python",
       "**/config",

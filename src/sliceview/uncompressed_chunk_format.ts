@@ -25,7 +25,10 @@ import type {
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { registerChunkFormatHandler } from "#src/sliceview/volume/frontend.js";
-import type { TypedArray, TypedArrayConstructor } from "#src/util/array.js";
+import type {
+  TypedNumberArray,
+  TypedNumberArrayConstructor,
+} from "#src/util/array.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
   DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT,
@@ -112,7 +115,7 @@ export class ChunkFormat
   textureFormat: number;
   texelType: number;
   arrayElementsPerTexel: number;
-  arrayConstructor: TypedArrayConstructor;
+  arrayConstructor: TypedNumberArrayConstructor;
   samplerPrefix: ShaderSamplerPrefix;
   shaderSamplerType: ShaderSamplerType;
   private textureAccessHelper: TextureAccessHelper;
@@ -263,7 +266,7 @@ ${shaderType} getDataValueAt(highp ivec3 p`;
     return TextureLayout.get(gl, chunkDataSize, this.textureDims);
   }
 
-  setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray) {
+  setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedNumberArray) {
     const { textureShape } = textureLayout;
     (this.textureDims === 3
       ? setThreeDimensionalTextureData
@@ -350,7 +353,7 @@ export function getFillValueArray(
 ) {
   const array = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
     dataType
-  ] as TypedArrayConstructor<ArrayBuffer>)(
+  ] as TypedNumberArrayConstructor<ArrayBuffer>)(
     DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType],
   );
   if (dataType === DataType.UINT64) {

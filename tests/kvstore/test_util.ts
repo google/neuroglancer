@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import { describe, expect, test } from "vitest";
+import { expect, test } from "vitest";
+import type { AutoDetectMatch } from "#src/kvstore/auto_detect.js";
+import { autoDetectFormat } from "#src/kvstore/auto_detect.js";
 import type { KvStore } from "#src/kvstore/index.js";
 import { listKvStoreRecursively, readKvStore } from "#src/kvstore/index.js";
 import type { Fixture } from "#tests/fixtures/fixture.js";
@@ -33,8 +35,7 @@ export function testRead(url: Fixture<string>) {
   test("read full", async () => {
     const response = await (
       await sharedKvStoreContext()
-    ).kvStoreContext.read(`${await url()}a`);
-    expect(response).toBeTruthy();
+    ).kvStoreContext.read(`${await url()}a`, { throwIfMissing: true });
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(0);
     expect.soft(response!.length).toEqual(3);
@@ -45,8 +46,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { offset: 1, length: 0 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(1);
     expect.soft(response!.length).toEqual(0);
@@ -57,8 +58,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}empty`, {
       byteRange: { offset: 0, length: 0 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(0);
     expect.soft(response!.offset).toEqual(0);
     expect.soft(response!.length).toEqual(0);
@@ -69,8 +70,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { offset: 1, length: 1 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(1);
     expect.soft(response!.length).toEqual(1);
@@ -81,8 +82,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { suffixLength: 1 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(2);
     expect.soft(response!.length).toEqual(1);
@@ -93,8 +94,8 @@ export function testRead(url: Fixture<string>) {
       await sharedKvStoreContext()
     ).kvStoreContext.read(`${await url()}a`, {
       byteRange: { suffixLength: 0 },
+      throwIfMissing: true,
     });
-    expect(response).toBeTruthy();
     expect.soft(response!.totalSize).toEqual(3);
     expect.soft(response!.offset).toEqual(3);
     expect.soft(response!.length).toEqual(0);
@@ -112,6 +113,16 @@ export function testRead(url: Fixture<string>) {
     ).kvStoreContext.read(`${await url()}baz`);
     expect(response).toEqual(undefined);
   });
+
+  test("read #", async () => {
+    const response = await (
+      await sharedKvStoreContext()
+    ).kvStoreContext.read(`${await url()}%23`, { throwIfMissing: true });
+    expect.soft(response!.totalSize).toEqual(0);
+    expect.soft(response!.offset).toEqual(0);
+    expect.soft(response!.length).toEqual(0);
+    expect.soft(await response!.response.text()).toEqual("");
+  });
 }
 
 export function testList(url: Fixture<string>) {
@@ -122,30 +133,26 @@ export function testList(url: Fixture<string>) {
       ).kvStoreContext.list(await url(), {
         responseKeys: "suffix",
       }),
-    ).toMatchInlineSnapshot(`
-      {
-        "directories": [
-          "baz",
-        ],
-        "entries": [
-          {
-            "key": "#",
-          },
-          {
-            "key": "a",
-          },
-          {
-            "key": "b",
-          },
-          {
-            "key": "c",
-          },
-          {
-            "key": "empty",
-          },
-        ],
-      }
-    `);
+    ).toEqual({
+      directories: ["baz"],
+      entries: [
+        {
+          key: "#",
+        },
+        {
+          key: "a",
+        },
+        {
+          key: "b",
+        },
+        {
+          key: "c",
+        },
+        {
+          key: "empty",
+        },
+      ],
+    });
   });
 
   test("list with file prefix", async () => {
@@ -155,16 +162,14 @@ export function testList(url: Fixture<string>) {
       ).kvStoreContext.list(`${await url()}e`, {
         responseKeys: "suffix",
       }),
-    ).toMatchInlineSnapshot(`
-      {
-        "directories": [],
-        "entries": [
-          {
-            "key": "mpty",
-          },
-        ],
-      }
-    `);
+    ).toEqual({
+      directories: [],
+      entries: [
+        {
+          key: "mpty",
+        },
+      ],
+    });
   });
 
   test("list with directory prefix", async () => {
@@ -174,24 +179,22 @@ export function testList(url: Fixture<string>) {
       ).kvStoreContext.list(`${await url()}baz/`, {
         responseKeys: "suffix",
       }),
-    ).toMatchInlineSnapshot(`
-      {
-        "directories": [],
-        "entries": [
-          {
-            "key": "x",
-          },
-        ],
-      }
-    `);
+    ).toEqual({
+      directories: [],
+      entries: [
+        { key: "first" },
+        {
+          key: "x",
+        },
+        { key: "z" },
+      ],
+    });
   });
 }
 
 export function testKvStore(url: Fixture<string>) {
-  describe("kvstore", () => {
-    testRead(url);
-    testList(url);
-  });
+  testRead(url);
+  testList(url);
 }
 
 export async function readAllFromKvStore(
@@ -210,4 +213,15 @@ export async function readAllFromKvStore(
     }),
   );
   return new Map(Array.from(keys, ({ key }, i) => [key, values[i]]));
+}
+
+export async function testAutoDetect(url: string): Promise<AutoDetectMatch[]> {
+  const kvStoreContext = (await sharedKvStoreContext()).kvStoreContext;
+  const result = await autoDetectFormat({
+    url,
+    kvStoreContext,
+    autoDetectDirectory: () => kvStoreContext.autoDetectRegistry.directorySpec,
+    autoDetectFile: () => kvStoreContext.autoDetectRegistry.fileSpec,
+  });
+  return result.matches;
 }

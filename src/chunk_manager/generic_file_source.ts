@@ -118,7 +118,7 @@ export function getCachedDecodedUrl<Data>(
   sharedKvStoreContext: SharedKvStoreContextCounterpart,
   url: string,
   decodeFunction: (
-    readResponse: ReadResponse | undefined,
+    readResponse: ReadResponse,
     options: ProgressOptions,
   ) => Promise<{ size: number; data: Data }>,
   options: Partial<ProgressOptions>,
@@ -129,13 +129,13 @@ export function getCachedDecodedUrl<Data>(
       const cache = new SimpleAsyncCache(
         sharedKvStoreContext.chunkManager.addRef(),
         {
-          get: async (url: string, options: ProgressOptions) => {
+          get: async (url: string, progressOptions: ProgressOptions) => {
             const readResponse = await sharedKvStoreContext.kvStoreContext.read(
               url,
-              options,
+              { ...progressOptions, throwIfMissing: true },
             );
             try {
-              return decodeFunction(readResponse, options);
+              return decodeFunction(readResponse, progressOptions);
             } catch (e) {
               throw new Error("Error reading ${url}", { cause: e });
             }

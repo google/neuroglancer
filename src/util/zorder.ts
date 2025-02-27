@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 
 export function getOctreeChildIndex(x: number, y: number, z: number) {
   return (x & 1) | ((y << 1) & 2) | ((z << 2) & 4);
@@ -84,8 +84,8 @@ export function encodeZIndexCompressed3d(
 }
 
 export function encodeZIndexCompressed(
-  position: TypedArray,
-  shape: TypedArray,
+  position: TypedNumberArray,
+  shape: TypedNumberArray,
 ): bigint {
   let zIndex = 0n;
   let outputBit = 0;

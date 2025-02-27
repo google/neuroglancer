@@ -132,7 +132,7 @@ export class SingleMeshUserLayer extends UserLayer {
   }
 
   static type = "mesh";
-  static typeAbbreviation = "mesh";
+  static typeAbbreviation = "msh";
 }
 
 function makeShaderCodeWidget(layer: SingleMeshUserLayer) {

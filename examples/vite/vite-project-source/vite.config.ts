@@ -32,23 +32,20 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    entries: [
+      "index.html",
+      // In order for Vite to properly find all of Neuroglancer's transitive
+      // dependencies, instruct Vite to search for dependencies starting from
+      // all of the bundle entry points.
+      //
+      // These have to be specified explicitly because vite does not allow globs
+      // within `node_modules`.
+      "node_modules/neuroglancer/src/main.bundle.js",
+      "node_modules/neuroglancer/src/async_computation.bundle.js",
+      "node_modules/neuroglancer/src/chunk_worker.bundle.js",
+    ],
     // Neuroglancer is incompatible with Vite's optimizeDeps step used for the
     // dev server due to its use of `new URL` syntax (not supported by esbuild).
     exclude: ["neuroglancer"],
-    // Some of Neuroglancer's dependencies are CommonJS modules for which the
-    // optimizeDeps step is mandatory.
-    //
-    // There does not seem to be a way to avoid having to specify all of these
-    // explicitly.
-    include: [
-      "neuroglancer > codemirror",
-      "neuroglancer > codemirror/mode/javascript/javascript.js",
-      "neuroglancer > codemirror/addon/fold/foldcode.js",
-      "neuroglancer > codemirror/addon/fold/foldgutter.js",
-      "neuroglancer > codemirror/addon/fold/brace-fold.js",
-      "neuroglancer > codemirror/addon/lint/lint.js",
-      "neuroglancer > core-js/actual/symbol/dispose.js",
-      "neuroglancer > core-js/actual/symbol/async-dispose.js",
-    ],
   },
 });

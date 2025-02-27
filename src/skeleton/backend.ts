@@ -28,7 +28,7 @@ import {
   getObjectKey,
 } from "#src/segmentation_display_state/base.js";
 import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import type { Endianness } from "#src/util/endian.js";
 import { Uint64 } from "#src/util/uint64.js";
 import {
@@ -45,7 +45,7 @@ const SKELETON_CHUNK_PRIORITY = 60;
 export class SkeletonChunk extends Chunk {
   objectId = new Uint64();
   vertexPositions: Float32Array | null = null;
-  vertexAttributes: TypedArray[] | null = null;
+  vertexAttributes: TypedNumberArray[] | null = null;
   indices: Uint32Array | null = null;
 
   initializeSkeletonChunk(key: string, objectId: Uint64) {

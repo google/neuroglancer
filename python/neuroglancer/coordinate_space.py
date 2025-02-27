@@ -15,7 +15,7 @@
 
 import re
 from collections.abc import Sequence
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, NamedTuple
 
 import numpy as np
 import numpy.typing
@@ -166,7 +166,7 @@ class DimensionScale(NamedTuple):
     unit: str = ""
     """Units of `.scale`."""
 
-    coordinate_array: Optional[CoordinateArray] = None
+    coordinate_array: CoordinateArray | None = None
     """Coordinate array for the dimension."""
 
     @staticmethod
@@ -208,7 +208,7 @@ class CoordinateSpace:
     Length is equal to `.rank`.
     """
 
-    coordinate_arrays: tuple[Optional[CoordinateArray], ...]
+    coordinate_arrays: tuple[CoordinateArray | None, ...]
     """Coordinate array for each dimension.
 
     Length is equal to `.rank`.
@@ -217,10 +217,10 @@ class CoordinateSpace:
     def __init__(
         self,
         json: Any = None,
-        names: Optional[Sequence[str]] = None,
-        scales: Optional[Sequence[float]] = None,
-        units: Optional[Union[str, Sequence[str]]] = None,
-        coordinate_arrays: Optional[Sequence[Optional[CoordinateArray]]] = None,
+        names: Sequence[str] | None = None,
+        scales: Sequence[float] | None = None,
+        units: str | Sequence[str] | None = None,
+        coordinate_arrays: Sequence[CoordinateArray | None] | None = None,
     ):
         """
         Constructs a coordinate space.

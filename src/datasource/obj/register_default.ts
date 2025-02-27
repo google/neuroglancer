@@ -19,8 +19,8 @@ import {
   registerProvider,
 } from "#src/datasource/default_provider.js";
 import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
-import { ObjDataSource } from "#src/datasource/obj/frontend.js";
+import { SingleMeshDataSource } from "#src/single_mesh/frontend.js";
 
-const provider = new ObjDataSource();
+const provider = new SingleMeshDataSource("obj", "Wavefront OBJ mesh");
 registerKvStoreBasedDataProvider(provider);
 registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
