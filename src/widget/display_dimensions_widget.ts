@@ -378,7 +378,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionIndices,
     } = this.displayDimensionRenderInfo.value;
 
-    const scaleValues = [-1, -1, -1];
+    const scaleValues = vec3.fromValues(-1, -1, -1);
     for (let i = 0; i < displayDimensionIndices.length; ++i) {
       if (displayDimensionIndices[i] === -1) {
         break;
@@ -387,14 +387,9 @@ export class DisplayDimensionsWidget extends RefCounted {
       const factor = canonicalVoxelFactors[i];
       scaleValues[i] = scale / factor;
     }
-    const vec3Scale = vec3.fromValues(
-      scaleValues[0],
-      scaleValues[1],
-      scaleValues[2],
-    );
     const xyScaleAndUnit = calculateOrientedSliceScales(
       this.orientation.orientation,
-      vec3Scale,
+      scaleValues,
       displayDimensionUnits,
     );
 
