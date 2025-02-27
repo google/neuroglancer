@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import type { OrientedSliceScales } from "#src/util/geom.js";
 import {
   getFrustrumPlanes,
   isAABBVisible,
@@ -22,12 +23,9 @@ import {
   quat,
   calculateOrientedSliceScales,
   vec3,
-  OrientedSliceScales,
 } from "#src/util/geom.js";
-import {
-  AXES_RELATIVE_ORIENTATION,
-  NamedAxes,
-} from "#src/widget/display_dimensions_widget.js";
+import type { NamedAxes } from "#src/widget/display_dimensions_widget.js";
+import { AXES_RELATIVE_ORIENTATION } from "#src/widget/display_dimensions_widget.js";
 
 describe("getFrustrumPlanes", () => {
   it("works for simple example", () => {
@@ -107,11 +105,14 @@ describe("calculateOrientedSliceScales", () => {
       "yz",
       { width: { scale: -1, unit: "" }, height: { scale: 3, unit: "Hz" } },
     ],
-  ])("works for 2D dataset default axis-aligned orientation: %s", (key, expectedResult) => {
-    const scales = vec3.fromValues(1, 3, -1);
-    const units = ["m", "Hz", ""];
-    validateOrientation(key, scales, units, expectedResult);
-  });
+  ])(
+    "works for 2D dataset default axis-aligned orientation: %s",
+    (key, expectedResult) => {
+      const scales = vec3.fromValues(1, 3, -1);
+      const units = ["m", "Hz", ""];
+      validateOrientation(key, scales, units, expectedResult);
+    },
+  );
 
   it("works for uniform scale and units regardless of orientation", () => {
     const scales = vec3.fromValues(1, 1, 1);

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import { mat3 } from "gl-matrix";
-import { mat4, quat, vec3, vec4 } from "gl-matrix";
+import { mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
 

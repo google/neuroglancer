@@ -38,12 +38,8 @@ import {
   removeFromParent,
   updateInputFieldWidth,
 } from "#src/util/dom.js";
-import {
-  calculateOrientedSliceScales,
-  OrientedSliceScales,
-  quat,
-  vec3,
-} from "#src/util/geom.js";
+import type { OrientedSliceScales } from "#src/util/geom.js";
+import { calculateOrientedSliceScales, quat, vec3 } from "#src/util/geom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
