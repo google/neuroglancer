@@ -842,7 +842,9 @@ class RenderingOptionsTab extends Tab {
             colorControlToolWidget.style.display = "";
           } else {
             colorControlToolWidget.style.display = "none";
-            this.layer.toolBinder.removeJsonString(ANNOTATION_COLOR_JSON_KEY);
+            this.layer.toolBinder.removeJsonString(
+              JSON.stringify(ANNOTATION_COLOR_JSON_KEY),
+            );
           }
         },
         makeCachedLazyDerivedWatchableValue(
