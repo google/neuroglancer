@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { mat3 } from "gl-matrix";
+import { mat3 } from "gl-matrix";
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
@@ -35,6 +35,11 @@ export const kZeroVec4 = vec4.fromValues(0, 0, 0, 0);
 export const kOneVec = vec3.fromValues(1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 export const kIdentityQuat = quat.create();
+
+export interface OrientedSliceScales {
+  width: { scale: number; unit: string };
+  height: { scale: number; unit: string };
+}
 
 export function prod3(x: ArrayLike<number>) {
   return x[0] * x[1] * x[2];
@@ -477,4 +482,46 @@ export function getViewFrustrumWorldBounds(
       bounds[j + 3] = Math.max(bounds[j + 3], x);
     }
   }
+}
+
+export function calculateOrientedSliceScales(
+  orientation: quat | undefined,
+  scales: vec3,
+  units: readonly string[],
+  tolerance: number = 1e-6,
+): OrientedSliceScales | null {
+  function extractContributingScales(
+    matrixRow: 0 | 1 | 2,
+  ): { scale: number; unit: string } | null {
+    const indices = [0, 1, 2].map((i) => i + 3 * matrixRow);
+    const contributingScales: number[] = [];
+    const contributingUnits: string[] = [];
+
+    for (const index of indices) {
+      if (Math.abs(rotationMatrix[index]) > tolerance) {
+        contributingScales.push(scales[index % 3]);
+        contributingUnits.push(units[index % 3]);
+      }
+    }
+
+    // Ensure all scales and units are consistent
+    if (
+      new Set(contributingScales).size > 1 ||
+      new Set(contributingUnits).size > 1
+    ) {
+      return null;
+    }
+
+    // As they are all the same, we can just return the first one
+    return { scale: contributingScales[0], unit: contributingUnits[0] };
+  }
+  if (orientation === undefined) orientation = kIdentityQuat;
+
+  const rotationMatrix = mat3.create();
+  mat3.fromQuat(rotationMatrix, orientation);
+
+  const width = extractContributingScales(0 /* matrixRow */);
+  const height = extractContributingScales(1 /* matrixRow */);
+
+  return width && height ? { width, height } : null;
 }

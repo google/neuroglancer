@@ -38,14 +38,23 @@ import {
   removeFromParent,
   updateInputFieldWidth,
 } from "#src/util/dom.js";
-import { quat, vec3 } from "#src/util/geom.js";
+import {
+  calculateOrientedSliceScales,
+  OrientedSliceScales,
+  quat,
+  vec3,
+} from "#src/util/geom.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
 } from "#src/util/keyboard_bindings.js";
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { formatScaleWithUnitAsString, parseScale } from "#src/util/si_units.js";
+import {
+  formatScaleWithUnit,
+  formatScaleWithUnitAsString,
+  parseScale,
+} from "#src/util/si_units.js";
 import type { NullarySignal } from "#src/util/signal.js";
 
 const dimensionColors = ["#f00", "#0f0", "#99f"];
@@ -58,18 +67,6 @@ export const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
   ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
 ]);
 
-const AXES_NORMALS = new Map<NamedAxes, vec3>([
-  ["xy", vec3.fromValues(0, 0, 1)],
-  ["xz", vec3.fromValues(0, 1, 0)],
-  ["yz", vec3.fromValues(1, 0, 0)],
-]);
-
-enum Axis {
-  x = 0,
-  y = 1,
-  z = 2,
-}
-
 interface DimensionWidget {
   container: HTMLDivElement;
   name: HTMLInputElement;
@@ -77,6 +74,12 @@ interface DimensionWidget {
   scale: HTMLInputElement;
   scaleUnit: HTMLSpanElement;
   scaleFactorModified: boolean;
+}
+
+interface fovControl {
+  container: HTMLDivElement;
+  input: HTMLInputElement;
+  unit: HTMLSpanElement;
 }
 
 const inputEventMap = EventActionMap.fromObject({
@@ -112,9 +115,7 @@ export class DisplayDimensionsWidget extends RefCounted {
   depthGridContainer = document.createElement("div");
   fovGridContainer = document.createElement("div");
   defaultCheckbox = document.createElement("input");
-  fovInputElements: HTMLInputElement[] = [];
-
-  fovAxesLabels: NamedAxes | undefined | "zy";
+  fovControls: fovControl[] = [];
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement("div");
@@ -271,8 +272,10 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionScales,
       displayDimensionUnits,
     } = this.displayDimensionRenderInfo.value;
-    const scale = this.dimensionElements[i].scale;
-    const parsedScale = parseScale(scale.value);
+    const dimElement = this.dimensionElements[i];
+    const unit = dimElement.scaleUnit.textContent?.split("/")[0];
+    const input = dimElement.scale.value + unit;
+    const parsedScale = parseScale(input);
     if (!parsedScale || parsedScale.unit !== displayDimensionUnits[i]) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
@@ -286,16 +289,16 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateZoomFromFOV(i: number) {
-    if (this.fovAxesLabels === undefined) return;
-    const axisIndex = Axis[this.fovAxesLabels[i] as keyof typeof Axis];
-    const {
-      displayDimensionScales,
-      canonicalVoxelFactors,
-      displayDimensionUnits,
-    } = this.displayDimensionRenderInfo.value;
-    const input = this.fovInputElements[i];
-    const parsedFov = parseScale(input.value);
-    if (!parsedFov || parsedFov.unit !== displayDimensionUnits[axisIndex]) {
+    const sliceScales = this.getFOVScales();
+    if (sliceScales == null) {
+      return;
+    }
+    const control = this.fovControls[i];
+    const input = control.input.value + control.unit.textContent;
+    const parsedFov = parseScale(input);
+    const scale = i == 0 ? sliceScales.width.scale : sliceScales.height.scale;
+    const unit = i == 0 ? sliceScales.width.unit : sliceScales.height.unit;
+    if (!parsedFov || parsedFov.unit !== unit) {
       // If the input is invalid or the wrong unit
       // reset the input states to the previous values
       this.updateView();
@@ -304,16 +307,14 @@ export class DisplayDimensionsWidget extends RefCounted {
     const { width, height } = this.panelRenderViewport;
     const pixelResolution = i === 0 ? width : height;
     const desiredPerPixelScale = parsedFov.scale / pixelResolution;
-    const desiredZoomLevel =
-      (desiredPerPixelScale * canonicalVoxelFactors[axisIndex]) /
-      displayDimensionScales[axisIndex];
+    const desiredZoomLevel = desiredPerPixelScale / scale;
     this.zoom.value = desiredZoomLevel;
   }
 
   private updateScaleTooltip(i: number) {
     const { displayDimensionUnits } = this.displayDimensionRenderInfo.value;
     const dataUnits = displayDimensionUnits[i];
-    const tooltip = `Display scale in ${dataUnits}/${this.displayUnit}`;
+    const tooltip = `Change display scale in ${dataUnits}/${this.displayUnit}`;
     this.dimensionElements[i].scale.title = tooltip;
     this.dimensionElements[i].scaleUnit.title = tooltip;
   }
@@ -348,17 +349,6 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private scheduleUpdateView = animationFrameDebounce(() => this.updateView());
 
-  /**
-   * Switches the axes between yz and zy
-   * This is because the FOV ordering is first dimension x-axis
-   * second dimension y-axis
-   * The xy and xz layouts both follow this ordering, but the yz layout does not.
-   * In the yz layout, z is the x-axis and y is the y-axis, so its zy in this convention
-   */
-  private normalizeAxes() {
-    this.fovAxesLabels = this.axes === "yz" ? "zy" : this.axes;
-  }
-
   private isUniformDisplayScale() {
     const { displayDimensionIndices, displayDimensionUnits } =
       this.displayDimensionRenderInfo.value;
@@ -378,39 +368,51 @@ export class DisplayDimensionsWidget extends RefCounted {
     return true;
   }
 
-  /**
-   * Check if the current orientation is equal to the default orientation
-   * or if the current normal is parallel to the default normal
-   */
-  private isOrientationAxisAligned() {
-    if (this.axes === undefined) return false;
-    let defaultQuaternion = AXES_RELATIVE_ORIENTATION.get(this.axes);
-    defaultQuaternion = defaultQuaternion ?? quat.create();
-    const currentQuaternion = this.orientation.orientation;
-    if (quat.equals(defaultQuaternion, currentQuaternion)) return true;
+  private getFOVScales() {
+    if (!this.isSliceView) return null;
 
-    const currentNormal = vec3.create();
-    const defaultNormal = AXES_NORMALS.get(this.axes);
-    if (defaultNormal === undefined) return false;
-    vec3.transformQuat(currentNormal, [0, 0, 1], currentQuaternion);
-    const epsilon = 1e-7;
-    return (
-      Math.abs(1 - Math.abs(vec3.dot(currentNormal, defaultNormal))) <= epsilon
+    const {
+      displayDimensionScales,
+      canonicalVoxelFactors,
+      displayDimensionUnits,
+      displayDimensionIndices,
+    } = this.displayDimensionRenderInfo.value;
+
+    const scaleValues = vec3.fromValues(-1, -1, -1);
+    for (let i = 0; i < displayDimensionIndices.length; ++i) {
+      if (displayDimensionIndices[i] === -1) {
+        break;
+      }
+      const scale = displayDimensionScales[i];
+      const factor = canonicalVoxelFactors[i];
+      scaleValues[i] = scale / factor;
+    }
+    const xyScaleAndUnit = calculateOrientedSliceScales(
+      this.orientation.orientation,
+      scaleValues,
+      displayDimensionUnits,
     );
+
+    return xyScaleAndUnit;
   }
 
-  private updateFovInputVisibility(triggerUpdateViewOnChange = true) {
-    if (this.fovAxesLabels === undefined) return false;
-    const enableFovInputs =
-      this.isOrientationAxisAligned() || this.isUniformDisplayScale();
+  private toggleFovInputVisibility(
+    triggerUpdate: boolean = true,
+    inputSliceScales: OrientedSliceScales | null = null,
+  ) {
+    const sliceScales = inputSliceScales ?? this.getFOVScales();
+    const enable =
+      sliceScales !== null &&
+      sliceScales.width.scale !== -1 &&
+      sliceScales.height.scale !== -1;
     const wasEnabled = this.fovGridContainer.style.display !== "none";
-    if (enableFovInputs !== wasEnabled) {
-      this.fovGridContainer.style.display = enableFovInputs ? "" : "none";
-      if (triggerUpdateViewOnChange) {
+    if (enable !== wasEnabled) {
+      this.fovGridContainer.style.display = enable ? "" : "none";
+      if (triggerUpdate) {
         this.scheduleUpdateView();
       }
     }
-    return enableFovInputs;
+    return enable;
   }
 
   get displayDimensions() {
@@ -421,20 +423,21 @@ export class DisplayDimensionsWidget extends RefCounted {
     return this.displayDimensionRenderInfo.relativeDisplayScales;
   }
 
+  get displayUnit() {
+    return this.isSliceView ? "px" : "vh";
+  }
+
   constructor(
     public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
     public zoom: TrackableZoomInterface,
     public depthRange: Owned<TrackableDepthRange>,
     public orientation: Owned<OrientationState>,
-    public axes: NamedAxes | undefined,
     public panelBoundsUpdated: NullarySignal,
     public panelRenderViewport: RenderViewport,
-    public displayUnit = "px",
+    public isSliceView: boolean,
   ) {
     super();
-    this.normalizeAxes();
-    const { element, dimensionGridContainer, defaultCheckbox, fovAxesLabels } =
-      this;
+    const { element, dimensionGridContainer, defaultCheckbox } = this;
     const defaultCheckboxLabel = document.createElement("label");
 
     const hideWidgetDetails = this.registerCancellable(
@@ -485,11 +488,9 @@ export class DisplayDimensionsWidget extends RefCounted {
       displayDimensionRenderInfo.changed.add(this.scheduleUpdateView),
     );
     this.registerDisposer(this.panelBoundsUpdated.add(this.scheduleUpdateView));
-    if (fovAxesLabels !== undefined) {
-      this.registerDisposer(
-        this.orientation.changed.add(() => this.updateFovInputVisibility()),
-      );
-    }
+    this.registerDisposer(
+      this.orientation.changed.add(() => this.toggleFovInputVisibility()),
+    );
     const keyboardHandler = this.registerDisposer(
       new KeyboardEventBinder(element, inputEventMap),
     );
@@ -503,7 +504,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     });
 
-    if (fovAxesLabels !== undefined) {
+    if (isSliceView) {
       const { fovGridContainer } = this;
       fovGridContainer.classList.add(
         "neuroglancer-display-dimensions-widget-fov",
@@ -514,20 +515,28 @@ export class DisplayDimensionsWidget extends RefCounted {
       fovGridContainer.appendChild(topLevelFOVLabel);
       const fovInputContainer = document.createElement("div");
       fovGridContainer.appendChild(fovInputContainer);
+      fovInputContainer.classList.add(
+        "neuroglancer-display-dimensions-widget-fov-container",
+      );
       for (let i = 0; i < 2; ++i) {
         const container = document.createElement("div");
-        container.classList.add(
-          "neuroglancer-display-dimensions-widget-fov-container",
-        );
         const input = document.createElement("input");
         input.classList.add("neuroglancer-display-dimensions-input-base");
         input.spellcheck = false;
         input.autocomplete = "off";
-        this.fovInputElements.push(input);
         const direction = i === 0 ? "horizontal" : "vertical";
-        const tooltip = `Panel ${direction} field of view`;
+        const tooltip = `Change panel ${direction} field of view`;
         input.title = tooltip;
-        fovInputContainer.appendChild(input);
+        input.classList.add(`neuroglancer-display-dimensions-widget-fov-input`);
+        const scaleUnit = document.createElement("span");
+        scaleUnit.classList.add(
+          "neuroglancer-display-dimensions-widget-fov-unit",
+        );
+        scaleUnit.title = tooltip;
+        container.appendChild(input);
+        container.appendChild(scaleUnit);
+        fovInputContainer.appendChild(container);
+        this.fovControls.push({ container, input, unit: scaleUnit });
         if (i == 0) {
           const separatorElement = document.createElement("span");
           separatorElement.textContent = "x";
@@ -546,12 +555,12 @@ export class DisplayDimensionsWidget extends RefCounted {
         });
         registerActionListener(input, "move-up", () => {
           if (i !== 0) {
-            this.fovInputElements[i - 1].focus();
+            this.fovControls[i - 1].input.focus();
           }
         });
         registerActionListener(input, "move-down", () => {
           if (i !== 1) {
-            this.fovInputElements[i + 1].focus();
+            this.fovControls[i + 1].input.focus();
           }
         });
       }
@@ -827,12 +836,13 @@ export class DisplayDimensionsWidget extends RefCounted {
         const totalScale =
           (displayDimensionScales[i] * zoom) / canonicalVoxelFactors[i];
         if (i === 0 || !singleScale) {
-          const formattedScale = formatScaleWithUnitAsString(
+          const formattedScale = formatScaleWithUnit(
             totalScale,
             displayDimensionUnits[i],
             { precision: 2, elide1: false },
           );
-          dimElements.scale.value = `${formattedScale}`;
+          dimElements.scale.value = `${formattedScale.scale}${formattedScale.prefix}`;
+          dimElements.scaleUnit.textContent = `${formattedScale.unit}/${this.displayUnit}`;
           dimElements.scale.style.display = "";
           this.updateScaleTooltip(i);
         } else {
@@ -846,23 +856,22 @@ export class DisplayDimensionsWidget extends RefCounted {
       updateInputFieldWidth(dimElements.scale);
     }
     // Update the FOV fields
-    if (this.updateFovInputVisibility(false /* triggerUpdate */)) {
+    const sliceScales = this.getFOVScales();
+    const enableFovInputs = this.toggleFovInputVisibility(false, sliceScales);
+    if (enableFovInputs && sliceScales) {
       const { width, height } = this.panelRenderViewport;
       for (let i = 0; i < 2; i++) {
-        const localAxisIndex =
-          Axis[this.fovAxesLabels![i] as keyof typeof Axis];
-        const totalScale =
-          (displayDimensionScales[localAxisIndex] * zoom) /
-          canonicalVoxelFactors[localAxisIndex];
+        const axis = i == 0 ? sliceScales.width : sliceScales.height;
+        const totalScale = axis.scale * zoom;
         const pixelResolution = i === 0 ? width : height;
         const fieldOfView = totalScale * pixelResolution;
-        const formattedFieldOfView = formatScaleWithUnitAsString(
-          fieldOfView,
-          displayDimensionUnits[localAxisIndex],
-          { precision: 2, elide1: false },
-        );
-        this.fovInputElements[i].value = formattedFieldOfView;
-        updateInputFieldWidth(this.fovInputElements[i]);
+        const fov = formatScaleWithUnit(fieldOfView, axis.unit, {
+          precision: 2,
+          elide1: false,
+        });
+        this.fovControls[i].input.value = `${fov.scale}${fov.prefix}`;
+        this.fovControls[i].unit.textContent = fov.unit;
+        updateInputFieldWidth(this.fovControls[i].input);
       }
     }
   }
