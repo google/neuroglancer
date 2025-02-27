@@ -467,9 +467,6 @@ export class AnnotationUserLayer extends Base {
     this.annotationDisplayState.shaderControls.restoreState(
       specification[SHADER_CONTROLS_JSON_KEY],
     );
-    this.annotationDisplayState.color.restoreState(
-      specification[ANNOTATION_COLOR_JSON_KEY],
-    );
   }
 
   getLegacyDataSourceSpecifications(
@@ -724,7 +721,6 @@ export class AnnotationUserLayer extends Base {
     x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] =
       this.annotationDisplayState.shaderControls.toJSON();
-    x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;
   }
