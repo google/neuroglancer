@@ -87,7 +87,7 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
           chunk.systemMemoryBytes = size;
           chunk!.queueManager.updateChunkState(
             chunk!,
-            ChunkState.SYSTEM_MEMORY,
+            ChunkState.SYSTEM_MEMORY_WORKER,
           );
           return data;
         } catch (e) {
@@ -96,7 +96,7 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
         }
       });
     }
-    if (chunk.state === ChunkState.SYSTEM_MEMORY) {
+    if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
       chunk.chunkManager.queueManager.markRecentlyUsed(chunk);
     }
     return chunk.asyncMemoize(options);
