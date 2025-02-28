@@ -309,7 +309,7 @@ export function normalizeEventAction(
 }
 
 // Strips the phase and optional modifiers.
-function friendlyEventIdentifier(identifier: string): string {
+export function friendlyEventIdentifier(identifier: string): string {
   identifier = identifier.replace(
     /^(?:at|bubble|capture)|(?:(?:shift|control|alt|meta)\?\+)/g,
     "",
