@@ -18,6 +18,7 @@
  * @file User interface for display and editing annotations.
  */
 
+import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -417,20 +418,27 @@ export class AnnotationLayerView extends Tab {
     toolbox.className = "neuroglancer-annotation-toolbox";
 
     layer.initializeAnnotationLayerViewTab(this);
-    const colorPicker = this.registerDisposer(
-      new ColorWidget(this.displayState.color),
-    );
-    colorPicker.element.title = "Change annotation display color";
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        makeCachedLazyDerivedWatchableValue(
-          (shader) => shader.match(/\bdefaultColor\b/) !== null,
-          displayState.shaderControls.processedFragmentMain,
+
+    const annotationColorPickerEnabled = (
+      layer.constructor as unknown as UserLayerWithAnnotationsClass
+    ).supportColorPickerInAnnotationTab;
+    if (annotationColorPickerEnabled) {
+      const colorPicker = this.registerDisposer(
+        new ColorWidget(this.displayState.color),
+      );
+      colorPicker.element.title = "Change annotation display color";
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          makeCachedLazyDerivedWatchableValue(
+            (shader) => shader.match(/\bdefaultColor\b/) !== null,
+            displayState.shaderControls.processedFragmentMain,
+          ),
+          colorPicker.element,
         ),
-        colorPicker.element,
-      ),
-    );
-    toolbox.appendChild(colorPicker.element);
+      );
+      toolbox.appendChild(colorPicker.element);
+    }
+
     const { mutableControls } = this;
     const pointButton = makeIcon({
       text: annotationTypeHandlers[AnnotationType.POINT].icon,
@@ -468,6 +476,15 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(ellipsoidButton);
+    const helpIcon = makeIcon({
+      title:
+        "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Rendering' tab.",
+      svg: svg_help,
+      clickable: false,
+    });
+    helpIcon.style.marginLeft = "auto";
+    mutableControls.appendChild(helpIcon);
+
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 
@@ -1588,6 +1605,7 @@ export function UserLayerWithAnnotationsMixin<
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
+    static supportColorPickerInAnnotationTab = true;
 
     constructor(...args: any[]) {
       super(...args);
@@ -2154,6 +2172,9 @@ export function UserLayerWithAnnotationsMixin<
   return C;
 }
 
-export type UserLayerWithAnnotations = InstanceType<
-  ReturnType<typeof UserLayerWithAnnotationsMixin>
+type UserLayerWithAnnotationsClass = ReturnType<
+  typeof UserLayerWithAnnotationsMixin
 >;
+
+export type UserLayerWithAnnotations =
+  InstanceType<UserLayerWithAnnotationsClass>;

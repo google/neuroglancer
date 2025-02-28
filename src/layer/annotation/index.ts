@@ -69,6 +69,12 @@ import {
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
+import {
+  addLayerControlToOptionsTab,
+  type LayerControlDefinition,
+  registerLayerControl,
+} from "#src/widget/layer_control.js";
+import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { RenderScaleWidget } from "#src/widget/render_scale_widget.js";
@@ -87,6 +93,7 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionAnnotationSpacing";
 const PROJECTION_RENDER_SCALE_JSON_KEY = "projectionAnnotationSpacing";
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
 
 function addPointAnnotations(annotations: LocalAnnotationSource, obj: any) {
   if (obj === undefined) {
@@ -386,6 +393,8 @@ export class AnnotationUserLayer extends Base {
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
+  static supportColorPickerInAnnotationTab = false;
+
   linkedSegmentationLayers = this.registerDisposer(
     new LinkedSegmentationLayers(
       this.manager.rootLayers,
@@ -742,6 +751,7 @@ class RenderingOptionsTab extends Tab {
     const { element } = this;
     this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-annotation-rendering-tab");
+
     element.appendChild(
       this.registerDisposer(
         new DependentViewWidget(
@@ -778,6 +788,7 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
+
     const topRow = document.createElement("div");
     topRow.className =
       "neuroglancer-segmentation-dropdown-skeleton-shader-header";
@@ -812,7 +823,40 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
+
+    element.appendChild(
+      addLayerControlToOptionsTab(
+        this,
+        layer,
+        this.visibility,
+        LAYER_CONTROLS[ANNOTATION_COLOR_JSON_KEY],
+      ),
+    );
   }
+}
+
+const LAYER_CONTROLS: Record<
+  string,
+  LayerControlDefinition<AnnotationUserLayer>
+> = {
+  [ANNOTATION_COLOR_JSON_KEY]: {
+    label: "Annotation color",
+    title:
+      "Annotation shader default color (enabled with 'defaultColor()' in the shader code)",
+    toolJson: ANNOTATION_COLOR_JSON_KEY,
+    ...colorLayerControl(
+      (layer: AnnotationUserLayer) => layer.annotationDisplayState.color,
+    ),
+    isValid: (layer) =>
+      makeCachedLazyDerivedWatchableValue(
+        (shader) => shader.match(/\bdefaultColor\b/) !== null,
+        layer.annotationDisplayState.shaderControls.processedFragmentMain,
+      ),
+  },
+};
+
+for (const control of Object.values(LAYER_CONTROLS)) {
+  registerLayerControl(AnnotationUserLayer, control);
 }
 
 registerLayerType(AnnotationUserLayer);
