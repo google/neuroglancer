@@ -185,6 +185,9 @@ export function stableStringify(x: any) {
     s += "}";
     return s;
   }
+  if (typeof x === "bigint") {
+    return x.toString();
+  }
   return JSON.stringify(x);
 }
 
