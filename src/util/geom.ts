@@ -500,13 +500,14 @@ export function calculateOrientedSliceScales(
     for (let i = 0; i < 3; ++i) {
       const index = i + 3 * matrixRow;
       if (Math.abs(rotationMatrix[index]) > tolerance) {
-        if (contributingUnit !== undefined && contributingScale !== undefined) {
-          if (contributingUnit !== units[i]) return null;
-          if (!nearlyEqualScales(contributingScale, scales[i])) return null;
-        } else {
+        if (contributingUnit === undefined || contributingScale === undefined) {
           contributingScale = scales[i];
           contributingUnit = units[i];
-        }
+        } else if (
+          contributingUnit !== units[i] ||
+          !nearlyEqualScales(contributingScale, scales[i])
+        )
+          return null;
       }
     }
     if (contributingScale === undefined || contributingUnit === undefined)
