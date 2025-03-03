@@ -191,7 +191,7 @@ describe("calculateOrientedSliceScales", () => {
     checkThreeNonAxisAlignedOrientations(scales, units, null);
 
     // Because of the default tolerance, a little bit bigger would fail
-    // like 100000001 100000000 100000002 
+    // like 100000001 100000000 100000002
     checkThreeNonAxisAlignedOrientations(
       vec3.fromValues(100001, 100000, 100000 - 1),
       ["m", "m", "m"],

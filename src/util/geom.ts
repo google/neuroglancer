@@ -17,7 +17,6 @@
 import { mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
-import { formatScaleWithUnit } from "#src/util/si_units.js";
 
 export { mat2, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
 
