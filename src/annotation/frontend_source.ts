@@ -101,7 +101,7 @@ export class AnnotationGeometryData {
       typeToIds: x.typeToIds,
       typeToOffset: x.typeToOffset,
       typeToIdMaps: x.typeToIdMaps,
-      idToSize: x.idToSize,
+      idToSizeMap: x.idToSizeMap,
     };
   }
   freeGPUMemory(gl: GL) {

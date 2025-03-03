@@ -634,7 +634,7 @@ function AnnotationRenderLayer<
       const { base } = this;
       const { chunkDisplayTransform } = state;
       const { serializedAnnotations } = chunk;
-      const { typeToIdMaps, typeToOffset, idToSize } = serializedAnnotations;
+      const { typeToIdMaps, typeToOffset, idToSizeMap: idToSize } = serializedAnnotations;
       let pickId = 0;
       if (renderContext.emitPickID) {
         pickId = renderContext.pickIDs.register(

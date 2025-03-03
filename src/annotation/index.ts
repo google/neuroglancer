@@ -1493,10 +1493,9 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
   return annotationSource;
 }
 
-// TODO (SKM) make index non optional
 export interface SerializedAnnotations {
   data: Uint8Array<ArrayBuffer>;
-  idToSize: Map<string, number>;
+  idToSizeMap: Map<string, number>;
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];
@@ -1507,39 +1506,29 @@ function serializeAnnotations(
   propertySerializers: AnnotationPropertySerializer[],
 ): SerializedAnnotations {
   let totalBytes = 0;
-  // let indexBytes = 0;
+  let polyLinePairCount = 0;
   const typeToOffset: number[] = [];
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
     let serializedPropertiesBytes = propertySerializer.serializedBytes;
-    // TODO (SKM) temp - make the handler be the one to report the index
-    // bytes
-    // Start offset and number of points both as uint32
-    // TODO (SKM) temp - this is not a good way to set the bytes
-    // It needs to be instead combined into the property serializer
     typeToOffset[annotationType] = totalBytes;
     const annotations: Annotation[] = allAnnotations[annotationType];
     const count = annotations.length;
-    let tempCountForDebug = 0;
     if (annotationType === AnnotationType.POLYLINE) {
       for (const annotation of annotations) {
-        const byteMultiplier = (annotation as PolyLine).points.length - 1;
-        totalBytes += serializedPropertiesBytes * byteMultiplier;
-        tempCountForDebug += byteMultiplier;
+        const polyLinePairs = (annotation as PolyLine).points.length - 1;
+        totalBytes += serializedPropertiesBytes * polyLinePairs;
+        polyLinePairCount += polyLinePairs;
       }
     } else {
       totalBytes += serializedPropertiesBytes * count;
     }
-    console.log("temp count", tempCountForDebug, "total bytes", totalBytes);
   }
   const typeToIds: string[][] = [];
   const typeToIdMaps: Map<string, number>[] = [];
-  // TODO (SKM) make this more generic
-  const idToSize = new Map<string, number>();
+  const idToSizeMap = new Map<string, number>();
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
-  // const index = new ArrayBuffer(indexBytes);
-  // const indexView = new DataView(index);
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
@@ -1554,44 +1543,34 @@ function serializeAnnotations(
     const serialize = handler.serialize;
     const offset = typeToOffset[annotationType];
     const geometryDataStride = propertySerializer.propertyGroupBytes[0];
-    console.log("stride", annotationType, geometryDataStride);
-    let polyCount = 0;
+    let numProcessedPolyLinePointPairs = 0;
     for (let i = 0, count = annotations.length; i < count; ++i) {
       const annotation = annotations[i];
-      // First store the number of points in the index buffer
-      // TODO (SKM) the handler should be the one to report this
-      // TODO handle polyline properly here, for now assume length two
-      // polyline just to debug the rendering
-      // TODO (SKM) let the annotation type indicate this
-      // TODO (SKM) expand this
+      // Polylines need to be serialized per pair of points
+      // Similar to if they stored each pair of points as a child Line annotation
       if (annotationType === AnnotationType.POLYLINE) {
         serialize(
           dataView,
-          offset + polyCount * geometryDataStride,
+          offset + numProcessedPolyLinePointPairs * geometryDataStride,
           isLittleEndian,
           rank,
           annotation,
           geometryDataStride,
         );
         const polyline = annotation as PolyLine;
-        // Store the size of the polyline in the map
-        idToSize.set(polyline.id, polyline.points.length - 1);
-        // Loop over each pair of points
+        idToSizeMap.set(polyline.id, polyline.points.length - 1);
+
         for (let j = 0; j < polyline.points.length - 1; j++) {
-          // Need to serialize properties multiple times
-          // TODO (SKM) improve on this - will not be at right place
-          // most likely
-          console.log("polyCount", polyCount);
           serializeProperties(
             dataView,
             offset,
-            i,
-            count,
+            numProcessedPolyLinePointPairs + j,
+            polyLinePairCount,
             isLittleEndian,
             polyline.properties,
           );
         }
-        polyCount += polyline.points.length - 1;
+        numProcessedPolyLinePointPairs += polyline.points.length - 1;
       } else {
         serialize(
           dataView,
@@ -1612,10 +1591,9 @@ function serializeAnnotations(
       }
     }
   }
-  console.log("totalBytes", totalBytes);
   return {
     data: new Uint8Array(data),
-    idToSize,
+    idToSizeMap,
     typeToIds,
     typeToOffset,
     typeToIdMaps,
