@@ -79,11 +79,11 @@ export function computeNumPickIds(
   serializedAnnotations: SerializedAnnotations,
 ) {
   let numPickIds = 0;
-  const { typeToIds } = serializedAnnotations;
+  const { typeToSize } = serializedAnnotations;
   for (const annotationType of annotationTypes) {
     numPickIds +=
       getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
-      typeToIds[annotationType].length;
+      typeToSize[annotationType];
   }
   return numPickIds;
 }
@@ -97,10 +97,11 @@ export class AnnotationGeometryData {
   constructor(x: SerializedAnnotations) {
     this.serializedAnnotations = {
       data: x.data,
+      idToSizeMaps: x.idToSizeMaps,
       typeToIds: x.typeToIds,
       typeToOffset: x.typeToOffset,
       typeToIdMaps: x.typeToIdMaps,
-      idToSizeMap: x.idToSizeMap,
+      typeToSize: x.typeToSize,
     };
   }
   freeGPUMemory(gl: GL) {

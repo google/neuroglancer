@@ -1504,10 +1504,11 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
 
 export interface SerializedAnnotations {
   data: Uint8Array<ArrayBuffer>;
-  idToSizeMap: Map<string, number>;
+  idToSizeMaps: Map<string, number>[];
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];
+  typeToSize: number[];
 }
 
 function serializeAnnotations(
@@ -1517,6 +1518,7 @@ function serializeAnnotations(
   let totalBytes = 0;
   let polyLinePairCount = 0;
   const typeToOffset: number[] = [];
+  const typeToSize: number[] = [];
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
     let serializedPropertiesBytes = propertySerializer.serializedBytes;
@@ -1535,11 +1537,13 @@ function serializeAnnotations(
   }
   const typeToIds: string[][] = [];
   const typeToIdMaps: Map<string, number>[] = [];
-  const idToSizeMap = new Map<string, number>();
+  const idToSizeMaps: Map<string, number>[] = [];
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
+    const idToSizeMap = new Map<string, number>();
+    idToSizeMaps[annotationType] = idToSizeMap;
     const propertySerializer = propertySerializers[annotationType];
     const { rank } = propertySerializer;
     const serializeProperties = propertySerializer.serialize;
@@ -1599,13 +1603,19 @@ function serializeAnnotations(
         );
       }
     }
+    if (annotationType === AnnotationType.POLYLINE) {
+      typeToSize[annotationType] = numProcessedPolyLinePointPairs;
+    } else {
+      typeToSize[annotationType] = annotations.length;
+    }
   }
   return {
     data: new Uint8Array(data),
-    idToSizeMap,
+    idToSizeMaps,
     typeToIds,
     typeToOffset,
     typeToIdMaps,
+    typeToSize,
   };
 }
 
