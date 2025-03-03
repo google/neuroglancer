@@ -37,7 +37,6 @@ import {
   AnnotationType,
   annotationTypeHandlers,
   annotationTypes,
-  fixAnnotationAfterStructuredCloning,
   makeAnnotationId,
   makeAnnotationPropertySerializers,
 } from "#src/annotation/index.js";
@@ -251,7 +250,7 @@ export class AnnotationMetadataChunk extends Chunk {
   annotation: Annotation | null;
   constructor(source: Borrowed<AnnotationMetadataChunkSource>, x: any) {
     super(source);
-    this.annotation = fixAnnotationAfterStructuredCloning(x.annotation);
+    this.annotation = x.annotation;
   }
 }
 
@@ -1009,8 +1008,7 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function (x) {
   if (error !== undefined) {
     source.handleFailedUpdate(annotationId, error);
   } else {
-    const newAnnotation: Annotation | null =
-      fixAnnotationAfterStructuredCloning(x.newAnnotation);
+    const newAnnotation: Annotation | null = x.newAnnotation;
     source.handleSuccessfulUpdate(annotationId, newAnnotation);
   }
 });

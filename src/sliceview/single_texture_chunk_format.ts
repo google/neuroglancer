@@ -19,7 +19,7 @@ import type {
   ChunkFormat,
 } from "#src/sliceview/volume/frontend.js";
 import { VolumeChunk } from "#src/sliceview/volume/frontend.js";
-import type { TypedNumberArray } from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -110,7 +110,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   abstract setTextureData(
     gl: GL,
     textureLayout: TextureLayout,
-    data: TypedNumberArray,
+    data: TypedArray,
   ): void;
 
   /**

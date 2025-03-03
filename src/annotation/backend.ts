@@ -33,7 +33,6 @@ import type {
   AnnotationId,
   SerializedAnnotations,
 } from "#src/annotation/index.js";
-import { fixAnnotationAfterStructuredCloning } from "#src/annotation/index.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import {
   Chunk,
@@ -67,7 +66,6 @@ import {
 import type { TransformedSource } from "#src/sliceview/base.js";
 import { registerNested, WatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import {
   getBasePriority,
   getPriorityTier,
@@ -154,7 +152,7 @@ export class AnnotationGeometryChunk extends GeometryChunkMixin(
 
 export class AnnotationSubsetGeometryChunk extends GeometryChunkMixin(Chunk) {
   declare source: AnnotationSubsetGeometryChunkSource;
-  objectId: Uint64;
+  objectId: bigint;
 }
 
 @registerSharedObject(ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID)
@@ -194,14 +192,14 @@ class AnnotationSubsetGeometryChunkSource extends ChunkSource {
   parent: Borrowed<AnnotationSource> | undefined = undefined;
   declare chunks: Map<string, AnnotationSubsetGeometryChunk>;
   relationshipIndex: number;
-  getChunk(objectId: Uint64) {
+  getChunk(objectId: bigint) {
     const key = getObjectKey(objectId);
     const { chunks } = this;
     let chunk = chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(AnnotationSubsetGeometryChunk);
       chunk.initialize(key);
-      chunk.objectId = objectId.clone();
+      chunk.objectId = objectId;
       this.addChunk(chunk);
     }
     return chunk;
@@ -304,9 +302,7 @@ registerRPC(ANNOTATION_REFERENCE_DELETE_RPC_ID, function (x: any) {
 registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, function (x: any) {
   const obj = <AnnotationSource>this.get(x.id);
   const annotationId: AnnotationId | undefined = x.annotationId;
-  const newAnnotation: Annotation | null = fixAnnotationAfterStructuredCloning(
-    x.newAnnotation,
-  );
+  const newAnnotation: Annotation | null = x.newAnnotation;
 
   let promise: Promise<Annotation | null>;
   if (annotationId === undefined) {

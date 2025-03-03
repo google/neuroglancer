@@ -25,7 +25,10 @@ import {
 import { toBase64 } from "#src/util/base64.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { convertEndian32, Endianness } from "#src/util/endian.js";
-import { verifyOptionalString } from "#src/util/json.js";
+import {
+  bigintToStringJsonReplacer,
+  verifyOptionalString,
+} from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
@@ -138,7 +141,10 @@ export class ScreenshotHandler extends RefCounted {
             JSON.stringify(getCachedJson(this.viewer.state).value),
           ),
           selectedValues: JSON.parse(
-            JSON.stringify(this.viewer.layerSelectedValues),
+            JSON.stringify(
+              this.viewer.layerSelectedValues,
+              bigintToStringJsonReplacer,
+            ),
           ),
           screenshotStatistics: { id: requestId, chunkSources: rows, total },
         };
@@ -207,7 +213,9 @@ export class ScreenshotHandler extends RefCounted {
       viewerState: JSON.parse(
         JSON.stringify(getCachedJson(this.viewer.state).value),
       ),
-      selectedValues: JSON.parse(JSON.stringify(layerSelectedValues)),
+      selectedValues: JSON.parse(
+        JSON.stringify(layerSelectedValues, bigintToStringJsonReplacer),
+      ),
       screenshot: {
         id: requestState,
         image,

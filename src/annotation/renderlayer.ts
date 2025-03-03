@@ -127,7 +127,6 @@ import type { MessageList } from "#src/util/message_list.js";
 import { MessageSeverity } from "#src/util/message_list.js";
 import type { AnyConstructor, MixinConstructor } from "#src/util/mixin.js";
 import { NullarySignal } from "#src/util/signal.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import type { ParameterizedContextDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
@@ -640,8 +639,7 @@ function AnnotationRenderLayer<
         pickId = renderContext.pickIDs.register(
           this,
           chunk.numPickIds,
-          0,
-          0,
+          0n,
           chunk,
         );
       }
@@ -708,7 +706,7 @@ function AnnotationRenderLayer<
 
     updateMouseState(
       mouseState: MouseSelectionState,
-      _pickedValue: Uint64,
+      _pickedValue: bigint,
       pickedOffset: number,
       data: any,
     ) {

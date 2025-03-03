@@ -46,14 +46,15 @@ import type {
 import { observeWatchable, registerNestedSync } from "#src/trackable_value.js";
 import { isWithinSelectionPanel } from "#src/ui/selection_details.js";
 import type { Uint64Map } from "#src/uint64_map.js";
+import { wrapSigned32BitIntegerToUint64 } from "#src/util/bigint.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { useWhiteBackground } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { measureElementClone } from "#src/util/dom.js";
 import type { vec3 } from "#src/util/geom.js";
 import { kOneVec, vec4 } from "#src/util/geom.js";
+import { parseUint64 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeEyeButton } from "#src/widget/eye_button.js";
@@ -62,8 +63,8 @@ import { makeStarButton } from "#src/widget/star_button.js";
 
 export class Uint64MapEntry {
   constructor(
-    public key: Uint64,
-    public value?: Uint64,
+    public key: bigint,
+    public value?: bigint,
     public label?: string | undefined,
   ) {}
   toString() {
@@ -80,8 +81,8 @@ export class Uint64MapEntry {
 }
 
 export class SegmentSelectionState extends RefCounted {
-  selectedSegment = new Uint64();
-  baseSelectedSegment = new Uint64();
+  selectedSegment = 0n;
+  baseSelectedSegment = 0n;
   hasSelectedSegment = false;
   changed = new NullarySignal();
 
@@ -94,36 +95,30 @@ export class SegmentSelectionState extends RefCounted {
   }
 
   set(
-    value: number | Uint64MapEntry | Uint64 | null | undefined,
+    value: number | Uint64MapEntry | bigint | null | undefined,
     hideSegmentZero = false,
   ) {
     const { selectedSegment, baseSelectedSegment } = this;
-    let newLow = 0;
-    let newHigh = 0;
-    let newBaseLow = 0;
-    let newBaseHigh = 0;
+    let newId = 0n;
+    let newBaseId = 0n;
     let hasSelectedSegment: boolean;
     if (value == null) {
       hasSelectedSegment = false;
     } else if (typeof value === "number") {
-      newLow = newBaseLow = value >>> 0;
-      newHigh = newBaseHigh = value < 0 ? 0xffffffff : 0;
+      newId = newBaseId = wrapSigned32BitIntegerToUint64(value);
       hasSelectedSegment = true;
     } else if (value instanceof Uint64MapEntry) {
       const valueMapped = value.value || value.key;
-      newLow = valueMapped.low;
-      newHigh = valueMapped.high;
-      newBaseLow = value.key.low;
-      newBaseHigh = value.key.high;
+      newId = valueMapped;
+      newBaseId = value.key;
       hasSelectedSegment = true;
-    } else if (value instanceof Uint64) {
-      newLow = newBaseLow = value.low;
-      newHigh = newBaseHigh = value.high;
+    } else if (typeof value === "bigint") {
+      newId = newBaseId = value;
       hasSelectedSegment = true;
     } else {
       hasSelectedSegment = false;
     }
-    if (hideSegmentZero && newLow === 0 && newHigh === 0) {
+    if (hideSegmentZero && newId === 0n) {
       hasSelectedSegment = false;
     }
     if (!hasSelectedSegment) {
@@ -134,22 +129,18 @@ export class SegmentSelectionState extends RefCounted {
     } else if (
       hasSelectedSegment &&
       (!this.hasSelectedSegment ||
-        selectedSegment.low !== newLow ||
-        selectedSegment.high !== newHigh ||
-        baseSelectedSegment.low !== newBaseLow ||
-        baseSelectedSegment.high !== newBaseHigh)
+        selectedSegment !== newId ||
+        baseSelectedSegment !== newBaseId)
     ) {
-      selectedSegment.low = newLow;
-      selectedSegment.high = newHigh;
-      baseSelectedSegment.low = newBaseLow;
-      baseSelectedSegment.high = newBaseHigh;
+      this.selectedSegment = newId;
+      this.baseSelectedSegment = newBaseId;
       this.hasSelectedSegment = true;
       this.changed.dispatch();
     }
   }
 
-  isSelected(value: Uint64) {
-    return this.hasSelectedSegment && Uint64.equal(value, this.selectedSegment);
+  isSelected(value: bigint) {
+    return this.hasSelectedSegment && value === this.selectedSegment;
   }
 
   bindTo(
@@ -200,9 +191,9 @@ export interface SegmentationDisplayState {
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
 
-  selectSegment: (id: Uint64, pin: boolean | "toggle") => void;
-  filterBySegmentLabel: (id: Uint64) => void;
-  moveToSegment: (id: Uint64) => void;
+  selectSegment: (id: bigint, pin: boolean | "toggle") => void;
+  filterBySegmentLabel: (id: bigint) => void;
+  moveToSegment: (id: bigint) => void;
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
@@ -224,22 +215,21 @@ export function resetTemporaryVisibleSegmentsState(
   state.temporarySegmentEquivalences.clear();
 }
 
-/// Converts a segment id to a Uint64MapEntry or Uint64 (if Uint64MapEntry would add no additional
+/// Converts a segment id to a Uint64MapEntry or uint64 (if Uint64MapEntry would add no additional
 /// information).
 export function maybeAugmentSegmentId(
   displayState: SegmentationDisplayState | undefined | null,
-  value: number | Uint64,
-  mustCopy = false,
-): Uint64 | Uint64MapEntry {
-  let id: Uint64;
-  let mappedValue: Uint64;
-  let mapped: Uint64 | undefined;
+  value: number | bigint | string,
+): bigint | Uint64MapEntry {
+  let id: bigint;
+  let mappedValue: bigint;
+  let mapped: bigint | undefined;
   if (typeof value === "number") {
-    id = new Uint64(value >>> 0, value < 0 ? 0xffffffff : 0);
+    id = wrapSigned32BitIntegerToUint64(value);
   } else if (typeof value === "string") {
-    id = Uint64.parseString(value);
+    id = parseUint64(value);
   } else {
-    id = mustCopy ? value.clone() : value;
+    id = value;
   }
   if (displayState == null) return id;
   const {
@@ -248,7 +238,7 @@ export function maybeAugmentSegmentId(
   } = displayState.segmentationGroupState.value;
   if (segmentEquivalences.size !== 0) {
     mappedValue = segmentEquivalences.get(id);
-    if (Uint64.equal(mappedValue, id)) {
+    if (mappedValue === id) {
       mapped = undefined;
     } else {
       mapped = mappedValue;
@@ -266,11 +256,11 @@ export function maybeAugmentSegmentId(
 /// Converts a plain segment id to a Uint64MapEntry.
 export function augmentSegmentId(
   displayState: SegmentationDisplayState | undefined | null,
-  value: number | Uint64 | Uint64MapEntry,
+  value: number | bigint | Uint64MapEntry,
 ): Uint64MapEntry {
   if (value instanceof Uint64MapEntry) return value;
   const newValue = maybeAugmentSegmentId(displayState, value);
-  if (newValue instanceof Uint64) {
+  if (typeof newValue === "bigint") {
     return new Uint64MapEntry(newValue);
   }
   return newValue;
@@ -426,8 +416,7 @@ function makeRegisterSegmentWidgetEventHandlers(
   const onMouseEnter = (event: Event) => {
     const entryElement = event.currentTarget as HTMLElement;
     const idString = entryElement.dataset.id!;
-    const id = tempStatedColor;
-    id.tryParseString(idString);
+    const id = BigInt(idString);
     displayState.segmentSelectionState.set(id);
     if (!isWithinSelectionPanel(entryElement)) {
       displayState.selectSegment(id, false);
@@ -437,8 +426,7 @@ function makeRegisterSegmentWidgetEventHandlers(
   const selectHandler = (event: Event) => {
     const entryElement = event.currentTarget as HTMLElement;
     const idString = entryElement.dataset.id!;
-    const id = tempStatedColor;
-    id.tryParseString(idString);
+    const id = BigInt(idString);
     displayState.selectSegment(
       id,
       isWithinSelectionPanel(entryElement) ? "toggle" : true,
@@ -470,8 +458,7 @@ function makeRegisterSegmentWidgetEventHandlers(
   const visibleCheckboxHandler = (event: Event) => {
     const entryElement = getEntryElement(event);
     const idString = entryElement.dataset.id!;
-    const id = tempStatedColor;
-    id.tryParseString(idString);
+    const id = BigInt(idString);
     const { selectedSegments, visibleSegments } =
       displayState.segmentationGroupState.value;
     const shouldBeVisible = !visibleSegments.has(id);
@@ -486,8 +473,7 @@ function makeRegisterSegmentWidgetEventHandlers(
   const filterHandler = (event: Event) => {
     const entryElement = getEntryElement(event);
     const idString = entryElement.dataset.id!;
-    const id = tempStatedColor;
-    id.tryParseString(idString);
+    const id = BigInt(idString);
     displayState.filterBySegmentLabel(id);
     event.stopPropagation();
   };
@@ -504,8 +490,7 @@ function makeRegisterSegmentWidgetEventHandlers(
     }
     const entryElement = event.currentTarget as HTMLElement;
     const idString = entryElement.dataset.id!;
-    const id = tempStatedColor;
-    id.tryParseString(idString);
+    const id = BigInt(idString);
     displayState.moveToSegment(id);
   };
 
@@ -539,8 +524,7 @@ function makeRegisterSegmentWidgetEventHandlers(
     starButton.addEventListener("click", (event: MouseEvent) => {
       const entryElement = getEntryElement(event);
       const idString = entryElement.dataset.id!;
-      const id = tempStatedColor;
-      id.tryParseString(idString);
+      const id = BigInt(idString);
       const { selectedSegments } = displayState.segmentationGroupState.value;
       selectedSegments.set(id, !selectedSegments.has(id));
     });
@@ -577,7 +561,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     );
   }
 
-  get(rawId: Uint64 | number): HTMLDivElement {
+  get(rawId: bigint | number): HTMLDivElement {
     const { displayState } = this;
     return this.getWithNormalizedId(augmentSegmentId(displayState, rawId));
   }
@@ -609,7 +593,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
       const unmappedIdElement = idContainer.children[
         unmappedIdIndex
       ] as HTMLElement;
-      if (!Uint64.equal(id, mapped)) {
+      if (id !== mapped) {
         const unmappedIdString = id.toString();
         container.dataset.unmappedId = unmappedIdString;
         unmappedIdElement.textContent = unmappedIdString;
@@ -641,14 +625,13 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
   }
 
   update(container: HTMLElement) {
-    const id = tempStatedColor;
     const idString = container.dataset.id;
     if (idString === undefined) return;
-    id.parseString(idString);
+    const id = BigInt(idString);
     this.updateWithId(container, id);
   }
 
-  private updateWithId(container: HTMLElement, mapped: Uint64) {
+  private updateWithId(container: HTMLElement, mapped: bigint) {
     const { children } = container;
     const stickyChildren = children[0].children;
     const { template } = this;
@@ -660,7 +643,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     ).classList.toggle("neuroglancer-visible", visibleSegments.has(mapped));
     container.dataset.selected = (
       segmentSelectionState.hasSelectedSegment &&
-      Uint64.equal(segmentSelectionState.selectedSegment, mapped)
+      segmentSelectionState.selectedSegment === mapped
     ).toString();
     const { selectedSegments } = displayState!.segmentationGroupState.value;
     (stickyChildren[template.starIndex] as HTMLInputElement).classList.toggle(
@@ -682,8 +665,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
         displayState!.baseSegmentColoring.value &&
         (unmappedIdString = container.dataset.unmappedId) !== undefined
       ) {
-        const unmappedId = tempStatedColor;
-        unmappedId.parseString(unmappedIdString);
+        const unmappedId = BigInt(unmappedIdString);
         color = getBaseObjectColor(this.displayState, unmappedId) as vec3;
       } else {
         color = kOneVec;
@@ -941,11 +923,10 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
  * Temporary values used by getObjectColor.
  */
 const tempColor = vec4.create();
-const tempStatedColor = new Uint64();
 
 export function getBaseObjectColor(
   displayState: SegmentationDisplayState | undefined | null,
-  objectId: Uint64,
+  objectId: bigint,
   color: Float32Array = tempColor,
 ) {
   if (displayState == null) {
@@ -954,14 +935,16 @@ export function getBaseObjectColor(
   }
   const colorGroupState = displayState.segmentationColorGroupState.value;
   const { segmentStatedColors } = colorGroupState;
+  let statedColor: bigint | undefined;
   if (
     segmentStatedColors.size !== 0 &&
-    colorGroupState.segmentStatedColors.get(objectId, tempStatedColor)
+    (statedColor = colorGroupState.segmentStatedColors.get(objectId)) !==
+      undefined
   ) {
     // If displayState maps the ID to a color, use it
-    color[0] = (tempStatedColor.low & 0x0000ff) / 255.0;
-    color[1] = ((tempStatedColor.low & 0x00ff00) >>> 8) / 255.0;
-    color[2] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
+    color[0] = Number(statedColor & 0x0000ffn) / 255.0;
+    color[1] = (Number(statedColor & 0x00ff00n) >>> 8) / 255.0;
+    color[2] = (Number(statedColor & 0xff0000n) >>> 16) / 255.0;
     return color;
   }
   const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
@@ -980,7 +963,7 @@ export function getBaseObjectColor(
  */
 export function getObjectColor(
   displayState: SegmentationDisplayState,
-  objectId: Uint64,
+  objectId: bigint,
   alpha = 1,
 ) {
   const color = tempColor;
@@ -1061,10 +1044,10 @@ export function forEachVisibleSegmentToDraw(
   emitColor: boolean,
   pickIDs: PickIDManager | undefined,
   callback: (
-    objectId: Uint64,
+    objectId: bigint,
     color: vec4 | undefined,
     pickIndex: number | undefined,
-    rootObjectId: Uint64,
+    rootObjectId: bigint,
   ) => void,
 ) {
   const alpha = Math.min(1, displayState.objectAlpha.value);
