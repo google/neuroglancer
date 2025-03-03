@@ -8,6 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      statuses: write
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: "Create commit status"
