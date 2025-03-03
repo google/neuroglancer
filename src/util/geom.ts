@@ -492,27 +492,23 @@ export function calculateOrientedSliceScales(
   function extractContributingScales(
     matrixRow: 0 | 1 | 2,
   ): { scale: number; unit: string } | null {
-    const indices = [0, 1, 2].map((i) => i + 3 * matrixRow);
-    const contributingScales: number[] = [];
-    const contributingUnits: string[] = [];
-
-    for (const index of indices) {
+    let contributingScale: number | undefined;
+    let contributingUnit: string | undefined;
+    for (let i = 0; i < 3; ++i) {
+      const index = i + 3 * matrixRow;
       if (Math.abs(rotationMatrix[index]) > tolerance) {
-        contributingScales.push(scales[index % 3]);
-        contributingUnits.push(units[index % 3]);
+        if (contributingUnit !== undefined && contributingScale !== undefined) {
+          if (contributingUnit !== units[i]) return null;
+          if (contributingScale !== scales[i]) return null;
+        } else {
+          contributingScale = scales[i];
+          contributingUnit = units[i];
+        }
       }
     }
-
-    // Ensure all scales and units are consistent
-    if (
-      new Set(contributingScales).size > 1 ||
-      new Set(contributingUnits).size > 1
-    ) {
+    if (contributingScale === undefined || contributingUnit === undefined)
       return null;
-    }
-
-    // As they are all the same, we can just return the first one
-    return { scale: contributingScales[0], unit: contributingUnits[0] };
+    return { scale: contributingScale, unit: contributingUnit };
   }
   if (orientation === undefined) orientation = kIdentityQuat;
 
