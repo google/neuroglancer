@@ -359,8 +359,8 @@ uint64_t getMappedObjectId(uint64_t value) {
       const seg = displayState.baseSegmentHighlighting.value
         ? segmentSelectionState.baseSelectedSegment
         : segmentSelectionState.selectedSegment;
-      selectedSegmentLow = seg.low;
-      selectedSegmentHigh = seg.high;
+      selectedSegmentLow = Number(seg & 0xffffffffn);
+      selectedSegmentHigh = Number(seg >> 32n);
       flags |= HAS_SELECTED_SEGMENT_FLAG;
     }
     gl.uniform1f(

@@ -21,7 +21,6 @@ import {
   defaultDataTypeRange,
   type DataTypeInterval,
 } from "#src/util/lerp.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 const BIN_SIZE_MULTIPLIER_FOR_WINDOW = 64;
 
@@ -47,28 +46,18 @@ function calculateEmpiricalCdf(histogram: Float32Array): Float32Array | null {
 function calculateBinSize(
   histogram: Float32Array,
   histogramRange: DataTypeInterval,
-  inputDataType: DataType,
 ): number {
   const totalBins = histogram.length - 2; // Exclude the first and last bins.
-  if (inputDataType === DataType.UINT64) {
-    const numerator64 = new Uint64();
-    const min = histogramRange[0] as Uint64;
-    const max = histogramRange[1] as Uint64;
-    Uint64.subtract(numerator64, max, min);
-    return numerator64.toNumber() / totalBins;
-  } else {
-    const min = histogramRange[0] as number;
-    const max = histogramRange[1] as number;
-    return (max - min) / totalBins;
-  }
+  const [minValue, maxValue] = histogramRange as [any, any];
+  return Number(maxValue - minValue) / totalBins;
 }
 
 function adjustBound(
-  bound: number | Uint64,
+  bound: number | bigint,
   dataType: DataType,
   change: number,
   increase: boolean,
-): number | Uint64 {
+): number | bigint {
   const maxDataRange = defaultDataTypeRange[dataType];
 
   // If the bound is already at the limit, don't adjust it.
@@ -81,15 +70,11 @@ function adjustBound(
 
   // Adjust the bound by the change amount up or down.
   const delta = dataType === DataType.FLOAT32 ? change : Math.round(change);
-  const temp = new Uint64();
+  const signedDelta = delta * (increase ? 1 : -1);
   const adjustedBound =
     dataType === DataType.UINT64
-      ? increase
-        ? Uint64.add(temp, bound as Uint64, Uint64.fromNumber(delta))
-        : Uint64.subtract(temp, bound as Uint64, Uint64.fromNumber(delta))
-      : increase
-        ? (bound as number) + delta
-        : (bound as number) - delta;
+      ? (bound as bigint) + BigInt(Math.round(signedDelta))
+      : (bound as number) + signedDelta;
 
   // Ensure the bound is within the data type's range.
   if (dataType === DataType.FLOAT32) {
@@ -99,18 +84,18 @@ function adjustBound(
 }
 
 function decreaseBound(
-  bound: number | Uint64,
+  bound: number | bigint,
   dataType: DataType,
   change: number,
-): number | Uint64 {
+): number | bigint {
   return adjustBound(bound, dataType, change, false);
 }
 
 function increaseBound(
-  bound: number | Uint64,
+  bound: number | bigint,
   dataType: DataType,
   change: number,
-): number | Uint64 {
+): number | bigint {
   return adjustBound(bound, dataType, change, true);
 }
 
@@ -145,7 +130,7 @@ export function computePercentilesFromEmpiricalHistogram(
   if (cdf === null) {
     return { range: histogramRange, window: histogramRange };
   }
-  const binSize = calculateBinSize(histogram, histogramRange, inputDataType);
+  const binSize = calculateBinSize(histogram, histogramRange);
 
   // Find the indices of the percentiles.
   let lowerIndex = 0;

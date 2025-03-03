@@ -15,19 +15,19 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { bigintCompare } from "#src/util/bigint.js";
 import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
-import { Uint64 } from "#src/util/uint64.js";
 
-function getSortedElementStrings(disjointSets: DisjointUint64Sets, x: Uint64) {
+function getSortedElements(disjointSets: DisjointUint64Sets, x: bigint) {
   const members = Array.from(disjointSets.setElements(x));
-  members.sort(Uint64.compare);
-  return members.map((v) => v.toString());
+  members.sort(bigintCompare);
+  return members;
 }
 
-function getContiguousElementStrings(start: number, end: number) {
-  const result = new Array<string>(end - start);
-  for (let i = 0, length = result.length; i < length; ++i) {
-    result[i] = (start + i).toString();
+function getContiguousElements(start: bigint, end: bigint) {
+  const result = new Array<bigint>();
+  for (let i = start; i < end; ++i) {
+    result.push(i);
   }
   return result;
 }
@@ -36,67 +36,66 @@ describe("disjoint_sets", () => {
   it("basic", () => {
     const disjointSets = new DisjointUint64Sets();
     // Link the first 25 elements.
-    for (let i = 0; i < 24; ++i) {
-      const a = new Uint64(i, 0);
-      const b = new Uint64(i + 1, 0);
-      expect(disjointSets.get(a).toString()).toEqual("0");
+    for (let i = 0n; i < 24n; ++i) {
+      const a = i;
+      const b = i + 1n;
+      expect(disjointSets.get(a)).toEqual(0n);
       expect(disjointSets.get(b)).toBe(b);
       disjointSets.link(a, b);
-      expect(disjointSets.get(a).toString()).toEqual("0");
-      expect(disjointSets.get(b).toString()).toEqual("0");
-      expect(getSortedElementStrings(disjointSets, a)).toEqual(
-        getContiguousElementStrings(0, i + 2),
+      expect(disjointSets.get(a)).toEqual(0n);
+      expect(disjointSets.get(b)).toEqual(0n);
+      expect(getSortedElements(disjointSets, a)).toEqual(
+        getContiguousElements(0n, i + 2n),
       );
     }
 
     // Link the next 25 elements.
-    for (let i = 25; i < 49; ++i) {
-      const a = new Uint64(i, 0);
-      const b = new Uint64(i + 1, 0);
-      expect(disjointSets.get(a).toString()).toEqual("25");
+    for (let i = 25n; i < 49n; ++i) {
+      const a = i;
+      const b = i + 1n;
+      expect(disjointSets.get(a)).toEqual(25n);
       expect(disjointSets.get(b)).toBe(b);
       disjointSets.link(a, b);
-      expect(disjointSets.get(a).toString()).toEqual("25");
-      expect(disjointSets.get(b).toString()).toEqual("25");
-      expect(getSortedElementStrings(disjointSets, a)).toEqual(
-        getContiguousElementStrings(25, i + 2),
+      expect(disjointSets.get(a)).toEqual(25n);
+      expect(disjointSets.get(b)).toEqual(25n);
+      expect(getSortedElements(disjointSets, a)).toEqual(
+        getContiguousElements(25n, i + 2n),
       );
     }
 
     // Link the two sets of 25 elements each.
-    expect(disjointSets.link(new Uint64(15, 0), new Uint64(40, 0))).toBe(true);
-    expect(disjointSets.get(new Uint64(15, 0)).toString()).toEqual("0");
-    expect(disjointSets.get(new Uint64(40, 0)).toString()).toEqual("0");
-    expect(getSortedElementStrings(disjointSets, new Uint64(15, 0))).toEqual(
-      getContiguousElementStrings(0, 50),
+    expect(disjointSets.link(15n, 40n)).toBe(true);
+    expect(disjointSets.get(15n)).toEqual(0n);
+    expect(disjointSets.get(40n)).toEqual(0n);
+    expect(getSortedElements(disjointSets, 15n)).toEqual(
+      getContiguousElements(0n, 50n),
     );
 
     // Does nothing, the two elements are already merged.
-    expect(disjointSets.link(new Uint64(15, 0), new Uint64(40, 0))).toBe(false);
+    expect(disjointSets.link(15n, 40n)).toBe(false);
 
-    for (let i = 0; i < 50; ++i) {
-      const x = new Uint64(i, 0);
+    for (let x = 0n; x < 50n; ++x) {
       // Check that the same representative is returned.
-      expect(disjointSets.get(x).toString()).toEqual("0");
-      // Check that getSortedElementStrings returns the same list for each member of a set.
-      expect(getSortedElementStrings(disjointSets, x)).toEqual(
-        getContiguousElementStrings(0, 50),
+      expect(disjointSets.get(x)).toEqual(0n);
+      // Check that getSortedElements returns the same list for each member of a set.
+      expect(getSortedElements(disjointSets, x)).toEqual(
+        getContiguousElements(0n, 50n),
       );
     }
 
     // Check that non-linked elements correctly have only a single element.
-    for (let i = 51; i < 100; ++i) {
-      expect(getSortedElementStrings(disjointSets, new Uint64(i, 0))).toEqual(
-        getContiguousElementStrings(i, i + 1),
+    for (let i = 51n; i < 100n; ++i) {
+      expect(getSortedElements(disjointSets, i)).toEqual(
+        getContiguousElements(i, i + 1n),
       );
     }
   });
 
   it("toJSON", () => {
     const disjointSets = new DisjointUint64Sets();
-    disjointSets.link(Uint64.parseString("5"), Uint64.parseString("0"));
-    disjointSets.link(Uint64.parseString("2"), Uint64.parseString("10"));
-    disjointSets.link(Uint64.parseString("2"), Uint64.parseString("3"));
+    disjointSets.link(5n, 0n);
+    disjointSets.link(2n, 10n);
+    disjointSets.link(2n, 3n);
     expect(JSON.stringify(disjointSets)).toEqual('[["0","5"],["2","3","10"]]');
   });
 });
