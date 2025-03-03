@@ -17,6 +17,7 @@
 import { mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
+import { formatScaleWithUnit } from "#src/util/si_units.js";
 
 export { mat2, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
 
@@ -489,6 +490,9 @@ export function calculateOrientedSliceScales(
   units: readonly string[],
   tolerance: number = 1e-6,
 ): OrientedSliceScales | null {
+  function nearlyEqualScales(a: number, b: number): boolean {
+    return Math.abs(a - b) / Math.max(a, b) < tolerance;
+  }
   function extractContributingScales(
     matrixRow: 0 | 1 | 2,
   ): { scale: number; unit: string } | null {
@@ -499,7 +503,7 @@ export function calculateOrientedSliceScales(
       if (Math.abs(rotationMatrix[index]) > tolerance) {
         if (contributingUnit !== undefined && contributingScale !== undefined) {
           if (contributingUnit !== units[i]) return null;
-          if (contributingScale !== scales[i]) return null;
+          if (!nearlyEqualScales(contributingScale, scales[i])) return null;
         } else {
           contributingScale = scales[i];
           contributingUnit = units[i];

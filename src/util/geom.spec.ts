@@ -70,20 +70,39 @@ describe("isAABBVisible", () => {
 });
 
 describe("calculateOrientedSliceScales", () => {
-  const validateOrientation = (
+  function validateOrientation(
     inputOrientation: string | quat,
     inputScales: vec3,
     inputUnits: readonly string[],
-    expected: OrientedSliceScales | null,
-  ) => {
+    expected: OrientedSliceScales | null | "exists",
+  ) {
     const orientation =
       typeof inputOrientation === "string"
         ? AXES_RELATIVE_ORIENTATION.get(inputOrientation as NamedAxes)
         : inputOrientation;
-    expect(
-      calculateOrientedSliceScales(orientation, inputScales, inputUnits),
-    ).toStrictEqual(expected);
-  };
+    const result = calculateOrientedSliceScales(
+      orientation,
+      inputScales,
+      inputUnits,
+    );
+    if (expected === "exists") expect(result).not.toBeNull();
+    else expect(result).toStrictEqual(expected);
+  }
+
+  function checkThreeNonAxisAlignedOrientations(
+    inputScales: vec3,
+    inputUnits: readonly string[],
+    expected: "exists" | null,
+  ) {
+    const startOrientation = quat.create();
+    const orientation = quat.create();
+    quat.rotateX(orientation, startOrientation, Math.PI / 4);
+    validateOrientation(orientation, inputScales, inputUnits, expected);
+    quat.rotateY(orientation, startOrientation, Math.PI / 4);
+    validateOrientation(orientation, inputScales, inputUnits, expected);
+    quat.rotateZ(orientation, startOrientation, Math.PI / 4);
+    validateOrientation(orientation, inputScales, inputUnits, expected);
+  }
 
   it.each([
     [
@@ -140,25 +159,13 @@ describe("calculateOrientedSliceScales", () => {
   it("rejects non-uniform scale non-axis-aligned orientations", () => {
     const scales = vec3.fromValues(1, 2, 1);
     const units = ["m", "m", "Hz"];
-    const orientation = quat.create();
-    quat.rotateX(orientation, orientation, Math.PI / 4);
-    validateOrientation(orientation, scales, units, null);
-    quat.rotateY(orientation, orientation, Math.PI / 4);
-    validateOrientation(orientation, scales, units, null);
-    quat.rotateZ(orientation, orientation, Math.PI / 4);
-    validateOrientation(orientation, scales, units, null);
+    checkThreeNonAxisAlignedOrientations(scales, units, null);
   });
 
   it("rejects very close non-uniform scale non-axis-aligned orientations", () => {
     const scales = vec3.fromValues(1e-20, 1e-21, 1.01e-20);
     const units = ["m", "m", "m"];
-    const orientation = quat.create();
-    quat.rotateX(orientation, orientation, Math.PI / 4);
-    validateOrientation(orientation, scales, units, null);
-    quat.rotateY(orientation, orientation, Math.PI / 4);
-    validateOrientation(orientation, scales, units, null);
-    quat.rotateZ(orientation, orientation, Math.PI / 4);
-    validateOrientation(orientation, scales, units, null);
+    checkThreeNonAxisAlignedOrientations(scales, units, null);
   });
 
   it("works for non-default axis-aligned orientations", () => {
@@ -169,7 +176,26 @@ describe("calculateOrientedSliceScales", () => {
       width: { scale: 2, unit: "Hz" },
       height: { scale: 3, unit: "s" },
     };
-
     validateOrientation(altYZOrientation, scales, units, expectedResult);
+  });
+
+  it("identifies close small numbers as equal", () => {
+    const scales = vec3.fromValues(1e-19, 1.000000001e-19, 0.99999999999e-19);
+    const units = ["m", "m", "m"];
+    checkThreeNonAxisAlignedOrientations(scales, units, "exists");
+  });
+
+  it("rejects large and somewhat close numbers as non-equal", () => {
+    const scales = vec3.fromValues(1e19, 1.001e19, 0.99999e19);
+    const units = ["m", "m", "m"];
+    checkThreeNonAxisAlignedOrientations(scales, units, null);
+
+    // Because of the default tolerance, a little bit bigger would fail
+    // like 100000001 100000000 100000002 
+    checkThreeNonAxisAlignedOrientations(
+      vec3.fromValues(100001, 100000, 100000 - 1),
+      ["m", "m", "m"],
+      null,
+    );
   });
 });
