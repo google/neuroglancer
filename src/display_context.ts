@@ -119,6 +119,8 @@ export abstract class RenderedPanel extends RefCounted {
 
   renderViewport = new RenderViewport();
 
+  boundsUpdated = new NullarySignal();
+
   private monitorState: PanelMonitorState = { isIntersecting: true };
 
   constructor(
@@ -241,6 +243,7 @@ export abstract class RenderedPanel extends RefCounted {
     viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
     viewport.visibleWidthFraction = clippedWidth / logicalWidth;
     viewport.visibleHeightFraction = clippedHeight / logicalHeight;
+    this.boundsUpdated.dispatch();
   }
 
   // Sets the viewport to the clipped viewport.  Any drawing must take
