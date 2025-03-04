@@ -895,8 +895,10 @@ export const annotationTypeHandlers: Record<
     },
     serializedBytes(rank: number, annotation?: PolyLine) {
       // If no annotation, can assume broken down
-      if (annotation === undefined) return 4 * rank * 2;
-      return 4 * rank * 2 * (annotation.points.length - 1);
+      // One float per rank, per point, + one uint32
+      const singlePointPairSize = 4 * rank * 2 + 4;
+      if (annotation === undefined) return singlePointPairSize;
+      return (annotation.points.length - 1) * singlePointPairSize;
     },
     serialize(
       buffer: DataView,
@@ -911,7 +913,7 @@ export const annotationTypeHandlers: Record<
       for (let i = 0; i < annotation.points.length - 1; i++) {
         const firstPoint = annotation.points[i];
         const secondPoint = annotation.points[i + 1];
-        serializeTwoFloatVectors(
+        const tempOffset = serializeTwoFloatVectors(
           buffer,
           offset + i * geometryDataStride,
           isLittleEndian,
@@ -919,6 +921,7 @@ export const annotationTypeHandlers: Record<
           firstPoint,
           secondPoint,
         );
+        buffer.setUint32(tempOffset, annotation.points.length, isLittleEndian);
       }
     },
     // TODO (SKM) how to make the calls to this give the index offset?

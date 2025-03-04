@@ -78,6 +78,35 @@ class RenderHelper extends AnnotationRenderHelper {
       rank,
       2,
     );
+    const type = "uint";
+    const name = "aPolyLineNumVertices";
+    builder.addAttribute(type, name);
+    builder.addVertexCode(
+      `${type} getPolyLineNumVertices() { return ${name}; }`,
+    );
+    builder.addInitializer((shader) => {
+      const location = shader.attribute(name);
+      const { gl } = shader;
+      shader.vertexShaderInputBinders[name] = {
+        enable(divisor: number) {
+          gl.enableVertexAttribArray(location);
+          gl.vertexAttribDivisor(location, divisor);
+        },
+        disable() {
+          gl.vertexAttribDivisor(location, 0);
+          gl.disableVertexAttribArray(location);
+        },
+        bind(stride: number, offset: number) {
+          gl.vertexAttribIPointer(
+            location,
+            1,
+            WebGL2RenderingContext.UNSIGNED_INT,
+            stride,
+            offset + 2 * rank * 4,
+          );
+        },
+      };
+    });
   }
 
   private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
@@ -182,17 +211,21 @@ class RenderHelper extends AnnotationRenderHelper {
   ) {
     super.enable(shaderGetter, context, (shader) => {
       const binder = shader.vertexShaderInputBinders.VertexPosition;
+      const countBinder = shader.vertexShaderInputBinders.aPolyLineNumVertices;
       binder.enable(1);
+      countBinder.enable(1);
       this.gl.bindBuffer(
         WebGL2RenderingContext.ARRAY_BUFFER,
         context.buffer.buffer,
       );
       binder.bind(this.geometryDataStride, context.bufferOffset);
+      countBinder.bind(this.geometryDataStride, context.bufferOffset);
       const { vertexIdHelper } = this;
       vertexIdHelper.enable();
       callback(shader);
       vertexIdHelper.disable();
       binder.disable();
+      countBinder.disable();
     });
   }
 
