@@ -79,7 +79,6 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { convertEndian32, Endianness } from "#src/util/endian.js";
 import { vec3 } from "#src/util/geom.js";
-import { Uint64 } from "#src/util/uint64.js";
 import {
   encodeZIndexCompressed,
   encodeZIndexCompressed3d,
@@ -497,7 +496,7 @@ export class PrecomputedMultiscaleMeshSource extends WithParameters(
     } else {
       ({ response: readResponse, shardInfo: chunk.shardInfo } =
         getOrNotFoundError(
-          await shardedKvStore.readWithShardInfo(chunk.objectId.toBigInt(), {
+          await shardedKvStore.readWithShardInfo(chunk.objectId, {
             signal,
           }),
         ));
@@ -555,7 +554,7 @@ async function fetchByUint64(
     kvStore: KvStoreWithPath;
     shardedKvStore: ShardedKvStore | undefined;
   },
-  id: Uint64,
+  id: bigint,
   signal: AbortSignal,
 ): Promise<ReadResponse | undefined> {
   const { shardedKvStore } = chunkSource;
@@ -565,7 +564,7 @@ async function fetchByUint64(
       signal,
     });
   } else {
-    return shardedKvStore.read(id.toBigInt(), { signal });
+    return shardedKvStore.read(id, { signal });
   }
 }
 
@@ -613,12 +612,11 @@ function parseAnnotations(
     );
   }
   const idOffset = 8 + numBytes * countLow;
-  const id = new Uint64();
   const ids = new Array<string>(countLow);
   for (let i = 0; i < countLow; ++i) {
-    id.low = dv.getUint32(idOffset + i * 8, /*littleEndian=*/ true);
-    id.high = dv.getUint32(idOffset + i * 8 + 4, /*littleEndian=*/ true);
-    ids[i] = id.toString();
+    ids[i] = dv
+      .getBigUint64(idOffset + i * 8, /*littleEndian=*/ true)
+      .toString();
   }
   const geometryData = new AnnotationGeometryData();
   const origData = new Uint8Array(buffer, 8, numBytes * countLow);
@@ -705,7 +703,7 @@ function parseSingleAnnotation(
     (annotation.properties = new Array(parameters.properties.length)),
   );
   let offset = baseNumBytes;
-  const relatedSegments: Uint64[][] = (annotation.relatedSegments = []);
+  const relatedSegments: BigUint64Array[] = (annotation.relatedSegments = []);
   relatedSegments.length = numRelationships;
   for (let i = 0; i < numRelationships; ++i) {
     const count = dv.getUint32(offset, /*littleEndian=*/ true);
@@ -715,12 +713,9 @@ function parseSingleAnnotation(
       );
     }
     offset += 4;
-    const segments: Uint64[] = (relatedSegments[i] = []);
+    const segments = (relatedSegments[i] = new BigUint64Array(count));
     for (let j = 0; j < count; ++j) {
-      segments[j] = new Uint64(
-        dv.getUint32(offset, /*littleEndian=*/ true),
-        dv.getUint32(offset + 4, /*littleEndian=*/ true),
-      );
+      segments[j] = dv.getBigUint64(offset, /*littleEndian=*/ true);
       offset += 8;
     }
   }
@@ -824,7 +819,7 @@ export class PrecomputedAnnotationSourceBackend extends WithParameters(
   }
 
   async downloadMetadata(chunk: AnnotationMetadataChunk, signal: AbortSignal) {
-    const id = Uint64.parseString(chunk.key!);
+    const id = BigInt(chunk.key!);
     const response = await fetchByUint64(this, id, signal);
     if (response === undefined) {
       chunk.annotation = null;

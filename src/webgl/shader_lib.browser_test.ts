@@ -16,7 +16,6 @@
 
 import { describe, it, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
-import { Uint64 } from "#src/util/uint64.js";
 import {
   glsl_addSaturateInt32,
   glsl_addSaturateUint32,
@@ -176,7 +175,6 @@ describe("int32SubtractSaturate", () => {
 });
 
 describe("uint64AddSaturate", () => {
-  const u64 = Uint64.parseString;
   it("works for examples", () => {
     fragmentShaderTest(
       { inputA: DataType.UINT64, inputB: DataType.UINT64 },
@@ -187,20 +185,20 @@ describe("uint64AddSaturate", () => {
         builder.setFragmentMain("outputValue = addSaturate(inputA, inputB);");
 
         for (const [a, b, expected] of [
-          ["0", "0", "0"],
-          ["1", "2", "3"],
-          ["fffffffffffffffd", "1", "fffffffffffffffe"],
-          ["fffffffffffffffd", "2", "ffffffffffffffff"],
-          ["fffffffffffffffd", "3", "ffffffffffffffff"],
-          ["1", "fffffffffffffffd", "fffffffffffffffe"],
-          ["2", "fffffffffffffffd", "ffffffffffffffff"],
-          ["3", "fffffffffffffffd", "ffffffffffffffff"],
-          ["1", "ffffffffffffffff", "ffffffffffffffff"],
+          [0n, 0n, 0n],
+          [1n, 2n, 3n],
+          [0xfffffffffffffffdn, 1n, 0xfffffffffffffffen],
+          [0xfffffffffffffffdn, 2n, 0xffffffffffffffffn],
+          [0xfffffffffffffffdn, 3n, 0xffffffffffffffffn],
+          [1n, 0xfffffffffffffffdn, 0xfffffffffffffffen],
+          [2n, 0xfffffffffffffffdn, 0xffffffffffffffffn],
+          [3n, 0xfffffffffffffffdn, 0xffffffffffffffffn],
+          [1n, 0xffffffffffffffffn, 0xffffffffffffffffn],
         ]) {
           const msg = `addSaturate(${a}, ${b}) = ${expected}`;
-          tester.execute({ inputA: u64(a, 16), inputB: u64(b, 16) });
+          tester.execute({ inputA: a, inputB: b });
           const result = tester.values.outputValue;
-          expect(result.toString(16), msg).toBe(u64(expected, 16).toString(16));
+          expect(result, msg).toEqual(expected);
         }
       },
     );

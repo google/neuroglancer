@@ -57,7 +57,6 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import type { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -832,15 +831,10 @@ float ${uName}() {
   }
 }
 
-function objectFromEntries(entries: Iterable<[string, any]>) {
-  const obj: any = {};
-  for (const [key, value] of entries) {
-    obj[key] = value;
+function replaceBigintAndMap(_key: string, value: unknown) {
+  if (typeof value === "bigint") {
+    return value.toString();
   }
-  return obj;
-}
-
-function replaceMap(_key: string, value: unknown) {
   if (value instanceof Map) {
     return Array.from(value.entries());
   }
@@ -849,7 +843,7 @@ function replaceMap(_key: string, value: unknown) {
 
 function encodeControls(controls: Controls | undefined) {
   if (controls === undefined) return undefined;
-  return JSON.stringify(objectFromEntries(controls), replaceMap);
+  return JSON.stringify(Object.fromEntries(controls), replaceBigintAndMap);
 }
 
 export class WatchableShaderUiControls
@@ -1144,9 +1138,9 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
   }
 
   controlPointsToJson(controlPoints: ControlPoint[], dataType: DataType) {
-    function inputToJson(inputValue: number | Uint64) {
+    function inputToJson(inputValue: number | bigint) {
       if (dataType === DataType.UINT64) {
-        return (inputValue as Uint64).toJSON();
+        return inputValue.toString();
       }
       return inputValue;
     }

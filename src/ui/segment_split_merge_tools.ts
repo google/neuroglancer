@@ -40,7 +40,6 @@ import {
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { removeChildren } from "#src/util/dom.js";
 import { EventActionMap } from "#src/util/keyboard_bindings.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export const ANNOTATE_MERGE_SEGMENTS_TOOL_ID = "mergeSegments";
 export const ANNOTATE_SPLIT_SEGMENTS_TOOL_ID = "splitSegments";
@@ -57,7 +56,7 @@ const SPLIT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
 });
 
 export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
-  lastAnchorBaseSegment = new WatchableValue<Uint64 | undefined>(undefined);
+  lastAnchorBaseSegment = new WatchableValue<bigint | undefined>(undefined);
 
   constructor(layer: SegmentationUserLayer) {
     super(layer);
@@ -71,13 +70,9 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const { segmentEquivalences } =
         layer.displayState.segmentationGroupState.value;
       const mappedAnchorSegment = segmentEquivalences.get(anchorSegment);
-      if (
-        !Uint64.equal(
-          segmentSelectionState.selectedSegment,
-          mappedAnchorSegment,
-        )
-      )
+      if (segmentSelectionState.selectedSegment !== mappedAnchorSegment) {
         return;
+      }
       const base = segmentSelectionState.baseSelectedSegment;
       const isBase = isBaseSegmentId(base);
       // TODO: This would ideally rely on a separate HIGH_BIT_REPRESENTATIVE flag,
@@ -94,7 +89,7 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       ) {
         return;
       }
-      this.lastAnchorBaseSegment.value = base.clone();
+      this.lastAnchorBaseSegment.value = base;
     };
     this.registerDisposer(
       layer.displayState.segmentSelectionState.changed.add(
@@ -115,7 +110,7 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       this.layer.displayState.segmentationGroupState.value;
 
     const getAnchorSegment = (): {
-      anchorSegment: Uint64 | undefined;
+      anchorSegment: bigint | undefined;
       error: string | undefined;
     } => {
       const anchorSegment = this.layer.anchorSegment.value;
@@ -136,10 +131,8 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       }
       if (
         baseAnchorSegment === undefined ||
-        !Uint64.equal(
-          segmentationGroupState.segmentEquivalences.get(baseAnchorSegment),
-          anchorGraphSegment,
-        )
+        segmentationGroupState.segmentEquivalences.get(baseAnchorSegment) !==
+          anchorGraphSegment
       ) {
         return {
           anchorSegment,
@@ -151,8 +144,8 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
     };
 
     const getMergeRequest = (): {
-      anchorSegment: Uint64 | undefined;
-      otherSegment: Uint64 | undefined;
+      anchorSegment: bigint | undefined;
+      otherSegment: bigint | undefined;
       anchorSegmentValid: boolean;
       error: string | undefined;
     } => {
@@ -169,10 +162,8 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const otherSegment = displayState.segmentSelectionState.baseValue;
       if (
         otherSegment === undefined ||
-        Uint64.equal(
-          displayState.segmentSelectionState.selectedSegment,
-          segmentationGroupState.segmentEquivalences.get(anchorSegment),
-        )
+        displayState.segmentSelectionState.selectedSegment ===
+          segmentationGroupState.segmentEquivalences.get(anchorSegment)
       ) {
         return {
           anchorSegment,
@@ -287,11 +278,8 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       if (other === undefined) return;
       const existingAnchor = this.layer.anchorSegment.value;
       segmentationGroupState.visibleSegments.add(other);
-      if (
-        existingAnchor === undefined ||
-        !Uint64.equal(existingAnchor, other)
-      ) {
-        this.layer.anchorSegment.value = other.clone();
+      if (existingAnchor === undefined || existingAnchor !== other) {
+        this.layer.anchorSegment.value = other;
         return;
       }
     });
@@ -313,7 +301,7 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
       this.layer.displayState.segmentationGroupState.value;
 
     const getAnchorSegment = (): {
-      anchorSegment: Uint64 | undefined;
+      anchorSegment: bigint | undefined;
       error: string | undefined;
     } => {
       const anchorSegment = this.layer.anchorSegment.value;
@@ -340,8 +328,8 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
     body.classList.add("neuroglancer-merge-segments-status");
     activation.bindInputEventMap(SPLIT_SEGMENTS_INPUT_EVENT_MAP);
     const getSplitRequest = (): {
-      anchorSegment: Uint64 | undefined;
-      otherSegment: Uint64 | undefined;
+      anchorSegment: bigint | undefined;
+      otherSegment: bigint | undefined;
       anchorSegmentValid: boolean;
       error: string | undefined;
     } => {
@@ -358,11 +346,9 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const otherSegment = displayState.segmentSelectionState.baseValue;
       if (
         otherSegment === undefined ||
-        !Uint64.equal(
-          displayState.segmentSelectionState.selectedSegment,
-          segmentationGroupState.segmentEquivalences.get(anchorSegment),
-        ) ||
-        Uint64.equal(otherSegment, anchorSegment)
+        displayState.segmentSelectionState.selectedSegment !==
+          segmentationGroupState.segmentEquivalences.get(anchorSegment) ||
+        otherSegment === anchorSegment
       ) {
         return {
           anchorSegment,
@@ -521,11 +507,8 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
       if (other === undefined) return;
       segmentationGroupState.visibleSegments.add(other);
       const existingAnchor = this.layer.anchorSegment.value;
-      if (
-        existingAnchor === undefined ||
-        !Uint64.equal(existingAnchor, other)
-      ) {
-        this.layer.anchorSegment.value = other.clone();
+      if (existingAnchor === undefined || existingAnchor !== other) {
+        this.layer.anchorSegment.value = other;
         return;
       }
     });

@@ -1,6 +1,8 @@
 import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
+import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { StatusMessage } from "#src/status.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { bigintToStringJsonReplacer } from "#src/util/json.js";
 import type { Viewer } from "#src/viewer.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -87,10 +89,13 @@ export class StateShare extends RefCounted {
 
       StatusMessage.forPromise(
         store
-          .fetchOkImpl(store.baseUrl + path, {
+          .fetchOkImpl(joinBaseUrlAndPath(store.baseUrl, path), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(viewer.state.toJSON()),
+            body: JSON.stringify(
+              viewer.state.toJSON(),
+              bigintToStringJsonReplacer,
+            ),
           })
           .then((response) => response.json())
           .then((res) => {

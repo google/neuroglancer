@@ -18,7 +18,7 @@ import { asyncComputation } from "#src/async_computation/index.js";
 
 export const encodeCompressedSegmentationUint32 = asyncComputation<
   (
-    rawData: Uint32Array,
+    rawData: Uint32Array<ArrayBuffer>,
     shape: ArrayLike<number>,
     blockSize: ArrayLike<number>,
   ) => Uint32Array
@@ -26,7 +26,7 @@ export const encodeCompressedSegmentationUint32 = asyncComputation<
 
 export const encodeCompressedSegmentationUint64 = asyncComputation<
   (
-    rawData: Uint32Array,
+    rawData: Uint32Array<ArrayBuffer>,
     shape: ArrayLike<number>,
     blockSize: ArrayLike<number>,
   ) => Uint32Array

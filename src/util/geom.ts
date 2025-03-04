@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { mat3 } from "gl-matrix";
-import { mat4, quat, vec3, vec4 } from "gl-matrix";
-import type { TypedArray } from "#src/util/array.js";
+import { mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
 
 export { mat2, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
@@ -35,6 +34,11 @@ export const kZeroVec4 = vec4.fromValues(0, 0, 0, 0);
 export const kOneVec = vec3.fromValues(1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 export const kIdentityQuat = quat.create();
+
+export interface OrientedSliceScales {
+  width: { scale: number; unit: string };
+  height: { scale: number; unit: string };
+}
 
 export function prod3(x: ArrayLike<number>) {
   return x[0] * x[1] * x[2];
@@ -380,7 +384,11 @@ export function getDependentTransformInputDimensions(
   return findMatchingIndices(isDependentInputDimension, true);
 }
 
-export function scaleMat3Input(out: mat3, input: mat3, scales: TypedArray) {
+export function scaleMat3Input(
+  out: mat3,
+  input: mat3,
+  scales: TypedNumberArray,
+) {
   for (let j = 0; j < 3; ++j) {
     const s = scales[j];
     for (let i = 0; i < 3; ++i) {
@@ -390,7 +398,11 @@ export function scaleMat3Input(out: mat3, input: mat3, scales: TypedArray) {
   return out;
 }
 
-export function scaleMat3Output(out: mat3, input: mat3, scales: TypedArray) {
+export function scaleMat3Output(
+  out: mat3,
+  input: mat3,
+  scales: TypedNumberArray,
+) {
   for (let i = 0; i < 3; ++i) {
     const s = scales[i];
     for (let j = 0; j < 3; ++j) {
@@ -469,4 +481,46 @@ export function getViewFrustrumWorldBounds(
       bounds[j + 3] = Math.max(bounds[j + 3], x);
     }
   }
+}
+
+export function calculateOrientedSliceScales(
+  orientation: quat | undefined,
+  scales: vec3,
+  units: readonly string[],
+  tolerance: number = 1e-6,
+): OrientedSliceScales | null {
+  function nearlyEqualScales(a: number, b: number): boolean {
+    return Math.abs(a - b) / Math.max(a, b) < tolerance;
+  }
+  function extractContributingScales(
+    matrixRow: 0 | 1 | 2,
+  ): { scale: number; unit: string } | null {
+    let contributingScale: number | undefined;
+    let contributingUnit: string | undefined;
+    for (let i = 0; i < 3; ++i) {
+      const index = i + 3 * matrixRow;
+      if (Math.abs(rotationMatrix[index]) > tolerance) {
+        if (contributingUnit === undefined || contributingScale === undefined) {
+          contributingScale = scales[i];
+          contributingUnit = units[i];
+        } else if (
+          contributingUnit !== units[i] ||
+          !nearlyEqualScales(contributingScale, scales[i])
+        )
+          return null;
+      }
+    }
+    if (contributingScale === undefined || contributingUnit === undefined)
+      return null;
+    return { scale: contributingScale, unit: contributingUnit };
+  }
+  if (orientation === undefined) orientation = kIdentityQuat;
+
+  const rotationMatrix = mat3.create();
+  mat3.fromQuat(rotationMatrix, orientation);
+
+  const width = extractContributingScales(0 /* matrixRow */);
+  const height = extractContributingScales(1 /* matrixRow */);
+
+  return width && height ? { width, height } : null;
 }

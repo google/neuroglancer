@@ -62,22 +62,8 @@ export const DATA_TYPE_ARRAY_CONSTRUCTOR: Record<
   [DataType.INT16]: Int16Array,
   [DataType.UINT32]: Uint32Array,
   [DataType.INT32]: Int32Array,
-  [DataType.UINT64]: Uint32Array,
+  [DataType.UINT64]: BigUint64Array,
   [DataType.FLOAT32]: Float32Array,
-};
-
-export const DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT: Record<
-  DataType,
-  number
-> = {
-  [DataType.UINT8]: 1,
-  [DataType.INT8]: 1,
-  [DataType.UINT16]: 1,
-  [DataType.INT16]: 1,
-  [DataType.UINT32]: 1,
-  [DataType.INT32]: 1,
-  [DataType.UINT64]: 2,
-  [DataType.FLOAT32]: 1,
 };
 
 export function makeDataTypeArrayView<TArrayBuffer extends ArrayBufferLike>(
@@ -87,13 +73,11 @@ export function makeDataTypeArrayView<TArrayBuffer extends ArrayBufferLike>(
   byteLength: number = buffer.byteLength,
 ): ArrayBufferView<TArrayBuffer> {
   const bytesPerElement = DATA_TYPE_BYTES[dataType];
-  const javascriptElementsPerArrayElement =
-    DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType];
   return new (DATA_TYPE_ARRAY_CONSTRUCTOR[
     dataType
   ] as TypedArrayConstructor<TArrayBuffer>)(
     buffer,
     byteOffset,
-    (byteLength / bytesPerElement) * javascriptElementsPerArrayElement,
+    byteLength / bytesPerElement,
   );
 }

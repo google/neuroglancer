@@ -29,7 +29,6 @@ import type {
 import { registerChunkFormatHandler } from "#src/sliceview/volume/frontend.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ShaderBuilder,
@@ -312,7 +311,7 @@ export class CompressedSegmentationVolumeChunk extends SingleTextureVolumeChunk<
     chunkFormat.setTextureData(gl, textureLayout, data!);
   }
 
-  getValueAt(dataPosition: Uint32Array): Uint64 | number {
+  getValueAt(dataPosition: Uint32Array): bigint | number {
     const { chunkDataSize, chunkFormat } = this;
     const { data } = this;
     if (data === null) {
@@ -320,16 +319,13 @@ export class CompressedSegmentationVolumeChunk extends SingleTextureVolumeChunk<
     }
     const offset = data[dataPosition[3] || 0];
     if (chunkFormat.dataType === DataType.UINT64) {
-      const result = new Uint64();
-      readSingleChannelValueUint64(
-        result,
+      return readSingleChannelValueUint64(
         data,
         /*baseOffset=*/ offset,
         chunkDataSize,
         chunkFormat.subchunkSize,
         dataPosition,
       );
-      return result;
     }
     return readSingleChannelValueUint32(
       data,
@@ -349,7 +345,7 @@ class FillValueChunk extends RefCounted {
 function getFillValueChunk(
   gl: GL,
   chunkFormat: ChunkFormat,
-  fillValue: number | Uint64,
+  fillValue: number | bigint,
 ): FillValueChunk {
   const { dataType, numChannels } = chunkFormat;
   const array = new Uint32Array(
@@ -358,8 +354,8 @@ function getFillValueChunk(
   array[0] = numChannels;
   array[numChannels] = 2;
   if (dataType === DataType.UINT64) {
-    array[numChannels + 2] = (fillValue as Uint64).low;
-    array[numChannels + 3] = (fillValue as Uint64).high;
+    array[numChannels + 2] = Number((fillValue as bigint) & 0xffffffffn);
+    array[numChannels + 3] = Number((fillValue as bigint) >> 32n);
   } else {
     array[numChannels + 2] = fillValue as number;
   }

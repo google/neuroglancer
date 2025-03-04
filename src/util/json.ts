@@ -15,6 +15,7 @@
  */
 
 import type { WritableArrayLike } from "#src/util/array.js";
+import { UINT64_MAX } from "#src/util/bigint.js";
 import { vec3 } from "#src/util/geom.js";
 
 export function verifyFloat(obj: any): number {
@@ -183,6 +184,9 @@ export function stableStringify(x: any) {
     }
     s += "}";
     return s;
+  }
+  if (typeof x === "bigint") {
+    return x.toString();
   }
   return JSON.stringify(x);
 }
@@ -740,9 +744,44 @@ export function verifyOptionalFixedLengthArrayOfStringOrNull(
   return parseFixedLengthArray(new Array<string | null>(rank), obj, (value) => {
     if (value !== null && typeof value !== "string") {
       throw new Error(
-        `Expected string or null, but received: ${JSON.stringify(name)}`,
+        `Expected string or null, but received: ${JSON.stringify(value)}`,
       );
     }
     return value;
   });
+}
+
+export function parseUint64(obj: unknown) {
+  let n: bigint;
+  switch (typeof obj) {
+    case "string":
+      if (obj.match(/^(?:0|[1-9][0-9]*)$/) === null) {
+        throw new Error(
+          `Expected base-10 number, but received: ${JSON.stringify(obj)}`,
+        );
+      }
+      n = BigInt(obj);
+      break;
+    case "number":
+      n = BigInt(obj);
+      break;
+    case "bigint":
+      n = obj;
+      break;
+    default:
+      throw new Error(
+        `Expected uint64 value, but received: ${JSON.stringify(obj)}`,
+      );
+  }
+  if (n < 0n || n > UINT64_MAX) {
+    throw new Error(`Expected uint64 value, but received: ${n}`);
+  }
+  return n;
+}
+
+export function bigintToStringJsonReplacer(_key: unknown, value: unknown) {
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  return value;
 }
