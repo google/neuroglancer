@@ -86,6 +86,7 @@ class UpdateTester {
   }
 }
 
+// TODO (SKM) expand with polyline
 describe("updateAnnotations", () => {
   it("rank 1", () => {
     const tester = new UpdateTester(1, []);
