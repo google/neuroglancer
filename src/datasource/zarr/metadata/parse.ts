@@ -126,7 +126,7 @@ export function parseDimensionUnit(obj: unknown): {
   return { unit: unitInfo.unit, scale: scale * unitInfo.scale };
 }
 
-function parseFillValue(dataType: DataType, value: unknown) {
+function parseFillValue(dataType: DataType, value: unknown): number | bigint {
   switch (dataType) {
     case DataType.UINT8:
     case DataType.INT8:
@@ -139,6 +139,9 @@ function parseFillValue(dataType: DataType, value: unknown) {
         throw new Error(
           `Expected integer but received: ${JSON.stringify(value)}`,
         );
+      }
+      if (dataType === DataType.UINT64) {
+        return BigInt(value);
       }
       return value;
     case DataType.FLOAT32:
