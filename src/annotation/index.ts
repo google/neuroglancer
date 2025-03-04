@@ -869,22 +869,9 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointB, false);
     },
     defaultProperties(annotation: Line, scales: vec3) {
-      return {
-        properties: [
-          {
-            type: "float32",
-            identifier: "Length",
-            default: 0,
-            description: "Length of the line annotation in nanometers",
-          },
-        ],
-        values: [
-          vec3.dist(
-            vec3.mul(vec3.create(), scales, annotation.pointA as vec3),
-            vec3.mul(vec3.create(), scales, annotation.pointB as vec3),
-          ),
-        ],
-      };
+      annotation;
+      scales;
+      return { properties: [], values: [] };
     },
   },
   [AnnotationType.POLYLINE]: {
@@ -966,6 +953,20 @@ export const annotationTypeHandlers: Record<
       for (const point of annotation.points) {
         callback(point, false);
       }
+    },
+    defaultProperties(annotation: PolyLine, scales: vec3) {
+      scales;
+      return {
+        properties: [
+          {
+            type: "uint32",
+            identifier: "Point count",
+            default: 0,
+            description: "Number of points in the polyline",
+          },
+        ],
+        values: [annotation.points.length],
+      };
     },
   },
   [AnnotationType.POINT]: {
