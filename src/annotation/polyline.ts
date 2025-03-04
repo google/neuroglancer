@@ -87,25 +87,28 @@ class RenderHelper extends AnnotationRenderHelper {
     builder.addInitializer((shader) => {
       const location = shader.attribute(name);
       const { gl } = shader;
-      shader.vertexShaderInputBinders[name] = {
-        enable(divisor: number) {
-          gl.enableVertexAttribArray(location);
-          gl.vertexAttribDivisor(location, divisor);
-        },
-        disable() {
-          gl.vertexAttribDivisor(location, 0);
-          gl.disableVertexAttribArray(location);
-        },
-        bind(stride: number, offset: number) {
-          gl.vertexAttribIPointer(
-            location,
-            1,
-            WebGL2RenderingContext.UNSIGNED_INT,
-            stride,
-            offset + 2 * rank * 4,
-          );
-        },
-      };
+      shader.vertexShaderInputBinders[name] =
+        location === -1
+          ? { enable() {}, disable() {}, bind() {} }
+          : {
+              enable(divisor: number) {
+                gl.enableVertexAttribArray(location);
+                gl.vertexAttribDivisor(location, divisor);
+              },
+              disable() {
+                gl.vertexAttribDivisor(location, 0);
+                gl.disableVertexAttribArray(location);
+              },
+              bind(stride: number, offset: number) {
+                gl.vertexAttribIPointer(
+                  location,
+                  1,
+                  WebGL2RenderingContext.UNSIGNED_INT,
+                  stride,
+                  offset + 2 * rank * 4,
+                );
+              },
+            };
     });
   }
 
