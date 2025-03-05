@@ -275,9 +275,7 @@ export class LayerListPanel extends SidePanel {
       for (const layer of self.layerManager.managedLayers) {
         if (!layer.archived) ++numNonArchivedLayers;
       }
-      const numberElementWidth = `${
-        (numNonArchivedLayers + 1).toString().length
-      }ch`;
+      const numberElementWidth = `${numNonArchivedLayers.toString().length}ch`;
       for (const layer of self.layerManager.managedLayers) {
         if (layer.visible) {
           ++numVisible;
