@@ -53,9 +53,9 @@ export default (env, args) => {
           type: "asset/source",
         },
         // Needed for .html assets used for auth redirect pages for the
-        // brainmaps and bossDB data sources.
+        // brainmaps, globus, and bossDB data sources.
         {
-          test: /(bossauth|google_oauth2_redirect)\.html$/,
+          test: /(bossauth|google_oauth2_redirect|globus_oauth2_redirect)\.html$/,
           type: "asset/resource",
           generator: {
             // Filename must be preserved since exact redirect URLs must be allowlisted.
@@ -116,6 +116,12 @@ export default (env, args) => {
       // NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: true
 
       // NEUROGLANCER_GOOGLE_TAG_MANAGER: JSON.stringify('GTM-XXXXXX'),
+      /**
+       * To deploy to a different origin, you will need to generate your
+       * own Client ID from Globus and substitute it in.
+       * @see https://docs.globus.org/api/auth/developer-guide/#developing-apps
+       */
+      GLOBUS_CLIENT_ID: JSON.stringify("f3c5dd86-8c8e-4393-8f46-3bfa32bfcd73"),
     },
     watchOptions: {
       ignored: /node_modules/,
