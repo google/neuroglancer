@@ -296,7 +296,7 @@ export class LayerListPanel extends SidePanel {
         }
         const { nonArchivedLayerIndex } = layer;
         item.numberElement.style.width = numberElementWidth;
-        if (nonArchivedLayerIndex === -1) {
+        if (layer.archived) {
           item.numberElement.style.visibility = "hidden";
         } else {
           item.numberElement.style.visibility = "";
