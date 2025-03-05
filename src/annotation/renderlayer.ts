@@ -679,13 +679,31 @@ function AnnotationRenderLayer<
           let selectedIndex = 0xffffffff;
           if (hoverValue !== undefined) {
             const index = idMap.get(hoverValue.id);
-            console.log(index);
             if (index !== undefined) {
               // TODO (SKM) fix this, but this is only for rendering
-              selectedIndex = index * handler.pickIdsPerInstance;
+              // TODO (SKM) for now I'll use a loop over the map but
+              // This could be made better
+              if (annotationType === AnnotationType.POLYLINE) {
+                const idToSizeMap = serializedAnnotations.idToSizeMaps[
+                  annotationType
+                ];
+                let count = 0;
+                // For each value in the map, get the index and add the size
+                // If the index is less than the current index
+                for (const [id, size] of idToSizeMap) {
+                  const tempIndex = idMap.get(id);
+                  if (tempIndex !== undefined && tempIndex < index) {
+                    count += size;
+                  }
+                }
+                selectedIndex = count * handler.pickIdsPerInstance;
+              }
+              else {
+                selectedIndex = index * handler.pickIdsPerInstance;
+              }
               // If we wanted to include the partIndex, we would add:
               // selectedIndex += hoverValue.partIndex;
-              console.log("Selected index", selectedIndex);
+              // Though for polylines this would be more complicated
             }
           }
           count = Math.round(count * drawFraction);

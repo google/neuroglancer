@@ -105,7 +105,7 @@ class RenderHelper extends AnnotationRenderHelper {
                   1,
                   WebGL2RenderingContext.UNSIGNED_INT,
                   stride,
-                  offset + 2 * rank * 4,
+                  offset,
                 );
               },
             };
@@ -214,6 +214,7 @@ class RenderHelper extends AnnotationRenderHelper {
   ) {
     super.enable(shaderGetter, context, (shader) => {
       const binder = shader.vertexShaderInputBinders.VertexPosition;
+      // TODO don't really need the countBinder, could do inline here
       const countBinder = shader.vertexShaderInputBinders.aPolyLineNumVertices;
       binder.enable(1);
       countBinder.enable(1);
@@ -221,7 +222,7 @@ class RenderHelper extends AnnotationRenderHelper {
         WebGL2RenderingContext.ARRAY_BUFFER,
         context.buffer.buffer,
       );
-      binder.bind(this.geometryDataStride, context.bufferOffset);
+      binder.bind(this.geometryDataStride, context.bufferOffset + 4);
       countBinder.bind(this.geometryDataStride, context.bufferOffset);
       const { vertexIdHelper } = this;
       vertexIdHelper.enable();

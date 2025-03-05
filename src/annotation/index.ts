@@ -702,8 +702,9 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     offset: number,
     isLittleEndian: boolean,
     rank: number,
-    annotation?: T,
+    annotation: T,
     geometryDataStride?: number,
+    instanceIndex?: number,
   ) => void;
   deserialize: (
     buffer: DataView,
@@ -907,21 +908,25 @@ export const annotationTypeHandlers: Record<
       rank: number,
       annotation: PolyLine,
       geometryDataStride: number,
+      instanceIndex: number,
     ) {
       // Build buffer like
       // P1 P2 PROPERTIES P3 P4 PROPERTIES ...
+      // TODO SKM don't actually need intance index
+      let startingOffset = offset + instanceIndex * geometryDataStride;
       for (let i = 0; i < annotation.points.length - 1; i++) {
+        const tempOffset = startingOffset + i * geometryDataStride;
+        buffer.setUint32(tempOffset, i, isLittleEndian);
         const firstPoint = annotation.points[i];
         const secondPoint = annotation.points[i + 1];
-        const tempOffset = serializeTwoFloatVectors(
+        serializeTwoFloatVectors(
           buffer,
-          offset + i * geometryDataStride,
+          tempOffset + 4,
           isLittleEndian,
           rank,
           firstPoint,
           secondPoint,
         );
-        buffer.setUint32(tempOffset, annotation.points.length, isLittleEndian);
       }
     },
     // TODO (SKM) how to make the calls to this give the index offset?
@@ -1601,34 +1606,35 @@ function serializeAnnotations(
     const serialize = handler.serialize;
     const offset = typeToOffset[annotationType];
     const geometryDataStride = propertySerializer.propertyGroupBytes[0];
-    let numProcessedPolyLinePointPairs = 0;
+    let polylineInstanceIndex = 0;
     for (let i = 0, count = annotations.length; i < count; ++i) {
       const annotation = annotations[i];
       // Polylines need to be serialized per pair of points
       // Similar to if they stored each pair of points as a child Line annotation
       if (annotationType === AnnotationType.POLYLINE) {
+        const polyline = annotation as PolyLine;
         serialize(
           dataView,
-          offset + numProcessedPolyLinePointPairs * geometryDataStride,
+          offset,
           isLittleEndian,
           rank,
-          annotation,
+          polyline,
           geometryDataStride,
+          polylineInstanceIndex,
         );
-        const polyline = annotation as PolyLine;
         idToSizeMap.set(polyline.id, polyline.points.length - 1);
 
         for (let j = 0; j < polyline.points.length - 1; j++) {
           serializeProperties(
             dataView,
             offset,
-            numProcessedPolyLinePointPairs + j,
+            polylineInstanceIndex + j,
             polyLinePairCount,
             isLittleEndian,
             polyline.properties,
           );
         }
-        numProcessedPolyLinePointPairs += polyline.points.length - 1;
+        polylineInstanceIndex += polyline.points.length - 1;
       } else {
         serialize(
           dataView,
@@ -1637,6 +1643,7 @@ function serializeAnnotations(
           rank,
           annotation,
           geometryDataStride,
+          i,
         );
         serializeProperties(
           dataView,
@@ -1649,7 +1656,8 @@ function serializeAnnotations(
       }
     }
     if (annotationType === AnnotationType.POLYLINE) {
-      typeToSize[annotationType] = numProcessedPolyLinePointPairs;
+      // The index represents the next polyline instance, so it is the length at the end
+      typeToSize[annotationType] = polylineInstanceIndex;
     } else {
       typeToSize[annotationType] = annotations.length;
     }
