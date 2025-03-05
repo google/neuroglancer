@@ -67,8 +67,6 @@
   display: inline-block;
   text-align: left;
   line-height: 18px;
-  width: auto !important;
-  min-width: 2ch;
 }
 
 .neuroglancer-layer-list-panel-item:not(:hover)
