@@ -271,8 +271,13 @@ export class LayerListPanel extends SidePanel {
     this.layerManager.updateNonArchivedLayerIndices();
     function* getItems() {
       const { items } = self;
-      const numLayers = self.layerManager.managedLayers.length;
-      const numberElementWidth = `${numLayers.toString().length}ch`;
+      let numNonArchivedLayers = 0;
+      for (const layer of self.layerManager.managedLayers) {
+        if (!layer.archived) ++numNonArchivedLayers;
+      }
+      const numberElementWidth = `${
+        (numNonArchivedLayers + 1).toString().length
+      }ch`;
       for (const layer of self.layerManager.managedLayers) {
         if (layer.visible) {
           ++numVisible;
