@@ -27,6 +27,7 @@ import {
 import type { Annotation } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
+  AnnotationType,
   annotationTypeHandlers,
   oldAnnotationTypes,
 } from "#src/annotation/index.js";
@@ -602,53 +603,161 @@ function parseAnnotations(
   propertySerializer: AnnotationPropertySerializer,
 ): AnnotationGeometryData {
   const dv = new DataView(buffer);
+  // First, compute simple sanity checks for sizes etc. to verify that the buffer is well-formed.
   if (buffer.byteLength <= 8) throw new Error("Expected at least 8 bytes");
   const countLow = dv.getUint32(0, /*littleEndian=*/ true);
   const countHigh = dv.getUint32(4, /*littleEndian=*/ true);
   if (countHigh !== 0) throw new Error("Annotation count too high");
   const numBytes = propertySerializer.serializedBytes;
-  const expectedBytes = 8 + (numBytes + 8) * countLow;
+  const annotationType = parameters.type;
+  let expectedNonIndexBytes = 8 + numBytes * countLow;
+  let glBufferSize = numBytes * countLow;
+  let totalNumInstances = countLow;
+  if (annotationType === AnnotationType.POLYLINE) {
+    // Instead need to loop through and read the number of points for each polyline
+    let offset = 8; // Starting count of total number of annotations
+    let runningSize = 0;
+    let runningNumInstances = 0;
+    for (let i = 0; i < countLow; i++) {
+      const numPoints = dv.getUint32(offset, /*littleEndian=*/ true);
+      const numGlInstances = numPoints - 1;
+      const numGeometryBytes = numPoints * parameters.rank * 4;
+      offset = numBytes - 2 * parameters.rank * 4 + numGeometryBytes;
+      runningSize += numBytes * numGlInstances;
+      runningNumInstances += numGlInstances;
+    }
+    expectedNonIndexBytes = offset;
+    glBufferSize = runningSize;
+    totalNumInstances = runningNumInstances;
+  }
+  // Account for the unique uint64 ids that sit at the end of the buffer
+  const expectedBytes = expectedNonIndexBytes + 8 * countLow;
   if (buffer.byteLength !== expectedBytes) {
     throw new Error(
       `Expected ${expectedBytes} bytes, but received: ${buffer.byteLength} bytes`,
     );
   }
-  const idOffset = 8 + numBytes * countLow;
+  // Start by reading all of the ids at the end of the buffer
+  const idOffset = expectedNonIndexBytes;
   const ids = new Array<string>(countLow);
   for (let i = 0; i < countLow; ++i) {
     ids[i] = dv
       .getBigUint64(idOffset + i * 8, /*littleEndian=*/ true)
       .toString();
   }
+  // Now, create the geometry and properties data object
   const geometryData = new AnnotationGeometryData();
-  const origData = new Uint8Array(buffer, 8, numBytes * countLow);
+  const origData = new Uint8Array(buffer, 8, expectedNonIndexBytes - 8);
   let data: Uint8Array<ArrayBuffer>;
   const { propertyGroupBytes } = propertySerializer;
-  if (propertyGroupBytes.length > 1) {
-    // Need to transpose the property data.
-    data = new Uint8Array(origData.length);
+  // TODO SKM polylines would need different here - has to take the idea from
+  // serializeAnnotations
+  if (
+    propertyGroupBytes.length > 1 ||
+    annotationType === AnnotationType.POLYLINE
+  ) {
+    // Need to transpose the property data or shift around the data.
+    data = new Uint8Array(glBufferSize);
 
-    let origOffset = 0;
-    let groupOffset = 0;
-    for (
-      let groupIndex = 0;
-      groupIndex < propertyGroupBytes.length;
-      ++groupIndex
-    ) {
-      const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
-      for (
-        let annotationIndex = 0;
-        annotationIndex < countLow;
-        ++annotationIndex
-      ) {
-        const origBase = origOffset + annotationIndex * numBytes;
-        const newBase = groupOffset + annotationIndex * groupBytesPerAnnotation;
-        for (let i = 0; i < groupBytesPerAnnotation; ++i) {
-          data[newBase + i] = origData[origBase + i];
+    // Start by checking for the polyline case
+    if (annotationType === AnnotationType.POLYLINE) {
+      const dataView = new DataView(origData.buffer);
+      // The GL buffer data is laid out as follows:
+      // numPointsInPoly, Point1, Point2, Properties
+      // numPointsInPoly, Point2, Point3, Properties
+      // ...
+      // numPointsInPolyK, PointN, PointN+1, Properties
+      // While the input data is a little different:
+      // numPointsInPoly1, Point1, Point2, ..., PointN, Properties
+      // numPointsInPoly2, Point1, Point2, ..., PointN, Properties
+      // ...
+      // numPointsInPolyK, Point1, Point2, ..., PointN, Properties
+      // So we need to shift the data around a bit
+      // Start by looping through the data and shifting the points
+      let offset = 0;
+      let runningOffset = 0;
+      for (let i = 0; i < countLow; ++i) {
+        const numPoints = dataView.getUint32(offset, true);
+        offset += 4;
+        const numGlInstances = numPoints - 1;
+        const numBytesPerInstance = numBytes;
+        const origPropertyBase = offset + numPoints * parameters.rank * 4;
+        // TODO SKM inefficient copying here, just for now as it's easier to understand
+        for (let j = 0; j < numGlInstances; ++j) {
+          // First copy in the geometry data for two points
+          for (let k = 0; k < 2 * parameters.rank * 4; ++k) {
+            data[runningOffset + k] = origData[offset + k];
+          }
+          // Then copy in the properties
+          for (let k = 2 * parameters.rank * 4; k < numBytesPerInstance; ++k) {
+            data[runningOffset + k] = origData[origPropertyBase + k];
+          }
+          // The original base increases by just 4 bytes * rank to move to the next point
+          offset += parameters.rank * 4;
+          // The new base increases by the number of bytes per instance
+          runningOffset += numBytesPerInstance;
         }
       }
-      origOffset += groupBytesPerAnnotation;
-      groupOffset += groupBytesPerAnnotation * countLow;
+      // TODO SKM - maybe just changing one thing works here actually
+      if (propertyGroupBytes.length > 1) {
+        let origOffset = 0;
+        let groupOffset = 0;
+        let runningInstanceIndex = 0;
+        for (
+          let groupIndex = 0;
+          groupIndex < propertyGroupBytes.length;
+          ++groupIndex
+        ) {
+          const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
+          for (
+            let annotationIndex = 0;
+            annotationIndex < countLow;
+            ++annotationIndex
+          ) {
+            const numGLInstances = dataView.getUint32(origOffset) - 1;
+            for (
+              let instanceIndex = 0;
+              instanceIndex < numGLInstances;
+              ++instanceIndex
+            ) {
+              const origBase = origOffset + runningInstanceIndex * numBytes;
+              const newBase =
+                groupOffset + runningInstanceIndex * groupBytesPerAnnotation;
+              for (let i = 0; i < groupBytesPerAnnotation; ++i) {
+                data[newBase + i] = origData[origBase + i];
+              }
+              ++runningInstanceIndex;
+            }
+          }
+          origOffset += groupBytesPerAnnotation;
+          groupOffset += groupBytesPerAnnotation * totalNumInstances;
+        }
+      }
+    }
+    if (propertyGroupBytes.length > 1) {
+      let origOffset = 0;
+      let groupOffset = 0;
+      for (
+        let groupIndex = 0;
+        groupIndex < propertyGroupBytes.length;
+        ++groupIndex
+      ) {
+        const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
+        for (
+          let annotationIndex = 0;
+          annotationIndex < countLow;
+          ++annotationIndex
+        ) {
+          const origBase = origOffset + annotationIndex * numBytes;
+          const newBase =
+            groupOffset + annotationIndex * groupBytesPerAnnotation;
+          for (let i = 0; i < groupBytesPerAnnotation; ++i) {
+            data[newBase + i] = origData[origBase + i];
+          }
+        }
+        origOffset += groupBytesPerAnnotation;
+        groupOffset += groupBytesPerAnnotation * countLow;
+      }
     }
   } else {
     data = origData;
@@ -670,6 +779,7 @@ function parseAnnotations(
   typeToIds[parameters.type] = ids;
   typeToIdMaps.fill(new Map());
   typeToIdMaps[parameters.type] = new Map(ids.map((id, i) => [id, i]));
+  // TODO (SKM) : need to fill out the typeToSize etc. here
   return geometryData;
 }
 
