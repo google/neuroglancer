@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type {
+import {
   Annotation,
   AnnotationPropertySpec,
   AnnotationType,
@@ -382,7 +382,11 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
 vec3 defaultColor() { return uColor; }
 highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }
 `);
-
+        if (this.annotationType !== AnnotationType.POLYLINE) {
+          builder.addVertexCode(`
+uint getNumRelatedInstances() { return 0u; }
+`);
+        }
         builder.addFragmentCode(`
 void emitAnnotation(vec4 color) {
   emit(color, vPickID);
@@ -468,7 +472,6 @@ void setEllipsoidFillColor(vec4 color);
 void setBoundingBoxBorderColor(vec4 color);
 void setBoundingBoxBorderWidth(float size);
 void setBoundingBoxFillColor(vec4 color);
-uint getPolyLineNumVertices();
 
 void setEndpointMarkerColor(vec3 startColor, vec3 endColor) {
   setEndpointMarkerColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
@@ -555,9 +558,9 @@ ${partIndexExpressions
     s += `
   vPickID = pickID + pickOffset0;
   highp uint selectedIndex = uSelectedIndex;
-  highp uint subtractAmount = getPolyLineNumVertices() * uint(${this.pickIdsPerInstance});
-if (selectedIndex + subtractAmount == pickBaseOffset${partIndexExpressions
-      .map((_, i) => ` || selectedIndex + subtractAmount == pickOffset${i}`)
+  highp uint relatedInstancePickOffset = getNumRelatedInstances() * uint(${this.pickIdsPerInstance});
+if (selectedIndex + relatedInstancePickOffset == pickBaseOffset${partIndexExpressions
+      .map((_, i) => ` || selectedIndex + relatedInstancePickOffset == pickOffset${i}`)
       .join("")}) {
     vColor = vec4(mix(vColor.rgb, vec3(1.0, 1.0, 1.0), 0.75), vColor.a);
   }

@@ -82,7 +82,7 @@ class RenderHelper extends AnnotationRenderHelper {
     const name = "aPolyLineNumVertices";
     builder.addAttribute(type, name);
     builder.addVertexCode(
-      `${type} getPolyLineNumVertices() { return ${name}; }`,
+      `${type} getNumRelatedInstances() { return ${name}; }`,
     );
     builder.addInitializer((shader) => {
       const location = shader.attribute(name);

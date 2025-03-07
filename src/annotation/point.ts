@@ -55,7 +55,6 @@ class RenderHelper extends AnnotationRenderHelper {
       rank,
     );
     builder.addVarying("highp vec4", "vBorderColor");
-    // TODO (SKM) add that num vertices to other things for multiple and change name
     builder.addVertexCode(`
 float ng_markerDiameter;
 float ng_markerBorderWidth;
@@ -71,7 +70,6 @@ void setPointMarkerColor(vec4 color) {
 void setPointMarkerBorderColor(vec4 color) {
   vBorderColor = color;
 }
-getPolyLineNumVertices() { return 0u; }
 `);
     builder.addVertexMain(`
 ng_markerDiameter = 5.0;
