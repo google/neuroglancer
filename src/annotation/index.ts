@@ -24,7 +24,7 @@ import type {
   CoordinateSpaceTransform,
   WatchableCoordinateSpaceTransform,
 } from "#src/coordinate_transform.js";
-import { arraysEqual } from "#src/util/array.js";
+import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
 import {
   packColor,
   parseRGBAColorSpecification,
@@ -914,9 +914,18 @@ export const annotationTypeHandlers: Record<
       // P1 P2 PROPERTIES P3 P4 PROPERTIES ...
       // TODO SKM don't actually need intance index
       let startingOffset = offset + instanceIndex * geometryDataStride;
+      const isClosed = annotation.points.length > 1 && arraysEqualWithPredicate(
+        annotation.points[0],
+        annotation.points[annotation.points.length - 1],
+        (a, b) => Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b)) < 1e-6,
+      );
       for (let i = 0; i < annotation.points.length - 1; i++) {
+        // 0 for regular points, 1 for last point unless closed
+        const pointType = i === annotation.points.length - 2 ? (isClosed ? 0 : 1) : 0;
+        console.log(isClosed, pointType);
         const tempOffset = startingOffset + i * geometryDataStride;
-        buffer.setUint32(tempOffset, i, isLittleEndian);
+        // Combine the point type and i into a single uint32
+        buffer.setUint32(tempOffset, pointType << 31 | i, isLittleEndian);
         const firstPoint = annotation.points[i];
         const secondPoint = annotation.points[i + 1];
         serializeTwoFloatVectors(

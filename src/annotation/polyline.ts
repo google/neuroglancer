@@ -81,8 +81,13 @@ class RenderHelper extends AnnotationRenderHelper {
     const type = "uint";
     const name = "aPolyLineNumVertices";
     builder.addAttribute(type, name);
+    // Low 30 bits store number of vertices.
     builder.addVertexCode(
-      `${type} getNumRelatedInstances() { return ${name}; }`,
+      `${type} getNumRelatedInstances() { return ${name} & 0x7FFFFFFFu; }`,
+    );
+    // High 2 bits store where the polyline is started or ended
+    builder.addVertexCode(
+      `${type} getPolyLineEndpointType() { return ${name} >> 31u; }`,
     );
     builder.addInitializer((shader) => {
       const location = shader.attribute(name);
@@ -184,6 +189,7 @@ class RenderHelper extends AnnotationRenderHelper {
     vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
   }
   `);
+      // We always draw the first endpoint, but only the second on the last segment
       builder.setVertexMain(`
   float modelPosition[${rank}] = getVertexPosition0();
   float modelPositionB[${rank}] = getVertexPosition1();
@@ -196,7 +202,9 @@ class RenderHelper extends AnnotationRenderHelper {
   ng_PolyMarkerDiameter = 5.0;
   ng_PolyMarkerBorderWidth = 1.0;
   ${this.invokeUserMain}
-  emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_PolyMarkerDiameter, ng_PolyMarkerBorderWidth);
+  if (getEndpointIndex() == 0 || getPolyLineEndpointType() == 1u) {
+    emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_PolyMarkerDiameter, ng_PolyMarkerBorderWidth);
+  }
   ${this.setPartIndex(builder, "uint(getEndpointIndex()) + 1u")};
   `);
       builder.setFragmentMain(`
