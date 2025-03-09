@@ -148,6 +148,19 @@ class AnnotationWriter:
             )
         self._add_two_point_obj(point_a, point_b, id, **kwargs)
 
+    def add_ellipsoid(
+        self,
+        center: Sequence[float],
+        radii: Sequence[float],
+        id: int | None = None,
+        **kwargs,
+    ):
+        if self.annotation_type != "ellipsoid":
+            raise ValueError(
+                f"Expected annotation type ellipsoid, but received: {self.annotation_type}"
+            )
+        self._add_two_point_obj(center, radii, id, **kwargs)
+
     def _add_two_point_obj(
         self,
         point_a: Sequence[float],
