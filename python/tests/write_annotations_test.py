@@ -42,3 +42,39 @@ def test_annotation_writer_point(tmp_path: pathlib.Path):
     assert os.path.exists(os.path.join(tmp_path, "info"))
     assert os.path.exists(os.path.join(tmp_path, "spatial0"))
     assert os.path.exists(os.path.join(tmp_path, "by_id"))
+
+
+def test_annotation_writer_line(tmp_path: pathlib.Path):
+    coordinate_space = neuroglancer.CoordinateSpace(names=["x", "y"], units="m")
+    writer = write_annotations.AnnotationWriter(
+        coordinate_space=coordinate_space, annotation_type="line"
+    )
+    writer.add_line([2, 5], [3, 6])
+    writer.write(tmp_path)
+    assert os.path.exists(os.path.join(tmp_path, "info"))
+    assert os.path.exists(os.path.join(tmp_path, "spatial0"))
+    assert os.path.exists(os.path.join(tmp_path, "by_id"))
+
+
+def test_annotation_writer_ellipsoid(tmp_path: pathlib.Path):
+    coordinate_space = neuroglancer.CoordinateSpace(names=["x", "y"], units="m")
+    writer = write_annotations.AnnotationWriter(
+        coordinate_space=coordinate_space, annotation_type="ellipsoid"
+    )
+    writer.add_ellipsoid([2, 5], [3, 6])
+    writer.write(tmp_path)
+    assert os.path.exists(os.path.join(tmp_path, "info"))
+    assert os.path.exists(os.path.join(tmp_path, "spatial0"))
+    assert os.path.exists(os.path.join(tmp_path, "by_id"))
+
+
+def test_annotation_writer_polyline(tmp_path: pathlib.Path):
+    coordinate_space = neuroglancer.CoordinateSpace(names=["x", "y"], units="m")
+    writer = write_annotations.AnnotationWriter(
+        coordinate_space=coordinate_space, annotation_type="polyline"
+    )
+    writer.add_polyline([[2, 5], [3, 6], [4, 7], [5, 8], [6, 9]])
+    writer.write(tmp_path)
+    assert os.path.exists(os.path.join(tmp_path, "info"))
+    assert os.path.exists(os.path.join(tmp_path, "spatial0"))
+    assert os.path.exists(os.path.join(tmp_path, "by_id"))
