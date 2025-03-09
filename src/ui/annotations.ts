@@ -1484,7 +1484,7 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
     );
     if (point === undefined)
       return { newAnnotation: oldAnnotation, finished: false };
-  
+
     // 1. Show a preview of the point being added until a click is triggered.
     if (!triggered) {
       return {
@@ -1499,15 +1499,16 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       oldAnnotation.points[oldAnnotation.points.length - 2];
     const finished = arraysEqual(lastPoint, secondLastPoint);
     if (finished) {
-      return {
-        newAnnotation: annotationWithoutLastPoint(oldAnnotation),
-        finished: true,
-      };
+      const newAnnotation =
+        oldAnnotation.points.length > 2
+          ? annotationWithoutLastPoint(oldAnnotation)
+          : oldAnnotation;
+      return { newAnnotation, finished };
     }
     // 3. Add the point to the annotation.
     return {
       newAnnotation: annotationWithNewPoint(oldAnnotation, point),
-      finished: finished,
+      finished,
     };
   }
   get description() {
