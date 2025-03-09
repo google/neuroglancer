@@ -50,6 +50,9 @@ AnnotationType = Literal["point", "line", "axis_aligned_bounding_box", "ellipsoi
 
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
     geometry_size = rank if annotation_type == "point" else 2 * rank
+    if annotation_type == "polyline":
+        point_size = [("num_points", "<u4")]
+        return [point_size]
     return [("geometry", "<f4", geometry_size)]
 
 
@@ -97,7 +100,7 @@ class AnnotationWriter:
         self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
         self.annotations = []
         self.rank = coordinate_space.rank
-        self.dtype = _get_dtype_for_geometry(
+        self._dtype = _get_dtype_for_geometry(
             annotation_type, coordinate_space.rank
         ) + _get_dtype_for_properties(self.properties)
         self.lower_bound = np.full(
@@ -107,6 +110,12 @@ class AnnotationWriter:
             shape=(self.rank,), fill_value=float("-inf"), dtype=np.float32
         )
         self.related_annotations = [{} for _ in self.relationships]
+
+    def get_dtype(self, annotation_size = None) -> np.dtype:
+        if self.annotation_type == "polyline" and annotation_size is not None:
+            geometry = ("geometry", "<f4", annotation_size)
+            return np.dtype([geometry] + _get_dtype_for_properties(self.properties))
+        return self._dtype
 
     def add_point(self, point: Sequence[float], id: int | None = None, **kwargs):
         if self.annotation_type != "point":
@@ -161,6 +170,21 @@ class AnnotationWriter:
             )
         self._add_two_point_obj(center, radii, id, **kwargs)
 
+    def add_polyline(
+        self,
+        points: Sequence[Sequence[float]],
+        id: int | None = None,
+        **kwargs,
+    ):
+        if self.annotation_type != "polyline":
+            raise ValueError(
+                f"Expected annotation type polyline, but received: {self.annotation_type}"
+            )
+        if len(points) < 2:
+            raise ValueError("Expected at least two points for a polyline")
+        geometry = np.concatenate(points)
+        self._add_obj(cast(Sequence[float], geometry), id, **kwargs)
+
     def _add_two_point_obj(
         self,
         point_a: Sequence[float],
@@ -184,7 +208,10 @@ class AnnotationWriter:
         self._add_obj(cast(Sequence[float], coords), id, **kwargs)
 
     def _add_obj(self, coords: Sequence[float], id: int | None, **kwargs):
-        encoded = np.zeros(shape=(), dtype=self.dtype)
+        # We need to save the number of points
+        encoded = np.zeros(shape=(), dtype=self.get_dtype(len(coords)))
+        if self.annotation_type == "polyline":
+            encoded[()]["num_points"] = len(coords) // self.rank
         encoded[()]["geometry"] = coords  # type: ignore[call-overload]
 
         for i, p in enumerate(self.properties):
