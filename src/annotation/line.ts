@@ -59,7 +59,7 @@ void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
 
 export function defineNoOpLineSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
-void setLineWidth(float width) {}
+void _setLineWidth(float width) {}
 void setLineColor(vec4 startColor, vec4 endColor) {}
 `);
 }
@@ -94,7 +94,7 @@ float ng_LineWidth;
 `);
       defineNoOpEndpointMarkerSetters(builder);
       builder.addVertexCode(`
-void setLineWidth(float width) {
+void _setLineWidth(float width) {
   ng_LineWidth = width;
 }
 void setLineColor(vec4 startColor, vec4 endColor) {

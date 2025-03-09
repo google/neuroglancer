@@ -448,7 +448,11 @@ void ng_discard() {
 }
 void setLineColor(vec4 startColor, vec4 endColor);
 void setPolyLineColor(vec4 startColor, vec4 endColor);
-void setLineWidth(float width);
+void setLineWidth(float width) {
+  _setLineWidth(width);
+  setPolyLineWidth(width);
+}
+void setPolyLineWidth(float width);
 
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
