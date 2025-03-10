@@ -599,7 +599,6 @@ if (ng_discardValue) {
     callback: (shader: ShaderProgram) => void,
   ) {
     const { shader, parameters } = shaderGetter(context.renderContext.emitter);
-    console.log(shader, parameters);
     if (shader === null) return;
     shader.bind();
     const { gl } = this;

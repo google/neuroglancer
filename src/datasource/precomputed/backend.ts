@@ -602,10 +602,11 @@ function parseAnnotations(
 ): AnnotationGeometryData {
   console.log("Parsing annotations", parameters);
   const dv = new DataView(buffer);
+  const isLittleEndian = true;
   // First, compute simple sanity checks for sizes etc. to verify that the buffer is well-formed.
   if (buffer.byteLength <= 8) throw new Error("Expected at least 8 bytes");
-  const countLow = dv.getUint32(0, /*littleEndian=*/ true);
-  const countHigh = dv.getUint32(4, /*littleEndian=*/ true);
+  const countLow = dv.getUint32(0, isLittleEndian);
+  const countHigh = dv.getUint32(4, isLittleEndian);
   if (countHigh !== 0) throw new Error("Annotation count too high");
   const numBytes = propertySerializer.serializedBytes;
   const annotationType = parameters.type;
@@ -618,7 +619,7 @@ function parseAnnotations(
     let runningSize = 0;
     let runningNumInstances = 0;
     for (let i = 0; i < countLow; i++) {
-      const numPoints = dv.getUint32(offset, /*littleEndian=*/ true);
+      const numPoints = dv.getUint32(offset, isLittleEndian);
       const numGlInstances = numPoints - 1;
       const numGeometryBytes = numPoints * parameters.rank * 4;
       offset += numBytes - 2 * parameters.rank * 4 + numGeometryBytes;
@@ -665,6 +666,7 @@ function parseAnnotations(
     // Start by checking for the polyline case
     if (annotationType === AnnotationType.POLYLINE) {
       const dataView = new DataView(buffer);
+      const newDataView = new DataView(data.buffer);
       // The GL buffer data is laid out as follows:
       // numPointsInPoly, Point1, Point2, Properties
       // numPointsInPoly, Point2, Point3, Properties
@@ -679,25 +681,36 @@ function parseAnnotations(
       // Start by looping through the data and shifting the points
       let offset = 8;
       let runningOffset = 0;
+      idToSizeMaps[parameters.type] = new Map();
       const annotationSizeMap = idToSizeMaps[annotationType];
+      const numPointsOffset = 4;
+      const pointOffset = parameters.rank * 4;
       const numPropertyBytes =
-        propertySerializer.serializedBytes - 2 * parameters.rank * 4 - 4;
+        propertySerializer.serializedBytes - 2 * pointOffset - numPointsOffset;
 
       for (let i = 0; i < countLow; ++i) {
-        const numPoints = dataView.getUint32(offset, true);
-        console.log(numPoints, dataView);
-        offset += 4; // Move past the number of points
+        const numPoints = dataView.getUint32(offset, isLittleEndian);
+        offset += numPointsOffset; // Move past the number of points
         const numGlInstances = numPoints - 1;
-        const origPropertyBase = offset + numPoints * parameters.rank * 4;
+        const origPropertyBase = offset + numPoints * pointOffset;
         const annotationId = ids[i];
-
         annotationSizeMap.set(annotationId, numGlInstances);
 
         for (let j = 0; j < numGlInstances; ++j) {
+          // First, we need to set the number of points, where the
+          // last bit is actually whether to draw the endpoint cap
+          const bitCap = j === numGlInstances - 1 ? 1 : 0;
+          const numPointsWithBitCap = numPoints | (bitCap << 31);
+          data[0];
+          newDataView.setUint32(
+            runningOffset,
+            numPointsWithBitCap,
+            isLittleEndian,
+          );
           // Copy the geometry data for two points
           data.set(
-            origData.subarray(offset, offset + 2 * parameters.rank * 4),
-            runningOffset,
+            origData.subarray(offset, offset + 2 * pointOffset),
+            runningOffset + numPointsOffset,
           );
           // Copy the properties data
           data.set(
@@ -705,27 +718,15 @@ function parseAnnotations(
               origPropertyBase,
               origPropertyBase + numPropertyBytes,
             ),
-            runningOffset + 2 * parameters.rank * 4,
+            runningOffset + numPointsOffset + 2 * pointOffset,
           );
 
           // Advance pointers
-          offset += parameters.rank * 4;
+          offset += pointOffset;;
           runningOffset += numBytes;
-          console.log(
-            j,
-            numGlInstances,
-            offset,
-            runningOffset,
-            glBufferSize,
-            expectedNonIndexBytes,
-          );
         }
         offset = origPropertyBase + numPropertyBytes;
-        console.log(
-          `Processed ${i} instances and finished at offset ${offset}...`,
-        );
       }
-      console.log("Done with all instances");
       // TODO SKM - maybe just changing one thing works here actually
       if (propertyGroupBytes.length > 1) {
         let origOffset = 0;
