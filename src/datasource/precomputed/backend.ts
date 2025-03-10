@@ -622,7 +622,7 @@ function parseAnnotations(
       const numPoints = dv.getUint32(offset, /*littleEndian=*/ true);
       const numGlInstances = numPoints - 1;
       const numGeometryBytes = numPoints * parameters.rank * 4;
-      offset = numBytes - 2 * parameters.rank * 4 + numGeometryBytes;
+      offset += numBytes - 2 * parameters.rank * 4 + numGeometryBytes;
       runningSize += numBytes * numGlInstances;
       runningNumInstances += numGlInstances;
     }
