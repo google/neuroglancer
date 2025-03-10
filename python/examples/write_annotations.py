@@ -1,5 +1,6 @@
 import argparse
 import atexit
+import os
 import shutil
 import tempfile
 
@@ -25,7 +26,30 @@ def write_some_annotations(
 
     writer.add_point([20, 30, 40], size=10, cell_type=16, point_color=(0, 255, 0, 255))
     writer.add_point([50, 51, 52], size=30, cell_type=16, point_color=(255, 0, 0, 255))
-    writer.write(output_dir)
+    writer.write(os.path.join(output_dir, "point"))
+
+    writer = neuroglancer.write_annotations.AnnotationWriter(
+        coordinate_space=coordinate_space,
+        annotation_type="polyline",
+        properties=[
+            neuroglancer.AnnotationPropertySpec(id="size", type="float32"),
+            neuroglancer.AnnotationPropertySpec(id="cell_type", type="uint16"),
+            neuroglancer.AnnotationPropertySpec(id="point_color", type="rgba"),
+        ],
+    )
+    writer.add_polyline(
+        [[20, 30, 40], [10, 15, 20]],
+        size=10,
+        cell_type=16,
+        point_color=(0, 255, 0, 255),
+    )
+    writer.add_polyline(
+        [[50, 51, 52], [10, 15, 30], [40, 20, 25]],
+        size=30,
+        cell_type=16,
+        point_color=(255, 0, 0, 255),
+    )
+    writer.write(os.path.join(output_dir, "polyline"))
 
 
 if __name__ == "__main__":
@@ -36,6 +60,8 @@ if __name__ == "__main__":
     viewer = neuroglancer.Viewer()
 
     tempdir = tempfile.mkdtemp()
+    if not os.path.exists(tempdir):
+        os.makedirs(tempdir)
     atexit.register(shutil.rmtree, tempdir)
 
     coordinate_space = neuroglancer.CoordinateSpace(
@@ -54,8 +80,8 @@ if __name__ == "__main__":
                 dimensions=coordinate_space,
             ),
         )
-        s.layers["annotations"] = neuroglancer.AnnotationLayer(
-            source=f"precomputed://{server.url}",
+        s.layers["points"] = neuroglancer.AnnotationLayer(
+            source=f"precomputed://{server.url + '/point'}",
             tab="rendering",
             shader="""
 void main() {
@@ -64,7 +90,17 @@ void main() {
 }
         """,
         )
-        s.selected_layer.layer = "annotations"
+        s.layers["polyline"] = neuroglancer.AnnotationLayer(
+            source=f"precomputed://{server.url + '/polyline'}",
+            tab="rendering",
+            shader="""
+void main() {
+setColor(prop_point_color());
+setLineWidth(prop_size());
+}
+        """,
+        )
+        s.selected_layer.layer = "points"
         s.selected_layer.visible = True
         s.show_slices = False
     print(viewer)
