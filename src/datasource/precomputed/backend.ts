@@ -666,10 +666,20 @@ function parseAnnotations(
   const typeToIdMaps = (geometryData.typeToIdMaps = new Array<
     Map<string, number>
   >(annotationTypes.length));
+  const idToSizeMaps = (geometryData.idToSizeMaps = new Array<
+    Map<string, number>
+  >(annotationTypes.length));
+  const typeToSize = (geometryData.typeToSize = new Array<number>(
+    annotationTypes.length,
+  ));
   typeToIds.fill([]);
   typeToIds[parameters.type] = ids;
   typeToIdMaps.fill(new Map());
   typeToIdMaps[parameters.type] = new Map(ids.map((id, i) => [id, i]));
+  idToSizeMaps.fill(new Map());
+  idToSizeMaps[parameters.type] = new Map(ids.map((id) => [id, 1]));
+  typeToSize.fill(0);
+  typeToSize[parameters.type] = countLow;
   return geometryData;
 }
 
