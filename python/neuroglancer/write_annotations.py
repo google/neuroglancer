@@ -111,10 +111,13 @@ class AnnotationWriter:
         )
         self.related_annotations = [{} for _ in self.relationships]
 
-    def get_dtype(self, annotation_size = None) -> np.dtype:
+    def get_dtype(self, annotation_size=None) -> np.dtype:
         if self.annotation_type == "polyline" and annotation_size is not None:
             geometry = ("geometry", "<f4", annotation_size)
-            return np.dtype([geometry] + _get_dtype_for_properties(self.properties))
+            num_points = ("num_points", "<u4")
+            return np.dtype(
+                [num_points, geometry] + _get_dtype_for_properties(self.properties)
+            )
         return self._dtype
 
     def add_point(self, point: Sequence[float], id: int | None = None, **kwargs):
@@ -211,7 +214,7 @@ class AnnotationWriter:
         # We need to save the number of points
         encoded = np.zeros(shape=(), dtype=self.get_dtype(len(coords)))
         if self.annotation_type == "polyline":
-            encoded[()]["num_points"] = len(coords) // self.rank
+            encoded[()]["num_points"] = len(coords) // self.rank  # type: ignore[call-overload]
         encoded[()]["geometry"] = coords  # type: ignore[call-overload]
 
         for i, p in enumerate(self.properties):
