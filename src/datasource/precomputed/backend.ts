@@ -652,7 +652,7 @@ function parseAnnotations(
 
   const idToSizeMaps = (geometryData.idToSizeMaps = new Array<
     Map<string, number>
-  >(annotationTypes.length));  
+  >(annotationTypes.length));
   idToSizeMaps.fill(new Map());
   console.log("Starting to parse annotations", parameters);
   if (
@@ -664,7 +664,7 @@ function parseAnnotations(
 
     // Start by checking for the polyline case
     if (annotationType === AnnotationType.POLYLINE) {
-      const dataView = new DataView(origData.buffer);
+      const dataView = new DataView(buffer);
       // The GL buffer data is laid out as follows:
       // numPointsInPoly, Point1, Point2, Properties
       // numPointsInPoly, Point2, Point3, Properties
@@ -677,34 +677,53 @@ function parseAnnotations(
       // numPointsInPolyK, Point1, Point2, ..., PointN, Properties
       // So we need to shift the data around a bit
       // Start by looping through the data and shifting the points
-      let offset = 0;
+      let offset = 8;
       let runningOffset = 0;
+      const annotationSizeMap = idToSizeMaps[annotationType];
+      const numPropertyBytes =
+        propertySerializer.serializedBytes - 2 * parameters.rank * 4 - 4;
+
       for (let i = 0; i < countLow; ++i) {
         const numPoints = dataView.getUint32(offset, true);
+        console.log(numPoints, dataView);
         offset += 4; // Move past the number of points
         const numGlInstances = numPoints - 1;
-        const numBytesPerInstance = numBytes;
         const origPropertyBase = offset + numPoints * parameters.rank * 4;
         const annotationId = ids[i];
-        idToSizeMaps[annotationType].set(annotationId, numGlInstances);
-        // TODO SKM inefficient copying here, just for now as it's easier to understand
+
+        annotationSizeMap.set(annotationId, numGlInstances);
+
         for (let j = 0; j < numGlInstances; ++j) {
-          // First copy in the geometry data for two points
-          for (let k = 0; k < 2 * parameters.rank * 4; ++k) {
-            data[runningOffset + k] = origData[offset + k];
-            console.log("Copy", i, j, k);
-          }
-          // Then copy in the properties
-          for (let k = 2 * parameters.rank * 4; k < numBytesPerInstance; ++k) {
-            data[runningOffset + k] = origData[origPropertyBase + k];
-            console.log("Property", i, j, k);
-          }
-          // The original base increases by just 4 bytes * rank to move to the next point
+          // Copy the geometry data for two points
+          data.set(
+            origData.subarray(offset, offset + 2 * parameters.rank * 4),
+            runningOffset,
+          );
+          // Copy the properties data
+          data.set(
+            origData.subarray(
+              origPropertyBase,
+              origPropertyBase + numPropertyBytes,
+            ),
+            runningOffset + 2 * parameters.rank * 4,
+          );
+
+          // Advance pointers
           offset += parameters.rank * 4;
-          // The new base increases by the number of bytes per instance
-          runningOffset += numBytesPerInstance;
+          runningOffset += numBytes;
+          console.log(
+            j,
+            numGlInstances,
+            offset,
+            runningOffset,
+            glBufferSize,
+            expectedNonIndexBytes,
+          );
         }
-        console.log("Done with instance", i);
+        offset = origPropertyBase + numPropertyBytes;
+        console.log(
+          `Processed ${i} instances and finished at offset ${offset}...`,
+        );
       }
       console.log("Done with all instances");
       // TODO SKM - maybe just changing one thing works here actually
