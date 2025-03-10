@@ -185,6 +185,9 @@ class AnnotationWriter:
             )
         if len(points) < 2:
             raise ValueError("Expected at least two points for a polyline")
+        as_array = np.array(points)
+        self.lower_bound = np.minimum(self.lower_bound, as_array.min(axis=0))
+        self.upper_bound = np.maximum(self.upper_bound, as_array.max(axis=0))
         geometry = np.concatenate(points)
         self._add_obj(cast(Sequence[float], geometry), id, **kwargs)
 
