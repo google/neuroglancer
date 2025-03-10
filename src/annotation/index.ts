@@ -705,7 +705,6 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     isLittleEndian: boolean,
     rank: number,
     id: string,
-    indexBuffer?: DataView,
   ) => T;
   visitGeometry: (
     annotation: T,
@@ -776,16 +775,15 @@ function deserializeTwoFloatVectors(
 
 function deserializeManyFloatVectors(
   buffer: DataView,
-  indexBuffer: DataView,
   offset: number,
   isLittleEndian: boolean,
   rank: number,
   points: Float32Array[],
+  numPoints: number,
 ) {
   // The buffer contains a sequence of vectors, each of length `rank`.
   // Each vector is stored as a sequence of `rank` 32-bit floats.
-  let dataOffset = indexBuffer.getUint32(offset, isLittleEndian);
-  const numPoints = indexBuffer.getUint32(offset + 4, isLittleEndian);
+  let dataOffset = offset;
   for (let i = 0; i < numPoints; ++i) {
     points[i] = new Float32Array(rank);
     dataOffset = deserializeFloatVector(
@@ -925,31 +923,23 @@ export const annotationTypeHandlers: Record<
         );
       }
     },
-    // TODO (SKM) how to make the calls to this give the index offset?
     deserialize(
       buffer: DataView,
       offset: number,
       isLittleEndian: boolean,
       rank: number,
       id: string,
-      indexBuffer?: DataView,
     ): PolyLine {
-      if (indexBuffer === undefined) {
-        return {
-          type: AnnotationType.POLYLINE,
-          points: [],
-          id,
-          properties: [],
-        };
-      }
       const points = new Array<Float32Array>();
+      // Remove the high bit - that's the point type
+      const numPoints = buffer.getUint32(offset, isLittleEndian) & 0x7fffffff;
       deserializeManyFloatVectors(
         buffer,
-        indexBuffer,
-        offset,
+        offset + 4,
         isLittleEndian,
         rank,
         points,
+        numPoints,
       );
       return { type: AnnotationType.POLYLINE, points, id, properties: [] };
     },
