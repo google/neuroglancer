@@ -448,11 +448,12 @@ void ng_discard() {
 }
 void setLineColor(vec4 startColor, vec4 endColor);
 void setPolyLineColor(vec4 startColor, vec4 endColor);
+void _setLineWidth(float width);
+void setPolyLineWidth(float width);
 void setLineWidth(float width) {
   _setLineWidth(width);
   setPolyLineWidth(width);
 }
-void setPolyLineWidth(float width);
 
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
@@ -598,6 +599,7 @@ if (ng_discardValue) {
     callback: (shader: ShaderProgram) => void,
   ) {
     const { shader, parameters } = shaderGetter(context.renderContext.emitter);
+    console.log(shader, parameters);
     if (shader === null) return;
     shader.bind();
     const { gl } = this;
