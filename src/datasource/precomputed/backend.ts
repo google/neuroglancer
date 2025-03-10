@@ -29,7 +29,7 @@ import {
   AnnotationPropertySerializer,
   AnnotationType,
   annotationTypeHandlers,
-  oldAnnotationTypes,
+  annotationTypes,
 } from "#src/annotation/index.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import {
@@ -86,8 +86,6 @@ import {
   zorder3LessThan,
 } from "#src/util/zorder.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
-
-const annotationTypes = oldAnnotationTypes;
 
 // Set to true to validate the multiscale index.
 const DEBUG_MULTISCALE_INDEX = false;
@@ -602,6 +600,7 @@ function parseAnnotations(
   parameters: AnnotationSourceParameters,
   propertySerializer: AnnotationPropertySerializer,
 ): AnnotationGeometryData {
+  console.log("Parsing annotations", parameters);
   const dv = new DataView(buffer);
   // First, compute simple sanity checks for sizes etc. to verify that the buffer is well-formed.
   if (buffer.byteLength <= 8) throw new Error("Expected at least 8 bytes");
@@ -650,8 +649,12 @@ function parseAnnotations(
   const origData = new Uint8Array(buffer, 8, expectedNonIndexBytes - 8);
   let data: Uint8Array<ArrayBuffer>;
   const { propertyGroupBytes } = propertySerializer;
-  // TODO SKM polylines would need different here - has to take the idea from
-  // serializeAnnotations
+
+  const idToSizeMaps = (geometryData.idToSizeMaps = new Array<
+    Map<string, number>
+  >(annotationTypes.length));  
+  idToSizeMaps.fill(new Map());
+  console.log("Starting to parse annotations", parameters);
   if (
     propertyGroupBytes.length > 1 ||
     annotationType === AnnotationType.POLYLINE
@@ -678,26 +681,32 @@ function parseAnnotations(
       let runningOffset = 0;
       for (let i = 0; i < countLow; ++i) {
         const numPoints = dataView.getUint32(offset, true);
-        offset += 4;
+        offset += 4; // Move past the number of points
         const numGlInstances = numPoints - 1;
         const numBytesPerInstance = numBytes;
         const origPropertyBase = offset + numPoints * parameters.rank * 4;
+        const annotationId = ids[i];
+        idToSizeMaps[annotationType].set(annotationId, numGlInstances);
         // TODO SKM inefficient copying here, just for now as it's easier to understand
         for (let j = 0; j < numGlInstances; ++j) {
           // First copy in the geometry data for two points
           for (let k = 0; k < 2 * parameters.rank * 4; ++k) {
             data[runningOffset + k] = origData[offset + k];
+            console.log("Copy", i, j, k);
           }
           // Then copy in the properties
           for (let k = 2 * parameters.rank * 4; k < numBytesPerInstance; ++k) {
             data[runningOffset + k] = origData[origPropertyBase + k];
+            console.log("Property", i, j, k);
           }
           // The original base increases by just 4 bytes * rank to move to the next point
           offset += parameters.rank * 4;
           // The new base increases by the number of bytes per instance
           runningOffset += numBytesPerInstance;
         }
+        console.log("Done with instance", i);
       }
+      console.log("Done with all instances");
       // TODO SKM - maybe just changing one thing works here actually
       if (propertyGroupBytes.length > 1) {
         let origOffset = 0;
@@ -762,6 +771,9 @@ function parseAnnotations(
   } else {
     data = origData;
   }
+  if (annotationType !== AnnotationType.POLYLINE) {
+    idToSizeMaps[parameters.type] = new Map(ids.map((id) => [id, 1]));
+  }
   geometryData.data = data;
   // FIXME: convert endian in order to support big endian platforms
   const typeToOffset = (geometryData.typeToOffset = new Array<number>(
@@ -775,9 +787,6 @@ function parseAnnotations(
   const typeToIdMaps = (geometryData.typeToIdMaps = new Array<
     Map<string, number>
   >(annotationTypes.length));
-  const idToSizeMaps = (geometryData.idToSizeMaps = new Array<
-    Map<string, number>
-  >(annotationTypes.length));
   const typeToSize = (geometryData.typeToSize = new Array<number>(
     annotationTypes.length,
   ));
@@ -785,11 +794,9 @@ function parseAnnotations(
   typeToIds[parameters.type] = ids;
   typeToIdMaps.fill(new Map());
   typeToIdMaps[parameters.type] = new Map(ids.map((id, i) => [id, i]));
-  // TODO (SKM) : need to fill out the typeToSize etc. here
-  idToSizeMaps.fill(new Map());
-  idToSizeMaps[parameters.type] = new Map(ids.map((id) => [id, 1]));
   typeToSize.fill(0);
-  typeToSize[parameters.type] = countLow;
+  typeToSize[parameters.type] = totalNumInstances;
+  console.log(annotationType, geometryData);
   return geometryData;
 }
 
