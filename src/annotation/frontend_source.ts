@@ -486,10 +486,15 @@ export function makeTemporaryChunk() {
   const typeToIds: string[][] = [];
   const typeToOffset: number[] = [];
   const typeToIdMaps: Map<string, number>[] = [];
+  const idToSizeMaps: Map<string, number>[] = [];
+  const typeToSize: number[] = [];
+
   for (const annotationType of annotationTypes) {
     typeToIds[annotationType] = [];
     typeToOffset[annotationType] = 0;
     typeToIdMaps[annotationType] = new Map();
+    idToSizeMaps[annotationType] = new Map();
+    typeToSize[annotationType] = 0;
   }
   return new AnnotationGeometryChunk(
     <AnnotationGeometryChunkSource>(<any>undefined),
@@ -499,6 +504,8 @@ export function makeTemporaryChunk() {
       typeToOffset,
       typeToIds,
       typeToIdMaps,
+      idToSizeMaps,
+      typeToSize,
     },
   );
 }

@@ -109,6 +109,8 @@ export class AnnotationGeometryData implements SerializedAnnotations {
     msg.typeToOffset = this.typeToOffset;
     msg.typeToIds = this.typeToIds;
     msg.typeToIdMaps = this.typeToIdMaps;
+    msg.idToSizeMaps = this.idToSizeMaps;
+    msg.typeToSize = this.typeToSize;
     transfers.push(this.data.buffer);
   }
 
