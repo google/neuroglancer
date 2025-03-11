@@ -179,6 +179,7 @@ export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
 
 export const VIEWER_UI_CONFIG_OPTIONS = [
   ...VIEWER_UI_CONTROL_CONFIG_OPTIONS,
+  "showTopBar",
   "showUIControls",
   "showPanelBorders",
 ] as const;
@@ -472,9 +473,20 @@ export class Viewer extends RefCounted implements ViewerState {
 
   private makeUiControlVisibilityState(key: keyof ViewerUIOptions) {
     const showUIControls = this.uiConfiguration.showUIControls;
+    const showTopBar = this.uiConfiguration.showTopBar;
     const option = this.uiConfiguration[key];
+    const isTopBarControl = (
+      VIEWER_TOP_ROW_CONFIG_OPTIONS as readonly string[]
+    ).includes(key as string);
     return this.registerDisposer(
-      makeDerivedWatchableValue((a, b) => a && b, showUIControls, option),
+      makeDerivedWatchableValue(
+        (a, b, c) => {
+          return a && (!isTopBarControl || b) && c;
+        },
+        showUIControls,
+        showTopBar,
+        option,
+      ),
     );
   }
 

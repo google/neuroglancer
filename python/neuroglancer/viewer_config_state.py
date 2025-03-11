@@ -348,6 +348,7 @@ class ConfigState(JsonObjectWrapper):
     show_ui_controls = showUIControls = wrapped_property(
         "showUIControls", optional(bool, True)
     )
+    show_top_bar = showTopBar = wrapped_property("showTopBar", optional(bool, True))
     show_location = showLocation = wrapped_property(
         "showLocation", optional(bool, True)
     )
