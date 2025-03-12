@@ -17,6 +17,7 @@ from . import (
     credentials_provider,
     dvid_credentials,
     google_credentials,
+    aws_credentials,
 )
 
 default_credentials_manager = credentials_provider.CredentialsManager()
@@ -44,6 +45,10 @@ default_credentials_manager.register(
     lambda parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider(
         parameters
     ),
+)
+
+default_credentials_manager.register(
+    "s3", lambda _parameters: aws_credentials.get_aws_application_default_credentials_provider(),
 )
 
 

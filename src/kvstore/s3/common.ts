@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import pythonIntegration from "#python_integration_build";
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
 import { read, stat } from "#src/kvstore/http/read.js";
 import type {
@@ -108,7 +109,9 @@ function amazonS3Provider<
 ): BaseKvStoreProvider {
   return {
     scheme: "s3",
-    description: "S3 (anonymous)",
+    description: pythonIntegration
+      ? "AWS S3"
+      : "AWS S3 (anonymous)",
     getKvStore(url) {
       const m = (url.suffix ?? "").match(/^\/\/([^/]+)(\/.*)?$/);
       if (m === null) {
