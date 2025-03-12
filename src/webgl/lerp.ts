@@ -18,9 +18,9 @@
  * @file Defines lerp/invlerp functionality for all supported data types.
  */
 
+import { bigintAbs } from "#src/util/bigint.js";
 import { DataType, DATA_TYPE_SIGNED } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type {
   ShaderBuilder,
   ShaderCodePart,
@@ -334,8 +334,6 @@ ${getShaderType(dataType)} ${name}(float inputValue) {
   ];
 }
 
-const tempUint64 = new Uint64();
-
 export function enableLerpShaderFunction(
   shader: ShaderProgram,
   name: string,
@@ -371,21 +369,23 @@ export function enableLerpShaderFunction(
       break;
     }
     case DataType.UINT64: {
-      const lower = interval[0] as Uint64;
-      const upper = interval[1] as Uint64;
-      Uint64.absDifference(tempUint64, upper, lower);
-      const numBits =
-        tempUint64.high > 0
-          ? 32 + Math.ceil(Math.log2(tempUint64.high))
-          : Math.ceil(Math.log2(tempUint64.low));
+      const lower = interval[0] as bigint;
+      const upper = interval[1] as bigint;
+      let diff = bigintAbs(upper - lower);
+      const numBits = Math.ceil(Math.log2(Number(diff)));
       const shift = Math.max(0, numBits - 24);
-      Uint64.rshift(tempUint64, tempUint64, shift);
-      let scalar = 1 / tempUint64.low;
-      if (Uint64.compare(lower, upper) > 0) {
+      diff = diff >> BigInt(shift);
+      let scalar = 1 / Number(diff);
+      if (lower > upper) {
         scalar *= -1;
       }
       const bLocation = shader.uniform(`uLerpBounds_${name}`);
-      gl.uniform3ui(bLocation, lower.low, lower.high, shift);
+      gl.uniform3ui(
+        bLocation,
+        Number(lower & 0xffffffffn),
+        Number(lower >> 32n),
+        shift,
+      );
       gl.uniform1f(shader.uniform(`uLerpScalar_${name}`), scalar);
     }
   }

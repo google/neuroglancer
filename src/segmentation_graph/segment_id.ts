@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import { Uint64 } from "#src/util/uint64.js";
-
 export enum VisibleSegmentEquivalencePolicy {
   MIN_REPRESENTATIVE = 0, // defafult, representative elmement is the minimum element in equivalence set
   MAX_REPRESENTATIVE = 1, // representative elmement is the maximum element in equivalence set
@@ -24,8 +22,8 @@ export enum VisibleSegmentEquivalencePolicy {
 }
 
 // Returns `true` if `segmentId` is a base segment id, rather than a segment id added to the graph.
-export function isBaseSegmentId(segmentId: Uint64) {
-  return segmentId.high >>> 31 ? false : true;
+export function isBaseSegmentId(segmentId: bigint) {
+  return segmentId & 0x8000000000000000n ? false : true;
 }
 
-export const UNKNOWN_NEW_SEGMENT_ID = new Uint64(0xffffffff, 0xffffffff);
+export const UNKNOWN_NEW_SEGMENT_ID = 0xffffffffffffffffn;

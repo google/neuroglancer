@@ -16,7 +16,6 @@
 
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import {
   FramebufferConfiguration,
@@ -39,7 +38,7 @@ export interface FragmentShaderTestOutputs {
 
 export type ShaderIoJavascriptType<T extends ShaderIoType> = T extends DataType
   ? T extends DataType.UINT64
-    ? bigint | Uint64
+    ? bigint
     : number
   : T extends "bool"
     ? boolean
@@ -254,8 +253,7 @@ void main() {
             gl.uniform1f(shader.uniform(key), value);
             break;
           case DataType.UINT64: {
-            const v =
-              value instanceof Uint64 ? value.toBigInt() : BigInt(value);
+            const v = BigInt(value);
             gl.uniform2ui(
               shader.uniform(`ngin_${key}`),
               Number(v & 0xffffffffn),

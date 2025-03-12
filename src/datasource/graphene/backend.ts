@@ -65,7 +65,7 @@ import { computeChunkBounds } from "#src/sliceview/volume/backend.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
 import { HttpError } from "#src/util/http_request.js";
-import { Uint64 } from "#src/util/uint64.js";
+import { parseUint64 } from "#src/util/json.js";
 import {
   getBasePriority,
   getPriorityTier,
@@ -136,7 +136,7 @@ export class GrapheneMeshSource extends WithParameters(
     this.parameters.fragmentUrl,
   );
 
-  addNewSegment(segment: Uint64) {
+  addNewSegment(segment: bigint) {
     const { newSegments } = this;
     newSegments.add(segment);
     const TEN_MINUTES = 1000 * 60 * 10;
@@ -196,8 +196,8 @@ export class GrapheneMeshSource extends WithParameters(
 export class ChunkedGraphChunk extends Chunk {
   chunkGridPosition: Float32Array;
   source: GrapheneChunkedGraphChunkSource | null = null;
-  segment: Uint64;
-  leaves: Uint64[] = [];
+  segment: bigint;
+  leaves: BigUint64Array = new BigUint64Array(0);
   chunkDataSize: Uint32Array | null;
 
   initializeVolumeChunk(key: string, chunkGridPosition: Float32Array) {
@@ -208,7 +208,7 @@ export class ChunkedGraphChunk extends Chunk {
   initializeChunkedGraphChunk(
     key: string,
     chunkGridPosition: Float32Array,
-    segment: Uint64,
+    segment: bigint,
   ) {
     this.initializeVolumeChunk(key, chunkGridPosition);
     this.chunkDataSize = null;
@@ -219,7 +219,7 @@ export class ChunkedGraphChunk extends Chunk {
 
   downloadSucceeded() {
     this.systemMemoryBytes = 16; // this.segment
-    this.systemMemoryBytes += 16 * this.leaves.length;
+    this.systemMemoryBytes += this.leaves.byteLength;
     this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
@@ -228,16 +228,12 @@ export class ChunkedGraphChunk extends Chunk {
   }
 
   freeSystemMemory() {
-    this.leaves = [];
+    this.leaves = new BigUint64Array(0);
   }
 }
 
 function decodeChunkedGraphChunk(leaves: string[]) {
-  const final: Uint64[] = new Array(leaves.length);
-  for (let i = 0; i < final.length; ++i) {
-    final[i] = Uint64.parseString(leaves[i]);
-  }
-  return final;
+  return BigUint64Array.from(leaves, parseUint64);
 }
 
 @registerSharedObject()
@@ -290,7 +286,7 @@ export class GrapheneChunkedGraphChunkSource extends WithParameters(
       });
   }
 
-  getChunk(chunkGridPosition: Float32Array, segment: Uint64) {
+  getChunk(chunkGridPosition: Float32Array, segment: bigint) {
     const key = `${vec3Key(chunkGridPosition)}-${segment}`;
     let chunk = <ChunkedGraphChunk>this.chunks.get(key);
 
@@ -442,7 +438,7 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState(
 
           forEachVisibleSegment(this, (segment, _) => {
             if (isBaseSegmentId(segment, this.nBitsForLayerId.value)) return; // TODO maybe support highBitRepresentation?
-            const chunk = source.getChunk(curPositionInChunks, segment.clone());
+            const chunk = source.getChunk(curPositionInChunks, segment);
             chunkManager.requestChunk(
               chunk,
               priorityTier,
@@ -460,7 +456,7 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState(
   }
 
   private forEachSelectedRootWithLeaves(
-    callback: (rootObjectKey: string, leaves: Uint64[]) => void,
+    callback: (rootObject: bigint, leaves: BigUint64Array) => void,
   ) {
     const { source } = this;
 
@@ -470,7 +466,7 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState(
         chunk.priorityTier < ChunkPriorityTier.RECENT
       ) {
         if (this.visibleSegments.has(chunk.segment) && chunk.leaves.length) {
-          callback(chunk.segment.toString(), chunk.leaves);
+          callback(chunk.segment, chunk.leaves);
         }
       }
     }
@@ -481,51 +477,41 @@ export class ChunkedGraphLayer extends withSegmentationLayerBackendState(
   }, 100);
 
   private updateDisplayState() {
-    const visibleLeaves = new Map<string, Uint64Set>();
-    const capacities = new Map<string, number>();
+    const visibleLeaves = new Map<bigint, Uint64Set>();
+    const capacities = new Map<bigint, number>();
 
     // Reserve
-    this.forEachSelectedRootWithLeaves((rootObjectKey, leaves) => {
-      if (!capacities.has(rootObjectKey)) {
-        capacities.set(rootObjectKey, leaves.length);
-      } else {
-        capacities.set(
-          rootObjectKey,
-          capacities.get(rootObjectKey)! + leaves.length,
-        );
-      }
+    this.forEachSelectedRootWithLeaves((rootObject, leaves) => {
+      capacities.set(
+        rootObject,
+        (capacities.get(rootObject) ?? 0) + leaves.length,
+      );
     });
 
     // Collect unique leaves
-    this.forEachSelectedRootWithLeaves((rootObjectKey, leaves) => {
-      if (!visibleLeaves.has(rootObjectKey)) {
-        visibleLeaves.set(rootObjectKey, new Uint64Set());
-        visibleLeaves
-          .get(rootObjectKey)!
-          .reserve(capacities.get(rootObjectKey)!);
-        visibleLeaves
-          .get(rootObjectKey)!
-          .add(Uint64.parseString(rootObjectKey));
+    this.forEachSelectedRootWithLeaves((rootObject, leaves) => {
+      if (!visibleLeaves.has(rootObject)) {
+        visibleLeaves.set(rootObject, new Uint64Set());
+        visibleLeaves.get(rootObject)!.reserve(capacities.get(rootObject)!);
+        visibleLeaves.get(rootObject)!.add(rootObject);
       }
-      visibleLeaves.get(rootObjectKey)!.add(leaves);
+      visibleLeaves.get(rootObject)!.add(leaves);
     });
 
     for (const [root, leaves] of visibleLeaves) {
       // TODO: Delete segments not visible anymore from segmentEquivalences - requires a faster data
       // structure, though.
 
-      /*if (this.segmentEquivalences.has(Uint64.parseString(root))) {
-        this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(Uint64.parseString(root))].filter(x
+      /*if (this.segmentEquivalences.has(root)) {
+        this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(root)].filter(x
       => !leaves.has(x) && !this.visibleSegments.has(x)));
       }*/
       const filteredLeaves = [...leaves].filter(
         (x) => !this.segmentEquivalences.has(x),
       );
 
-      const rootInt = Uint64.parseString(root);
-
       for (const leaf of filteredLeaves) {
-        this.segmentEquivalences.link(rootInt, leaf);
+        this.segmentEquivalences.link(root, leaf);
       }
     }
   }
@@ -553,5 +539,5 @@ registerRPC(CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, function (x) {
 
 registerRPC(GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, function (x) {
   const obj = <GrapheneMeshSource>this.get(x.rpcId);
-  obj.addNewSegment(Uint64.parseString(x.segment));
+  obj.addNewSegment(x.segment);
 });

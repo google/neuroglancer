@@ -496,6 +496,8 @@ export function computeCombinedLowerUpperBound(
   return { lower: targetLower, upper: targetUpper };
 }
 
+const INTEGER_BOUNDS_EPSILON = 1e-3;
+
 export function computeCombinedBounds(
   boundingBoxes: readonly TransformedBoundingBox[],
   outputRank: number,
@@ -521,17 +523,30 @@ export function computeCombinedBounds(
         outputRank,
       );
       if (result === undefined) continue;
-      const { lower: targetLower, upper: targetUpper } = result;
+      let { lower: targetLower, upper: targetUpper } = result;
       if (Number.isFinite(targetLower) && Number.isFinite(targetUpper)) {
-        const lowerFloor = Math.floor(targetLower);
-        const upperFloor = Math.floor(targetUpper);
-        if (lowerFloor === targetLower && upperFloor === targetUpper) {
+        let lowerRound: number;
+        let upperRound: number;
+        let lowerFloor: number;
+        let upperFloor: number;
+        if (
+          Math.abs(targetLower - (lowerRound = Math.round(targetLower))) <
+            INTEGER_BOUNDS_EPSILON &&
+          Math.abs(targetUpper - (upperRound = Math.round(targetUpper))) <
+            INTEGER_BOUNDS_EPSILON
+        ) {
           ++integerBounds[outputDim];
+          targetLower = lowerRound;
+          targetUpper = upperRound;
         } else if (
-          targetLower - lowerFloor === 0.5 &&
-          targetUpper - upperFloor === 0.5
+          Math.abs(targetLower - (lowerFloor = Math.floor(targetLower)) - 0.5) <
+            INTEGER_BOUNDS_EPSILON &&
+          Math.abs(targetUpper - (upperFloor = Math.floor(targetUpper)) - 0.5) <
+            INTEGER_BOUNDS_EPSILON
         ) {
           ++halfIntegerBounds[outputDim];
+          targetLower = lowerFloor + 0.5;
+          targetUpper = upperFloor + 0.5;
         }
       }
       lowerBounds[outputDim] =

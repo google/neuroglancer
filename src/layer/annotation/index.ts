@@ -15,7 +15,6 @@
  */
 
 import "#src/layer/annotation/style.css";
-import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import { AnnotationLayerState } from "#src/annotation/annotation_layer_state.js";
@@ -44,11 +43,8 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
-import {
-  TrackableBoolean,
-  TrackableBooleanCheckbox,
-  ElementVisibilityFromTrackableBoolean,
-} from "#src/trackable_boolean.js";
+import type { TrackableBoolean } from "#src/trackable_boolean.js";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
@@ -71,9 +67,14 @@ import {
   verifyStringArray,
 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
-import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
+import {
+  addLayerControlToOptionsTab,
+  type LayerControlDefinition,
+  registerLayerControl,
+} from "#src/widget/layer_control.js";
+import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { RenderScaleWidget } from "#src/widget/render_scale_widget.js";
@@ -92,6 +93,7 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionAnnotationSpacing";
 const PROJECTION_RENDER_SCALE_JSON_KEY = "projectionAnnotationSpacing";
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
 
 function addPointAnnotations(annotations: LocalAnnotationSource, obj: any) {
   if (obj === undefined) {
@@ -393,6 +395,8 @@ export class AnnotationUserLayer extends Base {
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
+  static supportColorPickerInAnnotationTab = false;
+
   linkedSegmentationLayers = this.registerDisposer(
     new LinkedSegmentationLayers(
       this.manager.rootLayers,
@@ -847,7 +851,40 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
+
+    element.appendChild(
+      addLayerControlToOptionsTab(
+        this,
+        layer,
+        this.visibility,
+        LAYER_CONTROLS[ANNOTATION_COLOR_JSON_KEY],
+      ),
+    );
   }
+}
+
+const LAYER_CONTROLS: Record<
+  string,
+  LayerControlDefinition<AnnotationUserLayer>
+> = {
+  [ANNOTATION_COLOR_JSON_KEY]: {
+    label: "Annotation color",
+    title:
+      "Annotation shader default color (enabled with 'defaultColor()' in the shader code)",
+    toolJson: ANNOTATION_COLOR_JSON_KEY,
+    ...colorLayerControl(
+      (layer: AnnotationUserLayer) => layer.annotationDisplayState.color,
+    ),
+    isValid: (layer) =>
+      makeCachedLazyDerivedWatchableValue(
+        (shader) => shader.match(/\bdefaultColor\b/) !== null,
+        layer.annotationDisplayState.shaderControls.processedFragmentMain,
+      ),
+  },
+};
+
+for (const control of Object.values(LAYER_CONTROLS)) {
+  registerLayerControl(AnnotationUserLayer, control);
 }
 
 registerLayerType(AnnotationUserLayer);

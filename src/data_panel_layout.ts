@@ -217,7 +217,10 @@ function addDisplayDimensionsWidget(
         navigationState.pose.displayDimensionRenderInfo.addRef(),
         navigationState.zoomFactor,
         navigationState.depthRange.addRef(),
-        panel instanceof SliceViewPanel ? "px" : "vh",
+        navigationState.pose.orientation.addRef(),
+        panel.boundsUpdated,
+        panel.renderViewport,
+        panel instanceof SliceViewPanel,
       ),
     ).element,
   );
