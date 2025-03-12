@@ -15,7 +15,6 @@
  */
 
 import "#src/layer/image/style.css";
-import svgCode from "ikonate/icons/code-alt.svg?raw";
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
@@ -50,10 +49,7 @@ import {
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { trackableBlendModeValue } from "#src/trackable_blend.js";
-import {
-  TrackableBoolean,
-  ElementVisibilityFromTrackableBoolean,
-} from "#src/trackable_boolean.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -84,10 +80,8 @@ import {
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
-import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
-import { makeHelpButton } from "#src/widget/help_button.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import {
   addLayerControlToOptionsTab,
@@ -95,12 +89,14 @@ import {
 } from "#src/widget/layer_control.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
-import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import {
   renderScaleLayerControl,
   VolumeRenderingRenderScaleWidget,
 } from "#src/widget/render_scale_widget.js";
-import { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
+import {
+  makeShaderCodeWidgetTopRow,
+  ShaderCodeWidget,
+} from "#src/widget/shader_code_widget.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import {
   registerLayerShaderControlsTool,
@@ -470,50 +466,6 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
   });
 }
 
-function makeShaderCodeWidgetTopRow(
-  layer: ImageUserLayer,
-  codeWidget: ShaderCodeWidget,
-) {
-  const spacer = document.createElement("div");
-  spacer.style.flex = "1";
-
-  const topRow = document.createElement("div");
-  topRow.className = "neuroglancer-image-dropdown-top-row";
-  topRow.appendChild(document.createTextNode("Shader"));
-  topRow.appendChild(spacer);
-
-  layer.registerDisposer(
-    new ElementVisibilityFromTrackableBoolean(
-      layer.codeVisible,
-      codeWidget.element,
-    ),
-  );
-
-  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
-    enableTitle: "Show code",
-    disableTitle: "Hide code",
-    backgroundScheme: "dark",
-    svg: svgCode,
-  });
-  topRow.appendChild(codeVisibilityControl.element);
-
-  topRow.appendChild(
-    makeMaximizeButton({
-      title: "Show larger editor view",
-      onClick: () => {
-        new ShaderCodeOverlay(layer);
-      },
-    }),
-  );
-  topRow.appendChild(
-    makeHelpButton({
-      title: "Documentation on image layer rendering",
-      href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
-    }),
-  );
-  return topRow;
-}
-
 const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Resolution (slice)",
@@ -590,7 +542,16 @@ class RenderingOptionsTab extends Tab {
     }
 
     element.appendChild(
-      makeShaderCodeWidgetTopRow(this.layer, this.codeWidget),
+      makeShaderCodeWidgetTopRow(
+        this.layer,
+        this.codeWidget,
+        ShaderCodeOverlay,
+        {
+          title: "Documentation on image layer rendering",
+          href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+        },
+        "neuroglancer-image-dropdown-top-row",
+      ),
     );
     element.appendChild(
       this.registerDisposer(

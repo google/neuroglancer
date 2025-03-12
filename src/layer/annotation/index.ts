@@ -43,8 +43,10 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
-import type { TrackableBoolean } from "#src/trackable_boolean.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
@@ -68,7 +70,6 @@ import {
 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
-import { makeHelpButton } from "#src/widget/help_button.js";
 import {
   addLayerControlToOptionsTab,
   type LayerControlDefinition,
@@ -76,9 +77,11 @@ import {
 } from "#src/widget/layer_control.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
-import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 import { RenderScaleWidget } from "#src/widget/render_scale_widget.js";
-import { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
+import {
+  makeShaderCodeWidgetTopRow,
+  ShaderCodeWidget,
+} from "#src/widget/shader_code_widget.js";
 import {
   registerLayerShaderControlsTool,
   ShaderControls,
@@ -739,50 +742,6 @@ function makeShaderCodeWidget(layer: AnnotationUserLayer) {
   });
 }
 
-function makeShaderCodeWidgetTopRow(
-  layer: AnnotationUserLayer,
-  codeWidget: ShaderCodeWidget,
-) {
-  const spacer = document.createElement("div");
-  spacer.style.flex = "1";
-
-  const topRow = document.createElement("div");
-  topRow.className = "neuroglancer-annotation-dropdown-shader-top-row";
-  topRow.appendChild(document.createTextNode("Shader"));
-  topRow.appendChild(spacer);
-
-  layer.registerDisposer(
-    new ElementVisibilityFromTrackableBoolean(
-      layer.codeVisible,
-      codeWidget.element,
-    ),
-  );
-
-  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
-    enableTitle: "Show code",
-    disableTitle: "Hide code",
-    backgroundScheme: "dark",
-    svg: svgCode,
-  });
-  topRow.appendChild(codeVisibilityControl.element);
-
-  topRow.appendChild(
-    makeMaximizeButton({
-      title: "Show larger editor view",
-      onClick: () => {
-        new ShaderCodeOverlay(layer);
-      },
-    }),
-  );
-  topRow.appendChild(
-    makeHelpButton({
-      title: "Documentation on image layer rendering",
-      href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
-    }),
-  );
-  return topRow;
-}
-
 class ShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
@@ -837,7 +796,16 @@ class RenderingOptionsTab extends Tab {
 
     element.appendChild(shaderProperties);
     element.appendChild(
-      makeShaderCodeWidgetTopRow(this.layer, this.codeWidget),
+      makeShaderCodeWidgetTopRow(
+        this.layer,
+        this.codeWidget,
+        ShaderCodeOverlay,
+        {
+          title: "Documentation on image layer rendering",
+          href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
+        },
+        "neuroglancer-annotation-dropdown-shader-top-row",
+      ),
     );
 
     element.appendChild(this.codeWidget.element);
