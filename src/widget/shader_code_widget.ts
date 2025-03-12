@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
+import CodeMirror from "codemirror";
+import svgCode from "ikonate/icons/code-alt.svg?raw";
 import "codemirror/addon/lint/lint.js";
 import "#src/widget/shader_code_widget.css";
 import "codemirror/lib/codemirror.css";
 import "codemirror/addon/lint/lint.css";
 
-import CodeMirror from "codemirror";
 import { debounce } from "lodash-es";
+import type { UserLayer } from "#src/layer/index.js";
+import type { Overlay } from "#src/overlay.js";
 import glslCodeMirror from "#src/third_party/codemirror-glsl.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  type TrackableBoolean,
+} from "#src/trackable_boolean.js";
 import type { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
@@ -34,6 +41,9 @@ import type {
   ShaderControlParseError,
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
+import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeHelpButton } from "#src/widget/help_button.js";
+import { makeMaximizeButton } from "#src/widget/maximize_button.js";
 
 // Install glsl support in CodeMirror.
 glslCodeMirror(CodeMirror);
@@ -189,4 +199,54 @@ export class ShaderCodeWidget extends RefCounted {
     this.textEditor = <any>undefined;
     super.disposed();
   }
+}
+
+type UserLayerWithCodeEditor = UserLayer & { codeVisible: TrackableBoolean };
+type ShaderCodeOverlayConstructor<T extends Overlay> = new (
+  layer: UserLayerWithCodeEditor,
+) => T;
+
+export function makeShaderCodeWidgetTopRow<T extends Overlay>(
+  layer: UserLayerWithCodeEditor,
+  codeWidget: ShaderCodeWidget,
+  ShaderCodeOverlay: ShaderCodeOverlayConstructor<T>,
+  help: {
+    title: string;
+    href: string;
+  },
+  className: string,
+) {
+  const spacer = document.createElement("div");
+  spacer.style.flex = "1";
+
+  const topRow = document.createElement("div");
+  topRow.className = className;
+  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(spacer);
+
+  layer.registerDisposer(
+    new ElementVisibilityFromTrackableBoolean(
+      layer.codeVisible,
+      codeWidget.element,
+    ),
+  );
+
+  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+    enableTitle: "Show code",
+    disableTitle: "Hide code",
+    backgroundScheme: "dark",
+    svg: svgCode,
+  });
+  topRow.appendChild(codeVisibilityControl.element);
+
+  topRow.appendChild(
+    makeMaximizeButton({
+      title: "Show larger editor view",
+      onClick: () => {
+        new ShaderCodeOverlay(layer);
+      },
+    }),
+  );
+  topRow.appendChild(makeHelpButton(help));
+  return topRow;
 }
