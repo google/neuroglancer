@@ -765,7 +765,6 @@ function AnnotationRenderLayer<
           mouseState.pickedAnnotationBufferBaseOffset =
             serializedAnnotations.data.byteOffset +
             typeToOffset[annotationType];
-          console.log("annotation index", annotationIndex);
           mouseState.pickedAnnotationIndex = annotationIndex;
           mouseState.pickedAnnotationCount = ids.length;
           const chunkPosition = this.tempChunkPosition;

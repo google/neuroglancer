@@ -142,7 +142,6 @@ def test_annotation_writer_polyline(tmp_path: pathlib.Path):
     total = len(lines)
     property_bytes = 12
     for i, (line, id_) in enumerate(zip(lines, ids)):
-        print(offset)
         offset = check_polyline_contents(contents, line, id_, i - total, offset=offset)
         offset += property_bytes
 
