@@ -52,7 +52,7 @@ export function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
 void setEndpointMarkerSize(float startSize, float endSize) {}
 void setEndpointMarkerBorderWidth(float startSize, float endSize) {}
-void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
+void _setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
 `);
 }
@@ -145,7 +145,7 @@ void setEndpointMarkerSize(float startSize, float endSize) {
 void setEndpointMarkerBorderWidth(float startSize, float endSize) {
   ng_markerBorderWidth = mix(startSize, endSize, float(getEndpointIndex()));
 }
-void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
+void _setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
   vColor = mix(startColor, endColor, float(getEndpointIndex()));
 }
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
