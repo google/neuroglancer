@@ -59,10 +59,13 @@ if __name__ == "__main__":
     neuroglancer.cli.handle_server_arguments(args)
     viewer = neuroglancer.Viewer()
 
-    tempdir = tempfile.mkdtemp()
+    # tempdir = tempfile.mkdtemp()
+    # tempdir = tempfile.mkdtemp()
+    # atexit.register(shutil.rmtree, tempdir)
+    tempdir = "/tmp/annotations"
     if not os.path.exists(tempdir):
         os.makedirs(tempdir)
-    atexit.register(shutil.rmtree, tempdir)
+    shutil.rmtree(tempdir, ignore_errors=True)
 
     coordinate_space = neuroglancer.CoordinateSpace(
         names=["x", "y", "z"], units=["nm", "nm", "nm"], scales=[10, 10, 10]
