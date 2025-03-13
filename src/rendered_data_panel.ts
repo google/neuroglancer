@@ -652,6 +652,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
             const annotationRef =
               annotationLayer.source.getReference(selectedAnnotationId)!;
             const ann = <Annotation>annotationRef.value;
+            // Quit out if still waiting or if the annotation has been deleted.
+            if (ann === undefined || ann === null) return;
 
             const handler = getAnnotationTypeRenderHandler(ann.type);
             const pickedOffset = mouseState.pickedOffset;
