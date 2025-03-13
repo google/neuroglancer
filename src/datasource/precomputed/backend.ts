@@ -600,7 +600,6 @@ function parseAnnotations(
   parameters: AnnotationSourceParameters,
   propertySerializer: AnnotationPropertySerializer,
 ): AnnotationGeometryData {
-  console.log("Parsing annotations", parameters);
   const dv = new DataView(buffer);
   const isLittleEndian = true;
   // First, compute simple sanity checks for sizes etc. to verify that the buffer is well-formed.
@@ -655,7 +654,6 @@ function parseAnnotations(
     Map<string, number>
   >(annotationTypes.length));
   idToSizeMaps.fill(new Map());
-  console.log("Starting to parse annotations", parameters);
   if (
     propertyGroupBytes.length > 1 ||
     annotationType === AnnotationType.POLYLINE
@@ -679,7 +677,7 @@ function parseAnnotations(
       // numPointsInPolyK, Point1, Point2, ..., PointN, Properties
       // So we need to shift the data around a bit
       // Start by looping through the data and shifting the points
-      let offset = 8;
+      let offset = 0;
       let runningOffset = 0;
       idToSizeMaps[parameters.type] = new Map();
       const annotationSizeMap = idToSizeMaps[annotationType];
@@ -687,9 +685,10 @@ function parseAnnotations(
       const pointOffset = parameters.rank * 4;
       const numPropertyBytes =
         propertySerializer.serializedBytes - 2 * pointOffset - numPointsOffset;
+      const numAnnotationsOffset = 8;
 
       for (let i = 0; i < countLow; ++i) {
-        const numPoints = dataView.getUint32(offset, isLittleEndian);
+        const numPoints = dataView.getUint32(offset + numAnnotationsOffset, isLittleEndian);
         offset += numPointsOffset; // Move past the number of points
         const numGlInstances = numPoints - 1;
         const origPropertyBase = offset + numPoints * pointOffset;
@@ -701,7 +700,6 @@ function parseAnnotations(
           // last bit is actually whether to draw the endpoint cap
           const bitCap = j === numGlInstances - 1 ? 1 : 0;
           const numPointsWithBitCap = numPoints | (bitCap << 31);
-          data[0];
           newDataView.setUint32(
             runningOffset,
             numPointsWithBitCap,
@@ -816,7 +814,6 @@ function parseAnnotations(
   typeToIdMaps[parameters.type] = new Map(ids.map((id, i) => [id, i]));
   typeToSize.fill(0);
   typeToSize[parameters.type] = totalNumInstances;
-  console.log(annotationType, geometryData);
   return geometryData;
 }
 
