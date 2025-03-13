@@ -699,10 +699,10 @@ function parseAnnotations(
           // First, we need to set the number of points, where the
           // last bit is actually whether to draw the endpoint cap
           const bitCap = j === numGlInstances - 1 ? 1 : 0;
-          const numPointsWithBitCap = numPoints | (bitCap << 31);
+          const instanceIndexWithBitCap = j | (bitCap << 31);
           newDataView.setUint32(
             runningOffset,
-            numPointsWithBitCap,
+            instanceIndexWithBitCap,
             isLittleEndian,
           );
           // Copy the geometry data for two points
