@@ -787,8 +787,8 @@ export class ManagedUserLayer extends RefCounted {
 
   setArchived(value: boolean) {
     if (this.archived === value) return;
+    this.visible = !value;
     if (value === true) {
-      this.visible = false;
       this.archived = true;
       for (const { layerManager } of this.manager.root.subsets) {
         if (!layerManager.has(this)) continue;
