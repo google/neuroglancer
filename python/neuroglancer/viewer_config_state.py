@@ -363,6 +363,9 @@ class ConfigState(JsonObjectWrapper):
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
         "showLayerSidePanelButton", optional(bool, True)
     )
+    show_screenshot_button = showScreenshotButton = wrapped_property(
+        "showScreenshotButton", optional(bool, True)
+    )
     show_tool_palette_button = showToolPaletteButton = wrapped_property(
         "showToolPaletteButton", optional(bool, True)
     )

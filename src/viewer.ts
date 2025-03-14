@@ -163,6 +163,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showHelpButton",
   "showSettingsButton",
   "showEditStateButton",
+  "showScreenshotButton",
   "showToolPaletteButton",
   "showLayerListPanelButton",
   "showSelectionPanelButton",
@@ -853,6 +854,12 @@ export class Viewer extends RefCounted implements ViewerState {
       this.registerEventListener(button, "click", () => {
         this.showScreenshotDialog();
       });
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showScreenshotButton,
+          button,
+        ),
+      );
       topRow.appendChild(button);
     }
 
