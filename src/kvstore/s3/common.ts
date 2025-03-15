@@ -16,6 +16,7 @@
 
 import pythonIntegration from "#python_integration_build";
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
+import type {CredentialsProvider} from "#src/credentials_provider/index.js";
 import { read, stat } from "#src/kvstore/http/read.js";
 import type {
   KvStore,
@@ -38,6 +39,7 @@ import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
 import { fetchOk } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
+import { AWSSignatureV4Credentials, fetchOkWithAWSSignatureV4CredentialsAdapter } from "#src/credentials_provider/aws_sigv4.js";
 
 export class ReadableS3KvStore<
   SharedKvStoreContext extends SharedKvStoreContextBase,
@@ -118,6 +120,19 @@ function amazonS3Provider<
         throw new Error("Invalid URL, expected `s3://<bucket>/<path>`");
       }
       const [, bucket, path] = m;
+      if (pythonIntegration) {
+        const credentialsProvider: CredentialsProvider<AWSSignatureV4Credentials> = sharedKvStoreContext.credentialsManager.getCredentialsProvider("s3", { bucket })
+        return {
+          store: new s3KvStoreClass(
+            sharedKvStoreContext,
+            `https://${bucket}.s3.amazonaws.com/`,
+            `s3://${bucket}/`,
+            /*knownToBeVirtualHostedStyle=*/ true,
+            fetchOkWithAWSSignatureV4CredentialsAdapter(credentialsProvider),
+          ),
+          path: decodeURIComponent((path ?? "").substring(1)),
+        };
+      }
       return {
         store: new s3KvStoreClass(
           sharedKvStoreContext,

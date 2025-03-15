@@ -21,14 +21,9 @@ import {
   import type { CredentialsProvider } from "#src/credentials_provider/index.js";
   import type { FetchOk, HttpError } from "#src/util/http_request.js";
   import { fetchOk } from "#src/util/http_request.js";
-
-  // New
-  import { fromHttp, HttpProviderResponse } from "@aws-sdk/credential-providers";
   import { Sha256 } from "@aws-crypto/sha256-js";
-  import { HttpRequest } from "@aws-sdk/protocol-http";
-  import { SignatureV4 } from "@aws-sdk/signature-v4";
-  import { HttpRequest as IHttpRequest } from "@aws-sdk/types";
-  import {} from "@smithy/signature-v4"
+  import { HttpRequest} from "@smithy/types";
+  import { SignatureV4 } from "@smithy/signature-v4";
   
   //aws-sdk signature v4 signer
   
@@ -36,49 +31,56 @@ import {
    * AWS Access Tokens
    */
   export interface AWSSignatureV4Credentials {
-    AccessKeyId: string;
-    SecretAccessKey: string;
-    Token?: string;      // if provided, expiration should be provided as well
+    accessKeyId: string;
+    secretAccessKey: string;
+    region: string;
+    token?: string;      // if provided, expiration should be provided as well
     // AccountId?: string;
     // Expiration?: string; // rfc3339
   };
   
-  function applyCredentials(
+  async function applyCredentials(
     credentials: AWSSignatureV4Credentials,
     init: RequestInit,
-  ): RequestInit {
-    if (!credentials.AccessKeyId) return init;
-    const headers = new Headers(init.headers);
-
+    input: RequestInfo,
+  ): Promise<RequestInit> {
+    console.log("Signing request with AWS Signature V4")
+    if (!credentials.accessKeyId) {
+        console.log("no credentials found")
+        return init;
+    }
+    console.log("credentials found, constructing signer")
     const signer = new SignatureV4({
         service: "s3", // Todo: handle different services?
-        region: "us-west-2", //Todo: handle different regions?
+        region: credentials.region, //Todo: handle different regions?
         credentials: {
-            accessKeyId: credentials.AccessKeyId,
-            secretAccessKey: credentials.SecretAccessKey,
-            sessionToken: credentials.Token,
+            accessKeyId: credentials.accessKeyId,
+            secretAccessKey: credentials.secretAccessKey,
+            sessionToken: credentials.token,
         },
         sha256: Sha256,
       });
-    const apiUrl = new URL(init.url);
+    console.log("signer constructed, signing request")
+    const apiUrl = new URL(input.toString());
+    console.log("apiUrl", apiUrl)
     const request = {
     hostname: apiUrl.hostname.toString(),
     protocol: apiUrl.protocol,
     path: apiUrl.pathname,
     method: "GET",
-    headers: {
-        "Content-Type": "application/json",
-        host: apiUrl.hostname.toString(),
-    },
-    } as IHttpRequest;
-    const signedRequest = await signer.sign(request);
-
-    
-    // headers.set(
-    //   "Authorization",
-    //   `${credentials.tokenType} ${credentials.accessToken}`,
-    // );
-    return { ...init, headers };
+    headers: {...init.headers, "host": apiUrl.hostname.toString()},
+    } as HttpRequest;
+    console.log("request", request)
+    return signer.sign(request).then(signedRequest => {
+        console.log("signed request headers", signedRequest.headers);
+        let headers = signedRequest.headers;
+        let x = { ...init, headers };
+        return x
+    })
+    .catch((error) => {
+        console.error("Error signing request:", error);
+        throw error;
+      });
   }
   
   function errorHandler(
@@ -90,7 +92,7 @@ import {
       // 401: Authorization needed.
       return "refresh";
     }
-    if (status === 403 && !credentials.AccessKeyId) {
+    if (status === 403 && !credentials.accessKeyId) {
       // Anonymous access denied.  Request credentials.
       return "refresh";
     }
@@ -130,30 +132,30 @@ import {
 
 
 
-import { Sha256 } from "@aws-crypto/sha256-js";
-import { HttpRequest } from "@aws-sdk/protocol-http";
-import { SignatureV4 } from "@aws-sdk/signature-v4";
-import { HttpRequest as IHttpRequest } from "@aws-sdk/types";
+// import { Sha256 } from "@aws-crypto/sha256-js";
+// import { HttpRequest } from "@aws-sdk/protocol-http";
+// import { SignatureV4 } from "@aws-sdk/signature-v4";
+// import { HttpRequest as IHttpRequest } from "@aws-sdk/types";
 
-const signer = new SignatureV4({
-  service: "execute-api",
-  region: "eu-central-1",
-  credentials: defaultCredentialProvider(),
-  sha256: Sha256,
-});
+// const signer = new SignatureV4({
+//   service: "execute-api",
+//   region: "eu-central-1",
+//   credentials: defaultCredentialProvider(),
+//   sha256: Sha256,
+// });
 
-export const handler = async (url: string) => {
-  const apiUrl = new URL(url);
-  const request = {
-    hostname: apiUrl.hostname.toString(),
-    protocol: apiUrl.protocol,
-    path: apiUrl.pathname,
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      host: apiUrl.hostname.toString(),
-    },
-  } as IHttpRequest;
-  const signedRequest = await signer.sign(request);
-  const client = new NodeHttpHandler();
-  const { response } = await client.handle(new HttpRequest(signedRequest));
+// export const handler = async (url: string) => {
+//   const apiUrl = new URL(url);
+//   const request = {
+//     hostname: apiUrl.hostname.toString(),
+//     protocol: apiUrl.protocol,
+//     path: apiUrl.pathname,
+//     method: "GET",
+//     headers: {
+//       "Content-Type": "application/json",
+//       host: apiUrl.hostname.toString(),
+//     },
+//   } as IHttpRequest;
+//   const signedRequest = await signer.sign(request);
+//   const client = new NodeHttpHandler();
+//   const { response } = await client.handle(new HttpRequest(signedRequest));

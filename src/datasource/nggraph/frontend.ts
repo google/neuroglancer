@@ -614,7 +614,7 @@ function fetchWithNggraphCredentials(
     credentialsProvider,
     `${serverUrl}${path}`,
     init,
-    (credentials, init) => {
+    async (credentials, init) => {
       const headers = new Headers(init.headers);
       headers.set("Authorization", credentials.token);
       return { ...init, headers };

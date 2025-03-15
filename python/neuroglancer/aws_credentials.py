@@ -38,16 +38,18 @@ class AWSApplicationDefaultCredentialsProvider(
             with self._lock:
                 if self._credentials is None:
                     import boto3
-
-                    credentials = boto3.session.Session().get_credentials()
+                    
+                    session = boto3.session.Session()
+                    credentials = session.get_credentials()
                     self._credentials = credentials
                 
                 # Will automatically refresh if possible
                 frozen_credentials = self._credentials.get_frozen_credentials()
                 return dict(
-                    AccessKeyId=frozen_credentials.access_key,
-                    SecretAccessKey=frozen_credentials.secret_key,
-                    Token=frozen_credentials.token,
+                    accessKeyId=frozen_credentials.access_key,
+                    secretAccessKey=frozen_credentials.secret_key,
+                    token=frozen_credentials.token,
+                    region=session.region_name
                 )
 
         return run_on_new_thread(func)
