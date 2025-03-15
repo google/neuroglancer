@@ -22,7 +22,7 @@ import type { FetchOk } from "#src/util/http_request.js";
 import { fetchOk, HttpError, pickDelay } from "#src/util/http_request.js";
 import type { ProgressListener } from "#src/util/progress_listener.js";
 
-const maxCredentialsAttempts = 5; //3
+const maxCredentialsAttempts = 3;
 
 export async function fetchOkWithCredentials<Credentials>(
   credentialsProvider: CredentialsProvider<Credentials>,
@@ -38,7 +38,6 @@ export async function fetchOkWithCredentials<Credentials>(
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
   for (let credentialsAttempt = 0; ; ) {
     init.signal?.throwIfAborted();
-    console.log(`credentialsattempt ${credentialsAttempt} requestInput ${input}`)
     if (credentialsAttempt > 1) {
       // Don't delay on the first attempt, and also don't delay on the second attempt, since if the
       // credentials have expired and there is no problem on the server there is no reason to delay
@@ -54,7 +53,6 @@ export async function fetchOkWithCredentials<Credentials>(
     try {
       const resolved_input = typeof input === "function" ? input(credentials.credentials) : input
       const resolved_init = await applyCredentials(credentials.credentials, init, resolved_input)
-      console.log(`resolved_init ${JSON.stringify(resolved_init)} attempt ${credentialsAttempt}`)
       return await fetchOk(
         resolved_input,
         resolved_init,

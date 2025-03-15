@@ -44,12 +44,9 @@ import {
     init: RequestInit,
     input: RequestInfo,
   ): Promise<RequestInit> {
-    console.log("Signing request with AWS Signature V4")
     if (!credentials.accessKeyId) {
-        console.log("no credentials found")
         return init;
     }
-    console.log("credentials found, constructing signer")
     const signer = new SignatureV4({
         service: "s3", // Todo: handle different services?
         region: credentials.region, //Todo: handle different regions?
@@ -60,9 +57,7 @@ import {
         },
         sha256: Sha256,
       });
-    console.log("signer constructed, signing request")
     const apiUrl = new URL(input.toString());
-    console.log("apiUrl", apiUrl)
     const request = {
     hostname: apiUrl.hostname.toString(),
     protocol: apiUrl.protocol,
@@ -70,9 +65,7 @@ import {
     method: "GET",
     headers: {...init.headers, "host": apiUrl.hostname.toString()},
     } as HttpRequest;
-    console.log("request", request)
     return signer.sign(request).then(signedRequest => {
-        console.log("signed request headers", signedRequest.headers);
         let headers = signedRequest.headers;
         let x = { ...init, headers };
         return x
