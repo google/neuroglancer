@@ -16,6 +16,7 @@ export const MESH_RENDER_SCALE_JSON_KEY = "meshRenderScale";
 export const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 export const SKELETON_RENDERING_JSON_KEY = "skeletonRendering";
 export const SKELETON_SHADER_JSON_KEY = "skeletonShader";
+export const SKELETON_CODE_VISIBLE_KEY = "codeVisible";
 export const SEGMENT_QUERY_JSON_KEY = "segmentQuery";
 export const MESH_SILHOUETTE_RENDERING_JSON_KEY = "meshSilhouetteRendering";
 export const LINKED_SEGMENTATION_GROUP_JSON_KEY = "linkedSegmentationGroup";
