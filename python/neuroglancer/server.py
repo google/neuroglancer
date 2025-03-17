@@ -366,33 +366,6 @@ class SetStateHandler(BaseRequestHandler):
 
 
 class CredentialsHandler(BaseRequestHandler):
-    async def get(self, viewer_token: str):
-        viewer = self.server.viewers.get(viewer_token)
-        if viewer is None:
-            self.send_error(404)
-            return
-        if not viewer.allow_credentials:
-            self.send_error(403)
-            return
-        if self.server._credentials_manager is None:
-            from .default_credentials_manager import default_credentials_manager
-
-            self.server._credentials_manager = default_credentials_manager
-        query = self.request.query
-        provider = self.server._credentials_manager.get(query, None)
-        if provider is None:
-            self.send_error(400)
-            return
-        try:
-            credentials = await asyncio.wrap_future(provider.get(False))
-            self.set_header("Content-type", "application/json")
-            self.finish(json.dumps(credentials))
-        except Exception:
-            import traceback
-
-            traceback.print_exc()
-            self.send_error(401)
-
     async def post(self, viewer_token: str):
         viewer = self.server.viewers.get(viewer_token)
         if viewer is None:
