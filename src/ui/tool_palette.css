@@ -116,7 +116,14 @@
   flex-direction: row;
   align-items: flex-start;
   overflow-x: auto;
+}
+
+.neuroglancer-tool-palette-layer-group-items[tool-stacking="horizontal"][has-tools="true"] {
   height: 100%;
+}
+
+.neuroglancer-tool-palette-layer-group-items[tool-stacking="horizontal"][has-tools="false"] {
+  height: 0;
 }
 
 .neuroglancer-tool-palette-layer-group-items

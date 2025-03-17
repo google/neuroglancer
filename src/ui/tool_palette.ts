@@ -764,6 +764,9 @@ export class ToolPalettePanel extends SidePanel {
       animationFrameDebounce(() => this.render()),
     );
     this.registerDisposer(this.state.tools.changed.add(debouncedRender));
+    this.registerDisposer(
+      this.state.tools.changed.add(() => this.handleNumToolsChange()),
+    );
     this.registerDisposer(this.queryResults.changed.add(debouncedRender));
     this.registerDisposer(
       this.state.verticalStacking.changed.add(() => {
@@ -773,7 +776,17 @@ export class ToolPalettePanel extends SidePanel {
     );
     this.visibility.changed.add(debouncedRender);
     this.handleStackingChange();
+    this.handleNumToolsChange();
     this.render();
+  }
+
+  private handleNumToolsChange() {
+    // If in horizontal stacking mode, the palette gets set to full height when there
+    // is at least one tool
+    this.layerGroupItemsContainer.setAttribute(
+      "has-tools",
+      this.state.tools.tools.length > 0 ? "true" : "false",
+    );
   }
 
   private handleStackingChange() {
