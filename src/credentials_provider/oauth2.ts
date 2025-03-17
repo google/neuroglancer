@@ -31,10 +31,10 @@ export interface OAuth2Credentials {
   email?: string;
 }
 
-function applyCredentials(
+async function applyCredentials(
   credentials: OAuth2Credentials,
   init: RequestInit,
-): RequestInit {
+): Promise<RequestInit> {
   if (!credentials.accessToken) return init;
   const headers = new Headers(init.headers);
   headers.set(

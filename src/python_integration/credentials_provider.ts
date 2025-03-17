@@ -75,6 +75,17 @@ class GcsCredentialsProvider extends AnonymousFirstCredentialsProvider<any> {
   }
 }
 
+class AwsCredentialsProvider extends AnonymousFirstCredentialsProvider<any> {
+  constructor(baseProvider: CredentialsProvider<any>) {
+    super(baseProvider, {
+      accessKey: "",
+      secretKey: "",
+      token: "",
+      tokenType: "",
+    });
+  }
+}
+
 export class PythonCredentialsManager implements CredentialsManager {
   constructor(private client: Client) {}
   private memoize = new Memoize<string, CredentialsProvider<any>>();
@@ -92,6 +103,9 @@ export class PythonCredentialsManager implements CredentialsManager {
       );
       if (key === "gcs") {
         return new GcsCredentialsProvider(provider);
+      }
+      if (key === "s3") {
+        return new AwsCredentialsProvider(provider);
       }
       return provider;
     });
