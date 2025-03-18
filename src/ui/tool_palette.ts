@@ -556,11 +556,7 @@ export class ToolPalettePanel extends SidePanel {
       if (this.hasQuery) {
         this.clearDragState();
         const otherPalette = toolDragSource?.paletteState?.palette;
-        if (
-          updateDropEffect &&
-          otherPalette !== undefined &&
-          otherPalette !== this
-        ) {
+        if (updateDropEffect && otherPalette !== this) {
           pushDragStatus(
             event,
             this.itemContainer,
