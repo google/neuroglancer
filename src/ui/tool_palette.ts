@@ -573,7 +573,7 @@ export class ToolPalettePanel extends SidePanel {
           event,
           this.itemContainer,
           "drop",
-          "Tools cannot be dropped into a horizontally-stacked palette.",
+          "Tools cannot be dropped into a horizontally-stacked palette. To allow dropping tools into this palette, first click the vertical stacking icon in the panel titlebar to convert it to a vertically-stacked palette.",
         );
         updateToolDragDropEffect(toolDragSource!, "none", false);
         return "none";
