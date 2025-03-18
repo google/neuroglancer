@@ -567,6 +567,17 @@ export class ToolPalettePanel extends SidePanel {
         updateToolDragDropEffect(toolDragSource!, "none", false);
         return "none";
       }
+      if (!this.state.verticalStacking.value) {
+        this.clearDragState();
+        pushDragStatus(
+          event,
+          this.itemContainer,
+          "drop",
+          "Tools cannot be dropped into a horizontally-stacked palette.",
+        );
+        updateToolDragDropEffect(toolDragSource!, "none", false);
+        return "none";
+      }
       if (this.dragState?.dragSource !== toolDragSource) {
         this.clearDragState();
       }
