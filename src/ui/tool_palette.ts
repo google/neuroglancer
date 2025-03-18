@@ -100,6 +100,15 @@ import {
   makeCompletionElementWithDescription,
 } from "#src/widget/multiline_autocomplete.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
+
+enum StackingMode {
+  AUTO = 0,
+  VERTICAL = 1,
+  HORIZONTAL = 2,
+}
+
+type TrackableStackingMode = TrackableEnum<StackingMode>;
 
 const DEFAULT_TOOL_PALETTE_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,
@@ -275,6 +284,10 @@ export class ToolPaletteState extends RefCounted implements Trackable {
   get changed() {
     return this.trackable.changed;
   }
+  stackingMode: TrackableStackingMode = new TrackableEnum(
+    StackingMode,
+    StackingMode.AUTO,
+  );
   verticalStacking = new TrackableBoolean(true, true);
 
   constructor(public viewer: Viewer) {
@@ -284,7 +297,7 @@ export class ToolPaletteState extends RefCounted implements Trackable {
     this.name.changed.add(this.changed.dispatch);
     this.trackable.add("tools", this.tools);
     this.trackable.add("query", this.query);
-    this.trackable.add("verticalStacking", this.verticalStacking);
+    this.trackable.add("stacking", this.stackingMode);
     this.queryDefined = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         (value) => value.length === 0,
@@ -298,6 +311,12 @@ export class ToolPaletteState extends RefCounted implements Trackable {
     this.trackable.restoreState(obj);
     if (this.query.value !== "") {
       this.tools.reset();
+    }
+    if (this.stackingMode.value === StackingMode.VERTICAL) {
+      this.verticalStacking.value = true;
+    }
+    if (this.stackingMode.value === StackingMode.HORIZONTAL) {
+      this.verticalStacking.value = false;
     }
   }
 
@@ -718,6 +737,13 @@ export class ToolPalettePanel extends SidePanel {
         disableTitle: "Swap to horizontal group stacking",
       }),
     );
+    changeStackingButton.element.addEventListener("click", () => {
+      if (self.state.verticalStacking.value) {
+        self.state.stackingMode.value = StackingMode.VERTICAL;
+      } else {
+        self.state.stackingMode.value = StackingMode.HORIZONTAL;
+      }
+    });
     titleBar.appendChild(changeStackingButton.element);
     const searchButton = this.registerDisposer(
       new CheckboxIcon(
@@ -801,11 +827,12 @@ export class ToolPalettePanel extends SidePanel {
   }
 
   private autoDetermineStacking() {
+    if (this.state.stackingMode.value !== StackingMode.AUTO) return;
     if (
       this.resizeGeneration === this.sidePanelManager.display.resizeGeneration
     )
       return;
-    const {width, height} = this.element.getBoundingClientRect();
+    const { width, height } = this.element.getBoundingClientRect();
     if (height === 0 || width === 0) return;
     this.resizeGeneration = this.sidePanelManager.display.resizeGeneration;
     this.state.verticalStacking.value = height > 0.4 * width;
