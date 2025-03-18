@@ -275,7 +275,6 @@ export class ToolPaletteState extends RefCounted implements Trackable {
   get changed() {
     return this.trackable.changed;
   }
-
   verticalStacking = new TrackableBoolean(true, true);
 
   constructor(public viewer: Viewer) {
@@ -527,6 +526,7 @@ export class ToolPalettePanel extends SidePanel {
   private dragEnterCount = 0;
   private mousePositionOnLastDrag: [number, number] | undefined = undefined;
   private queryResults: QueryResults;
+  private resizeGeneration = -1;
 
   private clearDragState() {
     const { dragState } = this;
@@ -704,6 +704,11 @@ export class ToolPalettePanel extends SidePanel {
     const hasQuery = this.registerDisposer(
       makeCachedDerivedWatchableValue((value) => value !== "", [state.query]),
     );
+    this.registerDisposer(
+      this.sidePanelManager.display.changed.add(() =>
+        this.autoDetermineStacking(),
+      ),
+    );
     const self = this;
     const changeStackingButton = this.registerDisposer(
       new CheckboxIcon(this.state.verticalStacking, {
@@ -789,9 +794,21 @@ export class ToolPalettePanel extends SidePanel {
       }),
     );
     this.visibility.changed.add(debouncedRender);
+    this.autoDetermineStacking();
     this.handleStackingChange();
     this.handleNumToolsChange();
     this.render();
+  }
+
+  private autoDetermineStacking() {
+    if (
+      this.resizeGeneration === this.sidePanelManager.display.resizeGeneration
+    )
+      return;
+    const {width, height} = this.element.getBoundingClientRect();
+    if (height === 0 || width === 0) return;
+    this.resizeGeneration = this.sidePanelManager.display.resizeGeneration;
+    this.state.verticalStacking.value = height > 0.4 * width;
   }
 
   private handleNumToolsChange() {
