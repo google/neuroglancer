@@ -578,6 +578,7 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
+  codeVisible = new TrackableBoolean(true);
 
   graphConnection = new WatchableValue<
     SegmentationGraphSourceConnection | undefined
@@ -622,6 +623,7 @@ export class SegmentationUserLayer extends Base {
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.registerDisposer(
       registerNestedSync((context, group) => {
         context.registerDisposer(
@@ -986,6 +988,7 @@ export class SegmentationUserLayer extends Base {
     if (skeletonShader !== undefined) {
       skeletonRenderingOptions.shader.restoreState(skeletonShader);
     }
+    this.codeVisible.restoreState(json_keys.SKELETON_CODE_VISIBLE_KEY);
     this.displayState.renderScaleTarget.restoreState(
       specification[json_keys.MESH_RENDER_SCALE_JSON_KEY],
     );
@@ -1041,6 +1044,7 @@ export class SegmentationUserLayer extends Base {
     x[json_keys.ANCHOR_SEGMENT_JSON_KEY] = this.anchorSegment.toJSON();
     x[json_keys.SKELETON_RENDERING_JSON_KEY] =
       this.displayState.skeletonRenderingOptions.toJSON();
+    x[json_keys.SKELETON_CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     x[json_keys.MESH_RENDER_SCALE_JSON_KEY] =
       this.displayState.renderScaleTarget.toJSON();
     x[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY] =

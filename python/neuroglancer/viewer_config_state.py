@@ -348,6 +348,7 @@ class ConfigState(JsonObjectWrapper):
     show_ui_controls = showUIControls = wrapped_property(
         "showUIControls", optional(bool, True)
     )
+    show_top_bar = showTopBar = wrapped_property("showTopBar", optional(bool, True))
     show_location = showLocation = wrapped_property(
         "showLocation", optional(bool, True)
     )
@@ -362,6 +363,9 @@ class ConfigState(JsonObjectWrapper):
     )
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
         "showLayerSidePanelButton", optional(bool, True)
+    )
+    show_screenshot_button = showScreenshotButton = wrapped_property(
+        "showScreenshotButton", optional(bool, True)
     )
     show_tool_palette_button = showToolPaletteButton = wrapped_property(
         "showToolPaletteButton", optional(bool, True)
