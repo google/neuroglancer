@@ -525,6 +525,7 @@ export class ToolPalettePanel extends SidePanel {
     | { dragSource: ToolDragSource; ephemeralTool: Tool }
     | undefined = undefined;
   private dragEnterCount = 0;
+  private mousePositionOnLastDrag: [number, number] | undefined = undefined;
   private queryResults: QueryResults;
 
   private clearDragState() {
@@ -562,19 +563,6 @@ export class ToolPalettePanel extends SidePanel {
             this.itemContainer,
             "drop",
             "Tools cannot be dropped into a query-defined palette.  To allow dropping tools into this palette, first click the magnifying glass icon in the panel titlebar to convert it to a manually-defined palette.",
-          );
-        }
-        updateToolDragDropEffect(toolDragSource!, "none", false);
-        return "none";
-      }
-      if (!this.state.verticalStacking.value) {
-        this.clearDragState();
-        if (updateDropEffect) {
-          pushDragStatus(
-            event,
-            this.itemContainer,
-            "drop",
-            "Tools cannot be dropped into a horizontally-stacked palette. To allow dropping tools into this palette, first click the vertical stacking icon in the panel titlebar to convert it to a vertically-stacked palette.",
           );
         }
         updateToolDragDropEffect(toolDragSource!, "none", false);
@@ -648,6 +636,7 @@ export class ToolPalettePanel extends SidePanel {
     };
 
     const handleDragOver = (event: DragEvent) => {
+      this.mousePositionOnLastDrag = [event.clientX, event.clientY];
       const updateResult = update(event, /*updateDropEffect=*/ true);
       if (updateResult === undefined) {
         popDragStatus(event, this.itemContainer, "drop");
@@ -664,7 +653,20 @@ export class ToolPalettePanel extends SidePanel {
     element.addEventListener("dragleave", (event: DragEvent) => {
       if (--this.dragEnterCount !== 0) return;
       popDragStatus(event, this.itemContainer, "drop");
-      this.clearDragState();
+      if (this.state.verticalStacking.value) {
+        this.clearDragState();
+      }
+      // In horizontal mode, the tools can move themselves
+      // So we need to check if the mouse cursor actually moved
+      else {
+        const [x, y] = this.mousePositionOnLastDrag!;
+        if (
+          Math.abs(x - event.clientX) > 1 ||
+          Math.abs(y - event.clientY) > 1
+        ) {
+          this.clearDragState();
+        }
+      }
       event.stopPropagation();
     });
     element.addEventListener("drop", (event: DragEvent) => {
@@ -797,7 +799,9 @@ export class ToolPalettePanel extends SidePanel {
     // is at least one tool
     this.layerGroupItemsContainer.setAttribute(
       "has-tools",
-      this.state.tools.tools.length > 0 || this.queryResults.value.length > 0 ? "true" : "false",
+      this.state.tools.tools.length > 0 || this.queryResults.value.length > 0
+        ? "true"
+        : "false",
     );
   }
 
