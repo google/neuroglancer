@@ -778,6 +778,9 @@ export class ToolPalettePanel extends SidePanel {
     );
     this.registerDisposer(this.queryResults.changed.add(debouncedRender));
     this.registerDisposer(
+      this.queryResults.changed.add(() => this.handleNumToolsChange()),
+    );
+    this.registerDisposer(
       this.state.verticalStacking.changed.add(() => {
         this.handleStackingChange();
         debouncedRender();
@@ -794,7 +797,7 @@ export class ToolPalettePanel extends SidePanel {
     // is at least one tool
     this.layerGroupItemsContainer.setAttribute(
       "has-tools",
-      this.state.tools.tools.length > 0 ? "true" : "false",
+      this.state.tools.tools.length > 0 || this.queryResults.value.length > 0 ? "true" : "false",
     );
   }
 
