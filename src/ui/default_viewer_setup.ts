@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
+import { schemePattern } from "#src/kvstore/url.js";
+import type { UserLayer } from "#src/layer/index.js";
 import { layerTypes } from "#src/layer/index.js";
 import { StatusMessage } from "#src/status.js";
 import {
@@ -27,60 +28,72 @@ import { bindTitle } from "#src/ui/title.js";
 import type { Tool } from "#src/ui/tool.js";
 import { restoreTool } from "#src/ui/tool.js";
 import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
+import type {
+  ActionIdentifier,
+  EventAction,
+  EventActionMap,
+  EventIdentifier,
+} from "#src/util/event_action_map.js";
 import {
   verifyObject,
   verifyObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import type { Viewer } from "#src/viewer.js";
 
 declare let NEUROGLANCER_DEFAULT_STATE_FRAGMENT: string | undefined;
 
 type CustomToolBinding = {
-  layer: string;
+  layerType: string;
   tool: unknown;
   provider?: string;
 };
 
-type CustomBindings = {
-  [key: string]: CustomToolBinding | string | boolean;
+type CustomBinding = {
+  action: EventAction | ActionIdentifier | CustomToolBinding | boolean;
+  context?: "global" | "perspectiveView" | "sliceView";
 };
 
-declare const CUSTOM_BINDINGS: CustomBindings | undefined;
+type CustomBindings = {
+  [identifier: EventIdentifier]: CustomBinding;
+};
+
+declare const NEUROGLANCER_CUSTOM_INPUT_BINDINGS: CustomBindings | undefined;
+
 export const hasCustomBindings =
-  typeof CUSTOM_BINDINGS !== "undefined" &&
-  Object.keys(CUSTOM_BINDINGS).length > 0;
+  typeof NEUROGLANCER_CUSTOM_INPUT_BINDINGS !== "undefined" &&
+  Object.keys(NEUROGLANCER_CUSTOM_INPUT_BINDINGS).length > 0;
 
-/**
- * Sets up the default neuroglancer viewer.
- */
-export function setupDefaultViewer() {
-  const viewer = ((<any>window).viewer = makeDefaultViewer());
-  setDefaultInputEventBindings(viewer.inputEventBindings);
-
+function setCustomInputEventBindings(viewer: Viewer, bindings: CustomBindings) {
   const bindNonLayerSpecificTool = (
-    obj: unknown,
-    toolKey: string,
-    desiredLayerType: UserLayerConstructor,
-    desiredProvider?: string,
+    key: string,
+    customBinding: CustomToolBinding,
   ) => {
+    const { layerType, provider: desiredProvider } = customBinding;
+    let toolJson = customBinding.tool;
+    const desiredLayerConstructor = layerTypes.get(layerType);
+    if (desiredLayerConstructor === undefined) {
+      throw new Error(`Invalid layer type: ${layerType}`);
+    }
+    const toolKey = key.charAt(key.length - 1).toUpperCase();
     let previousTool: Tool<object> | undefined;
     let previousLayer: UserLayer | undefined;
-    if (typeof obj === "string") {
-      obj = { type: obj };
+    if (typeof toolJson === "string") {
+      toolJson = { type: toolJson };
     }
-    verifyObject(obj);
-    const type = verifyObjectProperty(obj, "type", verifyString);
-    viewer.bindAction(`tool-${type}`, () => {
+    verifyObject(toolJson);
+    const type = verifyObjectProperty(toolJson, "type", verifyString);
+    const action = `tool-${type}`;
+    viewer.bindAction(action, () => {
       const acceptableLayers = viewer.layerManager.managedLayers.filter(
         (managedLayer) => {
           const correctLayerType =
-            managedLayer.layer instanceof desiredLayerType;
+            managedLayer.layer instanceof desiredLayerConstructor;
           if (desiredProvider && correctLayerType) {
             for (const dataSource of managedLayer.layer?.dataSources || []) {
-              const protocol = viewer.dataSourceProvider.getProvider(
-                dataSource.spec.url,
-              )[2];
-              if (protocol === desiredProvider) {
+              const m = dataSource.spec.url.match(schemePattern)!;
+              const scheme = m[1];
+              if (scheme === desiredProvider) {
                 return true;
               }
             }
@@ -94,7 +107,7 @@ export function setupDefaultViewer() {
         const firstLayer = acceptableLayers[0].layer;
         if (firstLayer) {
           if (firstLayer !== previousLayer) {
-            previousTool = restoreTool(firstLayer, obj);
+            previousTool = restoreTool(firstLayer, toolJson);
             previousLayer = firstLayer;
           }
           if (previousTool) {
@@ -103,33 +116,43 @@ export function setupDefaultViewer() {
         }
       }
     });
+    return action;
   };
 
-  if (hasCustomBindings) {
-    for (const [key, val] of Object.entries(CUSTOM_BINDINGS!)) {
-      if (typeof val === "string") {
-        viewer.inputEventBindings.global.set(key, val);
-      } else if (typeof val === "boolean") {
-        if (!val) {
-          viewer.inputEventBindings.global.delete(key);
-          viewer.inputEventBindings.global.parents.map((parent) =>
-            parent.delete(key),
-          );
-        }
-      } else {
-        viewer.inputEventBindings.global.set(key, `tool-${val.tool}`);
-        const layerConstructor = layerTypes.get(val.layer);
-        if (layerConstructor) {
-          const toolKey = key.charAt(key.length - 1).toUpperCase();
-          bindNonLayerSpecificTool(
-            val.tool,
-            toolKey,
-            layerConstructor,
-            val.provider,
-          );
-        }
-      }
+  const deleteKey = (map: EventActionMap, key: string) => {
+    map.delete(key);
+    for (const pMap of map.parents) {
+      deleteKey(pMap, key);
     }
+  };
+
+  for (const [key, val] of Object.entries(bindings)) {
+    const { action, context = "global" } = val;
+    const actionMap = viewer.inputEventBindings[context];
+    if (actionMap === undefined) {
+      throw new Error(`invalid action map context: ${context}`);
+    }
+    if (typeof action === "boolean") {
+      if (action === false) {
+        deleteKey(actionMap, key);
+      }
+    } else if (typeof action === "string" || "action" in action) {
+      actionMap.set(key, action);
+    } else {
+      const toolAction = bindNonLayerSpecificTool(key, action);
+      actionMap.set(key, toolAction);
+    }
+  }
+}
+
+/**
+ * Sets up the default neuroglancer viewer.
+ */
+export function setupDefaultViewer() {
+  const viewer = ((<any>window).viewer = makeDefaultViewer());
+  setDefaultInputEventBindings(viewer.inputEventBindings);
+  if (hasCustomBindings) {
+    setCustomInputEventBindings(viewer, NEUROGLANCER_CUSTOM_INPUT_BINDINGS!);
   }
 
   const hashBinding = viewer.registerDisposer(
