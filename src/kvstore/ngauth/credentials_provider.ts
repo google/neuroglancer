@@ -160,7 +160,7 @@ export class NgauthGcsCredentialsProvider extends CredentialsProvider<OAuth2Cred
       this.ngauthCredentialsProvider,
       `${this.serverUrl}/gcs_token`,
       { method: "POST", signal: options.signal },
-      (credentials, init) => {
+      async (credentials, init) => {
         return {
           ...init,
           body: JSON.stringify({
