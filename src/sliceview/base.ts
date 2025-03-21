@@ -184,7 +184,8 @@ function updateFixedCurPositionInChunks<
 ): boolean {
   const { curPositionInChunks, fixedPositionWithinChunk } = tsource;
   const { nonDisplayLowerClipBound, nonDisplayUpperClipBound } = tsource;
-  const { rank, chunkDataSize } = tsource.source.spec;
+  const { rank, chunkDataSize, lowerChunkBound, upperChunkBound } =
+    tsource.source.spec;
   if (
     !getChunkPositionFromCombinedGlobalLocalPositions(
       curPositionInChunks,
@@ -196,11 +197,14 @@ function updateFixedCurPositionInChunks<
   ) {
     return false;
   }
+  // Fraction by which non-display dimensions can be outside clip bounds, to
+  // account for floating-point imprecision.
+  const EPSILON = 1e-3;
   for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
     const x = curPositionInChunks[chunkDim];
     if (
-      x < nonDisplayLowerClipBound[chunkDim] ||
-      x >= nonDisplayUpperClipBound[chunkDim]
+      x < nonDisplayLowerClipBound[chunkDim] - EPSILON ||
+      x > nonDisplayUpperClipBound[chunkDim] + EPSILON
     ) {
       if (DEBUG_VISIBLE_SOURCES) {
         console.log(
@@ -215,7 +219,13 @@ function updateFixedCurPositionInChunks<
       return false;
     }
     const chunkSize = chunkDataSize[chunkDim];
-    const chunk = (curPositionInChunks[chunkDim] = Math.floor(x / chunkSize));
+    // Given that clip bounds are already tested above, clamp chunk index to its
+    // bounds, to ensure floating-point imprecision does not result in an
+    // out-of-bounds index.
+    const chunk = (curPositionInChunks[chunkDim] = Math.min(
+      upperChunkBound[chunkDim] - 1,
+      Math.max(lowerChunkBound[chunkDim], Math.floor(x / chunkSize)),
+    ));
     fixedPositionWithinChunk[chunkDim] = x - chunk * chunkSize;
   }
   return true;
@@ -931,18 +941,31 @@ export function forEachPlaneIntersectingVolumetricChunk<
     }
   }
 
+  const { upperChunkDisplayBound } = transformedSource;
+
   const invModelViewProjection = tempMat4;
   mat4.invert(invModelViewProjection, modelViewProjection);
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
-  const epsilon = 1e-3;
+  const BIAS_EPSILON = 1e-4;
+  const BOUND_EPSILON = 1e-3;
   for (let i = 0; i < 3; ++i) {
     // Add small offset of `epsilon` voxels to bias towards the higher coordinate if very close to a
     // voxel boundary.
-    const c = invModelViewProjection[12 + i] + epsilon / chunkSize[i];
+    const c = invModelViewProjection[12 + i] + BIAS_EPSILON / chunkSize[i];
     const xCoeff = Math.abs(invModelViewProjection[i]);
     const yCoeff = Math.abs(invModelViewProjection[4 + i]);
-    lower[i] = Math.floor(c - xCoeff - yCoeff);
+
+    const upperBound = upperChunkDisplayBound[i];
+    let lowerValue = c - xCoeff - yCoeff;
+    if (lowerValue >= upperBound && lowerValue < upperBound + BOUND_EPSILON) {
+      // Lower bound of the viewport is within `BOUND_EPSILON` of the upper
+      // chunk bound. Try to ensure that data is still shown in this case.
+      lowerValue = upperBound - 1;
+    } else {
+      lowerValue = Math.floor(lowerValue);
+    }
+    lower[i] = lowerValue;
     upper[i] = Math.floor(c + xCoeff + yCoeff + 1);
   }
 
