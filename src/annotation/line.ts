@@ -53,7 +53,7 @@ export function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
 void setEndpointMarkerSize(float startSize, float endSize) {}
 void setEndpointMarkerBorderWidth(float startSize, float endSize) {}
 void _setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
-void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
+void _setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
 `);
 }
 
@@ -148,7 +148,7 @@ void setEndpointMarkerBorderWidth(float startSize, float endSize) {
 void _setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
   vColor = mix(startColor, endColor, float(getEndpointIndex()));
 }
-void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
+void _setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
   vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
 }
 `);
