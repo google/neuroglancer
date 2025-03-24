@@ -688,7 +688,10 @@ function parseAnnotations(
       const numAnnotationsOffset = 8;
 
       for (let i = 0; i < countLow; ++i) {
-        const numPoints = dataView.getUint32(offset + numAnnotationsOffset, isLittleEndian);
+        const numPoints = dataView.getUint32(
+          offset + numAnnotationsOffset,
+          isLittleEndian,
+        );
         offset += numPointsOffset; // Move past the number of points
         const numGlInstances = numPoints - 1;
         const origPropertyBase = offset + numPoints * pointOffset;
@@ -720,7 +723,7 @@ function parseAnnotations(
           );
 
           // Advance pointers
-          offset += pointOffset;;
+          offset += pointOffset;
           runningOffset += numBytes;
         }
         offset = origPropertyBase + numPropertyBytes;
@@ -824,7 +827,18 @@ function parseSingleAnnotation(
   id: string,
 ): Annotation {
   const handler = annotationTypeHandlers[parameters.type];
-  const baseNumBytes = propertySerializer.serializedBytes;
+  let baseNumBytes = propertySerializer.serializedBytes;
+  const dv = new DataView(buffer);
+  let offset = 0;
+  if (parameters.type === AnnotationType.POLYLINE) {
+    const numPolylinePoints =
+      dv.getUint32(0, /*isLittleEndian=*/ true) & 0x7fffffff;
+    const numPropertyBytes =
+      propertySerializer.serializedBytes - (2 * 4 * parameters.rank + 4);
+    baseNumBytes =
+      4 + numPolylinePoints * 4 * parameters.rank + numPropertyBytes;
+    offset = (numPolylinePoints - 2) * 4 * parameters.rank;
+  }
   const numRelationships = parameters.relationships.length;
   const minNumBytes = baseNumBytes + 4 * numRelationships;
   if (buffer.byteLength < minNumBytes) {
@@ -832,7 +846,6 @@ function parseSingleAnnotation(
       `Expected at least ${minNumBytes} bytes, but received: ${buffer.byteLength}`,
     );
   }
-  const dv = new DataView(buffer);
   const annotation = handler.deserialize(
     dv,
     0,
@@ -842,13 +855,13 @@ function parseSingleAnnotation(
   );
   propertySerializer.deserialize(
     dv,
-    /*offset=*/ 0,
+    offset,
     /*annotationIndex=*/ 0,
     /*annotationCount=*/ 1,
     /*isLittleEndian=*/ true,
     (annotation.properties = new Array(parameters.properties.length)),
   );
-  let offset = baseNumBytes;
+  offset = baseNumBytes;
   const relatedSegments: BigUint64Array[] = (annotation.relatedSegments = []);
   relatedSegments.length = numRelationships;
   for (let i = 0; i < numRelationships; ++i) {
