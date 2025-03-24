@@ -954,7 +954,7 @@ export const annotationTypeHandlers: Record<
         properties: [
           {
             type: "uint32",
-            identifier: "Point count",
+            identifier: "Num vertices",
             default: 0,
             description: "Number of points in the polyline",
           },
