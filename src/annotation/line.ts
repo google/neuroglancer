@@ -50,8 +50,8 @@ const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
 
 export function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
-void setEndpointMarkerSize(float startSize, float endSize) {}
-void setEndpointMarkerBorderWidth(float startSize, float endSize) {}
+void _setEndpointMarkerSize(float startSize, float endSize) {}
+void _setEndpointMarkerBorderWidth(float startSize, float endSize) {}
 void _setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
 void _setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
 `);
@@ -139,10 +139,10 @@ float ng_markerBorderWidth;
 int getEndpointIndex() {
   return gl_VertexID / ${VERTICES_PER_CIRCLE};
 }
-void setEndpointMarkerSize(float startSize, float endSize) {
+void _setEndpointMarkerSize(float startSize, float endSize) {
   ng_markerDiameter = mix(startSize, endSize, float(getEndpointIndex()));
 }
-void setEndpointMarkerBorderWidth(float startSize, float endSize) {
+void _setEndpointMarkerBorderWidth(float startSize, float endSize) {
   ng_markerBorderWidth = mix(startSize, endSize, float(getEndpointIndex()));
 }
 void _setEndpointMarkerColor(vec4 startColor, vec4 endColor) {

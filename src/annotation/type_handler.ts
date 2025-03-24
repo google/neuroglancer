@@ -457,8 +457,8 @@ void setLineWidth(float width) {
 
 void _setEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void _setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
-void setEndpointMarkerSize(float startSize, float endSize);
-void setEndpointMarkerBorderWidth(float startSize, float endSize);
+void _setEndpointMarkerSize(float startSize, float endSize);
+void _setEndpointMarkerBorderWidth(float startSize, float endSize);
 
 void setPolyEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void setPolyEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
@@ -496,7 +496,15 @@ void setEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
 }
 void setEndpointMarkerBorderColor(vec3 color) { setEndpointMarkerBorderColor(color, color); }
 void setEndpointMarkerBorderColor(vec4 color) { setEndpointMarkerBorderColor(color, color); }
+void setEndpointMarkerSize(float startSize, float endSize) {
+  _setEndpointMarkerSize(startSize, endSize);
+  setPolyEndpointMarkerSize(startSize, endSize);
+}
 void setEndpointMarkerSize(float size) { setEndpointMarkerSize(size, size); }
+void setEndpointMarkerBorderWidth(float startSize, float endSize) {
+  _setEndpointMarkerBorderWidth(startSize, endSize);
+  setPolyEndpointMarkerBorderWidth(startSize, endSize);
+}
 void setEndpointMarkerBorderWidth(float size) { setEndpointMarkerBorderWidth(size, size); }
 void setLineColor(vec4 startColor, vec4 endColor) {
   _setLineColor(startColor, endColor);
@@ -525,9 +533,7 @@ void setPolyLineColor(vec3 startColor, vec3 endColor) { setPolyLineColor(vec4(st
 void setColor(vec4 color) {
   setPointMarkerColor(color);
   setLineColor(color);
-  setPolyLineColor(color);
   setEndpointMarkerColor(color);
-  setPolyEndpointMarkerColor(color);
   setBoundingBoxBorderColor(color);
   setEllipsoidFillColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
 }
