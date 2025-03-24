@@ -21,7 +21,11 @@ import pytest
 
 @pytest.mark.parametrize(
     "annotation,annotation_geometry",
-    [(neuroglancer.PointAnnotation, {"point": [0, 0]})],
+    [
+        (neuroglancer.PointAnnotation, {"point": [0, 0]}),
+        (neuroglancer.LineAnnotation, {"pointA": [0, 0], "pointB": [1, 1]}),
+        (neuroglancer.PolyLineAnnotation, {"points": [[0, 0], [1, 1], [-1, 1]]}),
+    ],
 )
 def test_annotate_properties(webdriver, annotation, annotation_geometry):
     kwargs = [
@@ -77,6 +81,7 @@ def test_annotate_properties(webdriver, annotation, annotation_geometry):
 void main() {
   setColor(prop_color());
   setPointMarkerSize(1000.0);
+  setEndpointMarkerSize(1000.0);
 }
 """,
             ),
