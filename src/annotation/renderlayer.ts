@@ -672,8 +672,7 @@ function AnnotationRenderLayer<
           .visibleHistograms > 0;
       for (const annotationType of annotationTypes) {
         const idMap = typeToIdMaps[annotationType];
-        let count = 0;
-        count += typeToSize[annotationType];
+        let count = typeToSize[annotationType];
         if (count > 0) {
           const handler = getAnnotationTypeRenderHandler(annotationType);
           let selectedIndex = 0xffffffff;
@@ -687,16 +686,16 @@ function AnnotationRenderLayer<
                 const idToSizeMap = serializedAnnotations.idToSizeMaps[
                   annotationType
                 ];
-                let count = 0;
+                let runningCount = 0;
                 // For each value in the map, get the index and add the size
                 // If the index is less than the current index
                 for (const [id, size] of idToSizeMap) {
                   const tempIndex = idMap.get(id);
                   if (tempIndex !== undefined && tempIndex < index) {
-                    count += size;
+                    runningCount += size;
                   }
                 }
-                selectedIndex = count * handler.pickIdsPerInstance;
+                selectedIndex = runningCount * handler.pickIdsPerInstance;
               }
               else {
                 selectedIndex = index * handler.pickIdsPerInstance;
@@ -707,6 +706,25 @@ function AnnotationRenderLayer<
             }
           }
           count = Math.round(count * drawFraction);
+          // Adjust the count slightly if needed to ensure we always
+          // Draw a full polyline if present
+          // TODO (SKM) again replace with binary search
+          if (drawFraction < 1 && annotationType === AnnotationType.POLYLINE) {
+            const idToSizeMap = serializedAnnotations.idToSizeMaps[
+              annotationType
+            ];
+            let runningCount = 0;
+            for (const [id, size] of idToSizeMap) {
+              const tempIndex = idMap.get(id);
+              if (tempIndex !== undefined) {
+                runningCount += size;
+              }
+              if (runningCount > count) {
+                break;
+              }
+            }
+            count = runningCount;
+          }
           context.count = count;
           context.bufferOffset = typeToOffset[annotationType];
           context.selectedIndex = selectedIndex;
