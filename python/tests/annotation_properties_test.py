@@ -16,9 +16,20 @@
 import neuroglancer
 import neuroglancer.test_utils
 import numpy as np
+import pytest
 
 
-def test_annotate(webdriver):
+@pytest.mark.parametrize(
+    "annotation,annotation_geometry",
+    [(neuroglancer.PointAnnotation, {"point": [0, 0]})],
+)
+def test_annotate_properties(webdriver, annotation, annotation_geometry):
+    kwargs = [
+        {"id": "1", "segments": [[42], []], "props": ["#0f0"], **annotation_geometry},
+        {"id": "2", "segments": [[], [43]], "props": ["#00f"], **annotation_geometry},
+        {"id": "3", "segments": [[], [44]], "props": ["#0ff"], **annotation_geometry},
+    ]
+
     with webdriver.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(
             names=["x", "y"], units="nm", scales=[1, 1]
@@ -61,26 +72,7 @@ def test_annotate(webdriver):
                         default="red",
                     )
                 ],
-                annotations=[
-                    neuroglancer.PointAnnotation(
-                        id="1",
-                        point=[0, 0],
-                        segments=[[42], []],
-                        props=["#0f0"],
-                    ),
-                    neuroglancer.PointAnnotation(
-                        id="2",
-                        point=[0, 0],
-                        segments=[[], [43]],
-                        props=["#00f"],
-                    ),
-                    neuroglancer.PointAnnotation(
-                        id="3",
-                        point=[0, 0],
-                        segments=[[], [44]],
-                        props=["#0ff"],
-                    ),
-                ],
+                annotations=[annotation(**kw) for kw in kwargs],
                 shader="""
 void main() {
   setColor(prop_color());
