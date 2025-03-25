@@ -729,7 +729,7 @@ export function adjustInvlerpBrightnessContrast(
 }
 
 export class InvlerpWidget extends Tab {
-  cdfPanel = this.registerDisposer(new CdfPanel(this));
+  cdfPanel;
   boundElements;
   invertArrows: HTMLElement[];
   autoRangeFinder: AutoRangeFinder;
@@ -751,6 +751,7 @@ export class InvlerpWidget extends Tab {
     public legendShaderOptions: LegendShaderOptions | undefined,
   ) {
     super(visibility);
+    this.cdfPanel = this.registerDisposer(new CdfPanel(this));
     this.boundElements = {
       range: createRangeBoundInputs("range", dataType, trackable),
       window: createRangeBoundInputs("window", dataType, trackable),
