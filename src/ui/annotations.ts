@@ -1442,6 +1442,14 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
 PlaceLineTool.prototype.annotationType = AnnotationType.LINE;
 
 class PlacePolylineTool extends MultiStepAnnotationTool {
+  getBaseSegment = false;
+
+  private storedRelationships: BigUint64Array[] | undefined;
+
+  get description() {
+    return "annotate polyline";
+  }
+
   getInitialAnnotation(
     mouseState: MouseSelectionState,
     annotationLayer: AnnotationLayerState,
@@ -1450,11 +1458,15 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       mouseState,
       annotationLayer,
     );
+    this.storedRelationships = getSelectedAssociatedSegments(
+      annotationLayer,
+      this.getBaseSegment,
+    );
     return <PolyLine>{
       type: AnnotationType.POLYLINE,
       id: "",
       description: "",
-      segments: getSelectedAssociatedSegments(annotationLayer),
+      relatedSegments: this.storedRelationships,
       points: [point, point],
       properties: annotationLayer.source.properties.map((x) => x.default),
     };
@@ -1489,27 +1501,47 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
     if (point === undefined)
       return { newAnnotation: oldAnnotation, finished: false };
 
-    // 1. Show a preview of the point being added until a click is triggered.
+    let newAnnotation;
+    let finished = false;
     if (!triggered) {
-      return {
-        newAnnotation: annotationWithUpdatedLastPoint(oldAnnotation, point),
-        finished: false,
-      };
+      // Show a preview of the point being added until a click is triggered.
+      newAnnotation = annotationWithUpdatedLastPoint(oldAnnotation, point);
+    } else {
+      // Check if the point is the same as the last point, if so, done
+      const lastPoint = oldAnnotation.points[oldAnnotation.points.length - 1];
+      const secondLastPoint =
+        oldAnnotation.points[oldAnnotation.points.length - 2];
+      finished = arraysEqual(lastPoint, secondLastPoint);
+      // Add the point to the annotation if not finished.
+      newAnnotation =
+        finished && oldAnnotation.points.length > 2
+          ? oldAnnotation
+          : annotationWithNewPoint(oldAnnotation, point);
     }
-    // 2. Check if the point is the same as the last point, if so, done
-    const lastPoint = oldAnnotation.points[oldAnnotation.points.length - 1];
-    const secondLastPoint =
-      oldAnnotation.points[oldAnnotation.points.length - 2];
-    const finished = arraysEqual(lastPoint, secondLastPoint);
-    // 3. Add the point to the annotation.
-    const newAnnotation =
-      finished && oldAnnotation.points.length > 2
-        ? oldAnnotation
-        : annotationWithNewPoint(oldAnnotation, point);
-    return { newAnnotation, finished };
-  }
-  get description() {
-    return "annotate polyline";
+
+    const initialRelationships = this.storedRelationships;
+    const newRelationships = getSelectedAssociatedSegments(
+      annotationLayer,
+      this.getBaseSegment,
+    );
+    if (initialRelationships === undefined) {
+      newAnnotation.relatedSegments = newRelationships;
+    } else {
+      newAnnotation.relatedSegments = Array.from(
+        newRelationships,
+        (newSegments, i) => {
+          const initialSegments = initialRelationships[i];
+          newSegments = newSegments.filter((x) => !initialSegments.includes(x));
+          return BigUint64Array.from([...initialSegments, ...newSegments]);
+        },
+      );
+    }
+    if (triggered) {
+      // Store the initial relationships for the next time the tool is triggered.
+      // Otherwise just show a preview
+      this.storedRelationships = newAnnotation.relatedSegments;
+    }
+    return {newAnnotation, finished};
   }
 
   toJSON() {
