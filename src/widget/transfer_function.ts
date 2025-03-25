@@ -1602,9 +1602,7 @@ class TransferFunctionController extends RefCounted {
  * Widget for the transfer function. Creates the UI elements required for the transfer function.
  */
 class TransferFunctionWidget extends Tab {
-  private transferFunctionPanel = this.registerDisposer(
-    new TransferFunctionPanel(this),
-  );
+  private transferFunctionPanel = this;
   autoRangeFinder: AutoRangeFinder;
   window = this.createWindowBoundInputs();
 
@@ -1630,6 +1628,9 @@ class TransferFunctionWidget extends Tab {
     public histogramIndex: number,
   ) {
     super(visibility);
+    this.transferFunctionPanel = this.registerDisposer(
+      new TransferFunctionPanel(this),
+    );
     this.registerDisposer(
       histogramSpecifications.visibility.add(this.visibility),
     );
