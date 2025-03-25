@@ -180,6 +180,13 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
       vector.add(center, annotation.pointA, annotation.pointB);
       vector.scale(center, center, 0.5);
       break;
+    case AnnotationType.POLYLINE:
+      // Return the centroid of the polyline.
+      for (const point of annotation.points) {
+        vector.add(center, center, point);
+      }
+      vector.scale(center, center, 1 / annotation.points.length);
+      break;
     case AnnotationType.POINT:
       center.set(annotation.point);
       break;
