@@ -1602,7 +1602,7 @@ class TransferFunctionController extends RefCounted {
  * Widget for the transfer function. Creates the UI elements required for the transfer function.
  */
 class TransferFunctionWidget extends Tab {
-  private transferFunctionPanel = this;
+  private transferFunctionPanel;
   autoRangeFinder: AutoRangeFinder;
   window = this.createWindowBoundInputs();
 
