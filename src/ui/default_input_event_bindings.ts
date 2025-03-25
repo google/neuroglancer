@@ -116,6 +116,7 @@ export function getDefaultRenderedDataPanelBindings() {
         "at:mousedown2": "move-to-mouse-position",
         "at:alt+mousedown0": "move-annotation",
         "at:control+alt+mousedown2": "delete-annotation",
+        enter: "finish-annotation",
         "at:touchpinch": "zoom-via-touchpinch",
         "at:touchrotate": "rotate-in-plane-via-touchrotate",
         "at:touchtranslate2": "translate-in-plane-via-touchtranslate",

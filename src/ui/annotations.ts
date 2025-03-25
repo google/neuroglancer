@@ -1199,12 +1199,7 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
         };
       } else {
         const finished = updateNextPoint(true);
-        if (finished) {
-          const state = inProgressAnnotation.value;
-          state.annotationLayer.source.commit(state.reference);
-          state.disposer();
-          inProgressAnnotation.value = undefined;
-        }
+        if (finished) this.complete();
       }
     }
   }
@@ -1221,6 +1216,14 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
       state.disposer();
       this.inProgressAnnotation.value = undefined;
     }
+  }
+
+  complete() {
+    const state = this.inProgressAnnotation.value;
+    if (state === undefined) return;
+    state.annotationLayer.source.commit(state.reference);
+    state.disposer();
+    this.inProgressAnnotation.value = undefined;
   }
 }
 
@@ -1463,12 +1466,6 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
     annotationLayer: AnnotationLayerState,
     triggered: boolean,
   ) {
-    function annotationWithoutLastPoint(annotation: PolyLine) {
-      return <PolyLine>{
-        ...annotation,
-        points: annotation.points.slice(0, -1),
-      };
-    }
     function annotationWithUpdatedLastPoint(
       annotation: PolyLine,
       point: Float32Array,
@@ -1499,24 +1496,17 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
         finished: false,
       };
     }
-    // 2. Check if the point is the same as the last point, if so, don't add it.
-    // Instead, finish the annotation.
+    // 2. Check if the point is the same as the last point, if so, done
     const lastPoint = oldAnnotation.points[oldAnnotation.points.length - 1];
     const secondLastPoint =
       oldAnnotation.points[oldAnnotation.points.length - 2];
     const finished = arraysEqual(lastPoint, secondLastPoint);
-    if (finished) {
-      const newAnnotation =
-        oldAnnotation.points.length > 2
-          ? annotationWithoutLastPoint(oldAnnotation)
-          : oldAnnotation;
-      return { newAnnotation, finished };
-    }
     // 3. Add the point to the annotation.
-    return {
-      newAnnotation: annotationWithNewPoint(oldAnnotation, point),
-      finished,
-    };
+    const newAnnotation =
+      finished && oldAnnotation.points.length > 2
+        ? oldAnnotation
+        : annotationWithNewPoint(oldAnnotation, point);
+    return { newAnnotation, finished };
   }
   get description() {
     return "annotate polyline";
@@ -1524,6 +1514,28 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
 
   toJSON() {
     return ANNOTATE_POLYLINE_TOOL_ID;
+  }
+
+  complete() {
+    function annotationWithoutLastPoint(annotation: PolyLine) {
+      return <PolyLine>{
+        ...annotation,
+        points: annotation.points.slice(0, -1),
+      };
+    }
+    const state = this.inProgressAnnotation.value;
+    if (state === undefined) return;
+    const annotation = state.reference.value;
+    if (annotation === null || annotation === undefined) return;
+    if ((annotation as PolyLine).points.length > 2) {
+      state.annotationLayer.source.update(
+        state.reference,
+        annotationWithoutLastPoint(annotation as PolyLine),
+      );
+    }
+    // If preferred, could use this to prevent polylines that are a single point.
+    // state.annotationLayer.source.delete(state.reference);
+    super.complete();
   }
 }
 
