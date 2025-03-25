@@ -129,6 +129,7 @@
 .neuroglancer-tool-palette-layer-group {
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .neuroglancer-tool-palette-layer-group-content >.neuroglancer-tool-palette-tool-container {
