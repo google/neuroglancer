@@ -100,6 +100,7 @@ export interface ViewerUIState
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  enableLayerColorWidget: TrackableBoolean;
   hideCrossSectionBackground3D: TrackableBoolean;
 }
 
@@ -182,6 +183,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
     scaleBarOptions: viewer.scaleBarOptions,
+    enableLayerColorWidget: viewer.enableLayerColorWidget,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
   };
 }

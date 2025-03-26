@@ -25,6 +25,7 @@ import type {
 } from "#src/layer/index.js";
 import { deleteLayer } from "#src/layer/index.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import { observeWatchable } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -92,6 +93,8 @@ export class LayerVisibilityWidget extends RefCounted {
         this.layer.setVisible(true);
       },
     });
+    element.style.display = "flex";
+    element.style.alignItems = "center";
     hideIcon.classList.add("neuroglancer-layer-list-panel-eye-icon");
     showIcon.classList.add("neuroglancer-layer-list-panel-eye-icon");
     element.appendChild(showIcon);
@@ -103,6 +106,59 @@ export class LayerVisibilityWidget extends RefCounted {
     };
     updateView();
     this.registerDisposer(layer.layerChanged.add(updateView));
+  }
+}
+
+class LayerColorWidget extends RefCounted {
+  element = document.createElement("div");
+  elementWrapper = document.createElement("div");
+
+  constructor(
+    public panel: LayerListPanel,
+    public layer: ManagedUserLayer,
+  ) {
+    super();
+    const { element, elementWrapper } = this;
+    element.className = "neuroglancer-layer-list-panel-color-value";
+    elementWrapper.className =
+      "neuroglancer-layer-list-panel-color-value-wrapper";
+    elementWrapper.appendChild(element);
+    const updateLayerColorWidget = () => {
+      element.classList.remove("rainbow");
+      element.classList.remove("unsupported");
+      const color = this.layer.layerBarColor;
+      if (color) {
+        element.style.backgroundColor = color;
+        element.classList.remove("rainbow");
+      } else {
+        const style = this.layer.supportsLayerBarColorSyncOption
+          ? "rainbow"
+          : "unsupported";
+        element.classList.add(style);
+        element.style.backgroundColor = "";
+      }
+    };
+    this.registerDisposer(
+      observeWatchable((layerColorEnabled) => {
+        elementWrapper.style.display = layerColorEnabled ? "block" : "none";
+        updateLayerColorWidget();
+      }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
+    );
+    this.registerDisposer(
+      layer.observeLayerColor(() => {
+        updateLayerColorWidget();
+      }),
+    );
+    this.registerDisposer(
+      layer.layerChanged.add(() => {
+        if (!this.layer.visible) {
+          elementWrapper.classList.add("cross");
+        } else {
+          elementWrapper.classList.remove("cross");
+        }
+        updateLayerColorWidget();
+      }),
+    );
   }
 }
 
@@ -173,6 +229,9 @@ class LayerListItem extends RefCounted {
     element.appendChild(numberElement);
     element.appendChild(
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
+    );
+    element.appendChild(
+      this.registerDisposer(new LayerColorWidget(panel, layer)).elementWrapper,
     );
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
     element.appendChild(layerNameWidget.element);
