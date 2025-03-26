@@ -16,7 +16,7 @@
 
 import { debounce } from "lodash-es";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
-import { fetchWithCredentials } from "#src/credentials_provider/http_request.js";
+import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
 import {
   CredentialsProvider,
   makeCredentialsGetter,
@@ -27,8 +27,8 @@ import type {
   DataSource,
   DataSubsourceEntry,
   GetDataSourceOptions,
+  DataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider } from "#src/datasource/index.js";
 import type { Credentials } from "#src/datasource/nggraph/credentials_provider.js";
 import { NggraphCredentialsProvider } from "#src/datasource/nggraph/credentials_provider.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
@@ -47,8 +47,10 @@ import { StatusMessage } from "#src/status.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import { getPrefixMatchesWithDescriptions } from "#src/util/completion.js";
 import { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import type { RequestInitWithProgress } from "#src/util/http_request.js";
 import {
   parseArray,
+  parseUint64,
   verifyFiniteFloat,
   verifyInt,
   verifyObject,
@@ -56,34 +58,31 @@ import {
   verifyString,
   verifyStringArray,
 } from "#src/util/json.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 const urlPattern = "^(https?://[^/]+)/(.*)$";
 
 interface GraphSegmentInfo {
-  id: Uint64;
-  baseSegments: Uint64[];
-  baseSegmentParents: Uint64[];
+  id: bigint;
+  baseSegments: bigint[];
+  baseSegmentParents: bigint[];
   name: string;
   tags: string[];
   numVoxels: number;
   bounds: number[];
-  lastLogId: Uint64 | null;
+  lastLogId: bigint | null;
 }
 
 function parseGraphSegmentInfo(obj: any): GraphSegmentInfo {
   verifyObject(obj);
   return {
-    id: verifyObjectProperty(obj, "id", (x) =>
-      Uint64.parseString(verifyString(x)),
-    ),
+    id: verifyObjectProperty(obj, "id", parseUint64),
     baseSegments: verifyObjectProperty(obj, "base_segment_ids", (x) =>
-      parseArray(x, (y) => Uint64.parseString(verifyString(y))),
+      parseArray(x, parseUint64),
     ),
     baseSegmentParents: verifyObjectProperty(
       obj,
       "base_segment_parent_ids",
-      (x) => parseArray(x, (y) => Uint64.parseString(verifyString(y))),
+      (x) => parseArray(x, parseUint64),
     ),
     name: verifyObjectProperty(obj, "name", verifyString),
     tags: verifyObjectProperty(obj, "tags", verifyStringArray),
@@ -92,16 +91,13 @@ function parseGraphSegmentInfo(obj: any): GraphSegmentInfo {
       parseArray(x, (y) => verifyFiniteFloat(y)),
     ),
     lastLogId: verifyObjectProperty(obj, "last_log_id", (x) =>
-      x == null ? null : Uint64.parseString(verifyString(x)),
+      x == null ? null : parseUint64(x),
     ),
   };
 }
 
-/// Base-10 string representation of a segment id, used as map key.
-type SegmentIdString = string;
-
 interface ActiveSegmentQuery {
-  id: Uint64;
+  id: bigint;
   current: GraphSegmentInfo | undefined;
   addedEquivalences: boolean;
   seenGeneration: number;
@@ -136,13 +132,12 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     this.visibleSegmentsChanged();
   }
 
-  computeSplit(include: Uint64, exclude: Uint64): ComputedSplit | undefined {
+  computeSplit(include: bigint, exclude: bigint): ComputedSplit | undefined {
     const { segmentEquivalences } = this.segmentsState;
     const graphSegment = segmentEquivalences.get(include);
     if (isBaseSegmentId(graphSegment)) return undefined;
-    if (!Uint64.equal(segmentEquivalences.get(exclude), graphSegment))
-      return undefined;
-    const query = this.segmentQueries.get(graphSegment.toString());
+    if (segmentEquivalences.get(exclude) !== graphSegment) return undefined;
+    const query = this.segmentQueries.get(graphSegment);
     if (query === undefined) return undefined;
     const { current } = query;
     if (current === undefined) return undefined;
@@ -152,27 +147,21 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     for (let i = 0; i < length; ++i) {
       const baseSegment = baseSegments[i];
       const parent = baseSegmentParents[i];
-      if (Uint64.equal(baseSegment, exclude) || Uint64.equal(parent, exclude))
-        continue;
+      if (baseSegment === exclude || parent === exclude) continue;
       ds.link(baseSegment, parent);
       console.log(
-        `Linking ${baseSegment} - ${parent} == ${include}? ${Uint64.equal(
-          include,
-          baseSegment,
-        )} ${Uint64.equal(
-          include,
-          parent,
-        )} :: unioned with include = ${Uint64.equal(
-          include,
-          ds.get(baseSegment),
-        )}, with exclude = ${Uint64.equal(exclude, ds.get(baseSegment))}`,
+        `Linking ${baseSegment} - ${parent} == ${include}? ${
+          include === baseSegment
+        } ${include === parent} :: unioned with include = ${
+          include === ds.get(baseSegment)
+        }, with exclude = ${exclude === ds.get(baseSegment)}`,
       );
     }
-    const includeSegments: Uint64[] = [];
-    const excludeSegments: Uint64[] = [];
+    const includeSegments: bigint[] = [];
+    const excludeSegments: bigint[] = [];
     const includeRep = ds.get(include);
     for (const segment of baseSegments) {
-      if (Uint64.equal(ds.get(segment), includeRep)) {
+      if (ds.get(segment) === includeRep) {
         includeSegments.push(segment);
       } else {
         excludeSegments.push(segment);
@@ -196,7 +185,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     debounce(() => this.visibleSegmentsChanged(), 0),
   );
 
-  private segmentQueries = new Map<SegmentIdString, ActiveSegmentQuery>();
+  private segmentQueries = new Map<bigint, ActiveSegmentQuery>();
 
   private ignoreVisibleSegmentsChanged = false;
 
@@ -207,8 +196,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       const { segmentQueries } = this;
       const { segmentEquivalences } = this.segmentsState;
       segmentEquivalences.clear();
-      for (const [segmentIdString, query] of segmentQueries) {
-        segmentIdString;
+      for (const [_segmentId, query] of segmentQueries) {
         if (query.current === undefined || isBaseSegmentId(query.id)) continue;
         const { id, baseSegments } = query.current;
         if (baseSegments.length > 0) {
@@ -223,33 +211,27 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     }, 0),
   );
 
-  private registerVisibleSegment(segmentId: Uint64) {
+  private registerVisibleSegment(segmentId: bigint) {
     const query: ActiveSegmentQuery = {
       id: segmentId,
       current: undefined,
       addedEquivalences: false,
       seenGeneration: updateGeneration,
       disposer: this.graph.watchSegment(segmentId, (info) =>
-        this.handleSegmentUpdate(query.id.toString(), info),
+        this.handleSegmentUpdate(query.id, info),
       ),
     };
-    const segmentIdString = segmentId.toString();
-    this.segmentQueries.set(segmentIdString, query);
-    console.log(`adding to segmentQueries: ${segmentIdString}`);
+    this.segmentQueries.set(segmentId, query);
+    console.log(`adding to segmentQueries: ${segmentId}`);
   }
 
-  private handleSegmentUpdate(
-    segmentIdString: SegmentIdString,
-    update: GraphSegmentUpdate,
-  ) {
-    console.log(`handleSegmentUpdate: ${segmentIdString}`);
-    const query = this.segmentQueries.get(segmentIdString)!;
+  private handleSegmentUpdate(segmentId: bigint, update: GraphSegmentUpdate) {
+    console.log(`handleSegmentUpdate: ${segmentId}`);
+    const query = this.segmentQueries.get(segmentId)!;
     if (update === "invalid") {
       query.disposer();
-      console.log(
-        `removing from segmentQueries: ${segmentIdString} due to invalid`,
-      );
-      this.segmentQueries.delete(segmentIdString);
+      console.log(`removing from segmentQueries: ${segmentId} due to invalid`);
+      this.segmentQueries.delete(segmentId);
       try {
         this.ignoreVisibleSegmentsChanged = true;
         this.segmentsState.visibleSegments.delete(query.id);
@@ -269,21 +251,20 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       }
       console.log(
         `Error from ${this.graph.serverUrl}/${this.graph.entityName}` +
-          ` watching segment ${segmentIdString}`,
+          ` watching segment ${segmentId}`,
       );
       return;
     }
     query.current = update;
     const oldId = query.id;
     const newId = update.id;
-    if (!Uint64.equal(newId, oldId)) {
+    if (newId !== oldId) {
       query.id = newId;
-      const newSegmentIdString = newId.toString();
-      const newQuery = this.segmentQueries.get(newSegmentIdString);
+      const newQuery = this.segmentQueries.get(newId);
       console.log(
-        `removing from segmentQueries: ${segmentIdString} due to rename -> ${newId}`,
+        `removing from segmentQueries: ${segmentId} due to rename -> ${newId}`,
       );
-      this.segmentQueries.delete(segmentIdString);
+      this.segmentQueries.delete(segmentId);
       try {
         this.ignoreVisibleSegmentsChanged = true;
         if (this.segmentsState.visibleSegments.has(oldId)) {
@@ -302,14 +283,14 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       }
       if (newQuery === undefined) {
         console.log(`adding to segmentQueries due to rename -> ${newId}`);
-        this.segmentQueries.set(newSegmentIdString, query);
+        this.segmentQueries.set(newId, query);
         this.segmentEquivalencesChanged();
       } else {
         if (
           update.lastLogId !== null &&
           (typeof newQuery.current !== "object" ||
             newQuery.current.lastLogId === null ||
-            Uint64.less(newQuery.current.lastLogId, update.lastLogId))
+            newQuery.current.lastLogId < update.lastLogId)
         ) {
           newQuery.current = update;
           this.segmentEquivalencesChanged();
@@ -329,25 +310,24 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     const { segmentQueries } = this;
     const generation = ++updateGeneration;
     const processVisibleSegments = (visibleSegments: Uint64Set) => {
-      for (const segmentId of visibleSegments.unsafeKeys()) {
-        if (Uint64.equal(segmentId, UNKNOWN_NEW_SEGMENT_ID)) continue;
-        const segmentIdString = segmentId.toString();
-        const existingQuery = segmentQueries.get(segmentIdString);
+      for (const segmentId of visibleSegments.keys()) {
+        if (segmentId === UNKNOWN_NEW_SEGMENT_ID) continue;
+        const existingQuery = segmentQueries.get(segmentId);
         if (existingQuery !== undefined) {
           existingQuery.seenGeneration = generation;
           continue;
         }
-        this.registerVisibleSegment(segmentId.clone());
+        this.registerVisibleSegment(segmentId);
       }
     };
     processVisibleSegments(segmentsState.visibleSegments);
     processVisibleSegments(segmentsState.temporaryVisibleSegments);
-    for (const [segmentIdString, query] of segmentQueries) {
+    for (const [segmentId, query] of segmentQueries) {
       if (query.seenGeneration !== generation) {
         console.log(
-          `removing from segmentQueries due to seenGeneration: ${segmentIdString}`,
+          `removing from segmentQueries due to seenGeneration: ${segmentId}`,
         );
-        segmentQueries.delete(segmentIdString);
+        segmentQueries.delete(segmentId);
         query.disposer();
         if (query.addedEquivalences) {
           this.segmentEquivalencesChanged();
@@ -361,7 +341,7 @@ type GraphSegmentUpdateCallback = (info: GraphSegmentUpdate) => void;
 
 interface WatchInfo {
   callback: GraphSegmentUpdateCallback;
-  segment: Uint64;
+  segment: bigint;
   watchId: number;
 }
 
@@ -490,7 +470,7 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
     return new GraphConnection(this, segmentsState);
   }
 
-  trackSegment(id: Uint64, callback: (id: Uint64 | null) => void): () => void {
+  trackSegment(id: bigint, callback: (id: bigint | null) => void): () => void {
     return this.watchSegment(id, (info: GraphSegmentUpdate) => {
       if (info === "invalid") {
         callback(null);
@@ -504,7 +484,7 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
   }
 
   watchSegment(
-    segment: Uint64,
+    segment: bigint,
     callback: GraphSegmentUpdateCallback,
   ): () => void {
     const watchInfo = {
@@ -546,7 +526,7 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
     return disposer;
   }
 
-  async merge(a: Uint64, b: Uint64): Promise<Uint64> {
+  async merge(a: bigint, b: bigint): Promise<bigint> {
     const response = await nggraphGraphFetch(
       this.chunkManager,
       this.serverUrl,
@@ -561,15 +541,13 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
       },
     );
     verifyObject(response);
-    return verifyObjectProperty(response, "merged", (x) =>
-      Uint64.parseString(x),
-    );
+    return verifyObjectProperty(response, "merged", parseUint64);
   }
 
   async split(
-    include: Uint64,
-    exclude: Uint64,
-  ): Promise<{ include: Uint64; exclude: Uint64 }> {
+    include: bigint,
+    exclude: bigint,
+  ): Promise<{ include: bigint; exclude: bigint }> {
     const response = await nggraphGraphFetch(
       this.chunkManager,
       this.serverUrl,
@@ -585,12 +563,8 @@ export class NggraphSegmentationGraphSource extends SegmentationGraphSource {
     );
     verifyObject(response);
     return {
-      include: verifyObjectProperty(response, "include", (x) =>
-        Uint64.parseString(x),
-      ),
-      exclude: verifyObjectProperty(response, "exclude", (x) =>
-        Uint64.parseString(x),
-      ),
+      include: verifyObjectProperty(response, "include", parseUint64),
+      exclude: verifyObjectProperty(response, "exclude", parseUint64),
     };
   }
 }
@@ -609,7 +583,7 @@ function fetchWithNggraphCredentials(
   path: string,
   init: RequestInit,
 ): Promise<any> {
-  return fetchWithCredentials(
+  return fetchOkWithCredentials(
     credentialsProvider,
     `${serverUrl}${path}`,
     init,
@@ -701,7 +675,7 @@ function nggraphGraphFetch(
   serverUrl: string,
   entityName: string,
   path: string,
-  init: RequestInit,
+  init: RequestInitWithProgress,
 ): Promise<any> {
   return fetchWithNggraphCredentials(
     getEntityCredentialsProvider(chunkManager, serverUrl, entityName),
@@ -732,41 +706,46 @@ function parseListResponse(response: any) {
   );
 }
 
-export class NggraphDataSource extends DataSourceProvider {
+export class NggraphDataSource implements DataSourceProvider {
+  get scheme() {
+    return "nggraph";
+  }
   get description() {
     return "nggraph data source";
   }
 
   get(options: GetDataSourceOptions): Promise<DataSource> {
     const { serverUrl, id } = parseNggraphUrl(options.providerUrl);
-    return options.chunkManager.memoize.getUncounted(
+    return options.registry.chunkManager.memoize.getAsync(
       { type: "nggraph:get", serverUrl, id },
-      async (): Promise<DataSource> => {
+      options,
+      async (progressOptions): Promise<DataSource> => {
         const entityCredentialsProvider = getEntityCredentialsProvider(
-          options.chunkManager,
+          options.registry.chunkManager,
           serverUrl,
           id,
         );
-        const { entityType } = (await entityCredentialsProvider.get())
-          .credentials;
+        const { entityType } = (
+          await entityCredentialsProvider.get(undefined, progressOptions)
+        ).credentials;
         if (entityType !== "graph") {
           throw new Error(
             `Unsupported entity type: ${JSON.stringify(entityType)}`,
           );
         }
         const { datasource_url: baseSegmentation } = await nggraphGraphFetch(
-          options.chunkManager,
+          options.registry.chunkManager,
           serverUrl,
           id,
           "/graph/config",
-          { method: "POST" },
+          { method: "POST", ...progressOptions },
         );
         const baseSegmentationDataSource = await options.registry.get({
           ...options,
           url: baseSegmentation,
         });
         const segmentationGraph = new NggraphSegmentationGraphSource(
-          options.chunkManager,
+          options.registry.chunkManager,
           serverUrl,
           id,
         );
@@ -789,13 +768,20 @@ export class NggraphDataSource extends DataSourceProvider {
 
   async completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
     const { serverUrl, id } = parseNggraphUrl(options.providerUrl);
-    const list = await options.chunkManager.memoize.getUncounted(
+    const list = await options.registry.chunkManager.memoize.getAsync(
       { type: "nggraph:list", serverUrl },
-      async () => {
+      options,
+      async (progressOptions) => {
         return parseListResponse(
-          await nggraphServerFetch(options.chunkManager, serverUrl, "/list", {
-            method: "POST",
-          }),
+          await nggraphServerFetch(
+            options.registry.chunkManager,
+            serverUrl,
+            "/list",
+            {
+              method: "POST",
+              ...progressOptions,
+            },
+          ),
         );
       },
     );

@@ -53,7 +53,6 @@ import {
   verifyObjectProperty,
   verifyStringArray,
 } from "#src/util/json.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { zorder3LessThan } from "#src/util/zorder.js";
 import {
   getBasePriority,
@@ -72,13 +71,13 @@ export type FragmentId = string;
 
 // Chunk that contains the list of fragments that make up a single object.
 export class ManifestChunk extends Chunk {
-  objectId = new Uint64();
+  objectId: bigint = 0n;
   fragmentIds: FragmentId[] | null;
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk(key: string, objectId: Uint64) {
+  initializeManifestChunk(key: string, objectId: bigint) {
     super.initialize(key);
-    this.objectId.assign(objectId);
+    this.objectId = objectId;
   }
 
   freeSystemMemory() {
@@ -369,10 +368,7 @@ export function decodeTriangleVertexPositionsAndIndices(
 export interface MeshSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.
-  downloadFragment(
-    chunk: FragmentChunk,
-    abortSignal: AbortSignal,
-  ): Promise<void>;
+  downloadFragment(chunk: FragmentChunk, signal: AbortSignal): Promise<void>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
@@ -387,7 +383,7 @@ export class MeshSource extends ChunkSource {
     fragmentSource.meshSource = this;
   }
 
-  getChunk(objectId: Uint64) {
+  getChunk(objectId: bigint) {
     const key = getObjectKey(objectId);
     let chunk = <ManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
@@ -423,8 +419,8 @@ export class MeshSource extends ChunkSource {
 @registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   meshSource: MeshSource | null = null;
-  download(chunk: FragmentChunk, abortSignal: AbortSignal) {
-    return this.meshSource!.downloadFragment(chunk, abortSignal);
+  download(chunk: FragmentChunk, signal: AbortSignal) {
+    return this.meshSource!.downloadFragment(chunk, signal);
   }
 }
 
@@ -501,13 +497,13 @@ export class MeshLayer extends withSegmentationLayerBackendState(
 
 // Chunk that contains the list of fragments that make up a single object.
 export class MultiscaleManifestChunk extends Chunk {
-  objectId = new Uint64();
+  objectId: bigint = 0n;
   manifest: MultiscaleMeshManifest | undefined;
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk(key: string, objectId: Uint64) {
+  initializeManifestChunk(key: string, objectId: bigint) {
     super.initialize(key);
-    this.objectId.assign(objectId);
+    this.objectId = objectId;
   }
 
   freeSystemMemory() {
@@ -569,7 +565,7 @@ export interface MultiscaleMeshSource {
   // TypeScript supports mixins with abstract classes.
   downloadFragment(
     chunk: MultiscaleFragmentChunk,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<void>;
 }
 
@@ -587,7 +583,7 @@ export class MultiscaleMeshSource extends ChunkSource {
     fragmentSource.meshSource = this;
   }
 
-  getChunk(objectId: Uint64) {
+  getChunk(objectId: bigint) {
     const key = getObjectKey(objectId);
     let chunk = <MultiscaleManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
@@ -621,8 +617,8 @@ export class MultiscaleMeshSource extends ChunkSource {
 @registerSharedObject(MULTISCALE_FRAGMENT_SOURCE_RPC_ID)
 export class MultiscaleFragmentSource extends ChunkSource {
   meshSource: MultiscaleMeshSource | null = null;
-  download(chunk: MultiscaleFragmentChunk, abortSignal: AbortSignal) {
-    return this.meshSource!.downloadFragment(chunk, abortSignal);
+  download(chunk: MultiscaleFragmentChunk, signal: AbortSignal) {
+    return this.meshSource!.downloadFragment(chunk, signal);
   }
 }
 

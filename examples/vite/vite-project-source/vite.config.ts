@@ -11,6 +11,10 @@ export default defineConfig({
       "neuroglancer/datasource/precomputed:enabled",
     ],
   },
+  esbuild: {
+    // Needed to acommodate decorator usage in Neuroglancer TypeScript sources.
+    target: "es2022",
+  },
   worker: {
     // Required due to use of dynamic imports in Neuroglancer.
     format: "es",
@@ -23,8 +27,25 @@ export default defineConfig({
     fs: {
       // Allow serving files from parent neuroglancer project, due to the local
       // path reference.  This would not be needed for projects that depend on
-      // Neuroglancer normally.
+      // Neuroglancer normally, or when using pnpm rather than npm.
       allow: ["../../.."],
     },
+  },
+  optimizeDeps: {
+    entries: [
+      "index.html",
+      // In order for Vite to properly find all of Neuroglancer's transitive
+      // dependencies, instruct Vite to search for dependencies starting from
+      // all of the bundle entry points.
+      //
+      // These have to be specified explicitly because vite does not allow globs
+      // within `node_modules`.
+      "node_modules/neuroglancer/src/main.bundle.js",
+      "node_modules/neuroglancer/src/async_computation.bundle.js",
+      "node_modules/neuroglancer/src/chunk_worker.bundle.js",
+    ],
+    // Neuroglancer is incompatible with Vite's optimizeDeps step used for the
+    // dev server due to its use of `new URL` syntax (not supported by esbuild).
+    exclude: ["neuroglancer"],
   },
 });

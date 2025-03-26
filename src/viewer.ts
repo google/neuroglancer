@@ -17,25 +17,23 @@
 import "#src/viewer.css";
 import "#src/ui/layer_data_sources_tab.js";
 import "#src/noselect.css";
+import svg_camera from "ikonate/icons/camera.svg?raw";
 import svg_controls_alt from "ikonate/icons/controls-alt.svg?raw";
 import svg_layers from "ikonate/icons/layers.svg?raw";
 import svg_list from "ikonate/icons/list.svg?raw";
 import svg_settings from "ikonate/icons/settings.svg?raw";
 import { debounce } from "lodash-es";
-import type { FrameNumberCounter } from "#src/chunk_manager/frontend.js";
-import {
-  CapacitySpecification,
-  ChunkManager,
-  ChunkQueueManager,
-} from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
   TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
-import { defaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import { getDefaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
+import type { CredentialsManager } from "#src/credentials_provider/index.js";
+import { SharedCredentialsManager } from "#src/credentials_provider/shared.js";
+import { DataManagementContext } from "#src/data_management_context.js";
 import { InputEventBindings as DataPanelInputEventBindings } from "#src/data_panel_layout.js";
 import { getDefaultDataSourceProvider } from "#src/datasource/default_provider.js";
-import type { DataSourceProviderRegistry } from "#src/datasource/index.js";
+import type { DataSourceRegistry } from "#src/datasource/index.js";
 import { StateShare, stateShareEnabled } from "#src/datasource/state_share.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { TrackableWindowedViewport } from "#src/display_context.js";
@@ -43,6 +41,7 @@ import {
   HelpPanelState,
   InputEventBindingHelpDialog,
 } from "#src/help/input_event_bindings.js";
+import { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import {
   addNewLayer,
   LayerManager,
@@ -70,6 +69,7 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import { overlaysOpen } from "#src/overlay.js";
+import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
 import { StatusMessage } from "#src/status.js";
 import {
@@ -89,6 +89,7 @@ import {
 } from "#src/ui/layer_list_panel.js";
 import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
+import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
@@ -122,6 +123,7 @@ import {
   EventActionMap,
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
+import { ScreenshotManager } from "#src/util/screenshot_manager.js";
 import { NullarySignal } from "#src/util/signal.js";
 import {
   CompoundTrackable,
@@ -132,7 +134,6 @@ import type {
   VisibilityPrioritySpecification,
 } from "#src/viewer_state.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import type { GL } from "#src/webgl/context.js";
 import { AnnotationToolStatusWidget } from "#src/widget/annotation_tool_status.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeIcon } from "#src/widget/icon.js";
@@ -144,7 +145,6 @@ import {
   registerDimensionToolForViewer,
 } from "#src/widget/position_widget.js";
 import { TrackableScaleBarOptions } from "#src/widget/scale_bar.js";
-import { RPC } from "#src/worker_rpc.js";
 
 declare let NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any;
 
@@ -155,60 +155,6 @@ interface CreditLink {
 
 declare let NEUROGLANCER_CREDIT_LINK: CreditLink | CreditLink[] | undefined;
 
-export class DataManagementContext extends RefCounted {
-  worker: Worker;
-  chunkQueueManager: ChunkQueueManager;
-  chunkManager: ChunkManager;
-
-  get rpc(): RPC {
-    return this.chunkQueueManager.rpc!;
-  }
-
-  constructor(
-    public gl: GL,
-    public frameNumberCounter: FrameNumberCounter,
-  ) {
-    super();
-    // Note: For compatibility with multiple bundlers, a browser-compatible URL
-    // must be used with `new URL`, which means a Node.js subpath import like
-    // "#src/chunk_worker.bundle.js" cannot be used.
-    this.worker = new Worker(
-      /* webpackChunkName: "neuroglancer_chunk_worker" */
-      new URL("./chunk_worker.bundle.js", import.meta.url),
-      { type: "module" },
-    );
-    this.chunkQueueManager = this.registerDisposer(
-      new ChunkQueueManager(
-        new RPC(this.worker, /*waitUntilReady=*/ true),
-        this.gl,
-        this.frameNumberCounter,
-        {
-          gpuMemory: new CapacitySpecification({
-            defaultItemLimit: 1e6,
-            defaultSizeLimit: 1e9,
-          }),
-          systemMemory: new CapacitySpecification({
-            defaultItemLimit: 1e7,
-            defaultSizeLimit: 2e9,
-          }),
-          download: new CapacitySpecification({
-            defaultItemLimit: 100,
-            defaultSizeLimit: Number.POSITIVE_INFINITY,
-          }),
-          compute: new CapacitySpecification({
-            defaultItemLimit: 128,
-            defaultSizeLimit: 5e8,
-          }),
-        },
-      ),
-    );
-    this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
-    this.chunkManager = this.registerDisposer(
-      new ChunkManager(this.chunkQueueManager),
-    );
-  }
-}
-
 export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
 }
@@ -217,6 +163,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showHelpButton",
   "showSettingsButton",
   "showEditStateButton",
+  "showScreenshotButton",
   "showToolPaletteButton",
   "showLayerListPanelButton",
   "showSelectionPanelButton",
@@ -233,6 +180,7 @@ export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
 
 export const VIEWER_UI_CONFIG_OPTIONS = [
   ...VIEWER_UI_CONTROL_CONFIG_OPTIONS,
+  "showTopBar",
   "showUIControls",
   "showPanelBorders",
 ] as const;
@@ -268,7 +216,8 @@ export interface ViewerOptions
     VisibilityPrioritySpecification {
   dataContext: Owned<DataManagementContext>;
   element: HTMLElement;
-  dataSourceProvider: Borrowed<DataSourceProviderRegistry>;
+  credentialsManager: CredentialsManager;
+  dataSourceProvider: Borrowed<DataSourceRegistry>;
   uiConfiguration: ViewerUIConfiguration;
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
@@ -306,6 +255,10 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
+    this.add(
+      "hideCrossSectionBackground3D",
+      viewer.hideCrossSectionBackground3D,
+    );
     this.add(
       "gpuMemoryLimit",
       viewer.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit,
@@ -470,6 +423,7 @@ export class Viewer extends RefCounted implements ViewerState {
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
+  hideCrossSectionBackground3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(
@@ -497,6 +451,9 @@ export class Viewer extends RefCounted implements ViewerState {
 
   resetInitiated = new NullarySignal();
 
+  screenshotHandler: ScreenshotHandler;
+  screenshotManager: ScreenshotManager;
+
   get chunkManager() {
     return this.dataContext.chunkManager;
   }
@@ -514,15 +471,26 @@ export class Viewer extends RefCounted implements ViewerState {
   visibility: WatchableVisibilityPriority;
   inputEventBindings: InputEventBindings;
   element: HTMLElement;
-  dataSourceProvider: Borrowed<DataSourceProviderRegistry>;
+  dataSourceProvider: Borrowed<DataSourceRegistry>;
 
   uiConfiguration: ViewerUIConfiguration;
 
   private makeUiControlVisibilityState(key: keyof ViewerUIOptions) {
     const showUIControls = this.uiConfiguration.showUIControls;
+    const showTopBar = this.uiConfiguration.showTopBar;
     const option = this.uiConfiguration[key];
+    const isTopBarControl = (
+      VIEWER_TOP_ROW_CONFIG_OPTIONS as readonly string[]
+    ).includes(key as string);
     return this.registerDisposer(
-      makeDerivedWatchableValue((a, b) => a && b, showUIControls, option),
+      makeDerivedWatchableValue(
+        (a, b, c) => {
+          return a && (!isTopBarControl || b) && c;
+        },
+        showUIControls,
+        showTopBar,
+        option,
+      ),
     );
   }
 
@@ -547,7 +515,8 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
-
+    this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
+    this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {
       dataContext = new DataManagementContext(display.gl, display),
       visibility = new WatchableVisibilityPriority(
@@ -559,14 +528,29 @@ export class Viewer extends RefCounted implements ViewerState {
         perspectiveView: new EventActionMap(),
       },
       element = display.makeCanvasOverlayElement(),
-      dataSourceProvider = getDefaultDataSourceProvider({
-        credentialsManager: defaultCredentialsManager,
-      }),
+
       uiConfiguration = makeViewerUIConfiguration(),
+      dataSourceProvider = (() => {
+        const { credentialsManager = getDefaultCredentialsManager() } = options;
+        const sharedCredentialsManager = this.registerDisposer(
+          new SharedCredentialsManager(credentialsManager, dataContext.rpc),
+        );
+        const kvStoreContext = this.registerDisposer(
+          new SharedKvStoreContext(
+            dataContext.chunkManager,
+            sharedCredentialsManager,
+          ),
+        );
+        return getDefaultDataSourceProvider({
+          credentialsManager: sharedCredentialsManager,
+          kvStoreContext,
+        });
+      })(),
     } = options;
     this.visibility = visibility;
     this.inputEventBindings = inputEventBindings;
     this.element = element;
+
     this.dataSourceProvider = dataSourceProvider;
     this.uiConfiguration = uiConfiguration;
 
@@ -642,6 +626,7 @@ export class Viewer extends RefCounted implements ViewerState {
           this.navigationState.reset();
           this.perspectiveNavigationState.pose.orientation.reset();
           this.perspectiveNavigationState.zoomFactor.reset();
+          this.layout.restoreState("4panel-alt");
           this.resetInitiated.dispatch();
           if (
             !overlaysOpen &&
@@ -880,6 +865,20 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const button = makeIcon({ svg: svg_camera, title: "Screenshot" });
+      this.registerEventListener(button, "click", () => {
+        this.showScreenshotDialog();
+      });
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showScreenshotButton,
+          button,
+        ),
+      );
+      topRow.appendChild(button);
+    }
+
+    {
       const { helpPanelState } = this;
       const button = this.registerDisposer(
         new CheckboxIcon(helpPanelState.location.watchableVisible, {
@@ -931,6 +930,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     gridContainer.appendChild(topRow);
 
+    // Note: for new states, the actual default layout is 4panel-alt.
     this.layout = this.registerDisposer(
       new RootLayoutContainer(this, "4panel"),
     );
@@ -1166,8 +1166,18 @@ export class Viewer extends RefCounted implements ViewerState {
     this.globalToolBinder.activate(uppercase);
   }
 
+  deactivateTools() {
+    this.globalToolBinder.deactivate();
+  }
+
   editJsonState() {
+    this.deactivateTools();
     new StateEditorDialog(this);
+  }
+
+  showScreenshotDialog() {
+    this.deactivateTools();
+    new ScreenshotDialog(this.screenshotManager);
   }
 
   showStatistics(value: boolean | undefined = undefined) {

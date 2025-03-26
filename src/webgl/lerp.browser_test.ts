@@ -16,6 +16,7 @@
 
 import { expect, describe, it } from "vitest";
 import type { TypedArrayConstructor } from "#src/util/array.js";
+import { bigintAbs } from "#src/util/bigint.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
@@ -24,7 +25,6 @@ import {
   defaultDataTypeRange,
 } from "#src/util/lerp.js";
 import { getRandomValues } from "#src/util/random.js";
-import { Uint64 } from "#src/util/uint64.js";
 import {
   defineInvlerpShaderFunction,
   defineLerpShaderFunction,
@@ -39,15 +39,14 @@ function getRandomValue(dataType: DataType) {
     case DataType.UINT16:
     case DataType.INT16:
     case DataType.UINT32:
-    case DataType.INT32: {
+    case DataType.INT32:
+    case DataType.UINT64: {
       const buf = new (DATA_TYPE_ARRAY_CONSTRUCTOR[
         dataType
       ] as TypedArrayConstructor<ArrayBuffer>)(1);
       getRandomValues(buf);
       return buf[0];
     }
-    case DataType.UINT64:
-      return Uint64.random();
     case DataType.FLOAT32:
       return Math.random();
   }
@@ -55,13 +54,6 @@ function getRandomValue(dataType: DataType) {
 
 function getRandomInterval(dataType: DataType): DataTypeInterval {
   while (true) {
-    if (dataType === DataType.UINT64) {
-      const a = Uint64.random();
-      const b = Uint64.random();
-      const c = Uint64.compare(a, b);
-      if (c === 0) continue;
-      return [a, b];
-    }
     const a = getRandomValue(dataType) as number;
     const b = getRandomValue(dataType) as number;
     if (a === b) continue;
@@ -69,12 +61,10 @@ function getRandomInterval(dataType: DataType): DataTypeInterval {
   }
 }
 
-const u64 = Uint64.parseString;
-
 function testInvlerpRoundtrip(
   dataType: DataType,
   interval: DataTypeInterval,
-  values: (number | Uint64)[],
+  values: (number | bigint)[],
 ) {
   for (const x of values) {
     const t = computeInvlerp(interval, x);
@@ -86,15 +76,11 @@ function testInvlerpRoundtrip(
   }
 }
 
-function getAbsDifference(a: number | Uint64, b: number | Uint64): number {
+function getAbsDifference(a: number | bigint, b: number | bigint): number {
   if (typeof a === "number") {
     return Math.abs(a - (b as number));
   }
-  return Uint64.absDifference(
-    new Uint64(),
-    a as Uint64,
-    b as Uint64,
-  ).toNumber();
+  return Number(bigintAbs(a - (b as bigint)));
 }
 
 function getLerpErrorBound(interval: DataTypeInterval, dataType: DataType) {
@@ -159,7 +145,7 @@ function testRoundtripRandom(
     const interval = getRandomInterval(dataType);
     testInvlerpRoundtrip(dataType, interval, interval);
     {
-      const values: (number | Uint64)[] = [];
+      const values: (number | bigint)[] = [];
       for (let j = 0; j < numInvlerpSamples; ++j) {
         values.push(getRandomValue(dataType));
       }
@@ -207,50 +193,27 @@ describe("computeLerp", () => {
     expect(computeLerp([255, 253], DataType.UINT8, 1)).toEqual(253);
   });
   it("works for uint64", () => {
+    expect(computeLerp([0n, 255n], DataType.UINT64, 0)).toEqual(0n);
+    expect(computeLerp([255n, 0n], DataType.UINT64, 0)).toEqual(255n);
+    expect(computeInvlerp([255n, 0n], 0n)).toEqual(1);
+    expect(computeInvlerp([255n, 0n], 128n)).toBeCloseTo(0.498, 2);
+    expect(computeLerp([0n, 255n], DataType.UINT64, 0.999)).toEqual(255n);
+    expect(computeLerp([0n, 255n], DataType.UINT64, 1.001)).toEqual(255n);
+    expect(computeLerp([0n, 255n], DataType.UINT64, 0.99)).toEqual(252n);
+    expect(computeLerp([0n, 255n], DataType.UINT64, 0.99)).toEqual(252n);
     expect(
-      computeLerp([u64("0"), u64("255")], DataType.UINT64, 0).toString(),
-    ).toEqual("0");
+      computeLerp([0n, 18446744073709551615n], DataType.UINT64, 0.0),
+    ).toEqual(0n);
     expect(
-      computeLerp([u64("255"), u64("0")], DataType.UINT64, 0).toString(),
-    ).toEqual("255");
-    expect(computeInvlerp([u64("255"), u64("0")], u64("0"))).toEqual(1);
-    expect(computeInvlerp([u64("255"), u64("0")], u64("128"))).toBeCloseTo(
-      0.498,
-      2,
-    );
-    expect(
-      computeLerp([u64("0"), u64("255")], DataType.UINT64, 0.999).toString(),
-    ).toEqual("255");
-    expect(
-      computeLerp([u64("0"), u64("255")], DataType.UINT64, 1.001).toString(),
-    ).toEqual("255");
-    expect(
-      computeLerp([u64("0"), u64("255")], DataType.UINT64, 0.99).toString(),
-    ).toEqual("252");
-    expect(
-      computeLerp([u64("0"), u64("255")], DataType.UINT64, 0.99).toString(),
-    ).toEqual("252");
+      computeLerp([0n, 18446744073709551615n], DataType.UINT64, 1.0),
+    ).toEqual(18446744073709551615n);
     expect(
       computeLerp(
-        [u64("0"), u64("18446744073709551615")],
-        DataType.UINT64,
-        0.0,
-      ).toString(),
-    ).toEqual("0");
-    expect(
-      computeLerp(
-        [u64("0"), u64("18446744073709551615")],
-        DataType.UINT64,
-        1.0,
-      ).toString(),
-    ).toEqual("18446744073709551615");
-    expect(
-      computeLerp(
-        [u64("18446744073709551613"), u64("18446744073709551615")],
+        [18446744073709551613n, 18446744073709551615n],
         DataType.UINT64,
         0.5,
-      ).toString(),
-    ).toEqual("18446744073709551614");
+      ),
+    ).toEqual(18446744073709551614n);
   });
   it("round trips for uint8", () => {
     testRoundtripInterval(DataType.UINT8, [0, 255]);
@@ -307,8 +270,11 @@ outputValue = doInvlerp(lerpOutput);
               t: number,
             ) => {
               tester.execute({ inputValue: t });
-              const values = tester.values;
-              return { u: values.outputValue, x: values.lerpOutput };
+              const { outputValue, lerpOutput } = tester.values;
+              return {
+                u: outputValue,
+                x: lerpOutput,
+              };
             };
             testLerpRoundtrip(dataType, interval, 0, roundtrip);
             testLerpRoundtrip(dataType, interval, 1, roundtrip);
@@ -330,7 +296,7 @@ outputValue = doInvlerp(lerpOutput);
     dataType: DataType,
     examples: {
       interval: DataTypeInterval;
-      values?: (number | Uint64)[] | undefined;
+      values?: (number | bigint)[] | undefined;
     }[],
   ) {
     it(`invlerp->lerp round trips for ${DataType[
@@ -354,7 +320,7 @@ outputValue = doLerp(invlerpOutput);
           const { shader } = tester;
           const testExample = (example: {
             interval: DataTypeInterval;
-            values?: (number | Uint64)[] | undefined;
+            values?: (number | bigint)[] | undefined;
           }) => {
             enableLerpShaderFunction(
               shader,

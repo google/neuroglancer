@@ -66,8 +66,7 @@ import {
   vec3,
 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
-import type { Uint64 } from "#src/util/uint64.js";
-import { Buffer } from "#src/webgl/buffer.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -86,19 +85,19 @@ function copyMeshDataToGpu(
   gl: GL,
   chunk: FragmentChunk | MultiscaleFragmentChunk,
 ) {
-  chunk.vertexBuffer = Buffer.fromData(
+  chunk.vertexBuffer = GLBuffer.fromData(
     gl,
     chunk.meshData.vertexPositions,
     gl.ARRAY_BUFFER,
     gl.STATIC_DRAW,
   );
-  chunk.indexBuffer = Buffer.fromData(
+  chunk.indexBuffer = GLBuffer.fromData(
     gl,
     chunk.meshData.indices,
     gl.ELEMENT_ARRAY_BUFFER,
     gl.STATIC_DRAW,
   );
-  chunk.normalBuffer = Buffer.fromData(
+  chunk.normalBuffer = GLBuffer.fromData(
     gl,
     chunk.meshData.vertexNormals,
     gl.ARRAY_BUFFER,
@@ -587,7 +586,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
   }
 
   getObjectPosition(
-    id: Uint64,
+    id: bigint,
     nearestTo: Float32Array,
   ): Float32Array | undefined {
     const transform = this.displayState.transform.value;
@@ -680,9 +679,9 @@ export class ManifestChunk extends Chunk {
 
 export class FragmentChunk extends Chunk {
   declare source: FragmentSource;
-  vertexBuffer: Buffer;
-  indexBuffer: Buffer;
-  normalBuffer: Buffer;
+  vertexBuffer: GLBuffer;
+  indexBuffer: GLBuffer;
+  normalBuffer: GLBuffer;
   meshData: EncodedMeshData;
 
   constructor(source: FragmentSource, x: any) {
@@ -1061,7 +1060,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     return hasAllChunks;
   }
 
-  getObjectPosition(id: Uint64): Float32Array | undefined {
+  getObjectPosition(id: bigint): Float32Array | undefined {
     const transform = this.displayState.transform.value;
     if (transform.error !== undefined) return undefined;
     const chunk = this.source.chunks.get(getObjectKey(id));
@@ -1099,9 +1098,9 @@ export class MultiscaleManifestChunk extends Chunk {
 export class MultiscaleFragmentChunk extends Chunk {
   meshData: EncodedMeshData & { subChunkOffsets: Uint32Array };
   declare source: MultiscaleFragmentSource;
-  vertexBuffer: Buffer;
-  indexBuffer: Buffer;
-  normalBuffer: Buffer;
+  vertexBuffer: GLBuffer;
+  indexBuffer: GLBuffer;
+  normalBuffer: GLBuffer;
 
   constructor(source: MultiscaleFragmentSource, x: any) {
     super(source);

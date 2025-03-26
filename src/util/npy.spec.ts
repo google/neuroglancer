@@ -16,7 +16,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, test, expect } from "vitest";
 import { DataType } from "#src/util/data_type.js";
 import { parseNpy } from "#src/util/npy.js";
 
@@ -26,7 +26,7 @@ interface ExampleSpec {
   data: number[];
 }
 
-async function checkNpy(spec: ExampleSpec, encoded: Uint8Array) {
+async function checkNpy(spec: ExampleSpec, encoded: Uint8Array<ArrayBuffer>) {
   const decoded = parseNpy(encoded);
   expect(decoded.shape).toEqual(spec.shape);
   expect(DataType[decoded.dataType].toLowerCase()).toBe(spec.dataType);
@@ -42,20 +42,26 @@ describe("parseNpy", () => {
     })),
   ]) {
     for (const npyName of npys) {
-      it(npyName, async () => {
+      test(npyName, async () => {
         const testDataDir = path.resolve(
           import.meta.dirname,
           "..",
           "..",
           "testdata",
+          "codec",
+          "npy",
         );
         const example = JSON.parse(
           await fs.readFile(`${testDataDir}/npy_test.${json}.json`, {
             encoding: "utf-8",
           }),
+          (key, value) =>
+            Number(key).toString() === key && typeof value === "string"
+              ? BigInt(value)
+              : value,
         ) as ExampleSpec;
         const npy = await fs.readFile(`${testDataDir}/npy_test.${npyName}.npy`);
-        checkNpy(example, new Uint8Array(npy));
+        await checkNpy(example, new Uint8Array(npy));
       });
     }
   }

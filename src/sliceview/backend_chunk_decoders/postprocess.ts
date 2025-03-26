@@ -28,8 +28,8 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 
 export async function postProcessRawData(
   chunk: VolumeChunk,
-  abortSignal: AbortSignal,
-  data: ArrayBufferView,
+  signal: AbortSignal,
+  data: ArrayBufferView<ArrayBuffer>,
 ) {
   const { spec } = chunk.source!;
   if (spec.compressedSegmentationBlockSize !== undefined) {
@@ -45,9 +45,9 @@ export async function postProcessRawData(
       case DataType.UINT32:
         chunk.data = await requestAsyncComputation(
           encodeCompressedSegmentationUint32,
-          abortSignal,
+          signal,
           [data.buffer],
-          data as Uint32Array,
+          data as Uint32Array<ArrayBuffer>,
           shape,
           spec.compressedSegmentationBlockSize,
         );
@@ -55,9 +55,9 @@ export async function postProcessRawData(
       case DataType.UINT64:
         chunk.data = await requestAsyncComputation(
           encodeCompressedSegmentationUint64,
-          abortSignal,
+          signal,
           [data.buffer],
-          data as Uint32Array,
+          data as Uint32Array<ArrayBuffer>,
           shape,
           spec.compressedSegmentationBlockSize,
         );

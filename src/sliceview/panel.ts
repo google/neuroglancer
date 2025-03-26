@@ -66,6 +66,7 @@ export interface SliceViewerState extends RenderedDataViewerState {
   wireFrame: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
+  hideCrossSectionBackground3D: TrackableBoolean;
 }
 
 export enum OffscreenTextures {
@@ -101,11 +102,10 @@ const tempVec4 = vec4.create();
 
 export class SliceViewPanel extends RenderedDataPanel {
   declare viewer: SliceViewerState;
+  private sliceViewRenderHelper;
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
-  private sliceViewRenderHelper = this.registerDisposer(
-    SliceViewRenderHelper.get(this.gl, sliceViewPanelEmitColor),
-  );
+
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private pickIDs = new PickIDManager();
 
@@ -167,6 +167,16 @@ export class SliceViewPanel extends RenderedDataPanel {
     viewer: SliceViewerState,
   ) {
     super(context, element, viewer);
+
+    this.sliceViewRenderHelper = this.registerDisposer(
+      SliceViewRenderHelper.get(
+        this.gl,
+        sliceViewPanelEmitColor,
+        this.viewer,
+        false /*sliceViewPanel*/,
+      ),
+    );
+
     viewer.wireFrame.changed.add(() => this.scheduleRedraw());
     registerActionListener(
       element,
@@ -435,7 +445,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   ensureBoundsUpdated() {
-    super.ensureBoundsUpdated();
+    super.ensureBoundsUpdated(true /* canScaleForScreenshot */);
     this.sliceView.projectionParameters.setViewport(this.renderViewport);
   }
 

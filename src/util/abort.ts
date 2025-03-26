@@ -44,10 +44,10 @@ export class SharedAbortController {
     return this.controller.signal;
   }
 
-  addConsumer(abortSignal: AbortSignal | undefined): void {
+  addConsumer(signal: AbortSignal | undefined): void {
     if (this.controller.signal.aborted) return undefined;
-    if (abortSignal !== undefined) {
-      if (abortSignal.aborted) return;
+    if (signal !== undefined) {
+      if (signal.aborted) return;
       const self = this;
       function wrappedCallback(this: AbortSignal) {
         self.consumers.delete(wrappedCallback);
@@ -56,14 +56,14 @@ export class SharedAbortController {
           self[Symbol.dispose]();
         }
       }
-      abortSignal.addEventListener("abort", wrappedCallback, { once: true });
+      signal.addEventListener("abort", wrappedCallback, { once: true });
     }
     ++this.retainCount;
   }
 
   [Symbol.dispose](): void {
-    for (const [wrappedCallback, abortSignal] of this.consumers) {
-      abortSignal.removeEventListener("abort", wrappedCallback);
+    for (const [wrappedCallback, signal] of this.consumers) {
+      signal.removeEventListener("abort", wrappedCallback);
     }
     this.consumers.clear();
     this.retainCount = 0;
@@ -78,7 +78,7 @@ export class SharedAbortController {
 }
 
 export function promiseWithResolversAndAbortCallback<T>(
-  abortSignal: AbortSignal,
+  signal: AbortSignal,
   abortCallback: (reason: any) => void,
 ): {
   promise: Promise<T>;
@@ -86,7 +86,7 @@ export function promiseWithResolversAndAbortCallback<T>(
   reject: (reason: any) => void;
 } {
   const { promise, resolve, reject } = Promise.withResolvers<T>();
-  const cleanup = scopedAbortCallback(abortSignal, abortCallback);
+  const cleanup = scopedAbortCallback(signal, abortCallback);
   return {
     promise,
     resolve: (value: T) => {
@@ -102,13 +102,13 @@ export function promiseWithResolversAndAbortCallback<T>(
 
 export function raceWithAbort<T>(
   promise: Promise<T>,
-  abortSignal: AbortSignal | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<T> {
-  if (abortSignal === undefined) return promise;
-  if (abortSignal.aborted) return Promise.reject(abortSignal.reason);
+  if (signal === undefined) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason);
 
   return new Promise((resolve, reject) => {
-    const cleanup = scopedAbortCallback(abortSignal, (reason) => {
+    const cleanup = scopedAbortCallback(signal, (reason) => {
       reject(reason);
     });
     promise.then(
@@ -124,12 +124,12 @@ export function raceWithAbort<T>(
   });
 }
 
-export function abortPromise(abortSignal: AbortSignal) {
+export function abortPromise(signal: AbortSignal) {
   return new Promise((_resolve, reject) => {
-    abortSignal.addEventListener(
+    signal.addEventListener(
       "abort",
       () => {
-        reject(abortSignal.reason);
+        reject(signal.reason);
       },
       { once: true },
     );

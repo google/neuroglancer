@@ -16,7 +16,6 @@
 
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { GL } from "#src/webgl/context.js";
 import {
   FramebufferConfiguration,
@@ -39,7 +38,7 @@ export interface FragmentShaderTestOutputs {
 
 export type ShaderIoJavascriptType<T extends ShaderIoType> = T extends DataType
   ? T extends DataType.UINT64
-    ? Uint64
+    ? bigint
     : number
   : T extends "bool"
     ? boolean
@@ -254,13 +253,12 @@ void main() {
             gl.uniform1f(shader.uniform(key), value);
             break;
           case DataType.UINT64: {
-            let v: Uint64;
-            if (typeof value === "number") {
-              v = Uint64.parseString(value.toString());
-            } else {
-              v = value;
-            }
-            gl.uniform2ui(shader.uniform(`ngin_${key}`), v.low, v.high);
+            const v = BigInt(value);
+            gl.uniform2ui(
+              shader.uniform(`ngin_${key}`),
+              Number(v & 0xffffffffn),
+              Number(v >> 32n),
+            );
             break;
           }
         }
@@ -284,7 +282,7 @@ void main() {
     return values;
   }
 
-  read(key: keyof Outputs): number | Uint64 | boolean {
+  read(key: keyof Outputs): number | bigint | boolean {
     const t = this.outputs[key];
     const index = Object.keys(this.outputs).indexOf(key as string);
     const { offscreenFramebuffer } = this;
@@ -336,7 +334,7 @@ void main() {
             WebGL2RenderingContext.UNSIGNED_INT,
             buf,
           );
-          return new Uint64(buf[0], buf[1]);
+          return BigInt(buf[0]) | (BigInt(buf[1]) << 32n);
         }
         default: {
           const buf = new Float32Array(4);

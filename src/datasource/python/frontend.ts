@@ -65,7 +65,6 @@ import {
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { transposeNestedArrays } from "#src/util/array.js";
-import { Borrowed, Owned } from "#src/util/disposable.js";
 import { fetchOk } from "#src/util/http_request.js";
 import {
   parseFixedLengthArray,
@@ -94,20 +93,18 @@ function WithPythonDataSource<
   >,
 >(Base: TBase) {
   type Options = InstanceType<TBase>["OPTIONS"] & {
-    dataSource: Borrowed<PythonDataSource>;
+    dataSource: PythonDataSource;
     generation: number;
   };
   class C extends Base {
     declare OPTIONS: Options;
-    dataSource: Owned<PythonDataSource>;
+    dataSource: PythonDataSource;
     generation: number;
     declare parameters: PythonSourceParameters;
     constructor(...args: any[]) {
       super(...args);
       const options: Options = args[1];
-      const dataSource = (this.dataSource = this.registerDisposer(
-        options.dataSource.addRef(),
-      ));
+      const dataSource = (this.dataSource = options.dataSource);
       this.generation = options.generation;
       const key = options.parameters.key;
       dataSource.registerSource(key, this);
@@ -238,7 +235,7 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
 
   // TODO(jbms): Properly handle reference counting of `dataSource`.
   constructor(
-    public dataSource: Borrowed<PythonDataSource>,
+    public dataSource: PythonDataSource,
     chunkManager: ChunkManager,
     public key: string,
     public response: any,
@@ -480,17 +477,19 @@ function getVolumeDataSource(
   options: GetDataSourceOptions,
   key: string,
 ) {
-  return options.chunkManager.memoize.getUncounted(
+  return options.registry.chunkManager.memoize.getAsync(
     { type: "python:VolumeDataSource", key },
-    async () => {
+    options,
+    async (progressOptions) => {
       const response = await (
         await fetchOk(
           new URL(`../../neuroglancer/info/${key}`, window.location.href).href,
+          progressOptions,
         )
       ).json();
       const volume = new PythonMultiscaleVolumeChunkSource(
         dataSourceProvider,
-        options.chunkManager,
+        options.registry.chunkManager,
         key,
         response,
       );
@@ -527,14 +526,17 @@ function getVolumeDataSource(
           default: true,
           subsourceToModelSubspaceTransform,
           subsource: {
-            mesh: options.chunkManager.getChunkSource(PythonMeshSource, {
-              dataSource: dataSourceProvider,
-              generation: volume.generation,
-              parameters: {
-                baseUrl: window.location.href,
-                key: key,
+            mesh: options.registry.chunkManager.getChunkSource(
+              PythonMeshSource,
+              {
+                dataSource: dataSourceProvider,
+                generation: volume.generation,
+                parameters: {
+                  baseUrl: window.location.href,
+                  key: key,
+                },
               },
-            }),
+            ),
           },
         });
       }
@@ -548,15 +550,17 @@ function getSkeletonDataSource(
   options: GetDataSourceOptions,
   key: string,
 ) {
-  return options.chunkManager.memoize.getUncounted(
+  return options.registry.chunkManager.memoize.getAsync(
     { type: "python:SkeletonDataSource", key },
-    async () => {
+    options,
+    async (progressOptions) => {
       const response = await (
         await fetchOk(
           new URL(
             `../../neuroglancer/skeletoninfo/${key}`,
             window.location.href,
           ).href,
+          progressOptions,
         )
       ).json();
       const { baseModelSpace, subsourceToModelTransform } =
@@ -567,7 +571,7 @@ function getSkeletonDataSource(
         (x) => verifyObjectAsMap(x, parseVertexAttributeInfo),
       );
       const generation = verifyObjectProperty(response, "generation", (x) => x);
-      const skeletonSource = options.chunkManager.getChunkSource(
+      const skeletonSource = options.registry.chunkManager.getChunkSource(
         PythonSkeletonSource,
         {
           dataSource: dataSourceProvider,
@@ -597,9 +601,13 @@ function getSkeletonDataSource(
   );
 }
 
-export class PythonDataSource extends DataSourceProvider {
+export class PythonDataSource implements DataSourceProvider {
   private sources = new Map<string, Set<PythonChunkSource>>();
   sourceGenerations = new Map<string, number>();
+
+  get scheme() {
+    return "python";
+  }
 
   registerSource(key: string, source: PythonChunkSource) {
     let existingSet = this.sources.get(key);

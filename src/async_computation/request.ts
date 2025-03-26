@@ -74,7 +74,7 @@ function launchWorker() {
     tasks.delete(id);
     if (callbacks === undefined) return;
     if (error !== undefined) {
-      callbacks.reject(new Error(error));
+      callbacks.reject(error);
     } else {
       callbacks.resolve(value);
     }
@@ -85,14 +85,14 @@ export function requestAsyncComputation<
   Signature extends (...args: any) => any,
 >(
   request: AsyncComputationSpec<Signature>,
-  abortSignal: AbortSignal | undefined,
+  signal: AbortSignal | undefined,
   transfer: Transferable[] | undefined,
   ...args: Parameters<Signature>
 ): Promise<ReturnType<Signature>> {
   const id = nextTaskId++;
   const msg = { t: request.id, id, args: args };
 
-  abortSignal?.throwIfAborted();
+  signal?.throwIfAborted();
 
   const promise = new Promise<ReturnType<Signature>>((resolve, reject) => {
     tasks.set(id, { resolve, reject });
@@ -102,16 +102,16 @@ export function requestAsyncComputation<
     freeWorkers.pop()!.postMessage(msg, transfer as Transferable[]);
   } else {
     let cleanup: (() => void) | undefined;
-    if (abortSignal !== undefined) {
+    if (signal !== undefined) {
       function abortHandler() {
         pendingTasks.delete(id);
         const task = tasks.get(id)!;
         tasks.delete(id);
-        task.reject(abortSignal!.reason);
+        task.reject(signal!.reason);
       }
-      abortSignal.addEventListener("abort", abortHandler, { once: true });
+      signal.addEventListener("abort", abortHandler, { once: true });
       cleanup = () => {
-        abortSignal.removeEventListener("abort", abortHandler);
+        signal.removeEventListener("abort", abortHandler);
       };
     }
     pendingTasks.set(id, { msg, transfer, cleanup });

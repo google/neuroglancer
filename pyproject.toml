@@ -1,53 +1,141 @@
-[build-system]
-requires = [
-    "setuptools>=64",
-    "wheel",
-    "setuptools_scm",
-    "numpy>=2",
+[project]
+name = "neuroglancer"
+requires-python = ">= 3.10"
+dynamic = ["version"]
+description = "Python integration for neuroglancer, a WebGL-based viewer for volumetric data"
+readme = "README.md"
+authors = [
+  { name = "Jeremy Maitin-Shepard", email = "jbms@google.com" },
+]
+license = { file = "LICENSE" }
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+  "atomicwrites>=1.4.1",
+  "google-apitools>=0.5.32",
+  "google-auth>=2.38.0",
+  "numpy>=1.11.0",
+  "pillow>=3.2.0",
+  "requests>=2.32.3",
+  "tornado>=6.4.2",
 ]
 
-[tool.ruff]
-target-version = "py39"
+[project.optional-dependencies]
+webdriver = [
+  "selenium>=4",
+]
+
+[project.urls]
+Repository = "https://github.com/google/neuroglancer"
+Issues = "https://github.com/google/neuroglancer/issues"
+Documentation = "https://neuroglancer-docs.web.app"
+
+[build-system]
+requires = [
+  "setuptools>=64",
+  "wheel",
+  "setuptools_scm>=8.1.0",
+  "numpy>=2",
+  "nodejs-wheel>=22",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+# It would be nice to include the commit hash in the version, but that
+# can't be done in a PEP 440-compatible way.
+version_scheme = "no-guess-dev"
+# Test PyPI does not support local versions.
+local_scheme = "no-local-version"
+fallback_version = "0.0.0"
+parentdir_prefix_version = "neuroglancer-"
 
 [tool.ruff.lint]
 select = [
-    "E", # pycodestyle
-    "W", # pycodestyle
-    "F", # pyflakes
-    "I", # isort
-    "UP", # pyupgrade
-    "NPY", # numpy
+  "E", # pycodestyle
+  "W", # pycodestyle
+  "F", # pyflakes
+  "I", # isort
+  "UP", # pyupgrade
+  "NPY", # numpy
 ]
 ignore = [
-    "E501",  # Line length regulated by ruff format
+  "E501", # Line length regulated by ruff format
 ]
 
 [tool.mypy]
 show_error_codes = true
 pretty = true
 exclude = [
-    "noxfile\\.py",
-    "^src/",
-    "/guide_video_recorder/",
-    "^docs/",
-    "^build/",
+  "noxfile\\.py",
+  "^src/",
+  "/guide_video_recorder/",
+  "^docs/",
+  "^build/",
+  "^testdata/",
 ]
 
 [[tool.mypy.overrides]]
 module = [
-    "apitools",
-    "apitools.*",
-    "numcodecs",
-    "google",
-    "google.*",
-    "zarr",
-    "zarrita",
-    "tensorstore",
-    "dask",
-    "dask.*",
-    "scipy",
-    "scipy.*",
-    "cloudvolume",
-    "trio",
+  "apitools",
+  "apitools.*",
+  "numcodecs",
+  "google",
+  "google.*",
+  "zarr",
+  "zarrita",
+  "tensorstore",
+  "dask",
+  "dask.*",
+  "scipy",
+  "scipy.*",
+  "cloudvolume",
+  "trio",
 ]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+  "requests>=2.32.3",
+  "selenium>=4",
+  "tensorstore>=0.1.71",
+]
+ruff = [
+  "ruff==0.3.2",
+]
+mypy = [
+  "mypy>=1.14.1",
+  "pandas-stubs>=2.2.3.241126",
+  "types-atomicwrites>=1.4.5.1",
+  "types-pillow>=10.2.0.20240822",
+  "types-requests>=2.32.0.20241016",
+  "types-setuptools>=75.8.0.20250110",
+]
+test = [
+  "pytest>=6.1.2",
+  "pytest-rerunfailures>=9.1.1",
+  "pytest-timeout>=1.4.2",
+  "tensorstore>=0.1.71",
+]
+docs = [
+  "jsonschema>=4.23.0",
+  "numpy>=2.2.2",
+  "pyyaml>=6.0.2",
+  "sphinx>=7.4.0,<8.2",
+  "sphinx-immaterial[black,json]>=0.12.0",
+  "tensorstore>=0.1.71",
+]
+cibuildwheel = [
+  "cibuildwheel>=2.22.0",
+]
+
+[tool.uv]
+required-version = ">=0.6.2"
+default-groups = ["dev", "ruff", "mypy", "test", "docs"]
+
+[tool.pytest.ini_options]
+testpaths = [
+  "python/tests",
+]

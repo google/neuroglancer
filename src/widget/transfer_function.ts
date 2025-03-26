@@ -48,10 +48,9 @@ import {
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import { Buffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
+import { GLBuffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
@@ -155,7 +154,7 @@ interface CanvasPosition {
  */
 export class ControlPoint {
   constructor(
-    public inputValue: number | Uint64,
+    public inputValue: number | bigint,
     public outputColor: vec4 = kZeroVec4,
   ) {}
 
@@ -258,7 +257,7 @@ export class SortedControlPoints {
     }
     this.controlPoints[index].outputColor = outputColor;
   }
-  findNearestControlPointIndex(inputValue: number | Uint64) {
+  findNearestControlPointIndex(inputValue: number | bigint) {
     const controlPoint = new ControlPoint(inputValue);
     const valueToFind = controlPoint.normalizedInput(this.range);
     return this.findNearestControlPointIndexByNormalizedInput(valueToFind);
@@ -685,12 +684,12 @@ function getTextureVertexBufferArray() {
  */
 class TransferFunctionPanel extends IndirectRenderedPanel {
   texture: DirectLookupTableTexture;
-  private textureVertexBuffer: Buffer;
-  private controlPointsVertexBuffer: Buffer;
+  private textureVertexBuffer: GLBuffer;
+  private controlPointsVertexBuffer: GLBuffer;
   private controlPointsPositionArray = new Float32Array();
-  private controlPointsColorBuffer: Buffer;
+  private controlPointsColorBuffer: GLBuffer;
   private controlPointsColorArray = new Float32Array();
-  private linePositionBuffer: Buffer;
+  private linePositionBuffer: GLBuffer;
   private linePositionArray = new Float32Array();
   get drawOrder() {
     return 1;
@@ -740,20 +739,20 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
       ),
     ).value;
     this.controlPointsVertexBuffer = this.registerDisposer(
-      new Buffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
     this.controlPointsColorBuffer = this.registerDisposer(
-      new Buffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
     this.linePositionBuffer = this.registerDisposer(
-      new Buffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
+      new GLBuffer(gl, WebGL2RenderingContext.ARRAY_BUFFER),
     );
   }
 
   updateTransferFunctionPointsAndLines() {
     // Normalize position to [-1, 1] for shader (x axis)
     const window = this.parent.trackable.value.window;
-    function normalizeInput(input: number | Uint64) {
+    function normalizeInput(input: number | bigint) {
       const lerpedInput = computeInvlerp(window, input);
       return lerpedInput * 2 - 1;
     }
@@ -1538,12 +1537,7 @@ class TransferFunctionController extends RefCounted {
     function calculateControlPointGrabDistance() {
       let windowSize = 0.0;
       if (dataType == DataType.UINT64) {
-        const tempUint = new Uint64();
-        windowSize = Uint64.subtract(
-          tempUint,
-          window[1] as Uint64,
-          window[0] as Uint64,
-        ).toNumber();
+        windowSize = Number((window[1] as bigint) - (window[0] as bigint));
       } else if (dataType == DataType.FLOAT32) {
         // Floating point data can have very small windows with many points
         windowSize = 1.0 / CONTROL_POINT_X_GRAB_DISTANCE;
@@ -1608,9 +1602,7 @@ class TransferFunctionController extends RefCounted {
  * Widget for the transfer function. Creates the UI elements required for the transfer function.
  */
 class TransferFunctionWidget extends Tab {
-  private transferFunctionPanel = this.registerDisposer(
-    new TransferFunctionPanel(this),
-  );
+  private transferFunctionPanel;
   autoRangeFinder: AutoRangeFinder;
   window = this.createWindowBoundInputs();
 
@@ -1636,6 +1628,9 @@ class TransferFunctionWidget extends Tab {
     public histogramIndex: number,
   ) {
     super(visibility);
+    this.transferFunctionPanel = this.registerDisposer(
+      new TransferFunctionPanel(this),
+    );
     this.registerDisposer(
       histogramSpecifications.visibility.add(this.visibility),
     );
@@ -1655,11 +1650,7 @@ class TransferFunctionWidget extends Tab {
     // If no points and no window, set the default control points for the transfer function
     const currentWindow = this.trackable.value.window;
     const defaultWindow = defaultDataTypeRange[this.dataType];
-    const windowUnset = dataTypeIntervalEqual(
-      this.dataType,
-      currentWindow,
-      defaultWindow,
-    );
+    const windowUnset = dataTypeIntervalEqual(currentWindow, defaultWindow);
     if (this.trackable.value.sortedControlPoints.length === 0 && windowUnset) {
       this.autoRangeFinder.autoComputeRange(0, 1);
     }

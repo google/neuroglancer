@@ -30,23 +30,24 @@ import {
   annotationTypeHandlers,
   annotationTypes,
 } from "#src/annotation/index.js";
-import type { Chunk, ChunkManager } from "#src/chunk_manager/backend.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { GenericSharedDataSource } from "#src/chunk_manager/generic_file_source.js";
-import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
-import type { ShardingParameters } from "#src/datasource/precomputed/base.js";
 import {
   AnnotationSourceParameters,
   AnnotationSpatialIndexSourceParameters,
-  DataEncoding,
-  IndexedSegmentPropertySourceParameters,
   MeshSourceParameters,
   MultiscaleMeshSourceParameters,
-  ShardingHashFunction,
   SkeletonSourceParameters,
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
 } from "#src/datasource/precomputed/base.js";
+import type {
+  ShardedKvStore,
+  ShardInfo,
+} from "#src/datasource/precomputed/sharded.js";
+import { getShardedKvStoreIfApplicable } from "#src/datasource/precomputed/sharded.js";
+import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
+import type { KvStoreWithPath, ReadResponse } from "#src/kvstore/index.js";
+import { readKvStore } from "#src/kvstore/index.js";
 import type {
   FragmentChunk,
   ManifestChunk,
@@ -64,7 +65,6 @@ import {
   MultiscaleMeshSource,
 } from "#src/mesh/backend.js";
 import { decodeDracoPartitioned } from "#src/mesh/draco/index.js";
-import { IndexedSegmentPropertySourceBackend } from "#src/segmentation_display_state/backend.js";
 import type { SkeletonChunk } from "#src/skeleton/backend.js";
 import { SkeletonSource } from "#src/skeleton/backend.js";
 import { decodeSkeletonChunk } from "#src/skeleton/decode_precomputed_skeleton.js";
@@ -77,21 +77,8 @@ import { decodePngChunk } from "#src/sliceview/backend_chunk_decoders/png.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import { fetchSpecialHttpByteRange } from "#src/util/byte_range_http_requests.js";
-import type { Borrowed } from "#src/util/disposable.js";
 import { convertEndian32, Endianness } from "#src/util/endian.js";
 import { vec3 } from "#src/util/geom.js";
-import { decodeGzip } from "#src/util/gzip.js";
-import { murmurHash3_x86_128Hash64Bits } from "#src/util/hash.js";
-import { isNotFoundError } from "#src/util/http_request.js";
-import { stableStringify } from "#src/util/json.js";
-import { getObjectId } from "#src/util/object_id.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import { fetchSpecialOk } from "#src/util/special_protocol_request.js";
-import { Uint64 } from "#src/util/uint64.js";
 import {
   encodeZIndexCompressed,
   encodeZIndexCompressed3d,
@@ -101,251 +88,6 @@ import { registerSharedObject } from "#src/worker_rpc.js";
 
 // Set to true to validate the multiscale index.
 const DEBUG_MULTISCALE_INDEX = false;
-
-const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> =
-  new Map([
-    [
-      ShardingHashFunction.MURMURHASH3_X86_128,
-      (out) => {
-        murmurHash3_x86_128Hash64Bits(out, 0, out.low, out.high);
-      },
-    ],
-    [ShardingHashFunction.IDENTITY, (_out) => {}],
-  ]);
-
-interface ShardInfo {
-  shardUrl: string;
-  offset: Uint64;
-}
-
-interface DecodedMinishardIndex {
-  data: Uint32Array;
-  shardUrl: string;
-}
-
-interface MinishardIndexSource
-  extends GenericSharedDataSource<Uint64, DecodedMinishardIndex | undefined> {
-  sharding: ShardingParameters;
-  credentialsProvider: SpecialProtocolCredentialsProvider;
-}
-
-function getMinishardIndexDataSource(
-  chunkManager: Borrowed<ChunkManager>,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
-  parameters: { url: string; sharding: ShardingParameters | undefined },
-): MinishardIndexSource | undefined {
-  const { url, sharding } = parameters;
-  if (sharding === undefined) return undefined;
-  const source = GenericSharedDataSource.get<
-    Uint64,
-    DecodedMinishardIndex | undefined
-  >(
-    chunkManager,
-    stableStringify({
-      type: "precomputed:shardedDataSource",
-      url,
-      sharding,
-      credentialsProvider: getObjectId(credentialsProvider),
-    }),
-    {
-      download: async (shardAndMinishard: Uint64, abortSignal: AbortSignal) => {
-        const minishard = Uint64.lowMask(new Uint64(), sharding.minishardBits);
-        Uint64.and(minishard, minishard, shardAndMinishard);
-        const shard = Uint64.lowMask(new Uint64(), sharding.shardBits);
-        const temp = new Uint64();
-        Uint64.rshift(temp, shardAndMinishard, sharding.minishardBits);
-        Uint64.and(shard, shard, temp);
-        const shardUrl = `${url}/${shard
-          .toString(16)
-          .padStart(Math.ceil(sharding.shardBits / 4), "0")}.shard`;
-        // Retrive minishard index start/end offsets.
-        const shardIndexSize = new Uint64(16);
-        Uint64.lshift(shardIndexSize, shardIndexSize, sharding.minishardBits);
-
-        // Multiply minishard by 16.
-        const shardIndexStart = Uint64.lshift(new Uint64(), minishard, 4);
-        const shardIndexEnd = Uint64.addUint32(
-          new Uint64(),
-          shardIndexStart,
-          16,
-        );
-        let shardIndexResponse: ArrayBuffer;
-        try {
-          shardIndexResponse = await fetchSpecialHttpByteRange(
-            credentialsProvider,
-            shardUrl,
-            shardIndexStart,
-            shardIndexEnd,
-            abortSignal,
-          );
-        } catch (e) {
-          if (isNotFoundError(e)) return { data: undefined, size: 0 };
-          throw e;
-        }
-        if (shardIndexResponse.byteLength !== 16) {
-          throw new Error("Failed to retrieve minishard offset");
-        }
-        const shardIndexDv = new DataView(shardIndexResponse);
-        const minishardStartOffset = new Uint64(
-          shardIndexDv.getUint32(0, /*littleEndian=*/ true),
-          shardIndexDv.getUint32(4, /*littleEndian=*/ true),
-        );
-        const minishardEndOffset = new Uint64(
-          shardIndexDv.getUint32(8, /*littleEndian=*/ true),
-          shardIndexDv.getUint32(12, /*littleEndian=*/ true),
-        );
-        if (Uint64.equal(minishardStartOffset, minishardEndOffset)) {
-          return { data: undefined, size: 0 };
-        }
-        // The start/end offsets in the shard index are relative to the end of the shard
-        // index.
-        Uint64.add(minishardStartOffset, minishardStartOffset, shardIndexSize);
-        Uint64.add(minishardEndOffset, minishardEndOffset, shardIndexSize);
-
-        let minishardIndexResponse = await fetchSpecialHttpByteRange(
-          credentialsProvider,
-          shardUrl,
-          minishardStartOffset,
-          minishardEndOffset,
-          abortSignal,
-        );
-        if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
-          minishardIndexResponse = await decodeGzip(
-            minishardIndexResponse,
-            "gzip",
-          );
-        }
-        if (minishardIndexResponse.byteLength % 24 !== 0) {
-          throw new Error(
-            `Invalid minishard index length: ${minishardIndexResponse.byteLength}`,
-          );
-        }
-        const minishardIndex = new Uint32Array(minishardIndexResponse);
-        convertEndian32(minishardIndex, Endianness.LITTLE);
-
-        const minishardIndexSize = minishardIndex.byteLength / 24;
-        let prevEntryKeyLow = 0;
-        let prevEntryKeyHigh = 0;
-        // Offsets in the minishard index are relative to the end of the shard index.
-        let prevStartLow = shardIndexSize.low;
-        let prevStartHigh = shardIndexSize.high;
-        for (let i = 0; i < minishardIndexSize; ++i) {
-          let entryKeyLow = prevEntryKeyLow + minishardIndex[i * 2];
-          let entryKeyHigh = prevEntryKeyHigh + minishardIndex[i * 2 + 1];
-          if (entryKeyLow >= 4294967296) {
-            entryKeyLow -= 4294967296;
-            entryKeyHigh += 1;
-          }
-          prevEntryKeyLow = minishardIndex[i * 2] = entryKeyLow;
-          prevEntryKeyHigh = minishardIndex[i * 2 + 1] = entryKeyHigh;
-          let startLow =
-            prevStartLow + minishardIndex[(minishardIndexSize + i) * 2];
-          let startHigh =
-            prevStartHigh + minishardIndex[(minishardIndexSize + i) * 2 + 1];
-          if (startLow >= 4294967296) {
-            startLow -= 4294967296;
-            startHigh += 1;
-          }
-          minishardIndex[(minishardIndexSize + i) * 2] = startLow;
-          minishardIndex[(minishardIndexSize + i) * 2 + 1] = startHigh;
-          const sizeLow = minishardIndex[(2 * minishardIndexSize + i) * 2];
-          const sizeHigh = minishardIndex[(2 * minishardIndexSize + i) * 2 + 1];
-          let endLow = startLow + sizeLow;
-          let endHigh = startHigh + sizeHigh;
-          if (endLow >= 4294967296) {
-            endLow -= 4294967296;
-            endHigh += 1;
-          }
-          prevStartLow = endLow;
-          prevStartHigh = endHigh;
-          minishardIndex[(2 * minishardIndexSize + i) * 2] = endLow;
-          minishardIndex[(2 * minishardIndexSize + i) * 2 + 1] = endHigh;
-        }
-        return {
-          data: { data: minishardIndex, shardUrl },
-          size: minishardIndex.byteLength,
-        };
-      },
-      encodeKey: (key: Uint64) => key.toString(),
-      sourceQueueLevel: 1,
-    },
-  ) as MinishardIndexSource;
-  source.sharding = sharding;
-  source.credentialsProvider = credentialsProvider;
-  return source;
-}
-
-function findMinishardEntry(
-  minishardIndex: DecodedMinishardIndex,
-  key: Uint64,
-): { startOffset: Uint64; endOffset: Uint64 } | undefined {
-  const minishardIndexData = minishardIndex.data;
-  const minishardIndexSize = minishardIndexData.length / 6;
-  const keyLow = key.low;
-  const keyHigh = key.high;
-  for (let i = 0; i < minishardIndexSize; ++i) {
-    if (
-      minishardIndexData[i * 2] !== keyLow ||
-      minishardIndexData[i * 2 + 1] !== keyHigh
-    ) {
-      continue;
-    }
-    const startOffset = new Uint64(
-      minishardIndexData[(minishardIndexSize + i) * 2],
-      minishardIndexData[(minishardIndexSize + i) * 2 + 1],
-    );
-    const endOffset = new Uint64(
-      minishardIndexData[(2 * minishardIndexSize + i) * 2],
-      minishardIndexData[(2 * minishardIndexSize + i) * 2 + 1],
-    );
-    return { startOffset, endOffset };
-  }
-  return undefined;
-}
-
-async function getShardedData(
-  minishardIndexSource: MinishardIndexSource,
-  chunk: Chunk,
-  key: Uint64,
-  abortSignal: AbortSignal,
-): Promise<{ shardInfo: ShardInfo; data: ArrayBuffer } | undefined> {
-  const { sharding } = minishardIndexSource;
-  const hashFunction = shardingHashFunctions.get(sharding.hash)!;
-  const hashCode = Uint64.rshift(new Uint64(), key, sharding.preshiftBits);
-  hashFunction(hashCode);
-  const shardAndMinishard = Uint64.lowMask(
-    new Uint64(),
-    sharding.minishardBits + sharding.shardBits,
-  );
-  Uint64.and(shardAndMinishard, shardAndMinishard, hashCode);
-  const getPriority = () => ({
-    priorityTier: chunk.priorityTier,
-    priority: chunk.priority,
-  });
-  const minishardIndex = await minishardIndexSource.getData(
-    shardAndMinishard,
-    getPriority,
-    abortSignal,
-  );
-  if (minishardIndex === undefined) return undefined;
-  const minishardEntry = findMinishardEntry(minishardIndex, key);
-  if (minishardEntry === undefined) return undefined;
-  const { startOffset, endOffset } = minishardEntry;
-  let data = await fetchSpecialHttpByteRange(
-    minishardIndexSource.credentialsProvider,
-    minishardIndex.shardUrl,
-    startOffset,
-    endOffset,
-    abortSignal,
-  );
-  if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
-    data = await decodeGzip(data, "gzip");
-  }
-  return {
-    data,
-    shardInfo: { shardUrl: minishardIndex.shardUrl, offset: startOffset },
-  };
-}
 
 function getOrNotFoundError<T>(v: T | undefined) {
   if (v === undefined) throw new Error("not found");
@@ -365,16 +107,17 @@ chunkDecoders.set(VolumeChunkEncoding.JXL, decodeJxlChunk);
 
 @registerSharedObject()
 export class PrecomputedVolumeChunkSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    VolumeChunkSource,
-  ),
+  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
-  private minishardIndexSource = getMinishardIndexDataSource(
-    this.chunkManager,
-    this.credentialsProvider,
-    this.parameters,
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+  shardedKvStore = getShardedKvStoreIfApplicable(
+    this,
+    this.kvStore,
+    this.parameters.sharding,
   );
 
   gridShape = (() => {
@@ -386,36 +129,25 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
     return gridShape;
   })();
 
-  async download(chunk: VolumeChunk, abortSignal: AbortSignal): Promise<void> {
-    const { parameters } = this;
-
-    const { minishardIndexSource } = this;
-    let response: ArrayBuffer | undefined;
-    if (minishardIndexSource === undefined) {
-      let url: string;
+  async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
+    const { shardedKvStore } = this;
+    let readResponse: ReadResponse | undefined;
+    if (shardedKvStore === undefined) {
+      const { kvStore } = this;
+      let path: string;
       {
         // chunkPosition must not be captured, since it will be invalidated by the next call to
         // computeChunkBounds.
         const chunkPosition = this.computeChunkBounds(chunk);
         const chunkDataSize = chunk.chunkDataSize!;
-        url =
-          `${parameters.url}/${chunkPosition[0]}-${
+        path =
+          `${kvStore.path}${chunkPosition[0]}-${
             chunkPosition[0] + chunkDataSize[0]
           }_` +
           `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
           `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
       }
-      try {
-        response = await fetchSpecialOk(this.credentialsProvider, url, {
-          signal: abortSignal,
-        }).then((response) => response.arrayBuffer());
-      } catch (e) {
-        if (isNotFoundError(e)) {
-          response = undefined;
-        } else {
-          throw e;
-        }
-      }
+      readResponse = await kvStore.store.read(path, { signal });
     } else {
       this.computeChunkBounds(chunk);
       const { gridShape } = this;
@@ -424,7 +156,6 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
       const yBits = Math.ceil(Math.log2(gridShape[1]));
       const zBits = Math.ceil(Math.log2(gridShape[2]));
       const chunkIndex = encodeZIndexCompressed3d(
-        new Uint64(),
         xBits,
         yBits,
         zBits,
@@ -432,17 +163,14 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
         chunkGridPosition[1],
         chunkGridPosition[2],
       );
-      response = (
-        await getShardedData(
-          minishardIndexSource,
-          chunk,
-          chunkIndex,
-          abortSignal,
-        )
-      )?.data;
+      readResponse = await shardedKvStore.read(chunkIndex, { signal });
     }
-    if (response !== undefined) {
-      await this.chunkDecoder(chunk, abortSignal, response);
+    if (readResponse !== undefined) {
+      await this.chunkDecoder(
+        chunk,
+        signal,
+        await readResponse.response.arrayBuffer(),
+      );
     }
   }
 }
@@ -470,29 +198,30 @@ export function decodeFragmentChunk(
 
 @registerSharedObject()
 export class PrecomputedMeshSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    MeshSource,
-  ),
+  WithSharedKvStoreContextCounterpart(MeshSource),
   MeshSourceParameters,
 ) {
-  async download(chunk: ManifestChunk, abortSignal: AbortSignal) {
-    const { parameters } = this;
-    const response = await fetchSpecialOk(
-      this.credentialsProvider,
-      `${parameters.url}/${chunk.objectId}:${parameters.lod}`,
-      { signal: abortSignal },
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+  async download(chunk: ManifestChunk, signal: AbortSignal) {
+    const { parameters, kvStore } = this;
+    const response = await readKvStore(
+      kvStore.store,
+      `${kvStore.path}${chunk.objectId}:${parameters.lod}`,
+      { signal, throwIfMissing: true },
     );
-    decodeManifestChunk(chunk, await response.json());
+    decodeManifestChunk(chunk, await response.response.json());
   }
 
-  async downloadFragment(chunk: FragmentChunk, abortSignal: AbortSignal) {
-    const { parameters } = this;
-    const response = await fetchSpecialOk(
-      this.credentialsProvider,
-      `${parameters.url}/${chunk.fragmentId}`,
-      { signal: abortSignal },
+  async downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
+    const { kvStore } = this;
+    const response = await readKvStore(
+      kvStore.store,
+      `${kvStore.path}${chunk.fragmentId}`,
+      { signal, throwIfMissing: true },
     );
-    decodeFragmentChunk(chunk, await response.arrayBuffer());
+    decodeFragmentChunk(chunk, await response.response.arrayBuffer());
   }
 }
 
@@ -740,146 +469,128 @@ async function decodeMultiscaleFragmentChunk(
 
 @registerSharedObject() //
 export class PrecomputedMultiscaleMeshSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    MultiscaleMeshSource,
-  ),
+  WithSharedKvStoreContextCounterpart(MultiscaleMeshSource),
   MultiscaleMeshSourceParameters,
 ) {
-  private minishardIndexSource = getMinishardIndexDataSource(
-    this.chunkManager,
-    this.credentialsProvider,
-    { url: this.parameters.url, sharding: this.parameters.metadata.sharding },
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+  shardedKvStore = getShardedKvStoreIfApplicable(
+    this,
+    this.kvStore,
+    this.parameters.metadata.sharding,
   );
 
   async download(
     chunk: PrecomputedMultiscaleManifestChunk,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<void> {
-    const { parameters, minishardIndexSource } = this;
-    let data: ArrayBuffer;
-    if (minishardIndexSource === undefined) {
-      data = await fetchSpecialOk(
-        this.credentialsProvider,
-        `${parameters.url}/${chunk.objectId}.index`,
-        { signal: abortSignal },
-      ).then((response) => response.arrayBuffer());
+    const { shardedKvStore } = this;
+    let readResponse: ReadResponse | undefined;
+    if (shardedKvStore === undefined) {
+      const { kvStore } = this;
+      readResponse = await kvStore.store.read(
+        `${kvStore.path}${chunk.objectId}.index`,
+        { signal },
+      );
     } else {
-      ({ data, shardInfo: chunk.shardInfo } = getOrNotFoundError(
-        await getShardedData(
-          minishardIndexSource,
-          chunk,
-          chunk.objectId,
-          abortSignal,
-        ),
-      ));
+      ({ response: readResponse, shardInfo: chunk.shardInfo } =
+        getOrNotFoundError(
+          await shardedKvStore.readWithShardInfo(chunk.objectId, {
+            signal,
+          }),
+        ));
     }
+
+    const data = await getOrNotFoundError(readResponse).response.arrayBuffer();
+
     decodeMultiscaleManifestChunk(chunk, data);
   }
 
   async downloadFragment(
     chunk: MultiscaleFragmentChunk,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<void> {
-    const { parameters } = this;
+    const { kvStore } = this;
     const manifestChunk =
       chunk.manifestChunk! as PrecomputedMultiscaleManifestChunk;
     const chunkIndex = chunk.chunkIndex;
     const { shardInfo, offsets } = manifestChunk;
     const startOffset = offsets[chunkIndex];
     const endOffset = offsets[chunkIndex + 1];
-    let requestUrl: string;
-    let adjustedStartOffset: Uint64 | number;
-    let adjustedEndOffset: Uint64 | number;
+    let requestPath: string;
+    let adjustedStartOffset: number;
+    let adjustedEndOffset: number;
     if (shardInfo !== undefined) {
-      requestUrl = shardInfo.shardUrl;
+      requestPath = shardInfo.shardPath;
       const fullDataSize = offsets[offsets.length - 1];
-      let startLow = shardInfo.offset.low - fullDataSize + startOffset;
-      let startHigh = shardInfo.offset.high;
-      let endLow = startLow + endOffset - startOffset;
-      let endHigh = startHigh;
-      while (startLow < 0) {
-        startLow += 4294967296;
-        startHigh -= 1;
-      }
-      while (endLow < 0) {
-        endLow += 4294967296;
-        endHigh -= 1;
-      }
-      while (endLow > 4294967296) {
-        endLow -= 4294967296;
-        endHigh += 1;
-      }
-      adjustedStartOffset = new Uint64(startLow, startHigh);
-      adjustedEndOffset = new Uint64(endLow, endHigh);
+      const start = shardInfo.offset - fullDataSize + startOffset;
+      const end = start + endOffset - startOffset;
+      adjustedStartOffset = start;
+      adjustedEndOffset = end;
     } else {
-      requestUrl = `${parameters.url}/${manifestChunk.objectId}`;
+      requestPath = `${kvStore.path}${manifestChunk.objectId}`;
       adjustedStartOffset = startOffset;
       adjustedEndOffset = endOffset;
     }
-    const response = await fetchSpecialHttpByteRange(
-      this.credentialsProvider,
-      requestUrl,
-      adjustedStartOffset,
-      adjustedEndOffset,
-      abortSignal,
+    const readResponse = await readKvStore(kvStore.store, requestPath, {
+      signal,
+      byteRange: {
+        offset: adjustedStartOffset,
+        length: adjustedEndOffset - adjustedStartOffset,
+      },
+      throwIfMissing: true,
+      strictByteRange: true,
+    });
+    await decodeMultiscaleFragmentChunk(
+      chunk,
+      await readResponse.response.arrayBuffer(),
     );
-    await decodeMultiscaleFragmentChunk(chunk, response);
   }
 }
 
 async function fetchByUint64(
-  credentialsProvider: SpecialProtocolCredentialsProvider,
-  url: string,
-  chunk: Chunk,
-  minishardIndexSource: MinishardIndexSource | undefined,
-  id: Uint64,
-  abortSignal: AbortSignal,
-) {
-  if (minishardIndexSource === undefined) {
-    try {
-      return await fetchSpecialOk(credentialsProvider, `${url}/${id}`, {
-        signal: abortSignal,
-      }).then((response) => response.arrayBuffer());
-    } catch (e) {
-      if (isNotFoundError(e)) return undefined;
-      throw e;
-    }
+  chunkSource: {
+    kvStore: KvStoreWithPath;
+    shardedKvStore: ShardedKvStore | undefined;
+  },
+  id: bigint,
+  signal: AbortSignal,
+): Promise<ReadResponse | undefined> {
+  const { shardedKvStore } = chunkSource;
+  if (shardedKvStore === undefined) {
+    const { kvStore } = chunkSource;
+    return kvStore.store.read(`${kvStore.path}${id}`, {
+      signal,
+    });
+  } else {
+    return shardedKvStore.read(id, { signal });
   }
-  const result = await getShardedData(
-    minishardIndexSource,
-    chunk,
-    id,
-    abortSignal,
-  );
-  if (result === undefined) return undefined;
-  return result.data;
 }
 
 @registerSharedObject() //
 export class PrecomputedSkeletonSource extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    SkeletonSource,
-  ),
+  WithSharedKvStoreContextCounterpart(SkeletonSource),
   SkeletonSourceParameters,
 ) {
-  private minishardIndexSource = getMinishardIndexDataSource(
-    this.chunkManager,
-    this.credentialsProvider,
-    { url: this.parameters.url, sharding: this.parameters.metadata.sharding },
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
   );
-  async download(chunk: SkeletonChunk, abortSignal: AbortSignal) {
+  shardedKvStore = getShardedKvStoreIfApplicable(
+    this,
+    this.kvStore,
+    this.parameters.metadata.sharding,
+  );
+  async download(chunk: SkeletonChunk, signal: AbortSignal) {
     const { parameters } = this;
     const response = getOrNotFoundError(
-      await fetchByUint64(
-        this.credentialsProvider,
-        parameters.url,
-        chunk,
-        this.minishardIndexSource,
-        chunk.objectId,
-        abortSignal,
-      ),
+      await fetchByUint64(this, chunk.objectId, signal),
     );
-    decodeSkeletonChunk(chunk, response, parameters.metadata.vertexAttributes);
+    decodeSkeletonChunk(
+      chunk,
+      await response.response.arrayBuffer(),
+      parameters.metadata.vertexAttributes,
+    );
   }
 }
 
@@ -901,12 +612,11 @@ function parseAnnotations(
     );
   }
   const idOffset = 8 + numBytes * countLow;
-  const id = new Uint64();
   const ids = new Array<string>(countLow);
   for (let i = 0; i < countLow; ++i) {
-    id.low = dv.getUint32(idOffset + i * 8, /*littleEndian=*/ true);
-    id.high = dv.getUint32(idOffset + i * 8 + 4, /*littleEndian=*/ true);
-    ids[i] = id.toString();
+    ids[i] = dv
+      .getBigUint64(idOffset + i * 8, /*littleEndian=*/ true)
+      .toString();
   }
   const geometryData = new AnnotationGeometryData();
   const origData = new Uint8Array(buffer, 8, numBytes * countLow);
@@ -993,7 +703,7 @@ function parseSingleAnnotation(
     (annotation.properties = new Array(parameters.properties.length)),
   );
   let offset = baseNumBytes;
-  const relatedSegments: Uint64[][] = (annotation.relatedSegments = []);
+  const relatedSegments: BigUint64Array[] = (annotation.relatedSegments = []);
   relatedSegments.length = numRelationships;
   for (let i = 0; i < numRelationships; ++i) {
     const count = dv.getUint32(offset, /*littleEndian=*/ true);
@@ -1003,12 +713,9 @@ function parseSingleAnnotation(
       );
     }
     offset += 4;
-    const segments: Uint64[] = (relatedSegments[i] = []);
+    const segments = (relatedSegments[i] = new BigUint64Array(count));
     for (let j = 0; j < count; ++j) {
-      segments[j] = new Uint64(
-        dv.getUint32(offset, /*littleEndian=*/ true),
-        dv.getUint32(offset + 4, /*littleEndian=*/ true),
-      );
+      segments[j] = dv.getBigUint64(offset, /*littleEndian=*/ true);
       offset += 8;
     }
   }
@@ -1022,52 +729,39 @@ function parseSingleAnnotation(
 
 @registerSharedObject() //
 export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    AnnotationGeometryChunkSourceBackend,
-  ),
+  WithSharedKvStoreContextCounterpart(AnnotationGeometryChunkSourceBackend),
   AnnotationSpatialIndexSourceParameters,
 ) {
-  private minishardIndexSource = getMinishardIndexDataSource(
-    this.chunkManager,
-    this.credentialsProvider,
-    this.parameters,
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.url,
+  );
+  shardedKvStore = getShardedKvStoreIfApplicable(
+    this,
+    this.kvStore,
+    this.parameters.sharding,
   );
   declare parent: PrecomputedAnnotationSourceBackend;
-  async download(chunk: AnnotationGeometryChunk, abortSignal: AbortSignal) {
-    const { parameters } = this;
-
-    const { minishardIndexSource } = this;
+  async download(chunk: AnnotationGeometryChunk, signal: AbortSignal) {
+    const { shardedKvStore } = this;
     const { parent } = this;
-    let response: ArrayBuffer | undefined;
+    let response: ReadResponse | undefined;
     const { chunkGridPosition } = chunk;
-    if (minishardIndexSource === undefined) {
-      const url = `${parameters.url}/${chunkGridPosition.join("_")}`;
-      try {
-        response = await fetchSpecialOk(this.credentialsProvider, url, {
-          signal: abortSignal,
-        }).then((response) => response.arrayBuffer());
-      } catch (e) {
-        if (!isNotFoundError(e)) throw e;
-      }
+    if (shardedKvStore === undefined) {
+      const { kvStore } = this;
+      const path = `${kvStore.path}${chunkGridPosition.join("_")}`;
+      response = await kvStore.store.read(path, { signal });
     } else {
       const { upperChunkBound } = this.spec;
       const { chunkGridPosition } = chunk;
       const chunkIndex = encodeZIndexCompressed(
-        new Uint64(),
         chunkGridPosition,
         upperChunkBound,
       );
-      const result = await getShardedData(
-        minishardIndexSource,
-        chunk,
-        chunkIndex,
-        abortSignal,
-      );
-      if (result !== undefined) response = result.data;
+      response = await shardedKvStore.read(chunkIndex, { signal });
     }
     if (response !== undefined) {
       chunk.data = parseAnnotations(
-        response,
+        await response.response.arrayBuffer(),
         parent.parameters,
         parent.annotationPropertySerializer,
       );
@@ -1077,19 +771,26 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends WithParamete
 
 @registerSharedObject() //
 export class PrecomputedAnnotationSourceBackend extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    AnnotationSource,
-  ),
+  WithSharedKvStoreContextCounterpart(AnnotationSource),
   AnnotationSourceParameters,
 ) {
-  private byIdMinishardIndexSource = getMinishardIndexDataSource(
-    this.chunkManager,
-    this.credentialsProvider,
-    this.parameters.byId,
+  kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(
+    this.parameters.byId.url,
   );
-  private relationshipIndexSource = this.parameters.relationships.map((x) =>
-    getMinishardIndexDataSource(this.chunkManager, this.credentialsProvider, x),
+  shardedKvStore = getShardedKvStoreIfApplicable(
+    this,
+    this.kvStore,
+    this.parameters.byId.sharding,
   );
+  private relationshipIndexSource = this.parameters.relationships.map((x) => {
+    const kvStore = this.sharedKvStoreContext.kvStoreContext.getKvStore(x.url);
+    const shardedKvStore = getShardedKvStoreIfApplicable(
+      this,
+      kvStore,
+      x.sharding,
+    );
+    return { kvStore, shardedKvStore };
+  });
   annotationPropertySerializer = new AnnotationPropertySerializer(
     this.parameters.rank,
     annotationTypeHandlers[this.parameters.type].serializedBytes(
@@ -1101,63 +802,34 @@ export class PrecomputedAnnotationSourceBackend extends WithParameters(
   async downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk,
     relationshipIndex: number,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ) {
-    const { parameters } = this;
     const response = await fetchByUint64(
-      this.credentialsProvider,
-      parameters.relationships[relationshipIndex].url,
-      chunk,
       this.relationshipIndexSource[relationshipIndex],
       chunk.objectId,
-      abortSignal,
+      signal,
     );
     if (response !== undefined) {
       chunk.data = parseAnnotations(
-        response,
+        await response.response.arrayBuffer(),
         this.parameters,
         this.annotationPropertySerializer,
       );
     }
   }
 
-  async downloadMetadata(
-    chunk: AnnotationMetadataChunk,
-    abortSignal: AbortSignal,
-  ) {
-    const { parameters } = this;
-    const id = Uint64.parseString(chunk.key!);
-    const response = await fetchByUint64(
-      this.credentialsProvider,
-      parameters.byId.url,
-      chunk,
-      this.byIdMinishardIndexSource,
-      id,
-      abortSignal,
-    );
+  async downloadMetadata(chunk: AnnotationMetadataChunk, signal: AbortSignal) {
+    const id = BigInt(chunk.key!);
+    const response = await fetchByUint64(this, id, signal);
     if (response === undefined) {
       chunk.annotation = null;
     } else {
       chunk.annotation = parseSingleAnnotation(
-        response,
+        await response.response.arrayBuffer(),
         this.parameters,
         this.annotationPropertySerializer,
         chunk.key!,
       );
     }
   }
-}
-
-@registerSharedObject()
-export class PrecomputedIndexedSegmentPropertySourceBackend extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(
-    IndexedSegmentPropertySourceBackend,
-  ),
-  IndexedSegmentPropertySourceParameters,
-) {
-  minishardIndexSource = getMinishardIndexDataSource(
-    this.chunkManager,
-    this.credentialsProvider,
-    this.parameters,
-  );
 }

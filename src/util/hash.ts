@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import type { Uint64 } from "#src/util/uint64.js";
-
 /**
  * This is a very simple string hash function.  It isn't secure, but
  * is suitable for sharding of requests.
@@ -69,6 +67,16 @@ export function murmurHash3_x86_32Hash64Bits(
   return murmurHash3_x86_32Finalize(h, 8);
 }
 
+export function murmurHash3_x86_32Hash64Bits_Bigint(
+  seed: number,
+  x: bigint,
+): number {
+  let h = seed;
+  h = murmurHash3_x86_32Mix(h, Number(x & 0xffffffffn));
+  h = murmurHash3_x86_32Mix(h, Number(x >> 32n));
+  return murmurHash3_x86_32Finalize(h, 8);
+}
+
 function murmurHash3_x86_128Mix(h: number) {
   h ^= h >>> 16;
   h = Math.imul(h, 0x85ebca6b);
@@ -87,12 +95,10 @@ function rotl32(x: number, r: number) {
  *
  * Only the low 8 bytes of output are returned.
  */
-export function murmurHash3_x86_128Hash64Bits(
-  out: Uint64,
+export function murmurHash3_x86_128Hash64Bits_Bigint(
   seed: number,
-  low: number,
-  high: number,
-): Uint64 {
+  input: bigint,
+): bigint {
   let h1 = seed;
   let h2 = seed;
   let h3 = seed;
@@ -102,12 +108,12 @@ export function murmurHash3_x86_128Hash64Bits(
   const c3 = 0x38b34ae5;
   // const c4 = 0xa1e38b93;
 
-  let k2 = Math.imul(high, c2);
+  let k2 = Math.imul(Number(input >> BigInt(32)), c2);
   k2 = rotl32(k2, 16);
   k2 = Math.imul(k2, c3);
   h2 ^= k2;
 
-  let k1 = Math.imul(low, c1);
+  let k1 = Math.imul(Number(input & BigInt(0xffffffff)), c1);
   k1 = rotl32(k1, 15);
   k1 = Math.imul(k1, c2);
   h1 ^= k1;
@@ -139,7 +145,5 @@ export function murmurHash3_x86_128Hash64Bits(
   // h3 = (h3 + h1) >>> 0;
   // h4 = (h4 + h1) >>> 0;
 
-  out.low = h1;
-  out.high = h2;
-  return out;
+  return BigInt(h1) | (BigInt(h2) << BigInt(32));
 }

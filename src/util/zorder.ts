@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import type { TypedArray } from "#src/util/array.js";
-import type { Uint64 } from "#src/util/uint64.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 
 export function getOctreeChildIndex(x: number, y: number, z: number) {
   return (x & 1) | ((y << 1) & 2) | ((z << 2) & 4);
@@ -29,73 +28,46 @@ export function getOctreeChildIndex(x: number, y: number, z: number) {
  * respectively, for `i` in `[0, xBits)`, `[0, yBits)`, `[0, zBits)`, respectively.
  */
 export function decodeZIndexCompressed(
-  zindex: Uint64,
+  zindex: bigint,
   xBits: number,
   yBits: number,
   zBits: number,
 ): Uint32Array {
   const maxCoordBits = Math.max(xBits, yBits, zBits);
   let inputBit = 0;
-  let inputValue = zindex.low;
   let x = 0;
   let y = 0;
   let z = 0;
   for (let coordBit = 0; coordBit < maxCoordBits; ++coordBit) {
     if (coordBit < xBits) {
-      const bit = (inputValue >>> inputBit) & 1;
+      const bit = Number((zindex >> BigInt(inputBit++)) & BigInt(1));
       x |= bit << coordBit;
-      if (inputBit === 31) {
-        inputBit = 0;
-        inputValue = zindex.high;
-      } else {
-        ++inputBit;
-      }
     }
     if (coordBit < yBits) {
-      const bit = (inputValue >>> inputBit) & 1;
+      const bit = Number((zindex >> BigInt(inputBit++)) & BigInt(1));
       y |= bit << coordBit;
-      if (inputBit === 31) {
-        inputBit = 0;
-        inputValue = zindex.high;
-      } else {
-        ++inputBit;
-      }
     }
     if (coordBit < zBits) {
-      const bit = (inputValue >>> inputBit) & 1;
+      const bit = Number((zindex >> BigInt(inputBit++)) & BigInt(1));
       z |= bit << coordBit;
-      if (inputBit === 31) {
-        inputBit = 0;
-        inputValue = zindex.high;
-      } else {
-        ++inputBit;
-      }
     }
   }
   return Uint32Array.of(x, y, z);
 }
 
 export function encodeZIndexCompressed3d(
-  zindex: Uint64,
   xBits: number,
   yBits: number,
   zBits: number,
   x: number,
   y: number,
   z: number,
-): Uint64 {
+): bigint {
   const maxBits = Math.max(xBits, yBits, zBits);
   let outputBit = 0;
-  let outputNum = 0;
-  let isHigh = false;
+  let zIndex = 0n;
   function writeBit(b: number): void {
-    outputNum |= (b & 1) << outputBit;
-    if (++outputBit === 32) {
-      zindex.low = outputNum >>> 0;
-      outputNum = 0;
-      outputBit = 0;
-      isHigh = true;
-    }
+    zIndex |= BigInt(b) << BigInt(outputBit++);
   }
   for (let bit = 0; bit < maxBits; ++bit) {
     if (bit < xBits) {
@@ -108,32 +80,18 @@ export function encodeZIndexCompressed3d(
       writeBit((z >> bit) & 1);
     }
   }
-  if (isHigh) {
-    zindex.high = outputNum >>> 0;
-  } else {
-    zindex.high = 0;
-    zindex.low = outputNum >>> 0;
-  }
-  return zindex;
+  return zIndex;
 }
 
 export function encodeZIndexCompressed(
-  zindex: Uint64,
-  position: TypedArray,
-  shape: TypedArray,
-): Uint64 {
+  position: TypedNumberArray,
+  shape: TypedNumberArray,
+): bigint {
+  let zIndex = 0n;
   let outputBit = 0;
   const rank = position.length;
-  let outputNum = 0;
-  let isHigh = false;
   function writeBit(b: number): void {
-    outputNum |= (b & 1) << outputBit;
-    if (++outputBit === 32) {
-      zindex.low = outputNum >>> 0;
-      outputNum = 0;
-      outputBit = 0;
-      isHigh = true;
-    }
+    zIndex |= BigInt(b & 1) << BigInt(outputBit++);
   }
 
   for (let bit = 0; bit < 32; ++bit) {
@@ -143,13 +101,7 @@ export function encodeZIndexCompressed(
       }
     }
   }
-  if (isHigh) {
-    zindex.high = outputNum >>> 0;
-  } else {
-    zindex.high = 0;
-    zindex.low = outputNum >>> 0;
-  }
-  return zindex;
+  return zIndex;
 }
 
 function lessMsb(a: number, b: number) {

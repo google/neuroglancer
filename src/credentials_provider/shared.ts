@@ -19,14 +19,18 @@
  */
 
 import type {
+  CredentialsManager,
   CredentialsProvider,
   CredentialsWithGeneration,
 } from "#src/credentials_provider/index.js";
 import {
   CREDENTIALS_PROVIDER_RPC_ID,
   CREDENTIALS_PROVIDER_GET_RPC_ID,
+  CREDENTIALS_MANAGER_RPC_ID,
+  CREDENTIALS_MANAGER_GET_RPC_ID,
 } from "#src/credentials_provider/shared_common.js";
 import type { Owned } from "#src/util/disposable.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import type { RPC, RPCPromise } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,
@@ -50,9 +54,9 @@ export class SharedCredentialsProvider<Credentials>
 
   get(
     invalidCredentials?: CredentialsWithGeneration<Credentials>,
-    abortSignal?: AbortSignal,
+    options?: Partial<ProgressOptions>,
   ): Promise<CredentialsWithGeneration<Credentials>> {
-    return this.provider.get(invalidCredentials, abortSignal);
+    return this.provider.get(invalidCredentials, options);
   }
 }
 
@@ -61,11 +65,53 @@ registerPromiseRPC(
   function (
     this: RPC,
     x: { providerId: number; invalidCredentials: any },
-    abortSignal: AbortSignal,
+    progressOptions,
   ): RPCPromise<CredentialsWithGeneration<any>> {
     const obj = <SharedCredentialsProvider<any>>this.get(x.providerId);
-    return obj.get(x.invalidCredentials, abortSignal).then((credentials) => ({
-      value: credentials,
-    }));
+    return obj
+      .get(x.invalidCredentials, progressOptions)
+      .then((credentials) => ({
+        value: credentials,
+      }));
+  },
+);
+
+@registerSharedObjectOwner(CREDENTIALS_MANAGER_RPC_ID)
+export class SharedCredentialsManager
+  extends SharedObject
+  implements CredentialsManager
+{
+  constructor(
+    public base: CredentialsManager,
+    rpc: RPC,
+  ) {
+    super();
+    this.initializeCounterpart(rpc);
+  }
+
+  getCredentialsProvider<Credentials>(key: string, parameters?: any) {
+    return this.base.getCredentialsProvider<Credentials>(key, parameters);
+  }
+}
+
+registerPromiseRPC(
+  CREDENTIALS_MANAGER_GET_RPC_ID,
+  async function (
+    this: RPC,
+    x: {
+      managerId: number;
+      key: string;
+      parameters: any;
+      invalidCredentials: any;
+    },
+    progressOptions,
+  ): RPCPromise<CredentialsWithGeneration<any>> {
+    const manager = this.get(x.managerId) as SharedCredentialsManager;
+    const provider = manager.base.getCredentialsProvider(x.key, x.parameters);
+    const credentials = await provider.get(
+      x.invalidCredentials,
+      progressOptions,
+    );
+    return { value: credentials };
   },
 );

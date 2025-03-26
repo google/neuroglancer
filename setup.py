@@ -19,35 +19,15 @@ import setuptools.command.install
 import setuptools.command.sdist
 import setuptools.command.test
 
-package_name = "neuroglancer"
 root_dir = os.path.dirname(__file__)
 python_dir = os.path.join(root_dir, "python")
-src_dir = os.path.join(python_dir, "ext", "src")
+src_dir = os.path.join("python", "ext", "src")
 openmesh_dir = os.path.join(
-    python_dir, "ext", "third_party", "openmesh", "OpenMesh", "src"
+    "python", "ext", "third_party", "openmesh", "OpenMesh", "src"
 )
 
 
-def _read_requirements(path: str) -> list[str]:
-    return pathlib.Path(path).read_text(encoding="utf-8").splitlines()
-
-
-_SETUP_REQUIRES = [
-    "setuptools_scm>=4.1.2",
-    "numpy>=1.11.0",
-]
-
-
 _PACKAGE_JSON_EXISTS = os.path.exists(os.path.join(root_dir, "package.json"))
-
-if _PACKAGE_JSON_EXISTS:
-    _SETUP_REQUIRES.extend(
-        _read_requirements(os.path.join(python_dir, "requirements-nodejs.txt"))
-    )
-
-
-with open(os.path.join(python_dir, "README.md"), encoding="utf-8") as f:
-    long_description = f.read()
 
 
 def _maybe_bundle_client(cmd, inplace=False):
@@ -130,7 +110,7 @@ class BundleClientCommand(
 ):
     editable_mode: bool = False
 
-    user_options = [
+    user_options = [  # type: ignore[assignment]
         (
             "client-bundle-type=",
             None,
@@ -150,7 +130,7 @@ class BundleClientCommand(
         (
             "skip-rebuild",
             None,
-            "Skip rebuilding if the `python/neuroglancer/static/client/index.html` file already exists.",
+            "Skip rebuilding if the client bundle files already exist.",
         ),
     ]
 
@@ -283,45 +263,10 @@ if platform.system() == "Windows":
     extra_compile_args.append("/d2FH4-")
 
 
-# Copied from setuptools_scm, can be removed once a released version of
-# setuptools_scm supports `version_scheme=no-guess-dev`.
-#
-# Note: It would be nice to include the commit hash in the version, but that
-# can't be done in a PEP 440-compatible way.
-def _no_guess_dev_version(version):
-    if version.exact:
-        return version.format_with("{tag}")
-    else:
-        return version.format_with("{tag}.post1.dev{distance}")
-
-
 setuptools.setup(
-    name=package_name,
-    # Use setuptools_scm to determine version from git tags
-    use_scm_version={
-        "relative_to": __file__,
-        "version_scheme": _no_guess_dev_version,
-        "local_scheme": "no-local-version",
-        "parentdir_prefix_version": package_name + "-",
-    },
-    description="Python data backend for neuroglancer, a WebGL-based viewer for volumetric data",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    author="Jeremy Maitin-Shepard",
-    author_email="jbms@google.com",
-    url="https://github.com/google/neuroglancer",
-    license="Apache License 2.0",
-    python_requires=">=3.9",
     packages=setuptools.find_packages("python"),
     package_dir={
         "": "python",
-    },
-    setup_requires=_SETUP_REQUIRES,
-    install_requires=_read_requirements(os.path.join(python_dir, "requirements.txt")),
-    extras_require={
-        "webdriver": _read_requirements(
-            os.path.join(python_dir, "requirements-webdriver.txt")
-        ),
     },
     ext_modules=[
         setuptools.Extension(
@@ -331,7 +276,7 @@ setuptools.setup(
             include_dirs=[openmesh_dir],
             define_macros=[
                 ("_USE_MATH_DEFINES", None),  # Needed by OpenMesh when used with MSVC
-                ("Py_LIMITED_API", "0x03090000"),
+                ("Py_LIMITED_API", "0x03100000"),
                 ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
             ],
             extra_compile_args=extra_compile_args,
@@ -346,5 +291,5 @@ setuptools.setup(
         "install": InstallCommand,
         "develop": DevelopCommand,
     },
-    options={"bdist_wheel": {"py_limited_api": "cp39"}},
+    options={"bdist_wheel": {"py_limited_api": "cp310"}},
 )

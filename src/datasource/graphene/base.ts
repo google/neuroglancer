@@ -15,6 +15,9 @@
  */
 
 import type { ShardingParameters } from "#src/datasource/precomputed/base.js";
+import type { KvStoreContext } from "#src/kvstore/context.js";
+import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
+import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type {
   ChunkLayoutOptions,
   SliceViewChunkSource,
@@ -25,8 +28,7 @@ import type {
 } from "#src/sliceview/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import type { mat4 } from "#src/util/geom.js";
-
-import { Uint64 } from "#src/util/uint64.js";
+import type { FetchOk, HttpError } from "#src/util/http_request.js";
 
 export const PYCG_APP_VERSION = 1;
 export const GRAPHENE_MESH_NEW_SEGMENT_RPC_ID = "GrapheneMeshSource:NewSegment";
@@ -68,9 +70,9 @@ export class MultiscaleMeshMetadata {
   sharding: Array<ShardingParameters> | undefined;
 }
 
-export function isBaseSegmentId(segmentId: Uint64, nBitsForLayerId: number) {
-  const layerId = Uint64.rshift(new Uint64(), segmentId, 64 - nBitsForLayerId);
-  return Uint64.equal(layerId, Uint64.ONE);
+export function isBaseSegmentId(segmentId: bigint, nBitsForLayerId: number) {
+  const layerId = segmentId >> BigInt(64 - nBitsForLayerId);
+  return layerId == 1n;
 }
 
 export function getGrapheneFragmentKey(fragmentId: string) {
@@ -136,4 +138,37 @@ export function makeChunkedGraphChunkSpecification(
 
 export interface ChunkedGraphChunkSource extends SliceViewChunkSource {
   spec: ChunkedGraphChunkSpecification;
+}
+
+export async function parseGrapheneError(e: HttpError) {
+  if (e.response) {
+    let msg: string;
+    if (e.response.headers.get("content-type") === "application/json") {
+      msg = (await e.response.json()).message;
+    } else {
+      msg = await e.response.text();
+    }
+    return msg;
+  }
+  return undefined;
+}
+
+export interface HttpSource {
+  fetchOkImpl: FetchOk;
+  baseUrl: string;
+}
+
+export function getHttpSource(
+  kvStoreContext: KvStoreContext,
+  url: string,
+): HttpSource {
+  const { store, path } = kvStoreContext.getKvStore(url);
+  if (!(store instanceof ReadableHttpKvStore)) {
+    throw new Error(`Non-HTTP URL ${JSON.stringify(url)} not supported`);
+  }
+  const { fetchOkImpl, baseUrl } = store;
+  if (baseUrl.includes("?")) {
+    throw new Error(`Invalid URL ${baseUrl}: query parameters not supported`);
+  }
+  return { fetchOkImpl, baseUrl: joinBaseUrlAndPath(baseUrl, path) };
 }

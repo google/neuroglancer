@@ -21,13 +21,24 @@ import { makeCloseButton } from "#src/widget/close_button.js";
 let statusContainer: HTMLElement | undefined;
 let modalStatusContainer: HTMLElement | undefined;
 
+// Exported for use by #tests/fixtures/status_message_handler.js
+export const statusMessages = new Set<StatusMessage>();
+
 export const DEFAULT_STATUS_DELAY = 200;
 
 export type Delay = boolean | number;
 
+function setupStatusContainer(container: HTMLElement) {
+  container.addEventListener("mousedown", (event) => {
+    // Prevent focus changes due to clicking on status message.
+    event.preventDefault();
+  });
+}
+
 function getStatusContainer() {
   if (statusContainer === undefined) {
     statusContainer = document.createElement("ul");
+    setupStatusContainer(statusContainer);
     statusContainer.id = "neuroglancer-status-container";
     const el: HTMLElement | null = document.getElementById(
       "neuroglancer-container",
@@ -44,6 +55,7 @@ function getStatusContainer() {
 function getModalStatusContainer() {
   if (modalStatusContainer === undefined) {
     modalStatusContainer = document.createElement("ul");
+    setupStatusContainer(modalStatusContainer);
     modalStatusContainer.id = "neuroglancer-status-container-modal";
     const el: HTMLElement | null = document.getElementById(
       "neuroglancer-container",
@@ -55,6 +67,11 @@ function getModalStatusContainer() {
     }
   }
   return modalStatusContainer;
+}
+
+// For use by #tests/fixtures/status_message_handler.js
+export function getStatusMessageContainers() {
+  return [getStatusContainer(), getModalStatusContainer()];
 }
 
 export class StatusMessage {
@@ -75,6 +92,7 @@ export class StatusMessage {
     } else {
       this.timer = null;
     }
+    statusMessages.add(this);
   }
 
   [Symbol.dispose]() {
@@ -90,6 +108,7 @@ export class StatusMessage {
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }
+    statusMessages.delete(this);
   }
   setText(text: string, makeVisible?: boolean) {
     this.element.textContent = text;

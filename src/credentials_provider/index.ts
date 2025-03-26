@@ -18,10 +18,11 @@
  * @file Generic facility for providing authentication/authorization credentials.
  */
 
-import { raceWithAbort, SharedAbortController } from "#src/util/abort.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { StringMemoize } from "#src/util/memoize.js";
+import type { AsyncMemoizeWithProgress } from "#src/util/memoize.js";
+import { asyncMemoizeWithProgress, StringMemoize } from "#src/util/memoize.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 /**
  * Wraps an arbitrary JSON credentials object with a generation number.
@@ -42,68 +43,50 @@ export abstract class CredentialsProvider<Credentials> extends RefCounted {
    */
   abstract get: (
     invalidCredentials?: CredentialsWithGeneration<Credentials>,
-    abortSignal?: AbortSignal | undefined,
+    options?: Partial<ProgressOptions>,
   ) => Promise<CredentialsWithGeneration<Credentials>>;
 }
 
 export function makeCachedCredentialsGetter<Credentials>(
   getUncached: (
     invalidCredentials: CredentialsWithGeneration<Credentials> | undefined,
-    abortSignal: AbortSignal,
+    options: ProgressOptions,
   ) => Promise<CredentialsWithGeneration<Credentials>>,
 ) {
   let cachedCredentials: CredentialsWithGeneration<Credentials> | undefined;
   let pendingCredentials:
-    | Promise<CredentialsWithGeneration<Credentials>>
+    | AsyncMemoizeWithProgress<CredentialsWithGeneration<Credentials>>
     | undefined;
-  let pendingAbortController: SharedAbortController | undefined;
-  return (
+  return async (
     invalidCredentials?: CredentialsWithGeneration<Credentials>,
-    abortSignal?: AbortSignal,
+    options?: Partial<ProgressOptions>,
   ) => {
+    // Check if a new credential request needs to be made.
     if (
-      pendingCredentials !== undefined &&
-      (cachedCredentials === undefined ||
-        invalidCredentials === undefined ||
-        cachedCredentials.generation !== invalidCredentials.generation)
+      pendingCredentials === undefined ||
+      (invalidCredentials !== undefined &&
+        cachedCredentials?.generation === invalidCredentials.generation)
     ) {
-      if (cachedCredentials === undefined) {
-        pendingAbortController!.addConsumer(abortSignal);
-      }
-      return raceWithAbort(pendingCredentials, abortSignal);
+      cachedCredentials = undefined;
+      pendingCredentials = asyncMemoizeWithProgress(async (progressOptions) => {
+        cachedCredentials = await getUncached(
+          invalidCredentials,
+          progressOptions,
+        );
+        return cachedCredentials;
+      });
     }
-    cachedCredentials = undefined;
-    pendingAbortController = new SharedAbortController();
-    pendingCredentials = getUncached(
-      invalidCredentials,
-      pendingAbortController.signal,
-    ).then(
-      (credentials) => {
-        cachedCredentials = credentials;
-        pendingAbortController![Symbol.dispose]();
-        pendingAbortController = undefined;
-        return credentials;
-      },
-      (reason) => {
-        pendingAbortController![Symbol.dispose]();
-        if (pendingAbortController?.signal.aborted) {
-          pendingAbortController = undefined;
-          pendingCredentials = undefined;
-        }
-        throw reason;
-      },
-    );
-    return pendingCredentials;
+    return pendingCredentials(options ?? {});
   };
 }
 
 export function makeCredentialsGetter<Credentials>(
-  getWithoutGeneration: (abortSignal: AbortSignal) => Promise<Credentials>,
+  getWithoutGeneration: (options: ProgressOptions) => Promise<Credentials>,
 ) {
   let generation = 0;
   return makeCachedCredentialsGetter<Credentials>(
-    (_invalidCredentials, abortSignal) =>
-      getWithoutGeneration(abortSignal).then((credentials) => ({
+    (_invalidCredentials, options) =>
+      getWithoutGeneration(options).then((credentials) => ({
         generation: ++generation,
         credentials,
       })),
@@ -129,13 +112,7 @@ export type ProviderGetter<Credentials> = (
  * CredentialsManager that supports registration.
  */
 export class MapBasedCredentialsManager implements CredentialsManager {
-  providers = new Map<
-    string,
-    (
-      parameters: any,
-      credentialsManager: CredentialsManager,
-    ) => Owned<CredentialsProvider<any>>
-  >();
+  providers = new Map<string, ProviderGetter<any>>();
   topLevelManager: CredentialsManager = this;
   register<Credentials>(
     key: string,
@@ -213,7 +190,10 @@ export class AnonymousFirstCredentialsProvider<
   }
 
   get = makeCachedCredentialsGetter(
-    (invalidCredentials?: CredentialsWithGeneration<T>) => {
+    (
+      invalidCredentials: CredentialsWithGeneration<T> | undefined,
+      options: ProgressOptions,
+    ) => {
       if (this.anonymous && invalidCredentials === undefined) {
         return Promise.resolve({
           generation: -10,
@@ -221,7 +201,7 @@ export class AnonymousFirstCredentialsProvider<
         });
       }
       this.anonymous = false;
-      return this.baseProvider.get(invalidCredentials);
+      return this.baseProvider.get(invalidCredentials, options);
     },
   );
 }

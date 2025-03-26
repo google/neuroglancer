@@ -1,0 +1,254 @@
+{
+  "attributes": {
+    "ome": {
+      "version": "0.5",
+      "multiscales": [
+        {
+          "axes": [
+            {
+              "name": "y",
+              "type": "space",
+              "unit": "nanometer"
+            },
+            {
+              "name": "x",
+              "type": "space",
+              "unit": "nanometer"
+            }
+          ],
+          "datasets": [
+            {
+              "path": "scale0/image",
+              "coordinateTransformations": [
+                {
+                  "scale": [
+                    4,
+                    30
+                  ],
+                  "type": "scale"
+                },
+                {
+                  "translation": [
+                    0.0,
+                    0.0
+                  ],
+                  "type": "translation"
+                }
+              ]
+            },
+            {
+              "path": "scale1/image",
+              "coordinateTransformations": [
+                {
+                  "scale": [
+                    8,
+                    60
+                  ],
+                  "type": "scale"
+                },
+                {
+                  "translation": [
+                    2,
+                    15
+                  ],
+                  "type": "translation"
+                }
+              ]
+            },
+            {
+              "path": "scale2/image",
+              "coordinateTransformations": [
+                {
+                  "scale": [
+                    16,
+                    120
+                  ],
+                  "type": "scale"
+                },
+                {
+                  "translation": [
+                    6,
+                    45
+                  ],
+                  "type": "translation"
+                }
+              ]
+            }
+          ],
+          "name": "image",
+          "@type": "ngff:Image"
+        }
+      ]
+    }
+  },
+  "zarr_format": 3,
+  "consolidated_metadata": {
+    "kind": "inline",
+    "must_understand": false,
+    "metadata": {
+      "scale1": {
+        "attributes": {
+          "_ARRAY_DIMENSIONS": [
+            "y",
+            "x"
+          ]
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "scale1/image": {
+        "shape": [
+          5,
+          5
+        ],
+        "data_type": "uint16",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              5,
+              5
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {},
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "scale2": {
+        "attributes": {
+          "_ARRAY_DIMENSIONS": [
+            "y",
+            "x"
+          ]
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "scale2/image": {
+        "shape": [
+          2,
+          2
+        ],
+        "data_type": "uint16",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              2,
+              2
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {},
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "scale0": {
+        "attributes": {
+          "_ARRAY_DIMENSIONS": [
+            "y",
+            "x"
+          ]
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "scale0/image": {
+        "shape": [
+          10,
+          10
+        ],
+        "data_type": "uint16",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              10,
+              10
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {},
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      }
+    }
+  },
+  "node_type": "group"
+}

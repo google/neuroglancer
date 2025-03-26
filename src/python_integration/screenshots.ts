@@ -25,14 +25,60 @@ import {
 import { toBase64 } from "#src/util/base64.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { convertEndian32, Endianness } from "#src/util/endian.js";
-import { verifyOptionalString } from "#src/util/json.js";
+import {
+  bigintToStringJsonReplacer,
+  verifyOptionalString,
+} from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { getCachedJson } from "#src/util/trackable.js";
+import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
+import type { ResolutionMetadata } from "#src/util/viewer_resolution_stats.js";
+import { getViewerResolutionMetadata } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
 
+export interface ScreenshotResult {
+  id: string;
+  image: string;
+  imageType: string;
+  depthData: string | undefined;
+  width: number;
+  height: number;
+  resolutionMetadata: ResolutionMetadata;
+}
+
+export interface ScreenshotActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshot: ScreenshotResult;
+}
+
+export interface ScreenshotChunkStatistics {
+  downloadLatency: number;
+  visibleChunksDownloading: number;
+  visibleChunksFailed: number;
+  visibleChunksGpuMemory: number;
+  visibleChunksSystemMemory: number;
+  visibleChunksTotal: number;
+  visibleGpuMemory: number;
+}
+
+export interface StatisticsActionState {
+  viewerState: any;
+  selectedValues: any;
+  screenshotStatistics: {
+    id: string;
+    chunkSources: any[];
+    total: ScreenshotChunkStatistics;
+  };
+}
+
 export class ScreenshotHandler extends RefCounted {
-  sendScreenshotRequested = new Signal<(state: any) => void>();
-  sendStatisticsRequested = new Signal<(state: any) => void>();
+  sendScreenshotRequested = new Signal<
+    (state: ScreenshotActionState) => void
+  >();
+  sendStatisticsRequested = new Signal<
+    (state: StatisticsActionState) => void
+  >();
   requestState = new TrackableValue<string | undefined>(
     undefined,
     verifyOptionalString,
@@ -95,7 +141,10 @@ export class ScreenshotHandler extends RefCounted {
             JSON.stringify(getCachedJson(this.viewer.state).value),
           ),
           selectedValues: JSON.parse(
-            JSON.stringify(this.viewer.layerSelectedValues),
+            JSON.stringify(
+              this.viewer.layerSelectedValues,
+              bigintToStringJsonReplacer,
+            ),
           ),
           screenshotStatistics: { id: requestId, chunkSources: rows, total },
         };
@@ -124,12 +173,14 @@ export class ScreenshotHandler extends RefCounted {
       return;
     }
     const { viewer } = this;
-    if (!viewer.isReady()) {
+    const shouldForceScreenshot =
+      this.viewer.display.screenshotMode.value === ScreenshotMode.FORCE;
+    if (!viewer.isReady() && !shouldForceScreenshot) {
       this.wasAlreadyVisible = false;
       this.throttledSendStatistics(requestState);
       return;
     }
-    if (!this.wasAlreadyVisible) {
+    if (!this.wasAlreadyVisible && !shouldForceScreenshot) {
       this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();
@@ -140,6 +191,7 @@ export class ScreenshotHandler extends RefCounted {
     this.throttledSendStatistics.cancel();
     viewer.display.draw();
     const screenshotData = viewer.display.canvas.toDataURL();
+    const resolutionMetadata = getViewerResolutionMetadata(viewer);
     const { width, height } = viewer.display.canvas;
     const prefix = "data:image/png;base64,";
     let imageType: string;
@@ -161,7 +213,9 @@ export class ScreenshotHandler extends RefCounted {
       viewerState: JSON.parse(
         JSON.stringify(getCachedJson(this.viewer.state).value),
       ),
-      selectedValues: JSON.parse(JSON.stringify(layerSelectedValues)),
+      selectedValues: JSON.parse(
+        JSON.stringify(layerSelectedValues, bigintToStringJsonReplacer),
+      ),
       screenshot: {
         id: requestState,
         image,
@@ -169,6 +223,7 @@ export class ScreenshotHandler extends RefCounted {
         depthData,
         width,
         height,
+        resolutionMetadata,
       },
     };
 

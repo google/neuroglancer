@@ -26,10 +26,10 @@ registerCodec({
     configuration: Configuration,
     decodedArrayInfo: CodecArrayInfo,
     encoded,
-    abortSignal: AbortSignal,
+    signal: AbortSignal,
   ) {
     decodedArrayInfo;
-    abortSignal;
+    signal;
     configuration;
     return encoded;
   },

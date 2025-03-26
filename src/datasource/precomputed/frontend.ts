@@ -37,16 +37,15 @@ import {
   makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
-import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
-import type {
-  CompleteUrlOptions,
-  ConvertLegacyUrlOptions,
-  DataSource,
-  DataSubsourceEntry,
-  GetDataSourceOptions,
-  NormalizeUrlOptions,
+import {
+  KvStoreBasedDataSourceLegacyUrlAdapter,
+  type ConvertLegacyUrlOptions,
+  type DataSource,
+  type DataSourceLookupResult,
+  type DataSubsourceEntry,
+  type GetKvStoreBasedDataSourceOptions,
+  type KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceProvider, RedirectError } from "#src/datasource/index.js";
 import type {
   MultiscaleMeshMetadata,
   ShardingParameters,
@@ -56,7 +55,6 @@ import {
   AnnotationSourceParameters,
   AnnotationSpatialIndexSourceParameters,
   DataEncoding,
-  IndexedSegmentPropertySourceParameters,
   MeshSourceParameters,
   MultiscaleMeshSourceParameters,
   ShardingHashFunction,
@@ -64,6 +62,16 @@ import {
   VolumeChunkEncoding,
   VolumeChunkSourceParameters,
 } from "#src/datasource/precomputed/base.js";
+import type { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
+import { simpleFilePresenceAutoDetectDirectorySpec } from "#src/kvstore/auto_detect.js";
+import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { KvStoreContext } from "#src/kvstore/context.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import {
+  kvstoreEnsureDirectoryPipelineUrl,
+  parseUrlSuffix,
+  pipelineUrlJoin,
+} from "#src/kvstore/url.js";
 import { VertexPositionFormat } from "#src/mesh/base.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import type {
@@ -71,7 +79,6 @@ import type {
   InlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import {
-  IndexedSegmentPropertySource,
   normalizeInlineSegmentPropertyMap,
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
@@ -88,12 +95,10 @@ import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
+import type { TypedNumberArrayConstructor } from "#src/util/array.js";
 import { transposeNestedArrays } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
-import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
-import { completeHttpPath } from "#src/util/http_path_completion.js";
-import { isNotFoundError } from "#src/util/http_request.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -111,36 +116,29 @@ import {
   verifyString,
   verifyStringArray,
   verifyOptionalBoolean,
+  parseUint64,
 } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
-import { getObjectId } from "#src/util/object_id.js";
-import type {
-  SpecialProtocolCredentials,
-  SpecialProtocolCredentialsProvider,
-} from "#src/util/special_protocol_request.js";
-import {
-  fetchSpecialOk,
-  parseSpecialUrl,
-} from "#src/util/special_protocol_request.js";
-import { Uint64 } from "#src/util/uint64.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { ProgressSpan } from "#src/util/progress_listener.js";
 
 export class PrecomputedVolumeChunkSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource),
+  WithSharedKvStoreContext(VolumeChunkSource),
   VolumeChunkSourceParameters,
 ) {}
 
 class PrecomputedMeshSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource),
+  WithSharedKvStoreContext(MeshSource),
   MeshSourceParameters,
 ) {}
 
 class PrecomputedMultiscaleMeshSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(MultiscaleMeshSource),
+  WithSharedKvStoreContext(MultiscaleMeshSource),
   MultiscaleMeshSourceParameters,
 ) {}
 
 class PrecomputedSkeletonSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(SkeletonSource),
+  WithSharedKvStoreContext(SkeletonSource),
   SkeletonSourceParameters,
 ) {
   get skeletonVertexCoordinatesInVoxels() {
@@ -149,20 +147,6 @@ class PrecomputedSkeletonSource extends WithParameters(
   get vertexAttributes() {
     return this.parameters.metadata.vertexAttributes;
   }
-}
-
-export function resolvePath(a: string, b: string) {
-  const outputParts = a.split("/");
-  for (const part of b.split("/")) {
-    if (part === "..") {
-      if (outputParts.length !== 0) {
-        outputParts.length = outputParts.length - 1;
-        continue;
-      }
-    }
-    outputParts.push(part);
-  }
-  return outputParts.join("/");
 }
 
 class ScaleInfo {
@@ -325,12 +309,11 @@ export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChun
   }
 
   constructor(
-    chunkManager: ChunkManager,
-    public credentialsProvider: SpecialProtocolCredentialsProvider,
+    public sharedKvStoreContext: SharedKvStoreContext,
     public url: string,
     public info: MultiscaleVolumeInfo,
   ) {
-    super(chunkManager);
+    super(sharedKvStoreContext.chunkManager);
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -380,10 +363,15 @@ export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChun
               chunkSource: this.chunkManager.getChunkSource(
                 PrecomputedVolumeChunkSource,
                 {
-                  credentialsProvider: this.credentialsProvider,
+                  sharedKvStoreContext: this.sharedKvStoreContext,
                   spec,
                   parameters: {
-                    url: resolvePath(this.url, scaleInfo.key),
+                    url: kvstoreEnsureDirectoryPipelineUrl(
+                      this.sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+                        this.url,
+                        scaleInfo.key,
+                      ),
+                    ),
                     encoding: scaleInfo.encoding,
                     sharding: scaleInfo.sharding,
                   },
@@ -400,29 +388,24 @@ export class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChun
 }
 
 const MultiscaleAnnotationSourceBase = WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(
-    MultiscaleAnnotationSource,
-  ),
+  WithSharedKvStoreContext(MultiscaleAnnotationSource),
   AnnotationSourceParameters,
 );
 
 class PrecomputedAnnotationSpatialIndexSource extends WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(
-    AnnotationGeometryChunkSource,
-  ),
+  WithSharedKvStoreContext(AnnotationGeometryChunkSource),
   AnnotationSpatialIndexSourceParameters,
 ) {}
 
 interface PrecomputedAnnotationSourceOptions {
   metadata: AnnotationMetadata;
   parameters: AnnotationSourceParameters;
-  credentialsProvider: SpecialProtocolCredentialsProvider;
+  sharedKvStoreContext: SharedKvStoreContext;
 }
 
 export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase {
   declare key: any;
   metadata: AnnotationMetadata;
-  credentialsProvider: SpecialProtocolCredentialsProvider;
   declare OPTIONS: PrecomputedAnnotationSourceOptions;
   constructor(
     chunkManager: ChunkManager,
@@ -433,11 +416,11 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
       rank: parameters.rank,
       relationships: parameters.relationships.map((x) => x.name),
       properties: parameters.properties,
+      sharedKvStoreContext: options.sharedKvStoreContext,
       parameters,
     } as any);
     this.readonly = true;
     this.metadata = options.metadata;
-    this.credentialsProvider = options.credentialsProvider;
   }
 
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
@@ -448,7 +431,7 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
           chunkSource: this.chunkManager.getChunkSource(
             PrecomputedAnnotationSpatialIndexSource,
             {
-              credentialsProvider: this.credentialsProvider,
+              sharedKvStoreContext: this.sharedKvStoreContext,
               parent: this,
               spec,
               parameters: spatialIndexLevel.parameters,
@@ -462,14 +445,16 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
 }
 
 function getLegacyMeshSource(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   parameters: MeshSourceParameters,
 ) {
-  return chunkManager.getChunkSource(PrecomputedMeshSource, {
-    parameters,
-    credentialsProvider,
-  });
+  return sharedKvStoreContext.chunkManager.getChunkSource(
+    PrecomputedMeshSource,
+    {
+      parameters,
+      sharedKvStoreContext,
+    },
+  );
 }
 
 function parseTransform(data: any): mat4 {
@@ -533,20 +518,20 @@ function parseMeshMetadata(data: any): ParsedMeshMetadata {
 }
 
 async function getMeshMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ParsedMeshMetadata> {
-  let metadata: any;
-  try {
-    metadata = await getJsonMetadata(chunkManager, credentialsProvider, url);
-  } catch (e) {
-    if (isNotFoundError(e)) {
-      // If we fail to fetch the info file, assume it is the legacy
-      // single-resolution mesh format.
-      return { metadata: undefined };
-    }
-    throw e;
+  const metadata = await getJsonMetadata(
+    sharedKvStoreContext,
+    url,
+    /*required=*/ false,
+    options,
+  );
+  if (metadata === undefined) {
+    // If the info file is missing, assume it is the legacy
+    // single-resolution mesh format.
+    return { metadata: undefined };
   }
   return parseMeshMetadata(metadata);
 }
@@ -649,14 +634,15 @@ function parseSkeletonMetadata(data: any): ParsedSkeletonMetadata {
 }
 
 async function getSkeletonMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ): Promise<ParsedSkeletonMetadata> {
   const metadata = await getJsonMetadata(
-    chunkManager,
-    credentialsProvider,
+    sharedKvStoreContext,
     url,
+    /*required=*/ true,
+    options,
   );
   return parseSkeletonMetadata(metadata);
 }
@@ -670,18 +656,18 @@ function getDefaultCoordinateSpace() {
 }
 
 async function getMeshSource(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ) {
   const { metadata, segmentPropertyMap } = await getMeshMetadata(
-    chunkManager,
-    credentialsProvider,
+    sharedKvStoreContext,
     url,
+    options,
   );
   if (metadata === undefined) {
     return {
-      source: getLegacyMeshSource(chunkManager, credentialsProvider, {
+      source: getLegacyMeshSource(sharedKvStoreContext, {
         url,
         lod: 0,
       }),
@@ -701,57 +687,71 @@ async function getMeshSource(
     );
   }
   return {
-    source: chunkManager.getChunkSource(PrecomputedMultiscaleMeshSource, {
-      credentialsProvider,
-      parameters: { url, metadata },
-      format: {
-        fragmentRelativeVertices: true,
-        vertexPositionFormat,
+    source: sharedKvStoreContext.chunkManager.getChunkSource(
+      PrecomputedMultiscaleMeshSource,
+      {
+        sharedKvStoreContext,
+        parameters: { url, metadata },
+        format: {
+          fragmentRelativeVertices: true,
+          vertexPositionFormat,
+        },
       },
-    }),
+    ),
     transform: metadata.transform,
     segmentPropertyMap,
   };
 }
 
 async function getSkeletonSource(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ) {
   const { metadata, segmentPropertyMap } = await getSkeletonMetadata(
-    chunkManager,
-    credentialsProvider,
+    sharedKvStoreContext,
     url,
+    options,
   );
   return {
-    source: chunkManager.getChunkSource(PrecomputedSkeletonSource, {
-      credentialsProvider,
-      parameters: {
-        url,
-        metadata,
+    source: sharedKvStoreContext.chunkManager.getChunkSource(
+      PrecomputedSkeletonSource,
+      {
+        sharedKvStoreContext,
+        parameters: {
+          url,
+          metadata,
+        },
       },
-    }),
+    ),
     transform: metadata.transform,
     segmentPropertyMap,
   };
 }
 
-function getJsonMetadata(
-  chunkManager: ChunkManager,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+export function getJsonMetadata(
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  required: boolean,
+  options: Partial<ProgressOptions>,
 ): Promise<any> {
-  return chunkManager.memoize.getUncounted(
+  return sharedKvStoreContext.chunkManager.memoize.getAsync(
     {
       type: "precomputed:metadata",
       url,
-      credentialsProvider: getObjectId(credentialsProvider),
     },
-    async () => {
-      return await fetchSpecialOk(credentialsProvider, `${url}/info`, {}).then(
-        (response) => response.json(),
-      );
+    options,
+    async (options) => {
+      const infoUrl = pipelineUrlJoin(url, "info");
+      using _span = new ProgressSpan(options.progressListener, {
+        message: `Reading neuroglancer_precomputed metadata from ${infoUrl}`,
+      });
+      const response = await sharedKvStoreContext.kvStoreContext.read(infoUrl, {
+        ...options,
+        throwIfMissing: required,
+      });
+      if (response === undefined) return undefined;
+      return await response.response.json();
     },
   );
 }
@@ -766,15 +766,14 @@ function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
 }
 
 async function getVolumeDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   metadata: any,
+  options: Partial<ProgressOptions>,
 ): Promise<DataSource> {
   const info = parseMultiscaleVolumeInfo(metadata);
   const volume = new PrecomputedMultiscaleVolumeChunkSource(
-    options.chunkManager,
-    credentialsProvider,
+    sharedKvStoreContext,
     url,
     info,
   );
@@ -796,18 +795,19 @@ async function getVolumeDataSource(
     },
   ];
   if (info.segmentPropertyMap !== undefined) {
-    const mapUrl = resolvePath(url, info.segmentPropertyMap);
+    const mapUrl = kvstoreEnsureDirectoryPipelineUrl(
+      sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+        url,
+        info.segmentPropertyMap,
+      ),
+    );
     const metadata = await getJsonMetadata(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       mapUrl,
+      /*required=*/ true,
+      options,
     );
-    const segmentPropertyMap = getSegmentPropertyMap(
-      options.chunkManager,
-      credentialsProvider,
-      metadata,
-      mapUrl,
-    );
+    const segmentPropertyMap = getSegmentPropertyMap(metadata);
     subsources.push({
       id: "properties",
       default: true,
@@ -815,11 +815,13 @@ async function getVolumeDataSource(
     });
   }
   if (info.mesh !== undefined) {
-    const meshUrl = resolvePath(url, info.mesh);
+    const meshUrl = kvstoreEnsureDirectoryPipelineUrl(
+      sharedKvStoreContext.kvStoreContext.resolveRelativePath(url, info.mesh),
+    );
     const { source: meshSource, transform } = await getMeshSource(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       meshUrl,
+      options,
     );
     const subsourceToModelSubspaceTransform =
       getSubsourceToModelSubspaceTransform(info);
@@ -836,11 +838,16 @@ async function getVolumeDataSource(
     });
   }
   if (info.skeletons !== undefined) {
-    const skeletonsUrl = resolvePath(url, info.skeletons);
+    const skeletonsUrl = kvstoreEnsureDirectoryPipelineUrl(
+      sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+        url,
+        info.skeletons,
+      ),
+    );
     const { source: skeletonSource, transform } = await getSkeletonSource(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       skeletonsUrl,
+      options,
     );
     const subsourceToModelSubspaceTransform =
       getSubsourceToModelSubspaceTransform(info);
@@ -860,15 +867,15 @@ async function getVolumeDataSource(
 }
 
 async function getSkeletonsDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ): Promise<DataSource> {
   const {
     source: skeletons,
     transform,
     segmentPropertyMap,
-  } = await getSkeletonSource(options.chunkManager, credentialsProvider, url);
+  } = await getSkeletonSource(sharedKvStoreContext, url, options);
   const subsources: DataSubsourceEntry[] = [
     {
       id: "default",
@@ -878,18 +885,19 @@ async function getSkeletonsDataSource(
     },
   ];
   if (segmentPropertyMap !== undefined) {
-    const mapUrl = resolvePath(url, segmentPropertyMap);
+    const mapUrl = kvstoreEnsureDirectoryPipelineUrl(
+      sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+        url,
+        segmentPropertyMap,
+      ),
+    );
     const metadata = await getJsonMetadata(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       mapUrl,
+      /*required=*/ true,
+      options,
     );
-    const segmentPropertyMapData = getSegmentPropertyMap(
-      options.chunkManager,
-      credentialsProvider,
-      metadata,
-      mapUrl,
-    );
+    const segmentPropertyMapData = getSegmentPropertyMap(metadata);
     subsources.push({
       id: "properties",
       default: true,
@@ -902,10 +910,17 @@ async function getSkeletonsDataSource(
   };
 }
 
-function parseKeyAndShardingSpec(url: string, obj: any) {
+function parseKeyAndShardingSpec(
+  kvStoreContext: KvStoreContext,
+  url: string,
+  obj: any,
+) {
   verifyObject(obj);
+  const relativePath = verifyObjectProperty(obj, "key", verifyString);
   return {
-    url: resolvePath(url, verifyObjectProperty(obj, "key", verifyString)),
+    url: kvstoreEnsureDirectoryPipelineUrl(
+      kvStoreContext.resolveRelativePath(url, relativePath),
+    ),
     sharding: verifyObjectProperty(obj, "sharding", parseShardingParameters),
   };
 }
@@ -921,6 +936,7 @@ class AnnotationMetadata {
   parameters: AnnotationSourceParameters;
   spatialIndices: AnnotationSpatialIndexLevelMetadata[];
   constructor(
+    kvStoreContext: KvStoreContext,
     public url: string,
     metadata: any,
   ) {
@@ -970,7 +986,7 @@ class AnnotationMetadata {
         "relationships",
         (relsObj) =>
           parseArray(relsObj, (relObj) => {
-            const common = parseKeyAndShardingSpec(url, relObj);
+            const common = parseKeyAndShardingSpec(kvStoreContext, url, relObj);
             const name = verifyObjectProperty(relObj, "id", verifyString);
             return { ...common, name };
           }),
@@ -981,7 +997,7 @@ class AnnotationMetadata {
         parseAnnotationPropertySpecs,
       ),
       byId: verifyObjectProperty(metadata, "by_id", (obj) =>
-        parseKeyAndShardingSpec(url, obj),
+        parseKeyAndShardingSpec(kvStoreContext, url, obj),
       ),
     };
     this.spatialIndices = verifyObjectProperty(
@@ -990,7 +1006,7 @@ class AnnotationMetadata {
       (spatialObj) =>
         parseArray(spatialObj, (levelObj) => {
           const common: AnnotationSpatialIndexSourceParameters =
-            parseKeyAndShardingSpec(url, levelObj);
+            parseKeyAndShardingSpec(kvStoreContext, url, levelObj);
           const gridShape = verifyObjectProperty(levelObj, "grid_shape", (j) =>
             parseFixedLengthArray(new Float32Array(rank), j, verifyPositiveInt),
           );
@@ -1038,13 +1054,16 @@ class AnnotationMetadata {
   }
 }
 
-async function getAnnotationDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+function getAnnotationDataSource(
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
   metadata: any,
-): Promise<DataSource> {
-  const info = new AnnotationMetadata(url, metadata);
+): DataSource {
+  const info = new AnnotationMetadata(
+    sharedKvStoreContext.kvStoreContext,
+    url,
+    metadata,
+  );
   const dataSource: DataSource = {
     modelTransform: makeIdentityTransform(info.coordinateSpace),
     subsources: [
@@ -1052,10 +1071,10 @@ async function getAnnotationDataSource(
         id: "default",
         default: true,
         subsource: {
-          annotation: options.chunkManager.getChunkSource(
+          annotation: sharedKvStoreContext.chunkManager.getChunkSource(
             PrecomputedAnnotationSource,
             {
-              credentialsProvider,
+              sharedKvStoreContext,
               metadata: info,
               parameters: info.parameters,
             },
@@ -1068,15 +1087,15 @@ async function getAnnotationDataSource(
 }
 
 async function getMeshDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
+  sharedKvStoreContext: SharedKvStoreContext,
   url: string,
+  options: Partial<ProgressOptions>,
 ): Promise<DataSource> {
   const {
     source: mesh,
     transform,
     segmentPropertyMap,
-  } = await getMeshSource(options.chunkManager, credentialsProvider, url);
+  } = await getMeshSource(sharedKvStoreContext, url, options);
   const subsources: DataSubsourceEntry[] = [
     {
       id: "default",
@@ -1086,18 +1105,19 @@ async function getMeshDataSource(
     },
   ];
   if (segmentPropertyMap !== undefined) {
-    const mapUrl = resolvePath(url, segmentPropertyMap);
+    const mapUrl = kvstoreEnsureDirectoryPipelineUrl(
+      sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+        url,
+        segmentPropertyMap,
+      ),
+    );
     const metadata = await getJsonMetadata(
-      options.chunkManager,
-      credentialsProvider,
+      sharedKvStoreContext,
       mapUrl,
+      /*required=*/ true,
+      options,
     );
-    const segmentPropertyMapData = getSegmentPropertyMap(
-      options.chunkManager,
-      credentialsProvider,
-      metadata,
-      mapUrl,
-    );
+    const segmentPropertyMapData = getSegmentPropertyMap(metadata);
     subsources.push({
       id: "properties",
       default: true,
@@ -1113,21 +1133,16 @@ async function getMeshDataSource(
 
 function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
   verifyObject(data);
-  const tempUint64 = new Uint64();
   const ids = verifyObjectProperty(data, "ids", (idsObj) => {
     idsObj = verifyStringArray(idsObj);
     const numIds = idsObj.length;
-    const ids = new Uint32Array(numIds * 2);
+    const ids = new BigUint64Array(numIds);
     for (let i = 0; i < numIds; ++i) {
-      if (!tempUint64.tryParseString(idsObj[i])) {
-        throw new Error(`Invalid uint64 id: ${JSON.stringify(idsObj[i])}`);
-      }
-      ids[2 * i] = tempUint64.low;
-      ids[2 * i + 1] = tempUint64.high;
+      ids[i] = parseUint64(idsObj[i]);
     }
     return ids;
   });
-  const numIds = ids.length / 2;
+  const numIds = ids.length;
   const properties = verifyObjectProperty(data, "properties", (propertiesObj) =>
     parseArray(propertiesObj, (propertyObj): InlineSegmentProperty => {
       verifyObject(propertyObj);
@@ -1202,7 +1217,11 @@ function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
                 `Expected ${numIds} values, but received: ${valuesObj.length}`,
               );
             }
-            return DATA_TYPE_ARRAY_CONSTRUCTOR[dataType].from(valuesObj);
+            return (
+              DATA_TYPE_ARRAY_CONSTRUCTOR[
+                dataType
+              ] as TypedNumberArrayConstructor
+            ).from(valuesObj);
           },
         );
         let min = Infinity;
@@ -1233,44 +1252,7 @@ function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
   return normalizeInlineSegmentPropertyMap({ ids, properties });
 }
 
-export const PrecomputedIndexedSegmentPropertySource = WithParameters(
-  WithCredentialsProvider<SpecialProtocolCredentials>()(
-    IndexedSegmentPropertySource,
-  ),
-  IndexedSegmentPropertySourceParameters,
-);
-
-// function parseIndexedPropertyMap(data: unknown): {
-//   sharding: ShardingParameters|undefined,
-//   properties: readonly Readonly<IndexedSegmentProperty>[]
-// } {
-//   verifyObject(data);
-//   const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
-//   const properties = verifyObjectProperty(
-//       data, 'properties',
-//       propertiesObj => parseArray(propertiesObj, (propertyObj): IndexedSegmentProperty => {
-//         const id = verifyObjectProperty(propertyObj, 'id', verifyString);
-//         const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
-//         const type = verifyObjectProperty(propertyObj, 'type', type => {
-//           if (type !== 'string') {
-//             throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
-//           }
-//           return type;
-//         });
-//         return {id, description, type};
-//       }));
-//   return {sharding, properties};
-// }
-
-export function getSegmentPropertyMap(
-  chunkManager: Borrowed<ChunkManager>,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
-  data: unknown,
-  url: string,
-): SegmentPropertyMap {
-  chunkManager;
-  credentialsProvider;
-  url;
+export function getSegmentPropertyMap(data: unknown): SegmentPropertyMap {
   try {
     const t = verifyObjectProperty(data, "@type", verifyString);
     if (t !== "neuroglancer_segment_properties") {
@@ -1283,25 +1265,13 @@ export function getSegmentPropertyMap(
       "inline",
       parseInlinePropertyMap,
     );
-    // const indexedProperties = verifyOptionalObjectProperty(data, 'indexed', indexedObj => {
-    //   const {sharding, properties} = parseIndexedPropertyMap(indexedObj);
-    //   return chunkManager.getChunkSource(
-    //       PrecomputedIndexedSegmentPropertySource,
-    //       {credentialsProvider, properties, parameters: {sharding, url}});
-    // });
     return new SegmentPropertyMap({ inlineProperties });
   } catch (e) {
     throw new Error(`Error parsing segment property map: ${e.message}`);
   }
 }
 
-async function getSegmentPropertyMapDataSource(
-  options: GetDataSourceOptions,
-  credentialsProvider: SpecialProtocolCredentialsProvider,
-  url: string,
-  metadata: unknown,
-): Promise<DataSource> {
-  options;
+function getSegmentPropertyMapDataSource(metadata: unknown): DataSource {
   return {
     modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
     subsources: [
@@ -1309,12 +1279,7 @@ async function getSegmentPropertyMapDataSource(
         id: "default",
         default: true,
         subsource: {
-          segmentPropertyMap: getSegmentPropertyMap(
-            options.chunkManager,
-            credentialsProvider,
-            metadata,
-            url,
-          ),
+          segmentPropertyMap: getSegmentPropertyMap(metadata),
         },
       },
     ],
@@ -1340,54 +1305,47 @@ export function unparseProviderUrl(url: string, parameters: any) {
   return url;
 }
 
-export class PrecomputedDataSource extends DataSourceProvider {
+export class PrecomputedDataSource implements KvStoreBasedDataSourceProvider {
+  get scheme() {
+    return "neuroglancer-precomputed";
+  }
+  get expectsDirectory() {
+    return true;
+  }
   get description() {
-    return "Precomputed file-backed data source";
+    return "Neuroglancer Precomputed data source";
   }
 
-  normalizeUrl(options: NormalizeUrlOptions): string {
-    const { url, parameters } = parseProviderUrl(options.providerUrl);
-    return (
-      options.providerProtocol + "://" + unparseProviderUrl(url, parameters)
+  get(
+    options: GetKvStoreBasedDataSourceOptions,
+  ): Promise<DataSourceLookupResult> {
+    const { authorityAndPath, query, fragment } = parseUrlSuffix(
+      options.url.suffix,
     );
-  }
-
-  convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
-    const { url, parameters } = parseProviderUrl(options.providerUrl);
-    if (options.type === "mesh") {
-      parameters.type = "mesh";
+    if (query) {
+      throw new Error(
+        `Invalid URL ${JSON.stringify(options.url.url)}: query parameters not supported`,
+      );
     }
-    return (
-      options.providerProtocol + "://" + unparseProviderUrl(url, parameters)
-    );
-  }
-
-  get(options: GetDataSourceOptions): Promise<DataSource> {
-    const { url: providerUrl, parameters } = parseProviderUrl(
-      options.providerUrl,
-    );
-    return options.chunkManager.memoize.getUncounted(
-      { type: "precomputed:get", providerUrl, parameters },
-      async (): Promise<DataSource> => {
-        const { url, credentialsProvider } = parseSpecialUrl(
-          providerUrl,
-          options.credentialsManager,
+    if (authorityAndPath) {
+      throw new Error(
+        `Invalid URL ${JSON.stringify(options.url.url)}: non-empty path not supported`,
+      );
+    }
+    const parameters = parseQueryStringParameters(fragment ?? "");
+    const url = kvstoreEnsureDirectoryPipelineUrl(options.kvStoreUrl);
+    return options.registry.chunkManager.memoize.getAsync(
+      { type: "precomputed:get", url, parameters },
+      options,
+      async (progressOptions) => {
+        const { sharedKvStoreContext } = options.registry;
+        const metadata = await getJsonMetadata(
+          sharedKvStoreContext,
+          url,
+          /*required=*/ parameters.type !== "mesh",
+          progressOptions,
         );
-        let metadata: any;
-        try {
-          metadata = await getJsonMetadata(
-            options.chunkManager,
-            credentialsProvider,
-            url,
-          );
-        } catch (e) {
-          if (isNotFoundError(e)) {
-            if (parameters.type === "mesh") {
-              return await getMeshDataSource(options, credentialsProvider, url);
-            }
-          }
-          throw e;
-        }
+        const canonicalUrl = `${url}|${options.url.scheme}:`;
         verifyObject(metadata);
         const redirect = verifyOptionalObjectProperty(
           metadata,
@@ -1395,52 +1353,74 @@ export class PrecomputedDataSource extends DataSourceProvider {
           verifyString,
         );
         if (redirect !== undefined) {
-          throw new RedirectError(redirect);
+          return { canonicalUrl, targetUrl: redirect };
         }
         const t = verifyOptionalObjectProperty(metadata, "@type", verifyString);
+        let dataSource: DataSource;
         switch (t) {
           case "neuroglancer_skeletons":
-            return await getSkeletonsDataSource(
-              options,
-              credentialsProvider,
+            dataSource = await getSkeletonsDataSource(
+              sharedKvStoreContext,
               url,
+              progressOptions,
             );
+            break;
           case "neuroglancer_multilod_draco":
           case "neuroglancer_legacy_mesh":
-            return await getMeshDataSource(options, credentialsProvider, url);
+            dataSource = await getMeshDataSource(
+              sharedKvStoreContext,
+              url,
+              progressOptions,
+            );
+            break;
           case "neuroglancer_annotations_v1":
-            return await getAnnotationDataSource(
-              options,
-              credentialsProvider,
+            dataSource = getAnnotationDataSource(
+              sharedKvStoreContext,
               url,
               metadata,
             );
+            break;
           case "neuroglancer_segment_properties":
-            return await getSegmentPropertyMapDataSource(
-              options,
-              credentialsProvider,
-              url,
-              metadata,
-            );
+            dataSource = getSegmentPropertyMapDataSource(metadata);
+            break;
           case "neuroglancer_multiscale_volume":
           case undefined:
-            return await getVolumeDataSource(
-              options,
-              credentialsProvider,
+            dataSource = await getVolumeDataSource(
+              sharedKvStoreContext,
               url,
               metadata,
+              progressOptions,
             );
+            break;
           default:
             throw new Error(`Invalid type: ${JSON.stringify(t)}`);
         }
+        dataSource.canonicalUrl = canonicalUrl;
+        return dataSource;
       },
     );
   }
-  completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(
-      options.credentialsManager,
-      options.providerUrl,
-      options.abortSignal,
-    );
+}
+
+export class PrecomputedLegacyUrlDataSource extends KvStoreBasedDataSourceLegacyUrlAdapter {
+  constructor() {
+    super(new PrecomputedDataSource(), "precomputed");
   }
+
+  convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
+    const { url, parameters } = parseProviderUrl(options.providerUrl);
+    if (options.type === "mesh") {
+      parameters.type = "mesh";
+    }
+    return options.providerScheme + "://" + unparseProviderUrl(url, parameters);
+  }
+}
+
+export function registerAutoDetect(registry: AutoDetectRegistry) {
+  registry.registerDirectoryFormat(
+    simpleFilePresenceAutoDetectDirectorySpec(new Set(["info"]), {
+      suffix: "neuroglancer-precomputed:",
+      description: "Neuroglancer Precomputed data source",
+    }),
+  );
 }

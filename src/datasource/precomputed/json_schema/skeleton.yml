@@ -1,0 +1,71 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: PrecomputedSkeleton
+title: "Precomputed skeleton metadata"
+type: object
+properties:
+  "@type":
+    const: "neuroglancer_skeletons"
+    title: Precomputed data kind.
+  transform:
+    type: array
+    minItems: 12
+    maxItems: 12
+    items:
+      type: number
+    title: |-
+      4x3 homogeneous coordinate transform matrix in row-major order from the
+      *stored model* coordinate space to the *model* coordinate space. The
+      "stored model" coordinate space is arbitrary. The "model" coordinate space
+      should be in nanometers.
+  vertex_attributes:
+    type: array
+    title: Additional per-vertex attributes.
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+          title: Unique identifier of the attribute.
+        data_type:
+          enum:
+            - "float32"
+            - "uint8"
+            - "int8"
+            - "uint16"
+            - "int16"
+            - "uint32"
+            - "int32"
+          title: Attribute data type.
+        num_components:
+          type: integer
+          minimum: 1
+          title: Number of components.
+          description: |-
+            If `.num_components` is greater than 1, the attribute is a vector.
+  sharding:
+    $ref: PrecomputedSharding
+    title: Sharding parameters.
+    description: |-
+      If specified, indicates that the skeletons are stored in :ref:`sharded
+      format<precomputed-skeleton-format-sharded>`. If unspecified, the
+      skeletons are stored in :ref:`unsharded
+      format<precomputed-skeleton-format-unsharded>` as separate files.
+  segment_properties:
+    title: |
+      Relative path to the directory containing associated :ref:`segment
+      properties<precomputed-segment-properties-format>`.
+
+      .. note::
+
+        This association does *not* apply transitively when this skeleton
+        dataset itself is referenced via the :ref:`precomputed
+        volume<precomputed-volume-format>` `~PrecomputedVolume.mesh` metadata
+        property. Instead, the associated segment properties must be specified
+        directly in the volume metadata.
+    type: string
+
+required:
+  - "@type"
+  - vertex_quantization_bits
+  - transform
+  - lod_scale_multiplier

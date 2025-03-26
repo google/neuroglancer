@@ -16,3 +16,5 @@
 
 export const CREDENTIALS_PROVIDER_RPC_ID = "CredentialsProvider";
 export const CREDENTIALS_PROVIDER_GET_RPC_ID = "CredentialsProvider.get";
+export const CREDENTIALS_MANAGER_RPC_ID = "CredentialsManager";
+export const CREDENTIALS_MANAGER_GET_RPC_ID = "CredentialsManager.get";

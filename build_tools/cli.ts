@@ -251,10 +251,19 @@ function parseArgs() {
           mode: {
             default: "production",
           },
+          analyze: {
+            type: "boolean",
+            default: false,
+            description: "Print bundle size analysis.",
+          },
         }),
       handler: async (argv) => {
         setConfig(await getWebpackConfig(argv, { watch: argv.watch }));
-        await runWebpack("build", `--mode=${argv.mode}`);
+        await runWebpack(
+          "build",
+          `--mode=${argv.mode}`,
+          ...(argv.analyze ? [`--analyze`] : []),
+        );
       },
     })
     .strict()

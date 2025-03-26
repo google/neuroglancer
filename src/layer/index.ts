@@ -32,7 +32,7 @@ import {
   TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type {
-  DataSourceProviderRegistry,
+  DataSourceRegistry,
   DataSourceSpecification,
   DataSubsource,
 } from "#src/datasource/index.js";
@@ -106,7 +106,6 @@ import {
   removeSignalBinding,
 } from "#src/util/signal_binding_updater.js";
 import type { Trackable } from "#src/util/trackable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { kEmptyFloat32Vec } from "#src/util/vector.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
@@ -1120,7 +1119,7 @@ export class LayerManager extends RefCounted {
 
 export interface PickState {
   pickedRenderLayer: RenderLayer | null;
-  pickedValue: Uint64;
+  pickedValue: bigint;
   pickedOffset: number;
   pickedAnnotationLayer: AnnotationLayerState | undefined;
   pickedAnnotationId: string | undefined;
@@ -1139,7 +1138,7 @@ export class MouseSelectionState implements PickState {
   active = false;
   displayDimensions: DisplayDimensions | undefined = undefined;
   pickedRenderLayer: RenderLayer | null = null;
-  pickedValue = new Uint64(0, 0);
+  pickedValue = 0n;
   pickedOffset = 0;
   pickedAnnotationLayer: AnnotationLayerState | undefined = undefined;
   pickedAnnotationId: string | undefined = undefined;
@@ -2124,7 +2123,7 @@ export abstract class LayerListSpecification extends RefCounted {
 
   abstract rpc: RPC;
 
-  abstract dataSourceProviderRegistry: Borrowed<DataSourceProviderRegistry>;
+  abstract dataSourceProviderRegistry: Borrowed<DataSourceRegistry>;
   abstract layerManager: Borrowed<LayerManager>;
   abstract chunkManager: Borrowed<ChunkManager>;
   abstract layerSelectedValues: Borrowed<LayerSelectedValues>;
@@ -2154,7 +2153,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
 
   constructor(
     public display: DisplayContext,
-    public dataSourceProviderRegistry: DataSourceProviderRegistry,
+    public dataSourceProviderRegistry: DataSourceRegistry,
     public layerManager: LayerManager,
     public chunkManager: ChunkManager,
     public selectionState: Borrowed<TrackableDataSelectionState>,

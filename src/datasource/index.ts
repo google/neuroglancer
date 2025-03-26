@@ -22,12 +22,21 @@ import type {
   CoordinateSpaceTransform,
   CoordinateTransformSpecification,
 } from "#src/coordinate_transform.js";
+import type { SharedCredentialsManager } from "#src/credentials_provider/shared.js";
+import { getKvStoreCompletions } from "#src/datasource/kvstore_completions.js";
+import type { LocalDataSource } from "#src/datasource/local.js";
 import {
-  emptyValidCoordinateSpace,
-  makeCoordinateSpace,
-  makeIdentityTransform,
-} from "#src/coordinate_transform.js";
-import type { CredentialsManager } from "#src/credentials_provider/index.js";
+  AutoDetectRegistry,
+  autoDetectFormat,
+} from "#src/kvstore/auto_detect.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import type { UrlWithParsedScheme } from "#src/kvstore/url.js";
+import {
+  extractQueryAndFragment,
+  finalPipelineUrlComponent,
+  parsePipelineUrlComponent,
+  splitPipelineUrl,
+} from "#src/kvstore/url.js";
 import type { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import type { SegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
 import type { SegmentationGraphSource } from "#src/segmentation_graph/source.js";
@@ -41,20 +50,14 @@ import type {
 } from "#src/util/completion.js";
 import {
   applyCompletionOffset,
+  emptyCompletionResult,
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
-import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { createIdentity } from "#src/util/matrix.js";
+import { type ProgressOptions } from "#src/util/progress_listener.js";
 import type { Trackable } from "#src/util/trackable.js";
 
 export type CompletionResult = BasicCompletionResult<CompletionWithDescription>;
-
-export class RedirectError extends Error {
-  constructor(public redirectTarget: string) {
-    super(`Redirected to: ${redirectTarget}`);
-  }
-}
 
 /**
  * Returns the length of the prefix of path that corresponds to the "group", according to the
@@ -93,9 +96,7 @@ export function suggestLayerNameBasedOnSeparator(
   return path.substring(groupIndex);
 }
 
-export interface GetDataSourceOptionsBase {
-  chunkManager: ChunkManager;
-  abortSignal?: AbortSignal;
+export interface GetDataSourceOptionsBase extends Partial<ProgressOptions> {
   url: string;
   transform: CoordinateTransformSpecification | undefined;
   globalCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
@@ -103,11 +104,10 @@ export interface GetDataSourceOptionsBase {
 }
 
 export interface GetDataSourceOptions extends GetDataSourceOptionsBase {
-  registry: DataSourceProviderRegistry;
+  registry: DataSourceRegistry;
   providerUrl: string;
-  abortSignal: AbortSignal;
-  providerProtocol: string;
-  credentialsManager: CredentialsManager;
+  signal: AbortSignal;
+  providerScheme: string;
 }
 
 export interface ConvertLegacyUrlOptionsBase {
@@ -116,24 +116,9 @@ export interface ConvertLegacyUrlOptionsBase {
 }
 
 export interface ConvertLegacyUrlOptions extends ConvertLegacyUrlOptionsBase {
-  registry: DataSourceProviderRegistry;
+  registry: DataSourceRegistry;
   providerUrl: string;
-  providerProtocol: string;
-}
-
-export interface NormalizeUrlOptionsBase {
-  url: string;
-}
-
-export interface NormalizeUrlOptions extends NormalizeUrlOptionsBase {
-  registry: DataSourceProviderRegistry;
-  providerUrl: string;
-  providerProtocol: string;
-}
-
-export enum LocalDataSource {
-  annotations = 0,
-  equivalences = 1,
+  providerScheme: string;
 }
 
 export interface DataSubsource {
@@ -147,17 +132,14 @@ export interface DataSubsource {
   segmentationGraph?: SegmentationGraphSource;
 }
 
-export interface CompleteUrlOptionsBase {
+export interface CompleteUrlOptionsBase extends Partial<ProgressOptions> {
   url: string;
-  abortSignal?: AbortSignal;
-  chunkManager: ChunkManager;
 }
 
 export interface CompleteUrlOptions extends CompleteUrlOptionsBase {
-  registry: DataSourceProviderRegistry;
+  registry: DataSourceRegistry;
   providerUrl: string;
-  abortSignal: AbortSignal;
-  credentialsManager: CredentialsManager;
+  signal: AbortSignal;
 }
 
 export interface DataSubsourceEntry {
@@ -196,20 +178,23 @@ export interface DataSource {
   modelTransform: CoordinateSpaceTransform;
   canChangeModelSpaceRank?: boolean;
   state?: Trackable;
+  canonicalUrl?: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
-export interface DataSourceProvider {
-  /**
-   * Returns a suggested layer name for the given volume source.
-   */
-  suggestLayerName?(path: string): string;
+export interface DataSourceRedirect {
+  // Canonical URL of the source.
+  canonicalUrl?: string;
 
-  /**
-   * Returns the length of the prefix of path that is its 'group'.  This is used for suggesting a
-   * default URL for adding a new layer.
-   */
-  findSourceGroup?(path: string): number;
+  // Target URL.
+  targetUrl: string;
+}
+
+export type DataSourceLookupResult = DataSource | DataSourceRedirect;
+
+export interface DataSourceWithRedirectInfo extends DataSource {
+  // Canonical URL prior to any redirects.
+  originalCanonicalUrl?: string;
+  redirectLog: Set<string>;
 }
 
 export interface DataSubsourceSpecification {
@@ -222,6 +207,9 @@ export interface DataSourceSpecification {
   enableDefaultSubsources: boolean;
   subsources: Map<string, DataSubsourceSpecification>;
   state?: any;
+
+  // Indicates that the spec was set manually in the UI.
+  setManually?: boolean;
 }
 
 export function makeEmptyDataSourceSpecification(): DataSourceSpecification {
@@ -233,220 +221,234 @@ export function makeEmptyDataSourceSpecification(): DataSourceSpecification {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
-export abstract class DataSourceProvider extends RefCounted {
-  abstract description?: string;
+export interface DataSourceProvider {
+  scheme: string;
+  description?: string;
+  // Exclude from completion list.
+  hidden?: boolean;
 
-  abstract get(options: GetDataSourceOptions): Promise<DataSource>;
+  get(options: GetDataSourceOptions): Promise<DataSourceLookupResult>;
 
-  normalizeUrl(options: NormalizeUrlOptions): string {
-    return options.url;
-  }
+  convertLegacyUrl?: (options: ConvertLegacyUrlOptions) => string;
 
-  convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
-    return options.url;
-  }
-
-  async completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
-    options;
-    throw null;
-  }
+  completeUrl?: (options: CompleteUrlOptions) => Promise<CompletionResult>;
 }
 
-export const localAnnotationsUrl = "local://annotations";
-export const localEquivalencesUrl = "local://equivalences";
-
-class LocalDataSourceProvider extends DataSourceProvider {
-  get description() {
-    return "Local in-memory";
-  }
-
-  async get(options: GetDataSourceOptions): Promise<DataSource> {
-    switch (options.url) {
-      case localAnnotationsUrl: {
-        const { transform } = options;
-        let modelTransform: CoordinateSpaceTransform;
-        if (transform === undefined) {
-          const baseSpace = options.globalCoordinateSpace.value;
-          const { rank, names, scales, units } = baseSpace;
-          const inputSpace = makeCoordinateSpace({
-            rank,
-            scales,
-            units,
-            names: names.map((_, i) => `${i}`),
-          });
-          const outputSpace = makeCoordinateSpace({
-            rank,
-            scales,
-            units,
-            names,
-          });
-          modelTransform = {
-            rank,
-            sourceRank: rank,
-            inputSpace,
-            outputSpace,
-            transform: createIdentity(Float64Array, rank + 1),
-          };
-        } else {
-          modelTransform = makeIdentityTransform(emptyValidCoordinateSpace);
-        }
-        return {
-          modelTransform,
-          canChangeModelSpaceRank: true,
-          subsources: [
-            {
-              id: "default",
-              default: true,
-              subsource: {
-                local: LocalDataSource.annotations,
-              },
-            },
-          ],
-        };
-      }
-      case localEquivalencesUrl: {
-        return {
-          modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
-          canChangeModelSpaceRank: false,
-          subsources: [
-            {
-              id: "default",
-              default: true,
-              subsource: {
-                local: LocalDataSource.equivalences,
-              },
-            },
-          ],
-        };
-      }
-    }
-    throw new Error("Invalid local data source URL");
-  }
-
-  async completeUrl(options: CompleteUrlOptions) {
-    return {
-      offset: 0,
-      completions: getPrefixMatchesWithDescriptions(
-        options.providerUrl,
-        [
-          {
-            value: "annotations",
-            description: "Annotations stored in the JSON state",
-          },
-          {
-            value: "equivalences",
-            description:
-              "Segmentation equivalence graph stored in the JSON state",
-          },
-        ],
-        (x) => x.value,
-        (x) => x.description,
-      ),
-    };
-  }
+export interface KvStoreBasedDataSourceProvider {
+  scheme: string;
+  description?: string;
+  singleFile?: boolean;
+  expectsDirectory?: boolean;
+  get(
+    options: GetKvStoreBasedDataSourceOptions,
+  ): Promise<DataSourceLookupResult>;
+  completeUrl?: (
+    options: GetKvStoreBasedDataSourceOptions,
+  ) => Promise<CompletionResult>;
 }
 
-const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
+export interface GetKvStoreBasedDataSourceOptions
+  extends Partial<ProgressOptions> {
+  registry: DataSourceRegistry;
+  kvStoreUrl: string;
+  url: UrlWithParsedScheme;
+  state?: any;
+}
 
-export class DataSourceProviderRegistry extends RefCounted {
-  constructor(public credentialsManager: CredentialsManager) {
+const schemePattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
+
+export class DataSourceRegistry extends RefCounted {
+  get credentialsManager(): SharedCredentialsManager {
+    return this.sharedKvStoreContext.credentialsManager;
+  }
+
+  get chunkManager(): ChunkManager {
+    return this.sharedKvStoreContext.chunkManager;
+  }
+
+  constructor(public sharedKvStoreContext: SharedKvStoreContext) {
     super();
   }
-  dataSources = new Map<string, Owned<DataSourceProvider>>([
-    ["local", new LocalDataSourceProvider()],
-  ]);
+  dataSources = new Map<string, DataSourceProvider>();
+  kvStoreBasedDataSources = new Map<string, KvStoreBasedDataSourceProvider>();
+  autoDetectRegistry = new AutoDetectRegistry();
 
-  register(name: string, dataSource: Owned<DataSourceProvider>) {
-    this.dataSources.set(name, this.registerDisposer(dataSource));
+  register(provider: DataSourceProvider) {
+    this.dataSources.set(provider.scheme, provider);
+  }
+  registerKvStoreBasedProvider(provider: KvStoreBasedDataSourceProvider) {
+    this.kvStoreBasedDataSources.set(provider.scheme, provider);
   }
 
   getProvider(url: string): [DataSourceProvider, string, string] {
-    const m = url.match(protocolPattern);
+    const m = url.match(schemePattern);
     if (m === null || m[1] === undefined) {
       throw new Error(
-        `Data source URL must have the form "<protocol>://<path>".`,
+        `Data source URL must have the form "<scheme>://<path>".`,
       );
     }
-    const [, providerProtocol, providerUrl] = m;
-    const factory = this.dataSources.get(providerProtocol);
+    const [, providerScheme, providerUrl] = m;
+    const factory = this.dataSources.get(providerScheme);
     if (factory === undefined) {
       throw new Error(
-        `Unsupported data source: ${JSON.stringify(providerProtocol)}.`,
+        `Unsupported data source: ${JSON.stringify(providerScheme)}.`,
       );
     }
-    return [factory, providerUrl, providerProtocol];
+    return [factory, providerUrl, providerScheme];
   }
 
-  async get(options: GetDataSourceOptionsBase): Promise<DataSource> {
-    const redirectLog = new Set<string>();
-    const { abortSignal } = options;
-    let url: string = options.url;
-    while (true) {
-      const [provider, providerUrl, providerProtocol] = this.getProvider(
-        options.url,
+  private async autoDetectFormat(options: GetDataSourceOptionsBase) {
+    const { matches, url } = await autoDetectFormat({
+      url: options.url,
+      kvStoreContext: this.sharedKvStoreContext.kvStoreContext,
+      signal: options.signal,
+      progressListener: options.progressListener,
+      autoDetectDirectory: () => this.autoDetectRegistry.directorySpec,
+      autoDetectFile: () => this.autoDetectRegistry.fileSpec,
+    });
+    if (matches.length !== 1) {
+      let message: string;
+      if (matches.length === 0) {
+        message = "no format detected";
+      } else {
+        message = `multiple formats detected: ${JSON.stringify(matches)}`;
+      }
+      throw new Error(
+        `Failed to auto-detect data source for ${JSON.stringify(options.url)}: ${message}`,
       );
-      redirectLog.add(options.url);
-      try {
-        return provider.get({
-          ...options,
-          url,
-          providerProtocol,
-          providerUrl,
-          registry: this,
-          abortSignal: abortSignal ?? new AbortController().signal,
-          credentialsManager: this.credentialsManager,
-        });
-      } catch (e) {
-        if (e instanceof RedirectError) {
-          const redirect = e.redirectTarget;
-          if (redirectLog.has(redirect)) {
-            throw Error(
-              `Layer source redirection contains loop: ${JSON.stringify(
-                Array.from(redirectLog),
-              )}`,
-            );
-          }
-          if (redirectLog.size >= 10) {
-            throw Error(
-              `Too many layer source redirections: ${JSON.stringify(
-                Array.from(redirectLog),
-              )}`,
-            );
-          }
-          url = redirect;
-          continue;
-        }
-        throw e;
+    }
+    return `${url}|${matches[0].suffix}`;
+  }
+
+  private async resolveKvStoreBasedDataSource(
+    options: GetDataSourceOptionsBase,
+  ): Promise<DataSourceLookupResult> {
+    while (true) {
+      const finalPart = parsePipelineUrlComponent(
+        finalPipelineUrlComponent(options.url),
+      );
+      const dataSourceProvider = this.kvStoreBasedDataSources.get(
+        finalPart.scheme,
+      );
+      if (dataSourceProvider === undefined) {
+        // Attempt to auto-detect format.
+        const newUrl = await this.autoDetectFormat(options);
+        options = { ...options, url: newUrl };
+        continue;
+      }
+      return await dataSourceProvider.get({
+        registry: this,
+        url: finalPart,
+        kvStoreUrl: options.url.substring(
+          0,
+          options.url.length - finalPart.url.length - 1,
+        ),
+        signal: options.signal,
+        progressListener: options.progressListener,
+        state: options.state,
+      });
+    }
+  }
+
+  private async resolvePipeline(
+    options: GetDataSourceOptionsBase,
+  ): Promise<DataSourceLookupResult> {
+    const pipelineParts = splitPipelineUrl(options.url);
+
+    const basePart = pipelineParts[0];
+    const baseScheme = basePart.scheme;
+
+    // Check kvstore providers
+    {
+      const provider =
+        this.sharedKvStoreContext.kvStoreContext.baseKvStoreProviders.get(
+          baseScheme,
+        );
+      if (provider !== undefined) {
+        return await this.resolveKvStoreBasedDataSource(options);
       }
     }
+
+    if (pipelineParts.length !== 1) {
+      throw new Error(`${baseScheme}: scheme does not support | URL pipelines`);
+    }
+
+    const suffix = basePart.suffix ?? "";
+    if (!suffix.startsWith("//")) {
+      throw new Error(`${baseScheme}: URLs must start with "${baseScheme}://"`);
+    }
+
+    const providerUrl = suffix.substring(2);
+
+    // Check non-kvstore-based providers
+    {
+      const provider = this.dataSources.get(baseScheme);
+      if (provider !== undefined) {
+        return await provider.get({
+          ...options,
+          url: pipelineParts[0].url,
+          providerScheme: baseScheme,
+          providerUrl,
+          registry: this,
+          signal: options.signal ?? new AbortController().signal,
+        });
+      }
+    }
+
+    throw new Error(`Unsupported scheme: ${baseScheme}:`);
   }
 
+  async get(
+    options: GetDataSourceOptionsBase,
+  ): Promise<DataSourceWithRedirectInfo> {
+    const redirectLog = new Set<string>();
+    let url: string = options.url;
+    url = url.trim();
+    // Trim any trailing "|" characters.
+    url = url.replace(/\|+$/, "");
+    let originalCanonicalUrl: string | undefined;
+    while (true) {
+      redirectLog.add(url);
+      const dataSource = await this.resolvePipeline({ ...options, url });
+      if (originalCanonicalUrl === undefined) {
+        originalCanonicalUrl = dataSource.canonicalUrl;
+      }
+      if ("targetUrl" in dataSource) {
+        const { targetUrl } = dataSource;
+        if (redirectLog.has(targetUrl)) {
+          throw Error(
+            `Layer source redirection contains loop: ${JSON.stringify([
+              ...redirectLog,
+              targetUrl,
+            ])}`,
+          );
+        }
+        if (redirectLog.size >= 10) {
+          throw Error(
+            `Too many layer source redirections: ${JSON.stringify([
+              ...redirectLog,
+              targetUrl,
+            ])}`,
+          );
+        }
+        url = targetUrl;
+        continue;
+      }
+      return { ...dataSource, redirectLog, originalCanonicalUrl };
+    }
+  }
+
+  // Converts legacy precomputed mesh and skeleton datasource URLs.
   convertLegacyUrl(options: ConvertLegacyUrlOptionsBase): string {
     try {
-      const [provider, providerUrl, providerProtocol] = this.getProvider(
+      const [provider, providerUrl, providerScheme] = this.getProvider(
         options.url,
       );
+      if (provider.convertLegacyUrl === undefined) return options.url;
       return provider.convertLegacyUrl({
         ...options,
         providerUrl,
-        providerProtocol,
-        registry: this,
-      });
-    } catch {
-      return options.url;
-    }
-  }
-
-  normalizeUrl(options: NormalizeUrlOptionsBase): string {
-    try {
-      const [provider, providerUrl, providerProtocol] = this.getProvider(
-        options.url,
-      );
-      return provider.normalizeUrl({
-        ...options,
-        providerUrl,
-        providerProtocol,
+        providerScheme: providerScheme,
         registry: this,
       });
     } catch {
@@ -457,52 +459,209 @@ export class DataSourceProviderRegistry extends RefCounted {
   async completeUrl(
     options: CompleteUrlOptionsBase,
   ): Promise<CompletionResult> {
-    // Check if url matches a protocol.  Note that protocolPattern always matches.
-    const { url, abortSignal } = options;
-    const protocolMatch = url.match(protocolPattern)!;
-    const protocol = protocolMatch[1];
-    if (protocol === undefined) {
-      return Promise.resolve({
-        offset: 0,
+    // Check if url matches a scheme.  Note that schemePattern always matches.
+    const { signal } = options;
+
+    const { url } = options;
+
+    const finalComponent = finalPipelineUrlComponent(url);
+    const parsedFinalComponent = parsePipelineUrlComponent(finalComponent);
+    const { scheme } = parsedFinalComponent;
+
+    // Check if we need to complete a scheme.
+    if (
+      finalComponent === url &&
+      !(parsedFinalComponent.suffix ?? "").startsWith("//")
+    ) {
+      const providers: {
+        scheme: string;
+        description?: string;
+      }[] = [];
+      const add = <Provider extends { scheme: string; description?: string }>(
+        iterable: Iterable<Provider>,
+        predicate?: (provider: Provider) => boolean,
+      ) => {
+        for (const provider of iterable) {
+          if (predicate?.(provider) === false) continue;
+          providers.push(provider);
+        }
+      };
+
+      if (finalComponent === url) {
+        add(
+          this.sharedKvStoreContext.kvStoreContext.baseKvStoreProviders.values(),
+        );
+        add(this.dataSources.values(), (provider) => provider.hidden !== true);
+      } else {
+        add(this.kvStoreBasedDataSources.values());
+        add(
+          this.sharedKvStoreContext.kvStoreContext.kvStoreAdapterProviders.values(),
+        );
+      }
+
+      const schemeSuffix = finalComponent === url ? "//" : "";
+      return {
+        offset: url.length - finalComponent.length,
         completions: getPrefixMatchesWithDescriptions(
-          url,
-          this.dataSources,
-          ([name]) => `${name}://`,
-          ([, factory]) => factory.description,
+          scheme,
+          providers,
+          ({ scheme }) => `${scheme}:${schemeSuffix}`,
+          ({ description }) => description,
         ),
-      });
+      };
     }
-    const factory = this.dataSources.get(protocol);
-    if (factory !== undefined) {
-      const completions = await factory.completeUrl({
-        registry: this,
-        url,
-        providerUrl: protocolMatch[2],
-        chunkManager: options.chunkManager,
-        abortSignal: abortSignal ?? new AbortController().signal,
-        credentialsManager: this.credentialsManager,
+
+    if (parsedFinalComponent.suffix === undefined) {
+      const prevPipelineUrl = options.url.substring(
+        0,
+        options.url.length - finalComponent.length - 1,
+      );
+      const { matches } = await autoDetectFormat({
+        url: prevPipelineUrl,
+        kvStoreContext: this.sharedKvStoreContext.kvStoreContext,
+        signal: options.signal,
+        progressListener: options.progressListener,
+        autoDetectDirectory: () => this.autoDetectRegistry.directorySpec,
+        autoDetectFile: () => this.autoDetectRegistry.fileSpec,
       });
-      return applyCompletionOffset(protocol.length + 3, completions);
+      if (matches.length === 0) {
+        throw new Error(
+          `Failed to auto-detect data source for ${JSON.stringify(prevPipelineUrl)}`,
+        );
+      }
+      return {
+        offset: url.length - finalComponent.length,
+        completions: getPrefixMatchesWithDescriptions(
+          parsedFinalComponent.scheme,
+          matches,
+          ({ suffix }) => suffix,
+          ({ description }) => description,
+        ),
+      };
     }
-    throw null;
+
+    if (finalComponent === url) {
+      // Single component pipeline.
+      const provider = this.dataSources.get(scheme);
+      if (provider !== undefined) {
+        // Non-kvstore-based protocol.
+        if (provider.completeUrl === undefined) return emptyCompletionResult;
+        const completions = await provider.completeUrl({
+          registry: this,
+          url: options.url,
+          providerUrl: parsedFinalComponent.suffix!.substring(2),
+          signal: signal ?? new AbortController().signal,
+          progressListener: options.progressListener,
+        });
+        return applyCompletionOffset(scheme.length + 3, completions);
+      }
+    }
+
+    {
+      const provider = this.kvStoreBasedDataSources.get(scheme);
+      if (provider !== undefined) {
+        if (provider.completeUrl === undefined) return emptyCompletionResult;
+        const completions = await provider.completeUrl({
+          registry: this,
+          signal: signal ?? new AbortController().signal,
+          progressListener: options.progressListener,
+          kvStoreUrl: url.substring(0, url.length - finalComponent.length - 1),
+          url: parsedFinalComponent,
+        });
+        return applyCompletionOffset(
+          url.length -
+            finalComponent.length +
+            parsedFinalComponent.scheme.length +
+            1,
+          completions,
+        );
+      }
+    }
+
+    return await getKvStoreCompletions(this.sharedKvStoreContext, {
+      url,
+      signal,
+      progressListener: options.progressListener,
+      autoDetectDirectory: () => this.autoDetectRegistry.directorySpec,
+    });
   }
 
-  suggestLayerName(url: string) {
-    let [dataSource, path] = this.getProvider(url);
-    if (path.endsWith("/")) {
-      path = path.substring(0, path.length - 1);
+  suggestLayerName(url: string): string | undefined {
+    const parts = splitPipelineUrl(url);
+    for (let i = parts.length - 1; i >= 0; --i) {
+      let { suffix } = parts[i];
+      if (!suffix) continue;
+      suffix = suffix.replace(/^\/+/, "").replace(/\/+$/, "");
+      if (!suffix) continue;
+      return suggestLayerNameBasedOnSeparator(suffix);
     }
-    const suggestor = dataSource.suggestLayerName;
-    if (suggestor !== undefined) {
-      return suggestor(path);
-    }
-    return suggestLayerNameBasedOnSeparator(path);
+    return undefined;
+  }
+}
+
+export class KvStoreBasedDataSourceLegacyUrlAdapter
+  implements DataSourceProvider
+{
+  constructor(
+    public base: KvStoreBasedDataSourceProvider,
+    public scheme = base.scheme,
+  ) {}
+
+  get hidden() {
+    return true;
   }
 
-  findSourceGroup(url: string) {
-    const [dataSource, path, dataSourceName] = this.getProvider(url);
-    const helper =
-      dataSource.findSourceGroup || findSourceGroupBasedOnSeparator;
-    return helper(path) + dataSourceName.length + 3;
+  get description() {
+    return this.base.description;
+  }
+
+  private parseProviderUrl(url: string) {
+    if (url.includes("|")) {
+      throw new Error("Only a single pipeline component supported");
+    }
+    const { base, queryAndFragment } = extractQueryAndFragment(url);
+    return {
+      kvStoreUrl: base,
+      queryAndFragment,
+      url: parsePipelineUrlComponent(`${this.base.scheme}:${queryAndFragment}`),
+    };
+  }
+
+  get(options: GetDataSourceOptions): Promise<DataSourceLookupResult> {
+    const { kvStoreUrl, url } = this.parseProviderUrl(options.providerUrl);
+    return this.base.get({
+      registry: options.registry,
+      url,
+      kvStoreUrl,
+      state: options.state,
+      signal: options.signal,
+      progressListener: options.progressListener,
+    });
+  }
+
+  async completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
+    const { kvStoreUrl, url, queryAndFragment } = this.parseProviderUrl(
+      options.providerUrl,
+    );
+    if (queryAndFragment === "") {
+      return await getKvStoreCompletions(
+        options.registry.sharedKvStoreContext,
+        {
+          url: options.providerUrl,
+          signal: options.signal,
+          progressListener: options.progressListener,
+          singlePipelineComponent: true,
+          directoryOnly: this.base.expectsDirectory,
+        },
+      );
+    }
+    if (!this.base.completeUrl) return emptyCompletionResult;
+    return this.base.completeUrl({
+      registry: options.registry,
+      signal: options.signal,
+      progressListener: options.progressListener,
+      kvStoreUrl,
+      url,
+    });
   }
 }

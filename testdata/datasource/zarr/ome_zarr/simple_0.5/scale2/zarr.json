@@ -1,0 +1,11 @@
+{
+  "attributes": {
+    "_ARRAY_DIMENSIONS": [
+      "y",
+      "x"
+    ]
+  },
+  "zarr_format": 3,
+  "consolidated_metadata": null,
+  "node_type": "group"
+}

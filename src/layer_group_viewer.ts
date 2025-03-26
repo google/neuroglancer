@@ -103,6 +103,7 @@ export interface LayerGroupViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   enableLayerColorWidget: TrackableBoolean;
+  hideCrossSectionBackground3D: TrackableBoolean;
 }
 
 export interface LayerGroupViewerOptions {
@@ -358,6 +359,9 @@ export class LayerGroupViewer extends RefCounted {
   get enableAdaptiveDownsampling() {
     return this.viewerState.enableAdaptiveDownsampling;
   }
+  get hideCrossSectionBackground3D() {
+    return this.viewerState.hideCrossSectionBackground3D;
+  }
   get showScaleBar() {
     return this.viewerState.showScaleBar;
   }
@@ -568,7 +572,7 @@ export class LayerGroupViewer extends RefCounted {
               if (layout !== "3d") {
                 newLayout = `${layout}-3d`;
               } else {
-                newLayout = "4panel";
+                newLayout = "4panel-alt";
               }
             } else {
               newLayout = layout;

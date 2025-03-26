@@ -19,7 +19,6 @@ import json
 import re
 import threading
 from concurrent.futures import Future
-from typing import Optional
 
 import numpy as np
 
@@ -190,7 +189,7 @@ class ViewerCommonBase:
         self,
         layer: str,
         *,
-        dimensions: Optional[coordinate_space.CoordinateSpace] = None,
+        dimensions: coordinate_space.CoordinateSpace | None = None,
     ) -> "Future[ts.TensorStore]":
         request_id = make_random_token()
         future: Future[ts.TensorStore] = Future()
@@ -217,7 +216,7 @@ class ViewerCommonBase:
         self,
         layer: str,
         *,
-        dimensions: Optional[coordinate_space.CoordinateSpace] = None,
+        dimensions: coordinate_space.CoordinateSpace | None = None,
     ) -> "Future[ts.TensorStore]":
         future: Future[ts.TensorStore] = Future()
 
@@ -377,7 +376,7 @@ class ViewerCommonBase:
             new_state = new_state.to_json()
 
             def encoder(x):
-                if isinstance(x, (local_volume.LocalVolume, skeleton.SkeletonSource)):
+                if isinstance(x, local_volume.LocalVolume | skeleton.SkeletonSource):
                     return self.volume_manager.register_volume(x)
                 return json_encoder_default(x)
 

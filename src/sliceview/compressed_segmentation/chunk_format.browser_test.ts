@@ -19,11 +19,11 @@ import { chunkFormatTest } from "#src/sliceview/chunk_format_testing.js";
 import { ChunkFormat } from "#src/sliceview/compressed_segmentation/chunk_format.js";
 import { encodeChannels as encodeChannelsUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
 import { encodeChannels as encodeChannelsUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
-import { makeRandomUint64Array } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { makeRandomArrayByChoosingWithReplacement } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import { prod4, vec3, vec3Key } from "#src/util/geom.js";
 import { getRandomValues } from "#src/util/random.js";
-import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 describe("sliceview/compressed_segmentation/chunk_format", () => {
   describe("data access", () => {
@@ -31,13 +31,13 @@ describe("sliceview/compressed_segmentation/chunk_format", () => {
     function runTest(
       dataType: DataType,
       volumeSize: Uint32Array,
-      rawData: Uint32Array,
+      rawData: Uint32Array | BigUint64Array,
       compressedSegmentationBlockSize: vec3,
     ) {
-      const encodeBuffer = new Uint32ArrayBuilder();
+      const encodeBuffer = new TypedArrayBuilder(Uint32Array);
       (dataType === DataType.UINT32
-        ? encodeChannelsUint32
-        : encodeChannelsUint64)(
+        ? encodeChannelsUint32<number | bigint>
+        : encodeChannelsUint64<number | bigint>)(
         encodeBuffer,
         compressedSegmentationBlockSize,
         rawData,
@@ -74,9 +74,9 @@ describe("sliceview/compressed_segmentation/chunk_format", () => {
         ]) {
           const numElements = prod4(volumeSize);
           {
-            const rawData = new Uint32Array(numElements * 2);
+            const rawData = new BigUint64Array(numElements);
             for (let i = 0; i < rawData.length; ++i) {
-              rawData[i] = i;
+              rawData[i] = BigInt(i);
             }
             runTest(
               DataType.UINT64,
@@ -108,7 +108,11 @@ describe("sliceview/compressed_segmentation/chunk_format", () => {
           Uint32Array.of(36, 36, 36, 1),
         ]) {
           const numElements = prod4(volumeSize);
-          const rawData = makeRandomUint64Array(numElements, numPossibleValues);
+          const rawData = makeRandomArrayByChoosingWithReplacement(
+            BigUint64Array,
+            numElements,
+            numPossibleValues,
+          );
           runTest(dataType, volumeSize, rawData, vec888);
         }
       });
@@ -119,7 +123,7 @@ describe("sliceview/compressed_segmentation/chunk_format", () => {
         Uint32Array.of(36, 36, 36, 1),
       ]) {
         const numElements = prod4(volumeSize);
-        const rawData = new Uint32Array(numElements * 2);
+        const rawData = new BigUint64Array(numElements);
         getRandomValues(rawData);
         runTest(DataType.UINT64, volumeSize, rawData, vec888);
       }
@@ -129,7 +133,7 @@ describe("sliceview/compressed_segmentation/chunk_format", () => {
       ]) {
         const numElements = prod4(volumeSize);
         {
-          const rawData = new Uint32Array(numElements * 2);
+          const rawData = new BigUint64Array(numElements);
           getRandomValues(rawData);
           runTest(DataType.UINT64, volumeSize, rawData, vec888);
         }

@@ -19,7 +19,9 @@ import neuroglancer
 import numpy as np
 import pytest
 
-TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
+TEST_DATA_DIR = (
+    pathlib.Path(__file__).parent.parent.parent / "testdata" / "datasource" / "zarr"
+)
 
 
 @pytest.mark.parametrize(
@@ -49,6 +51,17 @@ TEST_DATA_DIR = pathlib.Path(__file__).parent.parent / "testdata"
                     "write_chunk": {"shape": [6, 12, 20]},
                 }
             },
+        },
+        {
+            "driver": "zarr3",
+            "schema": {
+                "chunk_layout": {
+                    "inner_order": [2, 0, 1],
+                    "read_chunk": {"shape": [2, 3, 4]},
+                    "write_chunk": {"shape": [6, 12, 20]},
+                }
+            },
+            "kvstore": {"driver": "ocdbt"},
         },
         {
             "driver": "zarr3",
@@ -135,21 +148,21 @@ def test_zarr(tempdir_server: tuple[pathlib.Path, str], webdriver, spec):
 
     a = np.arange(np.prod(shape), dtype=np.int32).reshape(shape)
 
-    full_spec = {
-        "kvstore": {
-            "driver": "file",
-            "path": str(tmp_path),
-        }
+    file_spec = {
+        "driver": "file",
+        "path": str(tmp_path),
     }
-    full_spec.update(spec)
+
+    if "kvstore" in spec:
+        full_spec = {**spec, "kvstore": {**spec["kvstore"], "base": file_spec}}
+    else:
+        full_spec = {**spec, "kvstore": file_spec}
 
     store = ts.open(full_spec, create=True, dtype=ts.int32, shape=shape).result()
     store[...] = a
 
     with webdriver.viewer.txn() as s:
-        s.layers.append(
-            name="a", layer=neuroglancer.ImageLayer(source=f"zarr://{server_url}")
-        )
+        s.layers.append(name="a", layer=neuroglancer.ImageLayer(source=server_url))
 
     vol = webdriver.viewer.volume("a").result()
     b = vol.read().result()

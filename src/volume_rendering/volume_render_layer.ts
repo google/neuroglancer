@@ -74,7 +74,7 @@ import {
   drawBoxes,
   glsl_getBoxFaceVertexPosition,
 } from "#src/webgl/bounding_box.js";
-import type { Buffer } from "#src/webgl/buffer.js";
+import type { GLBuffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type {
@@ -218,6 +218,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
+  highestResolutionLoadedVoxelSize: Float32Array | undefined;
   private modeOverride: TrackableVolumeRenderingModeValue;
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
@@ -250,7 +251,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     return this.dataHistogramSpecifications.visibleHistograms;
   }
 
-  private histogramIndexBuffer: RefCountedValue<Buffer>;
+  private histogramIndexBuffer: RefCountedValue<GLBuffer>;
 
   constructor(options: VolumeRenderingRenderLayerOptions) {
     super();
@@ -878,6 +879,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         curPhysicalSpacing = physicalSpacing;
         curOptimalSamples = optimalSamples;
         curHistogramInformation = histogramInformation;
+        this.highestResolutionLoadedVoxelSize =
+          transformedSource.effectiveVoxelSize;
         const chunkLayout = getNormalizedChunkLayout(
           projectionParameters,
           transformedSource.chunkLayout,
