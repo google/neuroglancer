@@ -43,8 +43,10 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
-import type { TrackableBoolean } from "#src/trackable_boolean.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import {
   makeCachedLazyDerivedWatchableValue,
   observeWatchable,

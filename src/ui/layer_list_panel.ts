@@ -141,6 +141,7 @@ class LayerColorWidget extends RefCounted {
     this.registerDisposer(
       observeWatchable((layerColorEnabled) => {
         elementWrapper.style.display = layerColorEnabled ? "block" : "none";
+        updateLayerColorWidget();
       }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
     );
     this.registerDisposer(
