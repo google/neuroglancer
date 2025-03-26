@@ -15,12 +15,15 @@
  */
 
 import pythonIntegration from "#python_integration_build";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
+import { fetchOkWithOAuth2CredentialsAdapter } from "#src/credentials_provider/oauth2.js";
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
 import { GcsKvStore } from "#src/kvstore/gcs/index.js";
 import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import { frontendBackendIsomorphicKvStoreProviderRegistry } from "#src/kvstore/register.js";
 
-function gcsProvider(_context: SharedKvStoreContextBase): BaseKvStoreProvider {
+function gcsProvider(context: SharedKvStoreContextBase): BaseKvStoreProvider {
   return {
     scheme: "gs",
     description: pythonIntegration
@@ -32,6 +35,18 @@ function gcsProvider(_context: SharedKvStoreContextBase): BaseKvStoreProvider {
         throw new Error("Invalid URL, expected `gs://<bucket>/<path>`");
       }
       const [, bucket, path] = m;
+      if (pythonIntegration) {
+        const credentialsProvider: CredentialsProvider<OAuth2Credentials> =
+          context.credentialsManager.getCredentialsProvider("gcs", { bucket });
+        return {
+          store: new GcsKvStore(
+            bucket,
+            `gs://${bucket}/`,
+            fetchOkWithOAuth2CredentialsAdapter(credentialsProvider),
+          ),
+          path: decodeURIComponent((path ?? "").substring(1)),
+        };
+      }
       return {
         store: new GcsKvStore(bucket),
         path: decodeURIComponent((path ?? "").substring(1)),
