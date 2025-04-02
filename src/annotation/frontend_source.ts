@@ -358,6 +358,7 @@ export function updateAnnotation(
   const { serializedAnnotations } = chunk;
   const ids = serializedAnnotations.typeToIds[type];
   const idMap = serializedAnnotations.typeToIdMaps[type];
+  const typeToSize = serializedAnnotations.typeToSize;
   const handler = annotationTypeHandlers[type];
   const numBytes = propertySerializers[type].serializedBytes;
   let index = idMap.get(annotation.id);
@@ -382,6 +383,7 @@ export function updateAnnotation(
       /*destCount=*/ index + 1,
     );
     ids.push(annotation.id);
+    typeToSize[type] = ids.length; 
     serializedAnnotations.data = newData;
   }
   const bufferOffset = serializedAnnotations.typeToOffset![type];
@@ -418,6 +420,7 @@ export function deleteAnnotation(
 ): boolean {
   const { serializedAnnotations } = chunk;
   const idMap = serializedAnnotations.typeToIdMaps[type];
+  const typeToSize = serializedAnnotations.typeToSize;
   const index = idMap.get(id);
   if (index === undefined) {
     return false;
@@ -451,6 +454,7 @@ export function deleteAnnotation(
     /*destCount=*/ ids.length - 1,
   );
   ids.splice(index, 1);
+  typeToSize[type] -= 1;
   idMap.delete(id);
   for (let i = index, count = ids.length; i < count; ++i) {
     idMap.set(ids[i], i);
