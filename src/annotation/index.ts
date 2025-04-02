@@ -1480,7 +1480,6 @@ export class LocalAnnotationSource extends AnnotationSource {
     };
 
     for (const annotation of this.annotationMap.values()) {
-      // TODO (SKM) properly handle polyline annotation
       switch (annotation.type) {
         case AnnotationType.POINT:
           annotation.point = mapVector(annotation.point);
