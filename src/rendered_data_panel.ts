@@ -775,6 +775,33 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       annotationTool.complete();
     });
 
+    registerActionListener(element, "undo-annotation-step", () => {
+      const selectedLayer = this.viewer.selectedLayer.layer;
+      if (selectedLayer === undefined) {
+        return;
+      }
+      const userLayer = selectedLayer.layer;
+      if (userLayer === null || userLayer.tool.value === undefined) {
+        return;
+      }
+      const annotationTool = userLayer.tool.value;
+      if (
+        !annotationTool ||
+        !(
+          "undo" in annotationTool &&
+          typeof annotationTool.undo === "function"
+        )
+      ) {
+        StatusMessage.showTemporaryMessage(
+          `The selected layer (${JSON.stringify(
+            selectedLayer.name,
+          )}) does not have annotation tool with complete step.`,
+        );
+        return;
+      }
+      annotationTool.undo();
+    })
+
     registerActionListener(
       element,
       "zoom-via-touchpinch",

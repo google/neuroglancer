@@ -1225,6 +1225,8 @@ abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
     state.disposer();
     this.inProgressAnnotation.value = undefined;
   }
+
+  abstract undo(): void;
 }
 
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
@@ -1541,14 +1543,14 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       // Otherwise just show a preview
       this.storedRelationships = newAnnotation.relatedSegments;
     }
-    return {newAnnotation, finished};
+    return { newAnnotation, finished };
   }
 
   toJSON() {
     return ANNOTATE_POLYLINE_TOOL_ID;
   }
 
-  complete() {
+  private removeLastPointFromAnnotation() {
     function annotationWithoutLastPoint(annotation: PolyLine) {
       return <PolyLine>{
         ...annotation,
@@ -1567,7 +1569,15 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
     }
     // If preferred, could use this to prevent polylines that are a single point.
     // state.annotationLayer.source.delete(state.reference);
+  }
+
+  complete() {
+    this.removeLastPointFromAnnotation();
     super.complete();
+  }
+
+  undo() {
+    this.removeLastPointFromAnnotation();
   }
 }
 
