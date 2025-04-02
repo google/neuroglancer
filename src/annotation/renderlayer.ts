@@ -757,6 +757,7 @@ function AnnotationRenderLayer<
         const numInstances = typeToSize[annotationType];
         const renderHandler = getAnnotationTypeRenderHandler(annotationType);
         const { pickIdsPerInstance } = renderHandler;
+        let partIndex = pickedOffset % pickIdsPerInstance;
         if (pickedOffset < numInstances * pickIdsPerInstance) {
           let annotationIndex: number = -1;
           if (annotationType === AnnotationType.POLYLINE) {
@@ -764,6 +765,7 @@ function AnnotationRenderLayer<
             // TODO (SKM) replace by binary search, for loop is fine for now
             let count = 0;
             for (let i = 0; i < ids.length; i++) {
+              partIndex = pickedOffset - count;
               count += idToSizeMap.get(ids[i])! * pickIdsPerInstance;
               if (pickedOffset < count) {
                 annotationIndex = i;
@@ -774,7 +776,6 @@ function AnnotationRenderLayer<
             annotationIndex = Math.floor(pickedOffset / pickIdsPerInstance);
           }
           const id = ids[annotationIndex];
-          const partIndex = pickedOffset % pickIdsPerInstance;
           mouseState.pickedAnnotationId = id;
           mouseState.pickedAnnotationLayer = this.base.state;
           mouseState.pickedOffset = partIndex;

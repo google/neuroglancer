@@ -19,7 +19,10 @@
  */
 
 import type { PolyLine } from "#src/annotation/index.js";
-import { AnnotationType } from "#src/annotation/index.js";
+import {
+  AnnotationType,
+  annotationTypeHandlers,
+} from "#src/annotation/index.js";
 import type {
   AnnotationRenderContext,
   AnnotationShaderGetter,
@@ -28,7 +31,7 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
-// import { projectPointToLineSegment } from "#src/util/geom.js";
+import { projectPointToLineSegment } from "#src/util/geom.js";
 import {
   defineCircleShader,
   drawCircles,
@@ -269,27 +272,34 @@ class RenderHelper extends AnnotationRenderHelper {
   }
 }
 
-// function snapPositionToLine(position: Float32Array, endpoints: Float32Array) {
-//   const rank = position.length;
-//   projectPointToLineSegment(
-//     position,
-//     endpoints.subarray(0, rank),
-//     endpoints.subarray(rank),
-//     position,
-//   );
-// }
+function snapPositionToLine(position: Float32Array, endpoints: Float32Array) {
+  const rank = position.length;
+  projectPointToLineSegment(
+    position,
+    endpoints.subarray(0, rank),
+    endpoints.subarray(rank),
+    position,
+  );
+}
 
-// function snapPositionToEndpoint(
-//   position: Float32Array,
-//   endpoints: Float32Array,
-//   endpointIndex: number,
-// ) {
-//   const rank = position.length;
-//   const startOffset = rank * endpointIndex;
-//   for (let i = 0; i < rank; ++i) {
-//     position[i] = endpoints[startOffset + i];
-//   }
-// }
+function snapPositionToEndpoint(
+  position: Float32Array,
+  endpoint: Float32Array,
+) {
+  const rank = position.length;
+  for (let i = 0; i < rank; ++i) {
+    position[i] = endpoint[i];
+  }
+}
+
+function getPartIndexInfo(partIndex: number) {
+  // Mod informs which part. It is 0 for the line, 1 for start, 2 for end
+  const linePart = partIndex % PICK_IDS_PER_INSTANCE;
+  // The floor of dividing by PICK_IDS_PER_INSTANCE gives the index
+  const lineIndex = Math.floor(partIndex / 3);
+  const pointIndex = Math.max(lineIndex + (linePart - 1), 0);
+  return { linePart, lineIndex, pointIndex };
+}
 
 registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
   sliceViewRenderHelper: RenderHelper,
@@ -300,21 +310,41 @@ registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
   },
   pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
   snapPosition(position, data, offset, partIndex) {
-    // TODO (skm) See line for reference, but needs to pick the correct line
-    position;
-    data;
-    offset;
-    partIndex;
+    const { linePart, lineIndex } = getPartIndexInfo(partIndex);
+    const rank = position.length;
+    const startingOffset =
+      offset +
+      4 +
+      lineIndex *
+        annotationTypeHandlers[AnnotationType.POLYLINE].serializedBytes(rank);
+    if (linePart !== FULL_OBJECT_PICK_OFFSET) {
+      const dataOffset = startingOffset + (linePart - 1) * 4 * rank;
+      const point = new Float32Array(data, dataOffset, rank);
+      snapPositionToEndpoint(position, point);
+    } else {
+      const endpoints = new Float32Array(data, startingOffset, rank * 2);
+      snapPositionToLine(position, endpoints);
+    }
   },
   getRepresentativePoint(out, ann, partIndex) {
-    // TODO (skm) See line for reference
-    out;
-    ann;
-    partIndex;
+    out.set(ann.points[getPartIndexInfo(partIndex).pointIndex]);
   },
   updateViaRepresentativePoint(oldAnnotation, position, partIndex) {
-    position;
-    partIndex;
+    const { linePart, pointIndex } = getPartIndexInfo(partIndex);
+    const rank = position.length;
+    if (linePart === FULL_OBJECT_PICK_OFFSET) {
+      const oldPoint = oldAnnotation.points[pointIndex];
+      for (let i = 0; i < rank; ++i) {
+        const pos = position[i];
+        const diff = pos - oldPoint[i];
+        for (let j = 0; j < oldAnnotation.points.length; ++j) {
+          oldAnnotation.points[j][i] = oldAnnotation.points[j][i] + diff;
+        }
+      }
+    } else {
+      oldAnnotation.points[pointIndex] = position;
+    }
+
     return oldAnnotation;
   },
 });
