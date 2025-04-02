@@ -383,7 +383,7 @@ export function updateAnnotation(
       /*destCount=*/ index + 1,
     );
     ids.push(annotation.id);
-    typeToSize[type] = ids.length; 
+    typeToSize[type] = ids.length;
     serializedAnnotations.data = newData;
   }
   const bufferOffset = serializedAnnotations.typeToOffset![type];
@@ -845,6 +845,28 @@ export class MultiscaleAnnotationSource
             tempLower[i] = c - r;
             tempUpper[i] = c + r;
           }
+          break;
+        case AnnotationType.POLYLINE:
+          for (const point of annotation.points) {
+            for (let i = 0; i < rank; ++i) {
+              tempLower[i] = Math.min(point[i], tempLower[i]);
+              tempUpper[i] = Math.max(point[i], tempUpper[i]);
+            }
+          }
+          matrix.transformPoint(
+            tempLower,
+            source.multiscaleToChunkTransform,
+            rank + 1,
+            tempLower,
+            rank,
+          );
+          matrix.transformPoint(
+            tempUpper,
+            source.multiscaleToChunkTransform,
+            rank + 1,
+            tempUpper,
+            rank,
+          );
           break;
       }
       let totalChunks = 1;
