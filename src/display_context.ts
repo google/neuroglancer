@@ -117,9 +117,8 @@ export abstract class RenderedPanel extends RefCounted {
   canvasRelativeLogicalLeft = 0;
   canvasRelativeLogicalTop = 0;
 
-  renderViewport = new RenderViewport();
-
-  boundsUpdated = new NullarySignal();
+  renderViewport;
+  boundsUpdated;
 
   private monitorState: PanelMonitorState = { isIntersecting: true };
 
@@ -130,6 +129,8 @@ export abstract class RenderedPanel extends RefCounted {
   ) {
     super();
     this.gl = context.gl;
+    this.renderViewport = new RenderViewport();
+    this.boundsUpdated = new NullarySignal();
     context.addPanel(this);
   }
 
