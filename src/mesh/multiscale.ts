@@ -207,7 +207,10 @@ export function getDesiredMultiscaleMeshChunks(
           callback(lod, row, lodScale / pixelSize, childEndAndEmpty >>> 31);
         }
 
-        if (lod > 0 && (lodScale === 0 || pixelSize * detailCutoff < lodScale)) {
+        if (
+          lod > 0 &&
+          (lodScale === 0 || pixelSize * detailCutoff < lodScale)
+        ) {
           const nextPriorLodScale = lodScale === 0 ? priorLodScale : lodScale;
           const childBegin = (childBeginAndVirtual & 0x7fffffff) >>> 0;
           const childEnd = (childEndAndEmpty & 0x7fffffff) >>> 0;
@@ -347,7 +350,10 @@ export function getMultiscaleChunksToDraw(
   emitChunksUpTo(0, 0);
 }
 
-export function validateOctree(octree: Uint32Array, allowDuplicateChildren: boolean = false) {
+export function validateOctree(
+  octree: Uint32Array,
+  allowDuplicateChildren: boolean = false,
+) {
   if (octree.length % 5 !== 0) {
     throw new Error("Invalid length");
   }

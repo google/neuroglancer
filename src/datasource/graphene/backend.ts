@@ -209,7 +209,7 @@ export class GrapheneMeshSource extends WithParameters(
 
 interface ShardInfo {
   shardUrl: string;
-  offset: Uint64;
+  offset: bigint;
 }
 
 interface GrapheneMultiscaleManifestChunk extends MultiscaleManifestChunk {
@@ -298,8 +298,8 @@ function mergeArrayBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
 
   let offset = 0;
   for (const buffer of buffers) {
-      mergedView.set(new Uint8Array(buffer), offset);
-      offset += buffer.byteLength;
+    mergedView.set(new Uint8Array(buffer), offset);
+    offset += buffer.byteLength;
   }
   return mergedBuffer;
 }
@@ -320,7 +320,7 @@ export class GrapheneMultiscaleMeshSource extends WithParameters(
     this.parameters.fragmentUrl,
   );
 
-  addNewSegment(segment: Uint64) {
+  addNewSegment(segment: bigint) {
     const { newSegments } = this;
     newSegments.add(segment);
     const TEN_MINUTES = 1000 * 60 * 10;
@@ -379,7 +379,7 @@ export class GrapheneMultiscaleMeshSource extends WithParameters(
             parameters,
             signal,
           );
-          result.push(await response.arrayBuffer())
+          result.push(await response.arrayBuffer());
         }
         await decodeMultiscaleFragmentChunk(chunk, mergeArrayBuffers(result));
       }

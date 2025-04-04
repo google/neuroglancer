@@ -67,10 +67,10 @@ export class MultiscaleMeshSourceParameters {
   manifestUrl: string;
   fragmentUrl: string;
   metadata: MultiscaleMeshMetadata;
-  sharding: Array<ShardingParameters>|undefined;
+  sharding: Array<ShardingParameters> | undefined;
   nBitsForLayerId: number;
 
-  static RPC_ID = 'graphene/MultiscaleMeshSource';
+  static RPC_ID = "graphene/MultiscaleMeshSource";
 }
 
 export class MultiscaleMeshMetadata {
