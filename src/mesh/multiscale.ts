@@ -16,7 +16,7 @@
 
 import type { mat4, vec3 } from "#src/util/geom.js";
 import { isAABBVisible } from "#src/util/geom.js";
-import { getOctreeChildIndex } from "#src/util/zorder.js";
+import { getOctreeChildIndex, zorder3LessThan } from "#src/util/zorder.js";
 
 const DEBUG_CHUNKS_TO_DRAW = false;
 
@@ -391,6 +391,16 @@ export function validateOctree(
         throw new Error(
           `invalid child position: parent=${node} child=${child} childX=${childX} childY=${childY} childZ=${childZ} parentX=${x} parentY=${y} parentZ=${z}`,
         );
+      }
+      if (child !== beginChild) {
+        const prevX = octree[(child - 1) * 5];
+        const prevY = octree[(child - 1) * 5 + 1];
+        const prevZ = octree[(child - 1) * 5 + 2];
+        if (!zorder3LessThan(prevX, prevY, prevZ, childX, childY, childZ)) {
+          throw new Error(
+            `invalid child order: child=${child} childX=${childX} childY=${childY} childZ=${childZ} prevX=${prevX} prevY=${prevY} prevZ=${prevZ}`,
+          );
+        }
       }
       exploreNode(child);
     }
