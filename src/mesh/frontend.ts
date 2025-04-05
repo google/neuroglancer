@@ -79,7 +79,7 @@ const tempMat3 = mat3.create();
 // To validate the octrees and to determine the multiscale fragment responsible for each framebuffer
 // location, set `DEBUG_MULTISCALE_FRAGMENTS=true` and also set `DEBUG_PICKING=true` in
 // `src/object_picking.ts`.
-const DEBUG_MULTISCALE_FRAGMENTS = false;
+const DEBUG_MULTISCALE_FRAGMENTS = true;
 
 function copyMeshDataToGpu(
   gl: GL,
@@ -338,8 +338,21 @@ export class MeshShaderManager {
     subChunkBegin: number,
     subChunkEnd: number,
   ) {
+    if (subChunkEnd <= subChunkBegin) {
+      console.log(
+        `INVALID: subChunkBegin (${subChunkBegin}) < subChunkEnd (${subChunkEnd})`,
+      );
+    }
     const indexBegin = fragmentChunk.meshData.subChunkOffsets[subChunkBegin];
     const indexEnd = fragmentChunk.meshData.subChunkOffsets[subChunkEnd];
+    console.log("drawing chunk: ", {
+      subChunkBegin,
+      subChunkEnd,
+      subChunkOffsets: fragmentChunk.meshData.subChunkOffsets,
+      indexBegin,
+      indexEnd,
+      numIndices: fragmentChunk.meshData.indices.length,
+    });
     this.drawFragmentHelper(gl, shader, fragmentChunk, indexBegin, indexEnd);
   }
 
@@ -971,6 +984,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
               if (renderContext.emitPickID) {
                 meshShaderManager.setPickID(gl, shader, pickIndex!);
               }
+              console.log("drawing multiscale fragment", message);
             }
             meshShaderManager.drawMultiscaleFragment(
               gl,

@@ -18,7 +18,7 @@ import type { mat4, vec3 } from "#src/util/geom.js";
 import { isAABBVisible } from "#src/util/geom.js";
 import { getOctreeChildIndex, zorder3LessThan } from "#src/util/zorder.js";
 
-const DEBUG_CHUNKS_TO_DRAW = false;
+const DEBUG_CHUNKS_TO_DRAW = true;
 
 export interface MultiscaleMeshManifest {
   /**
@@ -75,6 +75,109 @@ export interface MultiscaleMeshManifest {
    * requested/rendered.
    */
   octree: Uint32Array;
+}
+
+export function sortOctree(octree: Uint32Array): {
+  octree: Uint32Array;
+  indices: Uint32Array;
+} {
+  if (octree.length % 5 !== 0) {
+    throw new Error("Invalid octree");
+  }
+  const numRows = octree.length / 5;
+  const indices = new Uint32Array(numRows);
+  for (let i = 0; i < numRows; ++i) {
+    indices[i] = i;
+  }
+  const sortChildrenOfRow = (row: number) => {
+    const childBeginAndVirtual = octree[row * 5 + 3];
+    const childEndAndEmpty = octree[row * 5 + 4];
+    const childBegin = (childBeginAndVirtual & 0x7fffffff) >>> 0;
+    const childEnd = (childEndAndEmpty & 0x7fffffff) >>> 0;
+    indices.subarray(childBegin, childEnd).sort((i, j) => {
+      return zorder3LessThan(
+        octree[i * 5],
+        octree[i * 5 + 1],
+        octree[i * 5 + 2],
+        octree[j * 5],
+        octree[j * 5 + 1],
+        octree[j * 5 + 2],
+      )
+        ? -1
+        : 1;
+    });
+    for (let i = childBegin; i < childEnd; ++i) {
+      sortChildrenOfRow(i);
+    }
+  };
+  sortChildrenOfRow(numRows - 1);
+  const inverseIndices = new Uint32Array(numRows);
+  for (let i = 0; i < numRows; ++i) {
+    inverseIndices[indices[i]] = i;
+  }
+  const newOctree = new Uint32Array(numRows * 5);
+  for (let newRow = 0; newRow < numRows; ++newRow) {
+    const oldRow = indices[newRow];
+    newOctree[newRow * 5] = octree[oldRow * 5];
+    newOctree[newRow * 5 + 1] = octree[oldRow * 5 + 1];
+    newOctree[newRow * 5 + 2] = octree[oldRow * 5 + 2];
+    const oldBeginAndVirtual = octree[oldRow * 5 + 3];
+    const oldEndAndEmpty = octree[oldRow * 5 + 4];
+    const oldBegin = (oldBeginAndVirtual & 0x7fffffff) >>> 0;
+    const oldEnd = (oldEndAndEmpty & 0x7fffffff) >>> 0;
+    let newBegin;
+    let newEnd;
+    if (oldBegin == oldEnd) {
+      newBegin = 0;
+      newEnd = 0;
+    } else {
+      newBegin = numRows;
+      newEnd = 0;
+      for (let i = oldBegin; i < oldEnd; ++i) {
+        let j = inverseIndices[i];
+        newBegin = Math.min(newBegin, j);
+        newEnd = Math.max(newEnd, j);
+      }
+      ++newEnd;
+    }
+    newOctree[newRow * 5 + 3] = newBegin | (oldBeginAndVirtual & 0x80000000);
+    newOctree[newRow * 5 + 4] = newEnd | (oldEndAndEmpty & 0x80000000);
+  }
+  // newOctree[5 * (numRows - 1) + 4] &= 0x7fffffff;
+  // newOctree[5 * (numRows - 1) + 3] |= 0x80000000;
+
+  validateOctree(newOctree);
+  printOctree(newOctree);
+  return { octree: newOctree, indices };
+}
+
+export function printOctree(octree: Uint32Array) {
+  const numRows = octree.length / 5;
+  const traverse = (
+    row: number,
+    depth: number,
+    callback: (row: number, depth: number) => void,
+  ) => {
+    callback(row, depth);
+    const childBeginAndVirtual = octree[row * 5 + 3];
+    const childEndAndEmpty = octree[row * 5 + 4];
+    const childBegin = (childBeginAndVirtual & 0x7fffffff) >>> 0;
+    const childEnd = (childEndAndEmpty & 0x7fffffff) >>> 0;
+    for (let child = childBegin; child < childEnd; ++child) {
+      traverse(child, depth + 1, callback);
+    }
+  };
+  let maxDepth = 0;
+  traverse(numRows - 1, 0, (_row, depth) => {
+    maxDepth = Math.max(maxDepth, depth);
+  });
+  traverse(numRows - 1, 0, (row, depth) => {
+    const lod = maxDepth - depth;
+    const i = row;
+    console.log(
+      `${" ".repeat(depth * 2)}lod ${lod} row ${i}: x=${octree[5 * i]}, y=${octree[5 * i + 1]}, z=${octree[5 * i + 2]}, start=${octree[5 * i + 3] & 0x7fffffff}, end=${octree[5 * i + 4] & 0x7fffffff}, virtual=${octree[5 * i + 3] >>> 31}, empty=${octree[5 * i + 4] >>> 31}`,
+    );
+  });
 }
 
 /**
@@ -218,7 +321,19 @@ export function getDesiredMultiscaleMeshChunks(
             handleChunk(lod - 1, childRow, nextPriorLodScale);
           }
         }
+      } else {
+        console.log("skipping due to pixel detail cutoff");
       }
+    } else {
+      console.log("aabb not visible", {
+        xLower,
+        yLower,
+        zLower,
+        xUpper,
+        yUpper,
+        zUpper,
+        clippingPlanes,
+      });
     }
   }
   handleChunk(maxLod, octree.length / 5 - 1, 0);
@@ -268,6 +383,15 @@ export function getMultiscaleChunksToDraw(
       const numSubChunks = entryLod === 0 ? 1 : 8;
       const entrySubChunkIndex = stack[stackIndex * stackEntryStride + 1];
       const entryRenderScale = stack[stackIndex * stackEntryStride + 2];
+      console.log("Finishing last chunk of last (finest) lod", {
+        stackIndex,
+        entryLod,
+        entrySubChunkIndex,
+        entryRenderScale,
+        priorSubChunkIndex,
+        entryRow,
+        numSubChunks,
+      });
       if (targetStackIndex === stackDepth) {
         const endSubChunk = subChunkIndex & (numSubChunks - 1);
 
@@ -317,10 +441,16 @@ export function getMultiscaleChunksToDraw(
     viewportHeight,
     (lod, row, renderScale, empty) => {
       if (!empty && !hasChunk(lod, row, renderScale)) {
+        console.log(
+          `skipping lod=${lod} row=${row} because empth=${empty} and hasChunk=${hasChunk(lod, row, renderScale)}`,
+        );
         priorMissingLod = Math.max(lod, priorMissingLod);
         return;
       }
       if (lod < priorMissingLod) {
+        console.log(
+          `skipping due to missing parent chunk lod=${lod} row=${row}  priorMissingLod=${priorMissingLod}`,
+        );
         // A parent chunk (containing chunk at coarser level-of-detail) is missing.  We can't draw
         // chunks at this level-of-detail because we would not be able to fill in gaps.
         return;

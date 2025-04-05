@@ -87,6 +87,7 @@ import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObject, registerRPC } from "#src/worker_rpc.js";
 import { isNotFoundError } from "#src/util/http_request.js";
 import { verifyObject } from "#src/util/json.js";
+import { sortOctree, validateOctree } from "#src/mesh/multiscale.js";
 
 function downloadFragmentWithSharding(
   fragmentKvStore: KvStoreWithPath,
@@ -223,16 +224,26 @@ function decodeMultiscaleManifestChunk(
   response: any,
 ) {
   verifyObject(response);
+  const origOctree = new Uint32Array(response.octree);
+  const { octree, indices: octreePermutation } = sortOctree(origOctree);
+  validateOctree(octree);
   chunk.manifest = {
     chunkShape: vec3.clone(response.chunkShape),
     chunkGridSpatialOrigin: vec3.clone(response.chunkGridSpatialOrigin),
     lodScales: new Float32Array(response.lodScales),
-    octree: new Uint32Array(response.octree),
+    octree,
     vertexOffsets: new Float32Array(response.lodScales.length * 3),
     clipLowerBound: vec3.clone(response.clipLowerBound),
     clipUpperBound: vec3.clone(response.clipUpperBound),
   };
-  chunk.fragments = response.fragments;
+  const origFragments = response.fragments as Array<FragmentId[]>;
+  let numRows = origFragments.length;
+  const fragments = new Array<FragmentId[]>(numRows);
+  for (let i = 0; i < numRows; ++i) {
+    fragments[i] = origFragments[octreePermutation[i]];
+  }
+
+  chunk.fragments = fragments;
   chunk.manifest.clipLowerBound.fill(0);
   chunk.manifest.clipUpperBound.fill(10000000);
 }
