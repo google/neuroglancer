@@ -454,7 +454,7 @@ export function deleteAnnotation(
     /*destCount=*/ ids.length - 1,
   );
   ids.splice(index, 1);
-  typeToSize[type] -= 1;
+  typeToSize[type] = ids.length;
   idMap.delete(id);
   for (let i = index, count = ids.length; i < count; ++i) {
     idMap.set(ids[i], i);

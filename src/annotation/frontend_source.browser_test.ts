@@ -50,7 +50,6 @@ class UpdateTester {
     for (const annotation of this.annotations) serializer.add(annotation);
     const direct = serializer.serialize();
     const incremental = this.incrementalChunk.data!.serializedAnnotations;
-    console.log(direct, incremental);
     expect(direct.data).toEqual(incremental.data);
     expect(direct.typeToIds).toEqual(incremental.typeToIds);
     expect(direct.typeToOffset).toEqual(incremental.typeToOffset);

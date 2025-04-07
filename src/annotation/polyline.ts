@@ -84,11 +84,11 @@ class RenderHelper extends AnnotationRenderHelper {
     const type = "uint";
     const name = "aPolyLineNumVertices";
     builder.addAttribute(type, name);
-    // Low 30 bits store number of vertices.
+    // Low 31 bits store number of vertices.
     builder.addVertexCode(
       `${type} getNumRelatedInstances() { return ${name} & 0x7FFFFFFFu; }`,
     );
-    // High 2 bits store where the polyline is started or ended
+    // High bit stores whether the polyline is ended at this line
     builder.addVertexCode(
       `${type} getPolyLineEndpointType() { return ${name} >> 31u; }`,
     );

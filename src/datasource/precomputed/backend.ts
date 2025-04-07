@@ -665,17 +665,22 @@ function parseAnnotations(
     if (annotationType === AnnotationType.POLYLINE) {
       const dataView = new DataView(buffer);
       const newDataView = new DataView(data.buffer);
-      // The GL buffer data is laid out as follows:
-      // numPointsInPoly, Point1, Point2, Properties
-      // numPointsInPoly, Point2, Point3, Properties
+      // We need to shift the data around a bit
+      // The input data is:
+      // numPointsInPoly1, Point1_1, Point1_2, ..., Point1_N1, Properties1
+      // numPointsInPoly2, Point2_1, Point2_2, ..., Point2_N2, Properties2
       // ...
-      // numPointsInPolyK, PointN, PointN+1, Properties
-      // While the input data is a little different:
-      // numPointsInPoly1, Point1, Point2, ..., PointN, Properties
-      // numPointsInPoly2, Point1, Point2, ..., PointN, Properties
+      // numPointsInPolyK, PointK_1, PointK_2, ..., PointK_Nk, PropertiesK
+      // While the GL buffer data is laid out as follows:
+      // numPointsInPoly1, Point1_1, Point1_2, Properties1
+      // numPointsInPoly1, Point1_2, Point1_3, Properties1
       // ...
-      // numPointsInPolyK, Point1, Point2, ..., PointN, Properties
-      // So we need to shift the data around a bit
+      // numPointsInPoly1, Point1_N1-1, Point1_N1, Properties1
+      // ...
+      // numPointsInPolyK, PointK_1, PointK_2, PropertiesK
+      // ...
+      // numPointsInPolyK, PointK_Nk-1, PointK_Nk, PropertiesK
+
       // Start by looping through the data and shifting the points
       let offset = 0;
       let runningOffset = 0;

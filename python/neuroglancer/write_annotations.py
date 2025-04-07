@@ -51,8 +51,8 @@ AnnotationType = Literal["point", "line", "axis_aligned_bounding_box", "ellipsoi
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
     geometry_size = rank if annotation_type == "point" else 2 * rank
     if annotation_type == "polyline":
-        point_size = [("num_points", "<u4")]
-        return [point_size]
+        num_points = [("num_points", "<u4")]
+        return [num_points]
     return [("geometry", "<f4", geometry_size)]
 
 
@@ -112,6 +112,15 @@ class AnnotationWriter:
         self.related_annotations = [{} for _ in self.relationships]
 
     def get_dtype(self, annotation_size=None) -> np.dtype:
+        """
+        Prepares the dtype for the annotations.
+
+        Usually this is fixed, but for polylines we need to know the number of points
+        in the polyline to create the correct dtype.
+
+        Args:
+            annotation_size: The number of points in the polyline. Optional.
+        """
         if self.annotation_type == "polyline" and annotation_size is not None:
             geometry = ("geometry", "<f4", annotation_size)
             num_points = ("num_points", "<u4")

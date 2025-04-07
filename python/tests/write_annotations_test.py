@@ -70,7 +70,7 @@ def test_annotation_writer_ellipsoid(tmp_path: pathlib.Path):
 
 
 def test_annotation_writer_polyline(tmp_path: pathlib.Path):
-    def check_polyline_contents(contents, line, id_, backward, offset):
+    def check_polyline_contents(contents, line, id_, offset, end_offset):
         num_points = len(line)
         point_offset = num_points * 3 * 4
         # The next 4 bytes are the number of points in the polyline
@@ -80,9 +80,8 @@ def test_annotation_writer_polyline(tmp_path: pathlib.Path):
             contents[offset + 4 : offset + 4 + point_offset], dtype=np.float32
         )
         # Finally it ends with the ids as uint64s
-        end_offset = backward * 8
         u_int64_id = np.frombuffer(contents[end_offset:], dtype=np.uint64)
-        assert u_int32[0] == len(line)
+        assert u_int32[0] == num_points
         assert np.allclose(floats, np.array(line).flatten())
         assert u_int64_id[0] == id_
 
@@ -117,8 +116,8 @@ def test_annotation_writer_polyline(tmp_path: pathlib.Path):
             neuroglancer.AnnotationPropertySpec(id="point_color", type="rgba"),
         ],
     )
-    random_generator = np.random.default_rng(0)
     line_sizes = [10, 5, 2, 2, 4]
+    random_generator = np.random.default_rng(42)
     lines = [random_generator.random((size, 3)) for size in line_sizes]
     ids = [10, 20, 30, 40, 50]
     for line, id_ in zip(lines, ids):
@@ -142,7 +141,9 @@ def test_annotation_writer_polyline(tmp_path: pathlib.Path):
     total = len(lines)
     property_bytes = 12
     for i, (line, id_) in enumerate(zip(lines, ids)):
-        offset = check_polyline_contents(contents, line, id_, i - total, offset=offset)
+        offset = check_polyline_contents(
+            contents, line, id_, end_offset=8 * (i - total), offset=offset
+        )
         offset += property_bytes
 
     # The first 8 bytes are the total count of the number of elements

@@ -689,7 +689,15 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   description: string;
   toJSON: (annotation: T, rank: number) => any;
   restoreState: (annotation: T, obj: any, rank: number) => void;
-  serializedBytes: (rank: number, annotation?: T) => number;
+  /**
+   * Number of bytes in the serializied version of one instance of annotation
+   * Most annotations have only one instance per annotation
+   * However, Polylines have an only rank-dependent instance size, but not a fixed
+   * number of instances (this is numPoints - 1).
+   * @param rank - rank of the co-ordinate transform matrix
+   * @param numInstances - optional
+   */
+  serializedBytes: (rank: number) => number;
   serialize: (
     buffer: DataView,
     offset: number,
@@ -885,12 +893,9 @@ export const annotationTypeHandlers: Record<
         ),
       );
     },
-    serializedBytes(rank: number, annotation?: PolyLine) {
-      // If no annotation, can assume broken down
-      // One float per rank, per point, + one uint32
-      const singlePointPairSize = 4 * rank * 2 + 4;
-      if (annotation === undefined) return singlePointPairSize;
-      return (annotation.points.length - 1) * singlePointPairSize;
+    serializedBytes(rank: number) {
+      // per instance, one uint32 and 2 * rank float32
+      return 4 * rank * 2 + 4;
     },
     serialize(
       buffer: DataView,

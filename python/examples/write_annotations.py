@@ -38,13 +38,13 @@ def write_some_annotations(
         ],
     )
     writer.add_polyline(
-        [[20, 30, 40], [10, 15, 20]],
+        [[25, 10, 20], [10, 15, 20]],
         size=10,
         cell_type=16,
         point_color=(0, 255, 0, 255),
     )
     writer.add_polyline(
-        [[50, 51, 52], [10, 15, 30], [40, 20, 25]],
+        [[5, 17, 29], [10, 15, 30], [40, 20, 25]],
         size=30,
         cell_type=16,
         point_color=(255, 0, 0, 255),
@@ -59,13 +59,8 @@ if __name__ == "__main__":
     neuroglancer.cli.handle_server_arguments(args)
     viewer = neuroglancer.Viewer()
 
-    # tempdir = tempfile.mkdtemp()
-    # tempdir = tempfile.mkdtemp()
-    # atexit.register(shutil.rmtree, tempdir)
-    tempdir = "/tmp/annotations"
-    if not os.path.exists(tempdir):
-        os.makedirs(tempdir)
-    shutil.rmtree(tempdir, ignore_errors=True)
+    tempdir = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, tempdir)
 
     coordinate_space = neuroglancer.CoordinateSpace(
         names=["x", "y", "z"], units=["nm", "nm", "nm"], scales=[10, 10, 10]
@@ -84,7 +79,7 @@ if __name__ == "__main__":
             ),
         )
         s.layers["points"] = neuroglancer.AnnotationLayer(
-            source=f"precomputed://{server.url + '/point'}",
+            source=f"precomputed://{server.url}/point",
             tab="rendering",
             shader="""
 void main() {
@@ -93,8 +88,8 @@ void main() {
 }
         """,
         )
-        s.layers["polyline"] = neuroglancer.AnnotationLayer(
-            source=f"precomputed://{server.url + '/polyline'}",
+        s.layers["polylines"] = neuroglancer.AnnotationLayer(
+            source=f"precomputed://{server.url}/polyline",
             tab="rendering",
             shader="""
 void main() {
