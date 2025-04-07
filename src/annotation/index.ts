@@ -1543,20 +1543,20 @@ function serializeAnnotations(
   propertySerializers: AnnotationPropertySerializer[],
 ): SerializedAnnotations {
   let totalBytes = 0;
-  let polyLinePairCount = 0;
   const typeToOffset: number[] = [];
   const typeToSize: number[] = [];
   for (const annotationType of annotationTypes) {
     const propertySerializer = propertySerializers[annotationType];
-    let serializedPropertiesBytes = propertySerializer.serializedBytes;
+    const serializedPropertiesBytes = propertySerializer.serializedBytes;
     typeToOffset[annotationType] = totalBytes;
     const annotations: Annotation[] = allAnnotations[annotationType];
     const count = annotations.length;
     if (annotationType === AnnotationType.POLYLINE) {
+      typeToSize[annotationType] = 0;
       for (const annotation of annotations) {
         const polyLinePairs = (annotation as PolyLine).points.length - 1;
         totalBytes += serializedPropertiesBytes * polyLinePairs;
-        polyLinePairCount += polyLinePairs;
+        typeToSize[annotationType] += polyLinePairs;
       }
     } else {
       totalBytes += serializedPropertiesBytes * count;
@@ -1605,7 +1605,7 @@ function serializeAnnotations(
             dataView,
             offset,
             polylineInstanceIndex + j,
-            polyLinePairCount,
+            typeToSize[annotationType],
             isLittleEndian,
             polyline.properties,
           );
@@ -1630,10 +1630,7 @@ function serializeAnnotations(
         );
       }
     }
-    if (annotationType === AnnotationType.POLYLINE) {
-      // The index represents the next polyline instance, so it is the length at the end
-      typeToSize[annotationType] = polylineInstanceIndex;
-    } else {
+    if (annotationType !== AnnotationType.POLYLINE) {
       typeToSize[annotationType] = annotations.length;
     }
   }

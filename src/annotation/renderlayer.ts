@@ -757,8 +757,8 @@ function AnnotationRenderLayer<
         const numInstances = typeToSize[annotationType];
         const renderHandler = getAnnotationTypeRenderHandler(annotationType);
         const { pickIdsPerInstance } = renderHandler;
-        let partIndex = pickedOffset % pickIdsPerInstance;
         if (pickedOffset < numInstances * pickIdsPerInstance) {
+          let partIndex = pickedOffset % pickIdsPerInstance;
           let annotationIndex: number = -1;
           if (annotationType === AnnotationType.POLYLINE) {
             const idToSizeMap = idToSizeMaps[annotationType];

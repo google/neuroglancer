@@ -225,7 +225,6 @@ class RenderHelper extends AnnotationRenderHelper {
   ) {
     super.enable(shaderGetter, context, (shader) => {
       const binder = shader.vertexShaderInputBinders.VertexPosition;
-      // TODO don't really need the countBinder, could do inline here
       const countBinder = shader.vertexShaderInputBinders.aPolyLineNumVertices;
       binder.enable(1);
       countBinder.enable(1);

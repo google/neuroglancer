@@ -446,19 +446,19 @@ bool ng_discardValue;
 void ng_discard() {
   ng_discardValue = true;
 }
-void _setLineColor(vec4 startColor, vec4 endColor);
+void setSingleLineColor(vec4 startColor, vec4 endColor);
 void setPolyLineColor(vec4 startColor, vec4 endColor);
-void _setLineWidth(float width);
+void setSingleLineWidth(float width);
 void setPolyLineWidth(float width);
 void setLineWidth(float width) {
-  _setLineWidth(width);
+  setSingleLineWidth(width);
   setPolyLineWidth(width);
 }
 
-void _setEndpointMarkerColor(vec4 startColor, vec4 endColor);
-void _setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
-void _setEndpointMarkerSize(float startSize, float endSize);
-void _setEndpointMarkerBorderWidth(float startSize, float endSize);
+void setLineEndpointMarkerColor(vec4 startColor, vec4 endColor);
+void setLineEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setLineEndpointMarkerSize(float startSize, float endSize);
+void setLineEndpointMarkerBorderWidth(float startSize, float endSize);
 
 void setPolyEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void setPolyEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
@@ -479,7 +479,7 @@ void setBoundingBoxBorderWidth(float size);
 void setBoundingBoxFillColor(vec4 color);
 
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
-  _setEndpointMarkerColor(startColor, endColor);
+  setLineEndpointMarkerColor(startColor, endColor);
   setPolyEndpointMarkerColor(startColor, endColor);
 }
 void setEndpointMarkerColor(vec3 startColor, vec3 endColor) {
@@ -488,7 +488,7 @@ void setEndpointMarkerColor(vec3 startColor, vec3 endColor) {
 void setEndpointMarkerColor(vec3 color) { setEndpointMarkerColor(color, color); }
 void setEndpointMarkerColor(vec4 color) { setEndpointMarkerColor(color, color); }
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
-  _setEndpointMarkerBorderColor(startColor, endColor);
+  setLineEndpointMarkerBorderColor(startColor, endColor);
   setPolyEndpointMarkerBorderColor(startColor, endColor);
 }
 void setEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
@@ -497,17 +497,17 @@ void setEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
 void setEndpointMarkerBorderColor(vec3 color) { setEndpointMarkerBorderColor(color, color); }
 void setEndpointMarkerBorderColor(vec4 color) { setEndpointMarkerBorderColor(color, color); }
 void setEndpointMarkerSize(float startSize, float endSize) {
-  _setEndpointMarkerSize(startSize, endSize);
+  setLineEndpointMarkerSize(startSize, endSize);
   setPolyEndpointMarkerSize(startSize, endSize);
 }
 void setEndpointMarkerSize(float size) { setEndpointMarkerSize(size, size); }
 void setEndpointMarkerBorderWidth(float startSize, float endSize) {
-  _setEndpointMarkerBorderWidth(startSize, endSize);
+  setLineEndpointMarkerBorderWidth(startSize, endSize);
   setPolyEndpointMarkerBorderWidth(startSize, endSize);
 }
 void setEndpointMarkerBorderWidth(float size) { setEndpointMarkerBorderWidth(size, size); }
 void setLineColor(vec4 startColor, vec4 endColor) {
-  _setLineColor(startColor, endColor);
+  setSingleLineColor(startColor, endColor);
   setPolyLineColor(startColor, endColor);
 }
 void setLineColor(vec4 color) { setLineColor(color, color); }
