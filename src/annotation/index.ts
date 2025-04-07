@@ -695,7 +695,6 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
    * However, Polylines have an only rank-dependent instance size, but not a fixed
    * number of instances (this is numPoints - 1).
    * @param rank - rank of the co-ordinate transform matrix
-   * @param numInstances - optional
    */
   serializedBytes: (rank: number) => number;
   serialize: (
@@ -704,8 +703,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     isLittleEndian: boolean,
     rank: number,
     annotation: T,
-    geometryDataStride?: number,
-    instanceIndex?: number,
+    instanceStride?: number,
   ) => void;
   deserialize: (
     buffer: DataView,
@@ -802,7 +800,7 @@ function deserializeManyFloatVectors(
       points[i],
     );
   }
-  return offset;
+  return dataOffset;
 }
 
 export const annotationTypeHandlers: Record<
@@ -903,17 +901,14 @@ export const annotationTypeHandlers: Record<
       isLittleEndian: boolean,
       rank: number,
       annotation: PolyLine,
-      geometryDataStride: number,
-      instanceIndex: number,
+      instanceStride: number,
     ) {
       // Build buffer like
       // P1 P2 PROPERTIES P3 P4 PROPERTIES ...
-      // TODO SKM don't actually need intance index
-      let startingOffset = offset + instanceIndex * geometryDataStride;
       for (let i = 0; i < annotation.points.length - 1; i++) {
-        // 0 for regular points, 1 for last point
+        // 0 for regular lines, 1 for the last line
         const pointType = i === annotation.points.length - 2 ? 1 : 0;
-        const tempOffset = startingOffset + i * geometryDataStride;
+        const tempOffset = offset + i * instanceStride;
         // Combine the point type and i into a single uint32
         buffer.setUint32(tempOffset, (pointType << 31) | i, isLittleEndian);
         const firstPoint = annotation.points[i];
@@ -1595,7 +1590,7 @@ function serializeAnnotations(
     const handler = annotationTypeHandlers[annotationType];
     const serialize = handler.serialize;
     const offset = typeToOffset[annotationType];
-    const geometryDataStride = propertySerializer.propertyGroupBytes[0];
+    const instanceStride = propertySerializer.propertyGroupBytes[0];
     let polylineInstanceIndex = 0;
     for (let i = 0, count = annotations.length; i < count; ++i) {
       const annotation = annotations[i];
@@ -1605,12 +1600,11 @@ function serializeAnnotations(
         const polyline = annotation as PolyLine;
         serialize(
           dataView,
-          offset,
+          offset + polylineInstanceIndex * instanceStride,
           isLittleEndian,
           rank,
           polyline,
-          geometryDataStride,
-          polylineInstanceIndex,
+          instanceStride,
         );
         idToSizeMap.set(polyline.id, polyline.points.length - 1);
 
@@ -1628,12 +1622,11 @@ function serializeAnnotations(
       } else {
         serialize(
           dataView,
-          offset + i * geometryDataStride,
+          offset + i * instanceStride,
           isLittleEndian,
           rank,
           annotation,
-          geometryDataStride,
-          i,
+          instanceStride,
         );
         serializeProperties(
           dataView,
