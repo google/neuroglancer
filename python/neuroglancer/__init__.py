@@ -47,6 +47,7 @@ from .viewer_state import (
     PlaceLineTool,  # noqa: F401
     PlaceBoundingBoxTool,  # noqa: F401
     PlaceEllipsoidTool,  # noqa: F401
+    PlacePolylineTool, # noqa: F401
     BlendTool,  # noqa: F401
     OpacityTool,  # noqa: F401
     VolumeRenderingTool,  # noqa: F401

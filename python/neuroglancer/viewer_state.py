@@ -188,6 +188,12 @@ class PlaceEllipsoidTool(Tool):
 
 
 @export_tool
+class PlacePolylineTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = "annotatePolyline"
+
+
+@export_tool
 class BlendTool(LayerTool):
     __slots__ = ()
     TOOL_TYPE = "blend"
