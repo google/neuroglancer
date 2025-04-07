@@ -98,7 +98,7 @@ export class AnnotationGeometryData {
   constructor(x: SerializedAnnotations) {
     this.serializedAnnotations = {
       data: x.data,
-      idToSizeMaps: x.idToSizeMaps,
+      typeToInstanceCounts: x.typeToInstanceCounts,
       typeToIds: x.typeToIds,
       typeToOffset: x.typeToOffset,
       typeToIdMaps: x.typeToIdMaps,
@@ -359,6 +359,7 @@ export function updateAnnotation(
   const { serializedAnnotations } = chunk;
   const ids = serializedAnnotations.typeToIds[type];
   const idMap = serializedAnnotations.typeToIdMaps[type];
+  const typeToInstanceCount = serializedAnnotations.typeToInstanceCounts[type];
   const typeToSize = serializedAnnotations.typeToSize;
   const handler = annotationTypeHandlers[type];
   const numBytes = propertySerializers[type].serializedBytes;
@@ -385,6 +386,8 @@ export function updateAnnotation(
     );
     ids.push(annotation.id);
     typeToSize[type] = ids.length;
+    const last = typeToInstanceCount.at(-1) ?? -1;
+    typeToInstanceCount.push(last + 1);
     serializedAnnotations.data = newData;
   }
   const bufferOffset = serializedAnnotations.typeToOffset![type];
@@ -422,6 +425,7 @@ export function deleteAnnotation(
   const { serializedAnnotations } = chunk;
   const idMap = serializedAnnotations.typeToIdMaps[type];
   const typeToSize = serializedAnnotations.typeToSize;
+  const typeToInstanceCount = serializedAnnotations.typeToInstanceCounts[type];
   const index = idMap.get(id);
   if (index === undefined) {
     return false;
@@ -455,10 +459,12 @@ export function deleteAnnotation(
     /*destCount=*/ ids.length - 1,
   );
   ids.splice(index, 1);
+  typeToInstanceCount.splice(index, 1);
   typeToSize[type] = ids.length;
   idMap.delete(id);
   for (let i = index, count = ids.length; i < count; ++i) {
     idMap.set(ids[i], i);
+    typeToInstanceCount[i] -= 1;
   }
   serializedAnnotations.data = newData;
   chunk.bufferValid = false;
@@ -491,14 +497,14 @@ export function makeTemporaryChunk() {
   const typeToIds: string[][] = [];
   const typeToOffset: number[] = [];
   const typeToIdMaps: Map<string, number>[] = [];
-  const idToSizeMaps: Map<string, AnnotationInstanceCount>[] = [];
+  const typeToInstanceCounts: number[][] = [];
   const typeToSize: number[] = [];
 
   for (const annotationType of annotationTypes) {
     typeToIds[annotationType] = [];
     typeToOffset[annotationType] = 0;
     typeToIdMaps[annotationType] = new Map();
-    idToSizeMaps[annotationType] = new Map();
+    typeToInstanceCounts[annotationType] = [];
     typeToSize[annotationType] = 0;
   }
   return new AnnotationGeometryChunk(
@@ -509,7 +515,7 @@ export function makeTemporaryChunk() {
       typeToOffset,
       typeToIds,
       typeToIdMaps,
-      idToSizeMaps,
+      typeToInstanceCounts,
       typeToSize,
     },
   );

@@ -18,7 +18,6 @@
  * @file Basic annotation data structures.
  */
 
-import { vec3 } from "gl-matrix";
 import type {
   BoundingBox,
   CoordinateSpaceTransform,
@@ -1536,7 +1535,7 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
 
 export interface SerializedAnnotations {
   data: Uint8Array<ArrayBuffer>;
-  idToSizeMaps: Map<string, AnnotationInstanceCount>[];
+  typeToInstanceCounts: number[][];
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];
@@ -1569,17 +1568,19 @@ function serializeAnnotations(
   }
   const typeToIds: string[][] = [];
   const typeToIdMaps: Map<string, number>[] = [];
-  const idToSizeMaps: Map<string, AnnotationInstanceCount>[] = [];
+  const typeToInstanceCounts: number[][] = [];
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
-    const idToSizeMap = new Map<string, AnnotationInstanceCount>();
-    idToSizeMaps[annotationType] = idToSizeMap;
     const propertySerializer = propertySerializers[annotationType];
     const { rank } = propertySerializer;
     const serializeProperties = propertySerializer.serialize;
     const annotations: Annotation[] = allAnnotations[annotationType];
+    typeToInstanceCounts[annotationType] = Array.from(
+      { length: annotations.length },
+      (_, i) => i
+    );
     typeToIds[annotationType] = annotations.map((x) => x.id);
     typeToIdMaps[annotationType] = new Map(
       annotations.map((x, i) => [x.id, i]),
@@ -1603,10 +1604,7 @@ function serializeAnnotations(
           polyline,
           instanceStride,
         );
-        idToSizeMap.set(polyline.id, {
-          numInstances: polyline.points.length - 1,
-          cumulativeInstances: polylineInstanceIndex,
-        });
+        typeToInstanceCounts[annotationType][i] = polylineInstanceIndex;
 
         for (let j = 0; j < polyline.points.length - 1; j++) {
           serializeProperties(
@@ -1644,7 +1642,7 @@ function serializeAnnotations(
   }
   return {
     data: new Uint8Array(data),
-    idToSizeMaps,
+    typeToInstanceCounts,
     typeToIds,
     typeToOffset,
     typeToIdMaps,

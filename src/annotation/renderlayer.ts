@@ -118,7 +118,11 @@ import {
   registerNested,
   registerNestedSync,
 } from "#src/trackable_value.js";
-import { arraysEqual } from "#src/util/array.js";
+import {
+  arraysEqual,
+  findClosestMatchInSortedArray,
+  findFirstInSortedArray,
+} from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
@@ -634,7 +638,8 @@ function AnnotationRenderLayer<
       const { base } = this;
       const { chunkDisplayTransform } = state;
       const { serializedAnnotations } = chunk;
-      const { typeToIdMaps, typeToOffset, typeToSize } = serializedAnnotations;
+      const { typeToIdMaps, typeToOffset, typeToSize, typeToInstanceCounts } =
+        serializedAnnotations;
       let pickId = 0;
       if (renderContext.emitPickID) {
         pickId = renderContext.pickIDs.register(
@@ -679,25 +684,12 @@ function AnnotationRenderLayer<
           if (hoverValue !== undefined) {
             const index = idMap.get(hoverValue.id);
             if (index !== undefined) {
-              // TODO (SKM) fix this, but this is only for rendering
-              // TODO (SKM) for now I'll use a loop over the map but
-              // This could be made better
               if (annotationType === AnnotationType.POLYLINE) {
-                const idToSizeMap = serializedAnnotations.idToSizeMaps[
-                  annotationType
-                ];
-                let runningCount = 0;
-                // For each value in the map, get the index and add the size
-                // If the index is less than the current index
-                for (const [id, size] of idToSizeMap) {
-                  const tempIndex = idMap.get(id);
-                  if (tempIndex !== undefined && tempIndex < index) {
-                    runningCount += size.numInstances;
-                  }
-                }
-                selectedIndex = runningCount * handler.pickIdsPerInstance;
-              }
-              else {
+                const cumulativeInstanceCount =
+                  typeToInstanceCounts[annotationType][index];
+                selectedIndex =
+                  cumulativeInstanceCount * handler.pickIdsPerInstance;
+              } else {
                 selectedIndex = index * handler.pickIdsPerInstance;
               }
               // If we wanted to include the partIndex, we would add:
@@ -708,22 +700,14 @@ function AnnotationRenderLayer<
           count = Math.round(count * drawFraction);
           // Adjust the count slightly if needed to ensure we always
           // Draw a full polyline if present
-          // TODO (SKM) again replace with binary search
           if (drawFraction < 1 && annotationType === AnnotationType.POLYLINE) {
-            const idToSizeMap = serializedAnnotations.idToSizeMaps[
-              annotationType
-            ];
-            let runningCount = 0;
-            for (const [id, size] of idToSizeMap) {
-              const tempIndex = idMap.get(id);
-              if (tempIndex !== undefined) {
-                runningCount += size.numInstances;
-              }
-              if (runningCount > count) {
-                break;
-              }
-            }
-            count = runningCount;
+            const typeToInstanceCount =
+              serializedAnnotations.typeToInstanceCounts[annotationType];
+            const bestIndex = findFirstInSortedArray(
+              typeToInstanceCount,
+              (a) => a >= count,
+            );
+            count = typeToInstanceCount[bestIndex];
           }
           context.count = count;
           context.bufferOffset = typeToOffset[annotationType];
@@ -747,7 +731,7 @@ function AnnotationRenderLayer<
     ) {
       const chunk = data as AnnotationGeometryDataInterface;
       const { serializedAnnotations } = chunk;
-      const { typeToIds, typeToOffset, typeToSize, idToSizeMaps } =
+      const { typeToIds, typeToOffset, typeToSize, typeToInstanceCounts } =
         serializedAnnotations;
       const rank = this.curRank;
       const chunkTransform = this.chunkTransform;
@@ -761,17 +745,12 @@ function AnnotationRenderLayer<
           let partIndex = pickedOffset % pickIdsPerInstance;
           let annotationIndex: number = -1;
           if (annotationType === AnnotationType.POLYLINE) {
-            const idToSizeMap = idToSizeMaps[annotationType];
-            // TODO (SKM) replace by binary search, for loop is fine for now
-            let count = 0;
-            for (let i = 0; i < ids.length; i++) {
-              partIndex = pickedOffset - count;
-              count += idToSizeMap.get(ids[i])!.numInstances * pickIdsPerInstance;
-              if (pickedOffset < count) {
-                annotationIndex = i;
-                break;
-              }
-            }
+            const typeToInstanceCount = typeToInstanceCounts[annotationType];
+            annotationIndex = findFirstInSortedArray(
+              typeToInstanceCount,
+              (count) => pickedOffset < count,
+            );
+            partIndex = pickedOffset - typeToInstanceCount[annotationIndex];
           } else {
             annotationIndex = Math.floor(pickedOffset / pickIdsPerInstance);
           }

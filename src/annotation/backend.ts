@@ -102,7 +102,7 @@ export class AnnotationGeometryData implements SerializedAnnotations {
   typeToOffset: number[];
   typeToIds: string[][];
   typeToIdMaps: Map<string, number>[];
-  idToSizeMaps: Map<string, AnnotationInstanceCount>[];
+  typeToInstanceCounts: number[][];
   typeToSize: number[];
 
   serialize(msg: any, transfers: any[]) {
@@ -110,7 +110,7 @@ export class AnnotationGeometryData implements SerializedAnnotations {
     msg.typeToOffset = this.typeToOffset;
     msg.typeToIds = this.typeToIds;
     msg.typeToIdMaps = this.typeToIdMaps;
-    msg.idToSizeMaps = this.idToSizeMaps;
+    msg.typeToInstanceCounts = this.typeToInstanceCounts;
     msg.typeToSize = this.typeToSize;
     transfers.push(this.data.buffer);
   }

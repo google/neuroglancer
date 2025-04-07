@@ -653,10 +653,10 @@ function parseAnnotations(
   let data: Uint8Array<ArrayBuffer>;
   const { propertyGroupBytes } = propertySerializer;
 
-  const idToSizeMaps = (geometryData.idToSizeMaps = new Array<
-    Map<string, AnnotationInstanceCount>
+  const typeToInstanceCounts = (geometryData.typeToInstanceCounts = new Array<
+    number[]
   >(annotationTypes.length));
-  idToSizeMaps.fill(new Map());
+  typeToInstanceCounts.fill([]);
   if (
     propertyGroupBytes.length > 1 ||
     annotationType === AnnotationType.POLYLINE
@@ -687,8 +687,7 @@ function parseAnnotations(
       // Start by looping through the data and shifting the points
       let offset = 0;
       let runningOffset = 0;
-      idToSizeMaps[parameters.type] = new Map();
-      const annotationSizeMap = idToSizeMaps[annotationType];
+      typeToInstanceCounts[annotationType] = new Array<number>(countLow);
       const numPointsOffset = 4;
       const pointOffset = parameters.rank * 4;
       const numPropertyBytes =
@@ -704,11 +703,7 @@ function parseAnnotations(
         offset += numPointsOffset; // Move past the number of points
         const numGlInstances = numPoints - 1;
         const origPropertyBase = offset + numPoints * pointOffset;
-        const annotationId = ids[i];
-        annotationSizeMap.set(annotationId, {
-          numInstances: numGlInstances,
-          cumulativeInstances,
-        });
+        typeToInstanceCounts[annotationType][i] = cumulativeInstances;
         cumulativeInstances += numGlInstances;
 
         for (let j = 0; j < numGlInstances; ++j) {
@@ -805,14 +800,6 @@ function parseAnnotations(
   } else {
     data = origData;
   }
-  if (annotationType !== AnnotationType.POLYLINE) {
-    let cumulative = 0;
-    idToSizeMaps[parameters.type] = new Map(
-      ids.map((id) => {
-        return [id, { numInstances: 1, cumulativeInstances: cumulative++ }];
-      }),
-    );
-  }
   geometryData.data = data;
   // FIXME: convert endian in order to support big endian platforms
   const typeToOffset = (geometryData.typeToOffset = new Array<number>(
@@ -829,12 +816,18 @@ function parseAnnotations(
   const typeToSize = (geometryData.typeToSize = new Array<number>(
     annotationTypes.length,
   ));
+  typeToSize.fill(0);
+  typeToSize[parameters.type] = totalNumInstances;
   typeToIds.fill([]);
   typeToIds[parameters.type] = ids;
   typeToIdMaps.fill(new Map());
   typeToIdMaps[parameters.type] = new Map(ids.map((id, i) => [id, i]));
-  typeToSize.fill(0);
-  typeToSize[parameters.type] = totalNumInstances;
+  if (annotationType !== AnnotationType.POLYLINE) {
+    typeToInstanceCounts[parameters.type] = Array.from(
+      { length: ids.length },
+      (_, i) => i,
+    );
+  }
   return geometryData;
 }
 
