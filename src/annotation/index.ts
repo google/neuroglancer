@@ -80,11 +80,6 @@ export enum AnnotationType {
   POLYLINE = 4,
 }
 
-export interface AnnotationInstanceCount {
-  numInstances: number;
-  cumulativeInstances: number;
-}
-
 export const annotationTypes = [
   AnnotationType.POINT,
   AnnotationType.LINE,
@@ -1579,7 +1574,7 @@ function serializeAnnotations(
     const annotations: Annotation[] = allAnnotations[annotationType];
     typeToInstanceCounts[annotationType] = Array.from(
       { length: annotations.length },
-      (_, i) => i
+      (_, i) => i,
     );
     typeToIds[annotationType] = annotations.map((x) => x.id);
     typeToIdMaps[annotationType] = new Map(

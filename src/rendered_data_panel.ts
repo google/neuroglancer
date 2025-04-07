@@ -27,6 +27,7 @@ import {
   displayToLayerCoordinates,
   layerToDisplayCoordinates,
 } from "#src/render_coordinate_transform.js";
+import { StatusMessage } from "#src/status.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type {
@@ -46,7 +47,6 @@ import type {
 import { TouchEventBinder } from "#src/util/touch_bindings.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { ViewerState } from "#src/viewer_state.js";
-import { StatusMessage } from "#src/status.js";
 
 declare let NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean | undefined;
 
@@ -787,10 +787,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       const annotationTool = userLayer.tool.value;
       if (
         !annotationTool ||
-        !(
-          "undo" in annotationTool &&
-          typeof annotationTool.undo === "function"
-        )
+        !("undo" in annotationTool && typeof annotationTool.undo === "function")
       ) {
         StatusMessage.showTemporaryMessage(
           `The selected layer (${JSON.stringify(
@@ -800,7 +797,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         return;
       }
       annotationTool.undo();
-    })
+    });
 
     registerActionListener(
       element,

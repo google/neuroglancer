@@ -31,7 +31,6 @@ import {
 import type {
   Annotation,
   AnnotationId,
-  AnnotationInstanceCount,
   SerializedAnnotations,
 } from "#src/annotation/index.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";

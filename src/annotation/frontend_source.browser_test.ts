@@ -56,7 +56,9 @@ class UpdateTester {
     expect(direct.typeToIdMaps).toEqual(incremental.typeToIdMaps);
     console.log("direct", direct.typeToInstanceCounts);
     console.log("incr", incremental.typeToInstanceCounts);
-    expect(direct.typeToInstanceCounts).toEqual(incremental.typeToInstanceCounts);
+    expect(direct.typeToInstanceCounts).toEqual(
+      incremental.typeToInstanceCounts,
+    );
     expect(direct.typeToSize).toEqual(incremental.typeToSize);
   }
   update(annotation: Annotation) {

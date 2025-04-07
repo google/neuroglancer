@@ -27,7 +27,6 @@ import {
 import type {
   Annotation,
   AnnotationId,
-  AnnotationInstanceCount,
   AnnotationPropertySerializer,
   AnnotationPropertySpec,
   AnnotationSourceSignals,

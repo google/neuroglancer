@@ -2131,9 +2131,10 @@ export function UserLayerWithAnnotationsMixin<
 
                 const { relationships, properties } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
-                const defaultProperties = annotationTypeHandlers[
-                  annotation.type
-                ].defaultProperties(annotation);
+                const defaultProperties =
+                  annotationTypeHandlers[annotation.type].defaultProperties(
+                    annotation,
+                  );
                 const allProperties = [
                   ...defaultProperties.properties,
                   ...properties,

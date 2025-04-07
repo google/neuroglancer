@@ -256,7 +256,7 @@ export function findClosestMatchInSortedArray<T>(
 export function findFirstInSortedArray<T>(
   haystack: ArrayLike<T>,
   predicate: (item: T) => boolean,
-  direction: 'asc' | 'desc' = 'asc',
+  direction: "asc" | "desc" = "asc",
   low: number = 0,
   high: number = haystack.length,
 ): number {
@@ -268,9 +268,9 @@ export function findFirstInSortedArray<T>(
 
     if (match) {
       result = mid;
-      direction === 'asc' ? (high = mid) : (low = mid + 1);
+      direction === "asc" ? (high = mid) : (low = mid + 1);
     } else {
-      direction === 'asc' ? (low = mid + 1) : (high = mid);
+      direction === "asc" ? (low = mid + 1) : (high = mid);
     }
   }
 

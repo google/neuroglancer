@@ -24,10 +24,7 @@ import {
   AnnotationSource,
   AnnotationGeometryChunkSourceBackend,
 } from "#src/annotation/backend.js";
-import type {
-  Annotation,
-  AnnotationInstanceCount,
-} from "#src/annotation/index.js";
+import type { Annotation } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
   AnnotationType,

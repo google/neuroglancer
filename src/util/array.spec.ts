@@ -258,9 +258,10 @@ describe("findFirst", () => {
 
     it("respects custom bounds", () => {
       const arr = [0, 1, 2, 3, 4, 0, 5, 6, 7];
-      expect(findFirstInSortedArray(arr, (x) => x >= 4, "asc", 5, 8)).toEqual(6);
+      expect(findFirstInSortedArray(arr, (x) => x >= 4, "asc", 5, 8)).toEqual(
+        6,
+      );
     });
-
   });
 
   describe("descending direction", () => {
@@ -281,7 +282,9 @@ describe("findFirst", () => {
 
     it("respects custom bounds", () => {
       const arr = [1, 2, 3, 4, 5, 6];
-      expect(findFirstInSortedArray(arr, (x) => x <= 4, "desc", 1, 3)).toEqual(2);
+      expect(findFirstInSortedArray(arr, (x) => x <= 4, "desc", 1, 3)).toEqual(
+        2,
+      );
     });
   });
 

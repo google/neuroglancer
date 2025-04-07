@@ -118,11 +118,7 @@ import {
   registerNested,
   registerNestedSync,
 } from "#src/trackable_value.js";
-import {
-  arraysEqual,
-  findClosestMatchInSortedArray,
-  findFirstInSortedArray,
-} from "#src/util/array.js";
+import { arraysEqual, findFirstInSortedArray } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";

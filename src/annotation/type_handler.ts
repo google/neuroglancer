@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {
+import type {
   Annotation,
   AnnotationPropertySpec,
-  AnnotationType,
 } from "#src/annotation/index.js";
 import {
+  AnnotationType,
   annotationTypeHandlers,
   getPropertyOffsets,
   propertyTypeDataType,
@@ -583,7 +583,10 @@ ${partIndexExpressions
   highp uint selectedIndex = uSelectedIndex;
   highp uint relatedInstancePickOffset = getNumRelatedInstances() * uint(${this.pickIdsPerInstance});
 if (selectedIndex + relatedInstancePickOffset == pickBaseOffset${partIndexExpressions
-      .map((_, i) => ` || selectedIndex + relatedInstancePickOffset == pickOffset${i}`)
+      .map(
+        (_, i) =>
+          ` || selectedIndex + relatedInstancePickOffset == pickOffset${i}`,
+      )
       .join("")}) {
     vColor = vec4(mix(vColor.rgb, vec3(1.0, 1.0, 1.0), 0.75), vColor.a);
   }
