@@ -692,7 +692,7 @@ function AnnotationRenderLayer<
                 for (const [id, size] of idToSizeMap) {
                   const tempIndex = idMap.get(id);
                   if (tempIndex !== undefined && tempIndex < index) {
-                    runningCount += size;
+                    runningCount += size.numInstances;
                   }
                 }
                 selectedIndex = runningCount * handler.pickIdsPerInstance;
@@ -717,7 +717,7 @@ function AnnotationRenderLayer<
             for (const [id, size] of idToSizeMap) {
               const tempIndex = idMap.get(id);
               if (tempIndex !== undefined) {
-                runningCount += size;
+                runningCount += size.numInstances;
               }
               if (runningCount > count) {
                 break;
@@ -766,7 +766,7 @@ function AnnotationRenderLayer<
             let count = 0;
             for (let i = 0; i < ids.length; i++) {
               partIndex = pickedOffset - count;
-              count += idToSizeMap.get(ids[i])! * pickIdsPerInstance;
+              count += idToSizeMap.get(ids[i])!.numInstances * pickIdsPerInstance;
               if (pickedOffset < count) {
                 annotationIndex = i;
                 break;

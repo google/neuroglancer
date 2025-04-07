@@ -27,6 +27,7 @@ import {
 import type {
   Annotation,
   AnnotationId,
+  AnnotationInstanceCount,
   AnnotationPropertySerializer,
   AnnotationPropertySpec,
   AnnotationSourceSignals,
@@ -490,7 +491,7 @@ export function makeTemporaryChunk() {
   const typeToIds: string[][] = [];
   const typeToOffset: number[] = [];
   const typeToIdMaps: Map<string, number>[] = [];
-  const idToSizeMaps: Map<string, number>[] = [];
+  const idToSizeMaps: Map<string, AnnotationInstanceCount>[] = [];
   const typeToSize: number[] = [];
 
   for (const annotationType of annotationTypes) {

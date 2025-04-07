@@ -24,7 +24,10 @@ import {
   AnnotationSource,
   AnnotationGeometryChunkSourceBackend,
 } from "#src/annotation/backend.js";
-import type { Annotation } from "#src/annotation/index.js";
+import type {
+  Annotation,
+  AnnotationInstanceCount,
+} from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
   AnnotationType,
@@ -651,7 +654,7 @@ function parseAnnotations(
   const { propertyGroupBytes } = propertySerializer;
 
   const idToSizeMaps = (geometryData.idToSizeMaps = new Array<
-    Map<string, number>
+    Map<string, AnnotationInstanceCount>
   >(annotationTypes.length));
   idToSizeMaps.fill(new Map());
   if (
@@ -691,6 +694,7 @@ function parseAnnotations(
       const numPropertyBytes =
         propertySerializer.serializedBytes - 2 * pointOffset - numPointsOffset;
       const numAnnotationsOffset = 8;
+      let cumulativeInstances = 0;
 
       for (let i = 0; i < countLow; ++i) {
         const numPoints = dataView.getUint32(
@@ -701,7 +705,11 @@ function parseAnnotations(
         const numGlInstances = numPoints - 1;
         const origPropertyBase = offset + numPoints * pointOffset;
         const annotationId = ids[i];
-        annotationSizeMap.set(annotationId, numGlInstances);
+        annotationSizeMap.set(annotationId, {
+          numInstances: numGlInstances,
+          cumulativeInstances,
+        });
+        cumulativeInstances += numGlInstances;
 
         for (let j = 0; j < numGlInstances; ++j) {
           // First, we need to set the number of points, where the
@@ -798,7 +806,12 @@ function parseAnnotations(
     data = origData;
   }
   if (annotationType !== AnnotationType.POLYLINE) {
-    idToSizeMaps[parameters.type] = new Map(ids.map((id) => [id, 1]));
+    let cumulative = 0;
+    idToSizeMaps[parameters.type] = new Map(
+      ids.map((id) => {
+        return [id, { numInstances: 1, cumulativeInstances: cumulative++ }];
+      }),
+    );
   }
   geometryData.data = data;
   // FIXME: convert endian in order to support big endian platforms

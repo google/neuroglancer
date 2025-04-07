@@ -31,6 +31,7 @@ import {
 import type {
   Annotation,
   AnnotationId,
+  AnnotationInstanceCount,
   SerializedAnnotations,
 } from "#src/annotation/index.js";
 import type { ChunkManager } from "#src/chunk_manager/backend.js";
@@ -101,7 +102,7 @@ export class AnnotationGeometryData implements SerializedAnnotations {
   typeToOffset: number[];
   typeToIds: string[][];
   typeToIdMaps: Map<string, number>[];
-  idToSizeMaps: Map<string, number>[];
+  idToSizeMaps: Map<string, AnnotationInstanceCount>[];
   typeToSize: number[];
 
   serialize(msg: any, transfers: any[]) {

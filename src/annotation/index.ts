@@ -81,6 +81,11 @@ export enum AnnotationType {
   POLYLINE = 4,
 }
 
+export interface AnnotationInstanceCount {
+  numInstances: number;
+  cumulativeInstances: number;
+}
+
 export const annotationTypes = [
   AnnotationType.POINT,
   AnnotationType.LINE,
@@ -1531,7 +1536,7 @@ export function makeDataBoundsBoundingBoxAnnotationSet(
 
 export interface SerializedAnnotations {
   data: Uint8Array<ArrayBuffer>;
-  idToSizeMaps: Map<string, number>[];
+  idToSizeMaps: Map<string, AnnotationInstanceCount>[];
   typeToIds: string[][];
   typeToOffset: number[];
   typeToIdMaps: Map<string, number>[];
@@ -1564,12 +1569,12 @@ function serializeAnnotations(
   }
   const typeToIds: string[][] = [];
   const typeToIdMaps: Map<string, number>[] = [];
-  const idToSizeMaps: Map<string, number>[] = [];
+  const idToSizeMaps: Map<string, AnnotationInstanceCount>[] = [];
   const data = new ArrayBuffer(totalBytes);
   const dataView = new DataView(data);
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
-    const idToSizeMap = new Map<string, number>();
+    const idToSizeMap = new Map<string, AnnotationInstanceCount>();
     idToSizeMaps[annotationType] = idToSizeMap;
     const propertySerializer = propertySerializers[annotationType];
     const { rank } = propertySerializer;
@@ -1598,7 +1603,10 @@ function serializeAnnotations(
           polyline,
           instanceStride,
         );
-        idToSizeMap.set(polyline.id, polyline.points.length - 1);
+        idToSizeMap.set(polyline.id, {
+          numInstances: polyline.points.length - 1,
+          cumulativeInstances: polylineInstanceIndex,
+        });
 
         for (let j = 0; j < polyline.points.length - 1; j++) {
           serializeProperties(
