@@ -739,16 +739,22 @@ function AnnotationRenderLayer<
         const { pickIdsPerInstance } = renderHandler;
         if (pickedOffset < numInstances * pickIdsPerInstance) {
           let partIndex = pickedOffset % pickIdsPerInstance;
-          let annotationIndex: number = -1;
+          let annotationIndex = Math.floor(pickedOffset / pickIdsPerInstance);
           if (annotationType === AnnotationType.POLYLINE) {
             const typeToInstanceCount = typeToInstanceCounts[annotationType];
             annotationIndex = findFirstInSortedArray(
               typeToInstanceCount,
-              (count) => pickedOffset < count,
+              (count) => annotationIndex >= count,
+              "desc",
             );
-            partIndex = pickedOffset - typeToInstanceCount[annotationIndex];
-          } else {
-            annotationIndex = Math.floor(pickedOffset / pickIdsPerInstance);
+            partIndex =
+              pickedOffset -
+              typeToInstanceCount[annotationIndex] * pickIdsPerInstance;
+            console.log(
+              annotationIndex,
+              typeToInstanceCount[annotationIndex],
+              partIndex,
+            );
           }
           const id = ids[annotationIndex];
           mouseState.pickedAnnotationId = id;
