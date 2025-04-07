@@ -716,10 +716,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     annotation: T,
     callback: (vec: Float32Array, isVector: boolean) => void,
   ) => void;
-  defaultProperties: (
-    annotation: T,
-    scales: vec3,
-  ) => {
+  defaultProperties: (annotation: T) => {
     properties: AnnotationNumericPropertySpec[];
     values: number[];
   };
@@ -866,9 +863,8 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
-    defaultProperties(annotation: Line, scales: vec3) {
+    defaultProperties(annotation: Line) {
       annotation;
-      scales;
       return { properties: [], values: [] };
     },
   },
@@ -948,8 +944,7 @@ export const annotationTypeHandlers: Record<
         callback(point, false);
       }
     },
-    defaultProperties(annotation: PolyLine, scales: vec3) {
-      scales;
+    defaultProperties(annotation: PolyLine) {
       return {
         properties: [
           {
@@ -1006,9 +1001,8 @@ export const annotationTypeHandlers: Record<
     visitGeometry(annotation: Point, callback) {
       callback(annotation.point, false);
     },
-    defaultProperties(annotation: Point, scales: vec3) {
+    defaultProperties(annotation: Point) {
       annotation;
-      scales;
       return { properties: [], values: [] };
     },
   },
@@ -1079,9 +1073,8 @@ export const annotationTypeHandlers: Record<
       callback(annotation.pointA, false);
       callback(annotation.pointB, false);
     },
-    defaultProperties(annotation: AxisAlignedBoundingBox, scales: vec3) {
+    defaultProperties(annotation: AxisAlignedBoundingBox) {
       annotation;
-      scales;
       return { properties: [], values: [] };
     },
   },
@@ -1152,9 +1145,8 @@ export const annotationTypeHandlers: Record<
       callback(annotation.center, false);
       callback(annotation.radii, true);
     },
-    defaultProperties(annotation: Ellipsoid, scales: vec3) {
+    defaultProperties(annotation: Ellipsoid) {
       annotation;
-      scales;
       return { properties: [], values: [] };
     },
   },

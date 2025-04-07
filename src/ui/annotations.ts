@@ -2131,14 +2131,9 @@ export function UserLayerWithAnnotationsMixin<
 
                 const { relationships, properties } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
-                const globalCoordinateSpace =
-                  this.manager.root.coordinateSpace.value;
-                const scales = new Float32Array(
-                  globalCoordinateSpace.scales.map((x) => x / 1e-9),
-                ) as vec3;
                 const defaultProperties = annotationTypeHandlers[
                   annotation.type
-                ].defaultProperties(annotation, scales);
+                ].defaultProperties(annotation);
                 const allProperties = [
                   ...defaultProperties.properties,
                   ...properties,
