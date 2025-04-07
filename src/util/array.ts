@@ -246,6 +246,63 @@ export function findClosestMatchInSortedArray<T>(
 }
 
 /**
+ * Performs a directional binary search to find the index of the first element in `haystack`
+ * that satisfies the given `predicate`.
+ *
+ * @param direction - 'asc' to find the lowest qualifying index (default),
+ *                    'desc' to find the highest qualifying index.
+ * @returns The index of the matching element, or -1 if none found.
+ */
+export function findFirstInSortedArray<T>(
+  haystack: ArrayLike<T>,
+  predicate: (item: T) => boolean,
+  direction: 'asc' | 'desc' = 'asc',
+  low: number = 0,
+  high: number = haystack.length,
+): number {
+  let result = -1;
+
+  while (low < high) {
+    const mid = (low + high - 1) >> 1;
+    const match = predicate(haystack[mid]);
+
+    if (match) {
+      result = mid;
+      direction === 'asc' ? (high = mid) : (low = mid + 1);
+    } else {
+      direction === 'asc' ? (low = mid + 1) : (high = mid);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Returns the index of the first element in `haystack` that is less than `needle`, according to
+ * `compare`. If no such element exists, returns -1.
+ */
+export function findFirstLessThanInSortedArray<T>(
+  haystack: ArrayLike<T>,
+  needle: T,
+  compare: (a: T, b: T) => number,
+  low = 0,
+  high = haystack.length,
+): number {
+  let result = -1;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (compare(haystack[mid], needle) < 0) {
+      // haystack[mid] < needle, it's a candidate
+      result = mid;
+      low = mid + 1; // try to find a larger one that's still < needle
+    } else {
+      high = mid; // eliminate this and all higher values
+    }
+  }
+  return result;
+}
+
+/**
  * Returns the first index in `[begin, end)` for which `predicate` is `true`, or returns `end` if no
  * such index exists.
  *
