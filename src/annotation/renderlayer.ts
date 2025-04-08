@@ -740,6 +740,7 @@ function AnnotationRenderLayer<
         if (pickedOffset < numInstances * pickIdsPerInstance) {
           let partIndex = pickedOffset % pickIdsPerInstance;
           let annotationIndex = Math.floor(pickedOffset / pickIdsPerInstance);
+          const annotationInstanceIndex = annotationIndex;
           if (annotationType === AnnotationType.POLYLINE) {
             const typeToInstanceCount = typeToInstanceCounts[annotationType];
             annotationIndex = findFirstInSortedArray(
@@ -750,11 +751,6 @@ function AnnotationRenderLayer<
             partIndex =
               pickedOffset -
               typeToInstanceCount[annotationIndex] * pickIdsPerInstance;
-            console.log(
-              annotationIndex,
-              typeToInstanceCount[annotationIndex],
-              partIndex,
-            );
           }
           const id = ids[annotationIndex];
           mouseState.pickedAnnotationId = id;
@@ -767,6 +763,8 @@ function AnnotationRenderLayer<
             typeToOffset[annotationType];
           mouseState.pickedAnnotationIndex = annotationIndex;
           mouseState.pickedAnnotationCount = ids.length;
+          mouseState.pickedAnnotationInstanceIndex = annotationInstanceIndex;
+          mouseState.pickedAnnotationInstanceCount = numInstances;
           const chunkPosition = this.tempChunkPosition;
           const {
             chunkToLayerTransform,
@@ -793,7 +791,7 @@ function AnnotationRenderLayer<
             chunkPosition,
             mouseState.pickedAnnotationBuffer,
             mouseState.pickedAnnotationBufferBaseOffset +
-              mouseState.pickedAnnotationIndex *
+              mouseState.pickedAnnotationInstanceIndex *
                 propertySerializer.propertyGroupBytes[0],
             partIndex,
           );
@@ -819,6 +817,7 @@ function AnnotationRenderLayer<
     }
 
     transformPickedValue(pickState: PickState) {
+      console.log("Transforming picked value");
       const { pickedAnnotationBuffer } = pickState;
       if (pickedAnnotationBuffer === undefined) return undefined;
       const { properties } = this.base.source;

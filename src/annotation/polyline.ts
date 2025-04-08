@@ -309,13 +309,9 @@ registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
   },
   pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
   snapPosition(position, data, offset, partIndex) {
-    const { linePart, lineIndex } = getPartIndexInfo(partIndex);
+    const { linePart } = getPartIndexInfo(partIndex);
     const rank = position.length;
-    const startingOffset =
-      offset +
-      4 +
-      lineIndex *
-        annotationTypeHandlers[AnnotationType.POLYLINE].serializedBytes(rank);
+    const startingOffset = offset + 4;
     if (linePart !== FULL_OBJECT_PICK_OFFSET) {
       const dataOffset = startingOffset + (linePart - 1) * 4 * rank;
       const point = new Float32Array(data, dataOffset, rank);

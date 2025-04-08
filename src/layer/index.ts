@@ -1104,7 +1104,10 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationBufferBaseOffset: number | undefined = undefined;
   // Index (out of a total of `pickedAnnotationCount`) of the picked annotation.
   pickedAnnotationIndex: number | undefined = undefined;
+  // Index (out of a total of `pickedAnnotationInstanceCount`) of the picked annotation
+  pickedAnnotationInstanceIndex: number | undefined = undefined;
   pickedAnnotationCount: number | undefined = undefined;
+  pickedAnnotationInstanceCount: number | undefined = undefined;
   pickedAnnotationType: AnnotationType | undefined = undefined;
   pageX: number;
   pageY: number;
