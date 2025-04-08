@@ -672,14 +672,14 @@ function parseAnnotations(
       // ...
       // numPointsInPolyK, PointK_1, PointK_2, ..., PointK_Nk, PropertiesK
       // While the GL buffer data is laid out as follows:
-      // numPointsInPoly1, Point1_1, Point1_2, Properties1
-      // numPointsInPoly1, Point1_2, Point1_3, Properties1
+      // polyLineIndex1_1, Point1_1, Point1_2, Properties1
+      // polyLineIndex1_2, Point1_2, Point1_3, Properties1
       // ...
-      // numPointsInPoly1, Point1_N1-1, Point1_N1, Properties1
+      // polyLineIndex1_N-1, Point1_N1-1, Point1_N1, Properties1
       // ...
-      // numPointsInPolyK, PointK_1, PointK_2, PropertiesK
+      // polyLineIndexK_1, PointK_1, PointK_2, PropertiesK
       // ...
-      // numPointsInPolyK, PointK_Nk-1, PointK_Nk, PropertiesK
+      // polyLineIndexK_Nk-1, PointK_Nk-1, PointK_Nk, PropertiesK
 
       // Start by looping through the data and shifting the points
       let offset = 0;
@@ -860,6 +860,7 @@ function parseSingleAnnotation(
     /*isLittleEndian=*/ true,
     parameters.rank,
     id,
+    0
   );
   propertySerializer.deserialize(
     dv,

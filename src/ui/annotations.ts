@@ -1963,8 +1963,8 @@ export function UserLayerWithAnnotationsMixin<
       );
       state.annotationIndex = mouseState.pickedAnnotationIndex!;
       state.annotationCount = mouseState.pickedAnnotationCount!;
-      state.annotationInstanceIndex = mouseState.pickedAnnotationInstanceIndex;
-      state.annotationInstanceCount = mouseState.pickedAnnotationInstanceCount;
+      state.annotationInstanceIndex = mouseState.pickedAnnotationInstanceIndex!;
+      state.annotationInstanceCount = mouseState.pickedAnnotationInstanceCount!;
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -2017,8 +2017,8 @@ export function UserLayerWithAnnotationsMixin<
                       numGeometryBytes,
                       properties,
                     );
-                  const annotationIndex = state.annotationIndex!;
-                  const annotationCount = state.annotationCount!;
+                  const annotationIndex = state.annotationInstanceIndex!;
+                  const annotationCount = state.annotationInstanceCount!;
                   annotation = handler.deserialize(
                     dataView,
                     baseOffset +
@@ -2027,6 +2027,7 @@ export function UserLayerWithAnnotationsMixin<
                     isLittleEndian,
                     rank,
                     state.annotationId!,
+                    annotationPropertySerializer.propertyGroupBytes[0],
                   );
                   annotationPropertySerializer.deserialize(
                     dataView,

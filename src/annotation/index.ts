@@ -689,7 +689,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   toJSON: (annotation: T, rank: number) => any;
   restoreState: (annotation: T, obj: any, rank: number) => void;
   /**
-   * Number of bytes in the serializied version of one instance of annotation
+   * Number of bytes in the serialized version of one instance of annotation
    * Most annotations have only one instance per annotation
    * However, Polylines have an only rank-dependent instance size, but not a fixed
    * number of instances (this is numPoints - 1).
@@ -710,6 +710,7 @@ export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
     isLittleEndian: boolean,
     rank: number,
     id: string,
+    instanceStride?: number,
   ) => T;
   visitGeometry: (
     annotation: T,
@@ -890,14 +891,14 @@ export const annotationTypeHandlers: Record<
       // per instance, one uint32 and 2 * rank float32
       return 4 * rank * 2 + 4;
     },
-    serialize(
+    serialize: (
       buffer: DataView,
       offset: number,
       isLittleEndian: boolean,
       rank: number,
       annotation: PolyLine,
       instanceStride: number,
-    ) {
+    ) => {
       // Build buffer like
       // P1 P2 PROPERTIES P3 P4 PROPERTIES ...
       for (let i = 0; i < annotation.points.length - 1; i++) {
@@ -918,24 +919,65 @@ export const annotationTypeHandlers: Record<
         );
       }
     },
-    deserialize(
+    deserialize: (
       buffer: DataView,
       offset: number,
       isLittleEndian: boolean,
       rank: number,
       id: string,
-    ): PolyLine {
+      instanceStride: number,
+    ): PolyLine => {
+      if (instanceStride === undefined) {
+        throw new Error("Can't deserialize polyline without stride");
+      }
       const points = new Array<Float32Array>();
-      // Remove the high bit - that's the point type
-      const numPoints = buffer.getUint32(offset, isLittleEndian) & 0x7fffffff;
-      deserializeManyFloatVectors(
-        buffer,
-        offset + 4,
-        isLittleEndian,
-        rank,
-        points,
-        numPoints,
-      );
+      // The instance stride is used along with the point type to know when to end
+      // This is for the input buffer layout
+      if (instanceStride == 0) {
+        const numPoints = buffer.getUint32(offset, isLittleEndian) & 0x7fffffff;
+        deserializeManyFloatVectors(
+          buffer,
+          offset + 4,
+          isLittleEndian,
+          rank,
+          points,
+          numPoints,
+        );
+      } else {
+        let currOffset = offset;
+        let index = 0;
+        const max_polyline_verts = 100000;
+        while (true && index <= max_polyline_verts) {
+          const isLastLine = buffer.getUint32(offset, isLittleEndian) >> 31;
+          const point = new Float32Array(rank);
+          const tempOffset = deserializeFloatVector(
+            buffer,
+            currOffset + 4,
+            isLittleEndian,
+            rank,
+            point,
+          );
+          points.push(point);
+          if (isLastLine) {
+            const point = new Float32Array(rank);
+            deserializeFloatVector(
+              buffer,
+              tempOffset,
+              isLittleEndian,
+              rank,
+              point,
+            );
+            points.push(point);
+            break;
+          }
+          index++;
+          currOffset += instanceStride;
+        }
+        if (index === max_polyline_verts) {
+          throw new Error("Reached max iters on polyline deserializing");
+        }
+      }
+
       return { type: AnnotationType.POLYLINE, points, id, properties: [] };
     },
     visitGeometry(annotation: PolyLine, callback) {

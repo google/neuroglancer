@@ -206,6 +206,8 @@ export class UserLayer extends RefCounted {
     state.annotationSourceIndex = undefined;
     state.annotationSubsource = undefined;
     state.annotationPartIndex = undefined;
+    state.annotationInstanceIndex = undefined;
+    state.annotationInstanceCount = undefined;
     state.value = undefined;
   }
 
@@ -332,6 +334,8 @@ export class UserLayer extends RefCounted {
     dest.annotationBuffer = source.annotationBuffer;
     dest.annotationIndex = source.annotationIndex;
     dest.annotationCount = source.annotationCount;
+    dest.annotationInstanceCount = source.annotationInstanceCount;
+    dest.annotationInstanceIndex = source.annotationInstanceIndex;
     dest.annotationSourceIndex = source.annotationSourceIndex;
     dest.annotationSubsource = source.annotationSubsource;
     dest.annotationPartIndex = source.annotationPartIndex;
