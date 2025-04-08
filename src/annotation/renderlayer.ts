@@ -817,7 +817,6 @@ function AnnotationRenderLayer<
     }
 
     transformPickedValue(pickState: PickState) {
-      console.log("Transforming picked value");
       const { pickedAnnotationBuffer } = pickState;
       if (pickedAnnotationBuffer === undefined) return undefined;
       const { properties } = this.base.source;
@@ -825,8 +824,8 @@ function AnnotationRenderLayer<
       const {
         pickedAnnotationBufferBaseOffset,
         pickedAnnotationType,
-        pickedAnnotationIndex,
-        pickedAnnotationCount,
+        pickedAnnotationInstanceIndex,
+        pickedAnnotationInstanceCount,
       } = pickState;
       const { annotationPropertySerializers } = this.base.source;
       // Check if there are any properties.
@@ -834,8 +833,8 @@ function AnnotationRenderLayer<
       annotationPropertySerializers[pickedAnnotationType!].deserialize(
         new DataView(pickedAnnotationBuffer),
         pickedAnnotationBufferBaseOffset!,
-        pickedAnnotationIndex!,
-        pickedAnnotationCount!,
+        pickedAnnotationInstanceIndex!,
+        pickedAnnotationInstanceCount!,
         /*isLittleEndian=*/ Endianness.LITTLE === ENDIANNESS,
         propertyValues,
       );

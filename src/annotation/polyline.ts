@@ -19,10 +19,7 @@
  */
 
 import type { PolyLine } from "#src/annotation/index.js";
-import {
-  AnnotationType,
-  annotationTypeHandlers,
-} from "#src/annotation/index.js";
+import { AnnotationType } from "#src/annotation/index.js";
 import type {
   AnnotationRenderContext,
   AnnotationShaderGetter,

@@ -135,6 +135,8 @@ export interface UserLayerSelectionState {
   annotationBuffer: Uint8Array | undefined;
   annotationIndex: number | undefined;
   annotationCount: number | undefined;
+  annotationInstanceIndex: number | undefined;
+  annotationInstanceCount: number | undefined;
   annotationSourceIndex: number | undefined;
   annotationSubsource: string | undefined;
   annotationSubsubsourceId: string | undefined;
@@ -1084,6 +1086,8 @@ export interface PickState {
   pickedAnnotationIndex: number | undefined;
   pickedAnnotationCount: number | undefined;
   pickedAnnotationType: AnnotationType | undefined;
+  pickedAnnotationInstanceIndex: number | undefined;
+  pickedAnnotationInstanceCount: number | undefined;
 }
 
 export class MouseSelectionState implements PickState {

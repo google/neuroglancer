@@ -1963,6 +1963,8 @@ export function UserLayerWithAnnotationsMixin<
       );
       state.annotationIndex = mouseState.pickedAnnotationIndex!;
       state.annotationCount = mouseState.pickedAnnotationCount!;
+      state.annotationInstanceIndex = mouseState.pickedAnnotationInstanceIndex;
+      state.annotationInstanceCount = mouseState.pickedAnnotationInstanceCount;
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -1996,6 +1998,7 @@ export function UserLayerWithAnnotationsMixin<
             ),
             ({ annotation, chunkTransform }, parent, context) => {
               let statusText: string | undefined;
+              console.log("Display state", annotation);
               if (annotation == null) {
                 if (
                   state.annotationType !== undefined &&
