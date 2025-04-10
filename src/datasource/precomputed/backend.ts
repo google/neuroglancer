@@ -728,6 +728,10 @@ function restructureAnnotationData(
 
   // Places all the properties that can't be put in the first group into their own
   // group at the end of the buffer
+  let dataToTransform = inputData;
+  if (annotationType === AnnotationType.POLYLINE) {
+    dataToTransform = new Uint8Array(outputData);
+  }
   if (propertyGroupBytes.length > 1) {
     let origOffset = 0;
     let groupOffset = 0;
@@ -765,7 +769,7 @@ function restructureAnnotationData(
           const newBase =
             groupOffset + runningTotalInstances * groupBytesPerAnnotation;
           outputData.set(
-            inputData.subarray(origBase, origBase + groupBytesPerAnnotation),
+            dataToTransform.subarray(origBase, origBase + groupBytesPerAnnotation),
             newBase,
           );
           ++runningTotalInstances;

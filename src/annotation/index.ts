@@ -948,7 +948,7 @@ export const annotationTypeHandlers: Record<
         let index = 0;
         const max_polyline_verts = 100000;
         while (true && index <= max_polyline_verts) {
-          const isLastLine = buffer.getUint32(offset, isLittleEndian) >> 31;
+          const isLastLine = buffer.getUint32(currOffset, isLittleEndian) >> 31;
           const point = new Float32Array(rank);
           const tempOffset = deserializeFloatVector(
             buffer,
