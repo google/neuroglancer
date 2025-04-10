@@ -600,54 +600,34 @@ function parseAnnotations(
   parameters: AnnotationSourceParameters,
   propertySerializer: AnnotationPropertySerializer,
 ): AnnotationGeometryData {
-  const dv = new DataView(buffer);
+  // FIXME: convert endian in order to support big endian platforms
   const isLittleEndian = true;
   // First, compute simple sanity checks for sizes etc. to verify that the buffer is well-formed.
   if (buffer.byteLength <= 8) throw new Error("Expected at least 8 bytes");
-  const countLow = dv.getUint32(0, isLittleEndian);
+  const dv = new DataView(buffer);
+  const annotationCount = dv.getUint32(0, isLittleEndian);
   const countHigh = dv.getUint32(4, isLittleEndian);
   if (countHigh !== 0) throw new Error("Annotation count too high");
-  const numBytes = propertySerializer.serializedBytes;
+
+  // Compute the size of the input buffer and output GL buffer
+  const numBytesPerInstance = propertySerializer.serializedBytes;
   const annotationType = parameters.type;
-  let expectedNonIndexBytes = 8 + numBytes * countLow;
-  let glBufferSize = numBytes * countLow;
-  let totalNumInstances = countLow;
+  let expectedNonIndexInputBytes = 8 + numBytesPerInstance * annotationCount;
+  let totalNumInstances = annotationCount;
   if (annotationType === AnnotationType.POLYLINE) {
-    // Instead need to loop through and read the number of points for each polyline
-    let offset = 8; // Starting count of total number of annotations
-    let runningSize = 0;
-    let runningNumInstances = 0;
-    for (let i = 0; i < countLow; i++) {
-      const numPoints = dv.getUint32(offset, isLittleEndian);
-      const numGlInstances = numPoints - 1;
-      const numGeometryBytes = numPoints * parameters.rank * 4;
-      offset += numBytes - 2 * parameters.rank * 4 + numGeometryBytes;
-      runningSize += numBytes * numGlInstances;
-      runningNumInstances += numGlInstances;
-    }
-    expectedNonIndexBytes = offset;
-    glBufferSize = runningSize;
-    totalNumInstances = runningNumInstances;
+    const result = computePolylineInstancesAndSize();
+    totalNumInstances = result.instanceCount;
+    expectedNonIndexInputBytes = result.memoryOffset;
   }
-  // Account for the unique uint64 ids that sit at the end of the buffer
-  const expectedBytes = expectedNonIndexBytes + 8 * countLow;
-  if (buffer.byteLength !== expectedBytes) {
-    throw new Error(
-      `Expected ${expectedBytes} bytes, but received: ${buffer.byteLength} bytes`,
-    );
-  }
-  // Start by reading all of the ids at the end of the buffer
-  const idOffset = expectedNonIndexBytes;
-  const ids = new Array<string>(countLow);
-  for (let i = 0; i < countLow; ++i) {
-    ids[i] = dv
-      .getBigUint64(idOffset + i * 8, /*littleEndian=*/ true)
-      .toString();
-  }
+  const glBufferSize = numBytesPerInstance * totalNumInstances;
+
+  // Get the unique uint64 ids that sit at the end of the buffer
+  const ids = extractIdsFromBuffer();
+
   // Now, create the geometry and properties data object
   const geometryData = new AnnotationGeometryData();
-  const origData = new Uint8Array(buffer, 8, expectedNonIndexBytes - 8);
-  let data: Uint8Array<ArrayBuffer>;
+  const inputData = new Uint8Array(buffer, 8, expectedNonIndexInputBytes - 8);
+  let outputData: Uint8Array<ArrayBuffer>;
   const { propertyGroupBytes } = propertySerializer;
 
   const typeToInstanceCounts = (geometryData.typeToInstanceCounts = new Array<
@@ -658,152 +638,27 @@ function parseAnnotations(
     propertyGroupBytes.length > 1 ||
     annotationType === AnnotationType.POLYLINE
   ) {
+    // In these cases the input data is not the same as the output data
     // Need to transpose the property data or shift around the data.
-    data = new Uint8Array(glBufferSize);
+    outputData = new Uint8Array(glBufferSize);
 
     // Start by checking for the polyline case
     if (annotationType === AnnotationType.POLYLINE) {
-      const dataView = new DataView(buffer);
-      const newDataView = new DataView(data.buffer);
-      // We need to shift the data around a bit
-      // The input data is:
-      // numPointsInPoly1, Point1_1, Point1_2, ..., Point1_N1, Properties1
-      // numPointsInPoly2, Point2_1, Point2_2, ..., Point2_N2, Properties2
-      // ...
-      // numPointsInPolyK, PointK_1, PointK_2, ..., PointK_Nk, PropertiesK
-      // While the GL buffer data is laid out as follows:
-      // polyLineIndex1_1, Point1_1, Point1_2, Properties1
-      // polyLineIndex1_2, Point1_2, Point1_3, Properties1
-      // ...
-      // polyLineIndex1_N-1, Point1_N1-1, Point1_N1, Properties1
-      // ...
-      // polyLineIndexK_1, PointK_1, PointK_2, PropertiesK
-      // ...
-      // polyLineIndexK_Nk-1, PointK_Nk-1, PointK_Nk, PropertiesK
-
-      // Start by looping through the data and shifting the points
-      let offset = 0;
-      let runningOffset = 0;
-      typeToInstanceCounts[annotationType] = new Array<number>(countLow);
-      const numPointsOffset = 4;
-      const pointOffset = parameters.rank * 4;
-      const numPropertyBytes =
-        propertySerializer.serializedBytes - 2 * pointOffset - numPointsOffset;
-      const numAnnotationsOffset = 8;
-      let cumulativeInstances = 0;
-
-      for (let i = 0; i < countLow; ++i) {
-        const numPoints = dataView.getUint32(
-          offset + numAnnotationsOffset,
-          isLittleEndian,
-        );
-        offset += numPointsOffset; // Move past the number of points
-        const numGlInstances = numPoints - 1;
-        const origPropertyBase = offset + numPoints * pointOffset;
-        typeToInstanceCounts[annotationType][i] = cumulativeInstances;
-        cumulativeInstances += numGlInstances;
-
-        for (let j = 0; j < numGlInstances; ++j) {
-          // First, we need to set the number of points, where the
-          // last bit is actually whether to draw the endpoint cap
-          const bitCap = j === numGlInstances - 1 ? 1 : 0;
-          const instanceIndexWithBitCap = j | (bitCap << 31);
-          newDataView.setUint32(
-            runningOffset,
-            instanceIndexWithBitCap,
-            isLittleEndian,
-          );
-          // Copy the geometry data for two points
-          data.set(
-            origData.subarray(offset, offset + 2 * pointOffset),
-            runningOffset + numPointsOffset,
-          );
-          // Copy the properties data
-          data.set(
-            origData.subarray(
-              origPropertyBase,
-              origPropertyBase + numPropertyBytes,
-            ),
-            runningOffset + numPointsOffset + 2 * pointOffset,
-          );
-
-          // Advance pointers
-          offset += pointOffset;
-          runningOffset += numBytes;
-        }
-        offset = origPropertyBase + numPropertyBytes;
-      }
-      // TODO SKM - maybe just changing one thing works here actually
-      if (propertyGroupBytes.length > 1) {
-        let origOffset = 0;
-        let groupOffset = 0;
-        let runningInstanceIndex = 0;
-        for (
-          let groupIndex = 0;
-          groupIndex < propertyGroupBytes.length;
-          ++groupIndex
-        ) {
-          const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
-          for (
-            let annotationIndex = 0;
-            annotationIndex < countLow;
-            ++annotationIndex
-          ) {
-            const numGLInstances = dataView.getUint32(origOffset) - 1;
-            for (
-              let instanceIndex = 0;
-              instanceIndex < numGLInstances;
-              ++instanceIndex
-            ) {
-              const origBase = origOffset + runningInstanceIndex * numBytes;
-              const newBase =
-                groupOffset + runningInstanceIndex * groupBytesPerAnnotation;
-              for (let i = 0; i < groupBytesPerAnnotation; ++i) {
-                data[newBase + i] = origData[origBase + i];
-              }
-              ++runningInstanceIndex;
-            }
-          }
-          origOffset += groupBytesPerAnnotation;
-          groupOffset += groupBytesPerAnnotation * totalNumInstances;
-        }
-      }
+      restructurePolylineData();
     }
     if (propertyGroupBytes.length > 1) {
-      let origOffset = 0;
-      let groupOffset = 0;
-      for (
-        let groupIndex = 0;
-        groupIndex < propertyGroupBytes.length;
-        ++groupIndex
-      ) {
-        const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
-        for (
-          let annotationIndex = 0;
-          annotationIndex < countLow;
-          ++annotationIndex
-        ) {
-          const origBase = origOffset + annotationIndex * numBytes;
-          const newBase =
-            groupOffset + annotationIndex * groupBytesPerAnnotation;
-          for (let i = 0; i < groupBytesPerAnnotation; ++i) {
-            data[newBase + i] = origData[origBase + i];
-          }
-        }
-        origOffset += groupBytesPerAnnotation;
-        groupOffset += groupBytesPerAnnotation * countLow;
-      }
+      restructurePropertyData();
     }
   } else {
-    data = origData;
+    outputData = inputData;
   }
-  geometryData.data = data;
-  // FIXME: convert endian in order to support big endian platforms
+  geometryData.data = outputData;
+
+  // Fill in the rest of the required geometry data
   const typeToOffset = (geometryData.typeToOffset = new Array<number>(
     annotationTypes.length,
   ));
   typeToOffset.fill(0);
-  typeToOffset[parameters.type] = 0;
   const typeToIds = (geometryData.typeToIds = new Array<string[]>(
     annotationTypes.length,
   ));
@@ -826,6 +681,149 @@ function parseAnnotations(
     );
   }
   return geometryData;
+
+  function restructurePropertyData() {
+    let origOffset = 0;
+    let groupOffset = 0;
+    let runningTotalInstances = 0;
+    for (
+      let groupIndex = 0;
+      groupIndex < propertyGroupBytes.length;
+      ++groupIndex
+    ) {
+      const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
+      for (
+        let annotationIndex = 0;
+        annotationIndex < annotationCount;
+        ++annotationIndex
+      ) {
+        let numGLInstances = 1;
+        if (annotationType === AnnotationType.POLYLINE) {
+          numGLInstances = dv.getUint32(origOffset, isLittleEndian) - 1;
+        }
+        for (
+          let instanceIndex = 0;
+          instanceIndex < numGLInstances;
+          ++instanceIndex
+        ) {
+          const origBase =
+            origOffset + runningTotalInstances * numBytesPerInstance;
+          const newBase =
+            groupOffset + runningTotalInstances * groupBytesPerAnnotation;
+          outputData.set(
+            inputData.subarray(origBase, origBase + groupBytesPerAnnotation),
+            newBase,
+          );
+          ++runningTotalInstances;
+        }
+      }
+      origOffset += groupBytesPerAnnotation;
+      groupOffset += groupBytesPerAnnotation * totalNumInstances;
+    }
+  }
+
+  function restructurePolylineData() {
+    const outputDataView = new DataView(outputData.buffer);
+    // We need to shift the data around
+    // The input data layout is:
+    // numPointsInPoly1, Point1_1, Point1_2, ..., Point1_N1, Properties1
+    // numPointsInPoly2, Point2_1, Point2_2, ..., Point2_N2, Properties2
+    // ...
+    // numPointsInPolyK, PointK_1, PointK_2, ..., PointK_Nk, PropertiesK
+    // While the GL buffer data layout is:
+    // polyLineIndex1_1, Point1_1, Point1_2, Properties1
+    // polyLineIndex1_2, Point1_2, Point1_3, Properties1
+    // ...
+    // polyLineIndex1_N-1, Point1_N1-1, Point1_N1, Properties1
+    // ...
+    // polyLineIndexK_1, PointK_1, PointK_2, PropertiesK
+    // ...
+    // polyLineIndexK_Nk-1, PointK_Nk-1, PointK_Nk, PropertiesK
+
+    let inputDataOffset = 0;
+    let outputDataOffset = 0;
+    const pointCountBytes = 4;
+    const pointBytes = parameters.rank * 4;
+    const numPropertyBytes =
+      propertySerializer.serializedBytes - 2 * pointBytes - pointCountBytes;
+    const numAnnotationsOffset = 8;
+    let cumulativeInstances = 0;
+    typeToInstanceCounts[annotationType] = new Array<number>(annotationCount);
+
+    for (let i = 0; i < annotationCount; ++i) {
+      const numPoints = dv.getUint32(
+        inputDataOffset + numAnnotationsOffset,
+        isLittleEndian,
+      );
+      const numInstancesInAnnotation = numPoints - 1;
+      inputDataOffset += pointCountBytes; // Move past the number of points
+      const propertyDataStart = inputDataOffset + numPoints * pointBytes;
+      typeToInstanceCounts[annotationType][i] = cumulativeInstances;
+      cumulativeInstances += numInstancesInAnnotation;
+
+      for (let j = 0; j < numInstancesInAnnotation; ++j) {
+        // First, we need to set the instance index for this annotation, where the
+        // last bit is actually whether to draw the endpoint cap
+        const bitCap = j === numInstancesInAnnotation - 1 ? 1 : 0;
+        const instanceIndexWithBitCap = j | (bitCap << 31);
+        outputDataView.setUint32(
+          outputDataOffset,
+          instanceIndexWithBitCap,
+          isLittleEndian,
+        );
+        // Copy the geometry data for two points
+        outputData.set(
+          inputData.subarray(inputDataOffset, inputDataOffset + 2 * pointBytes),
+          outputDataOffset + pointCountBytes,
+        );
+        // Copy the properties data
+        outputData.set(
+          inputData.subarray(
+            propertyDataStart,
+            propertyDataStart + numPropertyBytes,
+          ),
+          outputDataOffset + pointCountBytes + 2 * pointBytes,
+        );
+
+        inputDataOffset += pointBytes; // Move to the next point in the input data
+        outputDataOffset += numBytesPerInstance; // Move to the next instance in the output data
+      }
+      inputDataOffset = propertyDataStart + numPropertyBytes; // Move to the next annotation
+    }
+  }
+
+  function extractIdsFromBuffer() {
+    const expectedInputBytes = expectedNonIndexInputBytes + 8 * annotationCount;
+    if (buffer.byteLength !== expectedInputBytes) {
+      throw new Error(
+        `Expected ${expectedInputBytes} bytes, but received: ${buffer.byteLength} bytes`,
+      );
+    }
+    // Reading all of the ids at the end of the buffer
+    const idOffset = expectedNonIndexInputBytes;
+    const ids = new Array<string>(annotationCount);
+    for (let i = 0; i < annotationCount; ++i) {
+      ids[i] = dv
+        .getBigUint64(idOffset + i * 8, /*littleEndian=*/ true)
+        .toString();
+    }
+    return ids;
+  }
+
+  function computePolylineInstancesAndSize() {
+    // Instead need to loop through and read the number of points for each polyline
+    let memoryOffset = 8; // Starting count of total number of annotations
+    let instanceCount = 0;
+    for (let i = 0; i < annotationCount; i++) {
+      const numPoints = dv.getUint32(memoryOffset, isLittleEndian);
+      const numGlInstances = numPoints - 1;
+      const numGeometryBytes = numPoints * parameters.rank * 4;
+      const numPropertyBytes = numBytesPerInstance - 2 * parameters.rank * 4;
+      memoryOffset += numGeometryBytes + numPropertyBytes;
+      instanceCount += numGlInstances;
+    }
+    return { memoryOffset, instanceCount };
+  }
 }
 
 function parseSingleAnnotation(
@@ -860,7 +858,7 @@ function parseSingleAnnotation(
     /*isLittleEndian=*/ true,
     parameters.rank,
     id,
-    0
+    0,
   );
   propertySerializer.deserialize(
     dv,
