@@ -629,7 +629,7 @@ function parseAnnotations(
   }
 
   // Get the unique uint64 ids as string that sit at the end of the buffer
-  const ids = extractIdsFromBuffer(
+  const ids = extractAnnotationIdsFromBuffer(
     buffer,
     dv,
     numAnnotations,
@@ -693,6 +693,11 @@ function parseAnnotations(
   return geometryData;
 }
 
+/**
+ * Rearranges the annotation data into a format that is more suitable for WebGL.
+ *
+ * This is needed for annotations with multiple properties, and for polylines.
+ */
 function restructureAnnotationData(
   inputDataView: DataView<ArrayBuffer>,
   inputData: Uint8Array<ArrayBuffer>,
@@ -705,14 +710,10 @@ function restructureAnnotationData(
 ) {
   const { propertyGroupBytes, serializedBytes: numBytesPerInstance } =
     propertySerializer;
-
-  // In these cases the input data is not the same as the output data
-  // Need to transpose the property data or shift around the data.
   const glBufferSize = numBytesPerInstance * numInstances;
   const outputData = new Uint8Array(glBufferSize);
   let polylineInstanceCounts: number[] = [];
 
-  // Start by checking for the polyline case
   if (annotationType === AnnotationType.POLYLINE) {
     polylineInstanceCounts = reformatPolylineBuffer(
       inputDataView,
@@ -724,6 +725,9 @@ function restructureAnnotationData(
       isLittleEndian,
     );
   }
+
+  // Places all the properties that can't be put in the first group into their own
+  // group at the end of the buffer
   if (propertyGroupBytes.length > 1) {
     let origOffset = 0;
     let groupOffset = 0;
@@ -767,6 +771,24 @@ function restructureAnnotationData(
   return { outputData, polylineInstanceCounts };
 }
 
+/**
+ * Reformats the polyline buffer into a format that is more suitable for WebGL.
+ *
+ * The input data layout is:
+ *
+ * NumPointsInPoly1, Point1_1, Point1_2, ..., Point1_N1, Properties1,
+ * NumPointsInPoly2, Point2_1, Point2_2, ..., Point2_N2, Properties2,
+ * ...,
+ * NumPointsInPolyK, PointK_1, PointK_2, ..., PointK_Nk, PropertiesK
+ *
+ * While the GL buffer data layout is:
+ * PolyLineIndex1_1, Point1_1, Point1_2, Properties1,
+ * PolyLineIndex1_2, Point1_2, Point1_3, Properties1,
+ * ...,
+ * PolyLineIndex1_N-1, Point1_N1-1, Point1_N1, Properties1,
+ * ...,
+ * PolyLineIndexK_1, PointK_1, PointK_2, PropertiesK
+ */
 function reformatPolylineBuffer(
   inputDataView: DataView<ArrayBuffer>,
   inputData: Uint8Array<ArrayBuffer>,
@@ -777,21 +799,7 @@ function reformatPolylineBuffer(
   isLittleEndian: boolean,
 ): number[] {
   const outputDataView = new DataView(outputData.buffer);
-  // We need to shift the data around
-  // The input data layout is:
-  // numPointsInPoly1, Point1_1, Point1_2, ..., Point1_N1, Properties1
-  // numPointsInPoly2, Point2_1, Point2_2, ..., Point2_N2, Properties2
-  // ...
-  // numPointsInPolyK, PointK_1, PointK_2, ..., PointK_Nk, PropertiesK
-  // While the GL buffer data layout is:
-  // polyLineIndex1_1, Point1_1, Point1_2, Properties1
-  // polyLineIndex1_2, Point1_2, Point1_3, Properties1
-  // ...
-  // polyLineIndex1_N-1, Point1_N1-1, Point1_N1, Properties1
-  // ...
-  // polyLineIndexK_1, PointK_1, PointK_2, PropertiesK
-  // ...
-  // polyLineIndexK_Nk-1, PointK_Nk-1, PointK_Nk, PropertiesK
+
   let inputDataOffset = 0;
   let outputDataOffset = 0;
   const pointCountBytes = 4;
@@ -846,6 +854,13 @@ function reformatPolylineBuffer(
   return instanceCounts;
 }
 
+/**
+ * Calculates the memory usage of a polyline annotation.
+ *
+ * Since the polyline annotation is stored in a different format, we need to
+ * calculate the number of instances and the total memory usage.
+ * Other annotation types are fixed size per annotation.
+ */
 function calculatePolylineMemoryUsage(
   dv: DataView<ArrayBuffer>,
   rank: number,
@@ -866,7 +881,7 @@ function calculatePolylineMemoryUsage(
   return { totalBytes: memoryOffset, numInstances };
 }
 
-function extractIdsFromBuffer(
+function extractAnnotationIdsFromBuffer(
   buffer: ArrayBuffer,
   dv: DataView<ArrayBuffer>,
   numAnnotations: number,
