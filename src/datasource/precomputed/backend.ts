@@ -743,14 +743,21 @@ function restructureAnnotationData(
         annotationIndex < numAnnotations;
         ++annotationIndex
       ) {
-        let numGLInstances = 1;
+        let numGlInstances = 1;
         if (annotationType === AnnotationType.POLYLINE) {
-          numGLInstances =
-            inputDataView.getUint32(origOffset, isLittleEndian) - 1;
+          // Use the polyline instance count to get the number of instances
+          if (annotationIndex === numAnnotations - 1) {
+            numGlInstances =
+              numInstances - polylineInstanceCounts[annotationIndex];
+          } else {
+            numGlInstances =
+              polylineInstanceCounts[annotationIndex + 1] -
+              polylineInstanceCounts[annotationIndex];
+          }
         }
         for (
           let instanceIndex = 0;
-          instanceIndex < numGLInstances;
+          instanceIndex < numGlInstances;
           ++instanceIndex
         ) {
           const origBase =

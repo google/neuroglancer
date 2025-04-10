@@ -1998,7 +1998,6 @@ export function UserLayerWithAnnotationsMixin<
             ),
             ({ annotation, chunkTransform }, parent, context) => {
               let statusText: string | undefined;
-              console.log("Display state", annotation);
               if (annotation == null) {
                 if (
                   state.annotationType !== undefined &&
