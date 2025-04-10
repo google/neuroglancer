@@ -731,12 +731,12 @@ function restructureAnnotationData(
   if (propertyGroupBytes.length > 1) {
     let origOffset = 0;
     let groupOffset = 0;
-    let runningTotalInstances = 0;
     for (
       let groupIndex = 0;
       groupIndex < propertyGroupBytes.length;
       ++groupIndex
     ) {
+      let runningTotalInstances = 0;
       const groupBytesPerAnnotation = propertyGroupBytes[groupIndex];
       for (
         let annotationIndex = 0;
