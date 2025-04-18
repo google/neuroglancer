@@ -132,7 +132,8 @@
   box-sizing: border-box;
 }
 
-.neuroglancer-tool-palette-layer-group-content >.neuroglancer-tool-palette-tool-container {
+.neuroglancer-tool-palette-layer-group-content
+  > .neuroglancer-tool-palette-tool-container {
   align-items: center;
 }
 
