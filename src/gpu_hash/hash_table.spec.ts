@@ -16,22 +16,21 @@
 
 import { describe, it, expect } from "vitest";
 import { HashMapUint64, HashSetUint64 } from "#src/gpu_hash/hash_table.js";
-import { Uint64 } from "#src/util/uint64.js";
+import { randomUint64 } from "#src/util/bigint.js";
 
 describe("gpu_hash/hash_table", () => {
   it("HashSetUint64", () => {
     const ht = new HashSetUint64();
-    const set = new Set<string>();
+    const set = new Set<bigint>();
 
     function compareViaIterate() {
-      const htValues = new Set<string>();
-      for (const v of ht.unsafeKeys()) {
-        const s = v.toString();
-        expect(htValues.has(s), `Duplicate key in hash table: ${s}`).toBe(
+      const htValues = new Set<bigint>();
+      for (const v of ht.keys()) {
+        expect(htValues.has(v), `Duplicate key in hash table: ${v}`).toBe(
           false,
         );
-        expect(set.has(s), `Unexpected key ${s} in hash table`).toBe(true);
-        htValues.add(s);
+        expect(set.has(v), `Unexpected key ${v} in hash table`).toBe(true);
+        htValues.add(v);
       }
       for (const s of set) {
         expect(htValues.has(s), `Hash table is missing key ${s}`).toBe(true);
@@ -40,8 +39,7 @@ describe("gpu_hash/hash_table", () => {
 
     function compareViaHas() {
       for (const s of set) {
-        const k = Uint64.parseString(s);
-        expect(ht.has(k), `Hash table is missing key ${s}`).toBe(true);
+        expect(ht.has(s), `Hash table is missing key ${s}`).toBe(true);
       }
     }
 
@@ -51,70 +49,61 @@ describe("gpu_hash/hash_table", () => {
     }
     const numInsertions = 100;
 
-    function testInsert(k: Uint64) {
-      const s = "" + k;
-      set.add(s);
-      expect(
-        ht.has(k),
-        `Unexpected positive has result for ${[k.low, k.high]}`,
-      ).toBe(false);
+    function testInsert(k: bigint) {
+      set.add(k);
+      expect(ht.has(k), `Unexpected positive has result for ${k}`).toBe(false);
       ht.add(k);
       compare();
     }
 
-    const empty0 = new Uint64(ht.emptyLow, ht.emptyHigh);
+    const empty0 = ht.empty;
     testInsert(empty0);
 
     for (let i = 0; i < numInsertions; ++i) {
-      let k: Uint64;
-      let s: string;
+      let k: bigint;
       while (true) {
-        k = Uint64.random();
-        s = k.toString();
-        if (!set.has(s)) {
+        k = randomUint64();
+        if (!set.has(k)) {
           break;
         }
       }
       testInsert(k);
     }
 
-    const empty1 = new Uint64(ht.emptyLow, ht.emptyHigh);
+    const empty1 = ht.empty;
     testInsert(empty1);
   });
 
   it("HashMapUint64", () => {
     const ht = new HashMapUint64();
-    const map = new Map<string, Uint64>();
+    const map = new Map<bigint, bigint>();
 
     function compareViaIterate() {
-      const htValues = new Map<string, Uint64>();
+      const htValues = new Map<bigint, bigint>();
       for (const [key, value] of ht) {
-        const s = key.toString();
-        expect(htValues.has(s), `Duplicate key in hash table: ${s}`).toBe(
+        expect(htValues.has(key), `Duplicate key in hash table: ${key}`).toBe(
           false,
         );
-        expect(map.has(s), `Unexpected key ${s} in hash table`).toBe(true);
-        htValues.set(s, value.clone());
+        expect(map.has(key), `Unexpected key ${key} in hash table`).toBe(true);
+        htValues.set(key, value);
       }
-      for (const [s, value] of map) {
-        const v = htValues.get(s);
+      for (const [key, value] of map) {
+        const v = htValues.get(key);
         expect(
-          v !== undefined && Uint64.equal(v, value),
-          `Hash table maps ${s} -> ${v} rather than -> ${value}`,
+          v !== undefined && v === value,
+          `Hash table maps ${key} -> ${v} rather than -> ${value}`,
         ).toBe(true);
       }
     }
 
     function compareViaGet() {
-      const value = new Uint64();
-      for (const [s, expectedValue] of map) {
-        const key = Uint64.parseString(s);
-        const has = ht.get(key, value);
+      for (const [key, expectedValue] of map) {
+        const value = ht.get(key);
         expect(
-          has && Uint64.equal(value, expectedValue),
-          `Hash table maps ${key} -> ${has ? value : undefined} ` +
+          value,
+          `Hash table maps ${key} -> ${value} ` +
             `rather than -> ${expectedValue}`,
-        ).toBe(true);
+        ).toEqual(expectedValue);
       }
     }
 
@@ -124,31 +113,28 @@ describe("gpu_hash/hash_table", () => {
     }
     const numInsertions = 100;
 
-    function testInsert(k: Uint64, v: Uint64) {
-      const s = "" + k;
-      map.set(s, v);
-      expect(ht.has(k), `Unexpected positive has result for ${s}`).toBe(false);
+    function testInsert(k: bigint, v: bigint) {
+      map.set(k, v);
+      expect(ht.has(k), `Unexpected positive has result for ${k}`).toBe(false);
       ht.set(k, v);
       compare();
     }
 
-    const empty0 = new Uint64(ht.emptyLow, ht.emptyHigh);
-    testInsert(empty0, Uint64.random());
+    const empty0 = ht.empty;
+    testInsert(empty0, randomUint64());
 
     for (let i = 0; i < numInsertions; ++i) {
-      let k: Uint64;
-      let s: string;
+      let k: bigint;
       while (true) {
-        k = Uint64.random();
-        s = k.toString();
-        if (!map.has(s)) {
+        k = randomUint64();
+        if (!map.has(k)) {
           break;
         }
       }
-      testInsert(k, Uint64.random());
+      testInsert(k, randomUint64());
     }
 
-    const empty1 = new Uint64(ht.emptyLow, ht.emptyHigh);
-    testInsert(empty1, Uint64.random());
+    const empty1 = ht.empty;
+    testInsert(empty1, randomUint64());
   });
 });

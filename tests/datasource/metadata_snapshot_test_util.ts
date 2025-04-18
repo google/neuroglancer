@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import "#src/kvstore/http/register.js";
-import { describe, test } from "vitest";
+import "#src/kvstore/http/register_frontend.js";
+import { test } from "vitest";
 import { getDatasourceMetadata } from "#tests/datasource/test_util.js";
 import { dataSourceProviderFixture } from "#tests/fixtures/datasource_provider.js";
 
@@ -26,17 +26,16 @@ export const dataSourceProvider = dataSourceProviderFixture();
 export function datasourceMetadataSnapshotTests(
   datasourceName: string,
   names: string[],
+  basePrefix: string = `datasource/${datasourceName}/`,
 ) {
-  describe("metadata tests", () => {
-    test.for(names)("metadata %s", async (name, { expect }) => {
-      await expect(
-        await getDatasourceMetadata(
-          dataSourceProvider,
-          `${TEST_DATA_SERVER}datasource/${datasourceName}/${name}`,
-        ),
-      ).toMatchFileSnapshot(
-        `./metadata_snapshots/${datasourceName}/${name.replaceAll("/", "_")}.snapshot`,
-      );
-    });
+  test.for(names)("metadata %s", async (name, { expect }) => {
+    await expect(
+      await getDatasourceMetadata(
+        dataSourceProvider,
+        `${TEST_DATA_SERVER}${basePrefix}${name}`,
+      ),
+    ).toMatchFileSnapshot(
+      `./metadata_snapshots/${datasourceName}/${name.replaceAll("/", "_")}.snapshot`,
+    );
   });
 }

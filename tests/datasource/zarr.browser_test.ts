@@ -15,6 +15,7 @@
  */
 
 import "#src/datasource/zarr/register_default.js";
+import "#src/kvstore/icechunk/register_frontend.js";
 import "#src/kvstore/zip/register_frontend.js";
 import "#src/kvstore/ocdbt/register_frontend.js";
 import "#src/sliceview/uncompressed_chunk_format.js";
@@ -27,3 +28,9 @@ datasourceMetadataSnapshotTests("zarr", [
   "ome_zarr/simple_0.5.zip",
   "ome_zarr/simple_0.5.ocdbt",
 ]);
+
+datasourceMetadataSnapshotTests(
+  "zarr",
+  ["icechunk/single_array.icechunk"],
+  "kvstore/",
+);

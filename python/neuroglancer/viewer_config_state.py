@@ -53,8 +53,8 @@ def export(obj):
 @export
 class SegmentIdMapEntry(typing.NamedTuple):
     key: int
-    value: typing.Optional[int] = None
-    label: typing.Optional[str] = None
+    value: int | None = None
+    label: str | None = None
 
 
 @export
@@ -71,9 +71,7 @@ def layer_selected_value(x):
     return None
 
 
-_set_type_annotation(
-    layer_selected_value, typing.Union[None, numbers.Number, SegmentIdMapEntry]
-)
+_set_type_annotation(layer_selected_value, None | numbers.Number | SegmentIdMapEntry)
 
 
 @export
@@ -350,6 +348,7 @@ class ConfigState(JsonObjectWrapper):
     show_ui_controls = showUIControls = wrapped_property(
         "showUIControls", optional(bool, True)
     )
+    show_top_bar = showTopBar = wrapped_property("showTopBar", optional(bool, True))
     show_location = showLocation = wrapped_property(
         "showLocation", optional(bool, True)
     )
@@ -364,6 +363,9 @@ class ConfigState(JsonObjectWrapper):
     )
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
         "showLayerSidePanelButton", optional(bool, True)
+    )
+    show_screenshot_button = showScreenshotButton = wrapped_property(
+        "showScreenshotButton", optional(bool, True)
     )
     show_tool_palette_button = showToolPaletteButton = wrapped_property(
         "showToolPaletteButton", optional(bool, True)

@@ -104,7 +104,7 @@ export function pipelineUrlJoin(
     }
     if (part === "") continue;
     base = kvstoreEnsureDirectoryPipelineUrl(base);
-    base += part;
+    base += encodePathForUrl(part);
   }
   return base + queryAndFragment;
 }

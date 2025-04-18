@@ -20,12 +20,11 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
-import type { TypedArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
   DATA_TYPE_BYTES,
-  DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT,
 } from "#src/util/data_type.js";
 import { convertEndian } from "#src/util/endian.js";
 import { pythonLiteralParse } from "#src/util/json.js";
@@ -33,14 +32,14 @@ import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
 
 export class NumpyArray {
   constructor(
-    public data: TypedArray,
+    public data: TypedNumberArray<ArrayBuffer>,
     public shape: number[],
     public dataType: DataType,
     public fortranOrder: boolean,
   ) {}
 }
 
-export function parseNpy(x: Uint8Array) {
+export function parseNpy(x: Uint8Array<ArrayBuffer>) {
   // Verify 6-byte magic sequence: 147, 78, 85, 77, 80, 89
   if (
     x[0] !== 147 ||
@@ -83,18 +82,15 @@ export function parseNpy(x: Uint8Array) {
   }
   const { dataType, endianness } = parseNumpyDtype(dtype);
   const bytesPerElement = DATA_TYPE_BYTES[dataType];
-  const javascriptElementsPerArrayElement =
-    DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType];
   const arrayConstructor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType];
-  const javascriptElements = javascriptElementsPerArrayElement * numElements;
   if (bytesPerElement * numElements + dataOffset !== x.byteLength) {
     throw new Error("Expected length does not match length of data");
   }
   const data = new arrayConstructor(
     x.buffer,
     x.byteOffset + dataOffset,
-    javascriptElements,
-  );
+    numElements,
+  ) as TypedNumberArray<ArrayBuffer>;
   convertEndian(data, endianness, bytesPerElement);
   return new NumpyArray(
     data,

@@ -37,6 +37,7 @@ import { makeIdentityTransform } from "#src/coordinate_transform.js";
 import type {
   ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface,
   ChunkedGraphChunkSpecification,
+  HttpSource,
   MultiscaleMeshMetadata,
 } from "#src/datasource/graphene/base.js";
 import {
@@ -50,6 +51,7 @@ import {
   makeChunkedGraphChunkSpecification,
   MeshSourceParameters,
   PYCG_APP_VERSION,
+  getHttpSource,
 } from "#src/datasource/graphene/base.js";
 import type {
   DataSource,
@@ -71,7 +73,6 @@ import {
 } from "#src/datasource/precomputed/frontend.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import { HttpKvStore } from "#src/kvstore/http/index.js";
 import {
   ensureEmptyUrlSuffix,
   kvstoreEnsureDirectoryPipelineUrl,
@@ -165,11 +166,11 @@ import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { mat4, vec3, vec4 } from "#src/util/geom.js";
-import type { FetchOk } from "#src/util/http_request.js";
 import { HttpError, isNotFoundError } from "#src/util/http_request.js";
 import {
   parseArray,
   parseFixedLengthArray,
+  parseUint64,
   verify3dVec,
   verifyBoolean,
   verifyEnumString,
@@ -188,7 +189,6 @@ import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeIcon } from "#src/widget/icon.js";
@@ -206,9 +206,9 @@ const BLUE_COLOR_SEGMENT = vec4FromVec3(BLUE_COLOR, 0.5);
 const RED_COLOR_HIGHLIGHT = vec4FromVec3(RED_COLOR, 0.25);
 const BLUE_COLOR_HIGHTLIGHT = vec4FromVec3(BLUE_COLOR, 0.25);
 const TRANSPARENT_COLOR = vec4.fromValues(0.5, 0.5, 0.5, 0.01);
-const RED_COLOR_SEGMENT_PACKED = new Uint64(packColor(RED_COLOR_SEGMENT));
-const BLUE_COLOR_SEGMENT_PACKED = new Uint64(packColor(BLUE_COLOR_SEGMENT));
-const TRANSPARENT_COLOR_PACKED = new Uint64(packColor(TRANSPARENT_COLOR));
+const RED_COLOR_SEGMENT_PACKED = BigInt(packColor(RED_COLOR_SEGMENT));
+const BLUE_COLOR_SEGMENT_PACKED = BigInt(packColor(BLUE_COLOR_SEGMENT));
+const TRANSPARENT_COLOR_PACKED = BigInt(packColor(TRANSPARENT_COLOR));
 const MULTICUT_OFF_COLOR = vec4.fromValues(0, 0, 0, 0.5);
 
 class GrapheneMeshSource extends WithParameters(
@@ -787,15 +787,11 @@ function makeColoredAnnotationState(
 }
 
 function getOptionalUint64(obj: any, key: string) {
-  return verifyOptionalObjectProperty(obj, key, (value) =>
-    Uint64.parseString(String(value)),
-  );
+  return verifyOptionalObjectProperty(obj, key, parseUint64);
 }
 
 function getUint64(obj: any, key: string) {
-  return verifyObjectProperty(obj, key, (value) =>
-    Uint64.parseString(String(value)),
-  );
+  return verifyObjectProperty(obj, key, parseUint64);
 }
 
 function restoreSegmentSelection(obj: any): SegmentSelection {
@@ -866,8 +862,8 @@ class GrapheneState implements Trackable {
 }
 
 export interface SegmentSelection {
-  segmentId: Uint64;
-  rootId: Uint64;
+  segmentId: bigint;
+  rootId: bigint;
   position: Float32Array;
   annotationReference?: AnnotationReference;
 }
@@ -893,8 +889,8 @@ class MergeState extends RefCounted implements Trackable {
 
     const segmentSelectionToJSON = (x: SegmentSelection) => {
       return {
-        [SEGMENT_ID_JSON_KEY]: x.segmentId.toJSON(),
-        [ROOT_ID_JSON_KEY]: x.rootId.toJSON(),
+        [SEGMENT_ID_JSON_KEY]: x.segmentId.toString(),
+        [ROOT_ID_JSON_KEY]: x.rootId.toString(),
         [POSITION_JSON_KEY]: [...x.position],
       };
     };
@@ -908,7 +904,7 @@ class MergeState extends RefCounted implements Trackable {
       };
 
       if (x.mergedRoot) {
-        res[MERGED_ROOT_JSON_KEY] = x.mergedRoot.toJSON();
+        res[MERGED_ROOT_JSON_KEY] = x.mergedRoot.toString();
       }
       if (x.error) {
         res[ERROR_JSON_KEY] = x.error;
@@ -969,7 +965,7 @@ class MulticutState extends RefCounted implements Trackable {
   sources = new WatchableSet<SegmentSelection>();
 
   constructor(
-    public focusSegment = new TrackableValue<Uint64 | undefined>(
+    public focusSegment = new TrackableValue<bigint | undefined>(
       undefined,
       (x) => x,
     ),
@@ -1004,14 +1000,14 @@ class MulticutState extends RefCounted implements Trackable {
 
     const segmentSelectionToJSON = (x: SegmentSelection) => {
       return {
-        [SEGMENT_ID_JSON_KEY]: x.segmentId.toJSON(),
-        [ROOT_ID_JSON_KEY]: x.rootId.toJSON(),
+        [SEGMENT_ID_JSON_KEY]: x.segmentId.toString(),
+        [ROOT_ID_JSON_KEY]: x.rootId.toString(),
         [POSITION_JSON_KEY]: [...x.position],
       };
     };
 
     return {
-      [FOCUS_SEGMENT_JSON_KEY]: focusSegment.toJSON(),
+      [FOCUS_SEGMENT_JSON_KEY]: focusSegment.toJSON()?.toString(),
       [SINKS_JSON_KEY]: [...sinks].map(segmentSelectionToJSON),
       [SOURCES_JSON_KEY]: [...sources].map(segmentSelectionToJSON),
     };
@@ -1025,7 +1021,7 @@ class MulticutState extends RefCounted implements Trackable {
     };
 
     verifyOptionalObjectProperty(x, FOCUS_SEGMENT_JSON_KEY, (value) => {
-      this.focusSegment.restoreState(Uint64.parseString(String(value)));
+      this.focusSegment.restoreState(parseUint64(value));
     });
     const sinks = verifyObjectProperty(
       x,
@@ -1062,13 +1058,13 @@ class MulticutState extends RefCounted implements Trackable {
 
   get redSegments() {
     return [...this.sinks]
-      .filter((x) => !Uint64.equal(x.segmentId, x.rootId))
+      .filter((x) => x.segmentId !== x.rootId)
       .map((x) => x.segmentId);
   }
 
   get blueSegments() {
     return [...this.sources]
-      .filter((x) => !Uint64.equal(x.segmentId, x.rootId))
+      .filter((x) => x.segmentId !== x.rootId)
       .map((x) => x.segmentId);
   }
 }
@@ -1086,18 +1082,20 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     super(graph, layer.displayState.segmentationGroupState.value);
     const segmentsState = layer.displayState.segmentationGroupState.value;
     segmentsState.selectedSegments.changed.add(
-      (segmentIds: Uint64[] | Uint64 | null, add: boolean) => {
+      (segmentIds: bigint[] | bigint | null, add: boolean) => {
         if (segmentIds !== null) {
-          segmentIds = Array<Uint64>().concat(segmentIds);
+          segmentIds =
+            typeof segmentIds === "bigint" ? [segmentIds] : segmentIds;
         }
         this.selectedSegmentsChanged(segmentIds, add);
       },
     );
 
     segmentsState.visibleSegments.changed.add(
-      (segmentIds: Uint64[] | Uint64 | null, add: boolean) => {
+      (segmentIds: bigint[] | bigint | null, add: boolean) => {
         if (segmentIds !== null) {
-          segmentIds = Array<Uint64>().concat(segmentIds);
+          segmentIds =
+            typeof segmentIds === "bigint" ? [segmentIds] : segmentIds;
         }
         this.visibleSegmentsChanged(segmentIds, add);
       },
@@ -1150,7 +1148,9 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       mergeAnnotationState.source.childAdded.add((x) => {
         const annotation = x as Line;
         const relatedSegments = annotation.relatedSegments![0];
-        const visibles = relatedSegments.map((x) => visibleSegments.has(x));
+        const visibles = Array.from(relatedSegments, (x) =>
+          visibleSegments.has(x),
+        );
         if (visibles[0] === false) {
           setTimeout(() => {
             const { tool } = layer;
@@ -1179,7 +1179,9 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         const annotation = ref.value as Line | undefined;
         if (annotation) {
           const relatedSegments = annotation.relatedSegments![0];
-          const visibles = relatedSegments.map((x) => visibleSegments.has(x));
+          const visibles = Array.from(relatedSegments, (x) =>
+            visibleSegments.has(x),
+          );
           if (relatedSegments.length < 4) {
             mergeAnnotationState.source.delete(ref);
             StatusMessage.showTemporaryMessage(
@@ -1242,7 +1244,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   private lastDeselectionMessage: StatusMessage | undefined;
   private lastDeselectionMessageExists = false;
 
-  private visibleSegmentsChanged(segments: Uint64[] | null, added: boolean) {
+  private visibleSegmentsChanged(segments: bigint[] | null, added: boolean) {
     const { segmentsState } = this;
     const {
       focusSegment: { value: focusSegment },
@@ -1262,9 +1264,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       segmentsState.selectedSegments.add(focusSegment);
       segmentsState.visibleSegments.add(focusSegment);
       if (segments) {
-        segments = segments.filter(
-          (segment) => !Uint64.equal(segment, focusSegment),
-        );
+        segments = segments.filter((segment) => segment !== focusSegment);
       }
     }
     if (segments === null) {
@@ -1300,7 +1300,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     }
   }
 
-  private selectedSegmentsChanged(segments: Uint64[] | null, added: boolean) {
+  private selectedSegmentsChanged(segments: bigint[] | null, added: boolean) {
     const { segmentsState } = this;
     if (segments === null) {
       const leafSegmentCount = this.segmentsState.selectedSegments.size;
@@ -1315,20 +1315,19 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         segmentId,
         this.graph.info.graph.nBitsForLayerId,
       );
-      const segmentConst = segmentId.clone();
       if (added && isBaseSegment) {
-        this.graph.getRoot(segmentConst).then((rootId) => {
-          if (segmentsState.visibleSegments.has(segmentConst)) {
+        this.graph.getRoot(segmentId).then((rootId) => {
+          if (segmentsState.visibleSegments.has(segmentId)) {
             segmentsState.visibleSegments.add(rootId);
           }
-          segmentsState.selectedSegments.delete(segmentConst);
+          segmentsState.selectedSegments.delete(segmentId);
           segmentsState.selectedSegments.add(rootId);
         });
       }
     }
   }
 
-  computeSplit(include: Uint64, exclude: Uint64): ComputedSplit | undefined {
+  computeSplit(include: bigint, exclude: bigint): ComputedSplit | undefined {
     include;
     exclude;
     return undefined;
@@ -1359,13 +1358,13 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
-  meshAddNewSegments(segments: Uint64[]) {
+  meshAddNewSegments(segments: bigint[]) {
     const meshSource = this.getMeshSource();
     if (meshSource) {
       for (const segment of segments) {
         meshSource.rpc!.invoke(GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, {
           rpcId: meshSource.rpcId!,
-          segment: segment.toString(),
+          segment,
         });
       }
     }
@@ -1416,7 +1415,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   private submitMerge = async (
     submission: MergeSubmission,
     attempts = 1,
-  ): Promise<Uint64> => {
+  ): Promise<bigint> => {
     this.graph;
     const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
     const annotationToNanometers =
@@ -1439,30 +1438,27 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       }
     }
 
-    return Uint64.ZERO; // appease typescript
+    return 0n; // appease typescript
   };
 
   async bulkMerge(submissions: MergeSubmission[]) {
     const { merges } = this.state.mergeState;
     const bulkMergeHelper = (
       submissions: MergeSubmission[],
-    ): Promise<Uint64[]> => {
+    ): Promise<bigint[]> => {
       return new Promise((f) => {
         if (submissions.length === 0) {
           f([]);
           return;
         }
-        const segmentsToRemove: Uint64[] = [];
-        const replaceSegment = (a: Uint64, b: Uint64) => {
+        const segmentsToRemove: bigint[] = [];
+        const replaceSegment = (a: bigint, b: bigint) => {
           segmentsToRemove.push(a);
           for (const submission of submissions) {
-            if (
-              submission.source &&
-              Uint64.equal(submission.source.rootId, a)
-            ) {
+            if (submission.source && submission.source.rootId === a) {
               submission.source.rootId = b;
             }
-            if (Uint64.equal(submission.sink.rootId, a)) {
+            if (submission.sink.rootId === a) {
               submission.sink.rootId = b;
             }
           }
@@ -1519,7 +1515,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
 
     submissions = submissions.filter((x) => !x.locked && x.source);
     const segmentsToRemove = await bulkMergeHelper(submissions);
-    const segmentsToAdd: Uint64[] = [];
+    const segmentsToAdd: bigint[] = [];
     for (const submission of submissions) {
       if (submission.error) {
         submission.locked = false;
@@ -1578,46 +1574,38 @@ async function withErrorMessageHTTP<T>(
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol("Graph Server Not Specified.");
 
 class GrapheneGraphServerInterface {
-  private fetchOkImpl: FetchOk;
-  private url: string;
+  private httpSource: HttpSource;
   constructor(sharedKvStoreContext: SharedKvStoreContext, url: string) {
-    const { store, path } = sharedKvStoreContext.kvStoreContext.getKvStore(url);
-    if (store instanceof HttpKvStore) {
-      this.fetchOkImpl = store.fetchOkImpl;
-      this.url = store.baseUrl + path;
-    } else {
-      throw new Error(`Non-HTTP protocol not supported: ${url}`);
-    }
+    this.httpSource = getHttpSource(sharedKvStoreContext.kvStoreContext, url);
   }
 
-  async getRoot(segment: Uint64, timestamp = "") {
+  async getRoot(segment: bigint, timestamp = "") {
     const timestampEpoch = new Date(timestamp).valueOf() / 1000;
 
-    const url = `${this.url}/node/${String(segment)}/root?int64_as_str=1${
-      Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
-    }`;
+    const { fetchOkImpl, baseUrl } = this.httpSource;
 
     const jsonResp = await withErrorMessageHTTP(
-      this.fetchOkImpl(url).then((response) => response.json()),
+      fetchOkImpl(
+        `${baseUrl}/node/${String(segment)}/root?int64_as_str=1${
+          Number.isNaN(timestampEpoch) ? "" : `&timestamp=${timestampEpoch}`
+        }`,
+        {},
+      ).then((response) => response.json()),
       {
         initialMessage: `Retrieving root for segment ${segment}`,
         errorPrefix: "Could not fetch root: ",
       },
     );
-    return Uint64.parseString(jsonResp.root_id);
+    return parseUint64(jsonResp.root_id);
   }
 
   async mergeSegments(
     first: SegmentSelection,
     second: SegmentSelection,
     annotationToNanometers: Float64Array,
-  ): Promise<Uint64> {
-    const { url } = this;
-    if (url === "") {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    const promise = this.fetchOkImpl(`${url}/merge?int64_as_str=1`, {
+  ): Promise<bigint> {
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(`${baseUrl}/merge?int64_as_str=1`, {
       method: "POST",
       body: JSON.stringify([
         [
@@ -1634,7 +1622,7 @@ class GrapheneGraphServerInterface {
     try {
       const response = await promise;
       const jsonResp = await response.json();
-      return Uint64.parseString(jsonResp.new_root_ids[0]);
+      return parseUint64(jsonResp.new_root_ids[0]);
     } catch (e) {
       if (e instanceof HttpError) {
         const msg = await parseGrapheneError(e);
@@ -1648,13 +1636,9 @@ class GrapheneGraphServerInterface {
     first: SegmentSelection[],
     second: SegmentSelection[],
     annotationToNanometers: Float64Array,
-  ): Promise<Uint64[]> {
-    const { url } = this;
-    if (url === "") {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    const promise = this.fetchOkImpl(`${url}/split?int64_as_str=1`, {
+  ): Promise<bigint[]> {
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(`${baseUrl}/split?int64_as_str=1`, {
       method: "POST",
       body: JSON.stringify({
         sources: first.map((x) => [
@@ -1673,20 +1657,21 @@ class GrapheneGraphServerInterface {
       errorPrefix: "Split failed: ",
     });
     const jsonResp = await response.json();
-    const final: Uint64[] = new Array(jsonResp.new_root_ids.length);
+    const final: bigint[] = new Array(jsonResp.new_root_ids.length);
     for (let i = 0; i < final.length; ++i) {
-      final[i] = Uint64.parseString(jsonResp.new_root_ids[i]);
+      final[i] = parseUint64(jsonResp.new_root_ids[i]);
     }
     return final;
   }
 
-  async filterLatestRoots(segments: Uint64[]): Promise<Uint64[]> {
-    const url = `${this.url}/is_latest_roots`;
+  async filterLatestRoots(segments: bigint[]): Promise<bigint[]> {
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const url = `${baseUrl}/is_latest_roots`;
 
-    const promise = this.fetchOkImpl(url, {
+    const promise = fetchOkImpl(url, {
       method: "POST",
       body: JSON.stringify({
-        node_ids: segments.map((x) => x.toJSON()),
+        node_ids: segments.map((x) => x.toString()),
       }),
     });
 
@@ -1697,7 +1682,7 @@ class GrapheneGraphServerInterface {
       },
     );
 
-    const res: Uint64[] = [];
+    const res: bigint[] = [];
     for (const [i, isLatest] of jsonResp.is_latest.entries()) {
       if (isLatest) {
         res.push(segments[i]);
@@ -1748,7 +1733,7 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     );
   }
 
-  getRoot(segment: Uint64) {
+  getRoot(segment: bigint) {
     return this.graphServer.getRoot(segment);
   }
 
@@ -1789,20 +1774,20 @@ class GrapheneGraphSource extends SegmentationGraphSource {
 
   // following not used
 
-  async merge(a: Uint64, b: Uint64): Promise<Uint64> {
+  async merge(a: bigint, b: bigint): Promise<bigint> {
     a;
     b;
-    return new Uint64();
+    return 0n;
   }
 
   async split(
-    include: Uint64,
-    exclude: Uint64,
-  ): Promise<{ include: Uint64; exclude: Uint64 }> {
+    include: bigint,
+    exclude: bigint,
+  ): Promise<{ include: bigint; exclude: bigint }> {
     return { include, exclude };
   }
 
-  trackSegment(id: Uint64, callback: (id: Uint64 | null) => void): () => void {
+  trackSegment(id: bigint, callback: (id: bigint | null) => void): () => void {
     return () => {
       console.log("trackSegment... do nothing", id, callback);
     };
@@ -2009,7 +1994,9 @@ const synchronizeAnnotationSource = (
       point: selection.position,
       type: AnnotationType.POINT,
       properties: [],
-      relatedSegments: [[selection.segmentId, selection.rootId]],
+      relatedSegments: [
+        BigUint64Array.of(selection.segmentId, selection.rootId),
+      ],
     };
     const ref = annotationSource.add(annotation);
     selection.annotationReference = ref;
@@ -2245,21 +2232,21 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const { rootId, segmentId } = currentSegmentSelection;
       const { focusSegment, segments } = multicutState;
       if (focusSegment.value === undefined) {
-        focusSegment.value = rootId.clone();
+        focusSegment.value = rootId;
       }
-      if (!Uint64.equal(focusSegment.value, rootId)) {
+      if (focusSegment.value !== rootId) {
         StatusMessage.showTemporaryMessage(
-          `The selected supervoxel has root segment ${rootId.toString()}, but the supervoxels already selected have root ${focusSegment.value.toString()}`,
+          `The selected supervoxel has root segment ${rootId}, but the supervoxels already selected have root ${focusSegment.value}`,
           12000,
         );
         return;
       }
-      const isRoot = Uint64.equal(rootId, segmentId);
+      const isRoot = rootId === segmentId;
       if (!isRoot) {
         for (const segment of segments) {
-          if (Uint64.equal(segment, segmentId)) {
+          if (segment === segmentId) {
             StatusMessage.showTemporaryMessage(
-              `Supervoxel ${segmentId.toString()} has already been selected`,
+              `Supervoxel ${segmentId} has already been selected`,
               7000,
             );
             return;
@@ -2298,8 +2285,8 @@ const maybeGetSelection = (
   const point = getPoint(layer, mouseState);
   if (point === undefined) return;
   return {
-    rootId: value.clone(),
-    segmentId: baseValue.clone(),
+    rootId: value,
+    segmentId: baseValue,
     position: point,
   };
 };
@@ -2317,7 +2304,7 @@ interface MergeSubmission {
   status?: string;
   sink: SegmentSelection;
   source?: SegmentSelection;
-  mergedRoot?: Uint64;
+  mergedRoot?: bigint;
 }
 
 export class MergeSegmentsPlaceLineTool extends PlaceLineTool {
@@ -2355,15 +2342,15 @@ function lineToSubmission(line: Line, pending: boolean): MergeSubmission {
     locked: false,
     sink: {
       position: line.pointA.slice(),
-      rootId: relatedSegments[0].clone(),
-      segmentId: relatedSegments[1].clone(),
+      rootId: relatedSegments[0],
+      segmentId: relatedSegments[1],
     },
   };
   if (!pending) {
     res.source = {
       position: line.pointB.slice(),
-      rootId: relatedSegments[2].clone(),
-      segmentId: relatedSegments[3].clone(),
+      rootId: relatedSegments[2],
+      segmentId: relatedSegments[3],
     };
   }
   return res;
@@ -2377,12 +2364,12 @@ function mergeToLine(submission: MergeSubmission): Line {
     pointA: sink.position.slice(),
     pointB: source!.position.slice(),
     relatedSegments: [
-      [
-        sink.rootId.clone(),
-        sink.segmentId.clone(),
-        source!.rootId.clone(),
-        source!.segmentId.clone(),
-      ],
+      BigUint64Array.of(
+        sink.rootId,
+        sink.segmentId,
+        source!.rootId,
+        source!.segmentId,
+      ),
     ],
     properties: [],
   };
@@ -2478,7 +2465,7 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       return row;
     };
 
-    const createPointElement = (id: Uint64) => {
+    const createPointElement = (id: bigint) => {
       const containerEl = document.createElement("div");
       containerEl.classList.add("graphene-merge-segments-point");
       const widget = makeWidget(augmentSegmentId(this.layer.displayState, id));

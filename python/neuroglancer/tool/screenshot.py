@@ -79,8 +79,8 @@ import itertools
 import os
 import threading
 import time
-from collections.abc import Iterator
-from typing import Callable, NamedTuple, Optional
+from collections.abc import Callable, Iterator
+from typing import NamedTuple
 
 import numpy as np
 import PIL
@@ -293,8 +293,8 @@ def capture_screenshots_in_parallel(
     request_iter: Iterator[CaptureScreenshotRequest],
     refresh_browser_timeout: float,
     num_to_prefetch: int,
-    total_requests: Optional[int] = None,
-    buffer_size: Optional[int] = None,
+    total_requests: int | None = None,
+    buffer_size: int | None = None,
 ):
     if buffer_size is None:
         if total_requests is None:

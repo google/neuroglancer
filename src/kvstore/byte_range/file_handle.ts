@@ -52,6 +52,21 @@ export function composeByteRangeRequest(
   };
 }
 
+export function handleByteRangeRequestFromUint8Array(
+  value: Uint8Array,
+  byteRange: ByteRangeRequest | undefined,
+): ReadResponse {
+  const {
+    outer: { offset, length },
+  } = composeByteRangeRequest({ offset: 0, length: value.length }, byteRange);
+  return {
+    offset,
+    length,
+    totalSize: value.length,
+    response: new Response(value.subarray(offset, offset + length)),
+  };
+}
+
 export class FileByteRangeHandle implements FileHandle {
   constructor(
     public base: FileHandle,

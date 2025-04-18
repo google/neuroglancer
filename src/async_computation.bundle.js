@@ -4,4 +4,5 @@
 import "#src/util/polyfills.js";
 import "#src/async_computation/encode_compressed_segmentation.js";
 import "#src/datasource/enabled_async_computation_modules.js";
+import "#src/kvstore/enabled_async_computation_modules.js";
 import "#src/async_computation/handler.js";

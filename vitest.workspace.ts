@@ -16,7 +16,8 @@
 
 import path from "node:path";
 import mswPlugin from "@iodigital/vite-plugin-msw";
-import { defineWorkspace } from "vitest/config";
+import type { ViteUserConfig } from "vitest/config";
+import { defineWorkspace, mergeConfig } from "vitest/config";
 import { getFakeGcsServerBin } from "./build_tools/vitest/build_fake_gcs_server.js";
 import { startFakeNgauthServer } from "./build_tools/vitest/fake_ngauth_server.js";
 import {
@@ -32,31 +33,75 @@ const testDataServer = await startTestDataServer(
 const fakeGcsServerBin = await getFakeGcsServerBin();
 await syncPythonTools();
 
-export default defineWorkspace([
-  {
+const commonDefines: Record<string, string> = {
+  FAKE_NGAUTH_SERVER: JSON.stringify(fakeNgauthServer.url),
+  TEST_DATA_SERVER: JSON.stringify(testDataServer.url),
+};
+
+const browserDefines = { ...commonDefines };
+const nodeDefines = {
+  FAKE_GCS_SERVER_BIN: JSON.stringify(fakeGcsServerBin),
+  PYTHON_TEST_TOOLS_PATH: JSON.stringify(PYTHON_TEST_TOOLS_PATH),
+  ...commonDefines,
+};
+
+function defaultNodeProject(): ViteUserConfig {
+  return {
+    define: { ...nodeDefines },
     test: {
-      name: "node",
       environment: "jsdom",
       setupFiles: [
         "./build_tools/vitest/polyfill-browser-globals-in-node.ts",
         "@vitest/web-worker",
       ],
+      testTimeout: 10000,
+    },
+  };
+}
+
+const KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS = [
+  { name: "zip" },
+  { name: "ocdbt" },
+  { name: "icechunk", conditions: ["neuroglancer/kvstore/s3:enabled"] },
+];
+
+export default defineWorkspace([
+  mergeConfig(defaultNodeProject(), {
+    test: {
+      name: "node",
       include: ["src/**/*.spec.ts", "tests/**/*.spec.ts"],
+      exclude: KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(
+        ({ name }) => `tests/kvstore/${name}.spec.ts`,
+      ),
       benchmark: {
         include: ["src/**/*.benchmark.ts"],
       },
-      testTimeout: 10000,
     },
-    define: {
-      FAKE_GCS_SERVER_BIN: JSON.stringify(fakeGcsServerBin),
-      PYTHON_TEST_TOOLS_PATH: JSON.stringify(PYTHON_TEST_TOOLS_PATH),
-    },
-  },
+  }),
+  ...KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(({ name, conditions = [] }) =>
+    mergeConfig(defaultNodeProject(), {
+      resolve: {
+        conditions: [
+          "neuroglancer/datasource:none_by_default",
+          "neuroglancer/kvstore:none_by_default",
+          "neuroglancer/layer:none_by_default",
+          `neuroglancer/kvstore/${name}:enabled`,
+          "neuroglancer/kvstore/http:enabled",
+          ...conditions,
+        ],
+      },
+      test: {
+        name: `kvstore/${name}`,
+        include: [`tests/kvstore/${name}.spec.ts`],
+        setupFiles: ["#src/kvstore/enabled_frontend_modules.js"],
+        benchmark: {
+          include: [],
+        },
+      },
+    }),
+  ),
   {
-    define: {
-      FAKE_NGAUTH_SERVER: JSON.stringify(fakeNgauthServer.url),
-      TEST_DATA_SERVER: JSON.stringify(testDataServer.url),
-    },
+    define: browserDefines,
     esbuild: {
       target: "es2022",
     },
@@ -72,7 +117,7 @@ export default defineWorkspace([
       name: "browser",
       include: ["src/**/*.browser_test.ts", "tests/**/*.browser_test.ts"],
       benchmark: {
-        include: [],
+        include: ["src/**/*.browser_benchmark.ts"],
       },
       browser: {
         provider: "playwright",

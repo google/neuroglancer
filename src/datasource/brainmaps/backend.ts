@@ -84,6 +84,7 @@ import { kInfinityVec, kZeroVec, vec3, vec3Key } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
+  parseUint64,
   verifyObject,
   verifyObjectProperty,
   verifyOptionalString,
@@ -91,7 +92,6 @@ import {
   verifyStringArray,
 } from "#src/util/json.js";
 import { defaultStringCompare } from "#src/util/string.js";
-import { Uint64 } from "#src/util/uint64.js";
 import * as vector from "#src/util/vector.js";
 import {
   decodeZIndexCompressed,
@@ -215,13 +215,8 @@ function getFragmentCorner(
   yBits: number,
   zBits: number,
 ): Uint32Array {
-  const id = new Uint64();
-  if (!id.tryParseString(fragmentId, 16)) {
-    throw new Error(
-      `Couldn't parse fragmentId ${fragmentId} as hex-encoded Uint64`,
-    );
-  }
-  return decodeZIndexCompressed(id.toBigInt(), xBits, yBits, zBits);
+  const value = parseUint64(BigInt("0x" + fragmentId));
+  return decodeZIndexCompressed(value, xBits, yBits, zBits);
 }
 
 interface BrainmapsMultiscaleManifestChunk extends MultiscaleManifestChunk {
@@ -383,9 +378,8 @@ function decodeBatchMeshResponse(
     if (index + headerSize > length) {
       throw new Error("Invalid batch mesh fragment response.");
     }
-    const objectIdLow = dataView.getUint32(index, /*littleEndian=*/ true);
-    const objectIdHigh = dataView.getUint32(index + 4, /*littleEndian=*/ true);
-    const objectIdString = new Uint64(objectIdLow, objectIdHigh).toString();
+    const objectId = dataView.getBigUint64(index, /*littleEndian=*/ true);
+    const objectIdString = objectId.toString();
     const prefix = objectIdString + "\0";
     index += 8;
     const fragmentKeyLength = dataView.getUint32(index, /*littleEndian=*/ true);
@@ -892,11 +886,11 @@ function parseBrainmapsAnnotationId(idPrefix: string, fullId: string) {
   return id;
 }
 
-function parseObjectLabels(obj: any): Uint64[][] | undefined {
+function parseObjectLabels(obj: any): BigUint64Array[] | undefined {
   if (obj == null) {
     return undefined;
   }
-  return [parseArray(obj, (x) => Uint64.parseString("" + x, 10))];
+  return [BigUint64Array.from(parseArray(obj, parseUint64))];
 }
 
 function parseAnnotation(
@@ -1064,7 +1058,7 @@ function annotationToBrainmaps(annotation: Annotation): any {
   const objectLabels =
     annotation.relatedSegments === undefined
       ? undefined
-      : annotation.relatedSegments[0].map((x) => x.toString());
+      : Array.from(annotation.relatedSegments[0], (x) => x.toString());
   switch (annotation.type) {
     case AnnotationType.LINE: {
       const { pointA, pointB } = annotation;

@@ -163,6 +163,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showHelpButton",
   "showSettingsButton",
   "showEditStateButton",
+  "showScreenshotButton",
   "showToolPaletteButton",
   "showLayerListPanelButton",
   "showSelectionPanelButton",
@@ -179,6 +180,7 @@ export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
 
 export const VIEWER_UI_CONFIG_OPTIONS = [
   ...VIEWER_UI_CONTROL_CONFIG_OPTIONS,
+  "showTopBar",
   "showUIControls",
   "showPanelBorders",
 ] as const;
@@ -253,6 +255,10 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
+    this.add(
+      "hideCrossSectionBackground3D",
+      viewer.hideCrossSectionBackground3D,
+    );
     this.add(
       "gpuMemoryLimit",
       viewer.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit,
@@ -416,6 +422,7 @@ export class Viewer extends RefCounted implements ViewerState {
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
+  hideCrossSectionBackground3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(
@@ -467,9 +474,20 @@ export class Viewer extends RefCounted implements ViewerState {
 
   private makeUiControlVisibilityState(key: keyof ViewerUIOptions) {
     const showUIControls = this.uiConfiguration.showUIControls;
+    const showTopBar = this.uiConfiguration.showTopBar;
     const option = this.uiConfiguration[key];
+    const isTopBarControl = (
+      VIEWER_TOP_ROW_CONFIG_OPTIONS as readonly string[]
+    ).includes(key as string);
     return this.registerDisposer(
-      makeDerivedWatchableValue((a, b) => a && b, showUIControls, option),
+      makeDerivedWatchableValue(
+        (a, b, c) => {
+          return a && (!isTopBarControl || b) && c;
+        },
+        showUIControls,
+        showTopBar,
+        option,
+      ),
     );
   }
 
@@ -605,6 +623,7 @@ export class Viewer extends RefCounted implements ViewerState {
           this.navigationState.reset();
           this.perspectiveNavigationState.pose.orientation.reset();
           this.perspectiveNavigationState.zoomFactor.reset();
+          this.layout.restoreState("4panel-alt");
           this.resetInitiated.dispatch();
           if (
             !overlaysOpen &&
@@ -847,6 +866,12 @@ export class Viewer extends RefCounted implements ViewerState {
       this.registerEventListener(button, "click", () => {
         this.showScreenshotDialog();
       });
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showScreenshotButton,
+          button,
+        ),
+      );
       topRow.appendChild(button);
     }
 
@@ -902,6 +927,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     gridContainer.appendChild(topRow);
 
+    // Note: for new states, the actual default layout is 4panel-alt.
     this.layout = this.registerDisposer(
       new RootLayoutContainer(this, "4panel"),
     );

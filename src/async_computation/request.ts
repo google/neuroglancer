@@ -74,7 +74,7 @@ function launchWorker() {
     tasks.delete(id);
     if (callbacks === undefined) return;
     if (error !== undefined) {
-      callbacks.reject(new Error(error));
+      callbacks.reject(error);
     } else {
       callbacks.resolve(value);
     }

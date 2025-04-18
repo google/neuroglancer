@@ -16,7 +16,6 @@
 
 import type { CodecChainSpec } from "#src/datasource/zarr/codec/index.js";
 import type { DataType } from "#src/util/data_type.js";
-import type { Uint64 } from "#src/util/uint64.js";
 
 export enum ChunkKeyEncoding {
   DEFAULT = 0,
@@ -34,7 +33,7 @@ export interface ArrayMetadata {
   shape: number[];
   chunkShape: number[];
   dataType: DataType;
-  fillValue: number | Uint64;
+  fillValue: number | bigint;
   dimensionNames: (string | null)[];
   dimensionUnits: (string | null)[];
   userAttributes: Record<string, unknown>;

@@ -23,7 +23,11 @@
  * require padding.
  */
 
-import type { TypedArray, TypedArrayConstructor } from "#src/util/array.js";
+import type {
+  TypedArray,
+  TypedNumberArray,
+  TypedNumberArrayConstructor,
+} from "#src/util/array.js";
 import { maybePadArray } from "#src/util/array.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
@@ -82,7 +86,7 @@ export class TextureFormat {
   /**
    * TypedArray type that must be used when uploading the texture data.
    */
-  arrayConstructor: TypedArrayConstructor;
+  arrayConstructor: TypedNumberArrayConstructor;
 
   samplerPrefix: ShaderSamplerPrefix;
 }
@@ -302,7 +306,11 @@ export function setOneDimensionalTextureData(
     texelsPerElement,
   } = format;
   const { maxTextureSize } = gl;
-  const numElements = data.length / arrayElementsPerTexel;
+  const sourceArrayElementsPerTexel =
+    data.BYTES_PER_ELEMENT /
+    arrayConstructor.BYTES_PER_ELEMENT /
+    arrayElementsPerTexel;
+  const numElements = data.length * sourceArrayElementsPerTexel;
   if (numElements * texelsPerElement > maxTextureSize * maxTextureSize) {
     throw new Error(
       "Number of elements exceeds maximum texture size: " +
@@ -342,7 +350,7 @@ export function setOneDimensionalTextureData(
 export function setTwoDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
-  data: TypedArray,
+  data: TypedNumberArray,
   width: number,
   height: number,
 ) {

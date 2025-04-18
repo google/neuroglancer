@@ -100,6 +100,7 @@ export interface ViewerUIState
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
+  hideCrossSectionBackground3D: TrackableBoolean;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -119,6 +120,7 @@ const oneSquareSymbol = "◻";
 
 const LAYOUT_SYMBOLS = new Map<string, string>([
   ["4panel", "◱"],
+  ["4panel-alt", "◲"],
   ["3d", oneSquareSymbol],
 ]);
 
@@ -180,6 +182,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
     scaleBarOptions: viewer.scaleBarOptions,
+    hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
   };
 }
 
@@ -214,7 +217,10 @@ function addDisplayDimensionsWidget(
         navigationState.pose.displayDimensionRenderInfo.addRef(),
         navigationState.zoomFactor,
         navigationState.depthRange.addRef(),
-        panel instanceof SliceViewPanel ? "px" : "vh",
+        navigationState.pose.orientation.addRef(),
+        panel.boundsUpdated,
+        panel.renderViewport,
+        panel instanceof SliceViewPanel,
       ),
     ).element,
   );
@@ -403,7 +409,7 @@ export class FourPanelLayout extends RefCounted {
                 }
                 addDisplayDimensionsWidget(this, panel);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
-                registerRelatedLayouts(this, panel, ["3d"]);
+                registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
               }),
               L.withFlex(1, (element) => {
                 makeSliceViewPanel(
@@ -412,6 +418,109 @@ export class FourPanelLayout extends RefCounted {
                   sliceViewerStateWithoutScaleBar,
                   false,
                 );
+              }),
+            ]),
+          ),
+        ]),
+      ),
+    ];
+    L.box("row", mainDisplayContents)(rootElement);
+  }
+
+  disposed() {
+    removeChildren(this.rootElement);
+    super.disposed();
+  }
+}
+
+export class FourPanelAltLayout extends RefCounted {
+  constructor(
+    public container: DataPanelLayoutContainer,
+    public rootElement: HTMLElement,
+    public viewer: ViewerUIState,
+    crossSections: Borrowed<CrossSectionSpecificationMap>,
+  ) {
+    super();
+
+    const sliceViews = makeOrthogonalSliceViews(viewer);
+    const { display } = viewer;
+
+    const perspectiveViewerState = {
+      ...getCommonPerspectiveViewerState(container),
+      showSliceViews: viewer.showPerspectiveSliceViews,
+      showSliceViewsCheckbox: true,
+    };
+
+    const sliceViewerState = {
+      ...getCommonSliceViewerState(viewer),
+      showScaleBar: viewer.showScaleBar,
+    };
+
+    const sliceViewerStateWithoutScaleBar = {
+      ...getCommonSliceViewerState(viewer),
+      showScaleBar: new TrackableBoolean(false, false),
+    };
+
+    const makeSliceViewPanel = (
+      axes: NamedAxes,
+      element: HTMLElement,
+      state: SliceViewerState,
+      displayDimensionsWidget: boolean,
+    ) => {
+      const panel = this.registerDisposer(
+        new SliceViewPanel(display, element, sliceViews.get(axes)!, state),
+      );
+      if (displayDimensionsWidget) {
+        addDisplayDimensionsWidget(this, panel);
+      }
+      registerRelatedLayouts(this, panel, [axes, `${axes}-3d`]);
+      return panel;
+    };
+    const mainDisplayContents = [
+      L.withFlex(
+        1,
+        L.box("column", [
+          L.withFlex(
+            1,
+            L.box("row", [
+              L.withFlex(1, (element) => {
+                makeSliceViewPanel("xy", element, sliceViewerState, true);
+              }),
+              L.withFlex(1, (element) => {
+                makeSliceViewPanel(
+                  "yz",
+                  element,
+                  sliceViewerStateWithoutScaleBar,
+                  false,
+                );
+              }),
+            ]),
+          ),
+          L.withFlex(
+            1,
+            L.box("row", [
+              L.withFlex(1, (element) => {
+                makeSliceViewPanel(
+                  "xz",
+                  element,
+                  sliceViewerStateWithoutScaleBar,
+                  false,
+                );
+              }),
+              L.withFlex(1, (element) => {
+                const panel = this.registerDisposer(
+                  new PerspectivePanel(
+                    display,
+                    element,
+                    perspectiveViewerState,
+                  ),
+                );
+                for (const sliceView of sliceViews.values()) {
+                  panel.sliceViews.set(sliceView.addRef(), false);
+                }
+                addDisplayDimensionsWidget(this, panel);
+                addUnconditionalSliceViews(viewer, panel, crossSections);
+                registerRelatedLayouts(this, panel, ["3d", "4panel"]);
               }),
             ]),
           ),
@@ -460,7 +569,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
             new SliceViewPanel(display, element, sliceView, sliceViewerState),
           );
           addDisplayDimensionsWidget(this, panel);
-          registerRelatedLayouts(this, panel, [axes, "4panel"]);
+          registerRelatedLayouts(this, panel, [axes, "4panel-alt"]);
         }),
         L.withFlex(1, (element) => {
           const panel = this.registerDisposer(
@@ -469,7 +578,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           panel.sliceViews.set(sliceView.addRef(), false);
           addUnconditionalSliceViews(viewer, panel, crossSections);
           addDisplayDimensionsWidget(this, panel);
-          registerRelatedLayouts(this, panel, ["3d", "4panel"]);
+          registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
         }),
       ]),
     )(rootElement);
@@ -506,7 +615,7 @@ export class SinglePanelLayout extends RefCounted {
           ),
         );
         addDisplayDimensionsWidget(this, panel);
-        registerRelatedLayouts(this, panel, ["4panel", `${axes}-3d`]);
+        registerRelatedLayouts(this, panel, ["4panel-alt", `${axes}-3d`]);
       }),
     ])(rootElement);
   }
@@ -537,7 +646,7 @@ export class SinglePerspectiveLayout extends RefCounted {
         );
         addUnconditionalSliceViews(viewer, panel, crossSections);
         addDisplayDimensionsWidget(this, panel);
-        registerRelatedLayouts(this, panel, ["4panel"]);
+        registerRelatedLayouts(this, panel, ["4panel-alt"]);
       }),
     ])(rootElement);
   }
@@ -564,6 +673,13 @@ export const LAYOUTS = new Map<
     {
       factory: (container, element, viewer, crossSections) =>
         new FourPanelLayout(container, element, viewer, crossSections),
+    },
+  ],
+  [
+    "4panel-alt",
+    {
+      factory: (container, element, viewer, crossSections) =>
+        new FourPanelAltLayout(container, element, viewer, crossSections),
     },
   ],
   [

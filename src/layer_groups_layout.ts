@@ -420,6 +420,7 @@ function getCommonViewerState(viewer: Viewer) {
     velocity: viewer.velocity.addRef(),
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
+    hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
   };
 }
 

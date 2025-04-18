@@ -28,9 +28,17 @@ export const DEFAULT_STATUS_DELAY = 200;
 
 export type Delay = boolean | number;
 
+function setupStatusContainer(container: HTMLElement) {
+  container.addEventListener("mousedown", (event) => {
+    // Prevent focus changes due to clicking on status message.
+    event.preventDefault();
+  });
+}
+
 function getStatusContainer() {
   if (statusContainer === undefined) {
     statusContainer = document.createElement("ul");
+    setupStatusContainer(statusContainer);
     statusContainer.id = "neuroglancer-status-container";
     const el: HTMLElement | null = document.getElementById(
       "neuroglancer-container",
@@ -47,6 +55,7 @@ function getStatusContainer() {
 function getModalStatusContainer() {
   if (modalStatusContainer === undefined) {
     modalStatusContainer = document.createElement("ul");
+    setupStatusContainer(modalStatusContainer);
     modalStatusContainer.id = "neuroglancer-status-container-modal";
     const el: HTMLElement | null = document.getElementById(
       "neuroglancer-container",

@@ -119,6 +119,8 @@ export abstract class RenderedPanel extends RefCounted {
 
   renderViewport = new RenderViewport();
 
+  boundsUpdated = new NullarySignal();
+
   private monitorState: PanelMonitorState = { isIntersecting: true };
 
   constructor(
@@ -241,6 +243,7 @@ export abstract class RenderedPanel extends RefCounted {
     viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
     viewport.visibleWidthFraction = clippedWidth / logicalWidth;
     viewport.visibleHeightFraction = clippedHeight / logicalHeight;
+    this.boundsUpdated.dispatch();
   }
 
   // Sets the viewport to the clipped viewport.  Any drawing must take
@@ -640,8 +643,8 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       orderedPanels.sort((a, b) => a.drawOrder - b.drawOrder);
     }
     for (const panel of orderedPanels) {
-      if (!panel.shouldDraw) continue;
       panel.ensureBoundsUpdated();
+      if (!panel.shouldDraw) continue;
       const { renderViewport } = panel;
       if (renderViewport.width === 0 || renderViewport.height === 0) continue;
       panel.draw();

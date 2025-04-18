@@ -120,13 +120,13 @@ import { RefCounted } from "#src/util/disposable.js";
 import type { vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
+  parseUint64,
   verifyFiniteNonNegativeFloat,
   verifyObjectAsMap,
   verifyOptionalObjectProperty,
   verifyString,
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
-import { Uint64 } from "#src/util/uint64.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
@@ -221,7 +221,7 @@ export class SegmentationUserLayerGroupState
           if (hidden) {
             stringValue = stringValue.substring(1);
           }
-          const id = Uint64.parseString(stringValue, 10);
+          const id = parseUint64(stringValue);
           const segmentId = segmentEquivalences.get(id);
           selectedSegments.add(segmentId);
           if (!hidden) {
@@ -322,8 +322,8 @@ export class SegmentationUserLayerColorGroupState
           parseRGBColorSpecification(String(x)),
         );
         for (const [idStr, colorVec] of result) {
-          const id = Uint64.parseString(String(idStr));
-          const color = new Uint64(packColor(colorVec));
+          const id = parseUint64(idStr);
+          const color = BigInt(packColor(colorVec));
           this.segmentStatedColors.set(id, color);
         }
       },
@@ -338,8 +338,8 @@ export class SegmentationUserLayerColorGroupState
     const { segmentStatedColors } = this;
     if (segmentStatedColors.size > 0) {
       const j: any = (x[json_keys.SEGMENT_STATED_COLORS_JSON_KEY] = {});
-      for (const [key, value] of segmentStatedColors.unsafeEntries()) {
-        j[key.toString()] = serializeColor(unpackRGB(value.low));
+      for (const [key, value] of segmentStatedColors) {
+        j[key.toString()] = serializeColor(unpackRGB(Number(value)));
       }
     }
     return x;
@@ -534,15 +534,15 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   shaderError = makeWatchableShaderError();
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
-  selectSegment: (id: Uint64, pin: boolean | "toggle") => void;
+  selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   transparentPickEnabled: TrackableBoolean;
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
   useTempSegmentStatedColors2d: SharedWatchableValue<boolean>;
 
-  filterBySegmentLabel: (id: Uint64) => void;
+  filterBySegmentLabel: (id: bigint) => void;
 
-  moveToSegment = (id: Uint64) => {
+  moveToSegment = (id: bigint) => {
     this.layer.moveToSegment(id);
   };
 
@@ -578,6 +578,7 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
+  codeVisible = new TrackableBoolean(true);
 
   graphConnection = new WatchableValue<
     SegmentationGraphSourceConnection | undefined
@@ -589,18 +590,18 @@ export class SegmentationUserLayer extends Base {
 
   segmentQueryFocusTime = new WatchableValue<number>(Number.NEGATIVE_INFINITY);
 
-  selectSegment = (id: Uint64, pin: boolean | "toggle") => {
+  selectSegment = (id: bigint, pin: boolean | "toggle") => {
     this.manager.root.selectionState.captureSingleLayerState(
       this,
       (state) => {
-        state.value = id.clone();
+        state.value = id;
         return true;
       },
       pin,
     );
   };
 
-  filterBySegmentLabel = (id: Uint64) => {
+  filterBySegmentLabel = (id: bigint) => {
     const augmented = augmentSegmentId(this.displayState, id);
     const { label } = augmented;
     if (!label) return;
@@ -616,12 +617,13 @@ export class SegmentationUserLayer extends Base {
 
   displayState = new SegmentationUserLayerDisplayState(this);
 
-  anchorSegment = new TrackableValue<Uint64 | undefined>(undefined, (x) =>
-    x === undefined ? undefined : Uint64.parseString(x),
+  anchorSegment = new TrackableValue<bigint | undefined>(undefined, (x) =>
+    x === undefined ? undefined : parseUint64(x),
   );
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
+    this.codeVisible.changed.add(this.specificationChanged.dispatch);
     this.registerDisposer(
       registerNestedSync((context, group) => {
         context.registerDisposer(
@@ -986,6 +988,7 @@ export class SegmentationUserLayer extends Base {
     if (skeletonShader !== undefined) {
       skeletonRenderingOptions.shader.restoreState(skeletonShader);
     }
+    this.codeVisible.restoreState(json_keys.SKELETON_CODE_VISIBLE_KEY);
     this.displayState.renderScaleTarget.restoreState(
       specification[json_keys.MESH_RENDER_SCALE_JSON_KEY],
     );
@@ -1041,6 +1044,7 @@ export class SegmentationUserLayer extends Base {
     x[json_keys.ANCHOR_SEGMENT_JSON_KEY] = this.anchorSegment.toJSON();
     x[json_keys.SKELETON_RENDERING_JSON_KEY] =
       this.displayState.skeletonRenderingOptions.toJSON();
+    x[json_keys.SKELETON_CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
     x[json_keys.MESH_RENDER_SCALE_JSON_KEY] =
       this.displayState.renderScaleTarget.toJSON();
     x[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
@@ -1075,8 +1079,7 @@ export class SegmentationUserLayer extends Base {
     if (value == null) {
       return value;
     }
-    // Must copy, because `value` may be a temporary Uint64 returned by PickIDManager.
-    return maybeAugmentSegmentId(this.displayState, value, /*mustCopy=*/ true);
+    return maybeAugmentSegmentId(this.displayState, value);
   }
 
   handleAction(action: string, context: SegmentationActionContext) {
@@ -1120,13 +1123,12 @@ export class SegmentationUserLayer extends Base {
   }
   selectionStateFromJson(state: this["selectionState"], json: any) {
     super.selectionStateFromJson(state, json);
-    const v = new Uint64();
     let { value } = state;
     if (typeof value === "number") value = value.toString();
-    if (typeof value !== "string" || !v.tryParseString(value)) {
+    try {
+      state.value = parseUint64(value);
+    } catch {
       state.value = undefined;
-    } else {
-      state.value = v;
     }
   }
   selectionStateToJson(state: this["selectionState"], forPython: boolean): any {
@@ -1142,7 +1144,7 @@ export class SegmentationUserLayer extends Base {
       } else {
         json.value = (value.value || value.key).toString();
       }
-    } else if (value instanceof Uint64) {
+    } else if (typeof value === "bigint") {
       json.value = value.toString();
     }
     return json;
@@ -1154,15 +1156,18 @@ export class SegmentationUserLayer extends Base {
     context: DependentViewContext,
   ): boolean {
     const { value } = state;
-    let id: Uint64;
+    let id: bigint;
     if (typeof value === "number" || typeof value === "string") {
-      id = new Uint64();
-      if (!id.tryParseString(value.toString())) return false;
+      try {
+        id = parseUint64(value);
+      } catch {
+        return false;
+      }
     }
-    if (value instanceof Uint64) {
-      id = value.clone();
+    if (typeof value === "bigint") {
+      id = value;
     } else if (value instanceof Uint64MapEntry) {
-      id = value.key.clone();
+      id = value.key;
     } else {
       return false;
     }
@@ -1248,7 +1253,7 @@ export class SegmentationUserLayer extends Base {
     return displayed;
   }
 
-  moveToSegment(id: Uint64) {
+  moveToSegment(id: bigint) {
     for (const layer of this.renderLayers) {
       if (
         !(layer instanceof MultiscaleMeshLayer || layer instanceof MeshLayer)

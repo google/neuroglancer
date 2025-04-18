@@ -25,9 +25,9 @@ import {
   encodeChannels,
   newCache,
 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
-import { makeRandomUint32Array } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { makeRandomArrayByChoosingWithReplacement } from "#src/sliceview/compressed_segmentation/test_util.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
 import { prod3, prod4, vec3, vec3Key } from "#src/util/geom.js";
-import { Uint32ArrayBuilder } from "#src/util/uint32array_builder.js";
 
 describe("compressed_segmentation uint32", () => {
   describe("encodeBlock", () => {
@@ -36,7 +36,7 @@ describe("compressed_segmentation uint32", () => {
       const input = Uint32Array.of(3, 3, 3, 3);
       const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
         input,
@@ -59,7 +59,7 @@ describe("compressed_segmentation uint32", () => {
       const input = Uint32Array.of(3, 3, 3, 3);
       const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const expected = Uint32Array.of(1, 2, 3, 3);
       const cache = newCache();
@@ -84,7 +84,7 @@ describe("compressed_segmentation uint32", () => {
       const input = Uint32Array.of(4, 3, 4, 4);
       const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -109,7 +109,7 @@ describe("compressed_segmentation uint32", () => {
       const inputStrides = [1, 2, 4];
       const blockSize = [3, 2, 1];
       const actualSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -133,7 +133,7 @@ describe("compressed_segmentation uint32", () => {
       const input = Uint32Array.of(4, 3, 5, 4);
       const inputStrides = [1, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       const cache = newCache();
       const [encodedBits, tableOffset] = encodeBlock(
@@ -167,7 +167,7 @@ describe("compressed_segmentation uint32", () => {
       );
       const volumeSize = [2, 2, 2];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
@@ -211,7 +211,7 @@ describe("compressed_segmentation uint32", () => {
       );
       const volumeSize = [2, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
@@ -254,7 +254,7 @@ describe("compressed_segmentation uint32", () => {
       );
       const volumeSize = [2, 2, 4];
       const blockSize = [2, 2, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
@@ -291,12 +291,13 @@ describe("compressed_segmentation uint32", () => {
     ]) {
       it(`round trip ${volumeSize.join(",")}`, () => {
         const numPossibleValues = 15;
-        const input = makeRandomUint32Array(
+        const input = makeRandomArrayByChoosingWithReplacement(
+          Uint32Array,
           prod3(volumeSize),
           numPossibleValues,
         );
         const blockSize = [2, 2, 2];
-        const output = new Uint32ArrayBuilder();
+        const output = new TypedArrayBuilder(Uint32Array);
         encodeChannel(output, blockSize, input, volumeSize);
         const decoded = new Uint32Array(input.length);
         decodeChannel(decoded, output.view, 0, volumeSize, blockSize);
@@ -314,7 +315,7 @@ describe("compressed_segmentation uint32", () => {
         4, //
       );
       const volumeSize = [2, 2, 1, 1];
-      const output = new Uint32ArrayBuilder();
+      const output = new TypedArrayBuilder(Uint32Array);
       encodeChannels(output, blockSize, input, volumeSize);
       expect(output.view).toEqual(
         Uint32Array.of(
@@ -342,11 +343,12 @@ describe("compressed_segmentation uint32", () => {
           blockSize,
         )}`, () => {
           const numPossibleValues = 15;
-          const input = makeRandomUint32Array(
+          const input = makeRandomArrayByChoosingWithReplacement(
+            Uint32Array,
             prod4(volumeSize),
             numPossibleValues,
           );
-          const output = new Uint32ArrayBuilder();
+          const output = new TypedArrayBuilder(Uint32Array);
           encodeChannels(output, blockSize, input, volumeSize);
           const decoded = new Uint32Array(input.length);
           decodeChannels(decoded, output.view, 0, volumeSize, blockSize);

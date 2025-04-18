@@ -19,11 +19,17 @@ import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
-import type { TypedArray, WritableArrayLike } from "#src/util/array.js";
+import type {
+  TypedArray,
+  TypedNumberArray,
+  WritableArrayLike,
+} from "#src/util/array.js";
 import { mergeSequences } from "#src/util/array.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
-import { murmurHash3_x86_32Hash64Bits } from "#src/util/hash.js";
+import { murmurHash3_x86_32Hash64Bits_Bigint } from "#src/util/hash.js";
+import { parseUint64 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   clampToInterval,
@@ -34,7 +40,6 @@ import {
 } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
 import { defaultStringCompare } from "#src/util/string.js";
-import { Uint64 } from "#src/util/uint64.js";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -64,13 +69,12 @@ export interface InlineSegmentNumericalProperty {
   type: "number";
   dataType: DataType;
   description: string | undefined;
-  values: TypedArray<ArrayBuffer>;
+  values: TypedNumberArray<ArrayBuffer>;
   bounds: DataTypeInterval;
 }
 
 export interface InlineSegmentPropertyMap {
-  // Specifies low/high 32-bit portions of ids.
-  ids: Uint32Array<ArrayBuffer>;
+  ids: BigUint64Array<ArrayBuffer>;
   properties: InlineSegmentProperty[];
 }
 
@@ -98,7 +102,7 @@ export class IndexedSegmentPropertySource extends ChunkSource {
 }
 
 function insertIntoLinearChainingTable(
-  table: TypedArray,
+  table: TypedNumberArray,
   hashCode: number,
   value: number,
 ) {
@@ -125,18 +129,16 @@ function makeIndicesArray(size: number, maxValue: number): IndicesArray {
   return new Uint32Array(size);
 }
 
-function makeUint64PermutationHashMap(values: Uint32Array): IndicesArray {
+function makeUint64PermutationHashMap(values: BigUint64Array): IndicesArray {
   // Use twice the next power of 2 as the size.  This ensures a load factor <= 0.5.
-  const numEntries = values.length / 2;
+  const numEntries = values.length;
   const hashCodeBits = Math.ceil(Math.log2(numEntries)) + 1;
   const size = 2 ** hashCodeBits;
   const table = makeIndicesArray(size, numEntries + 1);
   for (let i = 0; i < numEntries; ++i) {
-    const low = values[2 * i];
-    const high = values[2 * i + 1];
     insertIntoLinearChainingTable(
       table,
-      murmurHash3_x86_32Hash64Bits(/*seed=*/ 0, low, high),
+      murmurHash3_x86_32Hash64Bits_Bigint(/*seed=*/ 0, values[i]),
       i + 1,
     );
   }
@@ -144,19 +146,18 @@ function makeUint64PermutationHashMap(values: Uint32Array): IndicesArray {
 }
 
 function queryUint64PermutationHashMap(
-  table: TypedArray,
-  values: Uint32Array,
-  low: number,
-  high: number,
+  table: TypedNumberArray,
+  values: BigUint64Array,
+  x: bigint,
 ): number {
-  let hashCode = murmurHash3_x86_32Hash64Bits(/*seed=*/ 0, low, high);
+  let hashCode = murmurHash3_x86_32Hash64Bits_Bigint(/*seed=*/ 0, x);
   const mask = table.length - 1;
   while (true) {
     hashCode = hashCode & mask;
     let index = table[hashCode];
     if (index === 0) return -1;
     --index;
-    if (values[2 * index] === low && values[2 * index + 1] === high) {
+    if (values[index] === x) {
       return index;
     }
     ++hashCode;
@@ -180,14 +181,13 @@ export class PreprocessedSegmentPropertyMap {
   labels: InlineSegmentStringProperty | undefined;
   numericalProperties: InlineSegmentNumericalProperty[];
 
-  getSegmentInlineIndex(id: Uint64): number {
+  getSegmentInlineIndex(id: bigint): number {
     const { inlineIdToIndex } = this;
     if (inlineIdToIndex === undefined) return -1;
     return queryUint64PermutationHashMap(
       inlineIdToIndex,
       this.segmentPropertyMap.inlineProperties!.ids,
-      id.low,
-      id.high,
+      id,
     );
   }
 
@@ -207,7 +207,7 @@ export class PreprocessedSegmentPropertyMap {
     ) ?? []) as InlineSegmentNumericalProperty[];
   }
 
-  getSegmentLabel(id: Uint64): string | undefined {
+  getSegmentLabel(id: bigint): string | undefined {
     const index = this.getSegmentInlineIndex(id);
     if (index === -1) return undefined;
     const { labels, tags: tagsProperty } = this;
@@ -242,17 +242,9 @@ function remapArray<T>(
   }
 }
 
-function isIdArraySorted(ids: Uint32Array): boolean {
-  const n = ids.length;
-  if (n === 0) return true;
-  let prevLow = ids[0];
-  let prevHigh = ids[1];
-  for (let i = 0; i < n; i += 2) {
-    const low = ids[i];
-    const high = ids[i + 1];
-    if ((high - prevHigh || low - prevLow) <= 0) return false;
-    prevLow = low;
-    prevHigh = high;
+function isIdArraySorted(ids: TypedArray): boolean {
+  for (let i = 1, n = ids.length; i < n; ++i) {
+    if (ids[i] <= ids[0]) return false;
   }
   return true;
 }
@@ -265,23 +257,16 @@ export function normalizeInlineSegmentPropertyMap(
   if (isIdArraySorted(ids)) {
     return inlineProperties;
   }
-  const length = ids.length / 2;
+  const length = ids.length;
   const permutation = makeIndicesArray(length, length - 1);
   for (let i = 0; i < length; ++i) {
     permutation[i] = i;
   }
-  permutation.sort((a, b) => {
-    const aLow = ids[a * 2];
-    const aHigh = ids[a * 2 + 1];
-    const bLow = ids[b * 2];
-    const bHigh = ids[b * 2 + 1];
-    return aHigh - bHigh || aLow - bLow;
-  });
-  const newIds = new Uint32Array(length * 2);
+  permutation.sort((a, b) => bigintCompare(ids[a], ids[b]));
+  const newIds = new BigUint64Array(length);
   for (let newIndex = 0; newIndex < length; ++newIndex) {
     const oldIndex = permutation[newIndex];
-    newIds[newIndex * 2] = ids[oldIndex * 2];
-    newIds[newIndex * 2 + 1] = ids[oldIndex * 2 + 1];
+    newIds[newIndex] = ids[oldIndex];
   }
   const properties = inlineProperties.properties.map((property) => {
     const { values } = property;
@@ -349,8 +334,8 @@ function mergeInlinePropertyMaps(
   if (b === undefined) return a;
   // Determine number of unique ids and mapping from `a` and `b` indices to joined indices.
   let numUnique = 0;
-  const aCount = a.ids.length / 2;
-  const bCount = b.ids.length / 2;
+  const aCount = a.ids.length;
+  const bCount = b.ids.length;
   const aToMerged = new Uint32Array(aCount);
   const bToMerged = new Uint32Array(bCount);
   const aIds = a.ids;
@@ -358,13 +343,7 @@ function mergeInlinePropertyMaps(
   mergeSequences(
     aCount,
     bCount,
-    (a, b) => {
-      const aHigh = aIds[2 * a + 1];
-      const aLow = aIds[2 * a];
-      const bHigh = bIds[2 * b + 1];
-      const bLow = bIds[2 * b];
-      return aHigh - bHigh || aLow - bLow;
-    },
+    (a, b) => bigintCompare(aIds[a], bIds[b]),
     (a) => {
       aToMerged[a] = numUnique;
       ++numUnique;
@@ -379,22 +358,20 @@ function mergeInlinePropertyMaps(
       ++numUnique;
     },
   );
-  let ids: Uint32Array<ArrayBuffer>;
+  let ids: BigUint64Array<ArrayBuffer>;
   if (numUnique === aCount) {
     ids = aIds;
   } else if (numUnique === bCount) {
     ids = bIds;
   } else {
-    ids = new Uint32Array(numUnique * 2);
+    ids = new BigUint64Array(numUnique);
     for (let a = 0; a < aCount; ++a) {
       const i = aToMerged[a];
-      ids[2 * i] = aIds[2 * a];
-      ids[2 * i + 1] = aIds[2 * a + 1];
+      ids[i] = aIds[a];
     }
     for (let b = 0; b < bCount; ++b) {
       const i = bToMerged[b];
-      ids[2 * i] = bIds[2 * b];
-      ids[2 * i + 1] = bIds[2 * b + 1];
+      ids[i] = bIds[b];
     }
   }
   const properties: InlineSegmentProperty[] = [];
@@ -465,7 +442,7 @@ export interface SortBy {
 }
 
 export interface ExplicitIdQuery {
-  ids: Uint64[];
+  ids: bigint[];
   prefix?: undefined;
   regexp?: undefined;
   includeTags?: undefined;
@@ -521,21 +498,19 @@ export function parseSegmentQuery(
 ): QueryParseResult {
   if (queryString.match(idPattern) !== null) {
     const parts = queryString.split(/[\s,]+/);
-    const ids: Uint64[] = [];
-    const idSet = new Set<string>();
+    const idSet = new Set<bigint>();
     for (let i = 0, n = parts.length; i < n; ++i) {
       const part = parts[i];
       if (part === "") continue;
-      const id = new Uint64();
-      if (!id.tryParseString(part)) {
+      let id: bigint;
+      try {
+        id = parseUint64(part);
+      } catch {
         continue;
       }
-      const idString = id.toString();
-      if (idSet.has(idString)) continue;
-      idSet.add(idString);
-      ids.push(id);
+      idSet.add(id);
     }
-    ids.sort(Uint64.compare);
+    const ids = Array.from(idSet).sort(bigintCompare);
     return { ids };
   }
   const parsed: FilterQuery = {
@@ -823,7 +798,7 @@ export interface QueryResult {
   intermediateIndicesMask?: Uint32Array | Uint16Array | Uint8Array | undefined;
   // Indices into the inline properties table that satisfy all constraints.  Sorting is applied.
   indices?: IndicesArray | undefined;
-  explicitIds?: Uint64[] | undefined;
+  explicitIds?: bigint[] | undefined;
   tags?: TagCount[] | undefined;
   count: number;
   total: number;
@@ -854,7 +829,7 @@ export function executeSegmentQuery(
     };
   }
   const properties = inlineProperties?.properties;
-  const totalIds = inlineProperties.ids.length / 2;
+  const totalIds = inlineProperties.ids.length;
   const totalTags = db?.tags?.tags?.length || 0;
   let indices = makeIndicesArray(totalIds, totalIds);
   const showTags = makeIndicesArray(totalTags, totalTags);
@@ -1044,7 +1019,7 @@ export function executeSegmentQuery(
         (a, b) => defaultStringCompare(values[a], values[b]) * orderCoeff,
       );
     } else {
-      const values = property.values as TypedArray;
+      const values = property.values as TypedNumberArray;
       indices.sort((a, b) => (values[a] - values[b]) * orderCoeff);
     }
   };
@@ -1169,11 +1144,7 @@ export function updatePropertyHistograms(
     if (
       propertyHistogram !== undefined &&
       propertyHistogram.queryResult === queryResult &&
-      dataTypeIntervalEqual(
-        property.dataType,
-        propertyHistogram.window,
-        propertyBounds,
-      )
+      dataTypeIntervalEqual(propertyHistogram.window, propertyBounds)
     ) {
       continue;
     }
@@ -1217,7 +1188,7 @@ export function unparseSegmentQuery(
     const { fieldId, bounds } = constraint;
     const [min, max] = bounds as [number, number];
     const property = db!.numericalProperties.find((p) => p.id === fieldId)!;
-    if (dataTypeIntervalEqual(property.dataType, property.bounds, bounds)) {
+    if (dataTypeIntervalEqual(property.bounds, bounds)) {
       continue;
     }
     if (dataTypeCompare(min, max) === 0) {
@@ -1272,11 +1243,10 @@ export function unparseSegmentQuery(
   return queryString;
 }
 
-const tempUint64 = new Uint64();
 export function forEachQueryResultSegmentId(
   db: PreprocessedSegmentPropertyMap | undefined,
   queryResult: QueryResult | undefined,
-  callback: (id: Uint64, index: number) => void,
+  callback: (id: bigint, index: number) => void,
 ) {
   if (queryResult === undefined) return;
   const { explicitIds } = queryResult;
@@ -1289,9 +1259,7 @@ export function forEachQueryResultSegmentId(
     const { ids } = db!.segmentPropertyMap.inlineProperties!;
     for (let i = 0, count = indices.length; i < count; ++i) {
       const propIndex = indices[i];
-      tempUint64.low = ids[propIndex * 2];
-      tempUint64.high = ids[propIndex * 2 + 1];
-      callback(tempUint64, i);
+      callback(ids[propIndex], i);
     }
   }
 }
@@ -1299,8 +1267,7 @@ export function forEachQueryResultSegmentId(
 export function* forEachQueryResultSegmentIdGenerator(
   db: PreprocessedSegmentPropertyMap | undefined,
   queryResult: QueryResult | undefined,
-  safe = false,
-): IterableIterator<Uint64> {
+): IterableIterator<bigint> {
   if (queryResult === undefined) return;
   const { explicitIds } = queryResult;
   if (explicitIds !== undefined) {
@@ -1313,13 +1280,7 @@ export function* forEachQueryResultSegmentIdGenerator(
     const { ids } = db!.segmentPropertyMap.inlineProperties!;
     for (let i = 0, count = indices.length; i < count; ++i) {
       const propIndex = indices[i];
-      if (safe) {
-        yield new Uint64(ids[propIndex * 2], ids[propIndex * 2 + 1]);
-      } else {
-        tempUint64.low = ids[propIndex * 2];
-        tempUint64.high = ids[propIndex * 2 + 1];
-        yield tempUint64;
-      }
+      yield ids[propIndex];
     }
   }
 }

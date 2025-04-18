@@ -23,7 +23,6 @@ import type { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/se
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { Disposer, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { Uint64 } from "#src/util/uint64.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { Tab } from "#src/widget/tab_view.js";
@@ -51,14 +50,14 @@ export abstract class SegmentationGraphSource {
   abstract connect(
     layer: SegmentationUserLayer,
   ): Owned<SegmentationGraphSourceConnection>;
-  abstract merge(a: Uint64, b: Uint64): Promise<Uint64>;
+  abstract merge(a: bigint, b: bigint): Promise<bigint>;
   abstract split(
-    include: Uint64,
-    exclude: Uint64,
-  ): Promise<{ include: Uint64; exclude: Uint64 }>;
+    include: bigint,
+    exclude: bigint,
+  ): Promise<{ include: bigint; exclude: bigint }>;
   abstract trackSegment(
-    id: Uint64,
-    callback: (id: Uint64 | null) => void,
+    id: bigint,
+    callback: (id: bigint | null) => void,
   ): () => void;
   abstract get visibleSegmentEquivalencePolicy(): VisibleSegmentEquivalencePolicy;
   tabContents?(
@@ -70,13 +69,13 @@ export abstract class SegmentationGraphSource {
 
 export interface ComputedSplit {
   // New representative id of retained segment.  May be fake.
-  includeRepresentative: Uint64;
+  includeRepresentative: bigint;
   // Base segment ids in retained segment.
-  includeBaseSegments: Uint64[];
+  includeBaseSegments: bigint[];
   // New representative id of split-off segment.  May be fake.
-  excludeRepresentative: Uint64;
+  excludeRepresentative: bigint;
   // Base segments in split-off segment.
-  excludeBaseSegments: Uint64[];
+  excludeBaseSegments: bigint[];
 }
 
 export abstract class SegmentationGraphSourceConnection<
@@ -89,8 +88,8 @@ export abstract class SegmentationGraphSourceConnection<
     super();
   }
   abstract computeSplit(
-    include: Uint64,
-    exclude: Uint64,
+    include: bigint,
+    exclude: bigint,
   ): ComputedSplit | undefined;
 
   createRenderLayers(
@@ -107,9 +106,9 @@ export abstract class SegmentationGraphSourceConnection<
 
 export function trackWatchableValueSegment(
   graph: SegmentationGraphSource,
-  watchable: WatchableValueInterface<Uint64 | undefined>,
+  watchable: WatchableValueInterface<bigint | undefined>,
 ): Disposer {
-  let lastId: Uint64 | null | undefined;
+  let lastId: bigint | null | undefined;
   let watchDisposer: undefined | (() => void) = undefined;
   const handleLocalChange = () => {
     const { value } = watchable;
@@ -121,7 +120,7 @@ export function trackWatchableValueSegment(
       }
       return;
     }
-    if (lastId != null && Uint64.equal(lastId, value)) {
+    if (lastId != null && lastId === value) {
       return;
     }
     if (watchDisposer !== undefined) {
