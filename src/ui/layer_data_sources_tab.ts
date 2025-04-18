@@ -24,7 +24,7 @@ import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
 import {
   changeLayerName,
   changeLayerType,
-  createImageLayerAsMultiChannel,
+  makeLayer,
   NewUserLayer,
   USER_LAYER_TABS,
 } from "#src/layer/index.js";
@@ -65,6 +65,7 @@ import {
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
 import { debounce } from "lodash-es";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_layer_creation.js";
 
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
   splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,
@@ -466,7 +467,7 @@ export class LayerDataSourcesTab extends Tab {
         // TODO (SKM) this is a hack until a proper way to know when done loading is implemented
         // For now, just debounce the createImageLayerAsMultiChannel call
         const debounced = debounce(() => {
-          createImageLayerAsMultiChannel(layer.managedLayer);
+          createImageLayerAsMultiChannel(layer.managedLayer, makeLayer);
         }, 400);
         debounced();
       });
