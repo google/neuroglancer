@@ -87,6 +87,7 @@ import {
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable, getCachedJson } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 import type { Viewer } from "#src/viewer.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
@@ -100,7 +101,6 @@ import {
   makeCompletionElementWithDescription,
 } from "#src/widget/multiline_autocomplete.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
-import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 enum StackingMode {
   AUTO = 0,
@@ -730,20 +730,29 @@ export class ToolPalettePanel extends SidePanel {
     );
     const self = this;
     const changeStackingButton = this.registerDisposer(
-      new CheckboxIcon(this.state.verticalStacking, {
-        svg: swap_horizontal,
-        disableSvg: swap_vertical,
-        enableTitle: "Swap to vertical group stacking",
-        disableTitle: "Swap to horizontal group stacking",
-      }),
+      new CheckboxIcon(
+        {
+          changed: self.state.verticalStacking.changed,
+          get value() {
+            return self.state.verticalStacking.value;
+          },
+          set value(newValue: boolean) {
+            self.state.verticalStacking.value = newValue;
+            if (newValue === false && state.verticalStacking.value !== false) {
+              self.state.stackingMode.value = StackingMode.HORIZONTAL;
+            } else {
+              self.state.stackingMode.value = StackingMode.VERTICAL;
+            }
+          },
+        },
+        {
+          svg: swap_horizontal,
+          disableSvg: swap_vertical,
+          enableTitle: "Swap to vertical group stacking",
+          disableTitle: "Swap to horizontal group stacking",
+        },
+      ),
     );
-    changeStackingButton.element.addEventListener("click", () => {
-      if (self.state.verticalStacking.value) {
-        self.state.stackingMode.value = StackingMode.VERTICAL;
-      } else {
-        self.state.stackingMode.value = StackingMode.HORIZONTAL;
-      }
-    });
     titleBar.appendChild(changeStackingButton.element);
     const searchButton = this.registerDisposer(
       new CheckboxIcon(
