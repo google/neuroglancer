@@ -110,6 +110,40 @@ const arrayColors = new Map([
   [2, new Float32Array([0, 0, 1])],
 ]);
 
+function postLayerCreationActions(
+  addedLayer: any,
+  i: number,
+  debouncedSetupFunctions: any[],
+) {
+  addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
+  // Set the color based on the index
+  // console.log(addedLayer.layer.shaderControlState.controls['contrast'])
+  // addedLayer.layer.shaderControlState.controls.controls.get('contrast').autoRangeFinder.autoComputeRange(0.05, 0.95);
+  // TODO (skm) wait until finished processing and then update some defaults
+  const debouncedSetDefaults = debounce(() => {
+    addedLayer.layer.shaderControlState.value.get("color").trackable.value =
+      arrayColors.get(i % 3);
+    // TODO (SKM) correct the watchable - Fake update for now
+    const trackableContrast =
+      addedLayer.layer.shaderControlState.value.get("contrast").trackable.value;
+    // addedLayer.layer.shaderControlState.value.get(
+    //   "contrast",
+    // ).trackable.value = {
+    //   ...trackableContrast,
+    //   range: [0, 2],
+    // };
+    addedLayer.layer.shaderControlState.value.get("contrast").trackable.value =
+      {
+        ...trackableContrast,
+        autoCompute: true,
+      };
+    addedLayer.layer.shaderControlState.value
+      .get("contrast")
+      .trackable.changed.dispatch();
+  }, 1000);
+  debouncedSetupFunctions.push(debouncedSetDefaults);
+}
+
 export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
   makeLayer: MakeLayerFn,
@@ -139,7 +173,7 @@ export function createImageLayerAsMultiChannel(
   const spec = managedLayer.layer?.toJSON();
   const startingName = managedLayer.name;
   managedLayer.name = `${managedLayer.name} chan0`;
-  const debouncedSetupFunctions = [];
+  const debouncedSetupFunctions: Array<() => void> = [];
   for (let i = 0; i < totalLocalChannels; i++) {
     // if i is 0 we already have the layer, this one
     // Otherwise we need to create a new layer
@@ -160,41 +194,7 @@ export function createImageLayerAsMultiChannel(
       managedLayer.manager.add(newLayer);
       addedLayer = newLayer;
     }
-    addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
-    // Set the color based on the index
-    // console.log(addedLayer.layer.shaderControlState.controls['contrast'])
-    // addedLayer.layer.shaderControlState.controls.controls.get('contrast').autoRangeFinder.autoComputeRange(0.05, 0.95);
-    // TODO (skm) wait until finished processing and then update some defaults
-    const debouncedSetDefaults = debounce(() => {
-      addedLayer.layer.shaderControlState.value.get("color").trackable.value =
-        arrayColors.get(i % 3);
-      // TODO (SKM) correct the watchable - Fake update for now
-      const trackableContrast =
-        addedLayer.layer.shaderControlState.value.get("contrast").trackable
-          .value;
-      // addedLayer.layer.shaderControlState.value.get(
-      //   "contrast",
-      // ).trackable.value = {
-      //   ...trackableContrast,
-      //   range: [0, 2],
-      // };
-      addedLayer.layer.shaderControlState.value.get(
-        "contrast",
-      ).trackable.value = {
-        ...trackableContrast,
-        autoCompute: true,
-      };
-      addedLayer.layer.shaderControlState.value
-        .get("contrast")
-        .trackable.changed.dispatch();
-    }, 1000);
-    debouncedSetupFunctions.push(debouncedSetDefaults);
+    postLayerCreationActions(addedLayer, i, debouncedSetupFunctions);
   }
-  debouncedSetupFunctions.forEach((fn) => {
-    fn();
-  });
-  // TODO (SKM) not really needed used for debugging
-  // debouncedSetupFunctions.forEach((fn, index) => {
-  //   setTimeout(fn, index * 1000); // Calls each function 1 second apart
-  // });
+  debouncedSetupFunctions.forEach((fn) => fn());
 }
