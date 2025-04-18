@@ -1074,6 +1074,27 @@ export class MultiToolPaletteManager extends RefCounted {
     );
     this.registerDisposer(this.state.changedShallow.add(debouncedUpdatePanels));
     this.updatePanels();
+    this.registerDisposer(
+      this.sidePanelManager.display.multiChannelSetupFinished.add(() => {
+        // Check for the canned shader control palette
+        const shaderControlPalette = CANNED_PALETTES[2];
+        const palettes = this.state.palettes;
+        for (const palette of palettes) {
+          if (palette.query.value === shaderControlPalette.query) {
+            return;
+          }
+        }
+        const newPalette = this.state.addNew({
+          name: shaderControlPalette.name,
+          location: {
+            ...DEFAULT_TOOL_PALETTE_PANEL_LOCATION,
+            side: "left",
+            row: 0,
+          },
+        });
+        newPalette.query.value = shaderControlPalette.query;
+      }),
+    );
   }
 
   private updatePanels() {

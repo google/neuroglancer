@@ -15,10 +15,11 @@
  */
 
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
-import type {
-  LayerListSpecification,
-  ManagedUserLayer,
-  UserLayer,
+import {
+  TopLevelLayerListSpecification,
+  type LayerListSpecification,
+  type ManagedUserLayer,
+  type UserLayer,
 } from "#src/layer/index.js";
 import { Borrowed } from "#src/util/disposable.js";
 import { debounce } from "lodash-es";
@@ -195,6 +196,9 @@ export function createImageLayerAsMultiChannel(
       addedLayer = newLayer;
     }
     postLayerCreationActions(addedLayer, i, debouncedSetupFunctions);
+  }
+  if (managedLayer.manager instanceof TopLevelLayerListSpecification) {
+    managedLayer.manager.display.multiChannelSetupFinished.dispatch();
   }
   debouncedSetupFunctions.forEach((fn) => fn());
 }

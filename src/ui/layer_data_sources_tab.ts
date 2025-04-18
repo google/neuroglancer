@@ -525,7 +525,6 @@ export class LayerDataSourcesTab extends Tab {
         "Click here or press enter in the data source URL input box to create as " +
         `${layerConstructor.type} layer`;
       layerTypeDetection.style.display = "";
-      console.log(layerConstructor, layerConstructor.type);
       multiChannelLayerCreate.style.display =
         layerConstructor.type === "image" ? "" : "none";
     } else {
