@@ -65,7 +65,7 @@ import {
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
 import { debounce } from "lodash-es";
-import { createImageLayerAsMultiChannel } from "#src/layer/multi_layer_creation.js";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
   splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,
@@ -428,6 +428,7 @@ export class LayerDataSourcesTab extends Tab {
     title: "Add additional data source",
   });
   private layerTypeDetection = document.createElement("div");
+  private multiChannelLayerCreate = document.createElement("div");
   private layerTypeElement = document.createElement("span");
   private dataSourcesContainer = document.createElement("div");
   private reRender: DebouncedFunction;
@@ -450,7 +451,8 @@ export class LayerDataSourcesTab extends Tab {
     });
     element.appendChild(this.dataSourcesContainer);
     if (layer instanceof NewUserLayer) {
-      const { layerTypeDetection, layerTypeElement } = this;
+      const { layerTypeDetection, layerTypeElement, multiChannelLayerCreate } =
+        this;
       layerTypeDetection.style.display = "none";
       layerTypeElement.classList.add(
         "neuroglancer-layer-data-sources-tab-type-detection-type",
@@ -464,6 +466,23 @@ export class LayerDataSourcesTab extends Tab {
       );
       layerTypeDetection.addEventListener("click", () => {
         changeLayerTypeToDetected(layer);
+      });
+      // Image layers provide a second option
+      multiChannelLayerCreate.classList.add(
+        "neuroglancer-layer-data-sources-tab-type-detection",
+      );
+      const multiChannelLayerCreateLabel = document.createElement("span");
+      multiChannelLayerCreateLabel.classList.add(
+        "neuroglancer-layer-data-sources-tab-type-detection-type",
+      );
+      multiChannelLayerCreateLabel.textContent = "multi-channel image";
+      multiChannelLayerCreate.appendChild(
+        document.createTextNode("Create as "),
+      );
+      multiChannelLayerCreate.appendChild(multiChannelLayerCreateLabel);
+      multiChannelLayerCreate.appendChild(document.createTextNode(" layer"));
+      multiChannelLayerCreate.addEventListener("click", () => {
+        changeLayerTypeToDetected(layer);
         // TODO (SKM) this is a hack until a proper way to know when done loading is implemented
         // For now, just debounce the createImageLayerAsMultiChannel call
         const debounced = debounce(() => {
@@ -471,6 +490,9 @@ export class LayerDataSourcesTab extends Tab {
         }, 400);
         debounced();
       });
+      multiChannelLayerCreate.style.display = "none";
+      multiChannelLayerCreate.style.marginTop = "0.5em";
+      element.appendChild(multiChannelLayerCreate);
     }
     const reRender = (this.reRender = animationFrameDebounce(() =>
       this.updateView(),
@@ -494,7 +516,7 @@ export class LayerDataSourcesTab extends Tab {
       return layerConstructor;
     })();
     if (layerConstructor === this.detectedLayerConstructor) return;
-    const { layerTypeDetection } = this;
+    const { layerTypeDetection, multiChannelLayerCreate } = this;
     this.detectedLayerConstructor = layerConstructor;
     if (layerConstructor !== undefined) {
       const { layerTypeElement } = this;
@@ -503,8 +525,12 @@ export class LayerDataSourcesTab extends Tab {
         "Click here or press enter in the data source URL input box to create as " +
         `${layerConstructor.type} layer`;
       layerTypeDetection.style.display = "";
+      console.log(layerConstructor, layerConstructor.type);
+      multiChannelLayerCreate.style.display =
+        layerConstructor.type === "image" ? "" : "none";
     } else {
       layerTypeDetection.style.display = "none";
+      multiChannelLayerCreate.style.display = "none";
     }
   }
 

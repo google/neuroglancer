@@ -112,7 +112,7 @@ import type { DependentViewContext } from "#src/widget/dependent_view_widget.js"
 import type { Tab } from "#src/widget/tab_view.js";
 import { TabSpecification } from "#src/widget/tab_view.js";
 import type { RPC } from "#src/worker_rpc.js";
-import { createImageLayerAsMultiChannel } from "#src/layer/multi_layer_creation.js";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 
 const TOOL_JSON_KEY = "tool";
 const TOOL_BINDINGS_JSON_KEY = "toolBindings";
@@ -2476,10 +2476,12 @@ export class AutoUserLayer extends UserLayer {
       // And checking the loadState of each one could be another way
       // A check on the signals in ManagedUserLayer could also be a way
       // For example readyStateChanged or specificationChanged
-      const debounced = debounce(() => {
-        createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
-      }, 400);
-      debounced();
+      if (layerConstructor.type === "image") {
+        const debounced = debounce(() => {
+          createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
+        }, 400);
+        debounced();
+      }
     }
   }
 }
