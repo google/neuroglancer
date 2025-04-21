@@ -16,6 +16,7 @@
 
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import {
+  changeLayerName,
   TopLevelLayerListSpecification,
   type LayerListSpecification,
   type ManagedUserLayer,
@@ -140,7 +141,7 @@ function postLayerCreationActions(
         // Continue polling
         checkContrast();
       }
-    }, 200);
+    }, 100);
 
     checkContrast();
   };
@@ -175,7 +176,7 @@ export function createImageLayerAsMultiChannel(
 
   const spec = managedLayer.layer?.toJSON();
   const startingName = managedLayer.name;
-  managedLayer.name = `${managedLayer.name} chan0`;
+  changeLayerName(managedLayer, `${startingName} chan0`);
   const debouncedSetupFunctions: Array<() => void> = [];
   for (let i = 0; i < totalLocalChannels; i++) {
     // if i is 0 we already have the layer, this one
