@@ -251,11 +251,9 @@ export function createImageLayerAsMultiChannel(
 
   function calculateLocalPosition(index: number) {
     const localPosition = rangeProduct[index];
-    const arr = new Array(localPosition.length);
-    for (let i = 0; i < localPosition.length; ++i) {
-      arr[i] = localPosition[i] + 0.5;
-    }
-    return arr;
+    const arr = localPosition.map((pos) => pos + 0.5);
+    const chanName = localPosition.join(",");
+    return { localPosition: arr, chanName };
   }
 
   const spec = managedLayer.layer?.toJSON();
@@ -270,8 +268,8 @@ export function createImageLayerAsMultiChannel(
   }
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
-    const name = channelMetadata?.label ?? `${startingName} chan${i}`;
-    const localPosition = calculateLocalPosition(i);
+    const { localPosition, chanName } = calculateLocalPosition(i);
+    const name = channelMetadata?.label ?? `${startingName} c${chanName}`;
     let addedLayer: any = managedLayer;
     if (i == 0) {
       changeLayerName(managedLayer, name);
