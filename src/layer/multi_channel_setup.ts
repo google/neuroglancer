@@ -188,20 +188,19 @@ function postLayerCreationActions(
       color = channel.color;
     }
     shaderControlState.get("color")!.trackable.value = color;
+    const contrast = shaderControlState.get("contrast")!;
+    const trackableContrast = contrast.trackable;
     if (
       channel?.range !== undefined &&
       channel?.window !== undefined &&
       !ignoreInputMetadata
     ) {
-      const contrast = shaderControlState.get("contrast")!;
-      contrast.trackable.value = {
-        ...contrast.trackable.value,
+      trackableContrast.value = {
+        ...trackableContrast.value,
         range: channel.range,
         window: channel.window,
       };
-    } else {
-      const contrast = shaderControlState.get("contrast")!;
-      const trackableContrast = contrast.trackable;
+    } else if (active) {
       trackableContrast.value = {
         ...trackableContrast.value,
         autoCompute: true,
