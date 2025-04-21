@@ -783,16 +783,6 @@ export class InvlerpWidget extends Tab {
     element.appendChild(boundElements.window.container);
     this.autoRangeFinder = this.registerDisposer(new AutoRangeFinder(this));
     this.updateView();
-    // TODO (SKM) don't double bind
-    this.registerDisposer(
-      trackable.changed.add(() => {
-        if (trackable.value.autoCompute) {
-          console.log("autoCompute started");
-          this.autoRangeFinder.autoComputeRange(0.05, 0.95);
-          trackable.value.autoCompute = false;
-        }
-      }),
-    );
     this.registerDisposer(
       trackable.changed.add(
         this.registerCancellable(
@@ -839,6 +829,11 @@ export class InvlerpWidget extends Tab {
     const { invertArrows } = this;
     invertArrows[reversed ? 1 : 0].style.display = "";
     invertArrows[reversed ? 0 : 1].style.display = "none";
+
+    if (this.trackable.value.autoCompute) {
+      this.autoRangeFinder.autoComputeRange(0.05, 0.95);
+      this.trackable.value.autoCompute = false;
+    }
   }
 }
 

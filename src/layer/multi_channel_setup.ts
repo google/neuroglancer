@@ -117,31 +117,34 @@ function postLayerCreationActions(
   debouncedSetupFunctions: any[],
 ) {
   addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
-  // Set the color based on the index
-  // console.log(addedLayer.layer.shaderControlState.controls['contrast'])
-  // addedLayer.layer.shaderControlState.controls.controls.get('contrast').autoRangeFinder.autoComputeRange(0.05, 0.95);
-  // TODO (skm) wait until finished processing and then update some defaults
-  const debouncedSetDefaults = debounce(() => {
-    addedLayer.layer.shaderControlState.value.get("color").trackable.value =
-      arrayColors.get(i % 3);
-    // TODO (SKM) correct the watchable - Fake update for now
-    const trackableContrast =
-      addedLayer.layer.shaderControlState.value.get("contrast").trackable.value;
-    // addedLayer.layer.shaderControlState.value.get(
-    //   "contrast",
-    // ).trackable.value = {
-    //   ...trackableContrast,
-    //   range: [0, 2],
-    // };
-    addedLayer.layer.shaderControlState.value.get("contrast").trackable.value =
-      {
-        ...trackableContrast,
-        autoCompute: true,
-      };
-    addedLayer.layer.shaderControlState.value
-      .get("contrast")
-      .trackable.changed.dispatch();
-  }, 1000);
+
+  const debouncedSetDefaults = () => {
+    const checkContrast = debounce(() => {
+      const shaderControlState = addedLayer.layer.shaderControlState.value;
+      const contrast = shaderControlState.get("contrast");
+
+      if (contrast !== undefined) {
+        shaderControlState.get("color").trackable.value = arrayColors.get(
+          i % 3,
+        );
+
+        const trackableContrast = contrast.trackable;
+        trackableContrast.value = {
+          ...trackableContrast.value,
+          autoCompute: true,
+        };
+
+        // Cancel any debounce calls
+        checkContrast.cancel();
+      } else {
+        // Continue polling
+        checkContrast();
+      }
+    }, 200);
+
+    checkContrast();
+  };
+
   debouncedSetupFunctions.push(debouncedSetDefaults);
 }
 
@@ -149,7 +152,6 @@ export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
   makeLayer: MakeLayerFn,
 ) {
-  // remapTransformInputSpace is a possiblity
   if (managedLayer.layer?.type !== "image") return;
 
   renameChannelDimensions(managedLayer.layer);
