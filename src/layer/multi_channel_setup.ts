@@ -15,6 +15,8 @@
  */
 
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
+import { SingleChannelMetadata } from "#src/datasource/index.js";
+import type { ImageUserLayer } from "#src/layer/image/index.js";
 import {
   changeLayerName,
   TopLevelLayerListSpecification,
@@ -22,6 +24,7 @@ import {
   type ManagedUserLayer,
   type UserLayer,
 } from "#src/layer/index.js";
+import { arraysEqual } from "#src/util/array.js";
 import { Borrowed } from "#src/util/disposable.js";
 import { debounce } from "lodash-es";
 
@@ -112,49 +115,122 @@ const arrayColors = new Map([
   [2, new Float32Array([0, 0, 1])],
 ]);
 
-function postLayerCreationActions(
-  addedLayer: any,
-  i: number,
-  debouncedSetupFunctions: any[],
-) {
-  addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
-
-  function setupChannelDefault() {
-    // Check the dataSources for one with channel setup info
-    for (const dataSource of addedLayer.layer.dataSources) {
-      console.log(dataSource);
+function getLayerChannelMetadata(
+  layer: ManagedUserLayer,
+  channelIndex: number,
+): SingleChannelMetadata | undefined {
+  if (!layer.layer) return undefined;
+  const loadState = layer.layer.dataSources[0].loadState;
+  if (loadState?.error || loadState === undefined) return undefined;
+  const channels = loadState.dataSource.channelMetadata;
+  if (channels !== undefined) {
+    const channel = channels.channels[channelIndex];
+    if (channel !== undefined) {
+      return channel;
     }
   }
+  return undefined;
+}
 
-  const debouncedSetDefaults = () => {
-    const checkContrast = debounce(() => {
-      const shaderControlState = addedLayer.layer.shaderControlState.value;
+function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
+  if (!layer.layer) return true;
+  const loadState = layer.layer.dataSources[0].loadState;
+  if (loadState?.error || loadState === undefined) return true;
+  const channels = loadState.dataSource.channelMetadata;
+  if (channels === undefined) return true;
+  // If all the ranges are the same and the colors are black, then we can
+  // assume that the input metadata is not set up correctly
+  const firstRange = channels.channels[0].range;
+  let sameRanges = true;
+  for (let i = 1; i < channels.channels.length; i++) {
+    const channel = channels.channels[i];
+    if (channel.range === undefined || firstRange === undefined) {
+      continue;
+    }
+    if (!arraysEqual(channel.range, firstRange)) {
+      sameRanges = false;
+      break;
+    }
+  }
+  let colorsAllBlack = true;
+  for (let i = 0; i < channels.channels.length; i++) {
+    const channel = channels.channels[i];
+    if (channel.color === undefined) {
+      continue;
+    }
+    const colorSum = channel.color.reduce((acc, val) => acc + val, 0);
+    if (colorSum > 0.05) {
+      colorsAllBlack = false;
+      break;
+    }
+  }
+  return sameRanges && colorsAllBlack;
+}
+
+function postLayerCreationActions(
+  addedLayer: ManagedUserLayer,
+  channelIndex: number,
+  debouncedSetupFunctions: any[],
+  channel?: SingleChannelMetadata,
+  ignoreInputMetadata = false,
+) {
+  if (!addedLayer.layer) return;
+  const userImageLayer = addedLayer.layer as ImageUserLayer;
+  userImageLayer.fragmentMain.value = NEW_FRAGMENT_MAIN;
+
+  const active = channel?.active ?? channelIndex <= 3;
+  addedLayer.setArchived(!active);
+
+  const setupWidgetsFunction = () => {
+    const shaderControlState = userImageLayer.shaderControlState.value;
+    let color = arrayColors.get(channelIndex % 3);
+    if (channel?.color !== undefined && !ignoreInputMetadata) {
+      color = channel.color;
+    }
+    shaderControlState.get("color")!.trackable.value = color;
+    if (
+      channel?.range !== undefined &&
+      channel?.window !== undefined &&
+      !ignoreInputMetadata
+    ) {
+      const contrast = shaderControlState.get("contrast")!;
+      contrast.trackable.value = {
+        ...contrast.trackable.value,
+        range: channel.range,
+        window: channel.window,
+      };
+    } else {
+      const contrast = shaderControlState.get("contrast")!;
+      const trackableContrast = contrast.trackable;
+      trackableContrast.value = {
+        ...trackableContrast.value,
+        autoCompute: true,
+      };
+    }
+  };
+
+  const maxWait = 2000;
+  const startTime = Date.now();
+  function debouncedSetDefaults() {
+    const checkReady = debounce(() => {
+      const shaderControlState = userImageLayer.shaderControlState.value;
       const contrast = shaderControlState.get("contrast");
-
-      if (contrast !== undefined) {
-        shaderControlState.get("color").trackable.value = arrayColors.get(
-          i % 3,
-        );
-
-        const trackableContrast = contrast.trackable;
-        trackableContrast.value = {
-          ...trackableContrast.value,
-          autoCompute: true,
-        };
-
-        // Cancel any debounce calls
-        checkContrast.cancel();
+      if (contrast !== undefined || Date.now() - startTime > maxWait) {
+        checkReady.cancel();
+        if (contrast !== undefined) {
+          // Set up the widgets
+          setupWidgetsFunction();
+        }
       } else {
         // Continue polling
-        checkContrast();
+        checkReady();
       }
     }, 100);
 
-    checkContrast();
-  };
+    checkReady();
+  }
 
   debouncedSetupFunctions.push(debouncedSetDefaults);
-  debouncedSetupFunctions.push(setupChannelDefault);
 }
 
 export function createImageLayerAsMultiChannel(
@@ -186,27 +262,34 @@ export function createImageLayerAsMultiChannel(
   const startingName = managedLayer.name;
   changeLayerName(managedLayer, `${startingName} chan0`);
   const debouncedSetupFunctions: Array<() => void> = [];
+  const ignoreInputMetadata = checkLayerInputMetadataForErrors(managedLayer);
+  if (ignoreInputMetadata) {
+    console.warn(
+      "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
+    );
+  }
   for (let i = 0; i < totalLocalChannels; i++) {
-    // if i is 0 we already have the layer, this one
-    // Otherwise we need to create a new layer
+    const channelMetadata = getLayerChannelMetadata(managedLayer, i);
+    const name = channelMetadata?.label ?? `${startingName} chan${i}`;
     const localPosition = calculateLocalPosition(i);
     let addedLayer: any = managedLayer;
     if (i == 0) {
-      // Just change the channel
+      changeLayerName(managedLayer, name);
       managedLayer.localPosition.value = new Float32Array(localPosition);
     }
     if (i !== 0) {
-      // Create a new layer
       const thisSpec = { ...spec, localPosition };
-      const newLayer = makeLayer(
-        managedLayer.manager,
-        `${startingName} chan${i}`,
-        thisSpec,
-      );
+      const newLayer = makeLayer(managedLayer.manager, name, thisSpec);
       managedLayer.manager.add(newLayer);
       addedLayer = newLayer;
     }
-    postLayerCreationActions(addedLayer, i, debouncedSetupFunctions);
+    postLayerCreationActions(
+      addedLayer,
+      i,
+      debouncedSetupFunctions,
+      channelMetadata,
+      ignoreInputMetadata,
+    );
   }
   if (managedLayer.manager instanceof TopLevelLayerListSpecification) {
     managedLayer.manager.display.multiChannelSetupFinished.dispatch();

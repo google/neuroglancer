@@ -548,7 +548,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),
-          channels: channelMetadata,
+          channelMetadata,
           subsources: [
             {
               id: "default",

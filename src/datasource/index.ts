@@ -54,6 +54,7 @@ import {
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { vec3 } from "#src/util/geom.js";
 import { type ProgressOptions } from "#src/util/progress_listener.js";
 import type { Trackable } from "#src/util/trackable.js";
 
@@ -177,13 +178,13 @@ export interface ChannelMetadata {
   name: string;
   channels: SingleChannelMetadata[];
 }
+
 export interface SingleChannelMetadata {
-  color?: string;
+  color?: vec3;
   label?: string;
   active?: boolean;
-  windowRange?: [number, number];
+  window?: [number, number];
   range?: [number, number];
-  inverted?: boolean;
   coefficient?: number;
 }
 
@@ -193,7 +194,7 @@ export interface DataSource {
   canChangeModelSpaceRank?: boolean;
   state?: Trackable;
   canonicalUrl?: string;
-  channelMetadata?: ChannelMetadata[];
+  channelMetadata?: ChannelMetadata;
 }
 
 export interface DataSourceRedirect {

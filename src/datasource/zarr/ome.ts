@@ -16,7 +16,11 @@
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
-import { SingleChannelMetadata, ChannelMetadata } from "#src/datasource/index.js";
+import {
+  SingleChannelMetadata,
+  ChannelMetadata,
+} from "#src/datasource/index.js";
+import { parseRGBColorSpecification } from "#src/util/color.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -43,7 +47,7 @@ export interface OmeMultiscaleMetadata {
 
 export interface OmeMetadata {
   multiscale: OmeMultiscaleMetadata;
-  channelMetadata: ChannelMetadata;
+  channelMetadata: ChannelMetadata | undefined;
 }
 
 const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
@@ -91,11 +95,12 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
     "coefficient",
     verifyFiniteFloat,
   );
-  const color = verifyOptionalObjectProperty(
+  const colorString = verifyOptionalObjectProperty(
     omeroChannel,
     "color",
     verifyString,
   );
+  const color = parseRGBColorSpecification(colorString);
   const inverted = verifyOptionalObjectProperty(
     omeroChannel,
     "inverted",
@@ -106,39 +111,41 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
     "label",
     verifyString,
   );
-  const window = verifyOptionalObjectProperty(
+  const inputWindow = verifyOptionalObjectProperty(
     omeroChannel,
     "window",
     verifyObject,
   );
   const windowMin = verifyOptionalObjectProperty(
-    window,
+    inputWindow,
     "min",
     verifyFiniteFloat,
   );
   const windowMax = verifyOptionalObjectProperty(
-    window,
+    inputWindow,
     "max",
     verifyFiniteFloat,
   );
   const windowEnd = verifyOptionalObjectProperty(
-    window,
+    inputWindow,
     "end",
     verifyFiniteFloat,
   );
   const windowStart = verifyOptionalObjectProperty(
-    window,
+    inputWindow,
     "start",
     verifyFiniteFloat,
   );
-  const windowRange =
+  const window =
     windowMin === undefined || windowMax === undefined
       ? undefined
       : ([windowMin, windowMax] as [number, number]);
   const range =
     windowEnd === undefined || windowStart === undefined
       ? undefined
-      : ([windowStart, windowEnd] as [number, number]);
+      : inverted
+        ? ([windowEnd, windowStart] as [number, number])
+        : ([windowStart, windowEnd] as [number, number]);
 
   return {
     active,
@@ -146,20 +153,18 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
     color,
     coefficient,
     range,
-    inverted,
-    windowRange,
+    window,
   };
 }
 
 function parseOmeroMetadata(omero: unknown): ChannelMetadata {
   verifyObject(omero);
   const name = verifyObjectProperty(omero, "name", verifyString);
-
   const channels = verifyObjectProperty(omero, "channels", (x) =>
     parseArray(x, parseOmeroChannel),
   );
 
-  return { name, channels};
+  return { name, channels };
 }
 
 function parseOmeAxis(axis: unknown): Axis {
@@ -393,7 +398,7 @@ export function parseOmeMetadata(
       continue;
     }
     const multiScaleInfo = parseOmeMultiscale(url, multiscale);
-    const channelMetadata = omero ?? parseOmeroMetadata(omero);
+    const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
     return { multiscale: multiScaleInfo, channelMetadata };
   }
   if (errors.length !== 0) {
