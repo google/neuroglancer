@@ -2469,19 +2469,13 @@ export class AutoUserLayer extends UserLayer {
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
-      // TODO (skm) maybe checking layer.isReady() repeatedly
-      // may be sufficient here. Depends if isReady means
-      // data is loaded or the subsources are setup.
-      // Alternatively iterarting the dataSources
-      // And checking the loadState of each one could be another way
-      // A check on the signals in ManagedUserLayer could also be a way
-      // For example readyStateChanged or specificationChanged
-      if (layerConstructor.type === "image") {
-        const debounced = debounce(() => {
-          createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
-        }, 400);
-        debounced();
-      }
+      this.registerDisposer(
+        this.managedLayer.readyStateChanged.add(() => {
+          if (this.managedLayer.isReady()) {
+            createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
+          }
+        }),
+      );
     }
   }
 }

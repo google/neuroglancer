@@ -64,7 +64,6 @@ import {
 } from "#src/widget/multiline_autocomplete.js";
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
-import { debounce } from "lodash-es";
 import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
@@ -483,12 +482,13 @@ export class LayerDataSourcesTab extends Tab {
       multiChannelLayerCreate.appendChild(document.createTextNode(" layer"));
       multiChannelLayerCreate.addEventListener("click", () => {
         changeLayerTypeToDetected(layer);
-        // TODO (SKM) this is a hack until a proper way to know when done loading is implemented
-        // For now, just debounce the createImageLayerAsMultiChannel call
-        const debounced = debounce(() => {
-          createImageLayerAsMultiChannel(layer.managedLayer, makeLayer);
-        }, 400);
-        debounced();
+        layer.managedLayer.registerDisposer(
+          layer.managedLayer.readyStateChanged.add(() => {
+            if (layer.managedLayer.isReady()) {
+              createImageLayerAsMultiChannel(layer.managedLayer, makeLayer);
+            }
+          }),
+        );
       });
       multiChannelLayerCreate.style.display = "none";
       multiChannelLayerCreate.style.marginTop = "0.5em";
