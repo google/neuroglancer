@@ -173,12 +173,27 @@ export interface DataSubsourceEntry {
   default: boolean;
 }
 
+export interface ChannelMetadata {
+  name: string;
+  channels: SingleChannelMetadata[];
+}
+export interface SingleChannelMetadata {
+  color?: string;
+  label?: string;
+  active?: boolean;
+  windowRange?: [number, number];
+  range?: [number, number];
+  inverted?: boolean;
+  coefficient?: number;
+}
+
 export interface DataSource {
   subsources: DataSubsourceEntry[];
   modelTransform: CoordinateSpaceTransform;
   canChangeModelSpaceRank?: boolean;
   state?: Trackable;
   canonicalUrl?: string;
+  channelMetadata?: ChannelMetadata[];
 }
 
 export interface DataSourceRedirect {

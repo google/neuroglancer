@@ -16,9 +16,11 @@
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
+import { SingleChannelMetadata, ChannelMetadata } from "#src/datasource/index.js";
 import {
   parseArray,
   parseFixedLengthArray,
+  verifyBoolean,
   verifyFiniteFloat,
   verifyFinitePositiveFloat,
   verifyObject,
@@ -37,6 +39,11 @@ export interface OmeMultiscaleScale {
 export interface OmeMultiscaleMetadata {
   scales: OmeMultiscaleScale[];
   coordinateSpace: CoordinateSpace;
+}
+
+export interface OmeMetadata {
+  multiscale: OmeMultiscaleMetadata;
+  channelMetadata: ChannelMetadata;
 }
 
 const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
@@ -70,6 +77,89 @@ interface Axis {
   unit: string;
   scale: number;
   type: string | undefined;
+}
+
+function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
+  verifyObject(omeroChannel);
+  const active = verifyOptionalObjectProperty(
+    omeroChannel,
+    "active",
+    verifyBoolean,
+  );
+  const coefficient = verifyOptionalObjectProperty(
+    omeroChannel,
+    "coefficient",
+    verifyFiniteFloat,
+  );
+  const color = verifyOptionalObjectProperty(
+    omeroChannel,
+    "color",
+    verifyString,
+  );
+  const inverted = verifyOptionalObjectProperty(
+    omeroChannel,
+    "inverted",
+    verifyBoolean,
+  );
+  const label = verifyOptionalObjectProperty(
+    omeroChannel,
+    "label",
+    verifyString,
+  );
+  const window = verifyOptionalObjectProperty(
+    omeroChannel,
+    "window",
+    verifyObject,
+  );
+  const windowMin = verifyOptionalObjectProperty(
+    window,
+    "min",
+    verifyFiniteFloat,
+  );
+  const windowMax = verifyOptionalObjectProperty(
+    window,
+    "max",
+    verifyFiniteFloat,
+  );
+  const windowEnd = verifyOptionalObjectProperty(
+    window,
+    "end",
+    verifyFiniteFloat,
+  );
+  const windowStart = verifyOptionalObjectProperty(
+    window,
+    "start",
+    verifyFiniteFloat,
+  );
+  const windowRange =
+    windowMin === undefined || windowMax === undefined
+      ? undefined
+      : ([windowMin, windowMax] as [number, number]);
+  const range =
+    windowEnd === undefined || windowStart === undefined
+      ? undefined
+      : ([windowStart, windowEnd] as [number, number]);
+
+  return {
+    active,
+    label,
+    color,
+    coefficient,
+    range,
+    inverted,
+    windowRange,
+  };
+}
+
+function parseOmeroMetadata(omero: unknown): ChannelMetadata {
+  verifyObject(omero);
+  const name = verifyObjectProperty(omero, "name", verifyString);
+
+  const channels = verifyObjectProperty(omero, "channels", (x) =>
+    parseArray(x, parseOmeroChannel),
+  );
+
+  return { name, channels};
 }
 
 function parseOmeAxis(axis: unknown): Axis {
@@ -266,9 +356,10 @@ export function parseOmeMetadata(
   url: string,
   attrs: any,
   zarrVersion: number,
-): OmeMultiscaleMetadata | undefined {
+): OmeMetadata | undefined {
   const ome = attrs.ome;
   const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
+  const omero = attrs.omero;
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
@@ -301,7 +392,9 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    return parseOmeMultiscale(url, multiscale);
+    const multiScaleInfo = parseOmeMultiscale(url, multiscale);
+    const channelMetadata = omero ?? parseOmeroMetadata(omero);
+    return { multiscale: multiScaleInfo, channelMetadata };
   }
   if (errors.length !== 0) {
     throw new Error(errors[0]);

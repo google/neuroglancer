@@ -119,6 +119,13 @@ function postLayerCreationActions(
 ) {
   addedLayer.layer.fragmentMain.value = NEW_FRAGMENT_MAIN;
 
+  function setupChannelDefault() {
+    // Check the dataSources for one with channel setup info
+    for (const dataSource of addedLayer.layer.dataSources) {
+      console.log(dataSource);
+    }
+  }
+
   const debouncedSetDefaults = () => {
     const checkContrast = debounce(() => {
       const shaderControlState = addedLayer.layer.shaderControlState.value;
@@ -147,6 +154,7 @@ function postLayerCreationActions(
   };
 
   debouncedSetupFunctions.push(debouncedSetDefaults);
+  debouncedSetupFunctions.push(setupChannelDefault);
 }
 
 export function createImageLayerAsMultiChannel(
