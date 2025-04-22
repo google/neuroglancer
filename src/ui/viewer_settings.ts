@@ -102,6 +102,7 @@ export class ViewerSettingsPanel extends SidePanel {
       "Concurrent chunk requests",
       viewer.chunkQueueManager.capacities.download.itemLimit,
     );
+    addLimitWidget("Url update rate limit (ms)", viewer.urlHashRateLimit);
 
     const addCheckbox = (
       label: string,
