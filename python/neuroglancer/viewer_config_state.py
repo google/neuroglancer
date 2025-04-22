@@ -367,6 +367,9 @@ class ConfigState(JsonObjectWrapper):
     show_screenshot_button = showScreenshotButton = wrapped_property(
         "showScreenshotButton", optional(bool, True)
     )
+    show_state_share_button = showStateShareButton = wrapped_property(
+        "showStateShareButton", optional(bool, True)
+    )
     show_tool_palette_button = showToolPaletteButton = wrapped_property(
         "showToolPaletteButton", optional(bool, True)
     )
