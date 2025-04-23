@@ -292,11 +292,10 @@ export function findFirstLessThanInSortedArray<T>(
   while (low < high) {
     const mid = (low + high) >> 1;
     if (compare(haystack[mid], needle) < 0) {
-      // haystack[mid] < needle, it's a candidate
       result = mid;
-      low = mid + 1; // try to find a larger one that's still < needle
+      low = mid + 1;
     } else {
-      high = mid; // eliminate this and all higher values
+      high = mid;
     }
   }
   return result;
