@@ -55,6 +55,8 @@ const DEFAULT_ARRAY_COLORS = new Map([
   [3, new Float32Array([1, 1, 1])],
 ]);
 
+const DEFAULT_VOLUME_RENDERING_SAMPLES = 256;
+
 function renameChannelDimensions(layer: UserLayer) {
   // rename each output dim with ^ to be ' instead
   for (const dataSource of layer.dataSources) {
@@ -230,6 +232,12 @@ function setupLayerPostCreation(
     waitForShaderWidgetsReady();
   }
 
+  function setVolumeRenderingSamples() {
+    userImageLayer.volumeRenderingDepthSamplesTarget.value =
+      DEFAULT_VOLUME_RENDERING_SAMPLES;
+  }
+
+  postCreationSetupFunctions.push(setVolumeRenderingSamples);
   postCreationSetupFunctions.push(setDefaultsWhenReady);
 }
 
