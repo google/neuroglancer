@@ -278,30 +278,6 @@ export function findFirstInSortedArray<T>(
 }
 
 /**
- * Returns the index of the first element in `haystack` that is less than `needle`, according to
- * `compare`. If no such element exists, returns -1.
- */
-export function findFirstLessThanInSortedArray<T>(
-  haystack: ArrayLike<T>,
-  needle: T,
-  compare: (a: T, b: T) => number,
-  low = 0,
-  high = haystack.length,
-): number {
-  let result = -1;
-  while (low < high) {
-    const mid = (low + high) >> 1;
-    if (compare(haystack[mid], needle) < 0) {
-      result = mid;
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-  return result;
-}
-
-/**
  * Returns the first index in `[begin, end)` for which `predicate` is `true`, or returns `end` if no
  * such index exists.
  *
