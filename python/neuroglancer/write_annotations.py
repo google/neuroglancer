@@ -45,7 +45,9 @@ _PROPERTY_DTYPES: dict[str, tuple[tuple[str] | tuple[str, tuple[int, ...]], int]
     "rgba": (("|u1", (4,)), 1),
 }
 
-AnnotationType = Literal["point", "line", "axis_aligned_bounding_box", "ellipsoid"]
+AnnotationType = Literal[
+    "point", "line", "polyline", "axis_aligned_bounding_box", "ellipsoid"
+]
 
 
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):

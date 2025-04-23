@@ -118,11 +118,11 @@ def test_annotation_writer_polyline(tmp_path: pathlib.Path):
     )
     line_sizes = [10, 5, 2, 2, 4]
     random_generator = np.random.default_rng(42)
-    lines = [random_generator.random((size, 3)) for size in line_sizes]
+    polylines = [random_generator.random((size, 3)) for size in line_sizes]
     ids = [10, 20, 30, 40, 50]
-    for line, id_ in zip(lines, ids):
+    for polyline, id_ in zip(polylines, ids):
         writer.add_polyline(
-            line,
+            polyline,  # type: ignore
             id=id_,
             size=10,
             cell_type=16,
@@ -138,14 +138,14 @@ def test_annotation_writer_polyline(tmp_path: pathlib.Path):
     # Read the bytes from the file
     contents = np.fromfile(os.path.join(tmp_path, "spatial0", "0_0_0"), dtype=np.uint8)
     offset = 8
-    total = len(lines)
+    total = len(polylines)
     property_bytes = 12
-    for i, (line, id_) in enumerate(zip(lines, ids)):
+    for i, (polyline, id_) in enumerate(zip(polylines, ids)):
         offset = check_polyline_contents(
-            contents, line, id_, end_offset=8 * (i - total), offset=offset
+            contents, polyline, id_, end_offset=8 * (i - total), offset=offset
         )
         offset += property_bytes
 
     # The first 8 bytes are the total count of the number of elements
     num_points = np.frombuffer(contents[0:8], dtype=np.uint64)
-    assert num_points[0] == len(lines)
+    assert num_points[0] == len(polylines)
