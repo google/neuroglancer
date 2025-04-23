@@ -769,7 +769,10 @@ function restructureAnnotationData(
           const newBase =
             groupOffset + runningTotalInstances * groupBytesPerAnnotation;
           outputData.set(
-            dataToTransform.subarray(origBase, origBase + groupBytesPerAnnotation),
+            dataToTransform.subarray(
+              origBase,
+              origBase + groupBytesPerAnnotation,
+            ),
             newBase,
           );
           ++runningTotalInstances;
