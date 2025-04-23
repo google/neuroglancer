@@ -244,12 +244,15 @@ function setupLayerPostCreation(
 export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
   makeLayer: MakeLayerFn,
+  checkForMultipleChannels: boolean = false,
 ) {
   if (managedLayer.layer?.type !== "image") return;
 
   renameChannelDimensions(managedLayer.layer);
   const { totalLocalChannels, lowerBounds, upperBounds, localDimensionRank } =
     calculateLocalDimensions(managedLayer);
+
+  if (totalLocalChannels <= 1 && checkForMultipleChannels) return;
 
   const ranges = [];
   for (let i = 0; i < localDimensionRank; i++) {
