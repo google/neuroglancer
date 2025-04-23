@@ -343,18 +343,18 @@ class Map(Generic[K, V], JsonObjectWrapper):
         Raises:
           KeyError: if the key is not present in the map.
         """
-        key = str(key)  # type: ignore[assignment]
+        str_key = str(key)
         with self._lock:
-            if key not in self._json_data:
+            if str_key not in self._json_data:
                 raise KeyError(key)
-            return self._get_wrapped(key, type(self)._value_type)
+            return self._get_wrapped(str_key, type(self)._value_type)
 
     def __setitem__(self, key: K, value: V):
         """Sets the specified key to the specified value."""
-        key = str(key)  # type: ignore[assignment]
+        str_key = str(key)
         with self._lock:
-            self._set_wrapped(key, value, type(self)._value_validator)
-            self._json_data[key] = None  # placeholder
+            self._set_wrapped(str_key, value, type(self)._value_validator)
+            self._json_data[str_key] = None  # placeholder
 
     def __delitem__(self, key: K):
         """Deletes the entry with the specified key.
@@ -364,7 +364,7 @@ class Map(Generic[K, V], JsonObjectWrapper):
         """
         if self._readonly:
             raise AttributeError
-        str_key = str(key)  # type: ignore[assignment]
+        str_key = str(key)
         with self._lock:
             del self._json_data[str_key]
             self._cached_wrappers.pop(str_key, None)
@@ -373,6 +373,41 @@ class Map(Generic[K, V], JsonObjectWrapper):
         key_validator = type(self)._key_validator
         for key in self._json_data:
             yield key_validator(key)
+
+    @overload
+    def pop(self, key: K, /) -> V: ...
+
+    @overload
+    def pop(self, key: K, default: V, /) -> V: ...
+
+    @overload
+    def pop(self, key: K, default: T, /) -> V | T: ...
+
+    def pop(self, key: K, /, *args):
+        """Removes and returns the mapped value associated with the specified key.
+
+        Returns:
+          The mapped value, or :py:param:`default` if :py:param:`key` is not
+          specified and :py:param:`default` is specified.
+
+        Raises:
+          KeyError: if the key is not present and :py:param:`default` is not
+            specified.
+        """
+        if self._readonly:
+            raise AttributeError
+        str_key = str(key)
+        if len(args) > 1:
+            raise ValueError("Expected at most one default argument")
+        with self._lock:
+            if str_key in self._json_data:
+                value = self._get_wrapped(str_key, type(self)._value_type)
+                del self._json_data[str_key]
+                self._cached_wrappers.pop(str_key, None)
+                return value
+            if len(args) == 0:
+                raise KeyError(key)
+            return args[0]
 
 
 class _MapKeysView(Generic[K], collections.abc.KeysView[K]):
