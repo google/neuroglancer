@@ -162,6 +162,7 @@ function setupLayerPostCreation(
   addedLayer: ManagedUserLayer,
   channelIndex: number,
   postCreationSetupFunctions: (() => void)[],
+  totalLocalChannels: number,
   channel?: SingleChannelMetadata,
   ignoreInputMetadata = false,
 ) {
@@ -177,6 +178,9 @@ function setupLayerPostCreation(
     let color = DEFAULT_ARRAY_COLORS.get(
       channelIndex % DEFAULT_ARRAY_COLORS.size,
     );
+    if (totalLocalChannels === 1) {
+      color = new Float32Array([1, 1, 1]);
+    }
     if (channel?.color !== undefined && !ignoreInputMetadata) {
       color = channel.color;
     }
@@ -194,10 +198,14 @@ function setupLayerPostCreation(
         window: channel.window,
       };
     } else if (active) {
-      trackableContrast.value = {
-        ...trackableContrast.value,
-        autoCompute: true,
-      };
+      // Wait for some data to be loaded before setting the contrast
+      const debouncedSetContrast = debounce(() => {
+        trackableContrast.value = {
+          ...trackableContrast.value,
+          autoCompute: true,
+        };
+      }, 2000);
+      debouncedSetContrast();
     }
   };
 
@@ -277,6 +285,7 @@ export function createImageLayerAsMultiChannel(
       addedLayer,
       i,
       postCreationSetupFunctions,
+      totalLocalChannels,
       channelMetadata,
       ignoreInputMetadata,
     );

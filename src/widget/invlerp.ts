@@ -831,7 +831,7 @@ export class InvlerpWidget extends Tab {
     invertArrows[reversed ? 0 : 1].style.display = "none";
 
     if (this.trackable.value.autoCompute) {
-      this.autoRangeFinder.autoComputeRange(0.05, 0.95);
+      this.autoRangeFinder.autoComputeRange(0.01, 0.99);
       this.trackable.value.autoCompute = false;
     }
   }
