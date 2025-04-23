@@ -54,7 +54,7 @@ import {
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { vec3 } from "#src/util/geom.js";
+import type { vec3 } from "#src/util/geom.js";
 import { type ProgressOptions } from "#src/util/progress_listener.js";
 import type { Trackable } from "#src/util/trackable.js";
 

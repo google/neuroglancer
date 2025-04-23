@@ -16,7 +16,7 @@
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
-import {
+import type {
   SingleChannelMetadata,
   ChannelMetadata,
 } from "#src/datasource/index.js";
@@ -47,7 +47,7 @@ export interface OmeMultiscaleMetadata {
 
 export interface OmeMetadata {
   multiscale: OmeMultiscaleMetadata;
-  channelMetadata: ChannelMetadata | undefined;
+  channels: ChannelMetadata | undefined;
 }
 
 const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
@@ -85,67 +85,43 @@ interface Axis {
 
 function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
   verifyObject(omeroChannel);
-  const active = verifyOptionalObjectProperty(
-    omeroChannel,
-    "active",
-    verifyBoolean,
-  );
-  const coefficient = verifyOptionalObjectProperty(
-    omeroChannel,
-    "coefficient",
-    verifyFiniteFloat,
-  );
-  const colorString = verifyOptionalObjectProperty(
-    omeroChannel,
-    "color",
-    verifyString,
-  );
+
+  const getProp = <T>(
+    key: string,
+    verifier: (value: unknown) => T,
+  ): T | undefined => verifyOptionalObjectProperty(omeroChannel, key, verifier);
+  const inputWindow = getProp("window", verifyObject);
+  const getWindowProp = <T>(
+    key: string,
+    verifier: (value: unknown) => T,
+  ): T | undefined =>
+    inputWindow
+      ? verifyOptionalObjectProperty(inputWindow, key, verifier)
+      : undefined;
+
+  const active = getProp("active", verifyBoolean);
+  const coefficient = getProp("coefficient", verifyFiniteFloat);
+  const colorString = getProp("color", verifyString);
   const color = parseRGBColorSpecification(colorString);
-  const inverted = verifyOptionalObjectProperty(
-    omeroChannel,
-    "inverted",
-    verifyBoolean,
-  );
-  const label = verifyOptionalObjectProperty(
-    omeroChannel,
-    "label",
-    verifyString,
-  );
-  const inputWindow = verifyOptionalObjectProperty(
-    omeroChannel,
-    "window",
-    verifyObject,
-  );
-  const windowMin = verifyOptionalObjectProperty(
-    inputWindow,
-    "min",
-    verifyFiniteFloat,
-  );
-  const windowMax = verifyOptionalObjectProperty(
-    inputWindow,
-    "max",
-    verifyFiniteFloat,
-  );
-  const windowEnd = verifyOptionalObjectProperty(
-    inputWindow,
-    "end",
-    verifyFiniteFloat,
-  );
-  const windowStart = verifyOptionalObjectProperty(
-    inputWindow,
-    "start",
-    verifyFiniteFloat,
-  );
+  const inverted = getProp("inverted", verifyBoolean);
+  const label = getProp("label", verifyString);
+
+  const windowMin = getWindowProp("min", verifyFiniteFloat);
+  const windowMax = getWindowProp("max", verifyFiniteFloat);
+  const windowStart = getWindowProp("start", verifyFiniteFloat);
+  const windowEnd = getWindowProp("end", verifyFiniteFloat);
+
   const window =
-    windowMin === undefined || windowMax === undefined
-      ? undefined
-      : ([windowMin, windowMax] as [number, number]);
+    windowMin !== undefined && windowMax !== undefined
+      ? ([windowMin, windowMax] as [number, number])
+      : undefined;
+
   const range =
-    windowEnd === undefined || windowStart === undefined
-      ? undefined
-      : inverted
+    windowStart !== undefined && windowEnd !== undefined
+      ? inverted
         ? ([windowEnd, windowStart] as [number, number])
-        : ([windowStart, windowEnd] as [number, number]);
+        : ([windowStart, windowEnd] as [number, number])
+      : undefined;
 
   return {
     active,
@@ -399,7 +375,7 @@ export function parseOmeMetadata(
     }
     const multiScaleInfo = parseOmeMultiscale(url, multiscale);
     const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
-    return { multiscale: multiScaleInfo, channelMetadata };
+    return { multiscale: multiScaleInfo, channels: channelMetadata };
   }
   if (errors.length !== 0) {
     throw new Error(errors[0]);

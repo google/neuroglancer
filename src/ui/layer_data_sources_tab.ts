@@ -33,6 +33,7 @@ import type {
   LoadedDataSubsource,
 } from "#src/layer/layer_data_source.js";
 import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
@@ -64,7 +65,6 @@ import {
 } from "#src/widget/multiline_autocomplete.js";
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
-import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
   splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,

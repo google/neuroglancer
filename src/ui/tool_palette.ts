@@ -1078,8 +1078,8 @@ export class MultiToolPaletteManager extends RefCounted {
       this.sidePanelManager.display.multiChannelSetupFinished.add(() => {
         // Check for the canned shader control palette
         const shaderControlPalette = CANNED_PALETTES[2];
-        const palettes = this.state.palettes;
-        for (const palette of palettes) {
+        const existingPalettes = this.state.palettes;
+        for (const palette of existingPalettes) {
           if (palette.query.value === shaderControlPalette.query) {
             return;
           }

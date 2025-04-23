@@ -522,10 +522,10 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
             metadata.userAttributes,
             metadata.zarrVersion,
           );
-          channelMetadata = omeMetadata?.channelMetadata;
           if (omeMetadata === undefined) {
             throw new Error("Neither array nor OME multiscale metadata found");
           }
+          channelMetadata = omeMetadata.channels;
           multiscaleInfo = await resolveOmeMultiscale(
             sharedKvStoreContext,
             omeMetadata.multiscale,

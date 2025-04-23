@@ -43,6 +43,7 @@ import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
 } from "#src/layer/layer_data_source.js";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 import type {
   DisplayDimensions,
   WatchableDisplayDimensionRenderInfo,
@@ -112,7 +113,6 @@ import type { DependentViewContext } from "#src/widget/dependent_view_widget.js"
 import type { Tab } from "#src/widget/tab_view.js";
 import { TabSpecification } from "#src/widget/tab_view.js";
 import type { RPC } from "#src/worker_rpc.js";
-import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 
 const TOOL_JSON_KEY = "tool";
 const TOOL_BINDINGS_JSON_KEY = "toolBindings";
