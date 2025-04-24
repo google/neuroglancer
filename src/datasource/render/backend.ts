@@ -60,31 +60,26 @@ export class TileChunkSource extends WithParameters(
 
   queryString = (() => {
     const { parameters } = this;
-    const query_params: string[] = [];
-    if (parameters.channel !== undefined) {
-      query_params.push("channels=" + parameters.channel);
-    }
-    if (parameters.minIntensity !== undefined) {
-      query_params.push(
-        `minIntensity=${JSON.stringify(parameters.minIntensity)}`,
-      );
-    }
-    if (parameters.maxIntensity !== undefined) {
-      query_params.push(
-        `maxIntensity=${JSON.stringify(parameters.maxIntensity)}`,
-      );
-    }
-    if (parameters.maxTileSpecsToRender !== undefined) {
-      query_params.push(
-        `maxTileSpecsToRender=${JSON.stringify(
-          parameters.maxTileSpecsToRender,
-        )}`,
-      );
-    }
-    if (parameters.filter !== undefined) {
-      query_params.push(`filter=${JSON.stringify(parameters.filter)}`);
-    }
-    return query_params.join("&");
+	const query_keys: (keyof TileChunkSourceParameters)[] = [
+		"channel",
+		"minIntensity",
+		"maxIntensity",
+		"maxTileSpecsToRender",
+		"filter"
+	]
+
+    const query_params = new URLSearchParams();
+	for (const key of query_keys) {
+		const value = parameters[key];
+		if (value === undefined)
+			continue;
+
+		const serialized = (typeof value === 'object') ? JSON.stringify(value) : String(value);
+		query_params.append(key, serialized);
+
+	}
+
+    return query_params.toString();
   })();
 
   async download(chunk: VolumeChunk, signal: AbortSignal) {
