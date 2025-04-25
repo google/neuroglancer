@@ -32,6 +32,7 @@ import {
   verifyOptionalObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import { clampToInterval } from "#src/util/lerp.js";
 import * as matrix from "#src/util/matrix.js";
 import { allSiPrefixes } from "#src/util/si_units.js";
 
@@ -122,6 +123,11 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
         ? ([windowEnd, windowStart] as [number, number])
         : ([windowStart, windowEnd] as [number, number])
       : undefined;
+  // If there is a window, then clamp the range to the window.
+  if (window !== undefined && range !== undefined) {
+    range[0] = clampToInterval(window, range[0]) as number;
+    range[1] = clampToInterval(window, range[1]) as number;
+  }
 
   return {
     active,
