@@ -271,37 +271,43 @@ function parseStackProject(stackIdObj: any): string {
 
 function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
   const boxImageApiKey =
-    "/v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/raw-image"
+    "/v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/raw-image";
   const boxImageApi = obj.paths[boxImageApiKey];
   if (boxImageApi === undefined) {
     // Could not retrieve api, skipping parameter hints
     throw null;
   }
 
-  const boxImageParameters =
-    boxImageApi.get.parameters as Array<{name: string, type: string, required?: boolean }>;
+  const boxImageParameters = boxImageApi.get.parameters as Array<{
+    name: string;
+    type: string;
+    required?: boolean;
+  }>;
 
   // Return optional parameters from render API and extend list with hardcoded options
   return boxImageParameters
     .filter(({ required }) => required === false)
     .filter(({ name }) => name !== "scale")
     .concat([
-      ({ name: "minX", type: "number" }),
-      ({ name: "minY", type: "number" }),
-      ({ name: "minZ", type: "number" }),
-      ({ name: "maxX", type: "number" }),
-      ({ name: "maxY", type: "number" }),
-      ({ name: "maxZ", type: "number" }),
-      ({ name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") }),
-      ({ name: "numLevels", type: "integer" }),
-      ({ name: "tileSize", type: "number" }),
-      ({ name: "channel", type: "string" }),
+      { name: "minX", type: "number" },
+      { name: "minY", type: "number" },
+      { name: "minZ", type: "number" },
+      { name: "maxX", type: "number" },
+      { name: "maxY", type: "number" },
+      { name: "maxZ", type: "number" },
+      { name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") },
+      { name: "numLevels", type: "integer" },
+      { name: "tileSize", type: "number" },
+      { name: "channel", type: "string" },
     ]);
 }
 
 class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
-    if (this.parameters.encoding === "raw16" || this.parameters.encoding === "png16") {
+    if (
+      this.parameters.encoding === "raw16" ||
+      this.parameters.encoding === "png16"
+    ) {
       return DataType.UINT16;
     }
     // 8-bit (JPEG or PNG)
@@ -329,7 +335,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   maxZ: number | undefined;
 
   // Key-value pairs to forward to the render webservice
-  renderArgs: {[index: string]: string};
+  renderArgs: { [index: string]: string };
 
   get rank() {
     return 3;
@@ -375,18 +381,27 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
     this.stackInfo = stackInfo;
 
     if (channel !== undefined && channel.length > 0) {
-        this.channel = channel;
+      this.channel = channel;
     }
 
-    const reservedKeys = new Set(["minX", "minY", "minZ", "maxX", "maxY", "maxZ",
-                                 "encoding", "numLevels", "tileSize", "channel"])
+    const reservedKeys = new Set([
+      "minX",
+      "minY",
+      "minZ",
+      "maxX",
+      "maxY",
+      "maxZ",
+      "encoding",
+      "numLevels",
+      "tileSize",
+      "channel",
+    ]);
 
-    this.renderArgs = {}
+    this.renderArgs = {};
     for (const [key, value] of Object.entries(parameters)) {
-        if (reservedKeys.has(key))
-            continue
+      if (reservedKeys.has(key)) continue;
 
-        this.renderArgs[key] = value
+      this.renderArgs[key] = value;
     }
 
     this.minX = verifyOptionalInt(parameters.minX);
@@ -757,11 +772,11 @@ export async function queryParameterCompleter(
     options,
   );
 
-  const idx = query.lastIndexOf('&');
-  const offset = (idx === -1) ? 0 : idx + 1;
+  const idx = query.lastIndexOf("&");
+  const offset = idx === -1 ? 0 : idx + 1;
   const keyValuePair = query.slice(offset);
 
-  const [key, ] = keyValuePair.split('=');
+  const [key] = keyValuePair.split("=");
 
   const completions = getPrefixMatchesWithDescriptions(
     key,
@@ -785,7 +800,7 @@ export async function volumeCompleter(
   const hostname = match[1];
   const path = match[2];
 
-  const [volume, query] = path.split('?');
+  const [volume, query] = path.split("?");
 
   let offset = match![1].length + 1;
   if (query === undefined) {

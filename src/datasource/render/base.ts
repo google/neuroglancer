@@ -23,7 +23,7 @@ export class RenderBaseSourceParameters {
 }
 
 export class RenderSourceParameters extends RenderBaseSourceParameters {
-  renderArgs: {[index: string]: string};
+  renderArgs: { [index: string]: string };
 }
 
 export class TileChunkSourceParameters extends RenderSourceParameters {

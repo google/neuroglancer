@@ -101,16 +101,16 @@ export class TileChunkSource extends WithParameters(
     const { parameters } = this;
     const query_params = new URLSearchParams();
 
-	if (parameters.channel !== undefined) {
-		query_params.append("channel", parameters.channel);
-	}
+    if (parameters.channel !== undefined) {
+      query_params.append("channel", parameters.channel);
+    }
 
-	// Parse fallback key-value argument
-	for (const [key, value] of Object.entries(parameters.renderArgs)) {
-		query_params.append(key, value);
-	}
+    // Parse fallback key-value argument
+    for (const [key, value] of Object.entries(parameters.renderArgs)) {
+      query_params.append(key, value);
+    }
 
-	return query_params.toString();
+    return query_params.toString();
   })();
 
   async download(chunk: VolumeChunk, signal: AbortSignal) {
