@@ -59,7 +59,6 @@ import {
   verifyFloat,
   verifyObject,
   verifyObjectProperty,
-  verifyOptionalBoolean,
   verifyOptionalInt,
   verifyOptionalString,
   verifyString,
@@ -286,10 +285,6 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   encoding: string;
   numLevels: number | undefined;
 
-  // Render Parameters
-  minIntensity: number | undefined;
-  maxIntensity: number | undefined;
-
   // Bounding box override parameters
   minX: number | undefined;
   minY: number | undefined;
@@ -298,10 +293,8 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   maxY: number | undefined;
   maxZ: number | undefined;
 
-  // Force limited number of tile specs to render for downsampled views of large projects
-  maxTileSpecsToRender: number | undefined;
-
-  filter: boolean | undefined;
+  // Key-value pairs to forward to the render webservice
+  renderArgs: {[index: string]: string};
 
   get rank() {
     return 3;
@@ -347,15 +340,19 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
     this.stackInfo = stackInfo;
 
     if (channel !== undefined && channel.length > 0) {
-      this.channel = channel;
+        this.channel = channel;
     }
 
-    this.minIntensity = verifyOptionalInt(parameters.minIntensity);
-    this.maxIntensity = verifyOptionalInt(parameters.maxIntensity);
-    this.maxTileSpecsToRender = verifyOptionalInt(
-      parameters.maxTileSpecsToRender,
-    );
-    this.filter = verifyOptionalBoolean(parameters.filter);
+    const reservedKeys = new Set(["minX", "minY", "minZ", "maxX", "maxY", "maxZ",
+                                 "encoding", "numLevels", "tileSize", "channel"])
+
+    this.renderArgs = {}
+    for (const [key, value] of Object.entries(parameters)) {
+        if (reservedKeys.has(key))
+            continue
+
+        this.renderArgs[key] = value
+    }
 
     this.minX = verifyOptionalInt(parameters.minX);
     this.minY = verifyOptionalInt(parameters.minY);
@@ -460,10 +457,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
           project: this.stackInfo.project,
           stack: this.stack,
           channel: this.channel,
-          minIntensity: this.minIntensity,
-          maxIntensity: this.maxIntensity,
-          maxTileSpecsToRender: this.maxTileSpecsToRender,
-          filter: this.filter,
+          renderArgs: this.renderArgs,
           dims: `${this.dims[0]}_${this.dims[1]}`,
           level: level,
           encoding: this.encoding,

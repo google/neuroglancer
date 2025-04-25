@@ -60,26 +60,18 @@ export class TileChunkSource extends WithParameters(
 
   queryString = (() => {
     const { parameters } = this;
-	const query_keys: (keyof TileChunkSourceParameters)[] = [
-		"channel",
-		"minIntensity",
-		"maxIntensity",
-		"maxTileSpecsToRender",
-		"filter"
-	]
-
     const query_params = new URLSearchParams();
-	for (const key of query_keys) {
-		const value = parameters[key];
-		if (value === undefined)
-			continue;
 
-		const serialized = (typeof value === 'object') ? JSON.stringify(value) : String(value);
-		query_params.append(key, serialized);
-
+	if (parameters.channel !== undefined) {
+		query_params.append("channel", parameters.channel);
 	}
 
-    return query_params.toString();
+	// Parse fallback key-value argument
+	for (const [key, value] of Object.entries(parameters.renderArgs)) {
+		query_params.append(key, value);
+	}
+
+	return query_params.toString();
   })();
 
   async download(chunk: VolumeChunk, signal: AbortSignal) {
