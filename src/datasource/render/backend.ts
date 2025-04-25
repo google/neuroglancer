@@ -15,6 +15,7 @@
  */
 
 import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
+import { decodePng } from "#src/async_computation/decode_png_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { TileChunkSourceParameters } from "#src/datasource/render/base.js";
@@ -43,6 +44,44 @@ chunkDecoders.set(
       chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
       3,
       true,
+    );
+    await postProcessRawData(chunk, signal, decoded);
+  },
+);
+chunkDecoders.set(
+  "png",
+  async (chunk: VolumeChunk, signal: AbortSignal, response: ArrayBuffer) => {
+    const chunkDataSize = chunk.chunkDataSize!;
+    const { uint8Array: decoded } = await requestAsyncComputation(
+      decodePng,
+      signal,
+      [response],
+      new Uint8Array(response),
+      chunkDataSize[0],
+      chunkDataSize[1],
+      chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
+      4,
+      1,
+      false,
+    );
+    await postProcessRawData(chunk, signal, decoded);
+  },
+);
+chunkDecoders.set(
+  "png16",
+  async (chunk: VolumeChunk, signal: AbortSignal, response: ArrayBuffer) => {
+    const chunkDataSize = chunk.chunkDataSize!;
+    const { uint8Array: decoded } = await requestAsyncComputation(
+      decodePng,
+      signal,
+      [response],
+      new Uint8Array(response),
+      chunkDataSize[0],
+      chunkDataSize[1],
+      chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
+      1,
+      2,
+      false,
     );
     await postProcessRawData(chunk, signal, decoded);
   },
@@ -99,6 +138,10 @@ export class TileChunkSource extends WithParameters(
     let imageMethod: string;
     if (parameters.encoding === "raw16") {
       imageMethod = "raw16-image";
+    } else if (parameters.encoding === "png16") {
+      imageMethod = "png16-image";
+    } else if (parameters.encoding === "png") {
+      imageMethod = "png-image";
     } else {
       imageMethod = "jpeg-image";
     }

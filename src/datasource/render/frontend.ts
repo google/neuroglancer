@@ -65,7 +65,7 @@ import {
 } from "#src/util/json.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 
-const VALID_ENCODINGS = new Set<string>(["jpg", "raw16"]);
+const VALID_ENCODINGS = new Set<string>(["jpg", "raw16", "png", "png16"]);
 
 const TileChunkSourceBase = WithParameters(
   VolumeChunkSource,
@@ -292,7 +292,7 @@ function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
       ({ name: "maxX", type: "number" }),
       ({ name: "maxY", type: "number" }),
       ({ name: "maxZ", type: "number" }),
-      ({ name: "encoding", type: "string" }),
+      ({ name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") }),
       ({ name: "numLevels", type: "integer" }),
       ({ name: "tileSize", type: "number" }),
       ({ name: "channel", type: "string" }),
@@ -301,10 +301,10 @@ function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
 
 class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
-    if (this.parameters.encoding === "raw16") {
+    if (this.parameters.encoding === "raw16" || this.parameters.encoding === "png16") {
       return DataType.UINT16;
     }
-    // JPEG
+    // 8-bit (JPEG or PNG)
     return DataType.UINT8;
   }
   get volumeType() {
