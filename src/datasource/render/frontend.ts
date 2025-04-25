@@ -93,6 +93,11 @@ interface StackInfo {
   channels: string[];
 }
 
+interface QueryParameterInfo {
+  name: string;
+  type: string;
+}
+
 function parseOwnerInfo(obj: any): OwnerInfo {
   const stackObjs = parseArray(obj, verifyObject);
 
@@ -262,6 +267,36 @@ function parseStackVersionInfo(stackVersionObj: any): vec3 {
 function parseStackProject(stackIdObj: any): string {
   verifyObject(stackIdObj);
   return verifyObjectProperty(stackIdObj, "project", verifyString);
+}
+
+function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
+  const boxImageApiKey =
+    "/v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/raw-image"
+  const boxImageApi = obj.paths[boxImageApiKey];
+  if (boxImageApi === undefined) {
+    // Could not retrieve api, skipping parameter hints
+    throw null;
+  }
+
+  const boxImageParameters =
+    boxImageApi.get.parameters as Array<{name: string, type: string, required?: boolean }>;
+
+  // Return optional parameters from render API and extend list with hardcoded options
+  return boxImageParameters
+    .filter(({ required }) => required === false)
+    .filter(({ name }) => name !== "scale")
+    .concat([
+      ({ name: "minX", type: "number" }),
+      ({ name: "minY", type: "number" }),
+      ({ name: "minZ", type: "number" }),
+      ({ name: "maxX", type: "number" }),
+      ({ name: "maxY", type: "number" }),
+      ({ name: "maxZ", type: "number" }),
+      ({ name: "encoding", type: "string" }),
+      ({ name: "numLevels", type: "integer" }),
+      ({ name: "tileSize", type: "number" }),
+      ({ name: "channel", type: "string" }),
+    ]);
 }
 
 class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -512,6 +547,21 @@ export function getOwnerInfo(
   );
 }
 
+export function getQueryParameterInfo(
+  chunkManager: ChunkManager,
+  hostname: string,
+  options: Partial<ProgressOptions>,
+): Promise<QueryParameterInfo[]> {
+  return chunkManager.memoize.getAsync(
+    { type: "render:getQueryParameterInfo", hostname },
+    options,
+    (progressOptions) =>
+      fetchOk(`${hostname}/render-ws/swagger.json`, progressOptions)
+        .then((response) => response.json())
+        .then(parseQueryParameterInfo),
+  );
+}
+
 const pathPattern =
   /^([^/?]+)(?:\/([^/?]+))?(?:\/([^/?]+))(?:\/([^/?]*))?(?:\?(.*))?$/;
 const urlPattern = /^((?:(?:(?:http|https):\/\/[^,/]+)[^/?]))\/(.*)$/;
@@ -701,10 +751,11 @@ export async function queryParameterCompleter(
   query: string,
   options: Partial<ProgressOptions>,
 ): Promise<CompletionResult> {
-
-  if (chunkManager === undefined || hostname === undefined || options === undefined) {
-    throw null;
-  }
+  const queryParameterInfo = await getQueryParameterInfo(
+    chunkManager,
+    hostname,
+    options,
+  );
 
   const idx = query.lastIndexOf('&');
   const offset = (idx === -1) ? 0 : idx + 1;
@@ -714,9 +765,9 @@ export async function queryParameterCompleter(
 
   const completions = getPrefixMatchesWithDescriptions(
     key,
-    [["bla", "boolean"], ["blub", "integer"], ["foo", "double"]],
-    (x) => x[0],
-    (x) => x[1],
+    queryParameterInfo,
+    (x) => x.name,
+    (x) => x.type,
   );
   return { offset: offset, completions };
 }
