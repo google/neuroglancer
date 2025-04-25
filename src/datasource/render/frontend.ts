@@ -619,6 +619,9 @@ export async function stackAndProjectCompleter(
     // Don't autocomplete the owner
     throw null;
   }
+
+  // Autocomplete the project
+  let offset = stackMatch[1].length + 1;
   if (stackMatch[3] === undefined) {
     const projectPrefix = stackMatch[2] || "";
     const ownerInfo = await getOwnerInfo(
@@ -633,8 +636,11 @@ export async function stackAndProjectCompleter(
       (x) => x[0] + "/",
       () => undefined,
     );
-    return { offset: stackMatch[1].length + 1, completions };
+    return { offset: offset, completions };
   }
+
+  // Autocomplete the stack name
+  offset += stackMatch[2].length + 1;
   if (stackMatch[4] === undefined) {
     const stackPrefix = stackMatch[3] || "";
     const ownerInfo = await getOwnerInfo(
@@ -655,11 +661,11 @@ export async function stackAndProjectCompleter(
         return x[1].project;
       },
     );
-    return {
-      offset: stackMatch[1].length + stackMatch[2].length + 2,
-      completions,
-    };
+    return { offset: offset, completions };
   }
+
+  // Autocomplete the channel
+  offset += stackMatch[3].length + 1;
   const channelPrefix = stackMatch[4].substr(1) || "";
   const ownerInfo = await getOwnerInfo(
     chunkManager,
@@ -686,11 +692,33 @@ export async function stackAndProjectCompleter(
     (x) => x,
     () => undefined,
   );
-  return {
-    offset:
-      stackMatch[1].length + stackMatch[2].length + stackMatch[3].length + 3,
-    completions,
-  };
+  return { offset: offset, completions };
+}
+
+export async function queryParameterCompleter(
+  chunkManager: ChunkManager,
+  hostname: string,
+  query: string,
+  options: Partial<ProgressOptions>,
+): Promise<CompletionResult> {
+
+  if (chunkManager === undefined || hostname === undefined || options === undefined) {
+    throw null;
+  }
+
+  const idx = query.lastIndexOf('&');
+  const offset = (idx === -1) ? 0 : idx + 1;
+  const keyValuePair = query.slice(offset);
+
+  const [key, ] = keyValuePair.split('=');
+
+  const completions = getPrefixMatchesWithDescriptions(
+    key,
+    [["bla", "boolean"], ["blub", "integer"], ["foo", "double"]],
+    (x) => x[0],
+    (x) => x[1],
+  );
+  return { offset: offset, completions };
 }
 
 export async function volumeCompleter(
@@ -706,13 +734,29 @@ export async function volumeCompleter(
   const hostname = match[1];
   const path = match[2];
 
-  const completions = await stackAndProjectCompleter(
+  const [volume, query] = path.split('?');
+
+  let offset = match![1].length + 1;
+  if (query === undefined) {
+    // Still typing the volume path, no query parameters yet
+    const completions = await stackAndProjectCompleter(
+      chunkManager,
+      hostname,
+      volume,
+      options,
+    );
+    return applyCompletionOffset(offset, completions);
+  }
+
+  // Typing query parameters now
+  offset += volume.length + 1;
+  const completions = await queryParameterCompleter(
     chunkManager,
     hostname,
-    path,
+    query,
     options,
   );
-  return applyCompletionOffset(match![1].length + 1, completions);
+  return applyCompletionOffset(offset, completions);
 }
 
 export class RenderDataSource implements DataSourceProvider {
