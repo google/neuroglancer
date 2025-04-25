@@ -135,7 +135,7 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
 
 function parseOmeroMetadata(omero: unknown): ChannelMetadata {
   verifyObject(omero);
-  const name = verifyObjectProperty(omero, "name", verifyString);
+  const name = verifyOptionalObjectProperty(omero, "name", verifyString);
   const channels = verifyObjectProperty(omero, "channels", (x) =>
     parseArray(x, parseOmeroChannel),
   );

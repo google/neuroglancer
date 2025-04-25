@@ -175,7 +175,7 @@ export interface DataSubsourceEntry {
 }
 
 export interface ChannelMetadata {
-  name: string;
+  name?: string;
   channels: SingleChannelMetadata[];
 }
 
