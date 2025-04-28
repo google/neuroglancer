@@ -128,12 +128,16 @@ class LayerColorWidget extends RefCounted {
       const color = this.layer.layerBarColor;
       if (color) {
         element.style.backgroundColor = color;
+        element.title = "Primary layer color";
         element.classList.remove("rainbow");
       } else {
-        const style = this.layer.supportsLayerBarColorSyncOption
-          ? "rainbow"
-          : "unsupported";
-        element.classList.add(style);
+        if (this.layer.supportsLayerBarColorSyncOption) {
+          element.title = "Multi-colored layer";
+          element.classList.add("rainbow");
+        } else {
+          element.title = "Layer does not support color legend";
+          element.classList.add("unsupported");
+        }
         element.style.backgroundColor = "";
       }
     };

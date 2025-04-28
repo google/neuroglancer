@@ -762,16 +762,6 @@ export class AnnotationUserLayer extends Base {
     return undefined;
   }
 
-  colorWidgetTooltip(): string | undefined {
-    const shaderHasDefaultColor =
-      this.annotationDisplayState.shader.value.includes("defaultColor");
-    if (shaderHasDefaultColor && this.annotationDisplayState.color.value) {
-      return `The color comes from the selected shader default color`;
-    }
-
-    return "Your shader code doesn't use the default color, we cannot determine which color you are using";
-  }
-
   static type = "annotation";
   static typeAbbreviation = "ann";
   static supportsLayerBarColorSyncOption = true;
