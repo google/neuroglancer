@@ -108,32 +108,32 @@ export class LayerVisibilityWidget extends RefCounted {
 
 class LayerColorWidget extends RefCounted {
   element = document.createElement("div");
-  elementWrapper = document.createElement("div");
+  colorIndicator = document.createElement("div");
 
   constructor(
     public panel: LayerListPanel,
     public layer: ManagedUserLayer,
   ) {
     super();
-    const { element, elementWrapper } = this;
-    element.className = "neuroglancer-layer-list-panel-color-value";
-    elementWrapper.className =
+    const { colorIndicator, element } = this;
+    colorIndicator.className = "neuroglancer-layer-list-panel-color-value";
+    element.className =
       "neuroglancer-layer-list-panel-color-value-wrapper";
-    elementWrapper.appendChild(element);
+    element.appendChild(colorIndicator);
     const updateLayerColorWidget = () => {
       const color = this.layer.layerBarColor;
       if (color) {
-        element.style.backgroundColor = color;
-        element.title = "Primary layer color";
+        colorIndicator.style.backgroundColor = color;
+        colorIndicator.title = "Primary layer color";
       } else {
         if (this.layer.supportsLayerBarColorSyncOption) {
-          element.title = "Multi-colored layer";
-          element.dataset.color = "rainbow";
+          colorIndicator.title = "Multi-colored layer";
+          colorIndicator.dataset.color = "rainbow";
         } else {
-          element.title = "Layer does not support color legend";
-          element.dataset.color = "unsupported";
+          colorIndicator.title = "Layer does not support color legend";
+          colorIndicator.dataset.color = "unsupported";
         }
-        element.style.backgroundColor = "";
+        colorIndicator.style.backgroundColor = "";
       }
     };
     this.registerDisposer(
@@ -143,10 +143,11 @@ class LayerColorWidget extends RefCounted {
     );
     this.registerDisposer(
       layer.layerChanged.add(() => {
-        elementWrapper.dataset.visible = this.layer.visible.toString();
+        element.dataset.visible = this.layer.visible.toString();
         updateLayerColorWidget();
       }),
     );
+    element.dataset.visible = this.layer.visible.toString();
     updateLayerColorWidget();
   }
 }
@@ -220,7 +221,7 @@ class LayerListItem extends RefCounted {
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
     );
     element.appendChild(
-      this.registerDisposer(new LayerColorWidget(panel, layer)).elementWrapper,
+      this.registerDisposer(new LayerColorWidget(panel, layer)).element,
     );
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
     element.appendChild(layerNameWidget.element);
