@@ -140,6 +140,13 @@
   );
 }
 
+.neuroglancer-layer-item[data-visible="false"]
+  .neuroglancer-layer-item-label[data-color="rainbow"],
+.neuroglancer-layer-item[data-visible="false"]
+  .neuroglancer-layer-item-label[data-color="solid"] {
+  opacity: 0.6;
+}
+
 .neuroglancer-layer-item-value {
   grid-row: 1;
   grid-column: 1;

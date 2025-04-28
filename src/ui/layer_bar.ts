@@ -179,6 +179,7 @@ class LayerWidget extends RefCounted {
         const textColor = useWhiteBackground(parseRGBColorSpecification(color))
           ? "white"
           : "black";
+        labelElement.dataset.color = "solid";
         labelElement.style.color = textColor;
       } else {
         labelElement.dataset.color = "rainbow";
@@ -186,7 +187,7 @@ class LayerWidget extends RefCounted {
       }
     } else {
       labelElement.style.backgroundColor = "#222";
-      labelElement.style.color = "white";
+      labelElement.style.color = "";
     }
   }
 
