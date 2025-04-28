@@ -21,10 +21,7 @@ import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
-import {
-  observeWatchable,
-  type WatchableValueInterface,
-} from "#src/trackable_value.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -39,6 +36,10 @@ import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
+import {
+  parseRGBColorSpecification,
+  useWhiteBackground,
+} from "#src/util/color.js";
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
@@ -48,7 +49,6 @@ class LayerWidget extends RefCounted {
   prefetchProgress = document.createElement("div");
   labelElementText = document.createTextNode("");
   valueElement = document.createElement("div");
-  layerColorElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
 
@@ -65,7 +65,6 @@ class LayerWidget extends RefCounted {
       visibleProgress,
       prefetchProgress,
       labelElementText,
-      layerColorElement,
     } = this;
     element.className = "neuroglancer-layer-item neuroglancer-noselect";
     element.appendChild(visibleProgress);
@@ -109,23 +108,8 @@ class LayerWidget extends RefCounted {
       event.stopPropagation();
     });
 
-    const layerColorElementWrapper = document.createElement("div");
-    layerColorElementWrapper.className =
-      "neuroglancer-layer-color-value-wrapper";
-    layerColorElement.className = "neuroglancer-layer-color-value";
-    layerColorElementWrapper.appendChild(layerColorElement);
-
-    this.registerDisposer(
-      observeWatchable((layerColorEnabled) => {
-        layerColorElementWrapper.style.display = layerColorEnabled
-          ? "block"
-          : "none";
-      }, this.panel.layerGroupViewer.viewerState.enableLayerColorWidget),
-    );
-
     // Compose the layer's title bar
     element.appendChild(layerNumberElement);
-    element.appendChild(layerColorElementWrapper);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
     buttonContainer.appendChild(closeElement);
@@ -173,12 +157,10 @@ class LayerWidget extends RefCounted {
   }
 
   update() {
-    const { layer, element, panel, layerColorElement } = this;
-    this.labelElementText.textContent = layer.name;
+    const { layer, element, panel, labelElement, labelElementText } = this;
+    labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
-    element.dataset.selected = (
-      layer === this.panel.selectedLayer.layer
-    ).toString();
+    element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
     element.dataset.pick = layer.pickEnabled.toString();
     let title = `Click to ${
       layer.visible ? "hide" : "show"
@@ -193,19 +175,27 @@ class LayerWidget extends RefCounted {
     // Color widget updates
     if (panel.layerGroupViewer.viewerState.enableLayerColorWidget.value) {
       if (layer.supportsLayerBarColorSyncOption) {
-        const color = this.layer.layerBarColor;
+        const color = layer.layerBarColor;
         if (color) {
           element.dataset.color = "fixed";
-          layerColorElement.style.backgroundColor = color;
+          labelElement.style.backgroundColor = color;
+          const textColor = useWhiteBackground(
+            parseRGBColorSpecification(color),
+          )
+            ? "white"
+            : "black";
+          labelElement.style.color = textColor;
         } else {
           element.dataset.color = "rainbow";
+          labelElement.style.color = "black";
         }
       } else {
-        layerColorElement.style.backgroundColor = "";
+        labelElement.style.backgroundColor = "";
+        labelElement.style.color = "white";
         element.dataset.color = "unsupported";
       }
     }
-    layerColorElement.title =
+    labelElement.title =
       layer.colorWidgetTooltip() ||
       "The color of this layer cannot be determined";
   }
