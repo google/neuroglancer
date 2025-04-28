@@ -66,6 +66,18 @@ import {
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 const VALID_ENCODINGS = new Set<string>(["jpg", "raw16", "png", "png16"]);
+const RESERVED_PARAMETERS = [
+	{ name: "minX", type: "number" },
+	{ name: "minY", type: "number" },
+	{ name: "minZ", type: "number" },
+	{ name: "maxX", type: "number" },
+	{ name: "maxY", type: "number" },
+	{ name: "maxZ", type: "number" },
+	{ name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") },
+	{ name: "numLevels", type: "integer" },
+	{ name: "tileSize", type: "number" },
+	{ name: "channel", type: "string" },
+];
 
 const TileChunkSourceBase = WithParameters(
   VolumeChunkSource,
@@ -274,8 +286,8 @@ function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
     "/v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/raw-image";
   const boxImageApi = obj.paths[boxImageApiKey];
   if (boxImageApi === undefined) {
-    // Could not retrieve api, skipping parameter hints
-    throw null;
+    // Could not retrieve api, skipping dynamic parameter hints
+    return RESERVED_PARAMETERS;
   }
 
   const boxImageParameters = boxImageApi.get.parameters as Array<{
@@ -288,18 +300,7 @@ function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
   return boxImageParameters
     .filter(({ required }) => required === false)
     .filter(({ name }) => name !== "scale")
-    .concat([
-      { name: "minX", type: "number" },
-      { name: "minY", type: "number" },
-      { name: "minZ", type: "number" },
-      { name: "maxX", type: "number" },
-      { name: "maxY", type: "number" },
-      { name: "maxZ", type: "number" },
-      { name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") },
-      { name: "numLevels", type: "integer" },
-      { name: "tileSize", type: "number" },
-      { name: "channel", type: "string" },
-    ]);
+    .concat(RESERVED_PARAMETERS);
 }
 
 class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -384,18 +385,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       this.channel = channel;
     }
 
-    const reservedKeys = new Set([
-      "minX",
-      "minY",
-      "minZ",
-      "maxX",
-      "maxY",
-      "maxZ",
-      "encoding",
-      "numLevels",
-      "tileSize",
-      "channel",
-    ]);
+	const reservedKeys = new Set(RESERVED_PARAMETERS.map(({ name }) => name));
 
     this.renderArgs = {};
     for (const [key, value] of Object.entries(parameters)) {
