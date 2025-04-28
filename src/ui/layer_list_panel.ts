@@ -92,8 +92,6 @@ export class LayerVisibilityWidget extends RefCounted {
         this.layer.setVisible(true);
       },
     });
-    element.style.display = "flex";
-    element.style.alignItems = "center";
     hideIcon.classList.add("neuroglancer-layer-list-panel-eye-icon");
     showIcon.classList.add("neuroglancer-layer-list-panel-eye-icon");
     element.appendChild(showIcon);
@@ -123,20 +121,17 @@ class LayerColorWidget extends RefCounted {
       "neuroglancer-layer-list-panel-color-value-wrapper";
     elementWrapper.appendChild(element);
     const updateLayerColorWidget = () => {
-      element.classList.remove("rainbow");
-      element.classList.remove("unsupported");
       const color = this.layer.layerBarColor;
       if (color) {
         element.style.backgroundColor = color;
         element.title = "Primary layer color";
-        element.classList.remove("rainbow");
       } else {
         if (this.layer.supportsLayerBarColorSyncOption) {
           element.title = "Multi-colored layer";
-          element.classList.add("rainbow");
+          element.dataset.color = "rainbow";
         } else {
           element.title = "Layer does not support color legend";
-          element.classList.add("unsupported");
+          element.dataset.color = "unsupported";
         }
         element.style.backgroundColor = "";
       }
@@ -148,11 +143,7 @@ class LayerColorWidget extends RefCounted {
     );
     this.registerDisposer(
       layer.layerChanged.add(() => {
-        if (!this.layer.visible) {
-          elementWrapper.classList.add("cross");
-        } else {
-          elementWrapper.classList.remove("cross");
-        }
+        elementWrapper.dataset.visible = this.layer.visible.toString();
         updateLayerColorWidget();
       }),
     );
