@@ -152,6 +152,7 @@ class LayerColorWidget extends RefCounted {
         updateLayerColorWidget();
       }),
     );
+    updateLayerColorWidget();
   }
 }
 
