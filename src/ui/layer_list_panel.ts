@@ -25,7 +25,6 @@ import type {
 } from "#src/layer/index.js";
 import { deleteLayer } from "#src/layer/index.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
-import { observeWatchable } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -138,12 +137,6 @@ class LayerColorWidget extends RefCounted {
         element.style.backgroundColor = "";
       }
     };
-    this.registerDisposer(
-      observeWatchable((layerColorEnabled) => {
-        elementWrapper.style.display = layerColorEnabled ? "block" : "none";
-        updateLayerColorWidget();
-      }, panel.sidePanelManager.viewerState.enableLayerColorWidget),
-    );
     this.registerDisposer(
       layer.observeLayerColor(() => {
         updateLayerColorWidget();

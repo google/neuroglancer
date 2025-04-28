@@ -29,6 +29,10 @@ import {
   registerLayerDragHandlers,
 } from "#src/ui/layer_drag_and_drop.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import {
+  parseRGBColorSpecification,
+  useWhiteBackground,
+} from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
@@ -36,10 +40,6 @@ import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
-import {
-  parseRGBColorSpecification,
-  useWhiteBackground,
-} from "#src/util/color.js";
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
@@ -173,27 +173,23 @@ class LayerWidget extends RefCounted {
     title += ", drag to move, shift+drag to copy";
     element.title = title;
     // Color widget updates
-    if (panel.layerGroupViewer.viewerState.enableLayerColorWidget.value) {
-      if (layer.supportsLayerBarColorSyncOption) {
-        const color = layer.layerBarColor;
-        if (color) {
-          element.dataset.color = "fixed";
-          labelElement.style.backgroundColor = color;
-          const textColor = useWhiteBackground(
-            parseRGBColorSpecification(color),
-          )
-            ? "white"
-            : "black";
-          labelElement.style.color = textColor;
-        } else {
-          element.dataset.color = "rainbow";
-          labelElement.style.color = "black";
-        }
+    if (layer.supportsLayerBarColorSyncOption) {
+      const color = layer.layerBarColor;
+      if (color) {
+        element.dataset.color = "fixed";
+        labelElement.style.backgroundColor = color;
+        const textColor = useWhiteBackground(parseRGBColorSpecification(color))
+          ? "white"
+          : "black";
+        labelElement.style.color = textColor;
       } else {
-        labelElement.style.backgroundColor = "";
-        labelElement.style.color = "white";
-        element.dataset.color = "unsupported";
+        element.dataset.color = "rainbow";
+        labelElement.style.color = "black";
       }
+    } else {
+      labelElement.style.backgroundColor = "";
+      labelElement.style.color = "white";
+      element.dataset.color = "unsupported";
     }
     labelElement.title =
       layer.colorWidgetTooltip() ||
@@ -242,10 +238,6 @@ export class LayerBar extends RefCounted {
     return this.layerGroupViewer.viewerNavigationState;
   }
 
-  get viewerState() {
-    return this.layerGroupViewer.viewerState;
-  }
-
   constructor(
     public layerGroupViewer: LayerGroupViewer,
     public getLayoutSpecForDrag: () => any,
@@ -263,7 +255,7 @@ export class LayerBar extends RefCounted {
       ),
     );
 
-    const { element, manager, selectedLayer, viewerState } = this;
+    const { element, manager, selectedLayer } = this;
     element.className = "neuroglancer-layer-panel";
     this.registerDisposer(
       manager.layerSelectedValues.changed.add(() => {
@@ -283,11 +275,6 @@ export class LayerBar extends RefCounted {
     this.registerDisposer(
       showLayerHoverValues.changed.add(() => {
         this.handleLayerItemValueChanged();
-      }),
-    );
-    this.registerDisposer(
-      viewerState.enableLayerColorWidget.changed.add(() => {
-        this.handleLayersChanged();
       }),
     );
     this.element.dataset.showHoverValues =

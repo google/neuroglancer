@@ -36,5 +36,4 @@ export interface ViewerState extends VisibilityPrioritySpecification {
   layerManager: LayerManager;
   selectedLayer: SelectedLayerState;
   selectionDetailsState: TrackableDataSelectionState;
-  enableLayerColorWidget: TrackableBoolean;
 }
