@@ -161,7 +161,6 @@ class LayerWidget extends RefCounted {
     labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
     element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
-    element.dataset.pick = layer.pickEnabled.toString();
     let title = `Click to ${
       layer.visible ? "hide" : "show"
     }, control+click to show side panel`;
@@ -176,20 +175,18 @@ class LayerWidget extends RefCounted {
     if (layer.supportsLayerBarColorSyncOption) {
       const color = layer.layerBarColor;
       if (color) {
-        element.dataset.color = "fixed";
         labelElement.style.backgroundColor = color;
         const textColor = useWhiteBackground(parseRGBColorSpecification(color))
           ? "white"
           : "black";
         labelElement.style.color = textColor;
       } else {
-        element.dataset.color = "rainbow";
-        labelElement.style.color = "black";
+        labelElement.dataset.color = "rainbow";
+        labelElement.style.color = "white";
       }
     } else {
-      labelElement.style.backgroundColor = "";
+      labelElement.style.backgroundColor = "#222";
       labelElement.style.color = "white";
-      element.dataset.color = "unsupported";
     }
   }
 
