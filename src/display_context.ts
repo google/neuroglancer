@@ -643,8 +643,8 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       orderedPanels.sort((a, b) => a.drawOrder - b.drawOrder);
     }
     for (const panel of orderedPanels) {
-      if (!panel.shouldDraw) continue;
       panel.ensureBoundsUpdated();
+      if (!panel.shouldDraw) continue;
       const { renderViewport } = panel;
       if (renderViewport.width === 0 || renderViewport.height === 0) continue;
       panel.draw();

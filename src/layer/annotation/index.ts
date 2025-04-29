@@ -44,6 +44,7 @@ import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transfo
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import {
+  ElementVisibilityFromTrackableBoolean,
   TrackableBoolean,
   TrackableBooleanCheckbox,
 } from "#src/trackable_boolean.js";
@@ -793,6 +794,13 @@ class RenderingOptionsTab extends Tab {
         },
       ),
     ).element;
+
+    layer.registerDisposer(
+      new ElementVisibilityFromTrackableBoolean(
+        layer.codeVisible,
+        shaderProperties,
+      ),
+    );
 
     element.appendChild(shaderProperties);
     element.appendChild(
