@@ -88,7 +88,7 @@
   width: 10px;
 }
 
-.neuroglancer-layer-list-panel-color-value.rainbow {
+.neuroglancer-layer-list-panel-color-value[data-color="rainbow"] {
   position: relative;
   border-radius: 50%;
   height: 10px;
@@ -96,7 +96,7 @@
   overflow: hidden;
 }
 
-.neuroglancer-layer-list-panel-color-value.rainbow::before {
+.neuroglancer-layer-list-panel-color-value[data-color="rainbow"]::before {
   content: "";
   position: absolute;
   top: -17.5%;
@@ -117,7 +117,7 @@
   transform: scale(1.35);
 }
 
-.neuroglancer-layer-list-panel-color-value.unsupported {
+.neuroglancer-layer-list-panel-color-value[data-color="unsupported"] {
   background-image: linear-gradient(
       45deg,
       rgba(128, 128, 128, 1.5) 25%,
@@ -134,18 +134,13 @@
     -2px 0px;
 }
 
-.neuroglancer-layer-list-panel-color-value-wrapper.unsupported::before {
-  position: relative;
+.neuroglancer-layer-list-panel-color-value-wrapper[data-visible="false"]
+  .neuroglancer-layer-list-panel-color-value {
+  opacity: 0.3;
 }
 
-.neuroglancer-layer-list-panel-color-value-wrapper.cross
-  .neuroglancer-layer-list-panel-color-value,
-.neuroglancer-layer-list-panel-color-value-wrapper.cross
-  .neuroglancer-layer-list-panel-color-value.rainbow::before {
-  opacity: 0.4;
-}
-
-.neuroglancer-layer-list-panel-color-value-wrapper.cross::before {
+/* Place a / over the color value in widget when it is not visible */
+.neuroglancer-layer-list-panel-color-value-wrapper[data-visible="false"]::before {
   content: "";
   position: absolute;
   top: 50%;

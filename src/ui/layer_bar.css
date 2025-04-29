@@ -62,14 +62,9 @@
   border-color: #daa520;
 }
 
-.neuroglancer-layer-item[data-pick="true"] .neuroglancer-layer-item-label {
-  background-color: #939;
-}
-
 .neuroglancer-layer-item-label {
   display: inline-block;
   position: relative;
-  background-color: #222;
   padding-right: 3px;
 }
 
@@ -134,99 +129,22 @@
   align-items: center;
 }
 
-.neuroglancer-layer-color-value {
-  border-radius: 50%;
-  height: 10px;
-  width: 10px;
-}
-
-.neuroglancer-layer-item[data-color="fixed"] .neuroglancer-layer-color-value {
-  border-radius: 50%;
-  height: 10px;
-  width: 10px;
-}
-
-.neuroglancer-layer-item[data-color="rainbow"] .neuroglancer-layer-color-value {
-  position: relative;
-  border-radius: 50%;
-  height: 10px;
-  width: 10px;
-  overflow: hidden;
-}
-
-.neuroglancer-layer-item[data-color="rainbow"]
-  .neuroglancer-layer-color-value::before {
-  content: "";
-  position: absolute;
-  top: -17.5%;
-  left: -17.5%;
-  width: 135%;
-  height: 135%;
-  background: conic-gradient(
-    from 0deg,
-    hsl(0, 100%, 50%),
-    hsl(60, 100%, 50%),
-    hsl(120, 100%, 50%),
-    hsl(180, 100%, 50%),
-    hsl(240, 100%, 50%),
-    hsl(300, 100%, 50%),
-    hsl(360, 100%, 50%)
+.neuroglancer-layer-item-label[data-color="rainbow"] {
+  background: linear-gradient(
+    90deg,
+    #6a1b9a 0%,
+    #283593 25%,
+    #00695c 50%,
+    #2e7d32 75%,
+    #f57f17 100%
   );
-  filter: blur(1px);
-  transform: scale(1.35);
-}
-
-.neuroglancer-layer-item[data-color="unsupported"]
-  .neuroglancer-layer-color-value {
-  background-image: linear-gradient(
-      45deg,
-      rgba(128, 128, 128, 1.5) 25%,
-      transparent 25%
-    ),
-    linear-gradient(-45deg, rgba(128, 128, 128, 1.5) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 1.5) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 1.5) 75%);
-  background-size: 4px 4px;
-  background-position:
-    0 0,
-    0 2px,
-    2px -2px,
-    -2px 0px;
-}
-
-.neuroglancer-layer-color-value-wrapper {
-  position: relative;
-  width: 10px;
-  height: 10px;
-  padding: 5px;
-  margin: 0 4px;
-}
-
-.neuroglancer-layer-item[data-color="unsupported"]
-  .neuroglancer-layer-color-value-wrapper {
-  position: relative;
 }
 
 .neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-color-value-wrapper
-  .neuroglancer-layer-color-value,
+  .neuroglancer-layer-item-label[data-color="rainbow"],
 .neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-color-value-wrapper
-  .neuroglancer-layer-color-value::before {
-  opacity: 0.4;
-}
-
-.neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-color-value-wrapper::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 18px;
-  height: 1px;
-  background-color: rgb(255, 255, 255);
-  transform: translate(-50%, -50%) rotate(135deg);
-  z-index: 1;
+  .neuroglancer-layer-item-label[data-color="solid"] {
+  opacity: 0.6;
 }
 
 .neuroglancer-layer-item-value {

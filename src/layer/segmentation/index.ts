@@ -1330,20 +1330,6 @@ export class SegmentationUserLayer extends Base {
     return undefined;
   }
 
-  colorWidgetTooltip(): string {
-    if (this.displayState.segmentDefaultColor.value) {
-      return `The color comes from the manually selected color`;
-    }
-
-    const visibleSegments =
-      this.displayState.segmentationGroupState.value.visibleSegments;
-    if (visibleSegments.size === 1) {
-      const id = [...visibleSegments][0];
-      return `The color of the visible segment with id "${id}"`;
-    }
-    return "The segmentation layer has multiple segments visible";
-  }
-
   static type = "segmentation";
   static typeAbbreviation = "seg";
   static supportsPickOption = true;
