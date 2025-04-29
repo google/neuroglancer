@@ -738,11 +738,9 @@ export class ToolPalettePanel extends SidePanel {
           },
           set value(newValue: boolean) {
             self.state.verticalStacking.value = newValue;
-            if (newValue === false && state.verticalStacking.value !== false) {
-              self.state.stackingMode.value = StackingMode.HORIZONTAL;
-            } else {
-              self.state.stackingMode.value = StackingMode.VERTICAL;
-            }
+            self.state.stackingMode.value = newValue
+              ? StackingMode.VERTICAL
+              : StackingMode.HORIZONTAL;
           },
         },
         {
@@ -814,13 +812,17 @@ export class ToolPalettePanel extends SidePanel {
     const debouncedRender = this.registerCancellable(
       animationFrameDebounce(() => this.render()),
     );
-    this.registerDisposer(this.state.tools.changed.add(debouncedRender));
     this.registerDisposer(
-      this.state.tools.changed.add(() => this.handleNumToolsChange()),
+      this.state.tools.changed.add(() => {
+        this.handleNumToolsChange();
+        debouncedRender();
+      }),
     );
-    this.registerDisposer(this.queryResults.changed.add(debouncedRender));
     this.registerDisposer(
-      this.queryResults.changed.add(() => this.handleNumToolsChange()),
+      this.queryResults.changed.add(() => {
+        this.handleNumToolsChange();
+        debouncedRender();
+      }),
     );
     this.registerDisposer(
       this.state.verticalStacking.changed.add(() => {
