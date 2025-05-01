@@ -117,8 +117,7 @@ class LayerColorWidget extends RefCounted {
     super();
     const { colorIndicator, element } = this;
     colorIndicator.className = "neuroglancer-layer-list-panel-color-value";
-    element.className =
-      "neuroglancer-layer-list-panel-color-value-wrapper";
+    element.className = "neuroglancer-layer-list-panel-color-value-wrapper";
     element.appendChild(colorIndicator);
     const updateLayerColorWidget = () => {
       const color = this.layer.layerBarColor;

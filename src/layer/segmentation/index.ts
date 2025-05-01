@@ -45,7 +45,7 @@ import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
-import { SegmentColorHash } from "#src/segment_color.js";
+import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -54,6 +54,7 @@ import type {
 import {
   augmentSegmentId,
   bindSegmentListWidth,
+  getBaseObjectColor,
   makeSegmentWidget,
   maybeAugmentSegmentId,
   registerCallbackWhenSegmentationDisplayStateChanged,
@@ -1311,19 +1312,12 @@ export class SegmentationUserLayer extends Base {
   }
 
   get automaticLayerBarColor() {
-    if (this.displayState.segmentDefaultColor.value) {
-      const [r, g, b] = this.displayState.segmentDefaultColor.value;
-      return `rgb(${r * 255}, ${g * 255}, ${b * 255})`;
-    }
-
     const visibleSegments =
       this.displayState.segmentationGroupState.value.visibleSegments;
     if (visibleSegments.size === 1) {
-      const id = [...visibleSegments][0];
-      const color =
-        this.displayState.segmentationColorGroupState.value.segmentColorHash.computeCssColor(
-          id,
-        );
+      const color = getCssColor(
+        getBaseObjectColor(this.displayState, [...visibleSegments][0]),
+      );
       return color;
     }
 
