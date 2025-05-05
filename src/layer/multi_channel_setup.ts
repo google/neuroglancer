@@ -25,6 +25,7 @@ import {
   type ManagedUserLayer,
   type UserLayer,
 } from "#src/layer/index.js";
+import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
@@ -211,7 +212,7 @@ function setupLayerPostCreation(
     }
   };
 
-  function setDefaultsWhenReady() {
+  const setDefaultsWhenReady = () => {
     const maxWait = 2000;
     const startTime = Date.now();
     const waitForShaderWidgetsReady = debounce(() => {
@@ -230,14 +231,20 @@ function setupLayerPostCreation(
     }, 100);
 
     waitForShaderWidgetsReady();
-  }
+  };
 
-  function setVolumeRenderingSamples() {
+  const setVolumeRenderingSamples = () => {
     userImageLayer.volumeRenderingDepthSamplesTarget.value =
       DEFAULT_VOLUME_RENDERING_SAMPLES;
-  }
+  };
+
+  const set2DBlending = () => {
+    userImageLayer.blendMode.value = BLEND_MODES.ADDITIVE;
+    userImageLayer.opacity.value = 1.0;
+  };
 
   postCreationSetupFunctions.push(setVolumeRenderingSamples);
+  postCreationSetupFunctions.push(set2DBlending);
   postCreationSetupFunctions.push(setDefaultsWhenReady);
 }
 
