@@ -84,6 +84,8 @@ def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
         chain = chain.move_to_element_with_offset(
             webdriver.root_element, 100 + 50 * i, 100 + 50 * i
         ).click()
+        if tool == "annotatePolyline" and i == num_clicks - 1:
+            chain = chain.click()
     chain.key_up(Keys.CONTROL)
     chain.perform()
     webdriver.sync()
