@@ -67,16 +67,16 @@ import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 const VALID_ENCODINGS = new Set<string>(["jpg", "raw16", "png", "png16"]);
 const RESERVED_PARAMETERS = [
-	{ name: "minX", type: "number" },
-	{ name: "minY", type: "number" },
-	{ name: "minZ", type: "number" },
-	{ name: "maxX", type: "number" },
-	{ name: "maxY", type: "number" },
-	{ name: "maxZ", type: "number" },
-	{ name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") },
-	{ name: "numLevels", type: "integer" },
-	{ name: "tileSize", type: "number" },
-	{ name: "channel", type: "string" },
+  { name: "minX", type: "number" },
+  { name: "minY", type: "number" },
+  { name: "minZ", type: "number" },
+  { name: "maxX", type: "number" },
+  { name: "maxY", type: "number" },
+  { name: "maxZ", type: "number" },
+  { name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") },
+  { name: "numLevels", type: "integer" },
+  { name: "tileSize", type: "number" },
+  { name: "channel", type: "string" },
 ];
 
 const TileChunkSourceBase = WithParameters(
@@ -385,7 +385,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       this.channel = channel;
     }
 
-	const reservedKeys = new Set(RESERVED_PARAMETERS.map(({ name }) => name));
+    const reservedKeys = new Set(RESERVED_PARAMETERS.map(({ name }) => name));
 
     this.renderArgs = {};
     for (const [key, value] of Object.entries(parameters)) {
