@@ -108,6 +108,7 @@ interface StackInfo {
 interface QueryParameterInfo {
   name: string;
   type: string;
+  required?: boolean;
 }
 
 function parseOwnerInfo(obj: any): OwnerInfo {
@@ -286,15 +287,13 @@ function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
     "/v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/raw-image";
   const boxImageApi = obj.paths[boxImageApiKey];
   if (boxImageApi === undefined) {
-    // Could not retrieve api, skipping dynamic parameter hints
+    console.warn(
+      "Could not retrieve API schema, skipping dynamic parameter hints",
+    );
     return RESERVED_PARAMETERS;
   }
 
-  const boxImageParameters = boxImageApi.get.parameters as Array<{
-    name: string;
-    type: string;
-    required?: boolean;
-  }>;
+  const boxImageParameters = boxImageApi.get.parameters as QueryParameterInfo[];
 
   // Return optional parameters from render API and extend list with hardcoded options
   return boxImageParameters
@@ -536,7 +535,7 @@ export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
   return counter;
 }
 
-export function getOwnerInfo(
+export async function getOwnerInfo(
   chunkManager: ChunkManager,
   hostname: string,
   owner: string,
@@ -552,7 +551,7 @@ export function getOwnerInfo(
   );
 }
 
-export function getQueryParameterInfo(
+export async function getQueryParameterInfo(
   chunkManager: ChunkManager,
   hostname: string,
   options: Partial<ProgressOptions>,
@@ -691,7 +690,7 @@ export async function stackAndProjectCompleter(
       (x) => x[0] + "/",
       () => undefined,
     );
-    return { offset: offset, completions };
+    return { offset, completions };
   }
 
   // Autocomplete the stack name
@@ -716,7 +715,7 @@ export async function stackAndProjectCompleter(
         return x[1].project;
       },
     );
-    return { offset: offset, completions };
+    return { offset, completions };
   }
 
   // Autocomplete the channel
@@ -747,7 +746,7 @@ export async function stackAndProjectCompleter(
     (x) => x,
     () => undefined,
   );
-  return { offset: offset, completions };
+  return { offset, completions };
 }
 
 export async function queryParameterCompleter(
@@ -774,7 +773,7 @@ export async function queryParameterCompleter(
     (x) => x.name,
     (x) => x.type,
   );
-  return { offset: offset, completions };
+  return { offset, completions };
 }
 
 export async function volumeCompleter(
