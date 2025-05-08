@@ -1320,9 +1320,17 @@ export class SegmentationUserLayer extends Base {
         const color = getCssColor(
           getBaseObjectColor(this.displayState, [...visibleSegments][i]),
         );
-        colors.push(color);
+        colors.push({ color, id: [...visibleSegments][i] });
       }
-      return colors;
+      // Sort the colors by their segment ID
+      // Otherwise, the order is random which is a bit confusing in the UI
+      colors.sort((a, b) => {
+        const aId = a.id;
+        const bId = b.id;
+        return aId < bId ? -1 : aId > bId ? 1 : 0;
+      });
+      // Extract just the colors
+      return colors.map((color) => color.color);
     }
 
     return undefined;
