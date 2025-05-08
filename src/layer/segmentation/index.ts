@@ -1314,11 +1314,15 @@ export class SegmentationUserLayer extends Base {
   get automaticLayerBarColors() {
     const visibleSegments =
       this.displayState.segmentationGroupState.value.visibleSegments;
-    if (visibleSegments.size === 1) {
-      const color = getCssColor(
-        getBaseObjectColor(this.displayState, [...visibleSegments][0]),
-      );
-      return [color];
+    if (visibleSegments.size > 0 && visibleSegments.size <= 3) {
+      const colors = [];
+      for (let i = 0; i < visibleSegments.size; i++) {
+        const color = getCssColor(
+          getBaseObjectColor(this.displayState, [...visibleSegments][i]),
+        );
+        colors.push(color);
+      }
+      return colors;
     }
 
     return undefined;

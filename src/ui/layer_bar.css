@@ -144,6 +144,11 @@
   z-index: 0;
 }
 
+.neuroglancer-layer-item-label-color[data-color="multi"] {
+  transform: scale(1.2);
+  filter: blur(8px);
+}
+
 .neuroglancer-layer-item-label-color[data-color="rainbow"] {
   background: linear-gradient(
     90deg,

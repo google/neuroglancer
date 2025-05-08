@@ -30,6 +30,7 @@ import {
 } from "#src/ui/layer_drag_and_drop.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import {
+  createSteppedCssGradient,
   parseRGBColorSpecification,
   useWhiteBackground,
 } from "#src/util/color.js";
@@ -166,24 +167,49 @@ class LayerWidget extends RefCounted {
 
   setColor() {
     const { labelColorElement, labelElement, layer } = this;
-    if (layer.supportsLayerBarColorSyncOption && layer.visible) {
-      const color = layer.layerBarColors;
-      if (color !== undefined) {
-        labelColorElement.style.backgroundColor = color[0];
-        const textColor = useWhiteBackground(parseRGBColorSpecification(color[0]))
-          ? "white"
-          : "black";
-        labelColorElement.dataset.color = "solid";
-        labelElement.style.color = textColor;
-      } else {
-        labelColorElement.dataset.color = "rainbow";
-        labelColorElement.style.color = "white";
-      }
-    } else {
-      labelColorElement.style.backgroundColor = "#222";
-      labelColorElement.style.color = "";
-      labelColorElement.dataset.color = "none";
+
+    const setNoColor = () => {
+      labelColorElement.style.background = "";
+      labelColorElement.style.backgroundColor = "";
+      labelElement.style.color = "";
+      labelColorElement.dataset.color = "solid";
+    };
+    const setRainbow = () => {
+      labelColorElement.style.background = "";
+      labelColorElement.dataset.color = "rainbow";
+      labelElement.style.color = "white";
+    };
+
+    if (!layer.supportsLayerBarColorSyncOption || !layer.visible) {
+      setNoColor();
+      return;
     }
+    const colors = layer.layerBarColors;
+    if (colors === undefined) {
+      setRainbow();
+      return;
+    }
+
+    const setSolidColor = () => {
+      labelColorElement.style.background = "";
+      labelColorElement.style.backgroundColor = colors[0];
+      labelColorElement.dataset.color = "solid";
+      const textColor = useWhiteBackground(
+        parseRGBColorSpecification(colors[0]),
+      )
+        ? "white"
+        : "black";
+      labelElement.style.color = textColor;
+    };
+
+    const setMultiColor = () => {
+      labelColorElement.style.background = createSteppedCssGradient(colors);
+      labelColorElement.dataset.color = "multi";
+      labelElement.style.color = "white";
+    };
+
+    if (colors.length === 1) setSolidColor();
+    else setMultiColor();
   }
 
   update() {
