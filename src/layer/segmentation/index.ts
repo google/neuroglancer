@@ -1312,28 +1312,28 @@ export class SegmentationUserLayer extends Base {
   }
 
   get automaticLayerBarColors() {
-    const visibleSegments =
+    const visibleSegmentsSet =
       this.displayState.segmentationGroupState.value.visibleSegments;
-    if (visibleSegments.size > 0 && visibleSegments.size <= 3) {
-      const colors = [];
-      for (let i = 0; i < visibleSegments.size; i++) {
-        const color = getCssColor(
-          getBaseObjectColor(this.displayState, [...visibleSegments][i]),
-        );
-        colors.push({ color, id: [...visibleSegments][i] });
-      }
-      // Sort the colors by their segment ID
-      // Otherwise, the order is random which is a bit confusing in the UI
-      colors.sort((a, b) => {
-        const aId = a.id;
-        const bId = b.id;
-        return aId < bId ? -1 : aId > bId ? 1 : 0;
-      });
-      // Extract just the colors
-      return colors.map((color) => color.color);
+    if (visibleSegmentsSet.size === 0 || visibleSegmentsSet.size > 3) {
+      return undefined;
     }
+    const visibleSegments = [...visibleSegmentsSet];
+    const colors = visibleSegments.map((id) => {
+      const color = getCssColor(
+        getBaseObjectColor(this.displayState, id),
+      );
+      return { color, id };
+    });
 
-    return undefined;
+    // Sort the colors by their segment ID
+    // Otherwise, the order is random which is a bit confusing in the UI
+    colors.sort((a, b) => {
+      const aId = a.id;
+      const bId = b.id;
+      return aId < bId ? -1 : aId > bId ? 1 : 0;
+    });
+    // Extract just the colors
+    return colors.map((color) => color.color);
   }
 
   static type = "segmentation";
