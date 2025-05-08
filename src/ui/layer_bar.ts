@@ -172,7 +172,7 @@ class LayerWidget extends RefCounted {
     title += ", drag to move, shift+drag to copy";
     element.title = title;
     // Color widget updates
-    if (layer.supportsLayerBarColorSyncOption) {
+    if (layer.supportsLayerBarColorSyncOption && layer.visible) {
       const color = layer.layerBarColor;
       if (color) {
         labelElement.style.backgroundColor = color;
@@ -188,6 +188,7 @@ class LayerWidget extends RefCounted {
     } else {
       labelElement.style.backgroundColor = "#222";
       labelElement.style.color = "";
+      labelElement.dataset.color = "none";
     }
   }
 
