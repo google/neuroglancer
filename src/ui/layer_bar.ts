@@ -45,6 +45,7 @@ class LayerWidget extends RefCounted {
   element = document.createElement("div");
   layerNumberElement = document.createElement("div");
   labelElement = document.createElement("div");
+  labelColorElement = document.createElement("div");
   visibleProgress = document.createElement("div");
   prefetchProgress = document.createElement("div");
   labelElementText = document.createTextNode("");
@@ -60,6 +61,7 @@ class LayerWidget extends RefCounted {
     const {
       element,
       labelElement,
+      labelColorElement,
       layerNumberElement,
       valueElement,
       visibleProgress,
@@ -75,6 +77,12 @@ class LayerWidget extends RefCounted {
     prefetchProgress.className = "neuroglancer-layer-item-prefetch-progress";
     layerNumberElement.className = "neuroglancer-layer-item-number";
     valueElement.className = "neuroglancer-layer-item-value";
+
+    labelColorElement.className = "neuroglancer-layer-item-label-color";
+    const labelWrapper = document.createElement("div");
+    labelWrapper.className = "neuroglancer-layer-item-label-wrapper";
+    labelWrapper.appendChild(labelElement);
+    labelWrapper.appendChild(labelColorElement);
 
     const valueContainer = document.createElement("div");
     valueContainer.className = "neuroglancer-layer-item-value-container";
@@ -114,7 +122,7 @@ class LayerWidget extends RefCounted {
     valueContainer.appendChild(buttonContainer);
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
-    element.appendChild(labelElement);
+    element.appendChild(labelWrapper);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
       new PositionWidget(
@@ -157,7 +165,14 @@ class LayerWidget extends RefCounted {
   }
 
   update() {
-    const { layer, element, panel, labelElement, labelElementText } = this;
+    const {
+      layer,
+      element,
+      panel,
+      labelElement,
+      labelColorElement,
+      labelElementText,
+    } = this;
     labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
     element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
@@ -175,20 +190,20 @@ class LayerWidget extends RefCounted {
     if (layer.supportsLayerBarColorSyncOption && layer.visible) {
       const color = layer.layerBarColor;
       if (color) {
-        labelElement.style.backgroundColor = color;
+        labelColorElement.style.backgroundColor = color;
         const textColor = useWhiteBackground(parseRGBColorSpecification(color))
           ? "white"
           : "black";
-        labelElement.dataset.color = "solid";
+        labelColorElement.dataset.color = "solid";
         labelElement.style.color = textColor;
       } else {
-        labelElement.dataset.color = "rainbow";
-        labelElement.style.color = "white";
+        labelColorElement.dataset.color = "rainbow";
+        labelColorElement.style.color = "white";
       }
     } else {
-      labelElement.style.backgroundColor = "#222";
-      labelElement.style.color = "";
-      labelElement.dataset.color = "none";
+      labelColorElement.style.backgroundColor = "#222";
+      labelColorElement.style.color = "";
+      labelColorElement.dataset.color = "none";
     }
   }
 
