@@ -126,7 +126,7 @@ class LayerColorWidget extends RefCounted {
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "unsupported";
         colorIndicator.title = "Layer type does not support color legend";
-      }
+      };
       if (!this.layer.supportsLayerBarColorSyncOption) {
         setNoColor();
         return;
@@ -134,7 +134,7 @@ class LayerColorWidget extends RefCounted {
       const setRainbow = () => {
         colorIndicator.dataset.color = "rainbow";
         colorIndicator.title = "Multi-colored layer";
-      }
+      };
       if (colors === undefined) {
         setRainbow();
         return;
@@ -144,15 +144,14 @@ class LayerColorWidget extends RefCounted {
         colorIndicator.style.backgroundColor = colors[0];
         colorIndicator.dataset.color = "solid";
         colorIndicator.title = "Primary layer color";
-      }
+      };
 
       const setMultiColor = () => {
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "multi";
-        colorIndicator.style.background = createSteppedCssGradient(
-          colors)
+        colorIndicator.style.background = createSteppedCssGradient(colors);
         colorIndicator.title = "Primary layer colors";
-      }
+      };
 
       if (colors.length === 1) setSingleColor();
       else setMultiColor();

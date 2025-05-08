@@ -1319,9 +1319,7 @@ export class SegmentationUserLayer extends Base {
     }
     const visibleSegments = [...visibleSegmentsSet];
     const colors = visibleSegments.map((id) => {
-      const color = getCssColor(
-        getBaseObjectColor(this.displayState, id),
-      );
+      const color = getCssColor(getBaseObjectColor(this.displayState, id));
       return { color, id };
     });
 
