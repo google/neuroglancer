@@ -110,6 +110,7 @@ export class LayerVisibilityWidget extends RefCounted {
 class LayerColorWidget extends RefCounted {
   element = document.createElement("div");
   colorIndicator = document.createElement("div");
+  private isListeningForColorChange = false;
 
   constructor(
     public panel: LayerListPanel,
@@ -157,8 +158,13 @@ class LayerColorWidget extends RefCounted {
       else setMultiColor();
     };
     this.registerDisposer(
-      layer.observeLayerColor(() => {
-        updateLayerColorWidget();
+      this.layer.readyStateChanged.add(() => {
+        if (this.isListeningForColorChange) return;
+        this.registerDisposer(
+          layer.observeLayerColor(() => {
+            updateLayerColorWidget();
+          }),
+        );
       }),
     );
     this.registerDisposer(
