@@ -77,8 +77,6 @@
 
 .neuroglancer-layer-list-panel-color-value-wrapper {
   position: relative;
-  width: 10px;
-  height: 10px;
   padding: 5px;
 }
 
@@ -86,14 +84,11 @@
   border-radius: 50%;
   height: 10px;
   width: 10px;
+  overflow: hidden;
 }
 
 .neuroglancer-layer-list-panel-color-value[data-color="rainbow"] {
   position: relative;
-  border-radius: 50%;
-  height: 10px;
-  width: 10px;
-  overflow: hidden;
 }
 
 .neuroglancer-layer-list-panel-color-value[data-color="rainbow"]::before {
