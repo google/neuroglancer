@@ -144,7 +144,7 @@
   z-index: 0;
 }
 
-.neuroglancer-layer-item-label[data-color="rainbow"] {
+.neuroglancer-layer-item-label-color[data-color="rainbow"] {
   background: linear-gradient(
     90deg,
     #6a1b9a 0%,
@@ -153,13 +153,6 @@
     #2e7d32 75%,
     #f57f17 100%
   );
-}
-
-.neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-item-label[data-color="rainbow"],
-.neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-item-label[data-color="solid"] {
-  opacity: 0.6;
 }
 
 .neuroglancer-layer-item-value {
