@@ -120,9 +120,9 @@ class LayerColorWidget extends RefCounted {
     element.className = "neuroglancer-layer-list-panel-color-value-wrapper";
     element.appendChild(colorIndicator);
     const updateLayerColorWidget = () => {
-      const color = this.layer.layerBarColor;
+      const color = this.layer.layerBarColors;
       if (color) {
-        colorIndicator.style.backgroundColor = color;
+        colorIndicator.style.backgroundColor = color[0];
         colorIndicator.title = "Primary layer color";
       } else {
         if (this.layer.supportsLayerBarColorSyncOption) {

@@ -196,12 +196,12 @@ export class UserLayer extends RefCounted {
     return () => {};
   }
 
-  get automaticLayerBarColor(): string | undefined {
-    return "";
+  get automaticLayerBarColors(): string[] | undefined {
+    return [""];
   }
 
-  get layerBarColor(): string | undefined {
-    return this.automaticLayerBarColor;
+  get layerBarColors(): string[] | undefined {
+    return this.automaticLayerBarColors;
   }
 
   initializeSelectionState(state: this["selectionState"]) {
@@ -752,9 +752,9 @@ export class ManagedUserLayer extends RefCounted {
     }
   }
 
-  get layerBarColor(): string | undefined {
+  get layerBarColors(): string[] | undefined {
     const userLayer = this.layer;
-    return userLayer?.layerBarColor;
+    return userLayer?.layerBarColors;
   }
 
   observeLayerColor(callback: () => void): () => void {

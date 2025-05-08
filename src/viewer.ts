@@ -429,7 +429,6 @@ export class Viewer extends RefCounted implements ViewerState {
     vec3.fromValues(0.5, 0.5, 0.5),
   );
   perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
-
   scaleBarOptions = new TrackableScaleBarOptions();
   partialViewport = new TrackableWindowedViewport();
   statisticsDisplayState = new StatisticsDisplayState();

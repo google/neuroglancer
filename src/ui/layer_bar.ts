@@ -164,34 +164,13 @@ class LayerWidget extends RefCounted {
     registerLayerBarDropHandlers(this.panel, element, this.layer);
   }
 
-  update() {
-    const {
-      layer,
-      element,
-      panel,
-      labelElement,
-      labelColorElement,
-      labelElementText,
-    } = this;
-    labelElementText.textContent = layer.name;
-    element.dataset.visible = layer.visible.toString();
-    element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
-    let title = `Click to ${
-      layer.visible ? "hide" : "show"
-    }, control+click to show side panel`;
-    if (layer.supportsPickOption) {
-      title += `, alt+click to ${
-        layer.pickEnabled ? "disable" : "enable"
-      } spatial object selection`;
-    }
-    title += ", drag to move, shift+drag to copy";
-    element.title = title;
-    // Color widget updates
+  setColor() {
+    const { labelColorElement, labelElement, layer } = this;
     if (layer.supportsLayerBarColorSyncOption && layer.visible) {
-      const color = layer.layerBarColor;
-      if (color) {
-        labelColorElement.style.backgroundColor = color;
-        const textColor = useWhiteBackground(parseRGBColorSpecification(color))
+      const color = layer.layerBarColors;
+      if (color !== undefined) {
+        labelColorElement.style.backgroundColor = color[0];
+        const textColor = useWhiteBackground(parseRGBColorSpecification(color[0]))
           ? "white"
           : "black";
         labelColorElement.dataset.color = "solid";
@@ -205,6 +184,24 @@ class LayerWidget extends RefCounted {
       labelColorElement.style.color = "";
       labelColorElement.dataset.color = "none";
     }
+  }
+
+  update() {
+    const { layer, element, panel, labelElementText } = this;
+    labelElementText.textContent = layer.name;
+    element.dataset.visible = layer.visible.toString();
+    element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
+    let title = `Click to ${
+      layer.visible ? "hide" : "show"
+    }, control+click to show side panel`;
+    if (layer.supportsPickOption) {
+      title += `, alt+click to ${
+        layer.pickEnabled ? "disable" : "enable"
+      } spatial object selection`;
+    }
+    title += ", drag to move, shift+drag to copy";
+    element.title = title;
+    this.setColor();
   }
 
   disposed() {
