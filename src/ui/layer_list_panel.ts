@@ -165,6 +165,7 @@ class LayerColorWidget extends RefCounted {
             updateLayerColorWidget();
           }),
         );
+        this.isListeningForColorChange = true;
       }),
     );
     this.registerDisposer(
