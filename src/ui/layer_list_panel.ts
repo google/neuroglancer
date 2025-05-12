@@ -150,7 +150,10 @@ class LayerColorWidget extends RefCounted {
       const setMultiColor = () => {
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "multi";
-        colorIndicator.style.background = createSteppedCssGradient(colors);
+        colorIndicator.style.background = createSteppedCssGradient(
+          colors,
+          true /*conic*/,
+        );
         colorIndicator.title = "Primary layer colors";
       };
 

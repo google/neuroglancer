@@ -133,7 +133,7 @@ import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
-const MAX_LAYER_BAR_COLORS = 3;
+const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
 
 export class SegmentationUserLayerGroupState
   extends RefCounted
@@ -1318,7 +1318,7 @@ export class SegmentationUserLayer extends Base {
       this.displayState.segmentationGroupState.value.visibleSegments;
     if (
       visibleSegmentsSet.size === 0 ||
-      visibleSegmentsSet.size > MAX_LAYER_BAR_COLORS
+      visibleSegmentsSet.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS
     ) {
       return undefined;
     }

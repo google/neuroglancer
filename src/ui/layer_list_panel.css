@@ -100,15 +100,14 @@
   height: 135%;
   background: conic-gradient(
     from 0deg,
-    hsl(0, 100%, 50%),
-    hsl(60, 100%, 50%),
-    hsl(120, 100%, 50%),
-    hsl(180, 100%, 50%),
-    hsl(240, 100%, 50%),
-    hsl(300, 100%, 50%),
-    hsl(360, 100%, 50%)
+    #ab47bc 0deg,
+    #5c6bc0 72deg,
+    #26a69a 144deg,
+    #66bb6a 216deg,
+    #ffca28 288deg,
+    #ab47bc 360deg
   );
-  filter: blur(1px);
+  filter: blur(0.5px);
   transform: scale(1.35);
 }
 
