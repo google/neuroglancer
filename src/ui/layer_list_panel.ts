@@ -142,6 +142,7 @@ class LayerColorWidget extends RefCounted {
       }
 
       const setSingleColor = () => {
+        colorIndicator.style.background = "";
         colorIndicator.style.backgroundColor = colors[0];
         colorIndicator.dataset.color = "solid";
         colorIndicator.title = "Primary layer color";
@@ -156,13 +157,12 @@ class LayerColorWidget extends RefCounted {
         );
         colorIndicator.title = "Primary layer colors";
       };
-
       if (colors.length === 1) setSingleColor();
       else setMultiColor();
     };
     this.registerDisposer(
       this.layer.readyStateChanged.add(() => {
-        if (this.isListeningForColorChange) return;
+        if (this.isListeningForColorChange || !this.layer.isReady) return;
         this.registerDisposer(
           layer.observeLayerColor(() => {
             updateLayerColorWidget();
