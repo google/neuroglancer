@@ -133,6 +133,11 @@
   opacity: 0.3;
 }
 
+.neuroglancer-layer-list-panel-item[data-archived="true"]
+  .neuroglancer-layer-list-panel-color-value {
+  visibility: hidden;
+}
+
 /* Place a / over the color value in widget when it is not visible */
 .neuroglancer-layer-list-panel-color-value-wrapper[data-visible="false"]::before {
   content: "";
