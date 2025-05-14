@@ -109,6 +109,7 @@ Within the annotation id index, each annotation is encoded in the following bina
   - For `"LINE"` type, the first endpoint position followed by the second endpoint position.
   - For `"AXIS_ALIGNED_BOUNDING_BOX"` type, the first position followed by the second position.
   - For `"ELLIPSOID"` type, the center position followed by the radii vector.
+  - For `"POLYLINE"` type, the number of points as a uint32le value, followed by the position vectors of each point as float32le.
 - For each property of type `uint32`, `int32`, or `float32`: the value encoded as a little endian value.
 - For each property of type `uint16` or `int16`: the value encoded as a little endian value.
 - For each property of type `uint8`, `int8`, `rgb`, or `rgba`: the encoded value.

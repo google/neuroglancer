@@ -47,6 +47,7 @@ from .viewer_state import (
     PlaceLineTool,  # noqa: F401
     PlaceBoundingBoxTool,  # noqa: F401
     PlaceEllipsoidTool,  # noqa: F401
+    PlacePolylineTool,  # noqa: F401
     BlendTool,  # noqa: F401
     OpacityTool,  # noqa: F401
     VolumeRenderingTool,  # noqa: F401
@@ -98,6 +99,7 @@ from .viewer_state import (
     Annotation,  # noqa: F401
     PointAnnotation,  # noqa: F401
     LineAnnotation,  # noqa: F401
+    PolyLineAnnotation,  # noqa: F401
     AxisAlignedBoundingBoxAnnotation,  # noqa: F401
     EllipsoidAnnotation,  # noqa: F401
     AnnotationPropertySpec,  # noqa: F401
