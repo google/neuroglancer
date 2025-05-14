@@ -40,6 +40,7 @@ import {
   TrackableSidePanelLocation,
 } from "#src/ui/side_panel_location.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { createSteppedCssGradient } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
 import { emptyToUndefined } from "#src/util/json.js";
@@ -48,7 +49,6 @@ import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { LayerTypeIndicatorWidget } from "#src/widget/layer_type_indicator.js";
-import { createSteppedCssGradient } from "#src/util/color.js";
 
 const DEFAULT_LAYER_LIST_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,
