@@ -23,10 +23,7 @@ export class RenderBaseSourceParameters {
 }
 
 export class RenderSourceParameters extends RenderBaseSourceParameters {
-  minIntensity: number | undefined;
-  maxIntensity: number | undefined;
-  maxTileSpecsToRender: number | undefined;
-  filter: boolean | undefined;
+  renderArgs: { [index: string]: string };
 }
 
 export class TileChunkSourceParameters extends RenderSourceParameters {

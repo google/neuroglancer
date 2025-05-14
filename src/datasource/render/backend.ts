@@ -15,6 +15,7 @@
  */
 
 import { decodeJpeg } from "#src/async_computation/decode_jpeg_request.js";
+import { decodePng } from "#src/async_computation/decode_png_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { TileChunkSourceParameters } from "#src/datasource/render/base.js";
@@ -47,6 +48,44 @@ chunkDecoders.set(
     await postProcessRawData(chunk, signal, decoded);
   },
 );
+chunkDecoders.set(
+  "png",
+  async (chunk: VolumeChunk, signal: AbortSignal, response: ArrayBuffer) => {
+    const chunkDataSize = chunk.chunkDataSize!;
+    const { uint8Array: decoded } = await requestAsyncComputation(
+      decodePng,
+      signal,
+      [response],
+      new Uint8Array(response),
+      chunkDataSize[0],
+      chunkDataSize[1],
+      chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
+      4,
+      1,
+      false,
+    );
+    await postProcessRawData(chunk, signal, decoded);
+  },
+);
+chunkDecoders.set(
+  "png16",
+  async (chunk: VolumeChunk, signal: AbortSignal, response: ArrayBuffer) => {
+    const chunkDataSize = chunk.chunkDataSize!;
+    const { uint8Array: decoded } = await requestAsyncComputation(
+      decodePng,
+      signal,
+      [response],
+      new Uint8Array(response),
+      chunkDataSize[0],
+      chunkDataSize[1],
+      chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
+      1,
+      2,
+      false,
+    );
+    await postProcessRawData(chunk, signal, decoded);
+  },
+);
 chunkDecoders.set("raw16", (chunk, signal, response) => {
   return decodeRawChunk(chunk, signal, response, Endianness.BIG);
 });
@@ -60,31 +99,18 @@ export class TileChunkSource extends WithParameters(
 
   queryString = (() => {
     const { parameters } = this;
-    const query_params: string[] = [];
+    const query_params = new URLSearchParams();
+
     if (parameters.channel !== undefined) {
-      query_params.push("channels=" + parameters.channel);
+      query_params.append("channel", parameters.channel);
     }
-    if (parameters.minIntensity !== undefined) {
-      query_params.push(
-        `minIntensity=${JSON.stringify(parameters.minIntensity)}`,
-      );
+
+    // Parse fallback key-value argument
+    for (const [key, value] of Object.entries(parameters.renderArgs)) {
+      query_params.append(key, value);
     }
-    if (parameters.maxIntensity !== undefined) {
-      query_params.push(
-        `maxIntensity=${JSON.stringify(parameters.maxIntensity)}`,
-      );
-    }
-    if (parameters.maxTileSpecsToRender !== undefined) {
-      query_params.push(
-        `maxTileSpecsToRender=${JSON.stringify(
-          parameters.maxTileSpecsToRender,
-        )}`,
-      );
-    }
-    if (parameters.filter !== undefined) {
-      query_params.push(`filter=${JSON.stringify(parameters.filter)}`);
-    }
-    return query_params.join("&");
+
+    return query_params.toString();
   })();
 
   async download(chunk: VolumeChunk, signal: AbortSignal) {
@@ -112,6 +138,10 @@ export class TileChunkSource extends WithParameters(
     let imageMethod: string;
     if (parameters.encoding === "raw16") {
       imageMethod = "raw16-image";
+    } else if (parameters.encoding === "png16") {
+      imageMethod = "png16-image";
+    } else if (parameters.encoding === "png") {
+      imageMethod = "png-image";
     } else {
       imageMethod = "jpeg-image";
     }
