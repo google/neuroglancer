@@ -66,6 +66,7 @@
   display: inline-block;
   position: relative;
   padding-right: 3px;
+  z-index: 1;
 }
 
 .neuroglancer-layer-item-number {
@@ -129,7 +130,26 @@
   align-items: center;
 }
 
-.neuroglancer-layer-item-label[data-color="rainbow"] {
+.neuroglancer-layer-item-label-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.neuroglancer-layer-item-label-color {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.neuroglancer-layer-item-label-color[data-color="multi"] {
+  transform: scale(1.2);
+  filter: blur(8px);
+}
+
+.neuroglancer-layer-item-label-color[data-color="rainbow"] {
   background: linear-gradient(
     90deg,
     #6a1b9a 0%,
@@ -138,13 +158,6 @@
     #2e7d32 75%,
     #f57f17 100%
   );
-}
-
-.neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-item-label[data-color="rainbow"],
-.neuroglancer-layer-item[data-visible="false"]
-  .neuroglancer-layer-item-label[data-color="solid"] {
-  opacity: 0.6;
 }
 
 .neuroglancer-layer-item-value {

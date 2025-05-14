@@ -48,6 +48,7 @@ import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { LayerTypeIndicatorWidget } from "#src/widget/layer_type_indicator.js";
+import { createSteppedCssGradient } from "#src/util/color.js";
 
 const DEFAULT_LAYER_LIST_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,
@@ -109,6 +110,7 @@ export class LayerVisibilityWidget extends RefCounted {
 class LayerColorWidget extends RefCounted {
   element = document.createElement("div");
   colorIndicator = document.createElement("div");
+  private isListeningForColorChange = false;
 
   constructor(
     public panel: LayerListPanel,
@@ -120,24 +122,54 @@ class LayerColorWidget extends RefCounted {
     element.className = "neuroglancer-layer-list-panel-color-value-wrapper";
     element.appendChild(colorIndicator);
     const updateLayerColorWidget = () => {
-      const color = this.layer.layerBarColor;
-      if (color) {
-        colorIndicator.style.backgroundColor = color;
-        colorIndicator.title = "Primary layer color";
-      } else {
-        if (this.layer.supportsLayerBarColorSyncOption) {
-          colorIndicator.title = "Multi-colored layer";
-          colorIndicator.dataset.color = "rainbow";
-        } else {
-          colorIndicator.title = "Layer does not support color legend";
-          colorIndicator.dataset.color = "unsupported";
-        }
+      const colors = this.layer.layerBarColors;
+      const setNoColor = () => {
+        colorIndicator.style.background = "";
         colorIndicator.style.backgroundColor = "";
+        colorIndicator.dataset.color = "unsupported";
+        colorIndicator.title = "Layer type does not support color legend";
+      };
+      if (!this.layer.supportsLayerBarColorSyncOption || colors?.length === 0) {
+        setNoColor();
+        return;
       }
+      const setRainbow = () => {
+        colorIndicator.dataset.color = "rainbow";
+        colorIndicator.title = "Multi-colored layer";
+      };
+      if (colors === undefined) {
+        setRainbow();
+        return;
+      }
+
+      const setSingleColor = () => {
+        colorIndicator.style.background = "";
+        colorIndicator.style.backgroundColor = colors[0];
+        colorIndicator.dataset.color = "solid";
+        colorIndicator.title = "Primary layer color";
+      };
+
+      const setMultiColor = () => {
+        colorIndicator.style.backgroundColor = "";
+        colorIndicator.dataset.color = "multi";
+        colorIndicator.style.background = createSteppedCssGradient(
+          colors,
+          true /*conic*/,
+        );
+        colorIndicator.title = "Primary layer colors";
+      };
+      if (colors.length === 1) setSingleColor();
+      else setMultiColor();
     };
     this.registerDisposer(
-      layer.observeLayerColor(() => {
-        updateLayerColorWidget();
+      this.layer.readyStateChanged.add(() => {
+        if (this.isListeningForColorChange || !this.layer.isReady) return;
+        this.registerDisposer(
+          layer.observeLayerColor(() => {
+            updateLayerColorWidget();
+          }),
+        );
+        this.isListeningForColorChange = true;
       }),
     );
     this.registerDisposer(
