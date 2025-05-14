@@ -197,7 +197,7 @@ export class UserLayer extends RefCounted {
   }
 
   get automaticLayerBarColors(): string[] | undefined {
-    return [""];
+    return [];
   }
 
   get layerBarColors(): string[] | undefined {
