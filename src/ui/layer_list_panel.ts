@@ -124,11 +124,12 @@ class LayerColorWidget extends RefCounted {
     const updateLayerColorWidget = () => {
       const colors = this.layer.layerBarColors;
       const setNoColor = () => {
+        colorIndicator.style.background = "";
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "unsupported";
         colorIndicator.title = "Layer type does not support color legend";
       };
-      if (!this.layer.supportsLayerBarColorSyncOption) {
+      if (!this.layer.supportsLayerBarColorSyncOption || colors?.length === 0) {
         setNoColor();
         return;
       }

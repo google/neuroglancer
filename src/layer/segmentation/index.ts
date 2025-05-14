@@ -1305,22 +1305,29 @@ export class SegmentationUserLayer extends Base {
       this.displayState.segmentationColorGroupState.value.segmentColorHash.changed.add(
         callback,
       );
+    const showAllByDefaultDisposer =
+      this.displayState.ignoreNullVisibleSet.changed.add(callback);
     return () => {
       disposer();
       defaultColorDisposer();
       visibleSegmentDisposer();
       colorHashChangeDisposer();
+      showAllByDefaultDisposer();
     };
   }
 
   get automaticLayerBarColors() {
     const visibleSegmentsSet =
       this.displayState.segmentationGroupState.value.visibleSegments;
+    const showAllByDefault = this.displayState.ignoreNullVisibleSet.value;
+    if (visibleSegmentsSet.size === 0 && !showAllByDefault) {
+      return []; // No segments are visible
+    }
     if (
       visibleSegmentsSet.size === 0 ||
       visibleSegmentsSet.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS
     ) {
-      return undefined;
+      return undefined; // Too many segments to show
     }
     const visibleSegments = [...visibleSegmentsSet];
     const colors = visibleSegments.map((id) => {

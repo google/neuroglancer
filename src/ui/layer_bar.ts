@@ -180,11 +180,15 @@ class LayerWidget extends RefCounted {
       labelElement.style.color = "white";
     };
 
-    if (!layer.supportsLayerBarColorSyncOption || !layer.visible) {
+    const colors = layer.layerBarColors;
+    if (
+      !layer.supportsLayerBarColorSyncOption ||
+      !layer.visible ||
+      colors?.length === 0
+    ) {
       setNoColor();
       return;
     }
-    const colors = layer.layerBarColors;
     if (colors === undefined) {
       setRainbow();
       return;
