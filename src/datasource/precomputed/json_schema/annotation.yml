@@ -39,13 +39,9 @@ properties:
       be contained with the bounding box defined by `.lower_bound` and
       `.upper_bound`.
   annotation_type:
-    title: |-
-      Annotation geometry type.
-    enum:
-      - "point"
-      - "line"
-      - "axis_aligned_bounding_box"
-      - "ellipsoid"
+    title: Annotation geometry type.
+    type: string
+    pattern: "^(?i)(point|line|axis_aligned_bounding_box|ellipsoid)$"
   properties:
     title: Additional properties associated with each annotation.
     type: array
@@ -200,9 +196,10 @@ properties:
             sharded format.
       required:
         - key
-        - grid_shape
-        - chunk_shape
         - limit
+      oneOf:
+        - required: ["grid_shape"]
+        - required: ["chunk_shape"]
   segment_properties:
     title: |
       Relative path to the directory containing associated :ref:`segment
@@ -218,6 +215,8 @@ properties:
     type: string
 required:
   - "@type"
-  - vertex_quantization_bits
-  - transform
-  - lod_scale_multiplier
+  - dimensions
+  - lower_bound
+  - upper_bound
+  - annotation_type
+  - properties
