@@ -43,6 +43,7 @@ const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
 
 const OME_UNITS = new Map<string, { unit: string; scale: number }>([
   ["angstrom", { unit: "m", scale: 1e-10 }],
+  ["µm", { unit: "m", scale: 1e-6 }],
   ["foot", { unit: "m", scale: 0.3048 }],
   ["inch", { unit: "m", scale: 0.0254 }],
   ["mile", { unit: "m", scale: 1609.34 }],
