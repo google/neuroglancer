@@ -153,7 +153,7 @@ class LayerColorWidget extends RefCounted {
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "multi";
         colorIndicator.style.background = createSteppedCssGradient(
-          colors,
+          colors.reverse(),
           true /*conic*/,
         );
         colorIndicator.title = "Primary layer colors";
