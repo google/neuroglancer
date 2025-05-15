@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+import pythonIntegration from "#python_integration_build";
+import type { AWSSignatureV4Credentials } from "#src/credentials_provider/aws_sigv4.js";
+import { fetchOkWithAWSSignatureV4CredentialsAdapter } from "#src/credentials_provider/aws_sigv4.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
 import { read, stat } from "#src/kvstore/http/read.js";
 import type {
@@ -108,13 +112,29 @@ function amazonS3Provider<
 ): BaseKvStoreProvider {
   return {
     scheme: "s3",
-    description: "S3 (anonymous)",
+    description: pythonIntegration ? "AWS S3" : "AWS S3 (anonymous)",
     getKvStore(url) {
       const m = (url.suffix ?? "").match(/^\/\/([^/]+)(\/.*)?$/);
       if (m === null) {
         throw new Error("Invalid URL, expected `s3://<bucket>/<path>`");
       }
       const [, bucket, path] = m;
+      if (pythonIntegration) {
+        const credentialsProvider: CredentialsProvider<AWSSignatureV4Credentials> =
+          sharedKvStoreContext.credentialsManager.getCredentialsProvider("s3", {
+            bucket,
+          });
+        return {
+          store: new s3KvStoreClass(
+            sharedKvStoreContext,
+            `https://${bucket}.s3.amazonaws.com/`,
+            `s3://${bucket}/`,
+            /*knownToBeVirtualHostedStyle=*/ true,
+            fetchOkWithAWSSignatureV4CredentialsAdapter(credentialsProvider),
+          ),
+          path: decodeURIComponent((path ?? "").substring(1)),
+        };
+      }
       return {
         store: new s3KvStoreClass(
           sharedKvStoreContext,
