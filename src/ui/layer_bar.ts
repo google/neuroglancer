@@ -53,6 +53,7 @@ class LayerWidget extends RefCounted {
   valueElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
+  private isListeningForColorChange = false;
 
   constructor(
     public layer: ManagedUserLayer,
@@ -135,6 +136,17 @@ class LayerWidget extends RefCounted {
           getToolBinder: () => layer.layer?.toolBinder,
         },
       ),
+    );
+    this.registerDisposer(
+      this.layer.readyStateChanged.add(() => {
+        if (this.isListeningForColorChange || !this.layer.isReady) return;
+        this.registerDisposer(
+          layer.observeLayerColor(() => {
+            this.setColor();
+          }),
+        );
+        this.isListeningForColorChange = true;
+      }),
     );
     element.appendChild(positionWidget.element);
     positionWidget.element.addEventListener("click", (event: MouseEvent) => {
