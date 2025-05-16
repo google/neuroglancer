@@ -45,7 +45,7 @@ import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
-import { SegmentColorHash } from "#src/segment_color.js";
+import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -54,6 +54,7 @@ import type {
 import {
   augmentSegmentId,
   bindSegmentListWidth,
+  getBaseObjectColor,
   makeSegmentWidget,
   maybeAugmentSegmentId,
   registerCallbackWhenSegmentationDisplayStateChanged,
@@ -95,6 +96,7 @@ import {
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
   registerNestedSync,
   TrackableValue,
   WatchableValue,
@@ -130,6 +132,8 @@ import { Signal } from "#src/util/signal.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
+
+const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
 
 export class SegmentationUserLayerGroupState
   extends RefCounted
@@ -1287,9 +1291,65 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
+  observeLayerColor(callback: () => void) {
+    const disposer = super.observeLayerColor(callback);
+    const defaultColorDisposer = observeWatchable(
+      callback,
+      this.displayState.segmentDefaultColor,
+    );
+    const visibleSegmentDisposer =
+      this.displayState.segmentationGroupState.value.visibleSegments.changed.add(
+        callback,
+      );
+    const colorHashChangeDisposer =
+      this.displayState.segmentationColorGroupState.value.segmentColorHash.changed.add(
+        callback,
+      );
+    const showAllByDefaultDisposer =
+      this.displayState.ignoreNullVisibleSet.changed.add(callback);
+    return () => {
+      disposer();
+      defaultColorDisposer();
+      visibleSegmentDisposer();
+      colorHashChangeDisposer();
+      showAllByDefaultDisposer();
+    };
+  }
+
+  get automaticLayerBarColors() {
+    const visibleSegmentsSet =
+      this.displayState.segmentationGroupState.value.visibleSegments;
+    const showAllByDefault = this.displayState.ignoreNullVisibleSet.value;
+    if (visibleSegmentsSet.size === 0 && !showAllByDefault) {
+      return []; // No segments are visible
+    }
+    if (
+      visibleSegmentsSet.size === 0 ||
+      visibleSegmentsSet.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS
+    ) {
+      return undefined; // Too many segments to show
+    }
+    const visibleSegments = [...visibleSegmentsSet];
+    const colors = visibleSegments.map((id) => {
+      const color = getCssColor(getBaseObjectColor(this.displayState, id));
+      return { color, id };
+    });
+
+    // Sort the colors by their segment ID
+    // Otherwise, the order is random which is a bit confusing in the UI
+    colors.sort((a, b) => {
+      const aId = a.id;
+      const bId = b.id;
+      return aId < bId ? -1 : aId > bId ? 1 : 0;
+    });
+    // Extract just the colors
+    return colors.map((color) => color.color);
+  }
+
   static type = "segmentation";
   static typeAbbreviation = "seg";
   static supportsPickOption = true;
+  static supportsLayerBarColorSyncOption = true;
 }
 
 registerLayerControls(SegmentationUserLayer);
