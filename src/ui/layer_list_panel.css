@@ -101,10 +101,10 @@
   background: conic-gradient(
     from 0deg,
     #ab47bc 0deg,
-    #5c6bc0 72deg,
-    #26a69a 144deg,
-    #66bb6a 216deg,
-    #ffca28 288deg,
+    #ffca28 72deg,
+    #66bb6a 144deg,
+    #26a69a 216deg,
+    #5c6bc0 288deg,
     #ab47bc 360deg
   );
   filter: blur(0.5px);
