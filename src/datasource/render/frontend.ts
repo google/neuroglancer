@@ -59,14 +59,25 @@ import {
   verifyFloat,
   verifyObject,
   verifyObjectProperty,
-  verifyOptionalBoolean,
   verifyOptionalInt,
   verifyOptionalString,
   verifyString,
 } from "#src/util/json.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 
-const VALID_ENCODINGS = new Set<string>(["jpg", "raw16"]);
+const VALID_ENCODINGS = new Set<string>(["jpg", "raw16", "png", "png16"]);
+const RESERVED_PARAMETERS = [
+  { name: "minX", type: "number" },
+  { name: "minY", type: "number" },
+  { name: "minZ", type: "number" },
+  { name: "maxX", type: "number" },
+  { name: "maxY", type: "number" },
+  { name: "maxZ", type: "number" },
+  { name: "encoding", type: Array.from(VALID_ENCODINGS).join(" | ") },
+  { name: "numLevels", type: "integer" },
+  { name: "tileSize", type: "number" },
+  { name: "channel", type: "string" },
+];
 
 const TileChunkSourceBase = WithParameters(
   VolumeChunkSource,
@@ -92,6 +103,12 @@ interface StackInfo {
   voxelResolution: vec3 /* in nm */;
   project: string;
   channels: string[];
+}
+
+interface QueryParameterInfo {
+  name: string;
+  type: string;
+  required?: boolean;
 }
 
 function parseOwnerInfo(obj: any): OwnerInfo {
@@ -265,12 +282,35 @@ function parseStackProject(stackIdObj: any): string {
   return verifyObjectProperty(stackIdObj, "project", verifyString);
 }
 
+function parseQueryParameterInfo(obj: any): QueryParameterInfo[] {
+  const boxImageApiKey =
+    "/v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/raw-image";
+  const boxImageApi = obj.paths[boxImageApiKey];
+  if (boxImageApi === undefined) {
+    console.warn(
+      "Could not retrieve API schema, skipping dynamic parameter hints",
+    );
+    return RESERVED_PARAMETERS;
+  }
+
+  const boxImageParameters = boxImageApi.get.parameters as QueryParameterInfo[];
+
+  // Return optional parameters from render API and extend list with hardcoded options
+  return boxImageParameters
+    .filter(({ required }) => required === false)
+    .filter(({ name }) => name !== "scale")
+    .concat(RESERVED_PARAMETERS);
+}
+
 class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
-    if (this.parameters.encoding === "raw16") {
+    if (
+      this.parameters.encoding === "raw16" ||
+      this.parameters.encoding === "png16"
+    ) {
       return DataType.UINT16;
     }
-    // JPEG
+    // 8-bit (JPEG or PNG)
     return DataType.UINT8;
   }
   get volumeType() {
@@ -286,10 +326,6 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   encoding: string;
   numLevels: number | undefined;
 
-  // Render Parameters
-  minIntensity: number | undefined;
-  maxIntensity: number | undefined;
-
   // Bounding box override parameters
   minX: number | undefined;
   minY: number | undefined;
@@ -298,10 +334,8 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   maxY: number | undefined;
   maxZ: number | undefined;
 
-  // Force limited number of tile specs to render for downsampled views of large projects
-  maxTileSpecsToRender: number | undefined;
-
-  filter: boolean | undefined;
+  // Key-value pairs to forward to the render webservice
+  renderArgs: { [index: string]: string };
 
   get rank() {
     return 3;
@@ -350,12 +384,14 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       this.channel = channel;
     }
 
-    this.minIntensity = verifyOptionalInt(parameters.minIntensity);
-    this.maxIntensity = verifyOptionalInt(parameters.maxIntensity);
-    this.maxTileSpecsToRender = verifyOptionalInt(
-      parameters.maxTileSpecsToRender,
-    );
-    this.filter = verifyOptionalBoolean(parameters.filter);
+    const reservedKeys = new Set(RESERVED_PARAMETERS.map(({ name }) => name));
+
+    this.renderArgs = {};
+    for (const [key, value] of Object.entries(parameters)) {
+      if (reservedKeys.has(key)) continue;
+
+      this.renderArgs[key] = value;
+    }
 
     this.minX = verifyOptionalInt(parameters.minX);
     this.minY = verifyOptionalInt(parameters.minY);
@@ -460,10 +496,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
           project: this.stackInfo.project,
           stack: this.stack,
           channel: this.channel,
-          minIntensity: this.minIntensity,
-          maxIntensity: this.maxIntensity,
-          maxTileSpecsToRender: this.maxTileSpecsToRender,
-          filter: this.filter,
+          renderArgs: this.renderArgs,
           dims: `${this.dims[0]}_${this.dims[1]}`,
           level: level,
           encoding: this.encoding,
@@ -502,7 +535,7 @@ export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
   return counter;
 }
 
-export function getOwnerInfo(
+export async function getOwnerInfo(
   chunkManager: ChunkManager,
   hostname: string,
   owner: string,
@@ -515,6 +548,21 @@ export function getOwnerInfo(
       fetchOk(`${hostname}/render-ws/v1/owner/${owner}/stacks`, progressOptions)
         .then((response) => response.json())
         .then(parseOwnerInfo),
+  );
+}
+
+export async function getQueryParameterInfo(
+  chunkManager: ChunkManager,
+  hostname: string,
+  options: Partial<ProgressOptions>,
+): Promise<QueryParameterInfo[]> {
+  return chunkManager.memoize.getAsync(
+    { type: "render:getQueryParameterInfo", hostname },
+    options,
+    (progressOptions) =>
+      fetchOk(`${hostname}/render-ws/swagger.json`, progressOptions)
+        .then((response) => response.json())
+        .then(parseQueryParameterInfo),
   );
 }
 
@@ -625,6 +673,9 @@ export async function stackAndProjectCompleter(
     // Don't autocomplete the owner
     throw null;
   }
+
+  // Autocomplete the project
+  let offset = stackMatch[1].length + 1;
   if (stackMatch[3] === undefined) {
     const projectPrefix = stackMatch[2] || "";
     const ownerInfo = await getOwnerInfo(
@@ -639,8 +690,11 @@ export async function stackAndProjectCompleter(
       (x) => x[0] + "/",
       () => undefined,
     );
-    return { offset: stackMatch[1].length + 1, completions };
+    return { offset, completions };
   }
+
+  // Autocomplete the stack name
+  offset += stackMatch[2].length + 1;
   if (stackMatch[4] === undefined) {
     const stackPrefix = stackMatch[3] || "";
     const ownerInfo = await getOwnerInfo(
@@ -661,11 +715,11 @@ export async function stackAndProjectCompleter(
         return x[1].project;
       },
     );
-    return {
-      offset: stackMatch[1].length + stackMatch[2].length + 2,
-      completions,
-    };
+    return { offset, completions };
   }
+
+  // Autocomplete the channel
+  offset += stackMatch[3].length + 1;
   const channelPrefix = stackMatch[4].substr(1) || "";
   const ownerInfo = await getOwnerInfo(
     chunkManager,
@@ -692,11 +746,34 @@ export async function stackAndProjectCompleter(
     (x) => x,
     () => undefined,
   );
-  return {
-    offset:
-      stackMatch[1].length + stackMatch[2].length + stackMatch[3].length + 3,
-    completions,
-  };
+  return { offset, completions };
+}
+
+export async function queryParameterCompleter(
+  chunkManager: ChunkManager,
+  hostname: string,
+  query: string,
+  options: Partial<ProgressOptions>,
+): Promise<CompletionResult> {
+  const queryParameterInfo = await getQueryParameterInfo(
+    chunkManager,
+    hostname,
+    options,
+  );
+
+  const idx = query.lastIndexOf("&");
+  const offset = idx === -1 ? 0 : idx + 1;
+  const keyValuePair = query.slice(offset);
+
+  const [key] = keyValuePair.split("=");
+
+  const completions = getPrefixMatchesWithDescriptions(
+    key,
+    queryParameterInfo,
+    (x) => x.name,
+    (x) => x.type,
+  );
+  return { offset, completions };
 }
 
 export async function volumeCompleter(
@@ -712,13 +789,29 @@ export async function volumeCompleter(
   const hostname = match[1];
   const path = match[2];
 
-  const completions = await stackAndProjectCompleter(
+  const [volume, query] = path.split("?");
+
+  let offset = match![1].length + 1;
+  if (query === undefined) {
+    // Still typing the volume path, no query parameters yet
+    const completions = await stackAndProjectCompleter(
+      chunkManager,
+      hostname,
+      volume,
+      options,
+    );
+    return applyCompletionOffset(offset, completions);
+  }
+
+  // Typing query parameters now
+  offset += volume.length + 1;
+  const completions = await queryParameterCompleter(
     chunkManager,
     hostname,
-    path,
+    query,
     options,
   );
-  return applyCompletionOffset(match![1].length + 1, completions);
+  return applyCompletionOffset(offset, completions);
 }
 
 export class RenderDataSource implements DataSourceProvider {
