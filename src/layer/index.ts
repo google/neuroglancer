@@ -135,6 +135,8 @@ export interface UserLayerSelectionState {
   annotationBuffer: Uint8Array | undefined;
   annotationIndex: number | undefined;
   annotationCount: number | undefined;
+  annotationInstanceIndex: number | undefined;
+  annotationInstanceCount: number | undefined;
   annotationSourceIndex: number | undefined;
   annotationSubsource: string | undefined;
   annotationSubsubsourceId: string | undefined;
@@ -204,6 +206,8 @@ export class UserLayer extends RefCounted {
     state.annotationSourceIndex = undefined;
     state.annotationSubsource = undefined;
     state.annotationPartIndex = undefined;
+    state.annotationInstanceIndex = undefined;
+    state.annotationInstanceCount = undefined;
     state.value = undefined;
   }
 
@@ -330,6 +334,8 @@ export class UserLayer extends RefCounted {
     dest.annotationBuffer = source.annotationBuffer;
     dest.annotationIndex = source.annotationIndex;
     dest.annotationCount = source.annotationCount;
+    dest.annotationInstanceCount = source.annotationInstanceCount;
+    dest.annotationInstanceIndex = source.annotationInstanceIndex;
     dest.annotationSourceIndex = source.annotationSourceIndex;
     dest.annotationSubsource = source.annotationSubsource;
     dest.annotationPartIndex = source.annotationPartIndex;
@@ -1084,6 +1090,8 @@ export interface PickState {
   pickedAnnotationIndex: number | undefined;
   pickedAnnotationCount: number | undefined;
   pickedAnnotationType: AnnotationType | undefined;
+  pickedAnnotationInstanceIndex: number | undefined;
+  pickedAnnotationInstanceCount: number | undefined;
 }
 
 export class MouseSelectionState implements PickState {
@@ -1104,7 +1112,10 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationBufferBaseOffset: number | undefined = undefined;
   // Index (out of a total of `pickedAnnotationCount`) of the picked annotation.
   pickedAnnotationIndex: number | undefined = undefined;
+  // Index (out of a total of `pickedAnnotationInstanceCount`) of the picked annotation
+  pickedAnnotationInstanceIndex: number | undefined = undefined;
   pickedAnnotationCount: number | undefined = undefined;
+  pickedAnnotationInstanceCount: number | undefined = undefined;
   pickedAnnotationType: AnnotationType | undefined = undefined;
   pageX: number;
   pageY: number;
