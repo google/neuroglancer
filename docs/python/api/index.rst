@@ -78,3 +78,9 @@ Trackable state
 ^^^^^^^^^^^^^^^
 
 .. python-apigen-group:: trackable-state
+
+
+Precomputed Annotation I/O
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. python-apigen-group:: annotation-io
