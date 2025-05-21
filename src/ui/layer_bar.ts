@@ -53,7 +53,7 @@ class LayerWidget extends RefCounted {
   valueElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
-  private isListeningForColorChange = false;
+  private colorChangeDisposer: () => void = () => {};
 
   constructor(
     public layer: ManagedUserLayer,
@@ -137,23 +137,20 @@ class LayerWidget extends RefCounted {
         },
       ),
     );
-    const listenForColorChange = () => {
-      if (this.isListeningForColorChange || !this.layer.isReady) return;
-      this.registerDisposer(
-        layer.observeLayerColor(() => {
-          this.setColor();
-        }),
-      );
-      this.isListeningForColorChange = true;
-    };
 
-    // Listen for color changes when the layer is ready.
-    listenForColorChange();
+    const listenForColorChange = () => {
+      if (!this.layer.isReady()) return;
+      this.colorChangeDisposer();
+      this.colorChangeDisposer = layer.observeLayerColor(() => {
+        this.setColor();
+      });
+    };
+    this.registerDisposer(this.colorChangeDisposer);
     this.registerDisposer(
-      this.layer.readyStateChanged.add(() => {
-        listenForColorChange();
-      }),
+      this.layer.readyStateChanged.add(listenForColorChange),
     );
+    listenForColorChange();
+
     element.appendChild(positionWidget.element);
     positionWidget.element.addEventListener("click", (event: MouseEvent) => {
       event.stopPropagation();

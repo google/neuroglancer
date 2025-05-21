@@ -110,7 +110,7 @@ export class LayerVisibilityWidget extends RefCounted {
 class LayerColorWidget extends RefCounted {
   element = document.createElement("div");
   colorIndicator = document.createElement("div");
-  private isListeningForColorChange = false;
+  private colorChangeDisposer: () => void = () => {};
 
   constructor(
     public panel: LayerListPanel,
@@ -161,23 +161,19 @@ class LayerColorWidget extends RefCounted {
       if (colors.length === 1) setSingleColor();
       else setMultiColor();
     };
-    const listenForColorChange = () => {
-      if (this.isListeningForColorChange || !this.layer.isReady) return;
-      this.registerDisposer(
-        layer.observeLayerColor(() => {
-          updateLayerColorWidget();
-        }),
-      );
-      this.isListeningForColorChange = true;
-    };
 
-    // Listen for color changes when the layer is ready.
-    listenForColorChange();
+    const listenForColorChange = () => {
+      if (!this.layer.isReady()) return;
+      this.colorChangeDisposer();
+      this.colorChangeDisposer = layer.observeLayerColor(() => {
+        updateLayerColorWidget();
+      });
+    };
+    this.registerDisposer(this.colorChangeDisposer);
     this.registerDisposer(
-      this.layer.readyStateChanged.add(() => {
-        listenForColorChange();
-      }),
+      this.layer.readyStateChanged.add(listenForColorChange),
     );
+
     this.registerDisposer(
       layer.layerChanged.add(() => {
         element.dataset.visible = this.layer.visible.toString();
@@ -185,6 +181,7 @@ class LayerColorWidget extends RefCounted {
       }),
     );
     element.dataset.visible = this.layer.visible.toString();
+    listenForColorChange();
     updateLayerColorWidget();
   }
 }
