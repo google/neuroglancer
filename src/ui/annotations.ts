@@ -86,7 +86,7 @@ import {
 } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
-import { removeChildren } from "#src/util/dom.js";
+import { removeChildren, updateChildren } from "#src/util/dom.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { vec3 } from "#src/util/geom.js";
@@ -999,7 +999,7 @@ export class AnnotationTab extends Tab {
   }
 }
 
-export class AnnotationSchemaTabView extends Tab {
+export class AnnotationSchemaView extends Tab {
   get annotationStates() {
     return this.layer.annotationStates;
   }
@@ -1018,13 +1018,12 @@ export class AnnotationSchemaTabView extends Tab {
 
     this.registerDisposer(
       this.annotationStates.changed.add(() => this.updateView()),
-    )
-    this.registerDisposer(
-      this.visibility.changed.add(() => this.updateView()),
-    )
+    );
+    this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
   }
 
-  private updateView() {
+  private extractSchema() {
+    const schema = [];
     let isMutable = false;
     for (const state of this.annotationStates.states) {
       if (!state.source.readonly) isMutable = true;
@@ -1033,22 +1032,39 @@ export class AnnotationSchemaTabView extends Tab {
       for (const property of properties) {
         const { type, identifier } = property;
         const defaultValue = property.default;
+        schema.push({
+          type,
+          identifier,
+          defaultValue,
+        });
+      }
+    }
+    return { schema, isMutable };
+  }
+
+  private updateView() {
+    const { schema } = this.extractSchema();
+    console.log(schema);
+
+    function* getItems() {
+      for (const { type, identifier, defaultValue } of schema) {
         const propertyElement = document.createElement("div");
         propertyElement.className = "neuroglancer-annotation-property";
         propertyElement.textContent = `${identifier} (${type}) ${defaultValue}`;
-        this.schemaTable.appendChild(propertyElement);
+        yield propertyElement;
       }
     }
-    console.log("isMutable", isMutable);
+
+    updateChildren(this.schemaTable, getItems());
   }
 }
 
 export class AnnotationSchemaTab extends Tab {
-  private schemaView: AnnotationSchemaTabView;
+  private schemaView: AnnotationSchemaView;
   constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
     super();
     this.schemaView = this.registerDisposer(
-      new AnnotationSchemaTabView(layer, layer.annotationDisplayState),
+      new AnnotationSchemaView(layer, layer.annotationDisplayState),
     );
 
     const { element } = this;
