@@ -999,6 +999,64 @@ export class AnnotationTab extends Tab {
   }
 }
 
+export class AnnotationSchemaTabView extends Tab {
+  get annotationStates() {
+    return this.layer.annotationStates;
+  }
+
+  private schemaTable = document.createElement("div");
+
+  constructor(
+    public layer: Borrowed<UserLayerWithAnnotations>,
+    public displayState: AnnotationDisplayState,
+  ) {
+    super();
+    this.element.classList.add("neuroglancer-annotation-schema-view");
+    this.schemaTable.className = "neuroglancer-annotation-schema-grid";
+    this.element.appendChild(this.schemaTable);
+    this.updateView();
+
+    this.registerDisposer(
+      this.annotationStates.changed.add(() => this.updateView()),
+    )
+    this.registerDisposer(
+      this.visibility.changed.add(() => this.updateView()),
+    )
+  }
+
+  private updateView() {
+    let isMutable = false;
+    for (const state of this.annotationStates.states) {
+      if (!state.source.readonly) isMutable = true;
+      if (state.chunkTransform.value.error !== undefined) continue;
+      const properties = state.source.properties;
+      for (const property of properties) {
+        const { type, identifier } = property;
+        const defaultValue = property.default;
+        const propertyElement = document.createElement("div");
+        propertyElement.className = "neuroglancer-annotation-property";
+        propertyElement.textContent = `${identifier} (${type}) ${defaultValue}`;
+        this.schemaTable.appendChild(propertyElement);
+      }
+    }
+    console.log("isMutable", isMutable);
+  }
+}
+
+export class AnnotationSchemaTab extends Tab {
+  private schemaView: AnnotationSchemaTabView;
+  constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
+    super();
+    this.schemaView = this.registerDisposer(
+      new AnnotationSchemaTabView(layer, layer.annotationDisplayState),
+    );
+
+    const { element } = this;
+    element.classList.add("neuroglancer-annotations-schema-tab");
+    element.appendChild(this.schemaView.element);
+  }
+}
+
 function getSelectedAssociatedSegments(
   annotationLayer: AnnotationLayerState,
   getBase = false,
@@ -1622,6 +1680,11 @@ export function UserLayerWithAnnotationsMixin<
         label: "Annotations",
         order: 10,
         getter: () => new AnnotationTab(this),
+      });
+      this.tabs.add("schema", {
+        label: "Schema",
+        order: 20,
+        getter: () => new AnnotationSchemaTab(this),
       });
 
       let annotationStateReadyBinding: (() => void) | undefined;
