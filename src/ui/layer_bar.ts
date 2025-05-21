@@ -137,15 +137,21 @@ class LayerWidget extends RefCounted {
         },
       ),
     );
+    const listenForColorChange = () => {
+      if (this.isListeningForColorChange || !this.layer.isReady) return;
+      this.registerDisposer(
+        layer.observeLayerColor(() => {
+          this.setColor();
+        }),
+      );
+      this.isListeningForColorChange = true;
+    };
+
+    // Listen for color changes when the layer is ready.
+    listenForColorChange();
     this.registerDisposer(
       this.layer.readyStateChanged.add(() => {
-        if (this.isListeningForColorChange || !this.layer.isReady) return;
-        this.registerDisposer(
-          layer.observeLayerColor(() => {
-            this.setColor();
-          }),
-        );
-        this.isListeningForColorChange = true;
+        listenForColorChange();
       }),
     );
     element.appendChild(positionWidget.element);
