@@ -607,15 +607,22 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
 
 function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
   const defaultValue = spec.default;
-  return {
+  const handler = annotationPropertyTypeHandlers[spec.type];
+  const jsonSpec: any = {
     id: spec.identifier,
     description: spec.description,
     type: spec.type,
     default:
-      defaultValue === 0
-        ? undefined
-        : annotationPropertyTypeHandlers[spec.type].serializeJson(defaultValue),
+      defaultValue === 0 ? undefined : handler.serializeJson(defaultValue),
   };
+  if ("enumValues" in spec) {
+    const { enumValues, enumLabels } = spec;
+    if (enumValues !== undefined && enumLabels !== undefined) {
+      jsonSpec.enum_values = enumValues.map(handler.serializeJson);
+      jsonSpec.enum_labels = enumLabels;
+    }
+  }
+  return jsonSpec;
 }
 
 export function annotationPropertySpecsToJson(
