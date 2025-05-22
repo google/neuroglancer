@@ -108,6 +108,12 @@ export interface AnnotationNumericPropertySpec
   step?: number;
 }
 
+export function isAnnotationNumericPropertySpec(
+  spec: AnnotationPropertySpec,
+): spec is AnnotationNumericPropertySpec {
+  return spec.type !== "rgb" && spec.type !== "rgba";
+}
+
 export const propertyTypeDataType: Record<
   AnnotationPropertySpec["type"],
   DataType | undefined
@@ -608,15 +614,12 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
 function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
   const defaultValue = spec.default;
   const handler = annotationPropertyTypeHandlers[spec.type];
-  let enumValues: number[] | undefined;
-  let enumLabels: string[] | undefined;
-  if ("enumValues" in spec) {
-    enumValues = spec.enumValues;
-    enumLabels = spec.enumLabels;
-    if (enumValues !== undefined) {
-      enumValues = enumValues.map(handler.serializeJson);
-    }
-  }
+  const isNumeric = isAnnotationNumericPropertySpec(spec);
+  const enumValues =
+    isNumeric && spec.enumValues
+      ? spec.enumValues.map(handler.serializeJson)
+      : undefined;
+  const enumLabels = isNumeric ? spec.enumLabels : undefined;
   return {
     id: spec.identifier,
     description: spec.description,
