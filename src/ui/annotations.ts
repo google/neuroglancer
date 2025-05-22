@@ -113,6 +113,15 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 
+interface AnnotationPropertySchema {
+  type: string;
+  identifier: string;
+  defaultValue: number;
+  enumValues?: number[];
+  enumLabels?: string[];
+  description?: string;
+}
+
 export class MergedAnnotationStates
   extends RefCounted
   implements WatchableValueInterface<readonly AnnotationLayerState[]>
@@ -1023,7 +1032,7 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private extractSchema() {
-    const schema = [];
+    const schema: AnnotationPropertySchema[] = [];
     let isMutable = false;
     for (const state of this.annotationStates.states) {
       if (!state.source.readonly) isMutable = true;
@@ -1031,11 +1040,19 @@ export class AnnotationSchemaView extends Tab {
       const properties = state.source.properties;
       for (const property of properties) {
         const { type, identifier } = property;
-        const defaultValue = property.default;
+        let enumValues: number[] | undefined;
+        let enumLabels: string[] | undefined;
+        if ("enumValues" in property) {
+          enumValues = property.enumValues;
+          enumLabels = property.enumLabels;
+        }
         schema.push({
           type,
           identifier,
-          defaultValue,
+          defaultValue: property.default,
+          enumValues,
+          enumLabels,
+          description: property.description,
         });
       }
     }
@@ -1047,10 +1064,17 @@ export class AnnotationSchemaView extends Tab {
     console.log(schema);
 
     function* getItems() {
-      for (const { type, identifier, defaultValue } of schema) {
+      for (const {
+        type,
+        identifier,
+        defaultValue,
+        enumValues,
+        enumLabels,
+        description,
+      } of schema) {
         const propertyElement = document.createElement("div");
         propertyElement.className = "neuroglancer-annotation-property";
-        propertyElement.textContent = `${identifier} (${type}) ${defaultValue}`;
+        propertyElement.textContent = `${identifier} (${type}) ${defaultValue} ${enumValues} ${enumLabels} ${description}`;
         yield propertyElement;
       }
     }
