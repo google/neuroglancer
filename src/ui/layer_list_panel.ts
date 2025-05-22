@@ -127,7 +127,8 @@ class LayerColorWidget extends RefCounted {
         colorIndicator.style.background = "";
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "unsupported";
-        colorIndicator.title = "Layer type does not support color legend or is currently not visible";
+        colorIndicator.title =
+          "Layer type does not support color legend or is currently not rendered";
       };
       if (!this.layer.supportsLayerBarColorSyncOption || colors?.length === 0) {
         setNoColor();
@@ -135,7 +136,8 @@ class LayerColorWidget extends RefCounted {
       }
       const setRainbow = () => {
         colorIndicator.dataset.color = "rainbow";
-        colorIndicator.title = "Multi-colored layer";
+        colorIndicator.title =
+          "Multi-colored layer or layer with uncertain color";
       };
       if (colors === undefined) {
         setRainbow();

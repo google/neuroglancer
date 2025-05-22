@@ -149,17 +149,6 @@
   filter: blur(8px);
 }
 
-.neuroglancer-layer-item-label-color[data-color="rainbow"] {
-  background: linear-gradient(
-    90deg,
-    #6a1b9a 0%,
-    #283593 25%,
-    #00695c 50%,
-    #2e7d32 75%,
-    #f57f17 100%
-  );
-}
-
 .neuroglancer-layer-item-value {
   grid-row: 1;
   grid-column: 1;

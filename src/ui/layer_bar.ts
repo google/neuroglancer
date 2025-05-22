@@ -189,23 +189,15 @@ class LayerWidget extends RefCounted {
       labelElement.style.color = "";
       labelColorElement.dataset.color = "solid";
     };
-    const setRainbow = () => {
-      labelColorElement.style.background = "";
-      labelColorElement.dataset.color = "rainbow";
-      labelElement.style.color = "white";
-    };
 
     const colors = layer.layerBarColors;
     if (
       !layer.supportsLayerBarColorSyncOption ||
       !layer.visible ||
-      colors?.length === 0
+      colors === undefined ||
+      colors.length === 0
     ) {
       setNoColor();
-      return;
-    }
-    if (colors === undefined) {
-      setRainbow();
       return;
     }
 
