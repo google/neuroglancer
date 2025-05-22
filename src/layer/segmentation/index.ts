@@ -1317,21 +1317,39 @@ export class SegmentationUserLayer extends Base {
   }
 
   get automaticLayerBarColors() {
+    const { displayState } = this;
     const visibleSegmentsSet =
-      this.displayState.segmentationGroupState.value.visibleSegments;
-    const showAllByDefault = this.displayState.ignoreNullVisibleSet.value;
-    if (visibleSegmentsSet.size === 0 && !showAllByDefault) {
-      return []; // No segments are visible
+      displayState.segmentationGroupState.value.visibleSegments;
+    const fixedColor = displayState.segmentDefaultColor.value;
+
+    const noVisibleSegments = visibleSegmentsSet.size === 0;
+    const tooManyVisibleSegments =
+      visibleSegmentsSet.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS;
+    const hasMappedColors =
+      displayState.segmentationColorGroupState.value.segmentStatedColors.size >
+      0;
+    const isFixedColorOnly = fixedColor !== undefined && !hasMappedColors;
+    const showAllByDefault = displayState.ignoreNullVisibleSet.value;
+
+    if (noVisibleSegments) {
+      if (!showAllByDefault) return []; // No segments visible
+      if (isFixedColorOnly) return [getCssColor(fixedColor)];
+      return undefined; // Rainbow colors
     }
-    if (
-      visibleSegmentsSet.size === 0 ||
-      visibleSegmentsSet.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS
-    ) {
+    if (isFixedColorOnly) {
+      return [getCssColor(fixedColor)]; // All segments show as one color
+    }
+
+    // Because manually mapped colors are not guaranteed to be unique,
+    // we need to actually check all the visible segments if
+    // manually mapped colors are used
+    if (!hasMappedColors && tooManyVisibleSegments) {
       return undefined; // Too many segments to show
     }
+
     const visibleSegments = [...visibleSegmentsSet];
     const colors = visibleSegments.map((id) => {
-      const color = getCssColor(getBaseObjectColor(this.displayState, id));
+      const color = getCssColor(getBaseObjectColor(displayState, id));
       return { color, id };
     });
 
@@ -1342,8 +1360,12 @@ export class SegmentationUserLayer extends Base {
       const bId = b.id;
       return aId < bId ? -1 : aId > bId ? 1 : 0;
     });
-    // Extract just the colors
-    return colors.map((color) => color.color);
+
+    const uniqueColors = [...new Set(colors.map((color) => color.color))];
+    if (uniqueColors.length > MAX_LAYER_BAR_UI_INDICATOR_COLORS) {
+      return undefined; // Too many colors to show
+    }
+    return uniqueColors;
   }
 
   static type = "segmentation";
