@@ -1341,6 +1341,74 @@ export class LocalAnnotationSource extends AnnotationSource {
     this.properties.changed.dispatch();
   }
 
+  updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newProperty: AnnotationPropertySpec,
+  ) {
+    // Can only convert between numeric types.
+    const { type: oldType } = oldProperty;
+    const { type: newType } = newProperty;
+    const isOldTypeNumeric = isAnnotationNumericPropertySpec(oldProperty);
+    const isNewTypeNumeric = isAnnotationNumericPropertySpec(newProperty);
+    const isConvertible = () => {
+      // Same type, no conversion needed.
+      if (oldType === newType) return true;
+      if (isOldTypeNumeric !== isNewTypeNumeric) return false;
+      if (!isOldTypeNumeric) return true;
+      if (newType === "float32") return true;
+
+      // Can convert between uint or int if newType is higher precision.
+      const sameFamily =
+        (oldType.startsWith("uint") && newType.startsWith("uint")) ||
+        (oldType.startsWith("int") && newType.startsWith("int"));
+
+      if (sameFamily) {
+        const oldBits = parseInt(oldType.replace(/\D/g, ""), 10);
+        const newBits = parseInt(newType.replace(/\D/g, ""), 10);
+        return oldBits < newBits;
+      }
+      return false;
+    };
+    if (!isConvertible()) {
+      console.error(
+        `Cannot convert property ${oldProperty.identifier} from ${oldProperty.type} to ${newProperty.type}`,
+      );
+      return;
+    }
+
+    const convertValue = (value: any) => {
+      if (value === oldProperty.default) {
+        return newProperty.default;
+      }
+      if (oldType === "rgb" && newType === "rgba") {
+        const rgba = new Uint8Array(4);
+        rgba[0] = value[0];
+        rgba[1] = value[1];
+        rgba[2] = value[2];
+        rgba[3] = 255;
+        return rgba;
+      }
+      return value;
+    };
+
+    const { identifier } = oldProperty;
+    const properties = this.properties.value;
+    const propertyIndex = properties.findIndex(
+      (x) => x.identifier === identifier,
+    );
+    if (propertyIndex === -1) {
+      console.error(`Property ${identifier} does not exist`);
+      return;
+    }
+    properties[propertyIndex] = newProperty;
+    for (const annotation of this) {
+      annotation.properties[propertyIndex] = convertValue(
+        annotation.properties[propertyIndex],
+      );
+    }
+    this.properties.changed.dispatch();
+  }
+
   ensureUpdated() {
     const transform = this.watchableTransform.value;
     const { curCoordinateTransform } = this;

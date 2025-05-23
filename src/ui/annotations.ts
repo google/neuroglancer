@@ -28,10 +28,12 @@ import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   Annotation,
   AnnotationId,
+  AnnotationPropertySpec,
   AnnotationReference,
   AxisAlignedBoundingBox,
   Ellipsoid,
   Line,
+  LocalAnnotationSource,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -111,6 +113,7 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
+import { getRandomHexString } from "#src/util/random.js";
 
 interface AnnotationPropertySchema {
   type: string;
@@ -1019,10 +1022,57 @@ export class AnnotationSchemaView extends Tab {
     this.element.appendChild(this.schemaTable);
     this.updateView();
 
+    // TODO make this only show for mutable layers
+    const addPropertyButton = makeAddButton({
+      title: "Add property",
+      onClick: () => {
+        const property: AnnotationPropertySpec = {
+          type: "float32",
+          identifier: `new_property${getRandomHexString(4)}`,
+          default: 0,
+          description: "",
+        };
+        this.addProperty(property);
+      },
+    });
+    this.element.appendChild(addPropertyButton);
+
     this.registerDisposer(
       this.annotationStates.changed.add(() => this.updateView()),
     );
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
+  }
+
+  private get mutableSources() {
+    // Get all modifiable sources
+    const states = this.layer.annotationStates.states.filter(
+      (state) => !state.source.readonly && "addProperty" in state.source,
+    );
+    return states.map((state) => state.source as LocalAnnotationSource);
+  }
+
+  private addProperty(property: AnnotationPropertySpec) {
+    this.mutableSources.forEach((s) => {
+      s.addProperty(property);
+    });
+    this.annotationStates.changed.dispatch();
+  }
+
+  private removeProperty(property: AnnotationPropertySpec) {
+    this.mutableSources.forEach((s) => {
+      s.removeProperty(property.identifier);
+    });
+    this.annotationStates.changed.dispatch();
+  }
+
+  private updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newProperty: AnnotationPropertySpec,
+  ) {
+    this.mutableSources.forEach((s) => {
+      s.updateProperty(oldProperty, newProperty);
+    });
+    this.annotationStates.changed.dispatch();
   }
 
   private extractSchema() {
