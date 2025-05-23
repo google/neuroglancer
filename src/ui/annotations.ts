@@ -1133,7 +1133,21 @@ export class AnnotationSchemaView extends Tab {
     const jsonSchema = states.map((state) =>
       annotationPropertySpecsToJson(state.source.properties.value),
     );
-    return stableStringify(jsonSchema);
+    const finalSchema = [];
+    // Remove all undefined values
+    for (const state of jsonSchema) {
+      if (state !== undefined) {
+        finalSchema.push(
+          state.map((property) => {
+            const entries = Object.entries(property).filter(
+              ([, value]) => value !== undefined,
+            );
+            return Object.fromEntries(entries);
+          }),
+        );
+      }
+    }
+    return stableStringify(finalSchema);
   }
 
   private downloadSchema() {
