@@ -108,6 +108,12 @@ export interface AnnotationNumericPropertySpec
   step?: number;
 }
 
+export function isAnnotationNumericPropertySpec(
+  spec: AnnotationPropertySpec,
+): spec is AnnotationNumericPropertySpec {
+  return spec.type !== "rgb" && spec.type !== "rgba";
+}
+
 export const propertyTypeDataType: Record<
   AnnotationPropertySpec["type"],
   DataType | undefined
@@ -607,14 +613,21 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
 
 function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
   const defaultValue = spec.default;
+  const handler = annotationPropertyTypeHandlers[spec.type];
+  const isNumeric = isAnnotationNumericPropertySpec(spec);
+  const enumValues =
+    isNumeric && spec.enumValues
+      ? spec.enumValues.map(handler.serializeJson)
+      : undefined;
+  const enumLabels = isNumeric ? spec.enumLabels : undefined;
   return {
     id: spec.identifier,
     description: spec.description,
     type: spec.type,
     default:
-      defaultValue === 0
-        ? undefined
-        : annotationPropertyTypeHandlers[spec.type].serializeJson(defaultValue),
+      defaultValue === 0 ? undefined : handler.serializeJson(defaultValue),
+    enum_labels: enumLabels,
+    enum_values: enumValues,
   };
 }
 
