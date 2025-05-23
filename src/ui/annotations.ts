@@ -1031,7 +1031,7 @@ export class AnnotationSchemaView extends Tab {
     for (const state of this.annotationStates.states) {
       if (!state.source.readonly) isMutable = true;
       if (state.chunkTransform.value.error !== undefined) continue;
-      const properties = state.source.properties;
+      const properties = state.source.properties.value;
       for (const property of properties) {
         const { type, identifier } = property;
         let enumValues: number[] | undefined;
@@ -1157,7 +1157,9 @@ export class PlacePointTool extends PlaceAnnotationTool {
         relatedSegments: getSelectedAssociatedSegments(annotationLayer),
         point,
         type: AnnotationType.POINT,
-        properties: annotationLayer.source.properties.map((x) => x.default),
+        properties: annotationLayer.source.properties.value.map(
+          (x) => x.default,
+        ),
       };
       const reference = annotationLayer.source.add(
         annotation,
@@ -1309,7 +1311,7 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
       description: "",
       pointA: point,
       pointB: point,
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1431,7 +1433,7 @@ class PlaceEllipsoidTool extends TwoStepAnnotationTool {
       segments: getSelectedAssociatedSegments(annotationLayer),
       center: point,
       radii: vec3.fromValues(0, 0, 0),
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1847,7 +1849,7 @@ export function UserLayerWithAnnotationsMixin<
                     new AnnotationPropertySerializer(
                       rank,
                       numGeometryBytes,
-                      properties,
+                      properties.value,
                     );
                   const annotationIndex = state.annotationIndex!;
                   const annotationCount = state.annotationCount!;
@@ -1866,7 +1868,9 @@ export function UserLayerWithAnnotationsMixin<
                     annotationIndex,
                     annotationCount,
                     isLittleEndian,
-                    (annotation.properties = new Array(properties.length)),
+                    (annotation.properties = new Array(
+                      properties.value.length,
+                    )),
                   );
                   if (annotationLayer.source.hasNonSerializedProperties()) {
                     statusText = "Loading...";
@@ -1964,7 +1968,10 @@ export function UserLayerWithAnnotationsMixin<
                   positionGrid.appendChild(button);
                 }
 
-                const { relationships, properties } = annotationLayer.source;
+                const {
+                  relationships,
+                  properties: { value: properties },
+                } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
 
                 // Add the ID to the annotation details.
