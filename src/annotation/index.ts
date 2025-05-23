@@ -612,7 +612,7 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   } as AnnotationPropertySpec;
 }
 
-function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
+function annotationPropertySpecToJson(spec: Readonly<AnnotationPropertySpec>) {
   const defaultValue = spec.default;
   const handler = annotationPropertyTypeHandlers[spec.type];
   const isNumeric = isAnnotationNumericPropertySpec(spec);
@@ -633,7 +633,7 @@ function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
 }
 
 export function annotationPropertySpecsToJson(
-  specs: AnnotationPropertySpec[] | undefined,
+  specs: readonly Readonly<AnnotationPropertySpec>[] | undefined,
 ) {
   if (specs === undefined || specs.length === 0) return undefined;
   return specs.map(annotationPropertySpecToJson);

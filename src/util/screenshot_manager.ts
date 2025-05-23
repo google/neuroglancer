@@ -38,6 +38,7 @@ import {
   type PanelViewport,
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
+import { saveBlobToFile } from "#src/util/file_download.js";
 
 export const MAX_RENDER_AREA_PIXELS = 5100 * 5100;
 const SCREENSHOT_TIMEOUT = 3000;
@@ -45,18 +46,6 @@ const SCREENSHOT_TIMEOUT = 3000;
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
   gpuMemoryCapacity: number;
-}
-
-function saveBlobToFile(blob: Blob, filename: string) {
-  const a = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = filename;
-  try {
-    a.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 function setExtension(filename: string, extension: string = ".png"): string {

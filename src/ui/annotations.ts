@@ -37,6 +37,7 @@ import type {
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
+  annotationPropertySpecsToJson,
   AnnotationSource,
   annotationToJson,
   AnnotationType,
@@ -91,7 +92,7 @@ import { removeChildren, updateChildren } from "#src/util/dom.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { vec3 } from "#src/util/geom.js";
-import { parseUint64 } from "#src/util/json.js";
+import { parseUint64, stableStringify } from "#src/util/json.js";
 import {
   EventActionMap,
   KeyboardEventBinder,
@@ -114,15 +115,8 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 import { getRandomHexString } from "#src/util/random.js";
-
-interface AnnotationPropertySchema {
-  type: string;
-  identifier: string;
-  defaultValue: number;
-  enumValues?: number[];
-  enumLabels?: string[];
-  description?: string;
-}
+import { saveBlobToFile } from "#src/util/file_download.js";
+import { StatusMessage } from "#src/status.js";
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -1022,25 +1016,84 @@ export class AnnotationSchemaView extends Tab {
     this.element.appendChild(this.schemaTable);
     this.updateView();
 
-    // TODO make this only show for mutable layers
-    const addPropertyButton = makeAddButton({
+    this.makeUI();
+    this.registerDisposer(
+      this.annotationStates.changed.add(() => this.updateView()),
+    );
+    this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
+  }
+
+  private makeUI() {
+    // TODO add paste etc only for mutable sources
+    // TODO add remove etc need to actually determine the property from UI input
+    const addButton = makeAddButton({
       title: "Add property",
       onClick: () => {
         const property: AnnotationPropertySpec = {
           type: "float32",
-          identifier: `new_property${getRandomHexString(4)}`,
+          identifier: `new_property${getRandomHexString(2)}`,
           default: 0,
           description: "",
         };
         this.addProperty(property);
       },
     });
-    this.element.appendChild(addPropertyButton);
+    this.element.appendChild(addButton);
 
-    this.registerDisposer(
-      this.annotationStates.changed.add(() => this.updateView()),
-    );
-    this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
+    const removeButton = makeDeleteButton({
+      title: "Remove property",
+      onClick: () => {
+        const property: AnnotationPropertySpec = {
+          type: "float32",
+          identifier: `new_property${getRandomHexString(2)}`,
+          default: 0,
+          description: "",
+        };
+        this.removeProperty(property);
+      },
+    });
+    this.element.appendChild(removeButton);
+
+    const updateButton = makeIcon({
+      text: "Update property",
+      title: "Update property",
+      onClick: () => {
+        const oldProperty: AnnotationPropertySpec = {
+          type: "float32",
+          identifier: `old_property${getRandomHexString(2)}`,
+          default: 0,
+          description: "",
+        };
+        const newProperty: AnnotationPropertySpec = {
+          type: "float32",
+          identifier: `new_property${getRandomHexString(2)}`,
+          default: 0,
+          description: "",
+        };
+        this.updateProperty(oldProperty, newProperty);
+      },
+    });
+    this.element.appendChild(updateButton);
+
+    const downloadButton = makeIcon({
+      text: "Download schema",
+      title: "Download schema",
+      onClick: () => this.downloadSchema(),
+    });
+    this.element.appendChild(downloadButton);
+
+    const copyButton = makeCopyButton({
+      title: "Copy schema to clipboard",
+      onClick: () => this.copySchemaToClipboard(),
+    });
+    this.element.appendChild(copyButton);
+
+    const pasteButton = makeIcon({
+      text: "Paste schema from clipboard",
+      title: "Paste schema from clipboard",
+      onClick: () => this.pasteSchemaFromClipboard(),
+    });
+    this.element.appendChild(pasteButton);
   }
 
   private get mutableSources() {
@@ -1075,29 +1128,65 @@ export class AnnotationSchemaView extends Tab {
     this.annotationStates.changed.dispatch();
   }
 
+  private get jsonSchema() {
+    const states = this.annotationStates.states;
+    const jsonSchema = states.map((state) =>
+      annotationPropertySpecsToJson(state.source.properties.value),
+    );
+    return stableStringify(jsonSchema);
+  }
+
+  private downloadSchema() {
+    const blob = new Blob([this.jsonSchema], {
+      type: "application/json",
+    });
+    saveBlobToFile(blob, "schema.json");
+  }
+
+  private copySchemaToClipboard() {
+    navigator.clipboard.writeText(this.jsonSchema).then(() => {
+      StatusMessage.showTemporaryMessage(
+        "Annotation schema copied to clipboard",
+        /*duration=*/ 2000,
+      );
+    });
+  }
+
+  private pasteSchemaFromClipboard() {
+    navigator.clipboard.readText().then((text) => {
+      try {
+        const parsedSchema = JSON.parse(text);
+        const states = this.annotationStates.states;
+        states.forEach((state) => {
+          const source = state.source as LocalAnnotationSource;
+          for (const property of parsedSchema) {
+            source.addProperty(property);
+          }
+        });
+        this.annotationStates.changed.dispatch();
+        StatusMessage.showTemporaryMessage(
+          "Annotation schema pasted from clipboard",
+          /*duration=*/ 2000,
+        );
+      } catch (error) {
+        console.error("Failed to parse schema from clipboard", error);
+        StatusMessage.showTemporaryMessage(
+          "Failed to parse schema from clipboard",
+          /*duration=*/ 2000,
+        );
+      }
+    });
+  }
+
   private extractSchema() {
-    const schema: AnnotationPropertySchema[] = [];
+    const schema: Readonly<AnnotationPropertySpec>[] = [];
     let isMutable = false;
     for (const state of this.annotationStates.states) {
       if (!state.source.readonly) isMutable = true;
       if (state.chunkTransform.value.error !== undefined) continue;
       const properties = state.source.properties.value;
       for (const property of properties) {
-        const { type, identifier } = property;
-        let enumValues: number[] | undefined;
-        let enumLabels: string[] | undefined;
-        if ("enumValues" in property) {
-          enumValues = property.enumValues;
-          enumLabels = property.enumLabels;
-        }
-        schema.push({
-          type,
-          identifier,
-          defaultValue: property.default,
-          enumValues,
-          enumLabels,
-          description: property.description,
-        });
+        schema.push(property);
       }
     }
     return { schema, isMutable };
@@ -1108,14 +1197,10 @@ export class AnnotationSchemaView extends Tab {
     console.log(schema);
 
     function* getItems() {
-      for (const {
-        type,
-        identifier,
-        defaultValue,
-        enumValues,
-        enumLabels,
-        description,
-      } of schema) {
+      for (const item of schema) {
+        const { type, identifier, default: defaultValue, description } = item;
+        const enumLabels = "enum_labels" in item ? item.enum_labels : undefined;
+        const enumValues = "enum_values" in item ? item.enum_values : undefined;
         const propertyElement = document.createElement("div");
         propertyElement.className = "neuroglancer-annotation-property";
         propertyElement.textContent = `${identifier} (${type}) ${defaultValue} ${enumValues} ${enumLabels} ${description}`;
