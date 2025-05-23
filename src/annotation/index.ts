@@ -1313,7 +1313,13 @@ export class LocalAnnotationSource extends AnnotationSource {
   }
 
   addProperty(property: AnnotationPropertySpec) {
-    this.properties.value.push(property);
+    const { identifier } = property;
+    const properties = this.properties.value;
+    if (properties.some((p) => p.identifier === identifier)) {
+      console.error(`Property ${identifier} already exists`);
+      return;
+    }
+    properties.push(property);
     for (const annotation of this) {
       annotation.properties.push(property.default);
     }
@@ -1324,6 +1330,10 @@ export class LocalAnnotationSource extends AnnotationSource {
     const propertyIndex = this.properties.value.findIndex(
       (x) => x.identifier === identifier,
     );
+    if (propertyIndex === -1) {
+      console.error(`Property ${identifier} does not exist`);
+      return;
+    }
     this.properties.value.splice(propertyIndex, 1);
     for (const annotation of this) {
       annotation.properties.splice(propertyIndex, 1);
