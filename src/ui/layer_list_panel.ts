@@ -40,6 +40,7 @@ import {
   TrackableSidePanelLocation,
 } from "#src/ui/side_panel_location.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { createSteppedCssGradient } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
 import { emptyToUndefined } from "#src/util/json.js";
@@ -103,6 +104,87 @@ export class LayerVisibilityWidget extends RefCounted {
     };
     updateView();
     this.registerDisposer(layer.layerChanged.add(updateView));
+  }
+}
+
+class LayerColorWidget extends RefCounted {
+  element = document.createElement("div");
+  colorIndicator = document.createElement("div");
+  private colorChangeDisposer: () => void = () => {};
+
+  constructor(
+    public panel: LayerListPanel,
+    public layer: ManagedUserLayer,
+  ) {
+    super();
+    const { colorIndicator, element } = this;
+    colorIndicator.className = "neuroglancer-layer-list-panel-color-value";
+    element.className = "neuroglancer-layer-list-panel-color-value-wrapper";
+    element.appendChild(colorIndicator);
+    const updateLayerColorWidget = () => {
+      const colors = this.layer.layerBarColors;
+      const setNoColor = () => {
+        colorIndicator.style.background = "";
+        colorIndicator.style.backgroundColor = "";
+        colorIndicator.dataset.color = "unsupported";
+        colorIndicator.title =
+          "Layer type does not support color legend or is currently not rendered";
+      };
+      if (!this.layer.supportsLayerBarColorSyncOption || colors?.length === 0) {
+        setNoColor();
+        return;
+      }
+      const setRainbow = () => {
+        colorIndicator.dataset.color = "rainbow";
+        colorIndicator.title =
+          "Multi-colored layer or layer with uncertain color";
+      };
+      if (colors === undefined) {
+        setRainbow();
+        return;
+      }
+
+      const setSingleColor = () => {
+        colorIndicator.style.background = "";
+        colorIndicator.style.backgroundColor = colors[0];
+        colorIndicator.dataset.color = "solid";
+        colorIndicator.title = "Primary layer color";
+      };
+
+      const setMultiColor = () => {
+        colorIndicator.style.backgroundColor = "";
+        colorIndicator.dataset.color = "multi";
+        colorIndicator.style.background = createSteppedCssGradient(
+          colors.reverse(),
+          true /*conic*/,
+        );
+        colorIndicator.title = "Primary layer colors";
+      };
+      if (colors.length === 1) setSingleColor();
+      else setMultiColor();
+    };
+
+    const listenForColorChange = () => {
+      if (!this.layer.isReady()) return;
+      this.colorChangeDisposer();
+      this.colorChangeDisposer = layer.observeLayerColor(() => {
+        updateLayerColorWidget();
+      });
+    };
+    this.registerDisposer(this.colorChangeDisposer);
+    this.registerDisposer(
+      this.layer.readyStateChanged.add(listenForColorChange),
+    );
+
+    this.registerDisposer(
+      layer.layerChanged.add(() => {
+        element.dataset.visible = this.layer.visible.toString();
+        updateLayerColorWidget();
+      }),
+    );
+    element.dataset.visible = this.layer.visible.toString();
+    listenForColorChange();
+    updateLayerColorWidget();
   }
 }
 
@@ -173,6 +255,9 @@ class LayerListItem extends RefCounted {
     element.appendChild(numberElement);
     element.appendChild(
       this.registerDisposer(new LayerVisibilityWidget(layer)).element,
+    );
+    element.appendChild(
+      this.registerDisposer(new LayerColorWidget(panel, layer)).element,
     );
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
     element.appendChild(layerNameWidget.element);
