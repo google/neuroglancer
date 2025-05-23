@@ -56,7 +56,7 @@ import type {
   AnnotationLayerView,
   MergedAnnotationStates,
 } from "#src/ui/annotations.js";
-import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import { AnnotationSchemaTab, UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -441,6 +441,11 @@ export class AnnotationUserLayer extends Base {
       order: -100,
       getter: () => new RenderingOptionsTab(this),
     });
+    this.tabs.add("schema", {
+        label: "Schema",
+        order: 20,
+        getter: () => new AnnotationSchemaTab(this),
+      });
     this.tabs.default = "annotations";
   }
 

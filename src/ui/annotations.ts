@@ -1717,11 +1717,6 @@ export function UserLayerWithAnnotationsMixin<
         order: 10,
         getter: () => new AnnotationTab(this),
       });
-      this.tabs.add("schema", {
-        label: "Schema",
-        order: 20,
-        getter: () => new AnnotationSchemaTab(this),
-      });
 
       let annotationStateReadyBinding: (() => void) | undefined;
 
