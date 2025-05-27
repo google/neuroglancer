@@ -1208,7 +1208,6 @@ export class AnnotationSchemaView extends Tab {
 
   private updateView() {
     const { schema } = this.extractSchema();
-    console.log(schema);
 
     function* getItems() {
       for (const item of schema) {
@@ -2150,7 +2149,38 @@ export function UserLayerWithAnnotationsMixin<
                     label.title = description;
                   }
                   const value = annotation.properties[i];
-                  const valueElement = document.createElement("span");
+                  let valueElement: HTMLElement;
+                  let valueElementSetter: (value: any) => void;
+                  if (sourceReadonly) {
+                    valueElement = document.createElement("span");
+                    valueElementSetter = (value) => {
+                      valueElement.textContent = value;
+                    };
+                  } else {
+                    // TODO check how components in shader widgets etc are made
+                    // to try and reuse them
+                    valueElement = document.createElement("input");
+                    // TODO type based on property.type
+                    (valueElement as HTMLInputElement).type = "number"
+                    // TODO RGBA color might need two inputs
+                    valueElementSetter = (value) => {
+                      (valueElement as HTMLInputElement).value = value;
+                    };
+                    (valueElement as HTMLInputElement).addEventListener(
+                      "change",
+                      () => {
+                        const x = (valueElement as HTMLInputElement).value;
+                        const newAnnotation = reference.value;
+                        // TODO switch on type
+                        newAnnotation!.properties[i] = Number(x);
+                        annotationLayer.source.update(
+                          reference,
+                          newAnnotation!,
+                        );
+                        annotationLayer.source.commit(reference);
+                      },
+                    );
+                  }
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
                   );
@@ -2158,7 +2188,7 @@ export function UserLayerWithAnnotationsMixin<
                     case "rgb": {
                       const colorVec = unpackRGB(value);
                       const hex = serializeColor(colorVec);
-                      valueElement.textContent = hex;
+                      valueElementSetter(hex);
                       valueElement.style.backgroundColor = hex;
                       valueElement.style.color = useWhiteBackground(colorVec)
                         ? "white"
@@ -2167,9 +2197,7 @@ export function UserLayerWithAnnotationsMixin<
                     }
                     case "rgba": {
                       const colorVec = unpackRGB(value);
-                      valueElement.textContent = serializeColor(
-                        unpackRGBA(value),
-                      );
+                      valueElementSetter(serializeColor(unpackRGBA(value)));
                       valueElement.style.backgroundColor = serializeColor(
                         unpackRGB(value),
                       );
@@ -2179,10 +2207,11 @@ export function UserLayerWithAnnotationsMixin<
                       break;
                     }
                     default:
-                      valueElement.textContent = formatNumericProperty(
-                        property,
-                        value,
-                      );
+                      console.log(property, value);
+                      const valueToSet = sourceReadonly
+                        ? formatNumericProperty(property, value)
+                        : value;
+                      valueElementSetter(valueToSet);
                       break;
                   }
                   label.appendChild(valueElement);
