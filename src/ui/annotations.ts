@@ -19,6 +19,8 @@
  */
 
 import svg_help from "ikonate/icons/help.svg?raw";
+import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
+import svg_upload from "ikonate/icons/upload.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -1005,6 +1007,7 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private schemaTable = document.createElement("div");
+  private schemaTextContainer = document.createElement("div");
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -1012,7 +1015,9 @@ export class AnnotationSchemaView extends Tab {
   ) {
     super();
     this.element.classList.add("neuroglancer-annotation-schema-view");
+    this.schemaTextContainer.className = "neuroglancer-annotation-schema-text-container";
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
+    this.element.appendChild(this.schemaTextContainer);
     this.element.appendChild(this.schemaTable);
     this.updateView();
 
@@ -1026,6 +1031,10 @@ export class AnnotationSchemaView extends Tab {
   private makeUI() {
     // TODO add paste etc only for mutable sources
     // TODO add remove etc need to actually determine the property from UI input
+    const text = document.createElement("p");
+    text.textContent = "Set default metadata schema for your layer which would apply to all your annotations."
+    this.schemaTextContainer.appendChild(text);
+  
     const addButton = makeAddButton({
       title: "Add property",
       onClick: () => {
@@ -1038,7 +1047,7 @@ export class AnnotationSchemaView extends Tab {
         this.addProperty(property);
       },
     });
-    this.element.appendChild(addButton);
+    this.schemaTextContainer.appendChild(addButton);
 
     const removeButton = makeDeleteButton({
       title: "Remove property",
@@ -1052,7 +1061,7 @@ export class AnnotationSchemaView extends Tab {
         this.removeProperty(property);
       },
     });
-    this.element.appendChild(removeButton);
+    this.schemaTextContainer.appendChild(removeButton);
 
     const updateButton = makeIcon({
       text: "Update property",
@@ -1073,27 +1082,27 @@ export class AnnotationSchemaView extends Tab {
         this.updateProperty(oldProperty, newProperty);
       },
     });
-    this.element.appendChild(updateButton);
+    this.schemaTextContainer.appendChild(updateButton);
 
     const downloadButton = makeIcon({
-      text: "Download schema",
       title: "Download schema",
+      svg: svg_upload,
       onClick: () => this.downloadSchema(),
     });
-    this.element.appendChild(downloadButton);
+    this.schemaTextContainer.appendChild(downloadButton);
 
     const copyButton = makeCopyButton({
       title: "Copy schema to clipboard",
       onClick: () => this.copySchemaToClipboard(),
     });
-    this.element.appendChild(copyButton);
+    this.schemaTextContainer.appendChild(copyButton);
 
     const pasteButton = makeIcon({
-      text: "Paste schema from clipboard",
       title: "Paste schema from clipboard",
+      svg: svg_clipboard,
       onClick: () => this.pasteSchemaFromClipboard(),
     });
-    this.element.appendChild(pasteButton);
+    this.schemaTextContainer.appendChild(pasteButton);
   }
 
   private get mutableSources() {
