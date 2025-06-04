@@ -15,7 +15,10 @@
  */
 
 import { debounce } from "lodash-es";
-import { makeCoordinateSpace } from "#src/coordinate_transform.js";
+import {
+  makeCoordinateSpace,
+  permuteCoordinateSpace,
+} from "#src/coordinate_transform.js";
 import type { SingleChannelMetadata } from "#src/datasource/index.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
 import {
@@ -58,8 +61,10 @@ const DEFAULT_ARRAY_COLORS = new Map([
 
 const DEFAULT_VOLUME_RENDERING_SAMPLES = 256;
 
+/**
+ * Rename each output dim with ^ to be ' instead.
+ */
 function renameChannelDimensions(layer: UserLayer) {
-  // rename each output dim with ^ to be ' instead
   for (const dataSource of layer.dataSources) {
     const { loadState } = dataSource;
     if (loadState === undefined) return;
@@ -79,6 +84,27 @@ function renameChannelDimensions(layer: UserLayer) {
       ...loadState.transform.value,
       outputSpace: newOutputSpace,
     };
+  }
+}
+
+/**
+ * Permute TZYX, ZYX, or YX to XYTZ order by reversing the dimensions.
+ */
+function reverseGlobalDimOrderIfNeeded(layer: ManagedUserLayer) {
+  const globalCoordinateSpace =
+    layer.manager.root.globalPosition.coordinateSpace;
+  const { names, rank } = globalCoordinateSpace.value;
+  if (
+    (rank === 4 && arraysEqual(names, ["t", "z", "y", "x"])) ||
+    (rank === 3 && arraysEqual(names, ["z", "y", "x"])) ||
+    (rank === 2 && arraysEqual(names, ["y", "x"]))
+  ) {
+    // Reverse the order
+    const newOrder = Array.from({ length: rank }, (_, i) => rank - 1 - i);
+    globalCoordinateSpace.value = permuteCoordinateSpace(
+      globalCoordinateSpace.value,
+      newOrder,
+    );
   }
 }
 
@@ -312,4 +338,5 @@ export function createImageLayerAsMultiChannel(
     managedLayer.manager.display.multiChannelSetupFinished.dispatch();
   }
   postCreationSetupFunctions.forEach((fn) => fn());
+  reverseGlobalDimOrderIfNeeded(managedLayer);
 }
