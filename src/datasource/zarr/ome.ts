@@ -102,7 +102,11 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
 
   const active = getProp("active", verifyBoolean);
   const coefficient = getProp("coefficient", verifyFiniteFloat);
-  const colorString = getProp("color", verifyString);
+  let colorString = getProp("color", verifyString);
+  // If six hex digits, needs the # in front of the hex color
+  if (colorString && /^[0-9a-f]{6}$/i.test(colorString)) {
+    colorString = `#${colorString}`;
+  }
   const color = parseRGBColorSpecification(colorString);
   const inverted = getProp("inverted", verifyBoolean);
   const label = getProp("label", verifyString);
