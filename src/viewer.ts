@@ -288,7 +288,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("statistics", viewer.statisticsDisplayState);
     this.add("helpPanel", viewer.helpPanelState);
     this.add("settingsPanel", viewer.settingsPanelState);
-    this.add("selection", viewer.selectionDetailsState); // TODO, if I disable this, do we stop updating the state when we move the mouse?
+    this.add("selection", viewer.selectionDetailsState);
     this.add("layerListPanel", viewer.layerListPanelState);
     this.add("partialViewport", viewer.partialViewport);
     this.add("selectedStateServer", viewer.selectedStateServer);
