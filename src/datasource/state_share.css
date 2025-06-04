@@ -1,0 +1,83 @@
+.neuroglancer-state-share-button-container {
+  display: inline-flex;
+  flex-direction: row;
+}
+
+.neuroglancer-state-share-button-container {
+  border-radius: 20%;
+  border: 1px solid transparent;
+}
+
+.neuroglancer-state-share-button-container:hover {
+  background-color: #484848;
+}
+
+.neuroglancer-state-share-button {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+}
+
+.neuroglancer-state-share-dropdown {
+  position: absolute;
+  z-index: 100;
+  min-width: fit-content;
+  border: 1px solid #aaa;
+  background-color: black;
+  padding: 2px;
+}
+
+.neuroglancer-state-share-dropdown > ul {
+  overflow-y: auto;
+  padding: 0px;
+  margin: 0px;
+  display: grid;
+  grid-template-rows: min-content min-content;
+  grid-auto-rows: 1fr;
+  grid-template-columns: min-content min-content min-content;
+  column-gap: 5px;
+  align-items: center;
+}
+
+.neuroglancer-state-share-dropdown > ul > li {
+  height: 100%;
+  display: grid;
+  box-sizing: border-box;
+  grid-column: 1/4;
+  grid-template-columns: subgrid;
+  align-items: center;
+  cursor: pointer;
+  list-style-type: none;
+  padding: 2px;
+  font: 10pt sans-serif;
+  white-space: nowrap;
+}
+
+.neuroglancer-state-share-dropdown-item:hover {
+  background-color: #333;
+}
+
+.neuroglancer-state-share-dropdown-item > *:nth-child(3) {
+  justify-self: end;
+}
+
+.neuroglancer-state-share-dropdown
+  > ul
+  > .neuroglancer-state-share-dropdown-separator {
+  height: 1px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+  padding: 0px;
+  background-color: #ccc;
+}
+
+.neuroglancer-state-share-items {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  font: 10pt sans-serif;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
