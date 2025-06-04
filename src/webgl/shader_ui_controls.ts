@@ -866,6 +866,7 @@ export class WatchableShaderUiControls
 export interface InvlerpParameters {
   range: DataTypeInterval;
   window: DataTypeInterval;
+  autoCompute?: boolean;
 }
 
 export interface ImageInvlerpParameters extends InvlerpParameters {
