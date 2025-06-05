@@ -33,7 +33,7 @@ import {
   makeCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
-import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
+import { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import type {
   CoordinateSpacePlaybackVelocity,
   Position,

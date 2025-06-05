@@ -765,6 +765,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
           showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
           showViewerMenu: true,
           showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues,
+          showAllBounds: viewer.showAllDimensionPlotBounds,
         },
       );
       try {

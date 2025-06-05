@@ -109,6 +109,7 @@ export interface LayerGroupViewerOptions {
   showLayerPanel: WatchableValueInterface<boolean>;
   showViewerMenu: boolean;
   showLayerHoverValues: WatchableValueInterface<boolean>;
+  showAllBounds?: boolean;
 }
 
 export const viewerDragType = "neuroglancer-layer-group-viewer";
