@@ -107,7 +107,7 @@ export class PositionPlot extends RefCounted {
     public position: Position,
     public dimensionId: DimensionId,
     public orientation: "row" | "column" = "column",
-    private showOnlyMaxBounds: boolean = false,
+    private showAllBounds: boolean = false,
   ) {
     super();
     this.tickWidth = orientation === "column" ? 10 : 5;
@@ -178,7 +178,7 @@ export class PositionPlot extends RefCounted {
         this.visible = false;
         return;
       }
-      if (this.showOnlyMaxBounds) {
+      if (!this.showAllBounds) {
         // Find the maximal normalized bounds.
         let minLowerBound: number | undefined = undefined;
         let maxUpperBound: number | undefined = undefined;

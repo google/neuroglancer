@@ -230,6 +230,7 @@ const defaultViewerOptions =
     : {
         showLayerDialog: true,
         resetStateWhenEmpty: true,
+        showAllDimensionPlotBounds: false,
       };
 
 class TrackableViewerState extends CompoundTrackable {
@@ -500,6 +501,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
+  showAllDimensionPlotBounds: boolean;
 
   get inputEventMap() {
     return this.inputEventBindings.global;
@@ -564,7 +566,8 @@ export class Viewer extends RefCounted implements ViewerState {
     setViewerUiConfiguration(uiConfiguration, options);
 
     const optionsWithDefaults = { ...defaultViewerOptions, ...options };
-    const { resetStateWhenEmpty, showLayerDialog } = optionsWithDefaults;
+    const { resetStateWhenEmpty, showLayerDialog, showAllDimensionPlotBounds } =
+      optionsWithDefaults;
 
     for (const key of VIEWER_UI_CONTROL_CONFIG_OPTIONS) {
       this.uiControlVisibility[key] = this.makeUiControlVisibilityState(key);
@@ -577,6 +580,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.showLayerDialog = showLayerDialog;
     this.resetStateWhenEmpty = resetStateWhenEmpty;
+    this.showAllDimensionPlotBounds = showAllDimensionPlotBounds;
 
     this.layerSpecification = new TopLevelLayerListSpecification(
       this.display,
@@ -699,7 +703,7 @@ export class Viewer extends RefCounted implements ViewerState {
         {
           velocity: this.velocity,
           getToolBinder: () => this.toolBinder,
-          showOnlyMaxBounds: true,
+          showAllBounds: this.showAllDimensionPlotBounds,
         },
       ),
     );
