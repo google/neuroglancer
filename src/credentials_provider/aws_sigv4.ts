@@ -62,7 +62,7 @@ async function applyCredentials(
     hostname: apiUrl.hostname.toString(),
     protocol: apiUrl.protocol,
     path: apiUrl.pathname,
-    method: "GET",
+    method: init.method || "GET",
     headers: { ...init.headers, host: apiUrl.hostname.toString() },
   } as HttpRequest;
   return signer
