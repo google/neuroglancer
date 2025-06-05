@@ -307,6 +307,17 @@ input.neuroglancer-segment-list-entry-id {
   visibility: visible;
 }
 
+.delete-cell svg {
+  width: 1rem;
+  height: 1rem;
+  fill: transparent;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 .neuroglancer-annotation-schema-cell {
   flex: 1;
   display: inline-flex;
@@ -315,13 +326,34 @@ input.neuroglancer-segment-list-entry-id {
 
 .schema-cell-icon-wrapper {
   display: inline-flex;
+  text-decoration: none;
+  align-self: center;
+  white-space: nowrap;
+  padding-left: 2px;
+  padding-right: 2px;
+  min-width: 12px;
+  min-height: 12px;
   align-items: center;
-  margin-right: 0.25rem;
+  justify-content: center;
+  color: white;
+  font: 12px sans-serif;
+  cursor: pointer;
+  font-weight: 900;
+  margin-left: 1px;
+  margin-right: 1px;
+  user-select: none;
 }
 
 .schema-cell-icon-wrapper svg {
   width: 12px;
   height: 12px;
+  opacity: 0.6;
+  fill: transparent;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .neuroglancer-annotation-schema-row:last-child .neuroglancer-annotation-schema-cell {
@@ -422,6 +454,15 @@ input.neuroglancer-segment-list-entry-id {
   border: none;
   background: rgba(255, 255, 255, 0.30);
   color: white;
+}
+
+.schema-default-input:hover {
+  background: rgba(255, 255, 255, 0.40);
+}
+
+.schema-default-input:focus {
+  border: 1px solid #016DCC;
+  outline: none;
 }
 
 input[type="color"] {

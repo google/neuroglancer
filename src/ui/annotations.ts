@@ -20,13 +20,12 @@
 
 import svg_help from "ikonate/icons/help.svg?raw";
 import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
-import svg_upload from "ikonate/icons/upload.svg?raw";
-import svg_format_size from "#src/ui/images/svg_format_size.svg?raw";
-import svg_exposure_zero from "#src/ui/images/svg_exposure_zero.svg?raw";
-import svg_numbers from "#src/ui/images/svg_numbers.svg?raw";
-import svg_palette from "#src/ui/images/svg_palette.svg?raw";
-import svg_toggle_on from "#src/ui/images/svg_toggle_on.svg?raw";
-import svg_delete from "#src/ui/images/svg_delete.svg?raw";
+import svg_bin from "ikonate/icons/bin.svg?raw";
+import svg_share from "ikonate/icons/share.svg?raw";
+import svg_format_size from "ikonate/icons/text.svg?raw";
+import svg_numbers from "ikonate/icons/hash.svg?raw";
+import svg_palette from "ikonate/icons/drop.svg?raw";
+import svg_check from "ikonate/icons/ok-circle.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -1084,7 +1083,7 @@ export class AnnotationSchemaView extends Tab {
 
     const downloadButton = makeIcon({
       title: "Download schema",
-      svg: svg_upload,
+      svg: svg_share,
       onClick: () => this.downloadSchema(),
     });
     this.schemaActionButtons.appendChild(downloadButton);
@@ -1129,8 +1128,8 @@ export class AnnotationSchemaView extends Tab {
     };
 
     const itemIcons: Record<string, string> = {
-      "float32": svg_exposure_zero,
-      "Boolean": svg_toggle_on
+      "float32": svg_numbers,
+      "Boolean": svg_check
     };
 
     const headerRow = document.createElement("div");
@@ -1190,7 +1189,7 @@ export class AnnotationSchemaView extends Tab {
           enumRow.className = "enum-entry";
 
           // TODO: append real keybinding element
-          const keyLabel = document.createElement("label");
+          const keyLabel = document.createElement("div");
           keyLabel.classList.add("neuroglancer-tool-palette-tool-container");
 
           const textInput = document.createElement("input");
@@ -1255,6 +1254,8 @@ export class AnnotationSchemaView extends Tab {
         const numberInput = document.createElement("input");
         numberInput.type = "number";
         numberInput.value = "0";
+        numberInput.name = `number-name-${index}`;
+        numberInput.id = `number-name-${index}`;
         numberInput.classList.add("schema-default-input");
         defaultCell.appendChild(numberInput);
       } else {
@@ -1265,8 +1266,7 @@ export class AnnotationSchemaView extends Tab {
       const deleteCell = document.createElement("div");
       deleteCell.classList.add("neuroglancer-annotation-schema-cell", "delete-cell");
       const deleteIcon = document.createElement("span");
-      deleteIcon.innerHTML = svg_delete;
-      deleteIcon.classList.add("delete-icon");
+      deleteIcon.innerHTML = svg_bin;
       deleteIcon.title = "Delete row";
       deleteIcon.style.cursor = "pointer";
       deleteIcon.addEventListener("click", () => {
@@ -1310,17 +1310,17 @@ export class AnnotationSchemaView extends Tab {
             const option = document.createElement("div");
             option.className = "neuroglancer-annotation-schema-dropdown-option";
 
+            const iconWrapper = document.createElement("span");
+            iconWrapper.classList.add("schema-cell-icon-wrapper");
             const icon = document.createElement("span");
             const iconSVG = itemIcons[item] || sectionIcons[section.header];
             icon.innerHTML = iconSVG;
-            icon.style.display = "inline-flex";
-            icon.style.alignItems = "center";
-            icon.style.marginRight = "0.25rem";
+            iconWrapper.appendChild(icon)
 
             const text = document.createElement("span");
             text.textContent = item;
 
-            option.appendChild(icon);
+            option.appendChild(iconWrapper);
             option.appendChild(text);
 
             option.addEventListener("mouseover", () => option.style.backgroundColor = "#333");
