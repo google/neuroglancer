@@ -303,6 +303,7 @@ export class PositionWidget extends RefCounted {
   private allowFocus: boolean;
   private showPlayback: boolean;
   private showDropdown: boolean;
+  private showOnlyMaxBounds: boolean;
 
   private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
   private dimensionWidgetList: DimensionWidget[] = [];
@@ -332,7 +333,7 @@ export class PositionWidget extends RefCounted {
     }
 
     const plot = dropdownOwner.registerDisposer(
-      new PositionPlot(this.position, widget.id),
+      new PositionPlot(this.position, widget.id, undefined, this.showOnlyMaxBounds),
     );
     dropdown.appendChild(plot.element);
 
@@ -1040,6 +1041,7 @@ export class PositionWidget extends RefCounted {
       allowFocus = true,
       showPlayback = true,
       showDropdown = true,
+      showOnlyMaxBounds = false,
     }: {
       copyButton?: boolean;
       velocity?: CoordinateSpacePlaybackVelocity;
@@ -1048,6 +1050,7 @@ export class PositionWidget extends RefCounted {
       allowFocus?: boolean;
       showPlayback?: boolean;
       showDropdown?: boolean;
+      showOnlyMaxBounds?: boolean;
     } = {},
   ) {
     super();
@@ -1058,6 +1061,7 @@ export class PositionWidget extends RefCounted {
     this.allowFocus = allowFocus;
     this.showPlayback = showPlayback;
     this.showDropdown = showDropdown;
+    this.showOnlyMaxBounds = showOnlyMaxBounds;
     this.registerDisposer(
       position.coordinateSpace.changed.add(
         this.registerCancellable(
@@ -1452,12 +1456,13 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         allowFocus: inPalette,
         showPlayback: false,
         showDropdown: false,
+        showOnlyMaxBounds: true,
       },
     );
     positionWidget.element.style.userSelect = "none";
     content.appendChild(activation.registerDisposer(positionWidget).element);
     const plot = activation.registerDisposer(
-      new PositionPlot(viewer.position, this.dimensionId, "row"),
+      new PositionPlot(viewer.position, this.dimensionId, "row", true),
     );
     plot.element.style.flex = "1";
     content.appendChild(plot.element);

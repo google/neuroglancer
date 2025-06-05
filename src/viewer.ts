@@ -699,6 +699,7 @@ export class Viewer extends RefCounted implements ViewerState {
         {
           velocity: this.velocity,
           getToolBinder: () => this.toolBinder,
+          showOnlyMaxBounds: true,
         },
       ),
     );

@@ -107,6 +107,7 @@ export class PositionPlot extends RefCounted {
     public position: Position,
     public dimensionId: DimensionId,
     public orientation: "row" | "column" = "column",
+    private showOnlyMaxBounds: boolean = false,
   ) {
     super();
     this.tickWidth = orientation === "column" ? 10 : 5;
@@ -163,7 +164,7 @@ export class PositionPlot extends RefCounted {
         canvas.height = this.canvasWidth;
       }
 
-      const normalizedDimensionBounds = getNormalizedDimensionBounds(
+      let normalizedDimensionBounds = getNormalizedDimensionBounds(
         coordinateSpace,
         dimensionIndex,
         canvasHeight,
@@ -176,6 +177,25 @@ export class PositionPlot extends RefCounted {
         this.element.style.display = "none";
         this.visible = false;
         return;
+      }
+      if (this.showOnlyMaxBounds) {
+        // Find the maximal normalized bounds.
+        let minLowerBound: number | undefined = undefined;
+        let maxUpperBound: number | undefined = undefined;
+        for (const { lower, upper } of normalizedDimensionBounds.normalizedBounds) {
+          if (minLowerBound === undefined || lower < minLowerBound) {
+            minLowerBound = lower;
+          }
+          if (maxUpperBound === undefined || upper > maxUpperBound) {
+            maxUpperBound = upper;
+          }
+        }
+        normalizedDimensionBounds.normalizedBounds = [
+          {
+            lower: minLowerBound || 0,
+            upper: maxUpperBound || 0,
+          },
+        ];
       }
       this.element.style.display = "";
       this.visible = true;
