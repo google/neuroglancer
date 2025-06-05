@@ -282,3 +282,150 @@ input.neuroglancer-segment-list-entry-id {
   font-family: sans-serif;
   font-size: small;
 }
+
+.neuroglancer-annotation-schema-grid {
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+}
+
+.neuroglancer-annotation-schema-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 2px;
+  border-bottom: 1px solid #222;
+  gap: 0.5rem;
+}
+
+.neuroglancer-annotation-schema-text-container {
+  padding: 0.25rem;
+  color: rgba(255, 255, 255, 0.60);
+}
+
+.neuroglancer-annotation-schema-row:hover .delete-cell {
+  opacity: 1;
+  visibility: visible;
+}
+
+.neuroglancer-annotation-schema-cell {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.schema-cell-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.25rem;
+}
+
+.schema-cell-icon-wrapper svg {
+  width: 12px;
+  height: 12px;
+}
+
+.neuroglancer-annotation-schema-row:last-child .neuroglancer-annotation-schema-cell {
+  border-bottom: none;
+}
+
+.neuroglancer-annotation-schema-cell:last-child {
+  border-right: none;
+  max-width: 1.25rem;
+}
+
+.header-row {
+  color: rgba(255, 255, 255, 0.60);
+}
+
+.neuroglancer-annotation-schema-action-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon {
+  opacity: 60%;
+}
+
+.neuroglancer-annotation-schema-add-button-field {
+  width: 100%;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.delete-cell {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.neuroglancer-annotation-schema-dropdown {
+  font-family: sans-serif;
+  position: absolute;
+  border: 0.5px solid #FFF;
+  background: #111;
+  padding: 2px;
+  z-index: 1000;
+  min-width: 160px;
+  margin-top: 5px;
+}
+
+.neuroglancer-annotation-schema-dropdown-header {
+  color: rgba(255, 255, 255, 0.60);
+  padding: 0.25rem;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.neuroglancer-annotation-schema-dropdown-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.25rem;
+  margin-bottom: 2px;
+  gap: 0.25rem;
+  font-size: 13px;
+}
+
+.enum-entry {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.schema-name-input {
+  width: 100%;
+  border-radius: 2px;
+  box-sizing: border-box;
+  background: transparent;
+  font-size: 13px;
+  color: white;
+  border: none;
+}
+
+.schema-name-input:hover {
+  background: rgba(255, 255, 255, 0.30);
+}
+
+.schema-name-input:focus {
+  border: 1px solid #016DCC;
+  outline: none;
+}
+
+.schema-name-input:hover:focus {
+  background: transparent;
+}
+
+.schema-default-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  background: rgba(255, 255, 255, 0.30);
+  color: white;
+}
+
+input[type="color"] {
+  background: #222;
+  border-radius: 2px;
+  width: 100%;
+}

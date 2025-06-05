@@ -21,6 +21,12 @@
 import svg_help from "ikonate/icons/help.svg?raw";
 import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_upload from "ikonate/icons/upload.svg?raw";
+import svg_format_size from "#src/ui/images/svg_format_size.svg?raw";
+import svg_exposure_zero from "#src/ui/images/svg_exposure_zero.svg?raw";
+import svg_numbers from "#src/ui/images/svg_numbers.svg?raw";
+import svg_palette from "#src/ui/images/svg_palette.svg?raw";
+import svg_toggle_on from "#src/ui/images/svg_toggle_on.svg?raw";
+import svg_delete from "#src/ui/images/svg_delete.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -122,8 +128,7 @@ import { StatusMessage } from "#src/status.js";
 
 export class MergedAnnotationStates
   extends RefCounted
-  implements WatchableValueInterface<readonly AnnotationLayerState[]>
-{
+  implements WatchableValueInterface<readonly AnnotationLayerState[]> {
   changed = new NullarySignal();
   isLoadingChanged = new NullarySignal();
   states: Borrowed<AnnotationLayerState>[] = [];
@@ -241,10 +246,10 @@ interface AnnotationLayerViewAttachedState {
 export class AnnotationLayerView extends Tab {
   private previousSelectedState:
     | {
-        annotationId: string;
-        annotationLayerState: AnnotationLayerState;
-        pin: boolean;
-      }
+      annotationId: string;
+      annotationLayerState: AnnotationLayerState;
+      pin: boolean;
+    }
     | undefined = undefined;
   private previousHoverId: string | undefined = undefined;
   private previousHoverAnnotationLayerState: AnnotationLayerState | undefined =
@@ -583,7 +588,7 @@ export class AnnotationLayerView extends Tab {
         selectionState !== undefined &&
         previousSelectedState.annotationId === selectionState.annotationId &&
         previousSelectedState.annotationLayerState ===
-          selectionState.annotationLayerState &&
+        selectionState.annotationLayerState &&
         previousSelectedState.pin === selectionState.pin)
     ) {
       return;
@@ -1008,6 +1013,7 @@ export class AnnotationSchemaView extends Tab {
 
   private schemaTable = document.createElement("div");
   private schemaTextContainer = document.createElement("div");
+  private schemaActionButtons = document.createElement("div");
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -1016,12 +1022,14 @@ export class AnnotationSchemaView extends Tab {
     super();
     this.element.classList.add("neuroglancer-annotation-schema-view");
     this.schemaTextContainer.className = "neuroglancer-annotation-schema-text-container";
+    this.schemaActionButtons.className = "neuroglancer-annotation-schema-action-buttons"
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
     this.element.appendChild(this.schemaTextContainer);
     this.element.appendChild(this.schemaTable);
     this.updateView();
 
     this.makeUI();
+    this.createSchemaTable();
     this.registerDisposer(
       this.annotationStates.changed.add(() => this.updateView()),
     );
@@ -1033,21 +1041,11 @@ export class AnnotationSchemaView extends Tab {
     // TODO add remove etc need to actually determine the property from UI input
     const text = document.createElement("p");
     text.textContent = "Set default metadata schema for your layer which would apply to all your annotations."
+    text.style.marginTop = "0";
+    text.style.marginBottom = "0.25rem"
+    text.style.padding = "0.25rem"
     this.schemaTextContainer.appendChild(text);
-  
-    const addButton = makeAddButton({
-      title: "Add property",
-      onClick: () => {
-        const property: AnnotationPropertySpec = {
-          type: "float32",
-          identifier: `new_property${getRandomHexString(2)}`,
-          default: 0,
-          description: "",
-        };
-        this.addProperty(property);
-      },
-    });
-    this.schemaTextContainer.appendChild(addButton);
+    this.schemaTextContainer.appendChild(this.schemaActionButtons);
 
     const removeButton = makeDeleteButton({
       title: "Remove property",
@@ -1061,7 +1059,7 @@ export class AnnotationSchemaView extends Tab {
         this.removeProperty(property);
       },
     });
-    this.schemaTextContainer.appendChild(removeButton);
+    this.schemaActionButtons.appendChild(removeButton);
 
     const updateButton = makeIcon({
       text: "Update property",
@@ -1082,43 +1080,295 @@ export class AnnotationSchemaView extends Tab {
         this.updateProperty(oldProperty, newProperty);
       },
     });
-    this.schemaTextContainer.appendChild(updateButton);
+    this.schemaActionButtons.appendChild(updateButton);
 
     const downloadButton = makeIcon({
       title: "Download schema",
       svg: svg_upload,
       onClick: () => this.downloadSchema(),
     });
-    this.schemaTextContainer.appendChild(downloadButton);
+    this.schemaActionButtons.appendChild(downloadButton);
 
     const copyButton = makeCopyButton({
       title: "Copy schema to clipboard",
       onClick: () => this.copySchemaToClipboard(),
     });
-    this.schemaTextContainer.appendChild(copyButton);
+    this.schemaActionButtons.appendChild(copyButton);
 
     const pasteButton = makeIcon({
       title: "Paste schema from clipboard",
       svg: svg_clipboard,
       onClick: () => this.pasteSchemaFromClipboard(),
     });
-    this.schemaTextContainer.appendChild(pasteButton);
+    this.schemaActionButtons.appendChild(pasteButton);
+  }
+
+  private createSchemaTable() {
+    const addButtonField = document.createElement("div");
+    addButtonField.className = "neuroglancer-annotation-schema-add-button-field";
+    const headers = ["Name", "Type", "Default value", ""];
+    const tableData = [
+      { name: "Name", type: "Enum (uint8)", default_value: "", delete_cell: "" },
+      { name: "Color alpha", type: "RGBa", default_value: "", delete_cell: "" },
+      { name: "is_deleted", type: "Boolean", default_value: "", delete_cell: "" },
+      { name: "Decimal", type: "float32", default_value: "", delete_cell: "" },
+      { name: "Color", type: "RGB", default_value: "", delete_cell: "" }
+    ];
+
+    const dropdownData = [
+      { header: "General", items: ["float32", "Boolean"] },
+      { header: "Enum", items: ["uint8", "uint16"] },
+      { header: "Colour", items: ["RGB", "RGBa"] },
+      { header: "Integer", items: ["int8", "int16", "int32"] }
+    ];
+
+    const sectionIcons: Record<string, string> = {
+      "Enum": svg_format_size,
+      "Colour": svg_palette,
+      "Integer": svg_numbers
+    };
+
+    const itemIcons: Record<string, string> = {
+      "float32": svg_exposure_zero,
+      "Boolean": svg_toggle_on
+    };
+
+    const headerRow = document.createElement("div");
+    headerRow.classList.add("neuroglancer-annotation-schema-row", "header-row");
+    headers.forEach(text => {
+      const cell = document.createElement("div");
+      cell.classList.add("neuroglancer-annotation-schema-cell");
+      cell.textContent = text;
+      headerRow.appendChild(cell);
+    });
+    this.schemaTable.appendChild(headerRow);
+
+    tableData.forEach((rowData, index) => {
+      const row = document.createElement("div");
+      row.classList.add("neuroglancer-annotation-schema-row");
+
+      // Name cell
+      const nameCell = document.createElement("div");
+      nameCell.classList.add("neuroglancer-annotation-schema-cell");
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = rowData.name;
+      nameInput.name = `name-column-${index}`;
+      nameInput.id = `name-column-${index}`;
+      nameInput.classList.add("schema-name-input");
+      nameCell.appendChild(nameInput);
+
+      // Type cell
+      const typeCell = document.createElement("div");
+      typeCell.classList.add("neuroglancer-annotation-schema-cell");
+      const textSpan = document.createElement("span");
+      textSpan.textContent = rowData.type.toString();
+      const iconWrapper = document.createElement("span");
+      iconWrapper.classList.add("schema-cell-icon-wrapper");
+      const iconSVG = itemIcons[rowData.type] || sectionIcons[
+        Object.keys(sectionIcons).find(section =>
+          dropdownData.find(d => d.header === section)?.items.includes(rowData.type)
+        ) || ""
+      ] || svg_format_size;
+
+      iconWrapper.innerHTML = iconSVG;
+      typeCell.appendChild(iconWrapper);
+      typeCell.appendChild(textSpan);
+
+      // Default cell
+      const defaultCell = document.createElement("div");
+      defaultCell.classList.add("neuroglancer-annotation-schema-cell");
+
+      const typeBase = rowData.type.match(/\(([^)]+)\)/)?.[1] || rowData.type;
+
+      if (rowData.type.includes("Enum")) {
+        const enumContainer = document.createElement("div");
+        enumContainer.className = "enum-container";
+
+        const addEntry = () => {
+          const enumRow = document.createElement("div");
+          enumRow.className = "enum-entry";
+
+          // TODO: append real keybinding element
+          const keyLabel = document.createElement("label");
+          keyLabel.classList.add("neuroglancer-tool-palette-tool-container");
+
+          const textInput = document.createElement("input");
+          textInput.type = "text";
+          textInput.type = "text";
+          textInput.placeholder = "Name";
+          textInput.name = `enum-name-${index}`;
+          textInput.id = `enum-name-${index}`;
+          textInput.classList.add("schema-default-input");
+
+          const numberInput = document.createElement("input");
+          numberInput.type = "number";
+          numberInput.value = "0";
+          numberInput.name = `enum-number-${index}`;
+          numberInput.id = `enum-number-${index}`;
+          numberInput.classList.add("schema-default-input");
+
+          enumRow.appendChild(keyLabel);
+          enumRow.appendChild(textInput);
+          enumRow.appendChild(numberInput);
+
+          enumContainer.insertBefore(enumRow, addEnumEntry);
+        };
+
+        const addEnumEntry = makeAddButton({
+          title: "Add",
+          onClick: addEntry
+        })
+        enumContainer.appendChild(addEnumEntry);
+
+        addEntry();
+
+        defaultCell.appendChild(enumContainer);
+      } else if (typeBase === "Boolean") {
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        defaultCell.appendChild(checkbox);
+      } else if (typeBase === "RGB") {
+        const colorPicker = document.createElement("input");
+        colorPicker.type = "color";
+        colorPicker.name = `rgb-name-${index}`;
+        colorPicker.id = `rgb-name-${index}`;
+        defaultCell.appendChild(colorPicker);
+      } else if (typeBase === "RGBa") {
+        const colorPicker = document.createElement("input");
+        colorPicker.type = "color";
+        colorPicker.name = `rgba-name-${index}`;
+        colorPicker.id = `rgba-name-${index}`;
+
+        const percentageInput = document.createElement("input");
+        percentageInput.type = "number";
+        percentageInput.value = "0.1";
+        percentageInput.step = "0.01";
+        percentageInput.name = `percentage-name-${index}`;
+        percentageInput.id = `percentage-name-${index}`;
+        percentageInput.style.marginLeft = "2px"
+        percentageInput.classList.add("schema-default-input");
+
+        defaultCell.appendChild(colorPicker);
+        defaultCell.appendChild(percentageInput);
+      } else if (["int8", "int16", "int32", "uint8", "uint16", "float32"].includes(typeBase)) {
+        const numberInput = document.createElement("input");
+        numberInput.type = "number";
+        numberInput.value = "0";
+        numberInput.classList.add("schema-default-input");
+        defaultCell.appendChild(numberInput);
+      } else {
+        defaultCell.textContent = rowData.default_value;
+      }
+
+      // Delete cell
+      const deleteCell = document.createElement("div");
+      deleteCell.classList.add("neuroglancer-annotation-schema-cell", "delete-cell");
+      const deleteIcon = document.createElement("span");
+      deleteIcon.innerHTML = svg_delete;
+      deleteIcon.classList.add("delete-icon");
+      deleteIcon.title = "Delete row";
+      deleteIcon.style.cursor = "pointer";
+      deleteIcon.addEventListener("click", () => {
+        this.schemaTable.removeChild(row);
+      });
+      deleteCell.appendChild(deleteIcon);
+
+      row.appendChild(nameCell);
+      row.appendChild(typeCell);
+      row.appendChild(defaultCell);
+      row.appendChild(deleteCell);
+      this.schemaTable.appendChild(row);
+    });
+
+    if (!this.schemaTable) {
+      this.schemaTable = document.createElement("div");
+    }
+
+    let dropdown: HTMLDivElement | null = null;
+
+    // Add property row
+    const addButton = makeAddButton({
+      title: "Add property",
+      onClick: () => {
+        if (dropdown) {
+          dropdown.remove();
+          dropdown = null;
+          return;
+        }
+
+        dropdown = document.createElement("div");
+        dropdown.className = "neuroglancer-annotation-schema-dropdown";
+
+        dropdownData.forEach(section => {
+          const headerEl = document.createElement("div");
+          headerEl.className = "neuroglancer-annotation-schema-dropdown-header";
+          headerEl.textContent = section.header;
+          dropdown?.appendChild(headerEl);
+
+          section.items.forEach(item => {
+            const option = document.createElement("div");
+            option.className = "neuroglancer-annotation-schema-dropdown-option";
+
+            const icon = document.createElement("span");
+            const iconSVG = itemIcons[item] || sectionIcons[section.header];
+            icon.innerHTML = iconSVG;
+            icon.style.display = "inline-flex";
+            icon.style.alignItems = "center";
+            icon.style.marginRight = "0.25rem";
+
+            const text = document.createElement("span");
+            text.textContent = item;
+
+            option.appendChild(icon);
+            option.appendChild(text);
+
+            option.addEventListener("mouseover", () => option.style.backgroundColor = "#333");
+            option.addEventListener("mouseout", () => option.style.backgroundColor = "");
+            option.addEventListener("click", () => {
+              console.log("Selected:", item);
+              dropdown?.remove();
+              dropdown = null;
+            });
+
+            dropdown?.appendChild(option);
+          });
+        });
+
+        document.body.appendChild(dropdown);
+
+        const rect = addButton.getBoundingClientRect();
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+
+        const handleOutsideClick = (e: MouseEvent) => {
+          if (dropdown && !dropdown.contains(e.target as Node)) {
+            dropdown.remove();
+            dropdown = null;
+            document.removeEventListener("mousedown", handleOutsideClick);
+          }
+        };
+        document.addEventListener("mousedown", handleOutsideClick);
+      },
+    });
+
+    addButtonField.appendChild(addButton);
+    this.schemaTable.appendChild(addButtonField);
   }
 
   private get mutableSources() {
-    // Get all modifiable sources
     const states = this.layer.annotationStates.states.filter(
       (state) => !state.source.readonly && "addProperty" in state.source,
     );
     return states.map((state) => state.source as LocalAnnotationSource);
   }
 
-  private addProperty(property: AnnotationPropertySpec) {
-    this.mutableSources.forEach((s) => {
-      s.addProperty(property);
-    });
-    this.annotationStates.changed.dispatch();
-  }
+  // private addProperty(property: AnnotationPropertySpec) {
+  //   this.mutableSources.forEach((s) => {
+  //     s.addProperty(property);
+  //   });
+  //   this.annotationStates.changed.dispatch();
+  // }
 
   private removeProperty(property: AnnotationPropertySpec) {
     this.mutableSources.forEach((s) => {
@@ -1362,10 +1612,10 @@ function getMousePositionInAnnotationCoordinates(
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
   inProgressAnnotation: WatchableValue<
     | {
-        annotationLayer: AnnotationLayerState;
-        reference: AnnotationReference;
-        disposer: () => void;
-      }
+      annotationLayer: AnnotationLayerState;
+      reference: AnnotationReference;
+      disposer: () => void;
+    }
     | undefined
   > = new WatchableValue(undefined);
 
@@ -1847,7 +2097,7 @@ function makeRelatedSegmentList(
 
 const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
 export function UserLayerWithAnnotationsMixin<
-  TBase extends { new (...args: any[]): UserLayer },
+  TBase extends { new(...args: any[]): UserLayer },
 >(Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
     annotationStates = this.registerDisposer(new MergedAnnotationStates());
@@ -2008,8 +2258,8 @@ export function UserLayerWithAnnotationsMixin<
                   annotation = handler.deserialize(
                     dataView,
                     baseOffset +
-                      annotationPropertySerializer.propertyGroupBytes[0] *
-                        annotationIndex,
+                    annotationPropertySerializer.propertyGroupBytes[0] *
+                    annotationIndex,
                     isLittleEndian,
                     rank,
                     state.annotationId!,
@@ -2247,30 +2497,30 @@ export function UserLayerWithAnnotationsMixin<
                         sourceReadonly
                           ? undefined
                           : (newIds) => {
-                              const annotation = reference.value;
-                              if (annotation == null) {
-                                return;
-                              }
-                              let { relatedSegments } = annotation;
-                              if (relatedSegments === undefined) {
-                                relatedSegments =
-                                  annotationLayer.source.relationships.map(
-                                    () => new BigUint64Array(0),
-                                  );
-                              } else {
-                                relatedSegments = relatedSegments.slice();
-                              }
-                              relatedSegments[relationshipIndex] = newIds;
-                              const newAnnotation = {
-                                ...annotation,
-                                relatedSegments,
-                              };
-                              annotationLayer.source.update(
-                                reference,
-                                newAnnotation,
-                              );
-                              annotationLayer.source.commit(reference);
-                            },
+                            const annotation = reference.value;
+                            if (annotation == null) {
+                              return;
+                            }
+                            let { relatedSegments } = annotation;
+                            if (relatedSegments === undefined) {
+                              relatedSegments =
+                                annotationLayer.source.relationships.map(
+                                  () => new BigUint64Array(0),
+                                );
+                            } else {
+                              relatedSegments = relatedSegments.slice();
+                            }
+                            relatedSegments[relationshipIndex] = newIds;
+                            const newAnnotation = {
+                              ...annotation,
+                              relatedSegments,
+                            };
+                            annotationLayer.source.update(
+                              reference,
+                              newAnnotation,
+                            );
+                            annotationLayer.source.commit(reference);
+                          },
                       ),
                     ).element,
                   );
