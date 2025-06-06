@@ -1103,253 +1103,306 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private createSchemaTable() {
-    const addButtonField = document.createElement("div");
-    addButtonField.className = "neuroglancer-annotation-schema-add-button-field";
-    const headers = ["Name", "Type", "Default value", ""];
-    const tableData = [
-      { name: "Name", type: "Enum (uint8)", default_value: "", delete_cell: "" },
-      { name: "Color alpha", type: "RGBa", default_value: "", delete_cell: "" },
-      { name: "is_deleted", type: "Boolean", default_value: "", delete_cell: "" },
-      { name: "Decimal", type: "float32", default_value: "", delete_cell: "" },
-      { name: "Color", type: "RGB", default_value: "", delete_cell: "" }
+    const TABLE_HEADERS = ["Name", "Type", "Default value", ""];
+
+    const SCHEMA_TABLE_DATA = [
+      { name: "Name", type: "Enum (uint8)", defaultValue: "", deleteCell: "" },
+      { name: "Color alpha", type: "RGBa", defaultValue: "", deleteCell: "" },
+      { name: "is_deleted", type: "Boolean", defaultValue: "", deleteCell: "" },
+      { name: "Decimal", type: "float32", defaultValue: "", deleteCell: "" },
+      { name: "Color", type: "RGB", defaultValue: "", deleteCell: "" },
+      { name: "s0_start_x", type: "int8", defaultValue: "", deleteCell: "" }
     ];
 
-    const dropdownData = [
+    const DROPDOWN_OPTIONS = [
       { header: "General", items: ["float32", "Boolean"] },
       { header: "Enum", items: ["uint8", "uint16"] },
       { header: "Colour", items: ["RGB", "RGBa"] },
       { header: "Integer", items: ["int8", "int16", "int32"] }
     ];
 
-    const sectionIcons: Record<string, string> = {
+    const SECTION_ICONS: Record<string, string> = {
       "Enum": svg_format_size,
       "Colour": svg_palette,
       "Integer": svg_numbers
     };
 
-    const itemIcons: Record<string, string> = {
+    const ITEM_ICONS: Record<string, string> = {
       "float32": svg_numbers,
       "Boolean": svg_check
     };
 
+    // Helper Functions
+    const createTableCell = (content: string | HTMLElement, className: string = "_"): HTMLDivElement => {
+      const cell = document.createElement("div");
+      cell.classList.add("neuroglancer-annotation-schema-cell", className);
+
+      if (typeof content === "string") {
+        cell.textContent = content;
+      } else {
+        cell.appendChild(content);
+      }
+
+      return cell;
+    };
+
+    const createInputElement = (config: {
+      type: string;
+      value?: string;
+      name: string;
+      id: string;
+      className?: string;
+      placeholder?: string;
+    }): HTMLInputElement => {
+      const input = document.createElement("input");
+      input.type = config.type;
+      input.value = config.value || "";
+      input.name = config.name;
+      input.id = config.id;
+      if (config.className) input.classList.add(config.className);
+      if (config.placeholder) input.placeholder = config.placeholder;
+      return input;
+    };
+
+    const getTypeIcon = (type: string): string => {
+      return ITEM_ICONS[type] ||
+        SECTION_ICONS[
+        Object.keys(SECTION_ICONS).find(section =>
+          DROPDOWN_OPTIONS.find(d => d.header === section)?.items.includes(type)
+        ) || ""
+        ] || svg_format_size;
+    };
+
+    const createDefaultValueInput = (type: string, index: number): HTMLElement => {
+      const container = document.createElement("div");
+      container.style.width = "100%";
+      container.style.display = "flex";
+
+      switch (type) {
+        case "Boolean":
+          container.appendChild(createInputElement({
+            type: "checkbox",
+            name: `boolean-${index}`,
+            id: `boolean-${index}`
+          }));
+          break;
+
+        case "RGB":
+          container.appendChild(createInputElement({
+            type: "color",
+            name: `rgb-${index}`,
+            id: `rgb-${index}`
+          }));
+          break;
+
+        case "RGBa":
+          container.appendChild(createInputElement({
+            type: "color",
+            name: `rgba-${index}`,
+            id: `rgba-${index}`
+          }));
+
+          const alphaInput = createInputElement({
+            type: "number",
+            value: "0.1",
+            name: `alpha-${index}`,
+            id: `alpha-${index}`,
+            className: "schema-default-input"
+          });
+          alphaInput.step = "0.01";
+          alphaInput.style.marginLeft = "2px";
+          container.appendChild(alphaInput);
+          break;
+
+        case "int8":
+        case "int16":
+        case "int32":
+        case "uint8":
+        case "uint16":
+        case "float32":
+          container.appendChild(createInputElement({
+            type: "number",
+            value: "0",
+            name: `number-${index}`,
+            id: `number-${index}`,
+            className: "schema-default-input"
+          }));
+          break;
+
+        default:
+          if (type.includes("Enum")) {
+            const enumContainer = document.createElement("div");
+            enumContainer.className = "enum-container";
+
+            const addEnumEntry = () => {
+              const enumRow = document.createElement("div");
+              enumRow.className = "enum-entry";
+
+              // TODO: append real keybinding element
+              const keyLabel = document.createElement("div");
+              keyLabel.classList.add("neuroglancer-tool-palette-tool-container");
+
+              const nameInput = createInputElement({
+                type: "text",
+                placeholder: "Name",
+                name: `enum-name-${index}`,
+                id: `enum-name-${index}`,
+                className: "schema-default-input"
+              });
+
+              const valueInput = createInputElement({
+                type: "number",
+                value: "0",
+                name: `enum-value-${index}`,
+                id: `enum-value-${index}`,
+                className: "schema-default-input"
+              });
+
+              enumRow.appendChild(keyLabel);
+              enumRow.appendChild(nameInput);
+              enumRow.appendChild(valueInput);
+              enumContainer.insertBefore(enumRow, addEnumButton);
+            };
+
+            const addEnumButton = makeAddButton({
+              title: "Add enum option",
+              onClick: addEnumEntry
+            });
+            enumContainer.appendChild(addEnumButton);
+
+            // Add initial enum entry
+            addEnumEntry();
+
+            container.appendChild(enumContainer);
+          } else {
+            container.textContent = "";
+          }
+      }
+
+      return container;
+    };
+
+    // Initialize Table
+    const addButtonField = document.createElement("div");
+    addButtonField.className = "neuroglancer-annotation-schema-add-button-field";
+
+    // Create Header Row
     const headerRow = document.createElement("div");
     headerRow.classList.add("neuroglancer-annotation-schema-row", "header-row");
-    headers.forEach(text => {
-      const cell = document.createElement("div");
-      cell.classList.add("neuroglancer-annotation-schema-cell");
-      cell.textContent = text;
-      headerRow.appendChild(cell);
+    TABLE_HEADERS.forEach(text => {
+      headerRow.appendChild(createTableCell(text));
     });
     this.schemaTable.appendChild(headerRow);
 
-    tableData.forEach((rowData, index) => {
+    // Create Data Rows
+    SCHEMA_TABLE_DATA.forEach((rowData, index) => {
       const row = document.createElement("div");
       row.classList.add("neuroglancer-annotation-schema-row");
 
-      // Name cell
-      const nameCell = document.createElement("div");
-      nameCell.classList.add("neuroglancer-annotation-schema-cell");
-      const nameInput = document.createElement("input");
-      nameInput.type = "text";
-      nameInput.value = rowData.name;
-      nameInput.name = `name-column-${index}`;
-      nameInput.id = `name-column-${index}`;
-      nameInput.classList.add("schema-name-input");
-      nameCell.appendChild(nameInput);
+      // Name Cell
+      const nameInput = createInputElement({
+        type: "text",
+        value: rowData.name,
+        name: `name-${index}`,
+        id: `name-${index}`,
+        className: "schema-name-input"
+      });
+      row.appendChild(createTableCell(nameInput));
 
-      // Type cell
-      const typeCell = document.createElement("div");
-      typeCell.classList.add("neuroglancer-annotation-schema-cell");
-      const textSpan = document.createElement("span");
-      textSpan.textContent = rowData.type.toString();
+      // Type Cell
+      const typeText = document.createElement("span");
+      typeText.textContent = rowData.type;
+
       const iconWrapper = document.createElement("span");
       iconWrapper.classList.add("schema-cell-icon-wrapper");
-      const iconSVG = itemIcons[rowData.type] || sectionIcons[
-        Object.keys(sectionIcons).find(section =>
-          dropdownData.find(d => d.header === section)?.items.includes(rowData.type)
-        ) || ""
-      ] || svg_format_size;
+      iconWrapper.innerHTML = getTypeIcon(rowData.type);
 
-      iconWrapper.innerHTML = iconSVG;
+      const typeCell = createTableCell("");
       typeCell.appendChild(iconWrapper);
-      typeCell.appendChild(textSpan);
+      typeCell.appendChild(typeText);
+      row.appendChild(typeCell);
 
-      // Default cell
-      const defaultCell = document.createElement("div");
-      defaultCell.classList.add("neuroglancer-annotation-schema-cell");
+      // Default Value Cell
+      row.appendChild(createTableCell(
+        createDefaultValueInput(rowData.type, index)
+      ));
 
-      const typeBase = rowData.type.match(/\(([^)]+)\)/)?.[1] || rowData.type;
-
-      if (rowData.type.includes("Enum")) {
-        const enumContainer = document.createElement("div");
-        enumContainer.className = "enum-container";
-
-        const addEntry = () => {
-          const enumRow = document.createElement("div");
-          enumRow.className = "enum-entry";
-
-          // TODO: append real keybinding element
-          const keyLabel = document.createElement("div");
-          keyLabel.classList.add("neuroglancer-tool-palette-tool-container");
-
-          const textInput = document.createElement("input");
-          textInput.type = "text";
-          textInput.type = "text";
-          textInput.placeholder = "Name";
-          textInput.name = `enum-name-${index}`;
-          textInput.id = `enum-name-${index}`;
-          textInput.classList.add("schema-default-input");
-
-          const numberInput = document.createElement("input");
-          numberInput.type = "number";
-          numberInput.value = "0";
-          numberInput.name = `enum-number-${index}`;
-          numberInput.id = `enum-number-${index}`;
-          numberInput.classList.add("schema-default-input");
-
-          enumRow.appendChild(keyLabel);
-          enumRow.appendChild(textInput);
-          enumRow.appendChild(numberInput);
-
-          enumContainer.insertBefore(enumRow, addEnumEntry);
-        };
-
-        const addEnumEntry = makeAddButton({
-          title: "Add",
-          onClick: addEntry
-        })
-        enumContainer.appendChild(addEnumEntry);
-
-        addEntry();
-
-        defaultCell.appendChild(enumContainer);
-      } else if (typeBase === "Boolean") {
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        defaultCell.appendChild(checkbox);
-      } else if (typeBase === "RGB") {
-        const colorPicker = document.createElement("input");
-        colorPicker.type = "color";
-        colorPicker.name = `rgb-name-${index}`;
-        colorPicker.id = `rgb-name-${index}`;
-        defaultCell.appendChild(colorPicker);
-      } else if (typeBase === "RGBa") {
-        const colorPicker = document.createElement("input");
-        colorPicker.type = "color";
-        colorPicker.name = `rgba-name-${index}`;
-        colorPicker.id = `rgba-name-${index}`;
-
-        const percentageInput = document.createElement("input");
-        percentageInput.type = "number";
-        percentageInput.value = "0.1";
-        percentageInput.step = "0.01";
-        percentageInput.name = `percentage-name-${index}`;
-        percentageInput.id = `percentage-name-${index}`;
-        percentageInput.style.marginLeft = "2px"
-        percentageInput.classList.add("schema-default-input");
-
-        defaultCell.appendChild(colorPicker);
-        defaultCell.appendChild(percentageInput);
-      } else if (["int8", "int16", "int32", "uint8", "uint16", "float32"].includes(typeBase)) {
-        const numberInput = document.createElement("input");
-        numberInput.type = "number";
-        numberInput.value = "0";
-        numberInput.name = `number-name-${index}`;
-        numberInput.id = `number-name-${index}`;
-        numberInput.classList.add("schema-default-input");
-        defaultCell.appendChild(numberInput);
-      } else {
-        defaultCell.textContent = rowData.default_value;
-      }
-
-      // Delete cell
-      const deleteCell = document.createElement("div");
-      deleteCell.classList.add("neuroglancer-annotation-schema-cell", "delete-cell");
+      // Delete Cell
       const deleteIcon = document.createElement("span");
       deleteIcon.innerHTML = svg_bin;
       deleteIcon.title = "Delete row";
       deleteIcon.style.cursor = "pointer";
-      deleteIcon.addEventListener("click", () => {
-        this.schemaTable.removeChild(row);
-      });
-      deleteCell.appendChild(deleteIcon);
+      deleteIcon.addEventListener("click", () => this.schemaTable.removeChild(row));
 
-      row.appendChild(nameCell);
-      row.appendChild(typeCell);
-      row.appendChild(defaultCell);
+      const deleteCell = createTableCell(deleteIcon, "delete-cell");
       row.appendChild(deleteCell);
+
       this.schemaTable.appendChild(row);
     });
 
-    if (!this.schemaTable) {
-      this.schemaTable = document.createElement("div");
-    }
-
+    // Add Property Button
     let dropdown: HTMLDivElement | null = null;
 
-    // Add property row
-    const addButton = makeAddButton({
-      title: "Add property",
-      onClick: () => {
-        if (dropdown) {
+    const handleAddPropertyClick = () => {
+      if (dropdown) {
+        dropdown.remove();
+        dropdown = null;
+        return;
+      }
+
+      dropdown = document.createElement("div");
+      dropdown.className = "neuroglancer-annotation-schema-dropdown";
+
+      DROPDOWN_OPTIONS.forEach(section => {
+        const headerEl = document.createElement("div");
+        headerEl.className = "neuroglancer-annotation-schema-dropdown-header";
+        headerEl.textContent = section.header;
+        dropdown?.appendChild(headerEl);
+
+        section.items.forEach(item => {
+          const option = document.createElement("div");
+          option.className = "neuroglancer-annotation-schema-dropdown-option";
+
+          const iconWrapper = document.createElement("span");
+          iconWrapper.classList.add("schema-cell-icon-wrapper");
+          iconWrapper.innerHTML = ITEM_ICONS[item] || SECTION_ICONS[section.header] || "";
+
+          const text = document.createElement("span");
+          text.textContent = item;
+
+          option.appendChild(iconWrapper);
+          option.appendChild(text);
+
+          option.addEventListener("mouseover", () => option.style.backgroundColor = "#333");
+          option.addEventListener("mouseout", () => option.style.backgroundColor = "");
+          option.addEventListener("click", () => {
+            console.log("Selected:", item);
+            dropdown?.remove();
+            dropdown = null;
+          });
+
+          dropdown?.appendChild(option);
+        });
+      });
+
+      document.body.appendChild(dropdown);
+      const rect = addButton.getBoundingClientRect();
+      dropdown.style.left = `${rect.left}px`;
+      dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+
+      const handleOutsideClick = (e: MouseEvent) => {
+        if (dropdown && !dropdown.contains(e.target as Node)) {
           dropdown.remove();
           dropdown = null;
-          return;
+          document.removeEventListener("mousedown", handleOutsideClick);
         }
+      };
+      document.addEventListener("mousedown", handleOutsideClick);
+    };
 
-        dropdown = document.createElement("div");
-        dropdown.className = "neuroglancer-annotation-schema-dropdown";
-
-        dropdownData.forEach(section => {
-          const headerEl = document.createElement("div");
-          headerEl.className = "neuroglancer-annotation-schema-dropdown-header";
-          headerEl.textContent = section.header;
-          dropdown?.appendChild(headerEl);
-
-          section.items.forEach(item => {
-            const option = document.createElement("div");
-            option.className = "neuroglancer-annotation-schema-dropdown-option";
-
-            const iconWrapper = document.createElement("span");
-            iconWrapper.classList.add("schema-cell-icon-wrapper");
-            const icon = document.createElement("span");
-            const iconSVG = itemIcons[item] || sectionIcons[section.header];
-            icon.innerHTML = iconSVG;
-            iconWrapper.appendChild(icon)
-
-            const text = document.createElement("span");
-            text.textContent = item;
-
-            option.appendChild(iconWrapper);
-            option.appendChild(text);
-
-            option.addEventListener("mouseover", () => option.style.backgroundColor = "#333");
-            option.addEventListener("mouseout", () => option.style.backgroundColor = "");
-            option.addEventListener("click", () => {
-              console.log("Selected:", item);
-              dropdown?.remove();
-              dropdown = null;
-            });
-
-            dropdown?.appendChild(option);
-          });
-        });
-
-        document.body.appendChild(dropdown);
-
-        const rect = addButton.getBoundingClientRect();
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + window.scrollY}px`;
-
-        const handleOutsideClick = (e: MouseEvent) => {
-          if (dropdown && !dropdown.contains(e.target as Node)) {
-            dropdown.remove();
-            dropdown = null;
-            document.removeEventListener("mousedown", handleOutsideClick);
-          }
-        };
-        document.addEventListener("mousedown", handleOutsideClick);
-      },
+    const addButton = makeAddButton({
+      title: "Add property",
+      onClick: handleAddPropertyClick
     });
 
     addButtonField.appendChild(addButton);
