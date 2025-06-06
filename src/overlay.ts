@@ -39,10 +39,10 @@ export class Overlay extends RefCounted {
     this.keyMap.addParent(defaultEventMap, Number.NEGATIVE_INFINITY);
     ++overlaysOpen;
     const container = (this.container = document.createElement("div"));
-    container.className = "overlay";
+    container.className = "neuroglancer-overlay";
     const content = (this.content = document.createElement("div"));
     this.registerDisposer(new AutomaticallyFocusedElement(content));
-    content.className = "overlay-content";
+    content.className = "neuroglancer-overlay-content";
     container.appendChild(content);
     document.body.appendChild(container);
     this.registerDisposer(new KeyboardEventBinder(this.container, this.keyMap));

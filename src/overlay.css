@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.overlay {
+.neuroglancer-overlay {
   height: 100%;
   width: 100%;
   position: fixed;
@@ -24,7 +24,7 @@
   background-color: rgba(0, 0, 0, 0.8);
 }
 
-.overlay-content {
+.neuroglancer-overlay-content {
   position: absolute;
   top: 50%;
   left: 50%;

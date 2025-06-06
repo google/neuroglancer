@@ -1,0 +1,51 @@
+.neuroglancer-code-editor-dialog {
+  padding: 0 !important;
+  outline: 0 !important;
+}
+
+.neuroglancer-code-editor-dialog .neuroglancer-shader-code-widget {
+  width: 80vw;
+  height: 80vh;
+}
+
+.neuroglancer-code-editor-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid #ccc;
+  height: 2rem;
+}
+
+.neuroglancer-code-editor-dialog-body {
+  padding: 0 1.5rem;
+  overflow: auto;
+}
+
+.neuroglancer-code-editor-dialog-title {
+  margin-right: auto;
+  font-size: large;
+  font-weight: bold;
+  color: #333;
+}
+
+.neuroglancer-code-editor-dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 1.5rem;
+  border-top: 1px solid #ccc;
+}
+
+.neuroglancer-code-editor-dialog-close-button {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+}
+
+.neuroglancer-code-editor-dialog-close-button:hover {
+  background: none;
+}
+
+.neuroglancer-code-editor-dialog-close-button svg {
+  stroke: rgba(20, 20, 21, 0.4);
+}

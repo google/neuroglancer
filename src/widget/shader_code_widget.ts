@@ -22,12 +22,10 @@ import "codemirror/lib/codemirror.css";
 import "codemirror/addon/lint/lint.css";
 
 import { debounce } from "lodash-es";
-import type { UserLayer } from "#src/layer/index.js";
-import type { Overlay } from "#src/overlay.js";
 import glslCodeMirror from "#src/third_party/codemirror-glsl.js";
 import {
   ElementVisibilityFromTrackableBoolean,
-  type TrackableBoolean,
+  TrackableBoolean,
 } from "#src/trackable_boolean.js";
 import type { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -44,6 +42,8 @@ import type {
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
+import { ShaderCodeEditorDialog } from "#src/ui/shader_code_dialog.js";
+import { UserLayer } from "#src/layer/index.js";
 
 // Install glsl support in CodeMirror.
 glslCodeMirror(CodeMirror);
@@ -53,6 +53,10 @@ glslCodeMirror(CodeMirror);
  * recompiled.
  */
 const SHADER_UPDATE_DELAY = 500;
+
+type UserLayerWithCodeEditor = UserLayer & {
+  codeVisible: TrackableBoolean;
+};
 
 interface ShaderCodeState {
   shaderError: WatchableShaderError;
@@ -201,18 +205,14 @@ export class ShaderCodeWidget extends RefCounted {
   }
 }
 
-type UserLayerWithCodeEditor = UserLayer & { codeVisible: TrackableBoolean };
-type ShaderCodeOverlayConstructor<T extends Overlay> = new (
+export function makeShaderCodeWidgetTopRow(
   layer: UserLayerWithCodeEditor,
-) => T;
-
-export function makeShaderCodeWidgetTopRow<T extends Overlay>(
-  layer: UserLayerWithCodeEditor,
-  codeWidget: ShaderCodeWidget,
-  ShaderCodeOverlay: ShaderCodeOverlayConstructor<T>,
+  codeWidgetElement: HTMLElement,
+  makeShaderCodeWidget: (layer: UserLayerWithCodeEditor) => ShaderCodeWidget,
   help: {
     title: string;
     href: string;
+    type: string;
   },
   className: string,
 ) {
@@ -227,7 +227,7 @@ export function makeShaderCodeWidgetTopRow<T extends Overlay>(
   layer.registerDisposer(
     new ElementVisibilityFromTrackableBoolean(
       layer.codeVisible,
-      codeWidget.element,
+      codeWidgetElement,
     ),
   );
 
@@ -243,7 +243,9 @@ export function makeShaderCodeWidgetTopRow<T extends Overlay>(
     makeMaximizeButton({
       title: "Show larger editor view",
       onClick: () => {
-        new ShaderCodeOverlay(layer);
+        new ShaderCodeEditorDialog(layer, makeShaderCodeWidget, {
+          title: `${help.type} shader editor`,
+        });
       },
     }),
   );

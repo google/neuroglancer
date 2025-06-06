@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-.neuroglancer-state-editor {
-  width: 80%;
+.neuroglancer-state-editor .neuroglancer-state-editor-text-editor {
+  width: 80vw;
+  height: 80vh;
 }
 
-.close-button {
-  position: absolute;
-  right: 15px;
+.neuroglancer-state-editor-save-container {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }

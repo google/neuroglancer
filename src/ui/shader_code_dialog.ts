@@ -1,0 +1,90 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import "#src/ui/shader_code_dialog.css";
+import type { VertexAttributeWidget } from "#src/layer/single_mesh/index.js";
+import { Overlay } from "#src/overlay.js";
+import svg_close from "ikonate/icons/close.svg?raw";
+import { makeIcon } from "#src/widget/icon.js";
+import type { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
+import { UserLayer } from "#src/layer/index.js";
+
+interface ShaderCodeOverlayOptions {
+  additionalClass?: string;
+  title?: string;
+}
+
+export class CodeEditorDialog extends Overlay {
+  header: HTMLDivElement;
+  body: HTMLDivElement;
+  footer?: HTMLDivElement;
+  constructor(title: string = "Code editor", hasFooter: boolean = false) {
+    super();
+    this.content.classList.add("neuroglancer-code-editor-dialog");
+
+    const header = (this.header = document.createElement("div"));
+    const closeMenuIcon = makeIcon({ svg: svg_close });
+    closeMenuIcon.addEventListener("click", () => this.close());
+    closeMenuIcon.classList.add("neuroglancer-code-editor-dialog-close-button");
+    const titleText = document.createElement("p");
+    titleText.textContent = title;
+    titleText.classList.add("neuroglancer-code-editor-dialog-title");
+    header.classList.add("neuroglancer-code-editor-dialog-header");
+    header.appendChild(titleText);
+    header.appendChild(closeMenuIcon);
+    this.content.appendChild(header);
+
+    const body = (this.body = document.createElement("div"));
+    body.classList.add("neuroglancer-code-editor-dialog-body");
+    this.content.appendChild(body);
+
+    if (hasFooter) {
+      const footer = (this.footer = document.createElement("div"));
+      footer.classList.add("neuroglancer-code-editor-dialog-footer");
+      this.content.appendChild(this.footer);
+    }
+  }
+}
+
+export class ShaderCodeEditorDialog extends CodeEditorDialog {
+  footerActionsBtnContainer: HTMLDivElement;
+  footerBtnsWrapper: HTMLDivElement;
+  constructor(
+    public layer: UserLayer,
+    private makeShaderCodeWidget: (layer: UserLayer) => ShaderCodeWidget,
+    options: ShaderCodeOverlayOptions = {},
+    makeVertexAttributeWidget?: (layer: UserLayer) => VertexAttributeWidget,
+  ) {
+    const { additionalClass, title = "Shader editor" } = options;
+    super(title);
+
+    if (additionalClass) {
+      this.content.classList.add(additionalClass);
+    }
+
+    const codeWidget = this.registerDisposer(
+      this.makeShaderCodeWidget(this.layer),
+    );
+    if (makeVertexAttributeWidget) {
+      const attributeWidget = this.registerDisposer(
+        makeVertexAttributeWidget(this.layer),
+      );
+      this.body.appendChild(attributeWidget.element);
+    }
+    this.body.appendChild(codeWidget.element);
+    codeWidget.textEditor.refresh();
+  }
+}
