@@ -1132,7 +1132,6 @@ export class AnnotationSchemaView extends Tab {
       "Boolean": svg_check
     };
 
-    // Helper Functions
     const createTableCell = (content: string | HTMLElement, className: string = "_"): HTMLDivElement => {
       const cell = document.createElement("div");
       cell.classList.add("neuroglancer-annotation-schema-cell", className);
