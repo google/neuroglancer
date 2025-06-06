@@ -30,15 +30,15 @@ interface ShaderCodeOverlayOptions {
 export class CodeEditorDialog extends Overlay {
   header: HTMLDivElement;
   body: HTMLDivElement;
-  footer?: HTMLDivElement;
-  constructor(title: string = "Code editor", hasFooter: boolean = false) {
+  footer: HTMLDivElement;
+  constructor(title: string = "Code editor") {
     super();
     this.content.classList.add("neuroglancer-code-editor-dialog");
 
     const header = (this.header = document.createElement("div"));
     const closeMenuIcon = makeIcon({ svg: svg_close });
     closeMenuIcon.addEventListener("click", () => this.close());
-    closeMenuIcon.classList.add("neuroglancer-code-editor-dialog-close-button");
+    closeMenuIcon.classList.add("neuroglancer-code-editor-dialog-close-icon");
     const titleText = document.createElement("p");
     titleText.textContent = title;
     titleText.classList.add("neuroglancer-code-editor-dialog-title");
@@ -51,11 +51,9 @@ export class CodeEditorDialog extends Overlay {
     body.classList.add("neuroglancer-code-editor-dialog-body");
     this.content.appendChild(body);
 
-    if (hasFooter) {
-      const footer = (this.footer = document.createElement("div"));
-      footer.classList.add("neuroglancer-code-editor-dialog-footer");
-      this.content.appendChild(this.footer);
-    }
+    const footer = (this.footer = document.createElement("div"));
+    footer.classList.add("neuroglancer-code-editor-dialog-footer");
+    this.content.appendChild(this.footer);
   }
 }
 
@@ -85,6 +83,15 @@ export class ShaderCodeEditorDialog extends CodeEditorDialog {
       this.body.appendChild(attributeWidget.element);
     }
     this.body.appendChild(codeWidget.element);
+
+    const closeButton = document.createElement("button");
+    closeButton.classList.add(
+      "neuroglancer-shader-code-editor-dialog-close-button",
+    );
+    closeButton.textContent = "Close";
+    closeButton.addEventListener("click", () => this.close());
+    this.footer.appendChild(closeButton);
+
     codeWidget.textEditor.refresh();
   }
 }

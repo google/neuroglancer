@@ -41,7 +41,7 @@ export class StateEditorDialog extends CodeEditorDialog {
   downloadButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
   constructor(public viewer: Viewer) {
-    super("State editor", true);
+    super("State editor");
 
     this.content.classList.add("neuroglancer-state-editor");
 

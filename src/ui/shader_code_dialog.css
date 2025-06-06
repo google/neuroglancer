@@ -36,16 +36,21 @@
   border-top: 1px solid #ccc;
 }
 
-.neuroglancer-code-editor-dialog-close-button {
+.neuroglancer-code-editor-dialog-close-icon {
   background-color: transparent;
   border: none;
   padding: 0;
 }
 
-.neuroglancer-code-editor-dialog-close-button:hover {
+.neuroglancer-code-editor-dialog-close-icon:hover {
   background: none;
 }
 
-.neuroglancer-code-editor-dialog-close-button svg {
+.neuroglancer-code-editor-dialog-close-icon svg {
   stroke: rgba(20, 20, 21, 0.4);
+}
+
+.neuroglancer-shader-code-editor-dialog-close-button {
+  margin-left: auto;
+  cursor: pointer;
 }
