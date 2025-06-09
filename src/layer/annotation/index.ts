@@ -56,7 +56,7 @@ import type {
   AnnotationLayerView,
   MergedAnnotationStates,
 } from "#src/ui/annotations.js";
-import { AnnotationSchemaTab, UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -91,6 +91,7 @@ import {
   ShaderControls,
 } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
+import { AnnotationSchemaTab } from "#src/ui/annotation_schema_tab.js";
 
 const POINTS_JSON_KEY = "points";
 const ANNOTATIONS_JSON_KEY = "annotations";
@@ -442,10 +443,10 @@ export class AnnotationUserLayer extends Base {
       getter: () => new RenderingOptionsTab(this),
     });
     this.tabs.add("schema", {
-        label: "Schema",
-        order: 20,
-        getter: () => new AnnotationSchemaTab(this),
-      });
+      label: "Schema",
+      order: 20,
+      getter: () => new AnnotationSchemaTab(this),
+    });
     this.tabs.default = "annotations";
   }
 
