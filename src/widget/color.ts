@@ -43,7 +43,7 @@ export class ColorWidget<
     this.registerDisposer(model.changed.add(() => this.updateView()));
     this.updateView();
   }
-  private getRGB() {
+  public getRGB() {
     return this.model.value ?? this.getDefaultColor();
   }
   private updateView() {

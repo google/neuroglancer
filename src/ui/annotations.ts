@@ -19,10 +19,6 @@
  */
 
 import svg_help from "ikonate/icons/help.svg?raw";
-import svg_format_size from "ikonate/icons/text.svg?raw";
-import svg_numbers from "ikonate/icons/hash.svg?raw";
-import svg_palette from "ikonate/icons/drop.svg?raw";
-import svg_check from "ikonate/icons/ok-circle.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,

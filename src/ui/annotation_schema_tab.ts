@@ -8,10 +8,15 @@ import svg_format_size from "ikonate/icons/text.svg?raw";
 import "#src/ui/annotations.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
+  AnnotationColorPropertySpec,
+  AnnotationNumericPropertySpec,
   AnnotationPropertySpec,
   LocalAnnotationSource,
 } from "#src/annotation/index.js";
-import { annotationPropertySpecsToJson } from "#src/annotation/index.js";
+import {
+  annotationPropertySpecsToJson,
+  propertyTypeDataType,
+} from "#src/annotation/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -27,11 +32,21 @@ import { StatusMessage } from "#src/status.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { DataType } from "#src/util/data_type.js";
 import { UserLayerWithAnnotations } from "#src/ui/annotations.js";
+import {
+  packColor,
+  parseRGBColorSpecification,
+  unpackRGB,
+  unpackRGBA,
+} from "#src/util/color.js";
+import { vec3, vec4 } from "#src/util/geom.js";
+import { ColorWidget } from "#src/widget/color.js";
+
+type uiAnnotationType = AnnotationPropertySpec["type"] | "bool";
 
 const DROPDOWN_OPTIONS = [
-  { header: "General", items: ["float32", "Boolean"] },
+  { header: "General", items: ["float32", "bool"] },
   { header: "Enum", items: ["uint8", "uint16"] },
-  { header: "Colour", items: ["RGB", "RGBa"] },
+  { header: "Colour", items: ["rgb", "rgba"] },
   { header: "Integer", items: ["int8", "int16", "int32"] },
 ];
 
@@ -43,7 +58,7 @@ const SECTION_ICONS: Record<string, string> = {
 
 const ITEM_ICONS: Record<string, string> = {
   float32: svg_numbers,
-  Boolean: svg_check,
+  bool: svg_check,
 };
 
 export class AnnotationSchemaView extends Tab {
@@ -94,8 +109,6 @@ export class AnnotationSchemaView extends Tab {
         this.updateOnMutableChange();
       }),
     );
-    // TODO (Sean) I think this is not needed but double check
-    // this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
   }
 
   private updateOnMutableChange = () => {
@@ -278,6 +291,7 @@ export class AnnotationSchemaView extends Tab {
     );
   }
 
+  // TODO remove the index if not needed
   private createTypeCell(type: string, index: number): HTMLDivElement {
     const typeText = document.createElement("span");
     typeText.textContent = type;
@@ -293,6 +307,7 @@ export class AnnotationSchemaView extends Tab {
     typeCell.appendChild(typeText);
     // TODO (Aigul) could this link to the dropdown that shows when adding
     // a new property?
+    // TODO if not, then remove the cursor pointer
     // typeCell.addEventListener("click", (event) => {});
     return typeCell;
   }
@@ -300,7 +315,7 @@ export class AnnotationSchemaView extends Tab {
   // TODO (SKM or Aigul -- use the actual default value from the schema to set the value here)
   private createDefaultValueCell(
     identifier: string,
-    type: string,
+    type: AnnotationPropertySpec["type"] | "bool",
     index: number,
   ): HTMLDivElement {
     const container = document.createElement("div");
@@ -336,41 +351,43 @@ export class AnnotationSchemaView extends Tab {
       console.warn(`Property with name ${identifier} not found.`);
       return this.createTableCell(container, "default-value");
     }
-    if (type.startsWith("RGB")) {
-      const colorInput = this.createInputElement({
-        type: "color",
-        name: `color-${index}`,
-        id: `color-${index}`,
-      });
-      inputs.push(colorInput);
+    if (type.startsWith("rgb")) {
+      const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
+      const colorInput = new ColorWidget(watchableColor);
+      inputs.push(colorInput.element);
       changeFunction = (event: Event) => {
-        const newColor = (event.target as HTMLInputElement).value;
-        // TODO (SKM) - default only supports number right now, need to fix
+        const newColor = colorInput.getRGB();
         this.updateProperty(oldProperty, {
           ...oldProperty,
-          default: newColor,
-        });
+          default: packColor(newColor),
+        } as AnnotationColorPropertySpec);
       };
-      if (type === "RGBa") {
+      if (type === "rgba") {
+        const alpha = unpackRGBA(oldProperty.default)[3];
         const alphaInput = this.createInputElement(
           {
             type: "number",
             name: `alpha-${index}`,
             id: `alpha-${index}`,
-            value: "1.0",
+            value: String(alpha),
             className: "schema-default-input",
           },
           { min: 0, max: 1, step: 0.01 },
         );
         inputs.push(alphaInput);
         changeFunction = (event: Event) => {
-          const newColor = (event.target as HTMLInputElement).value;
-          const newAlpha = alphaInput.value;
-          // TODO (SKM) - default only supports number right now, need to fix
+          const newColor = colorInput.getRGB();
+          const newAlpha = parseFloat(alphaInput.value);
+          const colorVec = vec4.fromValues(
+            newColor[0],
+            newColor[1],
+            newColor[2],
+            newAlpha,
+          );
           this.updateProperty(oldProperty, {
             ...oldProperty,
-            default: newColor + newAlpha,
-          });
+            default: packColor(colorVec),
+          } as AnnotationColorPropertySpec);
         };
       }
     } else if (
@@ -378,25 +395,17 @@ export class AnnotationSchemaView extends Tab {
       type.startsWith("uint") ||
       type === "float32"
     ) {
-      const typeStringToDataType: Record<string, DataType> = {
-        uint8: DataType.UINT8,
-        uint16: DataType.UINT16,
-        uint32: DataType.UINT32,
-        int8: DataType.INT8,
-        int16: DataType.INT16,
-        int32: DataType.INT32,
-        float32: DataType.FLOAT32,
-      };
-      const dataType = typeStringToDataType[type];
+      const dataType =
+        propertyTypeDataType[type as AnnotationPropertySpec["type"]];
       const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
-      const bounds = defaultDataTypeRange[dataType];
+      const bounds = defaultDataTypeRange[dataType!];
       // TODO (Aigul) more specific className
       const numberInput = this.createInputElement(
         {
           type: "number",
           name: `number-${index}`,
           id: `number-${index}`,
-          value: "0",
+          value: String(oldProperty.default),
           className: "schema-default-input",
         },
         {
@@ -414,9 +423,9 @@ export class AnnotationSchemaView extends Tab {
             dataType === DataType.FLOAT32
               ? parseFloat(newValue)
               : parseInt(newValue, 10),
-        });
+        } as AnnotationNumericPropertySpec);
       };
-    } else if (type === "Boolean") {
+    } else if (type === "bool") {
       const booleanInput = this.createInputElement({
         type: "checkbox",
         name: `boolean-${index}`,
@@ -428,7 +437,7 @@ export class AnnotationSchemaView extends Tab {
         this.updateProperty(oldProperty, {
           ...oldProperty,
           default: Number(newValue),
-        });
+        } as AnnotationNumericPropertySpec);
       };
     } else if (type.includes("Enum")) {
       const enumContainer = document.createElement("div");
@@ -482,6 +491,27 @@ export class AnnotationSchemaView extends Tab {
       }
     });
     return this.createTableCell(container);
+  }
+
+  private mapUITypeToAnnotationType(
+    uiType: uiAnnotationType,
+  ): AnnotationPropertySpec["type"] {
+    if (uiType === "bool") return "uint8";
+    return uiType;
+  }
+
+  private defaultValuePerType(uiType: uiAnnotationType): number {
+    // TODO change bool handling to actually be an enum
+    if (uiType === "bool") {
+      return 1;
+    }
+    if (uiType === "rgb") {
+      return packColor(vec3.fromValues(1, 1, 1));
+    }
+    if (uiType === "rgba") {
+      return packColor(vec4.fromValues(1, 1, 1, 1));
+    }
+    return 0;
   }
 
   private populateSchemaTable() {
@@ -568,13 +598,18 @@ export class AnnotationSchemaView extends Tab {
             () => (option.style.backgroundColor = ""),
           );
           option.addEventListener("click", () => {
-            console.log("Selected:", item);
             // TODO extract into a function and properly handle the defaults
             // + the naming system (`type+nextIncrement`)
+            // Map the item to the real annotation type
+            console.log(
+              `Adding property of type: ${item} with default value: ${this.defaultValuePerType(
+                item as uiAnnotationType,
+              )}`,
+            );
             this.addProperty({
-              type: item,
+              type: this.mapUITypeToAnnotationType(item as uiAnnotationType),
               identifier: `property_${getRandomHexString(2)}`,
-              default: item === "Boolean" ? false : 0,
+              default: this.defaultValuePerType(item as uiAnnotationType),
               description: "",
             } as AnnotationPropertySpec);
             dropdown?.remove();
@@ -634,9 +669,9 @@ export class AnnotationSchemaView extends Tab {
     this.annotationStates.changed.dispatch();
   }
 
-  private updateProperty(
-    oldProperty: AnnotationPropertySpec,
-    newProperty: AnnotationPropertySpec,
+  private updateProperty<T extends AnnotationPropertySpec>(
+    oldProperty: T,
+    newProperty: T,
   ) {
     this.mutableSources.forEach((s) => {
       s.updateProperty(oldProperty, newProperty);
