@@ -15,6 +15,7 @@ import type {
 } from "#src/annotation/index.js";
 import {
   annotationPropertySpecsToJson,
+  parseAnnotationPropertySpecs,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -747,14 +748,13 @@ export class AnnotationSchemaView extends Tab {
     // Remove all undefined values
     for (const state of jsonSchema) {
       if (state !== undefined) {
-        finalSchema.push(
-          state.map((property) => {
-            const entries = Object.entries(property).filter(
-              ([, value]) => value !== undefined,
-            );
-            return Object.fromEntries(entries);
-          }),
-        );
+        const entries = state.map((property) => {
+          const entries = Object.entries(property).filter(
+            ([, value]) => value !== undefined,
+          );
+          return Object.fromEntries(entries);
+        });
+        finalSchema.push(...entries);
       }
     }
     return stableStringify(finalSchema);
@@ -779,11 +779,12 @@ export class AnnotationSchemaView extends Tab {
   private pasteSchemaFromClipboard() {
     navigator.clipboard.readText().then((text) => {
       try {
-        const parsedSchema = JSON.parse(text);
+        const parsedSchema = parseAnnotationPropertySpecs(JSON.parse(text));
         const states = this.annotationStates.states;
         states.forEach((state) => {
           const source = state.source as LocalAnnotationSource;
           for (const property of parsedSchema) {
+            console.log("Adding property", property);
             source.addProperty(property);
           }
         });
