@@ -26,18 +26,12 @@ import { makeAddButton } from "#src/widget/add_button.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
-import { getRandomHexString } from "#src/util/random.js";
 import { saveBlobToFile } from "#src/util/file_download.js";
 import { StatusMessage } from "#src/status.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { DataType } from "#src/util/data_type.js";
 import { UserLayerWithAnnotations } from "#src/ui/annotations.js";
-import {
-  packColor,
-  parseRGBColorSpecification,
-  unpackRGB,
-  unpackRGBA,
-} from "#src/util/color.js";
+import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 
@@ -249,8 +243,8 @@ export class AnnotationSchemaView extends Tab {
       const rawValue = nameInput.value;
       // TODO (Sean) there needs to be a signal for the selected state
       // to now show the new name
-      let sanitizedValue = rawValue.replace(/\s+/g, "_");
       const oldProperty = this.getPropertyByName(identifier);
+      let sanitizedValue = rawValue.replace(/\s+/g, "_");
       if (oldProperty === undefined) {
         console.warn(`Property with name ${identifier} not found.`);
         return;
@@ -258,16 +252,7 @@ export class AnnotationSchemaView extends Tab {
       if (sanitizedValue === "") {
         sanitizedValue = identifier;
       } else {
-        const allProperties = this.schema;
-        const initalName = sanitizedValue;
-        let suffix = 0;
-        while (
-          allProperties.some(
-            (property) => property.identifier === sanitizedValue,
-          )
-        ) {
-          sanitizedValue = `${initalName}_${++suffix}`;
-        }
+        sanitizedValue = this.ensureUniqueName(sanitizedValue);
       }
       this.updateProperty(oldProperty, {
         ...oldProperty,
@@ -275,6 +260,18 @@ export class AnnotationSchemaView extends Tab {
       });
     });
     return cell;
+  }
+
+  private ensureUniqueName(suggestedName: string) {
+    const allProperties = this.schema;
+    const initalName = suggestedName;
+    let suffix = 0;
+    while (
+      allProperties.some((property) => property.identifier === suggestedName)
+    ) {
+      suggestedName = `${initalName}_${++suffix}`;
+    }
+    return suggestedName;
   }
 
   private getTypeIcon(type: string): string {
@@ -312,17 +309,18 @@ export class AnnotationSchemaView extends Tab {
     return typeCell;
   }
 
-  // TODO (SKM or Aigul -- use the actual default value from the schema to set the value here)
   private createDefaultValueCell(
     identifier: string,
     type: AnnotationPropertySpec["type"] | "bool",
     index: number,
   ): HTMLDivElement {
+    console.log(type);
     const container = document.createElement("div");
     // TODO (Aigul) - extract into CSS
     container.style.width = "100%";
     container.style.display = "flex";
 
+    // SKM -- already did this, keeping for reference in case we need to revisit
     // I would instead get this switch statement to just create the element
     // and give us that element
     // we will have to add an event listener to that element
@@ -355,7 +353,7 @@ export class AnnotationSchemaView extends Tab {
       const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
       const colorInput = new ColorWidget(watchableColor);
       inputs.push(colorInput.element);
-      changeFunction = (event: Event) => {
+      changeFunction = () => {
         const newColor = colorInput.getRGB();
         this.updateProperty(oldProperty, {
           ...oldProperty,
@@ -375,7 +373,7 @@ export class AnnotationSchemaView extends Tab {
           { min: 0, max: 1, step: 0.01 },
         );
         inputs.push(alphaInput);
-        changeFunction = (event: Event) => {
+        changeFunction = () => {
           const newColor = colorInput.getRGB();
           const newAlpha = parseFloat(alphaInput.value);
           const colorVec = vec4.fromValues(
@@ -395,93 +393,82 @@ export class AnnotationSchemaView extends Tab {
       type.startsWith("uint") ||
       type === "float32"
     ) {
-      const dataType =
-        propertyTypeDataType[type as AnnotationPropertySpec["type"]];
-      const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
-      const bounds = defaultDataTypeRange[dataType!];
-      // TODO (Aigul) more specific className
-      const numberInput = this.createInputElement(
-        {
-          type: "number",
-          name: `number-${index}`,
-          id: `number-${index}`,
-          value: String(oldProperty.default),
-          className: "schema-default-input",
-        },
-        {
-          min: bounds[0] as number,
-          max: bounds[1] as number,
-          step: step,
-        },
-      );
-      inputs.push(numberInput);
-      changeFunction = (event: Event) => {
-        const newValue = (event.target as HTMLInputElement).value;
-        this.updateProperty(oldProperty, {
-          ...oldProperty,
-          default:
-            dataType === DataType.FLOAT32
-              ? parseFloat(newValue)
-              : parseInt(newValue, 10),
-        } as AnnotationNumericPropertySpec);
-      };
-    } else if (type === "bool") {
-      const booleanInput = this.createInputElement({
-        type: "checkbox",
-        name: `boolean-${index}`,
-        id: `boolean-${index}`,
-      });
-      inputs.push(booleanInput);
-      changeFunction = (event: Event) => {
-        const newValue = (event.target as HTMLInputElement).checked;
-        this.updateProperty(oldProperty, {
-          ...oldProperty,
-          default: Number(newValue),
-        } as AnnotationNumericPropertySpec);
-      };
-    } else if (type.includes("Enum")) {
-      const enumContainer = document.createElement("div");
-      enumContainer.className = "enum-container";
-      const addEnumEntry = () => {
-        const enumRow = document.createElement("div");
-        enumRow.className = "enum-entry";
-
-        // TODO: append real keybinding element
-        const keyLabel = document.createElement("div");
-        keyLabel.classList.add("neuroglancer-tool-palette-tool-container");
-
-        const nameInput = this.createInputElement({
-          type: "text",
-          name: `enum-name-${index}`,
-          id: `enum-name-${index}`,
-          className: "schema-default-input",
+      const oldProperty = this.getPropertyByName(
+        identifier,
+      ) as AnnotationNumericPropertySpec;
+      const { enumValues, enumLabels } = oldProperty;
+      if (enumValues === undefined || enumLabels === undefined) {
+        const dataType =
+          propertyTypeDataType[type as AnnotationPropertySpec["type"]];
+        const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
+        const bounds = defaultDataTypeRange[dataType!];
+        // TODO (Aigul) more specific className
+        const numberInput = this.createInputElement(
+          {
+            type: "number",
+            name: `number-${index}`,
+            id: `number-${index}`,
+            value: String(oldProperty.default),
+            className: "schema-default-input",
+          },
+          {
+            min: bounds[0] as number,
+            max: bounds[1] as number,
+            step: step,
+          },
+        );
+        inputs.push(numberInput);
+        changeFunction = (event: Event) => {
+          const newValue = (event.target as HTMLInputElement).value;
+          this.updateProperty(oldProperty, {
+            ...oldProperty,
+            default:
+              dataType === DataType.FLOAT32
+                ? parseFloat(newValue)
+                : parseInt(newValue, 10),
+          } as AnnotationNumericPropertySpec);
+        };
+      } else {
+        const enumContainer = document.createElement("div");
+        enumContainer.className = "enum-container";
+        const addEnumButton = makeAddButton({
+          title: "Add enum option",
+          onClick: () => {
+            addEnumEntry(enumValues.length, `Option ${enumValues.length}`);
+          },
         });
+        enumContainer.appendChild(addEnumButton);
+        // For each enum entry, create a row with name, and value
+        const addEnumEntry = (value: number, label: string) => {
+          const enumRow = document.createElement("div");
+          enumRow.className = "enum-entry";
 
-        const valueInput = this.createInputElement({
-          type: "number",
-          value: "0",
-          name: `enum-value-${index}`,
-          id: `enum-value-${index}`,
-          className: "schema-default-input",
-        });
+          const nameInput = this.createInputElement({
+            type: "text",
+            name: `enum-name-${index}`,
+            id: `enum-name-${index}`,
+            className: "schema-default-input",
+            value: label,
+          });
 
-        enumRow.appendChild(keyLabel);
-        enumRow.appendChild(nameInput);
-        enumRow.appendChild(valueInput);
-        enumContainer.insertBefore(enumRow, addEnumButton);
-      };
+          const valueInput = this.createInputElement({
+            type: "number",
+            value: String(value),
+            name: `enum-value-${index}`,
+            id: `enum-value-${index}`,
+            className: "schema-default-input",
+          });
 
-      const addEnumButton = makeAddButton({
-        title: "Add enum option",
-        onClick: addEnumEntry,
-      });
-      enumContainer.appendChild(addEnumButton);
+          enumRow.appendChild(nameInput);
+          enumRow.appendChild(valueInput);
+          enumContainer.insertBefore(enumRow, addEnumButton);
+        };
+        for (let i = 0; i < enumValues.length; i++) {
+          addEnumEntry(enumValues[i], enumLabels[i]);
+        }
 
-      // Add initial enum entry
-      addEnumEntry();
-
-      // TODO (SKM) - handle the change event
-      container.appendChild(enumContainer);
+        container.appendChild(enumContainer);
+      }
     }
     // TODO (SKM) - again may need to unregister the event listeners
     inputs.forEach((input) => {
@@ -514,7 +501,26 @@ export class AnnotationSchemaView extends Tab {
     return 0;
   }
 
+  private setupInitialEnumsIfNeeded(type: string, header: string = "") {
+    if (type === "bool") {
+      return {
+        enumValues: [0, 1],
+        enumLabels: ["False", "True"],
+      };
+    }
+    if (header === "Enum") {
+      return {
+        enumValues: [0],
+        enumLabels: ["Default"],
+      };
+    }
+    return {};
+  }
+
   private populateSchemaTable() {
+    // TODO (sean or aigul) - remaking this all the time is not very efficient
+    // we could compare the current schema with the new one
+    // and only update the rows that have changed
     const { schema, isMutable } = this;
     // Remove everything from the table except the header
     removeChildren(this.schemaTable);
@@ -598,20 +604,18 @@ export class AnnotationSchemaView extends Tab {
             () => (option.style.backgroundColor = ""),
           );
           option.addEventListener("click", () => {
-            // TODO extract into a function and properly handle the defaults
-            // + the naming system (`type+nextIncrement`)
-            // Map the item to the real annotation type
-            console.log(
-              `Adding property of type: ${item} with default value: ${this.defaultValuePerType(
-                item as uiAnnotationType,
-              )}`,
-            );
-            this.addProperty({
+            console.log("Adding property:", item);
+            const name = this.ensureUniqueName(item);
+            console.log(this.setupInitialEnumsIfNeeded(item));
+            const newProperty = {
               type: this.mapUITypeToAnnotationType(item as uiAnnotationType),
-              identifier: `property_${getRandomHexString(2)}`,
+              identifier: name,
               default: this.defaultValuePerType(item as uiAnnotationType),
               description: "",
-            } as AnnotationPropertySpec);
+              ...this.setupInitialEnumsIfNeeded(item, section.header),
+            } as AnnotationPropertySpec;
+            console.log(newProperty);
+            this.addProperty(newProperty);
             dropdown?.remove();
             dropdown = null;
           });
