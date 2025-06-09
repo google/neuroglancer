@@ -1050,20 +1050,6 @@ export class AnnotationSchemaView extends Tab {
     this.schemaTextContainer.appendChild(text);
     this.schemaTextContainer.appendChild(this.schemaActionButtons);
 
-    const removeButton = makeDeleteButton({
-      title: "Remove property",
-      onClick: () => {
-        const property: AnnotationPropertySpec = {
-          type: "float32",
-          identifier: `new_property${getRandomHexString(2)}`,
-          default: 0,
-          description: "",
-        };
-        this.removeProperty(property);
-      },
-    });
-    this.schemaActionButtons.appendChild(removeButton);
-
     const updateButton = makeIcon({
       text: "Update property",
       title: "Update property",
@@ -1367,9 +1353,11 @@ export class AnnotationSchemaView extends Tab {
       deleteIcon.innerHTML = svg_bin;
       deleteIcon.title = "Delete row";
       deleteIcon.style.cursor = "pointer";
-      deleteIcon.addEventListener("click", () =>
-        this.schemaTable.removeChild(row),
-      );
+      deleteIcon.addEventListener("click", () => {
+        const propertyIdentifer = rowData.identifier;
+        this.removeProperty(propertyIdentifer);
+        // this.schemaTable.removeChild(row);
+      });
 
       const deleteCell = this.createTableCell(deleteIcon, "delete-cell");
       row.appendChild(deleteCell);
@@ -1421,6 +1409,14 @@ export class AnnotationSchemaView extends Tab {
           );
           option.addEventListener("click", () => {
             console.log("Selected:", item);
+            // TODO extract into a function and properly handle the defaults
+            // + the naming system (`type+nextIncrement`)
+            this.addProperty({
+              type: item,
+              identifier: `property_${getRandomHexString(2)}`,
+              default: item === "Boolean" ? false : 0,
+              description: "",
+            } as AnnotationPropertySpec);
             dropdown?.remove();
             dropdown = null;
           });
@@ -1464,16 +1460,16 @@ export class AnnotationSchemaView extends Tab {
     return states.map((state) => state.source as LocalAnnotationSource);
   }
 
-  // private addProperty(property: AnnotationPropertySpec) {
-  //   this.mutableSources.forEach((s) => {
-  //     s.addProperty(property);
-  //   });
-  //   this.annotationStates.changed.dispatch();
-  // }
-
-  private removeProperty(property: AnnotationPropertySpec) {
+  private addProperty(property: AnnotationPropertySpec) {
     this.mutableSources.forEach((s) => {
-      s.removeProperty(property.identifier);
+      s.addProperty(property);
+    });
+    this.annotationStates.changed.dispatch();
+  }
+
+  private removeProperty(propertyIdentifer: string) {
+    this.mutableSources.forEach((s) => {
+      s.removeProperty(propertyIdentifer);
     });
     this.annotationStates.changed.dispatch();
   }
