@@ -289,8 +289,7 @@ export class AnnotationSchemaView extends Tab {
     );
   }
 
-  // TODO remove the index if not needed
-  private createTypeCell(type: string, index: number): HTMLDivElement {
+  private createTypeCell(type: string, enumLabels?: string[]): HTMLDivElement {
     const typeText = document.createElement("span");
     typeText.textContent = type;
 
@@ -298,13 +297,29 @@ export class AnnotationSchemaView extends Tab {
     // TODO (Aigul) - include neuroglancer here
     // e.g. neuroglancer-annotation-schema-cell-icon-wrapper
     iconWrapper.classList.add("schema-cell-icon-wrapper");
+    // TODO (Aigul) please modify this to account for the enum labels
     iconWrapper.innerHTML = this.getTypeIcon(type);
 
+    // If there are any enum labels, we put (enum) after the type
+    if (enumLabels && enumLabels.length > 0) {
+      // If they are True / False we put (bool) instead
+      if (
+        enumLabels.includes("False") &&
+        enumLabels.includes("True") &&
+        enumLabels.length === 2
+      ) {
+        typeText.textContent = "bool";
+      } else {
+        typeText.textContent += " Enum";
+      }
+    }
     const typeCell = this.createTableCell(iconWrapper, "type");
     typeCell.appendChild(typeText);
     typeCell.appendChild(typeText);
     // TODO (Aigul) could this link to the dropdown that shows when adding
     // a new property?
+    // We'd need to use the logic in isConverible from #src/annotation/index.js
+    // To determine the list of types that can be shown in the dropdown
     // TODO if not, then remove the cursor pointer
     // typeCell.addEventListener("click", (event) => {});
     return typeCell;
@@ -571,8 +586,10 @@ export class AnnotationSchemaView extends Tab {
       const row = document.createElement("div");
       row.classList.add("neuroglancer-annotation-schema-row");
 
+      const enumLabels =
+        "enumLabels" in rowData ? rowData.enumLabels : undefined;
       row.appendChild(this.createNameCell(rowData.identifier, index));
-      row.appendChild(this.createTypeCell(rowData.type, index));
+      row.appendChild(this.createTypeCell(rowData.type, enumLabels));
       row.appendChild(
         this.createDefaultValueCell(rowData.identifier, rowData.type, index),
       );
