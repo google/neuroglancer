@@ -1015,6 +1015,7 @@ export class AnnotationSchemaView extends Tab {
   private schemaTextContainer = document.createElement("div");
   private schemaActionButtons = document.createElement("div");
   private schemaTableAddButtonField = document.createElement("div");
+  private tableToPropertyIndex: Array<number> = [];
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -1114,15 +1115,6 @@ export class AnnotationSchemaView extends Tab {
   private createSchemaTable() {
     const TABLE_HEADERS = ["Name", "Type", "Default value", ""];
 
-    // const SCHEMA_TABLE_DATA = [
-    //   { name: "Name", type: "Enum (uint8)", defaultValue: "", deleteCell: "" },
-    //   { name: "Color alpha", type: "RGBa", defaultValue: "", deleteCell: "" },
-    //   { name: "is_deleted", type: "Boolean", defaultValue: "", deleteCell: "" },
-    //   { name: "Decimal", type: "float32", defaultValue: "", deleteCell: "" },
-    //   { name: "Color", type: "RGB", defaultValue: "", deleteCell: "" },
-    //   { name: "s0_start_x", type: "int8", defaultValue: "", deleteCell: "" }
-    // ];
-
     // Initialize Table
     const addButtonField = document.createElement("div");
     addButtonField.className =
@@ -1162,15 +1154,56 @@ export class AnnotationSchemaView extends Tab {
       name: string;
       id: string;
       className?: string;
-      placeholder?: string;
     }): HTMLInputElement => {
       const input = document.createElement("input");
       input.type = config.type;
       input.value = config.value || "";
-      input.name = config.name;
-      input.id = config.id;
+      input.name = `${this.layer.managedLayer.name}-${config.name}`;
+      input.id = `${this.layer.managedLayer.name}-${config.id}`;
       if (config.className) input.classList.add(config.className);
-      if (config.placeholder) input.placeholder = config.placeholder;
+      input.addEventListener("change", () => {
+        const id = input.id;
+        // TODO this order is not fixed, so we need to do this in a better way
+        // using something from the html element is perhaps ok
+        // but if doing so, after the update is called here
+        // the updateView should be called and then
+        // the name of the property should be passed to the id
+        // This is particularly problematic for renaming
+        // say color to color_1
+        const index = parseInt(id.split("-").pop() || "0", 10);
+        const rawValue = input.value;
+        // Replace any spaces with underscores
+        // TODO (Sean) there needs to be a signal for the selected state
+        // to now show the new name
+        // TODO the default values also need similar logic to this
+        let sanitizedValue = rawValue.replace(/\s+/g, "_");
+        const oldProperty = this.getPropertyByIndex(index);
+        if (!oldProperty) {
+          console.warn(`Property with name ${config.name} not found.`);
+          return;
+        }
+        // Need to ensure thie name is unique and that empty names are not allowed
+        if (sanitizedValue === "") {
+          sanitizedValue = oldProperty.identifier;
+        } else {
+          const allProperties = this.extractSchema().schema;
+          const initalName = sanitizedValue;
+          let suffix = 0;
+          while (
+            allProperties.some(
+              (property) => property.identifier === sanitizedValue,
+            )
+          ) {
+            sanitizedValue = `${initalName}_${++suffix}`;
+          }
+        }
+
+        const newProperty = {
+          ...oldProperty,
+          identifier: sanitizedValue,
+        };
+        this.updateProperty(oldProperty, newProperty);
+      });
       return input;
     };
 
@@ -1272,7 +1305,6 @@ export class AnnotationSchemaView extends Tab {
 
               const nameInput = createInputElement({
                 type: "text",
-                placeholder: "Name",
                 name: `enum-name-${index}`,
                 id: `enum-name-${index}`,
                 className: "schema-default-input",
@@ -1310,7 +1342,9 @@ export class AnnotationSchemaView extends Tab {
       return container;
     };
 
+    // TODO logic in better place
     const { schema, isMutable } = this.extractSchema();
+    console.log(this.layer);
     // TODO handle the mutable
 
     // TODO this is not so efficient, for now, clear the table first
@@ -1321,6 +1355,7 @@ export class AnnotationSchemaView extends Tab {
       row.classList.add("neuroglancer-annotation-schema-row");
 
       // Name Cell
+      // TODO refactor naming
       const nameInput = createInputElement({
         type: "text",
         value: rowData.identifier,
@@ -1363,6 +1398,7 @@ export class AnnotationSchemaView extends Tab {
       row.appendChild(deleteCell);
 
       this.schemaTable.appendChild(row);
+      this.tableToPropertyIndex.push(index);
     });
 
     // Add Property Button
@@ -1548,6 +1584,7 @@ export class AnnotationSchemaView extends Tab {
     });
   }
 
+  // TODO should probably cache this
   private extractSchema() {
     const schema: Readonly<AnnotationPropertySpec>[] = [];
     let isMutable = false;
@@ -1560,6 +1597,31 @@ export class AnnotationSchemaView extends Tab {
       }
     }
     return { schema, isMutable };
+  }
+
+  private getPropertyByName(name: string): AnnotationPropertySpec | undefined {
+    for (const state of this.annotationStates.states) {
+      const property = state.source.properties.value.find(
+        (p) => p.identifier === name,
+      );
+      if (property) return property;
+    }
+    return undefined;
+  }
+
+  private getPropertyByIndex(
+    index: number,
+  ): AnnotationPropertySpec | undefined {
+    if (index < 0 || index >= this.tableToPropertyIndex.length) {
+      console.warn(`Index ${index} is out of bounds for property table.`);
+      return undefined;
+    }
+    const propertyIndex = this.tableToPropertyIndex[index];
+    for (const state of this.annotationStates.states) {
+      const property = state.source.properties.value[propertyIndex];
+      if (property) return property;
+    }
+    return undefined;
   }
 
   private updateView() {
