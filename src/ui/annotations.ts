@@ -21,7 +21,7 @@
 import svg_help from "ikonate/icons/help.svg?raw";
 import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_bin from "ikonate/icons/bin.svg?raw";
-import svg_share from "ikonate/icons/share.svg?raw";
+import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
 import svg_numbers from "ikonate/icons/hash.svg?raw";
 import svg_palette from "ikonate/icons/drop.svg?raw";
@@ -1051,30 +1051,9 @@ export class AnnotationSchemaView extends Tab {
     this.schemaTextContainer.appendChild(text);
     this.schemaTextContainer.appendChild(this.schemaActionButtons);
 
-    const updateButton = makeIcon({
-      text: "Update property",
-      title: "Update property",
-      onClick: () => {
-        const oldProperty: AnnotationPropertySpec = {
-          type: "float32",
-          identifier: `old_property${getRandomHexString(2)}`,
-          default: 0,
-          description: "",
-        };
-        const newProperty: AnnotationPropertySpec = {
-          type: "float32",
-          identifier: `new_property${getRandomHexString(2)}`,
-          default: 0,
-          description: "",
-        };
-        this.updateProperty(oldProperty, newProperty);
-      },
-    });
-    this.schemaActionButtons.appendChild(updateButton);
-
     const downloadButton = makeIcon({
       title: "Download schema",
-      svg: svg_share,
+      svg: svg_download,
       onClick: () => this.downloadSchema(),
     });
     this.schemaActionButtons.appendChild(downloadButton);
