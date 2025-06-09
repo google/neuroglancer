@@ -110,6 +110,7 @@ export class AnnotationSchemaView extends Tab {
     this.updatePasteVisibility();
   };
 
+  // TODO maybe let's move this into a tooltip, I don't think it looks great just at the top?
   private updateAnnotationText() {
     const setOrViewText = this.isMutable.value ? "Set" : "View read-only";
     this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.`;
@@ -309,6 +310,9 @@ export class AnnotationSchemaView extends Tab {
     return typeCell;
   }
 
+  // TODO (Aigul) -- the enums are missing the ability to have entries deleted
+  // TODO (Aigul) I seem to have messed the read only display of the default value
+  // maybe I broke something in the styling.
   private createDefaultValueCell(
     identifier: string,
     type: AnnotationPropertySpec["type"] | "bool",
@@ -432,31 +436,69 @@ export class AnnotationSchemaView extends Tab {
         const enumContainer = document.createElement("div");
         enumContainer.className = "enum-container";
         const addEnumButton = makeAddButton({
-          title: "Add enum option",
+          title: "Add new enum option",
           onClick: () => {
-            addEnumEntry(enumValues.length, `Option ${enumValues.length}`);
+            let suggestedEnumValue = 0;
+            while (enumValues.includes(suggestedEnumValue))
+              ++suggestedEnumValue;
+            this.updateProperty(oldProperty, {
+              ...oldProperty,
+              enumValues: [...oldProperty.enumValues!, suggestedEnumValue],
+              enumLabels: [
+                ...oldProperty.enumLabels!,
+                `${suggestedEnumValue} (label)`,
+              ],
+            } as AnnotationNumericPropertySpec);
           },
         });
         enumContainer.appendChild(addEnumButton);
         // For each enum entry, create a row with name, and value
-        const addEnumEntry = (value: number, label: string) => {
+        const addEnumEntry = (
+          value: number,
+          label: string,
+          enumIndex: number,
+        ) => {
           const enumRow = document.createElement("div");
           enumRow.className = "enum-entry";
 
+          // TODO ideally this should stop you from adding the same enum value
+          // or the same label
           const nameInput = this.createInputElement({
             type: "text",
-            name: `enum-name-${index}`,
-            id: `enum-name-${index}`,
+            name: `enum-name-${enumIndex}`,
+            id: `enum-name-${enumIndex}`,
             className: "schema-default-input",
             value: label,
+          });
+          nameInput.addEventListener("change", (event) => {
+            const newLabel = (event.target as HTMLInputElement).value;
+            this.updateProperty(oldProperty, {
+              ...oldProperty,
+              enumLabels: oldProperty.enumLabels!.map((l, i) =>
+                i === enumIndex ? newLabel : l,
+              ),
+            } as AnnotationNumericPropertySpec);
           });
 
           const valueInput = this.createInputElement({
             type: "number",
             value: String(value),
-            name: `enum-value-${index}`,
-            id: `enum-value-${index}`,
+            name: `enum-value-${enumIndex}`,
+            id: `enum-value-${enumIndex}`,
             className: "schema-default-input",
+          });
+          valueInput.addEventListener("change", (event) => {
+            const inputValue = (event.target as HTMLInputElement).value;
+            const newValue =
+              type === "float32"
+                ? parseFloat(inputValue)
+                : parseInt(inputValue, 10);
+            this.updateProperty(oldProperty, {
+              ...oldProperty,
+              enumValues: oldProperty.enumValues!.map((v, i) =>
+                i === enumIndex ? newValue : v,
+              ),
+            } as AnnotationNumericPropertySpec);
           });
 
           enumRow.appendChild(nameInput);
@@ -464,7 +506,7 @@ export class AnnotationSchemaView extends Tab {
           enumContainer.insertBefore(enumRow, addEnumButton);
         };
         for (let i = 0; i < enumValues.length; i++) {
-          addEnumEntry(enumValues[i], enumLabels[i]);
+          addEnumEntry(enumValues[i], enumLabels[i], i);
         }
 
         container.appendChild(enumContainer);
@@ -488,7 +530,6 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private defaultValuePerType(uiType: uiAnnotationType): number {
-    // TODO change bool handling to actually be an enum
     if (uiType === "bool") {
       return 1;
     }
@@ -540,7 +581,7 @@ export class AnnotationSchemaView extends Tab {
       if (isMutable.value) {
         const deleteIcon = document.createElement("span");
         deleteIcon.innerHTML = svg_bin;
-        deleteIcon.title = "Delete row";
+        deleteIcon.title = "Delete annotation property";
         deleteIcon.style.cursor = "pointer";
         deleteIcon.addEventListener("click", () => {
           const propertyIdentifer = rowData.identifier;
@@ -604,9 +645,7 @@ export class AnnotationSchemaView extends Tab {
             () => (option.style.backgroundColor = ""),
           );
           option.addEventListener("click", () => {
-            console.log("Adding property:", item);
             const name = this.ensureUniqueName(item);
-            console.log(this.setupInitialEnumsIfNeeded(item));
             const newProperty = {
               type: this.mapUITypeToAnnotationType(item as uiAnnotationType),
               identifier: name,
@@ -614,7 +653,6 @@ export class AnnotationSchemaView extends Tab {
               description: "",
               ...this.setupInitialEnumsIfNeeded(item, section.header),
             } as AnnotationPropertySpec;
-            console.log(newProperty);
             this.addProperty(newProperty);
             dropdown?.remove();
             dropdown = null;
