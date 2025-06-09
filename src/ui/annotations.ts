@@ -95,7 +95,7 @@ import {
 } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
-import { removeChildren, updateChildren } from "#src/util/dom.js";
+import { removeChildren } from "#src/util/dom.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { vec3 } from "#src/util/geom.js";
@@ -127,7 +127,8 @@ import { StatusMessage } from "#src/status.js";
 
 export class MergedAnnotationStates
   extends RefCounted
-  implements WatchableValueInterface<readonly AnnotationLayerState[]> {
+  implements WatchableValueInterface<readonly AnnotationLayerState[]>
+{
   changed = new NullarySignal();
   isLoadingChanged = new NullarySignal();
   states: Borrowed<AnnotationLayerState>[] = [];
@@ -245,10 +246,10 @@ interface AnnotationLayerViewAttachedState {
 export class AnnotationLayerView extends Tab {
   private previousSelectedState:
     | {
-      annotationId: string;
-      annotationLayerState: AnnotationLayerState;
-      pin: boolean;
-    }
+        annotationId: string;
+        annotationLayerState: AnnotationLayerState;
+        pin: boolean;
+      }
     | undefined = undefined;
   private previousHoverId: string | undefined = undefined;
   private previousHoverAnnotationLayerState: AnnotationLayerState | undefined =
@@ -587,7 +588,7 @@ export class AnnotationLayerView extends Tab {
         selectionState !== undefined &&
         previousSelectedState.annotationId === selectionState.annotationId &&
         previousSelectedState.annotationLayerState ===
-        selectionState.annotationLayerState &&
+          selectionState.annotationLayerState &&
         previousSelectedState.pin === selectionState.pin)
     ) {
       return;
@@ -1013,6 +1014,7 @@ export class AnnotationSchemaView extends Tab {
   private schemaTable = document.createElement("div");
   private schemaTextContainer = document.createElement("div");
   private schemaActionButtons = document.createElement("div");
+  private schemaTableAddButtonField = document.createElement("div");
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -1020,15 +1022,16 @@ export class AnnotationSchemaView extends Tab {
   ) {
     super();
     this.element.classList.add("neuroglancer-annotation-schema-view");
-    this.schemaTextContainer.className = "neuroglancer-annotation-schema-text-container";
-    this.schemaActionButtons.className = "neuroglancer-annotation-schema-action-buttons"
+    this.schemaTextContainer.className =
+      "neuroglancer-annotation-schema-text-container";
+    this.schemaActionButtons.className =
+      "neuroglancer-annotation-schema-action-buttons";
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
     this.element.appendChild(this.schemaTextContainer);
     this.element.appendChild(this.schemaTable);
     this.updateView();
 
     this.makeUI();
-    this.createSchemaTable();
     this.registerDisposer(
       this.annotationStates.changed.add(() => this.updateView()),
     );
@@ -1039,10 +1042,11 @@ export class AnnotationSchemaView extends Tab {
     // TODO add paste etc only for mutable sources
     // TODO add remove etc need to actually determine the property from UI input
     const text = document.createElement("p");
-    text.textContent = "Set default metadata schema for your layer which would apply to all your annotations."
+    text.textContent =
+      "Set default metadata schema for your layer which would apply to all your annotations.";
     text.style.marginTop = "0";
-    text.style.marginBottom = "0.25rem"
-    text.style.padding = "0.25rem"
+    text.style.marginBottom = "0.25rem";
+    text.style.padding = "0.25rem";
     this.schemaTextContainer.appendChild(text);
     this.schemaTextContainer.appendChild(this.schemaActionButtons);
 
@@ -1100,49 +1104,70 @@ export class AnnotationSchemaView extends Tab {
       onClick: () => this.pasteSchemaFromClipboard(),
     });
     this.schemaActionButtons.appendChild(pasteButton);
+
+    this.createSchemaTable();
+    this.fillSchemaTable();
   }
+
+  private createTableCell = (
+    content: string | HTMLElement,
+    className: string = "_",
+  ): HTMLDivElement => {
+    const cell = document.createElement("div");
+    cell.classList.add("neuroglancer-annotation-schema-cell", className);
+
+    if (typeof content === "string") {
+      cell.textContent = content;
+    } else {
+      cell.appendChild(content);
+    }
+
+    return cell;
+  };
 
   private createSchemaTable() {
     const TABLE_HEADERS = ["Name", "Type", "Default value", ""];
 
-    const SCHEMA_TABLE_DATA = [
-      { name: "Name", type: "Enum (uint8)", defaultValue: "", deleteCell: "" },
-      { name: "Color alpha", type: "RGBa", defaultValue: "", deleteCell: "" },
-      { name: "is_deleted", type: "Boolean", defaultValue: "", deleteCell: "" },
-      { name: "Decimal", type: "float32", defaultValue: "", deleteCell: "" },
-      { name: "Color", type: "RGB", defaultValue: "", deleteCell: "" },
-      { name: "s0_start_x", type: "int8", defaultValue: "", deleteCell: "" }
-    ];
+    // const SCHEMA_TABLE_DATA = [
+    //   { name: "Name", type: "Enum (uint8)", defaultValue: "", deleteCell: "" },
+    //   { name: "Color alpha", type: "RGBa", defaultValue: "", deleteCell: "" },
+    //   { name: "is_deleted", type: "Boolean", defaultValue: "", deleteCell: "" },
+    //   { name: "Decimal", type: "float32", defaultValue: "", deleteCell: "" },
+    //   { name: "Color", type: "RGB", defaultValue: "", deleteCell: "" },
+    //   { name: "s0_start_x", type: "int8", defaultValue: "", deleteCell: "" }
+    // ];
 
+    // Initialize Table
+    const addButtonField = document.createElement("div");
+    addButtonField.className =
+      "neuroglancer-annotation-schema-add-button-field";
+
+    // Create Header Row
+    const headerRow = document.createElement("div");
+    headerRow.classList.add("neuroglancer-annotation-schema-row", "header-row");
+    TABLE_HEADERS.forEach((text) => {
+      headerRow.appendChild(this.createTableCell(text));
+    });
+    this.schemaTable.appendChild(headerRow);
+  }
+
+  private fillSchemaTable() {
     const DROPDOWN_OPTIONS = [
       { header: "General", items: ["float32", "Boolean"] },
       { header: "Enum", items: ["uint8", "uint16"] },
       { header: "Colour", items: ["RGB", "RGBa"] },
-      { header: "Integer", items: ["int8", "int16", "int32"] }
+      { header: "Integer", items: ["int8", "int16", "int32"] },
     ];
 
     const SECTION_ICONS: Record<string, string> = {
-      "Enum": svg_format_size,
-      "Colour": svg_palette,
-      "Integer": svg_numbers
+      Enum: svg_format_size,
+      Colour: svg_palette,
+      Integer: svg_numbers,
     };
 
     const ITEM_ICONS: Record<string, string> = {
-      "float32": svg_numbers,
-      "Boolean": svg_check
-    };
-
-    const createTableCell = (content: string | HTMLElement, className: string = "_"): HTMLDivElement => {
-      const cell = document.createElement("div");
-      cell.classList.add("neuroglancer-annotation-schema-cell", className);
-
-      if (typeof content === "string") {
-        cell.textContent = content;
-      } else {
-        cell.appendChild(content);
-      }
-
-      return cell;
+      float32: svg_numbers,
+      Boolean: svg_check,
     };
 
     const createInputElement = (config: {
@@ -1164,49 +1189,63 @@ export class AnnotationSchemaView extends Tab {
     };
 
     const getTypeIcon = (type: string): string => {
-      return ITEM_ICONS[type] ||
+      return (
+        ITEM_ICONS[type] ||
         SECTION_ICONS[
-        Object.keys(SECTION_ICONS).find(section =>
-          DROPDOWN_OPTIONS.find(d => d.header === section)?.items.includes(type)
-        ) || ""
-        ] || svg_format_size;
+          Object.keys(SECTION_ICONS).find((section) =>
+            DROPDOWN_OPTIONS.find((d) => d.header === section)?.items.includes(
+              type,
+            ),
+          ) || ""
+        ] ||
+        svg_format_size
+      );
     };
 
-    const createDefaultValueInput = (type: string, index: number): HTMLElement => {
+    const createDefaultValueInput = (
+      type: string,
+      index: number,
+    ): HTMLElement => {
       const container = document.createElement("div");
       container.style.width = "100%";
       container.style.display = "flex";
 
       switch (type) {
         case "Boolean":
-          container.appendChild(createInputElement({
-            type: "checkbox",
-            name: `boolean-${index}`,
-            id: `boolean-${index}`
-          }));
+          container.appendChild(
+            createInputElement({
+              type: "checkbox",
+              name: `boolean-${index}`,
+              id: `boolean-${index}`,
+            }),
+          );
           break;
 
         case "RGB":
-          container.appendChild(createInputElement({
-            type: "color",
-            name: `rgb-${index}`,
-            id: `rgb-${index}`
-          }));
+          container.appendChild(
+            createInputElement({
+              type: "color",
+              name: `rgb-${index}`,
+              id: `rgb-${index}`,
+            }),
+          );
           break;
 
         case "RGBa":
-          container.appendChild(createInputElement({
-            type: "color",
-            name: `rgba-${index}`,
-            id: `rgba-${index}`
-          }));
+          container.appendChild(
+            createInputElement({
+              type: "color",
+              name: `rgba-${index}`,
+              id: `rgba-${index}`,
+            }),
+          );
 
           const alphaInput = createInputElement({
             type: "number",
             value: "0.1",
             name: `alpha-${index}`,
             id: `alpha-${index}`,
-            className: "schema-default-input"
+            className: "schema-default-input",
           });
           alphaInput.step = "0.01";
           alphaInput.style.marginLeft = "2px";
@@ -1219,13 +1258,15 @@ export class AnnotationSchemaView extends Tab {
         case "uint8":
         case "uint16":
         case "float32":
-          container.appendChild(createInputElement({
-            type: "number",
-            value: "0",
-            name: `number-${index}`,
-            id: `number-${index}`,
-            className: "schema-default-input"
-          }));
+          container.appendChild(
+            createInputElement({
+              type: "number",
+              value: "0",
+              name: `number-${index}`,
+              id: `number-${index}`,
+              className: "schema-default-input",
+            }),
+          );
           break;
 
         default:
@@ -1239,14 +1280,16 @@ export class AnnotationSchemaView extends Tab {
 
               // TODO: append real keybinding element
               const keyLabel = document.createElement("div");
-              keyLabel.classList.add("neuroglancer-tool-palette-tool-container");
+              keyLabel.classList.add(
+                "neuroglancer-tool-palette-tool-container",
+              );
 
               const nameInput = createInputElement({
                 type: "text",
                 placeholder: "Name",
                 name: `enum-name-${index}`,
                 id: `enum-name-${index}`,
-                className: "schema-default-input"
+                className: "schema-default-input",
               });
 
               const valueInput = createInputElement({
@@ -1254,7 +1297,7 @@ export class AnnotationSchemaView extends Tab {
                 value: "0",
                 name: `enum-value-${index}`,
                 id: `enum-value-${index}`,
-                className: "schema-default-input"
+                className: "schema-default-input",
               });
 
               enumRow.appendChild(keyLabel);
@@ -1265,7 +1308,7 @@ export class AnnotationSchemaView extends Tab {
 
             const addEnumButton = makeAddButton({
               title: "Add enum option",
-              onClick: addEnumEntry
+              onClick: addEnumEntry,
             });
             enumContainer.appendChild(addEnumButton);
 
@@ -1281,32 +1324,25 @@ export class AnnotationSchemaView extends Tab {
       return container;
     };
 
-    // Initialize Table
-    const addButtonField = document.createElement("div");
-    addButtonField.className = "neuroglancer-annotation-schema-add-button-field";
+    const { schema, isMutable } = this.extractSchema();
+    // TODO handle the mutable
 
-    // Create Header Row
-    const headerRow = document.createElement("div");
-    headerRow.classList.add("neuroglancer-annotation-schema-row", "header-row");
-    TABLE_HEADERS.forEach(text => {
-      headerRow.appendChild(createTableCell(text));
-    });
-    this.schemaTable.appendChild(headerRow);
-
+    // TODO this is not so efficient, for now, clear the table first
+    removeChildren(this.schemaTable);
     // Create Data Rows
-    SCHEMA_TABLE_DATA.forEach((rowData, index) => {
+    schema.forEach((rowData, index) => {
       const row = document.createElement("div");
       row.classList.add("neuroglancer-annotation-schema-row");
 
       // Name Cell
       const nameInput = createInputElement({
         type: "text",
-        value: rowData.name,
+        value: rowData.identifier,
         name: `name-${index}`,
         id: `name-${index}`,
-        className: "schema-name-input"
+        className: "schema-name-input",
       });
-      row.appendChild(createTableCell(nameInput));
+      row.appendChild(this.createTableCell(nameInput));
 
       // Type Cell
       const typeText = document.createElement("span");
@@ -1316,24 +1352,26 @@ export class AnnotationSchemaView extends Tab {
       iconWrapper.classList.add("schema-cell-icon-wrapper");
       iconWrapper.innerHTML = getTypeIcon(rowData.type);
 
-      const typeCell = createTableCell("");
+      const typeCell = this.createTableCell("");
       typeCell.appendChild(iconWrapper);
       typeCell.appendChild(typeText);
       row.appendChild(typeCell);
 
       // Default Value Cell
-      row.appendChild(createTableCell(
-        createDefaultValueInput(rowData.type, index)
-      ));
+      row.appendChild(
+        this.createTableCell(createDefaultValueInput(rowData.type, index)),
+      );
 
       // Delete Cell
       const deleteIcon = document.createElement("span");
       deleteIcon.innerHTML = svg_bin;
       deleteIcon.title = "Delete row";
       deleteIcon.style.cursor = "pointer";
-      deleteIcon.addEventListener("click", () => this.schemaTable.removeChild(row));
+      deleteIcon.addEventListener("click", () =>
+        this.schemaTable.removeChild(row),
+      );
 
-      const deleteCell = createTableCell(deleteIcon, "delete-cell");
+      const deleteCell = this.createTableCell(deleteIcon, "delete-cell");
       row.appendChild(deleteCell);
 
       this.schemaTable.appendChild(row);
@@ -1352,19 +1390,20 @@ export class AnnotationSchemaView extends Tab {
       dropdown = document.createElement("div");
       dropdown.className = "neuroglancer-annotation-schema-dropdown";
 
-      DROPDOWN_OPTIONS.forEach(section => {
+      DROPDOWN_OPTIONS.forEach((section) => {
         const headerEl = document.createElement("div");
         headerEl.className = "neuroglancer-annotation-schema-dropdown-header";
         headerEl.textContent = section.header;
         dropdown?.appendChild(headerEl);
 
-        section.items.forEach(item => {
+        section.items.forEach((item) => {
           const option = document.createElement("div");
           option.className = "neuroglancer-annotation-schema-dropdown-option";
 
           const iconWrapper = document.createElement("span");
           iconWrapper.classList.add("schema-cell-icon-wrapper");
-          iconWrapper.innerHTML = ITEM_ICONS[item] || SECTION_ICONS[section.header] || "";
+          iconWrapper.innerHTML =
+            ITEM_ICONS[item] || SECTION_ICONS[section.header] || "";
 
           const text = document.createElement("span");
           text.textContent = item;
@@ -1372,8 +1411,14 @@ export class AnnotationSchemaView extends Tab {
           option.appendChild(iconWrapper);
           option.appendChild(text);
 
-          option.addEventListener("mouseover", () => option.style.backgroundColor = "#333");
-          option.addEventListener("mouseout", () => option.style.backgroundColor = "");
+          option.addEventListener(
+            "mouseover",
+            () => (option.style.backgroundColor = "#333"),
+          );
+          option.addEventListener(
+            "mouseout",
+            () => (option.style.backgroundColor = ""),
+          );
           option.addEventListener("click", () => {
             console.log("Selected:", item);
             dropdown?.remove();
@@ -1399,13 +1444,17 @@ export class AnnotationSchemaView extends Tab {
       document.addEventListener("mousedown", handleOutsideClick);
     };
 
+    // TODO: not efficient, but for now we do this every update
+    this.schemaTableAddButtonField = document.createElement("div");
+    this.schemaTableAddButtonField.className =
+      "neuroglancer-annotation-schema-add-button-field";
     const addButton = makeAddButton({
       title: "Add property",
-      onClick: handleAddPropertyClick
+      onClick: handleAddPropertyClick,
     });
 
-    addButtonField.appendChild(addButton);
-    this.schemaTable.appendChild(addButtonField);
+    this.schemaTableAddButtonField.appendChild(addButton);
+    this.schemaTable.appendChild(this.schemaTableAddButtonField);
   }
 
   private get mutableSources() {
@@ -1518,21 +1567,8 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateView() {
-    const { schema } = this.extractSchema();
-
-    function* getItems() {
-      for (const item of schema) {
-        const { type, identifier, default: defaultValue, description } = item;
-        const enumLabels = "enum_labels" in item ? item.enum_labels : undefined;
-        const enumValues = "enum_values" in item ? item.enum_values : undefined;
-        const propertyElement = document.createElement("div");
-        propertyElement.className = "neuroglancer-annotation-property";
-        propertyElement.textContent = `${identifier} (${type}) ${defaultValue} ${enumValues} ${enumLabels} ${description}`;
-        yield propertyElement;
-      }
-    }
-
-    updateChildren(this.schemaTable, getItems());
+    console.log("Updating annotation schema view");
+    this.fillSchemaTable();
   }
 }
 
@@ -1664,10 +1700,10 @@ function getMousePositionInAnnotationCoordinates(
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
   inProgressAnnotation: WatchableValue<
     | {
-      annotationLayer: AnnotationLayerState;
-      reference: AnnotationReference;
-      disposer: () => void;
-    }
+        annotationLayer: AnnotationLayerState;
+        reference: AnnotationReference;
+        disposer: () => void;
+      }
     | undefined
   > = new WatchableValue(undefined);
 
@@ -2149,7 +2185,7 @@ function makeRelatedSegmentList(
 
 const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
 export function UserLayerWithAnnotationsMixin<
-  TBase extends { new(...args: any[]): UserLayer },
+  TBase extends { new (...args: any[]): UserLayer },
 >(Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
     annotationStates = this.registerDisposer(new MergedAnnotationStates());
@@ -2310,8 +2346,8 @@ export function UserLayerWithAnnotationsMixin<
                   annotation = handler.deserialize(
                     dataView,
                     baseOffset +
-                    annotationPropertySerializer.propertyGroupBytes[0] *
-                    annotationIndex,
+                      annotationPropertySerializer.propertyGroupBytes[0] *
+                        annotationIndex,
                     isLittleEndian,
                     rank,
                     state.annotationId!,
@@ -2472,7 +2508,7 @@ export function UserLayerWithAnnotationsMixin<
                     // to try and reuse them
                     valueElement = document.createElement("input");
                     // TODO type based on property.type
-                    (valueElement as HTMLInputElement).type = "number"
+                    (valueElement as HTMLInputElement).type = "number";
                     // TODO RGBA color might need two inputs
                     valueElementSetter = (value) => {
                       (valueElement as HTMLInputElement).value = value;
@@ -2549,30 +2585,30 @@ export function UserLayerWithAnnotationsMixin<
                         sourceReadonly
                           ? undefined
                           : (newIds) => {
-                            const annotation = reference.value;
-                            if (annotation == null) {
-                              return;
-                            }
-                            let { relatedSegments } = annotation;
-                            if (relatedSegments === undefined) {
-                              relatedSegments =
-                                annotationLayer.source.relationships.map(
-                                  () => new BigUint64Array(0),
-                                );
-                            } else {
-                              relatedSegments = relatedSegments.slice();
-                            }
-                            relatedSegments[relationshipIndex] = newIds;
-                            const newAnnotation = {
-                              ...annotation,
-                              relatedSegments,
-                            };
-                            annotationLayer.source.update(
-                              reference,
-                              newAnnotation,
-                            );
-                            annotationLayer.source.commit(reference);
-                          },
+                              const annotation = reference.value;
+                              if (annotation == null) {
+                                return;
+                              }
+                              let { relatedSegments } = annotation;
+                              if (relatedSegments === undefined) {
+                                relatedSegments =
+                                  annotationLayer.source.relationships.map(
+                                    () => new BigUint64Array(0),
+                                  );
+                              } else {
+                                relatedSegments = relatedSegments.slice();
+                              }
+                              relatedSegments[relationshipIndex] = newIds;
+                              const newAnnotation = {
+                                ...annotation,
+                                relatedSegments,
+                              };
+                              annotationLayer.source.update(
+                                reference,
+                                newAnnotation,
+                              );
+                              annotationLayer.source.commit(reference);
+                            },
                       ),
                     ).element,
                   );
