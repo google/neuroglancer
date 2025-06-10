@@ -25,12 +25,6 @@
   border: 1px solid transparent;
 }
 
-.neuroglancer-single-mesh-dropdown-top-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
 .neuroglancer-single-mesh-shader-overlay .neuroglancer-shader-code-widget {
   width: 80vw;
   height: 80vh;

@@ -84,9 +84,8 @@ export class DisplayOptionsTab extends Tab {
               {
                 title: "Documentation on skeleton rendering",
                 href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
-                type: "Skeleton"
+                type: "Skeleton",
               },
-              "neuroglancer-segmentation-dropdown-skeleton-shader-header",
             ),
           );
           parent.appendChild(codeWidget.element);

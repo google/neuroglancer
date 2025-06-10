@@ -15,17 +15,12 @@
  */
 
 import "#src/ui/shader_code_dialog.css";
+import svg_close from "ikonate/icons/close.svg?raw";
+import type { UserLayer } from "#src/layer/index.js";
 import type { VertexAttributeWidget } from "#src/layer/single_mesh/index.js";
 import { Overlay } from "#src/overlay.js";
-import svg_close from "ikonate/icons/close.svg?raw";
 import { makeIcon } from "#src/widget/icon.js";
 import type { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
-import { UserLayer } from "#src/layer/index.js";
-
-interface ShaderCodeOverlayOptions {
-  additionalClass?: string;
-  title?: string;
-}
 
 export class CodeEditorDialog extends Overlay {
   header: HTMLDivElement;
@@ -63,15 +58,10 @@ export class ShaderCodeEditorDialog extends CodeEditorDialog {
   constructor(
     public layer: UserLayer,
     private makeShaderCodeWidget: (layer: UserLayer) => ShaderCodeWidget,
-    options: ShaderCodeOverlayOptions = {},
+    title: string = "Shader editor",
     makeVertexAttributeWidget?: (layer: UserLayer) => VertexAttributeWidget,
   ) {
-    const { additionalClass, title = "Shader editor" } = options;
     super(title);
-
-    if (additionalClass) {
-      this.content.classList.add(additionalClass);
-    }
 
     const codeWidget = this.registerDisposer(
       this.makeShaderCodeWidget(this.layer),

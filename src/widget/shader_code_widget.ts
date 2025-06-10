@@ -22,12 +22,13 @@ import "codemirror/lib/codemirror.css";
 import "codemirror/addon/lint/lint.css";
 
 import { debounce } from "lodash-es";
+import type { UserLayer } from "#src/layer/index.js";
+import type { VertexAttributeWidget } from "#src/layer/single_mesh/index.js";
 import glslCodeMirror from "#src/third_party/codemirror-glsl.js";
-import {
-  ElementVisibilityFromTrackableBoolean,
-  TrackableBoolean,
-} from "#src/trackable_boolean.js";
+import type { TrackableBoolean } from "#src/trackable_boolean.js";
+import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValue } from "#src/trackable_value.js";
+import { ShaderCodeEditorDialog } from "#src/ui/shader_code_dialog.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
@@ -42,8 +43,6 @@ import type {
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeHelpButton } from "#src/widget/help_button.js";
 import { makeMaximizeButton } from "#src/widget/maximize_button.js";
-import { ShaderCodeEditorDialog } from "#src/ui/shader_code_dialog.js";
-import { UserLayer } from "#src/layer/index.js";
 
 // Install glsl support in CodeMirror.
 glslCodeMirror(CodeMirror);
@@ -214,13 +213,15 @@ export function makeShaderCodeWidgetTopRow(
     href: string;
     type: string;
   },
-  className: string,
+  makeVertexAttributeWidget?: (
+    layer: UserLayerWithCodeEditor,
+  ) => VertexAttributeWidget,
 ) {
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
 
   const topRow = document.createElement("div");
-  topRow.className = className;
+  topRow.classList.add("neuroglancer-shader-code-widget-top-row");
   topRow.appendChild(document.createTextNode("Shader"));
   topRow.appendChild(spacer);
 
@@ -243,9 +244,12 @@ export function makeShaderCodeWidgetTopRow(
     makeMaximizeButton({
       title: "Show larger editor view",
       onClick: () => {
-        new ShaderCodeEditorDialog(layer, makeShaderCodeWidget, {
-          title: `${help.type} shader editor`,
-        });
+        new ShaderCodeEditorDialog(
+          layer,
+          makeShaderCodeWidget,
+          `${help.type} shader editor`,
+          makeVertexAttributeWidget,
+        );
       },
     }),
   );

@@ -221,7 +221,6 @@ class DisplayOptionsTab extends Tab {
           href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
           type: "Mesh",
         },
-        "neuroglancer-single-mesh-dropdown-top-row",
       ),
     );
     element.appendChild(this.attributeWidget.element);
