@@ -181,25 +181,22 @@ export class PositionPlot extends RefCounted {
         this.visible = false;
         return;
       }
-      if (this.showAllBounds !== undefined && !this.showAllBounds.value) {
-        // Find the maximal normalized bounds.
-        let minLowerBound: number | undefined = undefined;
-        let maxUpperBound: number | undefined = undefined;
+      if (this.showAllBounds?.value === false) {
+        let minLowerBound = Infinity;
+        let maxUpperBound = -Infinity;
+
         for (const {
           lower,
           upper,
         } of normalizedDimensionBounds.normalizedBounds) {
-          if (minLowerBound === undefined || lower < minLowerBound) {
-            minLowerBound = lower;
-          }
-          if (maxUpperBound === undefined || upper > maxUpperBound) {
-            maxUpperBound = upper;
-          }
+          if (lower < minLowerBound) minLowerBound = lower;
+          if (upper > maxUpperBound) maxUpperBound = upper;
         }
+
         normalizedDimensionBounds.normalizedBounds = [
           {
-            lower: minLowerBound || 0,
-            upper: maxUpperBound || 0,
+            lower: isFinite(minLowerBound) ? minLowerBound : 0,
+            upper: isFinite(maxUpperBound) ? maxUpperBound : 1,
           },
         ];
       }
