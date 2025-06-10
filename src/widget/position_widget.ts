@@ -33,7 +33,7 @@ import {
   makeCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
-import { LayerGroupViewer } from "#src/layer_group_viewer.js";
+import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import type {
   CoordinateSpacePlaybackVelocity,
   Position,
@@ -1463,7 +1463,12 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
     positionWidget.element.style.userSelect = "none";
     content.appendChild(activation.registerDisposer(positionWidget).element);
     const plot = activation.registerDisposer(
-      new PositionPlot(viewer.position, this.dimensionId, "row", viewer.showAllBounds),
+      new PositionPlot(
+        viewer.position,
+        this.dimensionId,
+        "row",
+        viewer.showAllBounds,
+      ),
     );
     plot.element.style.flex = "1";
     content.appendChild(plot.element);

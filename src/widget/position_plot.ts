@@ -164,7 +164,7 @@ export class PositionPlot extends RefCounted {
         canvas.height = this.canvasWidth;
       }
 
-      let normalizedDimensionBounds = getNormalizedDimensionBounds(
+      const normalizedDimensionBounds = getNormalizedDimensionBounds(
         coordinateSpace,
         dimensionIndex,
         canvasHeight,
@@ -182,7 +182,10 @@ export class PositionPlot extends RefCounted {
         // Find the maximal normalized bounds.
         let minLowerBound: number | undefined = undefined;
         let maxUpperBound: number | undefined = undefined;
-        for (const { lower, upper } of normalizedDimensionBounds.normalizedBounds) {
+        for (const {
+          lower,
+          upper,
+        } of normalizedDimensionBounds.normalizedBounds) {
           if (minLowerBound === undefined || lower < minLowerBound) {
             minLowerBound = lower;
           }
