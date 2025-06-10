@@ -49,17 +49,17 @@ export class StateEditorDialog extends CodeEditorDialog {
     saveAndCloseWrapper.classList.add(
       "neuroglancer-state-editor-save-container",
     );
-    const buttonApply = (this.applyButton = document.createElement("button"));
-    buttonApply.textContent = "Apply changes";
-    saveAndCloseWrapper.appendChild(buttonApply);
-    buttonApply.addEventListener("click", () => this.applyChanges());
-    buttonApply.disabled = true;
+    const applyButton = (this.applyButton = document.createElement("button"));
+    applyButton.textContent = "Apply changes";
+    saveAndCloseWrapper.appendChild(applyButton);
+    applyButton.addEventListener("click", () => this.applyChanges());
+    applyButton.disabled = true;
 
-    const buttonClose = (this.closeButton = document.createElement("button"));
-    buttonClose.classList.add("neuroglancer-state-editor-close-button");
-    buttonClose.textContent = "Save & close";
-    saveAndCloseWrapper.appendChild(buttonClose);
-    buttonClose.addEventListener("click", () => {
+    const closeButton = (this.closeButton = document.createElement("button"));
+    closeButton.classList.add("neuroglancer-state-editor-close-button");
+    closeButton.textContent = "Save & close";
+    saveAndCloseWrapper.appendChild(closeButton);
+    closeButton.addEventListener("click", () => {
       this.applyChanges();
       this.dispose();
     });
@@ -69,8 +69,8 @@ export class StateEditorDialog extends CodeEditorDialog {
     downloadButton.textContent = "Download";
     downloadButton.title = "Download state as a JSON file";
     downloadButton.addEventListener("click", () => this.downloadState());
-    this.footer?.appendChild(downloadButton);
-    this.footer?.appendChild(saveAndCloseWrapper);
+    this.footer.appendChild(downloadButton);
+    this.footer.appendChild(saveAndCloseWrapper);
 
     this.textEditor = CodeMirror((_element) => {}, <any>{
       value: "",
