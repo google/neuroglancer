@@ -58,11 +58,25 @@ import { ColorWidget } from "#src/widget/color.js";
 
 type uiAnnotationType = AnnotationPropertySpec["type"] | "bool";
 
+interface InputConfig {
+  type: string;
+  value?: string;
+  name: string;
+  id: string;
+  className?: string;
+}
+
+interface NumberConfig {
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
 const DROPDOWN_OPTIONS = [
   { header: "General", items: ["float32", "bool"] },
-  { header: "Enum", items: ["uint8", "uint16"] },
   { header: "Colour", items: ["rgb", "rgba"] },
-  { header: "Integer", items: ["int8", "int16", "int32"] },
+  { header: "Enum", items: ["uint8", "uint16", "uint32", "int8", "int16", "int32", "float32"] },
+  { header: "Integer", items: ["uint8", "uint16", "uint32", "int8", "int16", "int32"] },
 ];
 
 const SECTION_ICONS: Record<string, string> = {
@@ -82,10 +96,6 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private schemaTable = document.createElement("div");
-  // TODO (Aigul) the schema text container can be only in the DOM
-  // doesn't need to be a part of the class as an instance attribute
-  private schemaTextContainer = document.createElement("div");
-  private schemaActionButtons = document.createElement("div");
   private schemaTableAddButtonField = document.createElement("div");
   private schemaViewTextElement = document.createElement("p");
   private schemaPasteButton: HTMLElement;
@@ -102,14 +112,10 @@ export class AnnotationSchemaView extends Tab {
       this.annotationStates.states.some((state) => !state.source.readonly),
     );
     this.element.classList.add("neuroglancer-annotation-schema-view");
-    this.schemaTextContainer.className =
-      "neuroglancer-annotation-schema-text-container";
-    this.schemaActionButtons.className =
-      "neuroglancer-annotation-schema-action-buttons";
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
-    this.element.appendChild(this.schemaTextContainer);
-    this.element.appendChild(this.schemaTable);
     this.makeUI();
+
+    this.element.appendChild(this.schemaTable);
 
     this.updateOnMutableChange();
     this.updateView();
@@ -142,32 +148,34 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private makeUI() {
-    // TODO (Aigul) - extract this styling to CSS
-    this.schemaViewTextElement.style.marginTop = "0";
-    this.schemaViewTextElement.style.marginBottom = "0.25rem";
-    this.schemaViewTextElement.style.padding = "0.25rem";
-    this.schemaTextContainer.appendChild(this.schemaViewTextElement);
-    this.schemaTextContainer.appendChild(this.schemaActionButtons);
+    const schemaTextContainer = document.createElement("div");
+    const schemaActionButtons = document.createElement("div");
+    schemaTextContainer.className = "neuroglancer-annotation-schema-text-container";
+    schemaActionButtons.className = "neuroglancer-annotation-schema-action-buttons";
+    schemaTextContainer.appendChild(this.schemaViewTextElement);
+    schemaTextContainer.appendChild(schemaActionButtons);
 
     const downloadButton = makeIcon({
       title: "Download schema",
       svg: svg_download,
       onClick: () => this.downloadSchema(),
     });
-    this.schemaActionButtons.appendChild(downloadButton);
+    schemaActionButtons.appendChild(downloadButton);
 
     const copyButton = makeCopyButton({
       title: "Copy schema to clipboard",
       onClick: () => this.copySchemaToClipboard(),
     });
-    this.schemaActionButtons.appendChild(copyButton);
+    schemaActionButtons.appendChild(copyButton);
 
     this.schemaPasteButton = makeIcon({
       title: "Paste schema from clipboard",
       svg: svg_clipboard,
       onClick: () => this.pasteSchemaFromClipboard(),
     });
-    this.schemaActionButtons.appendChild(this.schemaPasteButton);
+    schemaActionButtons.appendChild(this.schemaPasteButton);
+
+    this.element.appendChild(schemaTextContainer);
 
     this.createSchemaTableHeader();
     this.populateSchemaTable();
@@ -190,9 +198,9 @@ export class AnnotationSchemaView extends Tab {
   };
 
   private createSchemaTableHeader() {
-    let tableHeaders = ["Name", "Type", "Default value"];
+    let tableHeaders = ["Name", "Type", "Default value", ""];
     if (this.isMutable.value) {
-      tableHeaders = [...tableHeaders, ""];
+      tableHeaders = [...tableHeaders];
     }
 
     // Initialize Table
@@ -202,29 +210,16 @@ export class AnnotationSchemaView extends Tab {
 
     // Create Header Row
     const headerRow = document.createElement("div");
-    // TODO (Aigul) - header-row could be a little more specific
-    // e.g. neuroglancer-annotation-schema-header-row
-    headerRow.classList.add("neuroglancer-annotation-schema-row", "header-row");
+    headerRow.classList.add("neuroglancer-annotation-schema-header-row");
     tableHeaders.forEach((text) => {
       headerRow.appendChild(this.createTableCell(text));
     });
     this.schemaTable.appendChild(headerRow);
   }
 
-  // TODO (aigul) give the config an interface
   private createInputElement(
-    config: {
-      type: string;
-      value?: string;
-      name: string;
-      id: string;
-      className?: string;
-    },
-    numberConfig?: {
-      min?: number;
-      max?: number;
-      step?: number;
-    },
+    config: InputConfig,
+    numberConfig?: NumberConfig,
   ): HTMLInputElement {
     const input = document.createElement("input");
     // TODO (Aigul) - not sure if we need any specific styling for readonly
@@ -255,9 +250,7 @@ export class AnnotationSchemaView extends Tab {
       id: `name-${index}`,
       className: "schema-name-input",
     });
-    // TODO (Aigul)- do we need "name" as a className?
-    // If so, it should be more specific
-    const cell = this.createTableCell(nameInput, "name");
+    const cell = this.createTableCell(nameInput);
     if (!this.isMutable.value) return cell;
     // TODO (Sean) maybe need to call removeEventListener
     // when the table is updated
@@ -300,11 +293,11 @@ export class AnnotationSchemaView extends Tab {
     return (
       ITEM_ICONS[type] ||
       SECTION_ICONS[
-        Object.keys(SECTION_ICONS).find((section) =>
-          DROPDOWN_OPTIONS.find((d) => d.header === section)?.items.includes(
-            type,
-          ),
-        ) || ""
+      Object.keys(SECTION_ICONS).find((section) =>
+        DROPDOWN_OPTIONS.find((d) => d.header === section)?.items.includes(
+          type,
+        ),
+      ) || ""
       ] ||
       svg_format_size
     );
@@ -315,9 +308,7 @@ export class AnnotationSchemaView extends Tab {
     typeText.textContent = type;
 
     const iconWrapper = document.createElement("span");
-    // TODO (Aigul) - include neuroglancer here
-    // e.g. neuroglancer-annotation-schema-cell-icon-wrapper
-    iconWrapper.classList.add("schema-cell-icon-wrapper");
+    iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
     // TODO (Aigul) please modify this to account for the enum labels
     iconWrapper.innerHTML = this.getTypeIcon(type);
 
@@ -346,9 +337,6 @@ export class AnnotationSchemaView extends Tab {
     return typeCell;
   }
 
-  // TODO (Aigul) -- the enums are missing the ability to have entries deleted
-  // TODO (Aigul) I seem to have messed the read only display of the default value
-  // maybe I broke something in the styling.
   private createDefaultValueCell(
     identifier: string,
     type: AnnotationPropertySpec["type"] | "bool",
@@ -356,9 +344,7 @@ export class AnnotationSchemaView extends Tab {
   ): HTMLDivElement {
     console.log(type);
     const container = document.createElement("div");
-    // TODO (Aigul) - extract into CSS
-    container.style.width = "100%";
-    container.style.display = "flex";
+    container.className = "neuroglancer-annotation-schema-default-value-cell-container";
 
     // SKM -- already did this, keeping for reference in case we need to revisit
     // I would instead get this switch statement to just create the element
@@ -392,6 +378,7 @@ export class AnnotationSchemaView extends Tab {
     if (type.startsWith("rgb")) {
       const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
       const colorInput = new ColorWidget(watchableColor);
+      colorInput.element.className = "neuroglancer-annotation-schema-color-input";
       inputs.push(colorInput.element);
       changeFunction = () => {
         const newColor = colorInput.getRGB();
@@ -408,7 +395,7 @@ export class AnnotationSchemaView extends Tab {
             name: `alpha-${index}`,
             id: `alpha-${index}`,
             value: String(alpha),
-            className: "schema-default-input",
+            className: "neuroglancer-annotation-schema-default-input",
           },
           { min: 0, max: 1, step: 0.01 },
         );
@@ -442,14 +429,14 @@ export class AnnotationSchemaView extends Tab {
           propertyTypeDataType[type as AnnotationPropertySpec["type"]];
         const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
         const bounds = defaultDataTypeRange[dataType!];
-        // TODO (Aigul) more specific className
+
         const numberInput = this.createInputElement(
           {
             type: "number",
             name: `number-${index}`,
             id: `number-${index}`,
             value: String(oldProperty.default),
-            className: "schema-default-input",
+            className: "neuroglancer-annotation-schema-default-input",
           },
           {
             min: bounds[0] as number,
@@ -503,7 +490,7 @@ export class AnnotationSchemaView extends Tab {
             type: "text",
             name: `enum-name-${enumIndex}`,
             id: `enum-name-${enumIndex}`,
-            className: "schema-default-input",
+            className: "neuroglancer-annotation-schema-default-input",
             value: label,
           });
           nameInput.addEventListener("change", (event) => {
@@ -521,7 +508,7 @@ export class AnnotationSchemaView extends Tab {
             value: String(value),
             name: `enum-value-${enumIndex}`,
             id: `enum-value-${enumIndex}`,
-            className: "schema-default-input",
+            className: "neuroglancer-annotation-schema-default-input",
           });
           valueInput.addEventListener("change", (event) => {
             const inputValue = (event.target as HTMLInputElement).value;
@@ -537,8 +524,27 @@ export class AnnotationSchemaView extends Tab {
             } as AnnotationNumericPropertySpec);
           });
 
+          const deleteIcon = document.createElement("span");
+          deleteIcon.className = "neuroglancer-annotation-schema-delete-icon"
+          deleteIcon.innerHTML = svg_bin;
+          deleteIcon.title = "Delete enum row";
+          deleteIcon.style.cursor = "pointer";
+          deleteIcon.addEventListener("click", () => {
+            const newEnumValues = oldProperty.enumValues!.filter((_, i) => i !== enumIndex);
+            const newEnumLabels = oldProperty.enumLabels!.filter((_, i) => i !== enumIndex);
+
+            this.updateProperty(oldProperty, {
+              ...oldProperty,
+              enumValues: newEnumValues,
+              enumLabels: newEnumLabels,
+            } as AnnotationNumericPropertySpec);
+
+            enumRow.remove();
+          });
+
           enumRow.appendChild(nameInput);
           enumRow.appendChild(valueInput);
+          enumRow.appendChild(deleteIcon);
           enumContainer.insertBefore(enumRow, addEnumButton);
         };
         for (let i = 0; i < enumValues.length; i++) {
@@ -595,53 +601,7 @@ export class AnnotationSchemaView extends Tab {
     return {};
   }
 
-  private populateSchemaTable() {
-    // TODO (sean or aigul) - remaking this all the time is not very efficient
-    // we could compare the current schema with the new one
-    // and only update the rows that have changed
-    const { schema, isMutable } = this;
-    // Remove everything from the table except the header
-    removeChildren(this.schemaTable);
-    this.createSchemaTableHeader();
-
-    schema.forEach((rowData, index) => {
-      const row = document.createElement("div");
-      row.classList.add("neuroglancer-annotation-schema-row");
-
-      const enumLabels =
-        "enumLabels" in rowData ? rowData.enumLabels : undefined;
-      row.appendChild(this.createNameCell(rowData.identifier, index));
-      row.appendChild(this.createTypeCell(rowData.type, enumLabels));
-      row.appendChild(
-        this.createDefaultValueCell(rowData.identifier, rowData.type, index),
-      );
-
-      // Delete Cell
-      if (isMutable.value) {
-        const deleteIcon = document.createElement("span");
-        deleteIcon.innerHTML = svg_bin;
-        deleteIcon.title = "Delete annotation property";
-        deleteIcon.style.cursor = "pointer";
-        deleteIcon.addEventListener("click", () => {
-          const propertyIdentifer = rowData.identifier;
-          this.removeProperty(propertyIdentifer);
-        });
-
-        // TODO (Aigul) more specific className
-        const deleteCell = this.createTableCell(deleteIcon, "delete-cell");
-        row.appendChild(deleteCell);
-      }
-
-      this.schemaTable.appendChild(row);
-      this.tableToPropertyIndex.push(index);
-    });
-
-    // TODO (Aigul) can you please factor this out into a function
-    // that creates the add button and dropdown
-    // it also needs to be visible only if mutable --
-    // see how this was done for the paste button for example
-    // Add Property Button
-    if (!isMutable.value) return;
+  private createAnnotationSchemaDropdown() {
     let dropdown: HTMLDivElement | null = null;
 
     const handleAddPropertyClick = () => {
@@ -665,7 +625,7 @@ export class AnnotationSchemaView extends Tab {
           option.className = "neuroglancer-annotation-schema-dropdown-option";
 
           const iconWrapper = document.createElement("span");
-          iconWrapper.classList.add("schema-cell-icon-wrapper");
+          iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
           iconWrapper.innerHTML =
             ITEM_ICONS[item] || SECTION_ICONS[section.header] || "";
 
@@ -727,6 +687,51 @@ export class AnnotationSchemaView extends Tab {
 
     this.schemaTableAddButtonField.appendChild(addButton);
     this.schemaTable.appendChild(this.schemaTableAddButtonField);
+  }
+
+  private populateSchemaTable() {
+    // TODO (sean or aigul) - remaking this all the time is not very efficient
+    // we could compare the current schema with the new one
+    // and only update the rows that have changed
+    const { schema, isMutable } = this;
+    // Remove everything from the table except the header
+    removeChildren(this.schemaTable);
+    this.createSchemaTableHeader();
+
+    schema.forEach((rowData, index) => {
+      const row = document.createElement("div");
+      row.classList.add("neuroglancer-annotation-schema-row");
+
+      const enumLabels =
+        "enumLabels" in rowData ? rowData.enumLabels : undefined;
+      row.appendChild(this.createNameCell(rowData.identifier, index));
+      row.appendChild(this.createTypeCell(rowData.type, enumLabels));
+      row.appendChild(
+        this.createDefaultValueCell(rowData.identifier, rowData.type, index),
+      );
+
+      // Delete Cell
+      if (isMutable.value) {
+        const deleteIcon = document.createElement("span");
+        deleteIcon.innerHTML = svg_bin;
+        deleteIcon.title = "Delete annotation property";
+        deleteIcon.style.cursor = "pointer";
+        deleteIcon.addEventListener("click", () => {
+          const propertyIdentifer = rowData.identifier;
+          this.removeProperty(propertyIdentifer);
+        });
+
+        const deleteCell = this.createTableCell(deleteIcon, "neuroglancer-annotation-schema-delete-cell");
+        row.appendChild(deleteCell);
+      }
+
+      this.schemaTable.appendChild(row);
+      this.tableToPropertyIndex.push(index);
+    });
+
+    if (!isMutable.value) return;
+
+    this.createAnnotationSchemaDropdown();
   }
 
   private get mutableSources() {
