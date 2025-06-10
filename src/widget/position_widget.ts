@@ -303,7 +303,7 @@ export class PositionWidget extends RefCounted {
   private allowFocus: boolean;
   private showPlayback: boolean;
   private showDropdown: boolean;
-  private showAllBounds: boolean;
+  private showAllPlotBounds: WatchableValueInterface<boolean> | undefined;
 
   private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
   private dimensionWidgetList: DimensionWidget[] = [];
@@ -332,8 +332,9 @@ export class PositionWidget extends RefCounted {
       dropdown.appendChild(toolButton);
     }
 
+    console.log("widget", this.showAllPlotBounds);
     const plot = dropdownOwner.registerDisposer(
-      new PositionPlot(this.position, widget.id, undefined, this.showAllBounds),
+      new PositionPlot(this.position, widget.id, this.showAllPlotBounds),
     );
     dropdown.appendChild(plot.element);
 
@@ -1041,7 +1042,7 @@ export class PositionWidget extends RefCounted {
       allowFocus = true,
       showPlayback = true,
       showDropdown = true,
-      showAllBounds = true,
+      showAllPlotBounds = undefined,
     }: {
       copyButton?: boolean;
       velocity?: CoordinateSpacePlaybackVelocity;
@@ -1050,7 +1051,7 @@ export class PositionWidget extends RefCounted {
       allowFocus?: boolean;
       showPlayback?: boolean;
       showDropdown?: boolean;
-      showAllBounds?: boolean;
+      showAllPlotBounds?: WatchableValueInterface<boolean>;
     } = {},
   ) {
     super();
@@ -1061,7 +1062,7 @@ export class PositionWidget extends RefCounted {
     this.allowFocus = allowFocus;
     this.showPlayback = showPlayback;
     this.showDropdown = showDropdown;
-    this.showAllBounds = showAllBounds;
+    this.showAllPlotBounds = showAllPlotBounds;
     this.registerDisposer(
       position.coordinateSpace.changed.add(
         this.registerCancellable(
@@ -1364,7 +1365,7 @@ interface SupportsDimensionTool<ToolContext extends object = object> {
   velocity: CoordinateSpacePlaybackVelocity;
   coordinateSpaceCombiner: CoordinateSpaceCombiner;
   toolBinder: LocalToolBinder<ToolContext>;
-  showAllBounds: boolean;
+  showAllDimensionPlotBounds: WatchableValueInterface<boolean>;
 }
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
@@ -1457,7 +1458,7 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         allowFocus: inPalette,
         showPlayback: false,
         showDropdown: false,
-        showAllBounds: viewer.showAllBounds,
+        showAllPlotBounds: viewer.showAllDimensionPlotBounds,
       },
     );
     positionWidget.element.style.userSelect = "none";
@@ -1466,8 +1467,8 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
       new PositionPlot(
         viewer.position,
         this.dimensionId,
+        viewer.showAllDimensionPlotBounds,
         "row",
-        viewer.showAllBounds,
       ),
     );
     plot.element.style.flex = "1";
@@ -1670,7 +1671,7 @@ export function registerDimensionToolForViewer(contextType: typeof Viewer) {
           coordinateSpaceCombiner:
             viewer.layerSpecification.coordinateSpaceCombiner,
           toolBinder: viewer.toolBinder,
-          showAllBounds: viewer.showAllDimensionPlotBounds,
+          showAllDimensionPlotBounds: viewer.showAllDimensionPlotBounds,
         },
         obj,
       ),
@@ -1691,7 +1692,7 @@ export function registerDimensionToolForUserLayer(
           velocity: layer.localVelocity,
           coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
           toolBinder: layer.toolBinder,
-          showAllBounds: true,
+          showAllDimensionPlotBounds: new WatchableValue(true),
         },
         obj,
       ),
@@ -1711,7 +1712,7 @@ export function registerDimensionToolForLayerGroupViewer(
         coordinateSpaceCombiner:
           layerGroupViewer.layerSpecification.root.coordinateSpaceCombiner,
         toolBinder: layerGroupViewer.toolBinder,
-        showAllBounds: true,
+        showAllDimensionPlotBounds: new WatchableValue(true),
       },
       obj,
     ),

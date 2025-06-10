@@ -25,7 +25,10 @@ import {
   getDisplayLowerUpperBounds,
 } from "#src/coordinate_transform.js";
 import type { Position } from "#src/navigation_state.js";
-import { WatchableValue } from "#src/trackable_value.js";
+import {
+  WatchableValue,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { filterArrayInplace } from "#src/util/array.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -106,8 +109,8 @@ export class PositionPlot extends RefCounted {
   constructor(
     public position: Position,
     public dimensionId: DimensionId,
+    private showAllBounds?: WatchableValueInterface<boolean>,
     public orientation: "row" | "column" = "column",
-    private showAllBounds: boolean = false,
   ) {
     super();
     this.tickWidth = orientation === "column" ? 10 : 5;
@@ -178,7 +181,7 @@ export class PositionPlot extends RefCounted {
         this.visible = false;
         return;
       }
-      if (!this.showAllBounds) {
+      if (this.showAllBounds !== undefined && !this.showAllBounds.value) {
         // Find the maximal normalized bounds.
         let minLowerBound: number | undefined = undefined;
         let maxUpperBound: number | undefined = undefined;
@@ -305,6 +308,9 @@ export class PositionPlot extends RefCounted {
       animationFrameDebounce(updateView),
     );
     this.registerDisposer(this.position.changed.add(scheduleUpdateView));
+    if (this.showAllBounds !== undefined) {
+      this.registerDisposer(this.showAllBounds.changed.add(scheduleUpdateView));
+    }
     const getPositionFromMouseEvent = (
       event: MouseEvent,
     ): number | undefined => {

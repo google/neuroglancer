@@ -420,6 +420,9 @@ export class Viewer extends RefCounted implements ViewerState {
   );
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
+  showAllDimensionPlotBounds = new TrackableBoolean(
+    defaultViewerOptions.showAllDimensionPlotBounds,
+  );
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
@@ -501,7 +504,6 @@ export class Viewer extends RefCounted implements ViewerState {
 
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
-  showAllDimensionPlotBounds: boolean;
 
   get inputEventMap() {
     return this.inputEventBindings.global;
@@ -514,6 +516,7 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
+    this.showAllDimensionPlotBounds = new TrackableBoolean(true);
     this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
     this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {
@@ -566,8 +569,7 @@ export class Viewer extends RefCounted implements ViewerState {
     setViewerUiConfiguration(uiConfiguration, options);
 
     const optionsWithDefaults = { ...defaultViewerOptions, ...options };
-    const { resetStateWhenEmpty, showLayerDialog, showAllDimensionPlotBounds } =
-      optionsWithDefaults;
+    const { resetStateWhenEmpty, showLayerDialog } = optionsWithDefaults;
 
     for (const key of VIEWER_UI_CONTROL_CONFIG_OPTIONS) {
       this.uiControlVisibility[key] = this.makeUiControlVisibilityState(key);
@@ -580,7 +582,6 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.showLayerDialog = showLayerDialog;
     this.resetStateWhenEmpty = resetStateWhenEmpty;
-    this.showAllDimensionPlotBounds = showAllDimensionPlotBounds;
 
     this.layerSpecification = new TopLevelLayerListSpecification(
       this.display,
@@ -703,7 +704,7 @@ export class Viewer extends RefCounted implements ViewerState {
         {
           velocity: this.velocity,
           getToolBinder: () => this.toolBinder,
-          showAllBounds: this.showAllDimensionPlotBounds,
+          showAllPlotBounds: this.showAllDimensionPlotBounds,
         },
       ),
     );
