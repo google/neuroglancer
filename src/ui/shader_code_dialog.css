@@ -31,6 +31,7 @@
   padding: 0 1.5rem;
   border-bottom: 1px solid #ccc;
   height: 2rem;
+  margin-bottom: 1px;
 }
 
 .neuroglancer-code-editor-dialog-body {
@@ -47,9 +48,11 @@
 
 .neuroglancer-code-editor-dialog-footer {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   padding: 0.5rem 1.5rem;
   border-top: 1px solid #ccc;
+  margin-top: 1px;
 }
 
 .neuroglancer-code-editor-dialog-close-icon {
