@@ -70,3 +70,7 @@
   margin-left: auto;
   cursor: pointer;
 }
+
+.neuroglancer-code-editor-dialog .neuroglancer-single-mesh-attribute-widget {
+  max-height: 12vh;
+}

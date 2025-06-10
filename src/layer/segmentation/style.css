@@ -24,12 +24,6 @@
   height: 6em;
 }
 
-.neuroglancer-segmentation-layer-skeleton-shader-overlay
-  .neuroglancer-shader-code-widget {
-  width: 80vw;
-  height: 80vh;
-}
-
 .neuroglancer-segment-list-entry {
   display: flex;
   flex-direction: row;
