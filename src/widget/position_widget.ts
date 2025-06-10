@@ -332,7 +332,6 @@ export class PositionWidget extends RefCounted {
       dropdown.appendChild(toolButton);
     }
 
-    console.log("widget", this.showAllPlotBounds);
     const plot = dropdownOwner.registerDisposer(
       new PositionPlot(this.position, widget.id, this.showAllPlotBounds),
     );
@@ -1671,7 +1670,8 @@ export function registerDimensionToolForViewer(contextType: typeof Viewer) {
           coordinateSpaceCombiner:
             viewer.layerSpecification.coordinateSpaceCombiner,
           toolBinder: viewer.toolBinder,
-          showAllDimensionPlotBounds: viewer.showAllDimensionPlotBounds,
+          showAllDimensionPlotBounds:
+            viewer.uiConfiguration.showAllDimensionPlotBounds,
         },
         obj,
       ),

@@ -183,6 +183,7 @@ export const VIEWER_UI_CONFIG_OPTIONS = [
   "showTopBar",
   "showUIControls",
   "showPanelBorders",
+  "showAllDimensionPlotBounds",
 ] as const;
 
 export type ViewerUIOptions = {
@@ -230,7 +231,6 @@ const defaultViewerOptions =
     : {
         showLayerDialog: true,
         resetStateWhenEmpty: true,
-        showAllDimensionPlotBounds: false,
       };
 
 class TrackableViewerState extends CompoundTrackable {
@@ -420,9 +420,6 @@ export class Viewer extends RefCounted implements ViewerState {
   );
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
-  showAllDimensionPlotBounds = new TrackableBoolean(
-    defaultViewerOptions.showAllDimensionPlotBounds,
-  );
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
@@ -516,7 +513,6 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
-    this.showAllDimensionPlotBounds = new TrackableBoolean(true);
     this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
     this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {
@@ -704,7 +700,7 @@ export class Viewer extends RefCounted implements ViewerState {
         {
           velocity: this.velocity,
           getToolBinder: () => this.toolBinder,
-          showAllPlotBounds: this.showAllDimensionPlotBounds,
+          showAllPlotBounds: this.uiConfiguration.showAllDimensionPlotBounds,
         },
       ),
     );

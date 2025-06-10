@@ -537,6 +537,7 @@ export class LayerGroupViewer extends RefCounted {
         this,
         () => this.layout.toJSON(),
         this.options.showLayerHoverValues,
+        this.options.showAllPlotBounds,
       ));
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));

@@ -410,7 +410,6 @@ function getCommonViewerState(viewer: Viewer) {
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
     showScaleBar: viewer.showScaleBar,
     scaleBarOptions: viewer.scaleBarOptions,
-    showAllDimensionPlotBounds: viewer.showAllDimensionPlotBounds,
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
     inputEventBindings: viewer.inputEventBindings,
     visibility: viewer.visibility,
@@ -766,7 +765,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
           showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
           showViewerMenu: true,
           showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues,
-          showAllPlotBounds: viewer.showAllDimensionPlotBounds,
+          showAllPlotBounds: viewer.uiConfiguration.showAllDimensionPlotBounds,
         },
       );
       try {
