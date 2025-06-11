@@ -55,7 +55,7 @@ type CustomBinding = {
 };
 
 type CustomBindings = {
-  [identifier: EventIdentifier]: CustomBinding;
+  [identifier: EventIdentifier]: CustomBinding | CustomBinding[];
 };
 
 declare const NEUROGLANCER_CUSTOM_INPUT_BINDINGS: CustomBindings | undefined;
@@ -127,20 +127,22 @@ function setCustomInputEventBindings(viewer: Viewer, bindings: CustomBindings) {
   };
 
   for (const [key, val] of Object.entries(bindings)) {
-    const { action, context = "global" } = val;
-    const actionMap = viewer.inputEventBindings[context];
-    if (actionMap === undefined) {
-      throw new Error(`invalid action map context: ${context}`);
-    }
-    if (typeof action === "boolean") {
-      if (action === false) {
-        deleteKey(actionMap, key);
+    const bindings = Array.isArray(val) ? val : [val];
+    for (const { action, context = "global" } of bindings) {
+      const actionMap = viewer.inputEventBindings[context];
+      if (actionMap === undefined) {
+        throw new Error(`invalid action map context: ${context}`);
       }
-    } else if (typeof action === "string" || "action" in action) {
-      actionMap.set(key, action);
-    } else {
-      const toolAction = bindNonLayerSpecificTool(key, action);
-      actionMap.set(key, toolAction);
+      if (typeof action === "boolean") {
+        if (action === false) {
+          deleteKey(actionMap, key);
+        }
+      } else if (typeof action === "string" || "action" in action) {
+        actionMap.set(key, action);
+      } else {
+        const toolAction = bindNonLayerSpecificTool(key, action);
+        actionMap.set(key, toolAction);
+      }
     }
   }
 }
