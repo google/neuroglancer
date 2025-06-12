@@ -72,11 +72,57 @@ interface NumberConfig {
   step?: number;
 }
 
+enum DataTypeLabels {
+  bool = "bool",
+  float32 = "float32",
+  rgb = "rgb",
+  rgba = "rgba",
+  uint8 = "uint8",
+  uint16 = "uint16",
+  uint32 = "uint32",
+  int8 = "int8",
+  int16 = "int16",
+  int32 = "int32"
+}
+
 const DROPDOWN_OPTIONS = [
-  { header: "General", items: ["float32", "bool"] },
-  { header: "Colour", items: ["rgb", "rgba"] },
-  { header: "Enum", items: ["uint8", "uint16", "uint32", "int8", "int16", "int32", "float32"] },
-  { header: "Integer", items: ["uint8", "uint16", "uint32", "int8", "int16", "int32"] },
+  {
+    header: "General",
+    items: [
+      DataTypeLabels.float32,
+      DataTypeLabels.bool
+    ]
+  },
+  {
+    header: "Colour",
+    items: [
+      DataTypeLabels.rgb,
+      DataTypeLabels.rgba
+    ]
+  },
+  {
+    header: "Enum",
+    items: [
+      DataTypeLabels.uint8,
+      DataTypeLabels.uint16,
+      DataTypeLabels.uint32,
+      DataTypeLabels.int8,
+      DataTypeLabels.int16,
+      DataTypeLabels.int32,
+      DataTypeLabels.float32
+    ]
+  },
+  {
+    header: "Integer",
+    items: [
+      DataTypeLabels.uint8,
+      DataTypeLabels.uint16,
+      DataTypeLabels.uint32,
+      DataTypeLabels.int8,
+      DataTypeLabels.int16,
+      DataTypeLabels.int32
+    ]
+  }
 ];
 
 const SECTION_ICONS: Record<string, string> = {
@@ -86,8 +132,8 @@ const SECTION_ICONS: Record<string, string> = {
 };
 
 const ITEM_ICONS: Record<string, string> = {
-  float32: svg_numbers,
-  bool: svg_check,
+  [DataTypeLabels.float32]: svg_numbers,
+  [DataTypeLabels.bool]: svg_check,
 };
 
 export class AnnotationSchemaView extends Tab {
@@ -289,7 +335,7 @@ export class AnnotationSchemaView extends Tab {
     return suggestedName;
   }
 
-  private getTypeIcon(type: string): string {
+  private getTypeIcon(type: any): string {
     return (
       ITEM_ICONS[type] ||
       SECTION_ICONS[
@@ -305,12 +351,13 @@ export class AnnotationSchemaView extends Tab {
 
   private createTypeCell(type: string, enumLabels?: string[]): HTMLDivElement {
     const typeText = document.createElement("span");
-    typeText.textContent = type;
+    typeText.textContent = DataTypeLabels[type as keyof typeof DataTypeLabels];
 
     const iconWrapper = document.createElement("span");
     iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
-    // TODO (Aigul) please modify this to account for the enum labels
-    iconWrapper.innerHTML = this.getTypeIcon(type);
+
+    const label = type in DataTypeLabels ? DataTypeLabels[type as keyof typeof DataTypeLabels] : type;
+    iconWrapper.innerHTML = this.getTypeIcon(label);
 
     // If there are any enum labels, we put (enum) after the type
     if (enumLabels && enumLabels.length > 0) {
@@ -320,7 +367,8 @@ export class AnnotationSchemaView extends Tab {
         enumLabels.includes("True") &&
         enumLabels.length === 2
       ) {
-        typeText.textContent = "bool";
+        typeText.textContent = "Boolean";
+        iconWrapper.innerHTML = svg_check;
       } else {
         typeText.textContent += " Enum";
       }
