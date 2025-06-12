@@ -25,10 +25,8 @@ import {
   getDisplayLowerUpperBounds,
 } from "#src/coordinate_transform.js";
 import type { Position } from "#src/navigation_state.js";
-import {
-  WatchableValue,
-  WatchableValueInterface,
-} from "#src/trackable_value.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { filterArrayInplace } from "#src/util/array.js";
 import { RefCounted } from "#src/util/disposable.js";
