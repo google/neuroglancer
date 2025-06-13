@@ -374,6 +374,7 @@ export class AnnotationSchemaView extends Tab {
 
   public createTypeCell(
     type: AnnotationType,
+    identifier: string,
     enumLabels?: string[],
   ): HTMLDivElement {
     const typeText = this.createTypeTextElement(type, enumLabels);
@@ -389,7 +390,7 @@ export class AnnotationSchemaView extends Tab {
       typeCell.title = "You can convert to a higher precision, but not back to lower precision.";
       typeCell.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.showTypeDropdown(typeCell, type, enumLabels);
+        this.showTypeDropdown(typeCell, type, identifier, enumLabels);
       });
     }
 
@@ -399,6 +400,7 @@ export class AnnotationSchemaView extends Tab {
   private showTypeDropdown(
     anchorElement: HTMLElement,
     currentType: AnnotationType,
+    identifier: string,
     enumLabels?: string[],
   ) {
     const availableOptions: AnnotationType[] = [];
@@ -411,6 +413,7 @@ export class AnnotationSchemaView extends Tab {
     const dropdown = this.createDropdownElement(
       availableOptions,
       currentType,
+      identifier,
       enumLabels,
       anchorElement,
     );
@@ -424,6 +427,7 @@ export class AnnotationSchemaView extends Tab {
   private createDropdownElement(
     availableOptions: AnnotationType[],
     currentType: string,
+    identifier: string,
     enumLabels: string[] | undefined,
     anchorElement: HTMLElement,
   ): HTMLDivElement {
@@ -444,7 +448,7 @@ export class AnnotationSchemaView extends Tab {
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         if (item !== currentType) {
-          this.handleTypeChange(anchorElement, item, enumLabels);
+          this.handleTypeChange(anchorElement, item, identifier, enumLabels);
         }
         dropdown.remove();
       });
@@ -478,6 +482,7 @@ export class AnnotationSchemaView extends Tab {
   private handleTypeChange(
     cell: HTMLElement,
     newType: string,
+    identifier: string,
     enumLabels?: string[],
   ) {
     const iconWrapper = cell.querySelector(
@@ -486,6 +491,7 @@ export class AnnotationSchemaView extends Tab {
     const typeText = cell.querySelector(
       "span:not(.neuroglancer-annotation-schema-cell-icon-wrapper)",
     );
+    const oldProperty = this.getPropertyByName(identifier);
 
     if (!iconWrapper || !typeText) return;
 
@@ -500,6 +506,15 @@ export class AnnotationSchemaView extends Tab {
     } else {
       typeText.textContent = displayName;
     }
+
+    if (oldProperty === undefined) {
+      console.warn(`Property with name ${identifier} not found.`);
+      return;
+    }
+    // this.updateProperty(oldProperty, {
+    //   ...oldProperty,
+    //   type: this.mapUITypeToAnnotationType(newType)
+    // });
   }
 
   private createDefaultValueCell(
@@ -786,8 +801,8 @@ export class AnnotationSchemaView extends Tab {
       // So we handle the numeric types again at the end
 
       const populateDropDown = (types: AnnotationUIType[], isEnum = false) => {
+        let previousHeader: any = null;
         types.forEach((type) => {
-          let previousHeader = null;
           const newHeader = this.getCategoryForType(type);
           if (previousHeader !== newHeader) {
             const headerEl = document.createElement("div");
@@ -890,7 +905,7 @@ export class AnnotationSchemaView extends Tab {
       const enumLabels =
         "enumLabels" in rowData ? rowData.enumLabels : undefined;
       row.appendChild(this.createNameCell(rowData.identifier, index));
-      row.appendChild(this.createTypeCell(rowData.type, enumLabels));
+      row.appendChild(this.createTypeCell(rowData.type, rowData.identifier, enumLabels));
       row.appendChild(
         this.createDefaultValueCell(rowData.identifier, rowData.type, index),
       );
@@ -947,6 +962,8 @@ export class AnnotationSchemaView extends Tab {
     oldProperty: T,
     newProperty: T,
   ) {
+    console.log("oldProperty: ", oldProperty)
+    console.log("newProperty: ", newProperty)
     this.mutableSources.forEach((s) => {
       s.updateProperty(oldProperty, newProperty);
     });
