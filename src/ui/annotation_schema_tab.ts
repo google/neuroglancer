@@ -461,6 +461,7 @@ export class AnnotationSchemaView extends Tab {
 
     if (section && ALLOW_TYPE_SWITCHING.includes(section) && !isBoolean) {
       typeCell.style.cursor = "pointer";
+      typeCell.title = "You can convert to a higher precision, but not back to lower precision.";
       typeCell.addEventListener("click", (e) => {
         e.stopPropagation();
         this.showTypeDropdown(typeCell, type, enumLabels);
