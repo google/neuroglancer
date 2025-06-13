@@ -35,6 +35,8 @@ import type {
 } from "#src/annotation/index.js";
 import {
   annotationPropertySpecsToJson,
+  canConvertTypes,
+  isAnnotationTypeNumeric,
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
@@ -56,7 +58,26 @@ import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 
-type uiAnnotationType = AnnotationPropertySpec["type"] | "bool";
+type AnnotationType = AnnotationPropertySpec["type"];
+type AnnotationUIType = AnnotationType | "bool";
+const ANNOTATION_TYPES: AnnotationType[] = [
+  "float32",
+  "rgb",
+  "rgba",
+  "int8",
+  "int16",
+  "int32",
+  "uint8",
+  "uint16",
+  "uint32",
+];
+const ANNOTATION_UI_TYPES: AnnotationUIType[] = ["bool", ...ANNOTATION_TYPES];
+
+function ensureIsAnnotationType(type: string): asserts type is AnnotationType {
+  if (!ANNOTATION_TYPES.includes(type as AnnotationType)) {
+    throw new Error(`Invalid annotation type: ${type}`);
+  }
+}
 
 interface InputConfig {
   type: string;
@@ -71,84 +92,6 @@ interface NumberConfig {
   max?: number;
   step?: number;
 }
-
-enum DataTypeLabels {
-  bool = "bool",
-  float32 = "float32",
-  rgb = "rgb",
-  rgba = "rgba",
-  uint8 = "uint8",
-  uint16 = "uint16",
-  uint32 = "uint32",
-  int8 = "int8",
-  int16 = "int16",
-  int32 = "int32"
-}
-
-const DROPDOWN_OPTIONS = [
-  {
-    header: "General",
-    items: [
-      DataTypeLabels.float32,
-      DataTypeLabels.bool
-    ]
-  },
-  {
-    header: "Colour",
-    items: [
-      DataTypeLabels.rgb,
-      DataTypeLabels.rgba
-    ]
-  },
-  {
-    header: "Enum",
-    items: [
-      DataTypeLabels.uint8,
-      DataTypeLabels.uint16,
-      DataTypeLabels.uint32,
-      DataTypeLabels.int8,
-      DataTypeLabels.int16,
-      DataTypeLabels.int32,
-      DataTypeLabels.float32
-    ]
-  },
-  {
-    header: "Integer",
-    items: [
-      DataTypeLabels.uint8,
-      DataTypeLabels.uint16,
-      DataTypeLabels.uint32,
-      DataTypeLabels.int8,
-      DataTypeLabels.int16,
-      DataTypeLabels.int32
-    ]
-  }
-];
-
-const SECTION_ICONS: Record<string, string> = {
-  Enum: svg_format_size,
-  Colour: svg_palette,
-  Integer: svg_numbers,
-};
-
-const ITEM_ICONS: Record<string, string> = {
-  [DataTypeLabels.float32]: svg_numbers,
-  [DataTypeLabels.bool]: svg_check,
-  [DataTypeLabels.rgb]: svg_palette,
-  [DataTypeLabels.rgba]: svg_palette,
-};
-
-const DISPLAY_NAMES: Record<string, string> = {
-  [DataTypeLabels.rgb]: "RGB",
-  [DataTypeLabels.rgba]: "RGBa",
-  [DataTypeLabels.bool]: "Boolean",
-};
-
-const ALLOW_TYPE_SWITCHING = ['Colour', 'Enum', 'Integer'];
-
-function getDisplayName(type: string): string {
-  return DISPLAY_NAMES[type] || type;
-};
 
 export class AnnotationSchemaView extends Tab {
   get annotationStates() {
@@ -210,8 +153,10 @@ export class AnnotationSchemaView extends Tab {
   private makeUI() {
     const schemaTextContainer = document.createElement("div");
     const schemaActionButtons = document.createElement("div");
-    schemaTextContainer.className = "neuroglancer-annotation-schema-text-container";
-    schemaActionButtons.className = "neuroglancer-annotation-schema-action-buttons";
+    schemaTextContainer.className =
+      "neuroglancer-annotation-schema-text-container";
+    schemaActionButtons.className =
+      "neuroglancer-annotation-schema-action-buttons";
     schemaTextContainer.appendChild(this.schemaViewTextElement);
     schemaTextContainer.appendChild(schemaActionButtons);
 
@@ -337,6 +282,20 @@ export class AnnotationSchemaView extends Tab {
     return cell;
   }
 
+  private getDisplayNameForType(
+    type: AnnotationUIType,
+    enumLabels?: string[],
+  ): string {
+    if (this.isBooleanType(enumLabels) || type === "bool") return "Boolean";
+    if (type === "rgb") return "RGB";
+    if (type === "rgba") return "RGBA";
+    if (isAnnotationTypeNumeric(type)) {
+      const EnumText = this.isEnumType(enumLabels) ? " Enum" : "";
+      return `${type} ${EnumText}`;
+    }
+    return type;
+  }
+
   private ensureUniqueName(suggestedName: string) {
     const allProperties = this.schema;
     const initalName = suggestedName;
@@ -349,83 +308,50 @@ export class AnnotationSchemaView extends Tab {
     return suggestedName;
   }
 
-  private typeToSectionMap = new Map<HTMLElement, string>();
+  private getCategoryForType(type: AnnotationUIType, isEnum = false): string {
+    if (type === "bool") return "General";
+    if (type === "rgb" || type === "rgba") return "Color";
+    if (isEnum && isAnnotationTypeNumeric(type)) return "Enum";
+    if (!isEnum && isAnnotationTypeNumeric(type)) return "Numeric";
+    return "Other";
+  }
 
-  private getIconForType(type: string, enumValues?: string[]): string {
+  private getIconForType(
+    type: AnnotationUIType,
+    enumValues?: string[],
+  ): string {
     const isBoolean = this.isBooleanType(enumValues);
-    if (isBoolean) return svg_check;
-
-    if (this.isEnumType(enumValues)) {
-      return SECTION_ICONS.Enum;
-    }
-
-    if (this.isNumericType(type)) {
-      return svg_numbers;
-    }
-
-    if (ITEM_ICONS[type]) {
-      return ITEM_ICONS[type];
-    }
-
-    if (type === DataTypeLabels.rgb || type === DataTypeLabels.rgba) {
-      return SECTION_ICONS.Colour;
-    }
-
-    return svg_format_size;
+    if (isBoolean || type === "bool") return svg_check;
+    if (this.isEnumType(enumValues)) return svg_format_size;
+    if (isAnnotationTypeNumeric(type)) return svg_numbers;
+    return svg_palette;
   }
 
   private isBooleanType(enumValues?: string[]): boolean {
-    return enumValues?.includes("False") &&
-      enumValues?.includes("True") &&
-      enumValues.length === 2 || false;
+    return (
+      (enumValues?.includes("False") &&
+        enumValues?.includes("True") &&
+        enumValues.length === 2) ||
+      false
+    );
   }
 
   private isEnumType(enumValues?: string[]): boolean {
-    return enumValues && enumValues.length > 0 || false;
+    return (enumValues && enumValues.length > 0) || false;
   }
 
-  private isNumericType(type: string): boolean {
-    const numericTypes = [
-      DataTypeLabels.uint8,
-      DataTypeLabels.uint16,
-      DataTypeLabels.uint32,
-      DataTypeLabels.int8,
-      DataTypeLabels.int16,
-      DataTypeLabels.int32,
-      DataTypeLabels.float32,
-    ];
-    return numericTypes.includes(type as DataTypeLabels);
-  }
-
-  private getSectionsForType(type: any): { header: string; items: string[] }[] {
-    return DROPDOWN_OPTIONS.filter(section =>
-      section.items.includes(type as DataTypeLabels)
-    );
-  }
-
-  private determineSection(type: string, specificSection?: string): string | undefined {
-    if (specificSection) return specificSection;
-
-    if (type === DataTypeLabels.rgb || type === DataTypeLabels.rgba) {
-      return "Colour";
-    }
-
-    const sections = this.getSectionsForType(type);
-    if (sections.length === 0) return undefined;
-    if (sections.length === 1) return sections[0].header;
-
-    return type === DataTypeLabels.float32 ? "General" : sections[0].header;
-  }
-
-  private createTypeTextElement(type: string, enumLabels?: string[]): HTMLSpanElement {
+  private createTypeTextElement(
+    type: AnnotationType,
+    enumLabels?: string[],
+  ): HTMLSpanElement {
     const typeText = document.createElement("span");
-    const displayName = getDisplayName(
-      type in DataTypeLabels ? DataTypeLabels[type as keyof typeof DataTypeLabels] : type
-    );
 
     if (this.isBooleanType(enumLabels)) {
       typeText.textContent = "Boolean";
-    } else if (this.isEnumType(enumLabels)) {
+      return typeText;
+    }
+    const displayName = this.getDisplayNameForType(type);
+    if (this.isEnumType(enumLabels)) {
       typeText.textContent = `${displayName} Enum`;
     } else {
       typeText.textContent = displayName;
@@ -434,32 +360,31 @@ export class AnnotationSchemaView extends Tab {
     return typeText;
   }
 
-  private createIconWrapper(type: string, enumLabels?: string[]): HTMLSpanElement {
+  private createIconWrapper(
+    type: AnnotationType,
+    enumLabels?: string[],
+  ): HTMLSpanElement {
     const iconWrapper = document.createElement("span");
-    iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
+    iconWrapper.classList.add(
+      "neuroglancer-annotation-schema-cell-icon-wrapper",
+    );
     iconWrapper.innerHTML = this.getIconForType(type, enumLabels);
     return iconWrapper;
   }
 
-  public createTypeCell(type: string, enumLabels?: string[], specificSection?: string): HTMLDivElement {
-    const label = type in DataTypeLabels
-      ? DataTypeLabels[type as keyof typeof DataTypeLabels]
-      : type;
-
-    const section = this.determineSection(label, specificSection);
-    const typeText = this.createTypeTextElement(label, enumLabels);
-    const iconWrapper = this.createIconWrapper(label, enumLabels);
+  public createTypeCell(
+    type: AnnotationType,
+    enumLabels?: string[],
+  ): HTMLDivElement {
+    const typeText = this.createTypeTextElement(type, enumLabels);
+    const iconWrapper = this.createIconWrapper(type, enumLabels);
 
     const typeCell = this.createTableCell(iconWrapper, "type");
     typeCell.appendChild(typeText);
 
-    if (section) {
-      this.typeToSectionMap.set(typeCell, section);
-    }
-
     const isBoolean = this.isBooleanType(enumLabels);
 
-    if (section && ALLOW_TYPE_SWITCHING.includes(section) && !isBoolean) {
+    if (!isBoolean) {
       typeCell.style.cursor = "pointer";
       typeCell.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -467,25 +392,27 @@ export class AnnotationSchemaView extends Tab {
       });
     }
 
-    // TODO (Aigul) could this link to the dropdown that shows when adding
-    // a new property?
-    // We'd need to use the logic in isConverible from #src/annotation/index.js
-    // To determine the list of types that can be shown in the dropdown
-    // TODO if not, then remove the cursor pointer
-    // typeCell.addEventListener("click", (event) => {});
     return typeCell;
   }
 
-  private showTypeDropdown(anchorElement: HTMLElement, currentType: string, enumLabels?: string[]) {
-    const cellSection = this.typeToSectionMap.get(anchorElement);
-    if (!cellSection || !ALLOW_TYPE_SWITCHING.includes(cellSection)) return;
+  private showTypeDropdown(
+    anchorElement: HTMLElement,
+    currentType: AnnotationType,
+    enumLabels?: string[],
+  ) {
+    const availableOptions: AnnotationType[] = [];
+    for (const type of ANNOTATION_TYPES) {
+      if (canConvertTypes(currentType, type)) {
+        availableOptions.push(type);
+      }
+    }
 
-    const currentSection = DROPDOWN_OPTIONS.find(
-      section => section.header === cellSection
+    const dropdown = this.createDropdownElement(
+      availableOptions,
+      currentType,
+      enumLabels,
+      anchorElement,
     );
-    if (!currentSection) return;
-
-    const dropdown = this.createDropdownElement(currentSection, currentType, enumLabels, anchorElement);
     if (dropdown.children.length === 0) return;
 
     document.body.appendChild(dropdown);
@@ -494,29 +421,29 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private createDropdownElement(
-    currentSection: { header: string; items: string[] },
+    availableOptions: AnnotationType[],
     currentType: string,
     enumLabels: string[] | undefined,
-    anchorElement: HTMLElement
+    anchorElement: HTMLElement,
   ): HTMLDivElement {
     const dropdown = document.createElement("div");
     dropdown.className = "neuroglancer-annotation-schema-dropdown";
 
-    currentSection.items.forEach(item => {
+    availableOptions.forEach((item) => {
       const option = document.createElement("div");
       option.className = "neuroglancer-annotation-schema-dropdown-option";
 
-      const iconWrapper = this.createIconWrapper(item, enumLabels);
+      const iconWrapper = this.createIconWrapper(item);
       const label = document.createElement("span");
-      label.textContent = getDisplayName(item);
+      label.textContent = this.getDisplayNameForType(item);
 
       option.appendChild(iconWrapper);
       option.appendChild(label);
 
-      option.addEventListener("click", e => {
+      option.addEventListener("click", (e) => {
         e.stopPropagation();
         if (item !== currentType) {
-          this.handleTypeChange(anchorElement, item, enumLabels, currentSection.header);
+          this.handleTypeChange(anchorElement, item, enumLabels);
         }
         dropdown.remove();
       });
@@ -527,7 +454,10 @@ export class AnnotationSchemaView extends Tab {
     return dropdown;
   }
 
-  private positionDropdown(dropdown: HTMLDivElement, anchorElement: HTMLElement) {
+  private positionDropdown(
+    dropdown: HTMLDivElement,
+    anchorElement: HTMLElement,
+  ) {
     const rect = anchorElement.getBoundingClientRect();
     dropdown.style.position = "absolute";
     dropdown.style.left = `${rect.left}px`;
@@ -548,19 +478,18 @@ export class AnnotationSchemaView extends Tab {
     cell: HTMLElement,
     newType: string,
     enumLabels?: string[],
-    section?: string
   ) {
-    const iconWrapper = cell.querySelector(".neuroglancer-annotation-schema-cell-icon-wrapper");
-    const typeText = cell.querySelector("span:not(.neuroglancer-annotation-schema-cell-icon-wrapper)");
+    const iconWrapper = cell.querySelector(
+      ".neuroglancer-annotation-schema-cell-icon-wrapper",
+    );
+    const typeText = cell.querySelector(
+      "span:not(.neuroglancer-annotation-schema-cell-icon-wrapper)",
+    );
 
     if (!iconWrapper || !typeText) return;
 
-    const displayName = getDisplayName(
-      newType in DataTypeLabels
-        ? DataTypeLabels[newType as keyof typeof DataTypeLabels]
-        : newType
-    );
-
+    ensureIsAnnotationType(newType);
+    const displayName = this.getDisplayNameForType(newType, enumLabels);
     iconWrapper.innerHTML = this.getIconForType(newType, enumLabels);
 
     if (this.isBooleanType(enumLabels)) {
@@ -570,20 +499,17 @@ export class AnnotationSchemaView extends Tab {
     } else {
       typeText.textContent = displayName;
     }
-
-    if (section) {
-      this.typeToSectionMap.set(cell, section);
-    }
   }
 
   private createDefaultValueCell(
     identifier: string,
-    type: AnnotationPropertySpec["type"] | "bool",
+    type: AnnotationType | "bool",
     index: number,
   ): HTMLDivElement {
     console.log(type);
     const container = document.createElement("div");
-    container.className = "neuroglancer-annotation-schema-default-value-cell-container";
+    container.className =
+      "neuroglancer-annotation-schema-default-value-cell-container";
 
     // SKM -- already did this, keeping for reference in case we need to revisit
     // I would instead get this switch statement to just create the element
@@ -617,7 +543,8 @@ export class AnnotationSchemaView extends Tab {
     if (type.startsWith("rgb")) {
       const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
       const colorInput = new ColorWidget(watchableColor);
-      colorInput.element.className = "neuroglancer-annotation-schema-color-input";
+      colorInput.element.className =
+        "neuroglancer-annotation-schema-color-input";
       inputs.push(colorInput.element);
       changeFunction = () => {
         const newColor = colorInput.getRGB();
@@ -664,8 +591,7 @@ export class AnnotationSchemaView extends Tab {
       ) as AnnotationNumericPropertySpec;
       const { enumValues, enumLabels } = oldProperty;
       if (enumValues === undefined || enumLabels === undefined) {
-        const dataType =
-          propertyTypeDataType[type as AnnotationPropertySpec["type"]];
+        const dataType = propertyTypeDataType[type as AnnotationType];
         const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
         const bounds = defaultDataTypeRange[dataType!];
 
@@ -764,13 +690,17 @@ export class AnnotationSchemaView extends Tab {
           });
 
           const deleteIcon = document.createElement("span");
-          deleteIcon.className = "neuroglancer-annotation-schema-delete-icon"
+          deleteIcon.className = "neuroglancer-annotation-schema-delete-icon";
           deleteIcon.innerHTML = svg_bin;
           deleteIcon.title = "Delete enum row";
           deleteIcon.style.cursor = "pointer";
           deleteIcon.addEventListener("click", () => {
-            const newEnumValues = oldProperty.enumValues!.filter((_, i) => i !== enumIndex);
-            const newEnumLabels = oldProperty.enumLabels!.filter((_, i) => i !== enumIndex);
+            const newEnumValues = oldProperty.enumValues!.filter(
+              (_, i) => i !== enumIndex,
+            );
+            const newEnumLabels = oldProperty.enumLabels!.filter(
+              (_, i) => i !== enumIndex,
+            );
 
             this.updateProperty(oldProperty, {
               ...oldProperty,
@@ -804,14 +734,12 @@ export class AnnotationSchemaView extends Tab {
     return this.createTableCell(container);
   }
 
-  private mapUITypeToAnnotationType(
-    uiType: uiAnnotationType,
-  ): AnnotationPropertySpec["type"] {
+  private mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationType {
     if (uiType === "bool") return "uint8";
     return uiType;
   }
 
-  private defaultValuePerType(uiType: uiAnnotationType): number {
+  private defaultValuePerType(uiType: AnnotationUIType): number {
     if (uiType === "bool") {
       return 1;
     }
@@ -824,14 +752,14 @@ export class AnnotationSchemaView extends Tab {
     return 0;
   }
 
-  private setupInitialEnumsIfNeeded(type: string, header: string = "") {
+  private setupInitialEnumsIfNeeded(type: AnnotationUIType, isEnum = false) {
     if (type === "bool") {
       return {
         enumValues: [0, 1],
         enumLabels: ["False", "True"],
       };
     }
-    if (header === "Enum") {
+    if (isEnum && isAnnotationTypeNumeric(type)) {
       return {
         enumValues: [0],
         enumLabels: ["Default"],
@@ -853,23 +781,33 @@ export class AnnotationSchemaView extends Tab {
       dropdown = document.createElement("div");
       dropdown.className = "neuroglancer-annotation-schema-dropdown";
 
-      DROPDOWN_OPTIONS.forEach((section) => {
-        const headerEl = document.createElement("div");
-        headerEl.className = "neuroglancer-annotation-schema-dropdown-header";
-        headerEl.textContent = section.header;
-        dropdown?.appendChild(headerEl);
+      // The numeric types are all given the option to be "raw" or "enum"
+      // So we handle the numeric types again at the end
 
-        section.items.forEach((item) => {
+      const populateDropDown = (types: AnnotationUIType[], isEnum = false) => {
+        types.forEach((type) => {
+          let previousHeader = null;
+          const newHeader = this.getCategoryForType(type);
+          if (previousHeader !== newHeader) {
+            const headerEl = document.createElement("div");
+            headerEl.className =
+              "neuroglancer-annotation-schema-dropdown-header";
+            headerEl.textContent = newHeader;
+            dropdown?.appendChild(headerEl);
+            previousHeader = newHeader;
+          }
+
           const option = document.createElement("div");
           option.className = "neuroglancer-annotation-schema-dropdown-option";
-
           const iconWrapper = document.createElement("span");
-          iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
-          iconWrapper.innerHTML =
-            ITEM_ICONS[item] || SECTION_ICONS[section.header] || "";
+          iconWrapper.classList.add(
+            "neuroglancer-annotation-schema-cell-icon-wrapper",
+          );
+          iconWrapper.innerHTML = this.getIconForType(type);
 
           const text = document.createElement("span");
-          text.textContent = item;
+          const displayName = this.getDisplayNameForType(type);
+          text.textContent = displayName;
 
           option.appendChild(iconWrapper);
           option.appendChild(text);
@@ -883,13 +821,15 @@ export class AnnotationSchemaView extends Tab {
             () => (option.style.backgroundColor = ""),
           );
           option.addEventListener("click", () => {
-            const name = this.ensureUniqueName(item);
+            const name = this.ensureUniqueName(
+              displayName.replace(/\s+/g, "_"),
+            );
             const newProperty = {
-              type: this.mapUITypeToAnnotationType(item as uiAnnotationType),
+              type: this.mapUITypeToAnnotationType(type),
               identifier: name,
-              default: this.defaultValuePerType(item as uiAnnotationType),
+              default: this.defaultValuePerType(type),
               description: "",
-              ...this.setupInitialEnumsIfNeeded(item, section.header),
+              ...this.setupInitialEnumsIfNeeded(type, isEnum),
             } as AnnotationPropertySpec;
             this.addProperty(newProperty);
             dropdown?.remove();
@@ -898,7 +838,12 @@ export class AnnotationSchemaView extends Tab {
 
           dropdown?.appendChild(option);
         });
-      });
+      };
+      populateDropDown(ANNOTATION_UI_TYPES, true);
+      // Now do it again for the numeric types
+      populateDropDown(
+        ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
+      );
 
       document.body.appendChild(dropdown);
       const rect = addButton.getBoundingClientRect();
@@ -960,7 +905,10 @@ export class AnnotationSchemaView extends Tab {
           this.removeProperty(propertyIdentifer);
         });
 
-        const deleteCell = this.createTableCell(deleteIcon, "neuroglancer-annotation-schema-delete-cell");
+        const deleteCell = this.createTableCell(
+          deleteIcon,
+          "neuroglancer-annotation-schema-delete-cell",
+        );
         row.appendChild(deleteCell);
       }
 
