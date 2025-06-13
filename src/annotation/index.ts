@@ -109,10 +109,16 @@ export interface AnnotationNumericPropertySpec
   step?: number;
 }
 
+export function isAnnotationTypeNumeric(
+  type: AnnotationPropertySpec["type"],
+): boolean {
+  return type !== "rgb" && type !== "rgba";
+}
+
 export function isAnnotationNumericPropertySpec(
   spec: AnnotationPropertySpec,
 ): spec is AnnotationNumericPropertySpec {
-  return spec.type !== "rgb" && spec.type !== "rgba";
+  return isAnnotationTypeNumeric(spec.type);
 }
 
 export const propertyTypeDataType: Record<
@@ -1276,6 +1282,30 @@ export class AnnotationSource
   }
 }
 
+export function canConvertTypes(
+  oldType: AnnotationPropertySpec["type"],
+  newType: AnnotationPropertySpec["type"],
+): boolean {
+  if (oldType === newType) return true;
+  const isOldTypeNumeric = isAnnotationTypeNumeric(oldType);
+  const isNewTypeNumeric = isAnnotationTypeNumeric(newType);
+  if (isOldTypeNumeric !== isNewTypeNumeric) return false;
+  if (!isOldTypeNumeric) return true;
+  if (newType === "float32") return true;
+
+  // Can convert between uint or int if newType is higher precision.
+  const sameFamily =
+    (oldType.startsWith("uint") && newType.startsWith("uint")) ||
+    (oldType.startsWith("int") && newType.startsWith("int"));
+
+  if (sameFamily) {
+    const oldBits = parseInt(oldType.replace(/\D/g, ""), 10);
+    const newBits = parseInt(newType.replace(/\D/g, ""), 10);
+    return oldBits < newBits;
+  }
+  return false;
+}
+
 export class LocalAnnotationSource extends AnnotationSource {
   private curCoordinateTransform: CoordinateSpaceTransform;
 
@@ -1348,28 +1378,8 @@ export class LocalAnnotationSource extends AnnotationSource {
     // Can only convert between numeric types.
     const { type: oldType } = oldProperty;
     const { type: newType } = newProperty;
-    const isOldTypeNumeric = isAnnotationNumericPropertySpec(oldProperty);
-    const isNewTypeNumeric = isAnnotationNumericPropertySpec(newProperty);
-    const isConvertible = () => {
-      // Same type, no conversion needed.
-      if (oldType === newType) return true;
-      if (isOldTypeNumeric !== isNewTypeNumeric) return false;
-      if (!isOldTypeNumeric) return true;
-      if (newType === "float32") return true;
-
-      // Can convert between uint or int if newType is higher precision.
-      const sameFamily =
-        (oldType.startsWith("uint") && newType.startsWith("uint")) ||
-        (oldType.startsWith("int") && newType.startsWith("int"));
-
-      if (sameFamily) {
-        const oldBits = parseInt(oldType.replace(/\D/g, ""), 10);
-        const newBits = parseInt(newType.replace(/\D/g, ""), 10);
-        return oldBits < newBits;
-      }
-      return false;
-    };
-    if (!isConvertible()) {
+    const isConvertible = canConvertTypes(oldType, newType);
+    if (isConvertible) {
       console.error(
         `Cannot convert property ${oldProperty.identifier} from ${oldProperty.type} to ${newProperty.type}`,
       );
