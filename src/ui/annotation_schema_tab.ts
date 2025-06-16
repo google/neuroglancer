@@ -26,7 +26,7 @@ import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
-import "#src/ui/annotations.css";
+import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
   AnnotationColorPropertySpec,
@@ -192,7 +192,9 @@ export class AnnotationSchemaView extends Tab {
     className: string = "_",
   ): HTMLDivElement => {
     const cell = document.createElement("div");
-    cell.classList.add("neuroglancer-annotation-schema-cell", className);
+    if (className !== undefined) {
+      cell.classList.add("neuroglancer-annotation-schema-cell", className);
+    }
 
     if (typeof content === "string") {
       cell.textContent = content;
@@ -205,9 +207,6 @@ export class AnnotationSchemaView extends Tab {
 
   private createSchemaTableHeader() {
     let tableHeaders = ["Name", "Type", "Default value"];
-    if (!this.readonly.value) {
-      tableHeaders = [...tableHeaders, ""];
-    }
 
     const addButtonField = document.createElement("div");
     addButtonField.className =
@@ -218,6 +217,14 @@ export class AnnotationSchemaView extends Tab {
     tableHeaders.forEach((text) => {
       headerRow.appendChild(this.createTableCell(text));
     });
+    // Append a blank cell for the delete icon
+    if (!this.readonly.value) {
+      const deleteHeader = this.createTableCell(
+        "",
+        "neuroglancer-annotation-schema-delete-header",
+      );
+      headerRow.appendChild(deleteHeader);
+    }
     this.schemaTable.appendChild(headerRow);
   }
 
@@ -241,6 +248,8 @@ export class AnnotationSchemaView extends Tab {
     input.type = config.type;
     input.value = config.value || "";
     input.name = `${this.layer.managedLayer.name}-schema-${config.name}`;
+    input.autocomplete = "off";
+    input.spellcheck = false;
     input.id = `${this.layer.managedLayer.name}-schema-${config.id}`;
     if (config.className) input.classList.add(config.className);
     return input;
@@ -252,9 +261,10 @@ export class AnnotationSchemaView extends Tab {
       value: identifier,
       name: `name-${index}`,
       id: `name-${index}`,
-      className: "schema-name-input",
+      className: "neuroglancer-annotation-schema-name-input",
     });
     const cell = this.createTableCell(nameInput);
+    nameInput.dataset.readonly = String(this.readonly.value);
     if (this.readonly.value) return cell;
     // TODO (Sean) maybe need to call removeEventListener
     // when the table is updated
@@ -379,7 +389,7 @@ export class AnnotationSchemaView extends Tab {
     const typeText = this.createTypeTextElement(type, enumLabels);
     const iconWrapper = this.createIconWrapper(type, enumLabels);
 
-    const typeCell = this.createTableCell(iconWrapper, "type");
+    const typeCell = this.createTableCell(iconWrapper, "neuroglancer-annotation-schema-type-cell");
     typeCell.appendChild(typeText);
 
     const isBoolean = this.isBooleanType(enumLabels);
@@ -656,7 +666,7 @@ export class AnnotationSchemaView extends Tab {
           enumIndex: number,
         ) => {
           const enumRow = document.createElement("div");
-          enumRow.className = "enum-entry";
+          enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
           // TODO ideally this should stop you from adding the same enum value
           // or the same label
@@ -698,31 +708,33 @@ export class AnnotationSchemaView extends Tab {
             } as AnnotationNumericPropertySpec);
           });
 
-          const deleteIcon = document.createElement("span");
-          deleteIcon.className = "neuroglancer-annotation-schema-delete-icon";
-          deleteIcon.innerHTML = svg_bin;
-          deleteIcon.title = "Delete enum row";
-          deleteIcon.style.cursor = "pointer";
-          deleteIcon.addEventListener("click", () => {
-            const newEnumValues = oldProperty.enumValues!.filter(
-              (_, i) => i !== enumIndex,
-            );
-            const newEnumLabels = oldProperty.enumLabels!.filter(
-              (_, i) => i !== enumIndex,
-            );
-
-            this.updateProperty(oldProperty, {
-              ...oldProperty,
-              enumValues: newEnumValues,
-              enumLabels: newEnumLabels,
-            } as AnnotationNumericPropertySpec);
-
-            enumRow.remove();
-          });
-
           enumRow.appendChild(nameInput);
           enumRow.appendChild(valueInput);
-          enumRow.appendChild(deleteIcon);
+
+          if (!this.readonly.value) {
+            const deleteIcon = document.createElement("span");
+            deleteIcon.className = "neuroglancer-annotation-schema-delete-icon";
+            deleteIcon.innerHTML = svg_bin;
+            deleteIcon.title = "Delete enum row";
+            deleteIcon.style.cursor = "pointer";
+            deleteIcon.addEventListener("click", () => {
+              const newEnumValues = oldProperty.enumValues!.filter(
+                (_, i) => i !== enumIndex,
+              );
+              const newEnumLabels = oldProperty.enumLabels!.filter(
+                (_, i) => i !== enumIndex,
+              );
+
+              this.updateProperty(oldProperty, {
+                ...oldProperty,
+                enumValues: newEnumValues,
+                enumLabels: newEnumLabels,
+              } as AnnotationNumericPropertySpec);
+
+              enumRow.remove();
+            });
+            enumRow.appendChild(deleteIcon);
+          }
           enumContainer.insertBefore(enumRow, addEnumButton);
         };
         for (let i = 0; i < enumValues.length; i++) {
@@ -924,7 +936,7 @@ export class AnnotationSchemaView extends Tab {
       this.tableToPropertyIndex.push(index);
     });
 
-    if (!readonly.value) return;
+    if (readonly.value) return;
 
     this.createAnnotationSchemaDropdown();
   }
