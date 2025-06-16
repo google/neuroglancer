@@ -298,7 +298,7 @@ export class AnnotationSchemaView extends Tab {
   ): string {
     if (this.isBooleanType(enumLabels) || type === "bool") return "Boolean";
     if (type === "rgb") return "RGB";
-    if (type === "rgba") return "RGBA";
+    if (type === "rgba") return "RGBa";
     if (isAnnotationTypeNumeric(type)) {
       const EnumText = this.isEnumType(enumLabels) ? " Enum" : "";
       return `${type} ${EnumText}`;
@@ -1021,7 +1021,8 @@ export class AnnotationSchemaView extends Tab {
     const blob = new Blob([this.jsonSchema], {
       type: "application/json",
     });
-    saveBlobToFile(blob, "schema.json");
+    const layerName = this.layer.managedLayer.name;
+    saveBlobToFile(blob, `${layerName}_annotation_schema.json`);
   }
 
   private copySchemaToClipboard() {
