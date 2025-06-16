@@ -44,7 +44,6 @@ import {
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted, type Borrowed } from "#src/util/disposable.js";
-import { removeChildren } from "#src/util/dom.js";
 import { stableStringify } from "#src/util/json.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
@@ -58,6 +57,7 @@ import { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
+import { removeChildren } from "#src/util/dom.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -105,7 +105,7 @@ function isEnumType(enumValues?: string[]): boolean {
 }
 
 class AnnotationUIProperty extends RefCounted {
-  public element: HTMLElement = document.createElement("div");
+  public element: HTMLDivElement = document.createElement("div");
   constructor(
     private spec: AnnotationPropertySpec,
     private parentView: AnnotationSchemaView,
@@ -118,7 +118,24 @@ class AnnotationUIProperty extends RefCounted {
     return this.parentView.readonly.value;
   }
   private removeProperty(indentifier: string) {
+    this.parentView.annotationUIProperties.delete(indentifier);
     this.parentView.removeProperty(indentifier);
+  }
+  private renameProperty(oldIdentifier: string, newIdentifier: string) {
+    const oldProperty = this.getPropertyByIdentifier(oldIdentifier);
+    if (oldProperty === undefined) {
+      console.warn(`Property with name ${oldIdentifier} not found.`);
+      return;
+    }
+    this.parentView.annotationUIProperties.set(
+      newIdentifier,
+      this.parentView.annotationUIProperties.get(oldIdentifier)!,
+    );
+    this.parentView.annotationUIProperties.delete(oldIdentifier);
+    this.updateProperty(oldProperty, {
+      ...oldProperty,
+      identifier: newIdentifier,
+    });
   }
   private getPropertyByIdentifier(
     identifier: string,
@@ -200,21 +217,13 @@ class AnnotationUIProperty extends RefCounted {
       const rawValue = nameInput.value;
       // TODO (Sean) there needs to be a signal for the selected state
       // to now show the new name
-      const oldProperty = this.getPropertyByIdentifier(identifier);
       let sanitizedValue = rawValue.replace(/\s+/g, "_");
-      if (oldProperty === undefined) {
-        console.warn(`Property with name ${identifier} not found.`);
-        return;
-      }
       if (sanitizedValue === "") {
         sanitizedValue = identifier;
       } else {
         sanitizedValue = this.ensureUniquePropertyIdentifier(sanitizedValue);
       }
-      this.updateProperty(oldProperty, {
-        ...oldProperty,
-        identifier: sanitizedValue,
-      });
+      this.renameProperty(identifier, sanitizedValue);
     });
     return cell;
   }
@@ -654,11 +663,12 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private schemaTable = document.createElement("div");
+  private schemaTableBody = document.createElement("div");
   private schemaTableAddButtonField = document.createElement("div");
   private schemaViewTextElement = document.createElement("p");
   private schemaPasteButton: HTMLElement;
   private schema: Readonly<AnnotationPropertySpec[]> = [];
-  private annotationUIProperties: AnnotationUIProperty[] = [];
+  public annotationUIProperties: Map<string, AnnotationUIProperty> = new Map();
   public readonly: WatchableValueInterface<boolean>;
 
   constructor(
@@ -672,9 +682,6 @@ export class AnnotationSchemaView extends Tab {
     this.element.classList.add("neuroglancer-annotation-schema-view");
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
     this.makeUI();
-
-    this.element.appendChild(this.schemaTable);
-
     this.updateOnReadonlyChange();
     this.updateView();
 
@@ -692,7 +699,7 @@ export class AnnotationSchemaView extends Tab {
 
   private updateOnReadonlyChange = () => {
     this.updateAnnotationText();
-    this.updatePasteVisibility();
+    this.updateElementVisibility();
   };
 
   private updateAnnotationText() {
@@ -700,8 +707,11 @@ export class AnnotationSchemaView extends Tab {
     this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.`;
   }
 
-  private updatePasteVisibility() {
+  private updateElementVisibility() {
     this.schemaPasteButton.style.display = this.readonly.value ? "none" : "";
+    this.schemaTableAddButtonField.style.display = this.readonly.value
+      ? "none"
+      : "";
   }
 
   private makeUI() {
@@ -735,32 +745,44 @@ export class AnnotationSchemaView extends Tab {
     schemaActionButtons.appendChild(this.schemaPasteButton);
 
     this.element.appendChild(schemaTextContainer);
-
+    this.element.appendChild(this.schemaTable);
     this.createSchemaTableHeader();
-    this.populateSchemaTable();
+    this.schemaTable.appendChild(this.schemaTableBody);
+    this.schemaTableBody.className =
+      "neuroglancer-annotation-schema-table-body";
+    this.createAnnotationSchemaDropdown();
+  }
+
+  private updateSchemaRepresentation() {
+    for (const property of this.schema) {
+      const annotationUIProperty = this.annotationUIProperties.get(
+        property.identifier,
+      );
+      if (annotationUIProperty) {
+        annotationUIProperty.update(property);
+      } else {
+        const newAnnotationUIProperty = new AnnotationUIProperty(
+          property,
+          this,
+        );
+        newAnnotationUIProperty.makeUI();
+        this.annotationUIProperties.set(
+          property.identifier,
+          newAnnotationUIProperty,
+        );
+        // TODO (SKM) this would probably be better
+        // this.schemaTable.appendChild(newAnnotationUIProperty.element);
+      }
+    }
   }
 
   private populateSchemaTable() {
-    // TODO (sean or aigul) - remaking this all the time is not very efficient
-    // we could compare the current schema with the new one
-    // and only update the rows that have changed
-    const { schema, readonly } = this;
-    // Remove everything from the table except the header
-    removeChildren(this.schemaTable);
-    this.createSchemaTableHeader();
-
-    // TODO make this not every loop
-    // Instead now loop the properties
-    schema.forEach((rowData, index) => {
-      const annotationUIProperty = new AnnotationUIProperty(rowData, this);
-      annotationUIProperty.makeUI();
-      this.annotationUIProperties[index] = annotationUIProperty;
-      this.schemaTable.appendChild(annotationUIProperty.element);
+    this.updateSchemaRepresentation();
+    // TODO (SKM) not ideal I think
+    removeChildren(this.schemaTableBody);
+    this.annotationUIProperties.forEach((property) => {
+      this.schemaTableBody.appendChild(property.element);
     });
-
-    if (readonly.value) return;
-
-    this.createAnnotationSchemaDropdown();
   }
 
   private createSchemaTableHeader() {
@@ -1121,6 +1143,7 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateView() {
+    // TODO somehow need to know if big update - key based?
     const { schema, readonly } = this.extractSchema();
     this.schema = schema;
     this.readonly.value = readonly;
