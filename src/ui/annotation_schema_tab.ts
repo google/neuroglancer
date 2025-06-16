@@ -60,6 +60,7 @@ import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { removeChildren } from "#src/util/dom.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -79,7 +80,7 @@ type AnnotationUIType = AnnotationType | "bool";
 
 interface InputConfig {
   type: string;
-  value?: string;
+  value?: number | string;
   className?: string;
 }
 
@@ -169,7 +170,7 @@ class AnnotationUIProperty extends RefCounted {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
     if (isAnnotationTypeNumeric(type)) {
-      this.defaultValueElements[0].value = String(defaultValue);
+      this.defaultValueElements[0].value = numberToStringFixed(defaultValue, 4);
     }
   }
   makeUI() {
@@ -291,7 +292,7 @@ class AnnotationUIProperty extends RefCounted {
         const alphaInput = this.createInputElement(
           {
             type: "number",
-            value: String(alpha),
+            value: alpha.toFixed(2),
             className: "neuroglancer-annotation-schema-default-input",
           },
           { min: 0, max: 1, step: 0.01 },
@@ -325,7 +326,10 @@ class AnnotationUIProperty extends RefCounted {
       if (enumValues === undefined || enumLabels === undefined) {
         const dataType = propertyTypeDataType[type as AnnotationType];
         const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
-        const bounds = defaultDataTypeRange[dataType!];
+        const bounds =
+          dataType === DataType.FLOAT32
+            ? [undefined, undefined]
+            : defaultDataTypeRange[dataType!];
 
         const numberInput = this.createInputElement(
           {
@@ -498,7 +502,12 @@ class AnnotationUIProperty extends RefCounted {
       });
     }
     input.type = config.type;
-    input.value = config.value || "";
+    console.log("input type: ", config.type, "hi");
+    if (typeof config.value === "number") {
+      input.value = numberToStringFixed(config.value, 4); // For numbers, format to 2 decimal places
+    } else {
+      input.value = config.value || "";
+    }
     input.autocomplete = "off";
     input.spellcheck = false;
     if (config.className) input.classList.add(config.className);
