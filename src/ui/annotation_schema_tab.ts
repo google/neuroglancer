@@ -141,7 +141,6 @@ export class AnnotationSchemaView extends Tab {
     this.updatePasteVisibility();
   };
 
-  // TODO maybe let's move this into a tooltip, I don't think it looks great just at the top?
   private updateAnnotationText() {
     const setOrViewText = this.readonly.value ? "View read-only" : "Set";
     this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.`;
@@ -187,24 +186,55 @@ export class AnnotationSchemaView extends Tab {
     this.populateSchemaTable();
   }
 
-  private createTableCell = (
-    content: string | HTMLElement,
-    className?: string,
-  ): HTMLDivElement => {
-    const cell = document.createElement("div");
-    cell.classList.add("neuroglancer-annotation-schema-cell");
-    if (className) {
-      cell.classList.add(className);
-    }
+  private populateSchemaTable() {
+    // TODO (sean or aigul) - remaking this all the time is not very efficient
+    // we could compare the current schema with the new one
+    // and only update the rows that have changed
+    const { schema, readonly } = this;
+    // Remove everything from the table except the header
+    removeChildren(this.schemaTable);
+    this.createSchemaTableHeader();
 
-    if (typeof content === "string") {
-      cell.textContent = content;
-    } else {
-      cell.appendChild(content);
-    }
+    schema.forEach((rowData, index) => {
+      const row = document.createElement("div");
+      row.classList.add("neuroglancer-annotation-schema-row");
 
-    return cell;
-  };
+      const enumLabels =
+        "enumLabels" in rowData ? rowData.enumLabels : undefined;
+      row.appendChild(this.createNameCell(rowData.identifier, index));
+      row.appendChild(
+        this.createTypeCell(rowData.type, rowData.identifier, enumLabels),
+      );
+      row.appendChild(
+        this.createDefaultValueCell(rowData.identifier, rowData.type, index),
+      );
+
+      // Delete Cell
+      if (!readonly.value) {
+        const deleteIcon = document.createElement("span");
+        deleteIcon.innerHTML = svg_bin;
+        deleteIcon.title = "Delete annotation property";
+        deleteIcon.style.cursor = "pointer";
+        deleteIcon.addEventListener("click", () => {
+          const propertyIdentifer = rowData.identifier;
+          this.removeProperty(propertyIdentifer);
+        });
+
+        const deleteCell = this.createTableCell(
+          deleteIcon,
+          "neuroglancer-annotation-schema-delete-cell",
+        );
+        row.appendChild(deleteCell);
+      }
+
+      this.schemaTable.appendChild(row);
+      this.tableToPropertyIndex.push(index);
+    });
+
+    if (readonly.value) return;
+
+    this.createAnnotationSchemaDropdown();
+  }
 
   private createSchemaTableHeader() {
     let tableHeaders = ["Name", "Type", "Default value"];
@@ -229,33 +259,6 @@ export class AnnotationSchemaView extends Tab {
     this.schemaTable.appendChild(headerRow);
   }
 
-  private createInputElement(
-    config: InputConfig,
-    numberConfig?: NumberConfig,
-  ): HTMLInputElement {
-    const input = document.createElement("input");
-    // TODO (Aigul) - not sure if we need any specific styling for readonly
-    const readonly = this.readonly.value;
-    input.dataset.readonly = String(readonly);
-    input.disabled = readonly;
-    if (this.readonly.value && config.type === "number") {
-      if (numberConfig?.min !== undefined) input.min = String(numberConfig.min);
-      if (numberConfig?.max !== undefined) input.max = String(numberConfig.max);
-      if (numberConfig?.step !== undefined)
-        input.step = String(numberConfig.step);
-      // TODO (SKM) might want to allow adjust via mouse wheel
-      // this.registerEventListener(input, "wheel", (event: WheelEvent) => {
-    }
-    input.type = config.type;
-    input.value = config.value || "";
-    input.name = `${this.layer.managedLayer.name}-schema-${config.name}`;
-    input.autocomplete = "off";
-    input.spellcheck = false;
-    input.id = `${this.layer.managedLayer.name}-schema-${config.id}`;
-    if (config.className) input.classList.add(config.className);
-    return input;
-  }
-
   private createNameCell(identifier: string, index: number): HTMLDivElement {
     const nameInput = this.createInputElement({
       type: "text",
@@ -273,7 +276,7 @@ export class AnnotationSchemaView extends Tab {
       const rawValue = nameInput.value;
       // TODO (Sean) there needs to be a signal for the selected state
       // to now show the new name
-      const oldProperty = this.getPropertyByName(identifier);
+      const oldProperty = this.getPropertyByIdentifier(identifier);
       let sanitizedValue = rawValue.replace(/\s+/g, "_");
       if (oldProperty === undefined) {
         console.warn(`Property with name ${identifier} not found.`);
@@ -282,7 +285,7 @@ export class AnnotationSchemaView extends Tab {
       if (sanitizedValue === "") {
         sanitizedValue = identifier;
       } else {
-        sanitizedValue = this.ensureUniqueName(sanitizedValue);
+        sanitizedValue = this.ensureUniquePropertyIdentifier(sanitizedValue);
       }
       this.updateProperty(oldProperty, {
         ...oldProperty,
@@ -292,97 +295,7 @@ export class AnnotationSchemaView extends Tab {
     return cell;
   }
 
-  private getDisplayNameForType(
-    type: AnnotationUIType,
-    enumLabels?: string[],
-  ): string {
-    if (this.isBooleanType(enumLabels) || type === "bool") return "Boolean";
-    if (type === "rgb") return "RGB";
-    if (type === "rgba") return "RGBa";
-    if (isAnnotationTypeNumeric(type)) {
-      const EnumText = this.isEnumType(enumLabels) ? " Enum" : "";
-      return `${type} ${EnumText}`;
-    }
-    return type;
-  }
-
-  private ensureUniqueName(suggestedName: string) {
-    const allProperties = this.schema;
-    const initalName = suggestedName;
-    let suffix = 0;
-    while (
-      allProperties.some((property) => property.identifier === suggestedName)
-    ) {
-      suggestedName = `${initalName}_${++suffix}`;
-    }
-    return suggestedName;
-  }
-
-  private getCategoryForType(type: AnnotationUIType, isEnum = false): string {
-    if (type === "bool") return "General";
-    if (type === "rgb" || type === "rgba") return "Color";
-    if (isEnum && isAnnotationTypeNumeric(type)) return "Enum";
-    if (!isEnum && isAnnotationTypeNumeric(type)) return "Numeric";
-    return "Other";
-  }
-
-  private getIconForType(
-    type: AnnotationUIType,
-    enumValues?: string[],
-  ): string {
-    const isBoolean = this.isBooleanType(enumValues);
-    if (isBoolean || type === "bool") return svg_check;
-    if (this.isEnumType(enumValues)) return svg_format_size;
-    if (isAnnotationTypeNumeric(type)) return svg_numbers;
-    return svg_palette;
-  }
-
-  private isBooleanType(enumValues?: string[]): boolean {
-    return (
-      (enumValues?.includes("False") &&
-        enumValues?.includes("True") &&
-        enumValues.length === 2) ||
-      false
-    );
-  }
-
-  private isEnumType(enumValues?: string[]): boolean {
-    return (enumValues && enumValues.length > 0) || false;
-  }
-
-  private createTypeTextElement(
-    type: AnnotationType,
-    enumLabels?: string[],
-  ): HTMLSpanElement {
-    const typeText = document.createElement("span");
-
-    if (this.isBooleanType(enumLabels)) {
-      typeText.textContent = "Boolean";
-      return typeText;
-    }
-    const displayName = this.getDisplayNameForType(type);
-    if (this.isEnumType(enumLabels)) {
-      typeText.textContent = `${displayName} Enum`;
-    } else {
-      typeText.textContent = displayName;
-    }
-
-    return typeText;
-  }
-
-  private createIconWrapper(
-    type: AnnotationType,
-    enumLabels?: string[],
-  ): HTMLSpanElement {
-    const iconWrapper = document.createElement("span");
-    iconWrapper.classList.add(
-      "neuroglancer-annotation-schema-cell-icon-wrapper",
-    );
-    iconWrapper.innerHTML = this.getIconForType(type, enumLabels);
-    return iconWrapper;
-  }
-
-  public createTypeCell(
+  private createTypeCell(
     type: AnnotationType,
     identifier: string,
     enumLabels?: string[],
@@ -411,141 +324,6 @@ export class AnnotationSchemaView extends Tab {
     return typeCell;
   }
 
-  private showTypeDropdown(
-    anchorElement: HTMLElement,
-    currentType: AnnotationType,
-    identifier: string,
-    enumLabels?: string[],
-  ) {
-    const availableOptions: AnnotationType[] = [];
-    for (const type of ANNOTATION_TYPES) {
-      if (canConvertTypes(currentType, type)) {
-        availableOptions.push(type);
-      }
-    }
-
-    const dropdown = this.createDropdownElement(
-      availableOptions,
-      currentType,
-      identifier,
-      enumLabels,
-      anchorElement,
-    );
-    if (dropdown.children.length === 0) return;
-
-    document.body.appendChild(dropdown);
-    this.positionDropdown(dropdown, anchorElement);
-    this.addDropdownDismissHandler(dropdown);
-  }
-
-  // TODO a bit unfortunate that we can open multiple of these
-  private createDropdownElement(
-    availableOptions: AnnotationType[],
-    currentType: string,
-    identifier: string,
-    enumLabels: string[] | undefined,
-    anchorElement: HTMLElement,
-  ): HTMLDivElement {
-    const dropdown = document.createElement("div");
-    dropdown.className = "neuroglancer-annotation-schema-dropdown";
-
-    availableOptions.forEach((item) => {
-      const option = document.createElement("div");
-      option.className = "neuroglancer-annotation-schema-dropdown-option";
-
-      const iconWrapper = this.createIconWrapper(item);
-      const label = document.createElement("span");
-      label.textContent = this.getDisplayNameForType(item);
-
-      option.appendChild(iconWrapper);
-      option.appendChild(label);
-
-      option.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (item !== currentType) {
-          this.handleTypeChange(anchorElement, item, identifier, enumLabels);
-        }
-        dropdown.remove();
-      });
-
-      dropdown.appendChild(option);
-    });
-
-    return dropdown;
-  }
-
-  private positionDropdown(
-    dropdown: HTMLDivElement,
-    anchorElement: HTMLElement,
-  ) {
-    const rect = anchorElement.getBoundingClientRect();
-    dropdown.style.position = "absolute";
-    dropdown.style.left = `${rect.left}px`;
-    dropdown.style.top = `${rect.bottom}px`;
-  }
-
-  private addDropdownDismissHandler(dropdown: HTMLDivElement) {
-    const clickOutsideHandler = (e: MouseEvent) => {
-      if (!dropdown.contains(e.target as Node)) {
-        dropdown.remove();
-        document.removeEventListener("click", clickOutsideHandler);
-      }
-    };
-    document.addEventListener("click", clickOutsideHandler);
-  }
-
-  private handleTypeChange(
-    cell: HTMLElement,
-    newType: AnnotationType,
-    identifier: string,
-    enumLabels?: string[],
-  ) {
-    const iconWrapper = cell.querySelector(
-      ".neuroglancer-annotation-schema-cell-icon-wrapper",
-    );
-    const typeText = cell.querySelector(
-      "span:not(.neuroglancer-annotation-schema-cell-icon-wrapper)",
-    );
-    const oldProperty = this.getPropertyByName(identifier);
-
-    if (!iconWrapper || !typeText) return;
-
-    ensureIsAnnotationType(newType);
-    const displayName = this.getDisplayNameForType(newType, enumLabels);
-    iconWrapper.innerHTML = this.getIconForType(newType, enumLabels);
-
-    if (this.isBooleanType(enumLabels)) {
-      typeText.textContent = "Boolean";
-    } else if (this.isEnumType(enumLabels)) {
-      typeText.textContent = `${displayName} Enum`;
-    } else {
-      typeText.textContent = displayName;
-    }
-
-    if (oldProperty === undefined) {
-      console.warn(`Property with name ${identifier} not found.`);
-      return;
-    }
-    let defaultValue = oldProperty.default;
-    if (oldProperty.type === "rgb" && newType === "rgba") {
-      // Add alpha = 1 to the default value
-      const oldColor = unpackRGB(oldProperty.default);
-      const newColor = vec4.fromValues(
-        oldColor[0],
-        oldColor[1],
-        oldColor[2],
-        1,
-      );
-      defaultValue = packColor(newColor);
-    }
-
-    this.updateProperty(oldProperty, {
-      ...oldProperty,
-      type: this.mapUITypeToAnnotationType(newType),
-      default: defaultValue,
-    });
-  }
-
   private createDefaultValueCell(
     identifier: string,
     type: AnnotationType | "bool",
@@ -557,7 +335,7 @@ export class AnnotationSchemaView extends Tab {
 
     let inputs: HTMLInputElement[] = [];
     let changeFunction: (event: Event) => void;
-    const oldProperty = this.getPropertyByName(identifier);
+    const oldProperty = this.getPropertyByIdentifier(identifier);
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
       return this.createTableCell(
@@ -612,7 +390,7 @@ export class AnnotationSchemaView extends Tab {
       type.startsWith("uint") ||
       type === "float32"
     ) {
-      const oldProperty = this.getPropertyByName(
+      const oldProperty = this.getPropertyByIdentifier(
         identifier,
       ) as AnnotationNumericPropertySpec;
       const { enumValues, enumLabels } = oldProperty;
@@ -762,52 +540,8 @@ export class AnnotationSchemaView extends Tab {
       container,
       "neuroglancer-annotation-schema-default-value-cell",
     );
-    cell.dataset.enums = String(this.hasEnums());
+    cell.dataset.enums = String(this.includesEnumProperties());
     return cell;
-  }
-
-  private hasEnums(): Boolean {
-    const schema = this.schema;
-    return schema.some(
-      (property) =>
-        "enumValues" in property &&
-        property.enumValues &&
-        property.enumValues.length > 0,
-    );
-  }
-
-  private mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationType {
-    if (uiType === "bool") return "uint8";
-    return uiType;
-  }
-
-  private defaultValuePerType(uiType: AnnotationUIType): number {
-    if (uiType === "bool") {
-      return 1;
-    }
-    if (uiType === "rgb") {
-      return packColor(vec3.fromValues(1, 1, 1));
-    }
-    if (uiType === "rgba") {
-      return packColor(vec4.fromValues(1, 1, 1, 1));
-    }
-    return 0;
-  }
-
-  private setupInitialEnumsIfNeeded(type: AnnotationUIType, isEnum = false) {
-    if (type === "bool") {
-      return {
-        enumValues: [0, 1],
-        enumLabels: ["False", "True"],
-      };
-    }
-    if (isEnum && isAnnotationTypeNumeric(type)) {
-      return {
-        enumValues: [0],
-        enumLabels: ["Default"],
-      };
-    }
-    return {};
   }
 
   private createAnnotationSchemaDropdown() {
@@ -862,7 +596,9 @@ export class AnnotationSchemaView extends Tab {
             () => (option.style.backgroundColor = ""),
           );
           option.addEventListener("click", () => {
-            const name = this.ensureUniqueName(type.replace(/\s+/g, "_"));
+            const name = this.ensureUniquePropertyIdentifier(
+              type.replace(/\s+/g, "_"),
+            );
             const newProperty = {
               type: this.mapUITypeToAnnotationType(type),
               identifier: name,
@@ -913,54 +649,320 @@ export class AnnotationSchemaView extends Tab {
     this.schemaTable.appendChild(this.schemaTableAddButtonField);
   }
 
-  private populateSchemaTable() {
-    // TODO (sean or aigul) - remaking this all the time is not very efficient
-    // we could compare the current schema with the new one
-    // and only update the rows that have changed
-    const { schema, readonly } = this;
-    // Remove everything from the table except the header
-    removeChildren(this.schemaTable);
-    this.createSchemaTableHeader();
+  private createInputElement(
+    config: InputConfig,
+    numberConfig?: NumberConfig,
+  ): HTMLInputElement {
+    const input = document.createElement("input");
+    const readonly = this.readonly.value;
+    input.dataset.readonly = String(readonly);
+    input.disabled = readonly;
+    if (this.readonly.value && config.type === "number") {
+      if (numberConfig?.min !== undefined) input.min = String(numberConfig.min);
+      if (numberConfig?.max !== undefined) input.max = String(numberConfig.max);
+      if (numberConfig?.step !== undefined)
+        input.step = String(numberConfig.step);
+      // TODO (SKM) might want to allow adjust via mouse wheel
+      // But will need to unregister the event listener
+      // this.registerEventListener(input, "wheel", (event: WheelEvent) => {
+    }
+    input.type = config.type;
+    input.value = config.value || "";
+    input.name = `${this.layer.managedLayer.name}-schema-${config.name}`;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.id = `${this.layer.managedLayer.name}-schema-${config.id}`;
+    if (config.className) input.classList.add(config.className);
+    return input;
+  }
 
-    schema.forEach((rowData, index) => {
-      const row = document.createElement("div");
-      row.classList.add("neuroglancer-annotation-schema-row");
+  private createTableCell = (
+    content: string | HTMLElement,
+    className?: string,
+  ): HTMLDivElement => {
+    const cell = document.createElement("div");
+    cell.classList.add("neuroglancer-annotation-schema-cell");
+    if (className) {
+      cell.classList.add(className);
+    }
 
-      const enumLabels =
-        "enumLabels" in rowData ? rowData.enumLabels : undefined;
-      row.appendChild(this.createNameCell(rowData.identifier, index));
-      row.appendChild(
-        this.createTypeCell(rowData.type, rowData.identifier, enumLabels),
-      );
-      row.appendChild(
-        this.createDefaultValueCell(rowData.identifier, rowData.type, index),
-      );
+    if (typeof content === "string") {
+      cell.textContent = content;
+    } else {
+      cell.appendChild(content);
+    }
 
-      // Delete Cell
-      if (!readonly.value) {
-        const deleteIcon = document.createElement("span");
-        deleteIcon.innerHTML = svg_bin;
-        deleteIcon.title = "Delete annotation property";
-        deleteIcon.style.cursor = "pointer";
-        deleteIcon.addEventListener("click", () => {
-          const propertyIdentifer = rowData.identifier;
-          this.removeProperty(propertyIdentifer);
-        });
+    return cell;
+  };
 
-        const deleteCell = this.createTableCell(
-          deleteIcon,
-          "neuroglancer-annotation-schema-delete-cell",
-        );
-        row.appendChild(deleteCell);
+  private getDisplayNameForType(
+    type: AnnotationUIType,
+    enumLabels?: string[],
+  ): string {
+    if (this.isBooleanType(enumLabels) || type === "bool") return "Boolean";
+    if (type === "rgb") return "RGB";
+    if (type === "rgba") return "RGBa";
+    if (isAnnotationTypeNumeric(type)) {
+      const EnumText = this.isEnumType(enumLabels) ? " Enum" : "";
+      return `${type} ${EnumText}`;
+    }
+    return type;
+  }
+
+  private ensureUniquePropertyIdentifier(suggestedIdentifier: string) {
+    const allProperties = this.schema;
+    const initalName = suggestedIdentifier;
+    let uniqueIdenifier = suggestedIdentifier;
+    let suffix = 0;
+    while (
+      allProperties.some((property) => property.identifier === uniqueIdenifier)
+    ) {
+      uniqueIdenifier = `${initalName}_${++suffix}`;
+    }
+    return uniqueIdenifier;
+  }
+
+  private getCategoryForType(type: AnnotationUIType, isEnum = false): string {
+    if (type === "bool") return "General";
+    if (type === "rgb" || type === "rgba") return "Color";
+    if (isEnum && isAnnotationTypeNumeric(type)) return "Enum";
+    if (!isEnum && isAnnotationTypeNumeric(type)) return "Numeric";
+    return "Other";
+  }
+
+  private getIconForType(
+    type: AnnotationUIType,
+    enumValues?: string[],
+  ): string {
+    const isBoolean = this.isBooleanType(enumValues);
+    if (isBoolean || type === "bool") return svg_check;
+    if (this.isEnumType(enumValues)) return svg_format_size;
+    if (isAnnotationTypeNumeric(type)) return svg_numbers;
+    return svg_palette;
+  }
+
+  private isBooleanType(enumValues?: string[]): boolean {
+    return (
+      (enumValues?.includes("False") &&
+        enumValues?.includes("True") &&
+        enumValues.length === 2) ||
+      false
+    );
+  }
+
+  private isEnumType(enumValues?: string[]): boolean {
+    return (enumValues && enumValues.length > 0) || false;
+  }
+
+  private createTypeTextElement(
+    type: AnnotationType,
+    enumLabels?: string[],
+  ): HTMLSpanElement {
+    const typeText = document.createElement("span");
+
+    if (this.isBooleanType(enumLabels)) {
+      typeText.textContent = "Boolean";
+      return typeText;
+    }
+    const displayName = this.getDisplayNameForType(type);
+    if (this.isEnumType(enumLabels)) {
+      typeText.textContent = `${displayName} Enum`;
+    } else {
+      typeText.textContent = displayName;
+    }
+
+    return typeText;
+  }
+
+  private createIconWrapper(
+    type: AnnotationType,
+    enumLabels?: string[],
+  ): HTMLSpanElement {
+    const iconWrapper = document.createElement("span");
+    iconWrapper.classList.add(
+      "neuroglancer-annotation-schema-cell-icon-wrapper",
+    );
+    iconWrapper.innerHTML = this.getIconForType(type, enumLabels);
+    return iconWrapper;
+  }
+
+  private showTypeDropdown(
+    anchorElement: HTMLElement,
+    currentType: AnnotationType,
+    identifier: string,
+    enumLabels?: string[],
+  ) {
+    const availableOptions: AnnotationType[] = [];
+    for (const type of ANNOTATION_TYPES) {
+      if (canConvertTypes(currentType, type)) {
+        availableOptions.push(type);
       }
+    }
 
-      this.schemaTable.appendChild(row);
-      this.tableToPropertyIndex.push(index);
+    const dropdown = this.createDropdownElement(
+      availableOptions,
+      currentType,
+      identifier,
+      enumLabels,
+      anchorElement,
+    );
+    if (dropdown.children.length === 0) return;
+
+    document.body.appendChild(dropdown);
+    this.positionDropdown(dropdown, anchorElement);
+    this.addDropdownDismissHandler(dropdown);
+  }
+
+  // TODO a bit unfortunate that we can open multiple of these
+  private createDropdownElement(
+    availableOptions: AnnotationType[],
+    currentType: string,
+    identifier: string,
+    enumLabels: string[] | undefined,
+    anchorElement: HTMLElement,
+  ): HTMLDivElement {
+    const dropdown = document.createElement("div");
+    dropdown.className = "neuroglancer-annotation-schema-dropdown";
+
+    availableOptions.forEach((item) => {
+      const option = document.createElement("div");
+      option.className = "neuroglancer-annotation-schema-dropdown-option";
+
+      const iconWrapper = this.createIconWrapper(item);
+      const label = document.createElement("span");
+      label.textContent = this.getDisplayNameForType(item);
+
+      option.appendChild(iconWrapper);
+      option.appendChild(label);
+
+      option.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (item !== currentType) {
+          this.handleTypeChange(anchorElement, item, identifier, enumLabels);
+        }
+        dropdown.remove();
+      });
+
+      dropdown.appendChild(option);
     });
 
-    if (readonly.value) return;
+    return dropdown;
+  }
 
-    this.createAnnotationSchemaDropdown();
+  private positionDropdown(
+    dropdown: HTMLDivElement,
+    anchorElement: HTMLElement,
+  ) {
+    const rect = anchorElement.getBoundingClientRect();
+    dropdown.style.position = "absolute";
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.top = `${rect.bottom}px`;
+  }
+
+  private addDropdownDismissHandler(dropdown: HTMLDivElement) {
+    const clickOutsideHandler = (e: MouseEvent) => {
+      if (!dropdown.contains(e.target as Node)) {
+        dropdown.remove();
+        document.removeEventListener("click", clickOutsideHandler);
+      }
+    };
+    document.addEventListener("click", clickOutsideHandler);
+  }
+
+  private handleTypeChange(
+    cell: HTMLElement,
+    newType: AnnotationType,
+    identifier: string,
+    enumLabels?: string[],
+  ) {
+    const iconWrapper = cell.querySelector(
+      ".neuroglancer-annotation-schema-cell-icon-wrapper",
+    );
+    const typeText = cell.querySelector(
+      "span:not(.neuroglancer-annotation-schema-cell-icon-wrapper)",
+    );
+    const oldProperty = this.getPropertyByIdentifier(identifier);
+
+    if (!iconWrapper || !typeText) return;
+
+    ensureIsAnnotationType(newType);
+    const displayName = this.getDisplayNameForType(newType, enumLabels);
+    iconWrapper.innerHTML = this.getIconForType(newType, enumLabels);
+
+    if (this.isBooleanType(enumLabels)) {
+      typeText.textContent = "Boolean";
+    } else if (this.isEnumType(enumLabels)) {
+      typeText.textContent = `${displayName} Enum`;
+    } else {
+      typeText.textContent = displayName;
+    }
+
+    if (oldProperty === undefined) {
+      console.warn(`Property with name ${identifier} not found.`);
+      return;
+    }
+    let defaultValue = oldProperty.default;
+    if (oldProperty.type === "rgb" && newType === "rgba") {
+      // Add alpha = 1 to the default value
+      const oldColor = unpackRGB(oldProperty.default);
+      const newColor = vec4.fromValues(
+        oldColor[0],
+        oldColor[1],
+        oldColor[2],
+        1,
+      );
+      defaultValue = packColor(newColor);
+    }
+
+    this.updateProperty(oldProperty, {
+      ...oldProperty,
+      type: this.mapUITypeToAnnotationType(newType),
+      default: defaultValue,
+    });
+  }
+
+  private includesEnumProperties(): Boolean {
+    const schema = this.schema;
+    return schema.some(
+      (property) =>
+        "enumValues" in property &&
+        property.enumValues &&
+        property.enumValues.length > 0,
+    );
+  }
+
+  private mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationType {
+    if (uiType === "bool") return "uint8";
+    return uiType;
+  }
+
+  private defaultValuePerType(uiType: AnnotationUIType): number {
+    if (uiType === "bool") {
+      return 1;
+    }
+    if (uiType === "rgb") {
+      return packColor(vec3.fromValues(1, 1, 1));
+    }
+    if (uiType === "rgba") {
+      return packColor(vec4.fromValues(1, 1, 1, 1));
+    }
+    return 0;
+  }
+
+  private setupInitialEnumsIfNeeded(type: AnnotationUIType, isEnum = false) {
+    if (type === "bool") {
+      return {
+        enumValues: [0, 1],
+        enumLabels: ["False", "True"],
+      };
+    }
+    if (isEnum && isAnnotationTypeNumeric(type)) {
+      return {
+        enumValues: [0],
+        enumLabels: ["Default"],
+      };
+    }
+    return {};
   }
 
   private get mutableSources() {
@@ -1076,10 +1078,12 @@ export class AnnotationSchemaView extends Tab {
     return { schema, readonly };
   }
 
-  private getPropertyByName(name: string): AnnotationPropertySpec | undefined {
+  private getPropertyByIdentifier(
+    identifier: string,
+  ): AnnotationPropertySpec | undefined {
     for (const state of this.annotationStates.states) {
       const property = state.source.properties.value.find(
-        (p) => p.identifier === name,
+        (p) => p.identifier === identifier,
       );
       if (property) return property;
     }
