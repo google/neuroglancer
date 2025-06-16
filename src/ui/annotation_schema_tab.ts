@@ -37,6 +37,7 @@ import type {
 import {
   annotationPropertySpecsToJson,
   canConvertTypes,
+  compareAnnotationSpecProperties,
   isAnnotationTypeNumeric,
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
@@ -106,13 +107,15 @@ function isEnumType(enumValues?: string[]): boolean {
 
 class AnnotationUIProperty extends RefCounted {
   public element: HTMLDivElement = document.createElement("div");
+  private defaultValueElements: HTMLInputElement[] = [];
   constructor(
-    private spec: AnnotationPropertySpec,
+    public spec: AnnotationPropertySpec,
     private parentView: AnnotationSchemaView,
   ) {
     super();
     this.spec = spec;
     this.element.classList.add("neuroglancer-annotation-schema-row");
+    this.makeUI();
   }
   get readonly() {
     return this.parentView.readonly.value;
@@ -127,11 +130,6 @@ class AnnotationUIProperty extends RefCounted {
       console.warn(`Property with name ${oldIdentifier} not found.`);
       return;
     }
-    this.parentView.annotationUIProperties.set(
-      newIdentifier,
-      this.parentView.annotationUIProperties.get(oldIdentifier)!,
-    );
-    this.parentView.annotationUIProperties.delete(oldIdentifier);
     this.updateProperty(oldProperty, {
       ...oldProperty,
       identifier: newIdentifier,
@@ -169,6 +167,13 @@ class AnnotationUIProperty extends RefCounted {
   ): string {
     return this.parentView.getIconForType(type, enumLabels);
   }
+  public setNumericDefaultValueOnly(defaultValue: number) {
+    // For numeric types, we can set the default value directly
+    const type = this.spec.type;
+    if (isAnnotationTypeNumeric(type)) {
+      this.defaultValueElements[0].value = String(defaultValue);
+    }
+  }
   makeUI() {
     const { element, spec, readonly } = this;
     const enumLabels = "enumLabels" in spec ? spec.enumLabels : undefined;
@@ -197,9 +202,6 @@ class AnnotationUIProperty extends RefCounted {
       );
       element.appendChild(deleteCell);
     }
-  }
-  public update(spec: AnnotationPropertySpec) {
-    this.spec = spec;
   }
 
   private createNameCell(identifier: string): HTMLDivElement {
@@ -460,6 +462,7 @@ class AnnotationUIProperty extends RefCounted {
         input.addEventListener("change", changeFunction);
       }
     });
+    this.defaultValueElements = inputs;
     const cell = this.createTableCell(
       container,
       "neuroglancer-annotation-schema-default-value-cell",
@@ -754,34 +757,67 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateSchemaRepresentation() {
-    for (const property of this.schema) {
+    // Check to see if the new IDs match the old keys
+    const oldKeys = Array.from(this.annotationUIProperties.keys());
+    const newKeys = this.schema.map((property) => property.identifier);
+    // All the old keys that are not in the new keys need to be removed
+    for (const oldKey of oldKeys) {
+      if (!newKeys.includes(oldKey)) {
+        this.annotationUIProperties.delete(oldKey);
+      }
+    }
+    for (const propertySchema of this.schema) {
       const annotationUIProperty = this.annotationUIProperties.get(
-        property.identifier,
+        propertySchema.identifier,
       );
-      if (annotationUIProperty) {
-        annotationUIProperty.update(property);
-      } else {
-        const newAnnotationUIProperty = new AnnotationUIProperty(
-          property,
-          this,
-        );
-        newAnnotationUIProperty.makeUI();
+      // If the property is undefined, it means it is a new property
+      if (annotationUIProperty === undefined) {
+        // Create a new AnnotationUIProperty and add it to the map
         this.annotationUIProperties.set(
-          property.identifier,
-          newAnnotationUIProperty,
+          propertySchema.identifier,
+          new AnnotationUIProperty(propertySchema, this),
         );
-        // TODO (SKM) this would probably be better
-        // this.schemaTable.appendChild(newAnnotationUIProperty.element);
+      } else {
+        // For existing properties, we need to check if the schema has changed
+        const oldPropertySchema = annotationUIProperty.spec;
+        const comparedProperties = compareAnnotationSpecProperties(
+          oldPropertySchema,
+          propertySchema,
+        );
+        // If the property is the same, we can skip updating it
+        if (!comparedProperties.same) {
+          // If only the default value changed, we can update that
+          const isNumeric = isAnnotationTypeNumeric(propertySchema.type);
+          if (isNumeric && comparedProperties.defaultValueChanged) {
+            annotationUIProperty.setNumericDefaultValueOnly(
+              propertySchema.default,
+            );
+          } else {
+            // If the property has changed otherwise, we need to create a new one
+            this.annotationUIProperties.set(
+              propertySchema.identifier,
+              new AnnotationUIProperty(propertySchema, this),
+            );
+          }
+        }
       }
     }
   }
 
   private populateSchemaTable() {
     this.updateSchemaRepresentation();
-    // TODO (SKM) not ideal I think
     removeChildren(this.schemaTableBody);
-    this.annotationUIProperties.forEach((property) => {
-      this.schemaTableBody.appendChild(property.element);
+    this.schema.forEach((property) => {
+      const annotationUIProperty = this.annotationUIProperties.get(
+        property.identifier,
+      );
+      if (annotationUIProperty === undefined) {
+        console.warn(
+          `Annotation UI Property for ${property.identifier} not found.`,
+        );
+        return;
+      }
+      this.schemaTableBody.appendChild(annotationUIProperty.element);
     });
   }
 

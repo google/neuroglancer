@@ -565,6 +565,40 @@ export function ensureUniqueAnnotationPropertyIds(
   }
 }
 
+export function compareAnnotationSpecProperties(
+  a: Readonly<AnnotationPropertySpec>,
+  b: Readonly<AnnotationPropertySpec>,
+): { same: boolean; defaultValueChanged: boolean } {
+  const sameExcludingDefault = () => {
+    if (a.type !== b.type || a.identifier !== b.identifier) return false;
+    if (a.description !== b.description) return false;
+
+    // If there are enum values, we need to check them.
+    if (
+      isAnnotationNumericPropertySpec(a) !== isAnnotationNumericPropertySpec(b)
+    ) {
+      return false;
+    }
+    if (
+      isAnnotationNumericPropertySpec(a) &&
+      isAnnotationNumericPropertySpec(b)
+    ) {
+      if (a.min !== b.min || a.max !== b.max || a.step !== b.step) return false;
+      if (a.enumValues !== b.enumValues) {
+        if (!arraysEqual(a.enumValues || [], b.enumValues || [])) return false;
+      }
+      if (a.enumLabels !== b.enumLabels) {
+        if (!arraysEqual(a.enumLabels || [], b.enumLabels || [])) return false;
+      }
+    }
+    // At this point, we know that everything is the same, except for maybe the default value.
+    return true;
+  };
+  const defaultValueChanged = a.default !== b.default;
+  const same = sameExcludingDefault() && !defaultValueChanged;
+  return { same, defaultValueChanged };
+}
+
 function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   verifyObject(obj);
   const identifier = verifyObjectProperty(obj, "id", parseAnnotationPropertyId);
