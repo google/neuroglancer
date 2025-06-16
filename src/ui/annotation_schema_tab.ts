@@ -105,15 +105,15 @@ export class AnnotationSchemaView extends Tab {
   private schemaPasteButton: HTMLElement;
   private tableToPropertyIndex: Array<number> = [];
   private schema: Readonly<AnnotationPropertySpec[]> = [];
-  private isMutable: WatchableValueInterface<boolean>;
+  private readonly: WatchableValueInterface<boolean>;
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
     public displayState: AnnotationDisplayState,
   ) {
     super();
-    this.isMutable = new WatchableValue(
-      this.annotationStates.states.some((state) => !state.source.readonly),
+    this.readonly = new WatchableValue(
+      this.annotationStates.states.every((state) => state.source.readonly),
     );
     this.element.classList.add("neuroglancer-annotation-schema-view");
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
@@ -121,7 +121,7 @@ export class AnnotationSchemaView extends Tab {
 
     this.element.appendChild(this.schemaTable);
 
-    this.updateOnMutableChange();
+    this.updateOnReadonlyChange();
     this.updateView();
 
     this.registerDisposer(
@@ -130,25 +130,25 @@ export class AnnotationSchemaView extends Tab {
       }),
     );
     this.registerDisposer(
-      this.isMutable.changed.add(() => {
-        this.updateOnMutableChange();
+      this.readonly.changed.add(() => {
+        this.updateOnReadonlyChange();
       }),
     );
   }
 
-  private updateOnMutableChange = () => {
+  private updateOnReadonlyChange = () => {
     this.updateAnnotationText();
     this.updatePasteVisibility();
   };
 
   // TODO maybe let's move this into a tooltip, I don't think it looks great just at the top?
   private updateAnnotationText() {
-    const setOrViewText = this.isMutable.value ? "Set" : "View read-only";
+    const setOrViewText = this.readonly.value ? "View read-only" : "Set";
     this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.`;
   }
 
   private updatePasteVisibility() {
-    this.schemaPasteButton.style.display = this.isMutable.value ? "" : "none";
+    this.schemaPasteButton.style.display = this.readonly.value ? "none" : "";
   }
 
   private makeUI() {
@@ -204,9 +204,9 @@ export class AnnotationSchemaView extends Tab {
   };
 
   private createSchemaTableHeader() {
-    let tableHeaders = ["Name", "Type", "Default value", ""];
-    if (this.isMutable.value) {
-      tableHeaders = [...tableHeaders];
+    let tableHeaders = ["Name", "Type", "Default value"];
+    if (!this.readonly.value) {
+      tableHeaders = [...tableHeaders, ""];
     }
 
     const addButtonField = document.createElement("div");
@@ -227,10 +227,10 @@ export class AnnotationSchemaView extends Tab {
   ): HTMLInputElement {
     const input = document.createElement("input");
     // TODO (Aigul) - not sure if we need any specific styling for readonly
-    const readonly = !this.isMutable.value;
+    const readonly = this.readonly.value;
     input.dataset.readonly = String(readonly);
     input.disabled = readonly;
-    if (this.isMutable.value && config.type === "number") {
+    if (this.readonly.value && config.type === "number") {
       if (numberConfig?.min !== undefined) input.min = String(numberConfig.min);
       if (numberConfig?.max !== undefined) input.max = String(numberConfig.max);
       if (numberConfig?.step !== undefined)
@@ -255,7 +255,7 @@ export class AnnotationSchemaView extends Tab {
       className: "schema-name-input",
     });
     const cell = this.createTableCell(nameInput);
-    if (!this.isMutable.value) return cell;
+    if (this.readonly.value) return cell;
     // TODO (Sean) maybe need to call removeEventListener
     // when the table is updated
     nameInput.addEventListener("change", () => {
@@ -384,7 +384,7 @@ export class AnnotationSchemaView extends Tab {
 
     const isBoolean = this.isBooleanType(enumLabels);
 
-    if (!isBoolean) {
+    if (!isBoolean && !this.readonly.value) {
       typeCell.style.cursor = "pointer";
       typeCell.title =
         "You can convert to a higher precision, but not back to lower precision.";
@@ -735,8 +735,7 @@ export class AnnotationSchemaView extends Tab {
     // TODO (SKM) - again may need to unregister the event listeners
     inputs.forEach((input) => {
       container.appendChild(input);
-      // TODO We should refactor isMutable to instead be the name "readonly"
-      if (this.isMutable.value) {
+      if (!this.readonly.value) {
         input.addEventListener("change", changeFunction);
       }
     });
@@ -884,7 +883,7 @@ export class AnnotationSchemaView extends Tab {
     // TODO (sean or aigul) - remaking this all the time is not very efficient
     // we could compare the current schema with the new one
     // and only update the rows that have changed
-    const { schema, isMutable } = this;
+    const { schema, readonly } = this;
     // Remove everything from the table except the header
     removeChildren(this.schemaTable);
     this.createSchemaTableHeader();
@@ -904,7 +903,7 @@ export class AnnotationSchemaView extends Tab {
       );
 
       // Delete Cell
-      if (isMutable.value) {
+      if (!readonly.value) {
         const deleteIcon = document.createElement("span");
         deleteIcon.innerHTML = svg_bin;
         deleteIcon.title = "Delete annotation property";
@@ -925,7 +924,7 @@ export class AnnotationSchemaView extends Tab {
       this.tableToPropertyIndex.push(index);
     });
 
-    if (!isMutable.value) return;
+    if (!readonly.value) return;
 
     this.createAnnotationSchemaDropdown();
   }
@@ -1030,16 +1029,16 @@ export class AnnotationSchemaView extends Tab {
   // TODO should probably cache this
   private extractSchema() {
     const schema: Readonly<AnnotationPropertySpec>[] = [];
-    let isMutable = false;
+    let readonly = true;
     for (const state of this.annotationStates.states) {
-      if (!state.source.readonly) isMutable = true;
+      if (!state.source.readonly) readonly = false;
       if (state.chunkTransform.value.error !== undefined) continue;
       const properties = state.source.properties.value;
       for (const property of properties) {
         schema.push(property);
       }
     }
-    return { schema, isMutable };
+    return { schema, readonly };
   }
 
   private getPropertyByName(name: string): AnnotationPropertySpec | undefined {
@@ -1053,9 +1052,9 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateView() {
-    const { schema, isMutable } = this.extractSchema();
+    const { schema, readonly } = this.extractSchema();
     this.schema = schema;
-    this.isMutable.value = isMutable;
+    this.readonly.value = readonly;
     this.populateSchemaTable();
   }
 }
