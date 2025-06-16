@@ -16,6 +16,7 @@
 
 /**
  * @file User interface for viewing and editing the annotation schema.
+ * See https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md
  */
 
 import svg_numbers from "ikonate/icons/hash.svg?raw";
@@ -58,12 +59,10 @@ import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 
-type AnnotationType = AnnotationPropertySpec["type"];
-type AnnotationUIType = AnnotationType | "bool";
 const ANNOTATION_TYPES: AnnotationType[] = [
-  "float32",
   "rgb",
   "rgba",
+  "float32",
   "int8",
   "int16",
   "int32",
@@ -73,6 +72,8 @@ const ANNOTATION_TYPES: AnnotationType[] = [
 ];
 const ANNOTATION_UI_TYPES: AnnotationUIType[] = ["bool", ...ANNOTATION_TYPES];
 
+type AnnotationType = AnnotationPropertySpec["type"];
+type AnnotationUIType = AnnotationType | "bool";
 function ensureIsAnnotationType(type: string): asserts type is AnnotationType {
   if (!ANNOTATION_TYPES.includes(type as AnnotationType)) {
     throw new Error(`Invalid annotation type: ${type}`);
@@ -387,7 +388,8 @@ export class AnnotationSchemaView extends Tab {
 
     if (!isBoolean) {
       typeCell.style.cursor = "pointer";
-      typeCell.title = "You can convert to a higher precision, but not back to lower precision.";
+      typeCell.title =
+        "You can convert to a higher precision, but not back to lower precision.";
       typeCell.addEventListener("click", (e) => {
         e.stopPropagation();
         this.showTypeDropdown(typeCell, type, identifier, enumLabels);
@@ -522,7 +524,6 @@ export class AnnotationSchemaView extends Tab {
     type: AnnotationType | "bool",
     index: number,
   ): HTMLDivElement {
-    console.log(type);
     const container = document.createElement("div");
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
@@ -801,16 +802,15 @@ export class AnnotationSchemaView extends Tab {
       // So we handle the numeric types again at the end
 
       const populateDropDown = (types: AnnotationUIType[], isEnum = false) => {
-        let previousHeader: any = null;
+        let previousHeaderText: string | null = null;
         types.forEach((type) => {
-          const newHeader = this.getCategoryForType(type);
-          if (previousHeader !== newHeader) {
-            const headerEl = document.createElement("div");
-            headerEl.className =
-              "neuroglancer-annotation-schema-dropdown-header";
-            headerEl.textContent = newHeader;
-            dropdown?.appendChild(headerEl);
-            previousHeader = newHeader;
+          const newHeaderText = isEnum ? "Enum" : this.getCategoryForType(type);
+          if (previousHeaderText !== newHeaderText) {
+            const header = document.createElement("div");
+            header.className = "neuroglancer-annotation-schema-dropdown-header";
+            header.textContent = newHeaderText;
+            dropdown?.appendChild(header);
+            previousHeaderText = newHeaderText;
           }
 
           const option = document.createElement("div");
@@ -855,10 +855,11 @@ export class AnnotationSchemaView extends Tab {
           dropdown?.appendChild(option);
         });
       };
-      populateDropDown(ANNOTATION_UI_TYPES, true);
+      populateDropDown(ANNOTATION_UI_TYPES, false);
       // Now do it again for the numeric types
       populateDropDown(
         ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
+        true,
       );
 
       document.body.appendChild(dropdown);
@@ -905,7 +906,9 @@ export class AnnotationSchemaView extends Tab {
       const enumLabels =
         "enumLabels" in rowData ? rowData.enumLabels : undefined;
       row.appendChild(this.createNameCell(rowData.identifier, index));
-      row.appendChild(this.createTypeCell(rowData.type, rowData.identifier, enumLabels));
+      row.appendChild(
+        this.createTypeCell(rowData.type, rowData.identifier, enumLabels),
+      );
       row.appendChild(
         this.createDefaultValueCell(rowData.identifier, rowData.type, index),
       );
@@ -962,8 +965,8 @@ export class AnnotationSchemaView extends Tab {
     oldProperty: T,
     newProperty: T,
   ) {
-    console.log("oldProperty: ", oldProperty)
-    console.log("newProperty: ", newProperty)
+    console.log("oldProperty: ", oldProperty);
+    console.log("newProperty: ", newProperty);
     this.mutableSources.forEach((s) => {
       s.updateProperty(oldProperty, newProperty);
     });
