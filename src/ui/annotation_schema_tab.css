@@ -25,7 +25,8 @@
 
 .neuroglancer-annotation-schema-row:hover
   .neuroglancer-annotation-schema-delete-cell,
-.neuroglancer-annotation-schema-enum-entry:hover .neuroglancer-annotation-schema-delete-icon {
+.neuroglancer-annotation-schema-enum-entry:hover
+  .neuroglancer-annotation-schema-delete-icon {
   opacity: 1;
   visibility: visible;
 }
@@ -103,6 +104,10 @@
   width: 100%;
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
+}
+
+.neuroglancer-annotation-schema-default-value-cell[data-enums="true"] {
+  flex: 2;
 }
 
 .neuroglancer-annotation-schema-default-value-cell-container {

@@ -189,11 +189,12 @@ export class AnnotationSchemaView extends Tab {
 
   private createTableCell = (
     content: string | HTMLElement,
-    className: string = "_",
+    className?: string,
   ): HTMLDivElement => {
     const cell = document.createElement("div");
-    if (className !== undefined) {
-      cell.classList.add("neuroglancer-annotation-schema-cell", className);
+    cell.classList.add("neuroglancer-annotation-schema-cell");
+    if (className) {
+      cell.classList.add(className);
     }
 
     if (typeof content === "string") {
@@ -263,7 +264,7 @@ export class AnnotationSchemaView extends Tab {
       id: `name-${index}`,
       className: "neuroglancer-annotation-schema-name-input",
     });
-    const cell = this.createTableCell(nameInput);
+    const cell = this.createTableCell(nameInput, "");
     nameInput.dataset.readonly = String(this.readonly.value);
     if (this.readonly.value) return cell;
     // TODO (Sean) maybe need to call removeEventListener
@@ -389,7 +390,10 @@ export class AnnotationSchemaView extends Tab {
     const typeText = this.createTypeTextElement(type, enumLabels);
     const iconWrapper = this.createIconWrapper(type, enumLabels);
 
-    const typeCell = this.createTableCell(iconWrapper, "neuroglancer-annotation-schema-type-cell");
+    const typeCell = this.createTableCell(
+      iconWrapper,
+      "neuroglancer-annotation-schema-type-cell",
+    );
     typeCell.appendChild(typeText);
 
     const isBoolean = this.isBooleanType(enumLabels);
@@ -556,7 +560,10 @@ export class AnnotationSchemaView extends Tab {
     const oldProperty = this.getPropertyByName(identifier);
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
-      return this.createTableCell(container, "default-value");
+      return this.createTableCell(
+        container,
+        "neuruoglancer-annotation-schema-default-value-cell",
+      );
     }
     if (type.startsWith("rgb")) {
       const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
@@ -751,7 +758,22 @@ export class AnnotationSchemaView extends Tab {
         input.addEventListener("change", changeFunction);
       }
     });
-    return this.createTableCell(container);
+    const cell = this.createTableCell(
+      container,
+      "neuroglancer-annotation-schema-default-value-cell",
+    );
+    cell.dataset.enums = String(this.hasEnums());
+    return cell;
+  }
+
+  private hasEnums(): Boolean {
+    const schema = this.schema;
+    return schema.some(
+      (property) =>
+        "enumValues" in property &&
+        property.enumValues &&
+        property.enumValues.length > 0,
+    );
   }
 
   private mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationType {
