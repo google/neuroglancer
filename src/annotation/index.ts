@@ -1290,7 +1290,7 @@ export function canConvertTypes(
   const isOldTypeNumeric = isAnnotationTypeNumeric(oldType);
   const isNewTypeNumeric = isAnnotationTypeNumeric(newType);
   if (isOldTypeNumeric !== isNewTypeNumeric) return false;
-  if (!isOldTypeNumeric) return true;
+  if (oldType === "rgb" && newType === "rgba") return true;
   if (newType === "float32") return true;
 
   // Can convert between uint or int if newType is higher precision.
@@ -1379,7 +1379,7 @@ export class LocalAnnotationSource extends AnnotationSource {
     const { type: oldType } = oldProperty;
     const { type: newType } = newProperty;
     const isConvertible = canConvertTypes(oldType, newType);
-    if (isConvertible) {
+    if (!isConvertible) {
       console.error(
         `Cannot convert property ${oldProperty.identifier} from ${oldProperty.type} to ${newProperty.type}`,
       );

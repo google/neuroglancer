@@ -209,12 +209,10 @@ export class AnnotationSchemaView extends Tab {
       tableHeaders = [...tableHeaders];
     }
 
-    // Initialize Table
     const addButtonField = document.createElement("div");
     addButtonField.className =
       "neuroglancer-annotation-schema-add-button-field";
 
-    // Create Header Row
     const headerRow = document.createElement("div");
     headerRow.classList.add("neuroglancer-annotation-schema-header-row");
     tableHeaders.forEach((text) => {
@@ -426,6 +424,7 @@ export class AnnotationSchemaView extends Tab {
     this.addDropdownDismissHandler(dropdown);
   }
 
+  // TODO a bit unfortunate that we can open multiple of these
   private createDropdownElement(
     availableOptions: AnnotationType[],
     currentType: string,
@@ -483,7 +482,7 @@ export class AnnotationSchemaView extends Tab {
 
   private handleTypeChange(
     cell: HTMLElement,
-    newType: string,
+    newType: AnnotationType,
     identifier: string,
     enumLabels?: string[],
   ) {
@@ -513,10 +512,24 @@ export class AnnotationSchemaView extends Tab {
       console.warn(`Property with name ${identifier} not found.`);
       return;
     }
-    // this.updateProperty(oldProperty, {
-    //   ...oldProperty,
-    //   type: this.mapUITypeToAnnotationType(newType)
-    // });
+    let defaultValue = oldProperty.default;
+    if (oldProperty.type === "rgb" && newType === "rgba") {
+      // Add alpha = 1 to the default value
+      const oldColor = unpackRGB(oldProperty.default);
+      const newColor = vec4.fromValues(
+        oldColor[0],
+        oldColor[1],
+        oldColor[2],
+        1,
+      );
+      defaultValue = packColor(newColor);
+    }
+
+    this.updateProperty(oldProperty, {
+      ...oldProperty,
+      type: this.mapUITypeToAnnotationType(newType),
+      default: defaultValue,
+    });
   }
 
   private createDefaultValueCell(
@@ -527,28 +540,6 @@ export class AnnotationSchemaView extends Tab {
     const container = document.createElement("div");
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
-
-    // SKM -- already did this, keeping for reference in case we need to revisit
-    // I would instead get this switch statement to just create the element
-    // and give us that element
-    // we will have to add an event listener to that element
-    // which is tricky to do in the current implementation
-    // This needs a bit of thought to do it best.
-    // I think our best strategy is not to switch directly on the type
-    // but to switch on the type of the input we want to create
-    // So this would involve a mapping of types to input types
-
-    // Something like this:
-    // const inputType = typeToInputTypeMap[type] || "text";
-    // and then we would create the input element based on that
-    // at the end, we'd have a list of the input elements after coming out of the switch
-    // then we could call something like
-    // if (this.isMutable.value) {
-    //   inputElements.forEach(element => addEventListener("change", (event) => {
-    //    this.updateProperty(property, { ...property, defaultValue: element.value });
-    // except for RBGa because it has two inputs
-    // Then for enums this also gets handled a bit differently
-    // because we are not passing a defaultValue, but rather a list of enum options
 
     let inputs: HTMLInputElement[] = [];
     let changeFunction: (event: Event) => void;
@@ -592,6 +583,7 @@ export class AnnotationSchemaView extends Tab {
             newColor[2],
             newAlpha,
           );
+          console.log("newColor: ", newColor, packColor(colorVec));
           this.updateProperty(oldProperty, {
             ...oldProperty,
             default: packColor(colorVec),
@@ -837,9 +829,7 @@ export class AnnotationSchemaView extends Tab {
             () => (option.style.backgroundColor = ""),
           );
           option.addEventListener("click", () => {
-            const name = this.ensureUniqueName(
-              displayName.replace(/\s+/g, "_"),
-            );
+            const name = this.ensureUniqueName(type.replace(/\s+/g, "_"));
             const newProperty = {
               type: this.mapUITypeToAnnotationType(type),
               identifier: name,
