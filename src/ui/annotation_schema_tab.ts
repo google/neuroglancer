@@ -59,6 +59,7 @@ import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { removeChildren } from "#src/util/dom.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -75,11 +76,6 @@ const ANNOTATION_UI_TYPES: AnnotationUIType[] = ["bool", ...ANNOTATION_TYPES];
 
 type AnnotationType = AnnotationPropertySpec["type"];
 type AnnotationUIType = AnnotationType | "bool";
-function ensureIsAnnotationType(type: string): asserts type is AnnotationType {
-  if (!ANNOTATION_TYPES.includes(type as AnnotationType)) {
-    throw new Error(`Invalid annotation type: ${type}`);
-  }
-}
 
 interface InputConfig {
   type: string;
@@ -108,6 +104,8 @@ function isEnumType(enumValues?: string[]): boolean {
 class AnnotationUIProperty extends RefCounted {
   public element: HTMLDivElement = document.createElement("div");
   private defaultValueElements: HTMLInputElement[] = [];
+  private typeChangeDropdown: HTMLDivElement | null = null;
+  private typeChanged = new NullarySignal();
   constructor(
     public spec: AnnotationPropertySpec,
     private parentView: AnnotationSchemaView,
@@ -213,12 +211,10 @@ class AnnotationUIProperty extends RefCounted {
     const cell = this.createTableCell(nameInput, "");
     nameInput.dataset.readonly = String(this.readonly);
     if (this.readonly) return cell;
-    // TODO (Sean) maybe need to call removeEventListener
-    // when the table is updated
-    nameInput.addEventListener("change", () => {
-      const rawValue = nameInput.value;
-      // TODO (Sean) there needs to be a signal for the selected state
-      // to now show the new name
+    this.registerEventListener(nameInput, "change", (event: Event) => {
+      // If the input is readonly, we don't want to do anything
+      if (this.readonly) return;
+      const rawValue = (event.target as HTMLInputElement).value;
       let sanitizedValue = rawValue.replace(/\s+/g, "_");
       if (sanitizedValue === "") {
         sanitizedValue = identifier;
@@ -250,9 +246,9 @@ class AnnotationUIProperty extends RefCounted {
       typeCell.style.cursor = "pointer";
       typeCell.title =
         "You can convert to a higher precision, but not back to lower precision.";
-      typeCell.addEventListener("click", (e) => {
+      this.registerEventListener(typeCell, "click", (e: MouseEvent) => {
         e.stopPropagation();
-        this.showTypeChangeDropdown(typeCell, type, identifier, enumLabels);
+        this.showTypeChangeDropdown(typeCell, type, identifier);
       });
     }
 
@@ -459,7 +455,7 @@ class AnnotationUIProperty extends RefCounted {
     inputs.forEach((input) => {
       container.appendChild(input);
       if (!this.readonly) {
-        input.addEventListener("change", changeFunction);
+        this.registerEventListener(input, "change", changeFunction);
       }
     });
     this.defaultValueElements = inputs;
@@ -478,14 +474,28 @@ class AnnotationUIProperty extends RefCounted {
     const readonly = this.readonly;
     input.dataset.readonly = String(readonly);
     input.disabled = readonly;
-    if (this.readonly && config.type === "number") {
+    if (!this.readonly && config.type === "number") {
       if (numberConfig?.min !== undefined) input.min = String(numberConfig.min);
       if (numberConfig?.max !== undefined) input.max = String(numberConfig.max);
       if (numberConfig?.step !== undefined)
         input.step = String(numberConfig.step);
-      // TODO (SKM) might want to allow adjust via mouse wheel
-      // But will need to unregister the event listener
-      // this.registerEventListener(input, "wheel", (event: WheelEvent) => {
+      this.registerEventListener(input, "wheel", (event: WheelEvent) => {
+        const deltaY = event.deltaY;
+        if (deltaY === 0) return; // No change
+        const currentValue = parseFloat(input.value);
+        const step = numberConfig?.step || 1;
+        const newValue = deltaY < 0 ? currentValue + step : currentValue - step;
+        // Ensure the new value is within bounds
+        if (
+          (numberConfig?.min === undefined || newValue >= numberConfig.min) &&
+          (numberConfig?.max === undefined || newValue <= numberConfig.max)
+        ) {
+          input.value = String(newValue);
+          // Trigger change event
+          const changeEvent = new Event("change", { bubbles: true });
+          input.dispatchEvent(changeEvent);
+        }
+      });
     }
     input.type = config.type;
     input.value = config.value || "";
@@ -517,7 +527,6 @@ class AnnotationUIProperty extends RefCounted {
     anchorElement: HTMLElement,
     currentType: AnnotationType,
     identifier: string,
-    enumLabels?: string[],
   ) {
     const availableOptions: AnnotationType[] = [];
     for (const type of ANNOTATION_TYPES) {
@@ -526,54 +535,54 @@ class AnnotationUIProperty extends RefCounted {
       }
     }
 
-    const dropdown = this.createDropdownElement(
-      availableOptions,
-      currentType,
-      identifier,
-      enumLabels,
-      anchorElement,
-    );
-    if (dropdown.children.length === 0) return;
+    if (!this.typeChangeDropdown) {
+      this.createDropdownElement(availableOptions, identifier);
+    }
+    const dropdown = this.typeChangeDropdown!;
 
     document.body.appendChild(dropdown);
     this.positionDropdown(dropdown, anchorElement);
-    this.addDropdownDismissHandler(dropdown);
+    const clickOutsideHandler = (e: MouseEvent) => {
+      if (!dropdown.contains(e.target as Node)) {
+        dropdown.remove();
+        document.removeEventListener("click", clickOutsideHandler);
+      }
+    };
+    document.addEventListener("click", clickOutsideHandler);
+    this.registerDisposer(
+      this.typeChanged.add(() =>
+        document.removeEventListener("click", clickOutsideHandler),
+      ),
+    );
   }
 
   // TODO a bit unfortunate that we can open multiple of these
   private createDropdownElement(
     availableOptions: AnnotationType[],
-    currentType: string,
     identifier: string,
-    enumLabels: string[] | undefined,
-    anchorElement: HTMLElement,
-  ): HTMLDivElement {
+  ) {
     const dropdown = document.createElement("div");
     dropdown.className = "neuroglancer-annotation-schema-dropdown";
 
-    availableOptions.forEach((item) => {
+    availableOptions.forEach((newType) => {
       const option = document.createElement("div");
       option.className = "neuroglancer-annotation-schema-dropdown-option";
 
-      const iconWrapper = this.createIconWrapper(item);
+      const iconWrapper = this.createIconWrapper(newType);
       const label = document.createElement("span");
-      label.textContent = this.getDisplayNameForType(item);
+      label.textContent = this.getDisplayNameForType(newType);
 
       option.appendChild(iconWrapper);
       option.appendChild(label);
 
-      option.addEventListener("click", (e) => {
+      this.registerEventListener(option, "click", (e: MouseEvent) => {
         e.stopPropagation();
-        if (item !== currentType) {
-          this.handleTypeChange(anchorElement, item, identifier, enumLabels);
-        }
+        this.handleTypeChange(newType, identifier);
         dropdown.remove();
       });
-
       dropdown.appendChild(option);
     });
-
-    return dropdown;
+    this.typeChangeDropdown = dropdown;
   }
   private createIconWrapper(
     type: AnnotationType,
@@ -597,44 +606,8 @@ class AnnotationUIProperty extends RefCounted {
     dropdown.style.top = `${rect.bottom}px`;
   }
 
-  private addDropdownDismissHandler(dropdown: HTMLDivElement) {
-    const clickOutsideHandler = (e: MouseEvent) => {
-      if (!dropdown.contains(e.target as Node)) {
-        dropdown.remove();
-        document.removeEventListener("click", clickOutsideHandler);
-      }
-    };
-    document.addEventListener("click", clickOutsideHandler);
-  }
-
-  private handleTypeChange(
-    cell: HTMLElement,
-    newType: AnnotationType,
-    identifier: string,
-    enumLabels?: string[],
-  ) {
-    const iconWrapper = cell.querySelector(
-      ".neuroglancer-annotation-schema-cell-icon-wrapper",
-    );
-    const typeText = cell.querySelector(
-      "span:not(.neuroglancer-annotation-schema-cell-icon-wrapper)",
-    );
+  private handleTypeChange(newType: AnnotationType, identifier: string) {
     const oldProperty = this.getPropertyByIdentifier(identifier);
-
-    if (!iconWrapper || !typeText) return;
-
-    ensureIsAnnotationType(newType);
-    const displayName = this.getDisplayNameForType(newType, enumLabels);
-    iconWrapper.innerHTML = this.getIconForType(newType, enumLabels);
-
-    if (isBooleanType(enumLabels)) {
-      typeText.textContent = "Boolean";
-    } else if (isEnumType(enumLabels)) {
-      typeText.textContent = `${displayName} Enum`;
-    } else {
-      typeText.textContent = displayName;
-    }
-
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
       return;
@@ -652,9 +625,10 @@ class AnnotationUIProperty extends RefCounted {
       defaultValue = packColor(newColor);
     }
 
+    this.typeChanged.dispatch();
     this.updateProperty(oldProperty, {
       ...oldProperty,
-      type: this.parentView.mapUITypeToAnnotationType(newType),
+      type: newType,
       default: defaultValue,
     });
   }
