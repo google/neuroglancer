@@ -659,6 +659,7 @@ export class AnnotationSchemaView extends Tab {
   private schemaViewTextElement = document.createElement("p");
   private schemaPasteButton: HTMLElement;
   private schema: Readonly<AnnotationPropertySpec[]> = [];
+  private defaultValueHeaderCell: HTMLDivElement | null = null;
   public annotationUIProperties: Map<string, AnnotationUIProperty> = new Map();
   public readonly: WatchableValueInterface<boolean>;
 
@@ -819,7 +820,14 @@ export class AnnotationSchemaView extends Tab {
     const headerRow = document.createElement("div");
     headerRow.classList.add("neuroglancer-annotation-schema-header-row");
     tableHeaders.forEach((text) => {
-      headerRow.appendChild(this.createTableCell(text));
+      const cell = this.createTableCell(text);
+      if (text === "Default value") {
+        cell.classList.add(
+          "neuroglancer-annotation-schema-default-value-header",
+        );
+      }
+      this.defaultValueHeaderCell = cell;
+      headerRow.appendChild(cell);
     });
     // Append a blank cell for the delete icon
     if (!this.readonly.value) {
@@ -1171,6 +1179,10 @@ export class AnnotationSchemaView extends Tab {
     const { schema, readonly } = this.extractSchema();
     this.schema = schema;
     this.readonly.value = readonly;
+    const hasEnums = this.includesEnumProperties();
+    if (this.defaultValueHeaderCell) {
+      this.defaultValueHeaderCell.dataset.enums = String(hasEnums);
+    }
     this.populateSchemaTable();
   }
 }

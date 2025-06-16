@@ -106,7 +106,8 @@
   padding-bottom: 0.25rem;
 }
 
-.neuroglancer-annotation-schema-default-value-cell[data-enums="true"] {
+.neuroglancer-annotation-schema-default-value-cell[data-enums="true"],
+.neuroglancer-annotation-schema-default-value-header[data-enums="true"] {
   flex: 2;
 }
 
@@ -184,6 +185,10 @@
   border: none;
   background: rgba(255, 255, 255, 0.3);
   color: white;
+}
+
+.neuroglancer-annotation-schema-default-input[data-readonly="true"] {
+  background: none;
 }
 
 .neuroglancer-annotation-schema-default-input[data-readonly="false"]:hover {
