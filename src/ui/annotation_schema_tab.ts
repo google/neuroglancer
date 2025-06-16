@@ -183,6 +183,7 @@ class AnnotationUIProperty extends RefCounted {
       this.createDefaultValueCell(spec.identifier, spec.type),
     );
 
+    // TODO skm needs to listen?
     // Delete Cell
     if (!readonly) {
       const deleteIcon = document.createElement("span");
@@ -233,7 +234,6 @@ class AnnotationUIProperty extends RefCounted {
   ): HTMLDivElement {
     const typeText = this.createTypeTextElement(type, enumLabels);
     const iconWrapper = this.createIconWrapper(type, enumLabels);
-
     const typeCell = this.createTableCell(
       iconWrapper,
       "neuroglancer-annotation-schema-type-cell",
@@ -241,9 +241,9 @@ class AnnotationUIProperty extends RefCounted {
     typeCell.appendChild(typeText);
 
     const isBoolean = isBooleanType(enumLabels);
-
-    if (!isBoolean && !this.readonly) {
-      typeCell.style.cursor = "pointer";
+    const readonly = this.readonly || isBoolean;
+    typeCell.dataset.readonly = String(readonly);
+    if (!readonly) {
       typeCell.title =
         "You can convert to a higher precision, but not back to lower precision.";
       this.registerEventListener(typeCell, "click", (e: MouseEvent) => {
@@ -563,6 +563,11 @@ class AnnotationUIProperty extends RefCounted {
   ) {
     const dropdown = document.createElement("div");
     dropdown.className = "neuroglancer-annotation-schema-dropdown";
+
+    const header = document.createElement("div");
+    header.className = "neuroglancer-annotation-schema-dropdown-header";
+    header.textContent = "Change type (click to select)";
+    dropdown.appendChild(header);
 
     availableOptions.forEach((newType) => {
       const option = document.createElement("div");
