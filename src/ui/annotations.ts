@@ -28,6 +28,7 @@ import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   Annotation,
   AnnotationId,
+  AnnotationNumericPropertySpec,
   AnnotationReference,
   AxisAlignedBoundingBox,
   Ellipsoid,
@@ -40,6 +41,7 @@ import {
   AnnotationType,
   annotationTypeHandlers,
   formatNumericProperty,
+  propertyTypeDataType,
 } from "#src/annotation/index.js";
 import {
   AnnotationLayer,
@@ -78,6 +80,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
+  packColor,
   serializeColor,
   unpackRGB,
   unpackRGBA,
@@ -88,7 +91,7 @@ import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
-import { vec3 } from "#src/util/geom.js";
+import { vec3, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
 import {
   EventActionMap,
@@ -111,6 +114,20 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
+
+export function isBooleanType(enumLabels?: string[]): boolean {
+  return (
+    (enumLabels?.includes("False") &&
+      enumLabels?.includes("True") &&
+      enumLabels.length === 2) ||
+    false
+  );
+}
+export function isEnumType(enumLabels?: string[]): boolean {
+  return (enumLabels && enumLabels.length > 0) || false;
+}
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -1905,52 +1922,54 @@ export function UserLayerWithAnnotationsMixin<
                   const value = annotation.properties[i];
                   let valueElement: HTMLElement;
                   let valueElementSetter: (value: any) => void;
-                  if (sourceReadonly) {
-                    valueElement = document.createElement("span");
-                    valueElementSetter = (value) => {
-                      valueElement.textContent = value;
-                    };
-                  } else {
-                    // TODO check how components in shader widgets etc are made
-                    // to try and reuse them
-                    valueElement = document.createElement("input");
-                    // TODO type based on property.type
-                    (valueElement as HTMLInputElement).type = "number";
-                    // TODO RGBA color might need two inputs
-                    valueElementSetter = (value) => {
-                      (valueElement as HTMLInputElement).value = value;
-                    };
-                    (valueElement as HTMLInputElement).addEventListener(
-                      "change",
-                      () => {
-                        const x = (valueElement as HTMLInputElement).value;
+                  const changeFunction = sourceReadonly
+                    ? (inputValue: any) => {
+                        inputValue;
+                      }
+                    : (inputValue: any) => {
                         const newAnnotation = reference.value;
-                        // TODO switch on type
-                        newAnnotation!.properties[i] = Number(x);
-                        annotationLayer.source.update(
-                          reference,
-                          newAnnotation!,
-                        );
+                        if (newAnnotation == null) {
+                          return;
+                        }
+                        newAnnotation.properties[i] = inputValue;
+                        annotationLayer.source.update(reference, newAnnotation);
                         annotationLayer.source.commit(reference);
-                      },
-                    );
-                  }
+                      };
+                  valueElement = document.createElement("span");
+                  valueElementSetter = (value) => {
+                    valueElement.textContent = value;
+                  };
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
                   );
-                  switch (property.type) {
-                    case "rgb": {
-                      const colorVec = unpackRGB(value);
+                  valueElement.dataset.readonly = sourceReadonly.toString();
+                  const makeColorWidget = (inputColor: vec3) => {
+                    const watchableColor = new WatchableValue(inputColor);
+                    const colorInput = new ColorWidget(watchableColor);
+                    colorInput.element.classList.add(
+                      "neuroglancer-annotation-property-color",
+                    );
+                    return colorInput;
+                  };
+                  if (property.type === "rgb") {
+                    const colorVec = unpackRGB(value);
+                    if (sourceReadonly) {
                       const hex = serializeColor(colorVec);
                       valueElementSetter(hex);
                       valueElement.style.backgroundColor = hex;
                       valueElement.style.color = useWhiteBackground(colorVec)
                         ? "white"
                         : "black";
-                      break;
+                    } else {
+                      const colorInput = makeColorWidget(colorVec);
+                      colorInput.element.addEventListener("change", () => {
+                        changeFunction(packColor(colorInput.getRGB()));
+                      });
+                      valueElement = colorInput.element;
                     }
-                    case "rgba": {
-                      const colorVec = unpackRGB(value);
+                  } else if (property.type === "rgba") {
+                    const colorVec = unpackRGB(value);
+                    if (sourceReadonly) {
                       valueElementSetter(serializeColor(unpackRGBA(value)));
                       valueElement.style.backgroundColor = serializeColor(
                         unpackRGB(value),
@@ -1958,14 +1977,113 @@ export function UserLayerWithAnnotationsMixin<
                       valueElement.style.color = useWhiteBackground(colorVec)
                         ? "white"
                         : "black";
-                      break;
+                    } else {
+                      const colorInput = makeColorWidget(colorVec);
+                      const alpha = unpackRGBA(value)[3];
+                      const alphaInput = createBoundedNumberInputElement(
+                        {
+                          inputValue: alpha,
+                        },
+                        {
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                        },
+                      );
+                      const rgbaContainer = document.createElement("div");
+                      rgbaContainer.classList.add(
+                        "neuroglancer-annotation-property-container",
+                      );
+                      rgbaContainer.appendChild(colorInput.element);
+                      rgbaContainer.appendChild(alphaInput);
+                      valueElement = rgbaContainer;
+                      const rgbaChangeFunction = () => {
+                        const rgb = colorInput.getRGB();
+                        const alpha = alphaInput.valueAsNumber;
+                        const colorVec = vec4.fromValues(
+                          rgb[0],
+                          rgb[1],
+                          rgb[2],
+                          alpha,
+                        );
+                        changeFunction(packColor(colorVec));
+                      };
+                      colorInput.element.addEventListener("change", () =>
+                        rgbaChangeFunction(),
+                      );
+                      alphaInput.addEventListener("change", () =>
+                        rgbaChangeFunction(),
+                      );
                     }
-                    default:
-                      const valueToSet = sourceReadonly
-                        ? formatNumericProperty(property, value)
-                        : value;
+                  } else {
+                    if (sourceReadonly) {
+                      const valueToSet = formatNumericProperty(
+                        property as AnnotationNumericPropertySpec,
+                        value,
+                      );
                       valueElementSetter(valueToSet);
-                      break;
+                    } else {
+                      const propertyAsNum =
+                        property as AnnotationNumericPropertySpec;
+                      const isBool = isBooleanType(propertyAsNum.enumLabels);
+                      const isEnum = isEnumType(propertyAsNum.enumLabels);
+                      if (isBool) {
+                        const input = document.createElement("input");
+                        input.type = "checkbox";
+                        input.checked = Boolean(value);
+                        input.addEventListener("change", () => {
+                          changeFunction(input.checked ? 1 : 0);
+                        });
+                        valueElement = input;
+                      } else if (isEnum) {
+                        // Make a dropdown which combines the enum labels and values.
+                        const options = [];
+                        for (
+                          let j = 0;
+                          j < propertyAsNum.enumLabels!.length;
+                          ++j
+                        ) {
+                          options.push({
+                            label: propertyAsNum.enumLabels![j],
+                            value: propertyAsNum.enumValues![j],
+                          });
+                        }
+                        const select = document.createElement("select");
+                        select.classList.add(
+                          "neuroglancer-annotation-property-select",
+                        );
+                        for (const option of options) {
+                          const optionElement =
+                            document.createElement("option");
+                          optionElement.value = String(option.value);
+                          optionElement.textContent = `${option.label} (${numberToStringFixed(option.value, 2)})`;
+                          select.appendChild(optionElement);
+                        }
+                        select.value = String(value);
+                        select.addEventListener("change", () => {
+                          changeFunction(select.value);
+                        });
+                        valueElement = select;
+                      } else {
+                        const input = createBoundedNumberInputElement(
+                          {
+                            inputValue: value,
+                          },
+                          {
+                            dataType: propertyTypeDataType[propertyAsNum.type],
+                          },
+                        );
+                        valueElement = input;
+                        valueElement.addEventListener("change", () => {
+                          const inputValue = input.valueAsNumber;
+                          if (propertyAsNum.type !== "float32") {
+                            changeFunction(Math.floor(inputValue));
+                          } else {
+                            changeFunction(inputValue);
+                          }
+                        });
+                      }
+                    }
                   }
                   label.appendChild(valueElement);
                   parent.appendChild(label);
