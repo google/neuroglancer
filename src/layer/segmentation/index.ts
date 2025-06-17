@@ -518,6 +518,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     );
   }
 
+  bounds: WatchableValue<Float32Array|undefined> = new WatchableValue(undefined);
+
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
   saturation = trackableAlphaValue(1.0);

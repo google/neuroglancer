@@ -27,7 +27,7 @@ import type {
   DataType,
 } from "#src/sliceview/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
-import type { mat4 } from "#src/util/geom.js";
+import type { mat4, vec3 } from "#src/util/geom.js";
 import type { FetchOk, HttpError } from "#src/util/http_request.js";
 
 export const PYCG_APP_VERSION = 1;
@@ -59,8 +59,12 @@ export class MeshSourceParameters {
   lod: number;
   sharding: Array<ShardingParameters> | undefined;
   nBitsForLayerId: number;
-
+  chunkSize: vec3;
   static RPC_ID = "graphene/MeshSource";
+}
+
+export class MeshSourceParametersWithFocus extends MeshSourceParameters {
+  focusBoundingBox: number;
 }
 
 export class MultiscaleMeshMetadata {
@@ -172,3 +176,17 @@ export function getHttpSource(
   }
   return { fetchOkImpl, baseUrl: joinBaseUrlAndPath(baseUrl, path) };
 }
+
+export const startLayerForBBox = (
+  focusBoundingBox: Float32Array<ArrayBufferLike>,
+  chunkSize: vec3,
+) => {
+  const rank = 3; // TODO need to change vec3 otherwise it doesn't make sense to make this a variable
+  let minChunks = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < rank; i++) {
+    const length = focusBoundingBox[i + rank] - focusBoundingBox[i];
+    const numChunks = Math.ceil(length / chunkSize[i]);
+    minChunks = Math.min(minChunks, numChunks);
+  }
+  return 2 + Math.max(0, Math.floor(Math.log2(minChunks / 1)));
+};

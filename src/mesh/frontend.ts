@@ -54,7 +54,10 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import {
+  makeCachedDerivedWatchableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import type { Borrowed, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
 import {
@@ -349,19 +352,29 @@ export class MeshShaderManager {
   }
 
   makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
-    const silhouetteRenderingEnabled = layer.registerDisposer(
-      makeCachedDerivedWatchableValue(
-        (x) => x > 0,
-        [layer.displayState.silhouetteRendering],
-      ),
+    const parameters = makeCachedDerivedWatchableValue(
+      (silhouetteRendering: number, bounds: Float32Array | undefined) => {
+        return {
+          silhouetteRenderingEnabled: silhouetteRendering > 0,
+          bounds,
+        };
+      },
+      [
+        layer.displayState.silhouetteRendering,
+        layer.displayState.bounds || new WatchableValue(undefined),
+      ],
     );
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
-      parameters: silhouetteRenderingEnabled,
-      defineShader: (builder, silhouetteRenderingEnabled) => {
+      parameters,
+      defineShader: (builder, { silhouetteRenderingEnabled, bounds }) => {
+        const cullingEnabled = bounds !== undefined;
         this.vertexPositionHandler.defineShader(builder);
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
+        if (cullingEnabled) {
+          builder.addVarying("highp float", "vDiscard");
+        }
         builder.addUniform("highp vec4", "uLightDirection");
         builder.addUniform("highp vec4", "uColor");
         builder.addUniform("highp mat3", "uNormalMatrix");
@@ -400,8 +413,41 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 `;
         }
+        if (cullingEnabled) {
+          vertexMain += `
+if ((vertexPosition.x < ${bounds[0].toFixed(1)}f) ||
+    (vertexPosition.y < ${bounds[1].toFixed(1)}f) ||
+    (vertexPosition.z < ${bounds[2].toFixed(1)}f) ||
+    (vertexPosition.x > ${bounds[3].toFixed(1)}f) ||
+    (vertexPosition.y > ${bounds[4].toFixed(1)}f) ||
+    (vertexPosition.z > ${bounds[5].toFixed(1)}f)) {
+  vDiscard = 1.0f;
+}
+`;
+          // alternate idea but culling doesn't seem to have a significant performance impact
+          //           vertexMain += `
+          // vDiscard += clamp(${bounds[0].toFixed(1)}f - vertexPosition.x, 0.0f, 1.0f);
+          // vDiscard += clamp(vertexPosition.x - ${bounds[3].toFixed(1)}f, 0.0f, 1.0f);
+
+          // vDiscard += clamp(${bounds[1].toFixed(1)}f - vertexPosition.y, 0.0f, 1.0f);
+          // vDiscard += clamp(vertexPosition.y - ${bounds[4].toFixed(1)}f, 0.0f, 1.0f);
+
+          // vDiscard += clamp(${bounds[2].toFixed(1)}f - vertexPosition.z, 0.0f, 1.0f);
+          // vDiscard += clamp(vertexPosition.z - ${bounds[5].toFixed(1)}f, 0.0f, 1.0f);
+          // `;
+        }
         builder.setVertexMain(vertexMain);
-        builder.setFragmentMain("emit(vColor, uPickID);");
+        let fragmentMain = `
+emit(vColor, uPickID);
+`;
+        if (cullingEnabled) {
+          fragmentMain += `
+if (vDiscard > 0.0f) {
+  discard;
+}
+`;
+        }
+        builder.setFragmentMain(fragmentMain);
       },
     });
   }
@@ -409,6 +455,7 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 
 export interface MeshDisplayState extends SegmentationDisplayState3D {
   silhouetteRendering: WatchableValueInterface<number>;
+  bounds?: WatchableValueInterface<Float32Array|undefined>;
 }
 
 export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
