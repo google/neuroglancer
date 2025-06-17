@@ -105,6 +105,7 @@ function isEnumType(enumValues?: string[]): boolean {
 
 class AnnotationUIProperty extends RefCounted {
   public element: HTMLDivElement = document.createElement("div");
+  private defaultValueCell: HTMLDivElement | null = null;
   private defaultValueElements: HTMLInputElement[] = [];
   private typeChangeDropdown: HTMLDivElement | null = null;
   private typeChanged = new NullarySignal();
@@ -119,6 +120,10 @@ class AnnotationUIProperty extends RefCounted {
   }
   get readonly() {
     return this.parentView.readonly.value;
+  }
+  public updateTableRowSize(hasEnums: boolean) {
+    if (this.defaultValueCell === null) return;
+    this.defaultValueCell.dataset.enums = String(hasEnums);
   }
   private removeProperty(indentifier: string) {
     this.parentView.removeProperty(indentifier);
@@ -474,6 +479,7 @@ class AnnotationUIProperty extends RefCounted {
       "neuroglancer-annotation-schema-default-value-cell",
     );
     cell.dataset.enums = String(this.parentView.includesEnumProperties());
+    this.defaultValueCell = cell;
     return cell;
   }
   private createInputElement(
@@ -830,6 +836,7 @@ export class AnnotationSchemaView extends Tab {
   private populateSchemaTable() {
     this.updateSchemaRepresentation();
     removeChildren(this.schemaTableBody);
+    const hasEnums = this.includesEnumProperties();
     this.schema.forEach((property) => {
       const annotationUIProperty = this.annotationUIProperties.get(
         property.identifier,
@@ -840,6 +847,7 @@ export class AnnotationSchemaView extends Tab {
         );
         return;
       }
+      annotationUIProperty.updateTableRowSize(hasEnums);
       this.schemaTableBody.appendChild(annotationUIProperty.element);
     });
   }
@@ -1041,7 +1049,7 @@ export class AnnotationSchemaView extends Tab {
     return svg_palette;
   }
 
-  includesEnumProperties(): Boolean {
+  includesEnumProperties(): boolean {
     const schema = this.schema;
     return schema.some(
       (property) =>
