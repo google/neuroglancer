@@ -1409,7 +1409,6 @@ export class LocalAnnotationSource extends AnnotationSource {
     oldProperty: AnnotationPropertySpec,
     newProperty: AnnotationPropertySpec,
   ) {
-    // Can only convert between numeric types.
     const { type: oldType } = oldProperty;
     const { type: newType } = newProperty;
     const isConvertible = canConvertTypes(oldType, newType);
@@ -1421,9 +1420,6 @@ export class LocalAnnotationSource extends AnnotationSource {
     }
 
     const convertValue = (value: any) => {
-      if (value === oldProperty.default) {
-        return newProperty.default;
-      }
       if (oldType === "rgb" && newType === "rgba") {
         const rgba = new Uint8Array(4);
         rgba[0] = value[0];
