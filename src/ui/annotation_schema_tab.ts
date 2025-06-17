@@ -357,13 +357,18 @@ class AnnotationUIProperty extends RefCounted {
             let suggestedEnumValue = 0;
             while (enumValues.includes(suggestedEnumValue))
               ++suggestedEnumValue;
+            const newEnumValues = [
+              ...oldProperty.enumValues!,
+              suggestedEnumValue,
+            ];
             this.updateProperty(oldProperty, {
               ...oldProperty,
-              enumValues: [...oldProperty.enumValues!, suggestedEnumValue],
+              enumValues: newEnumValues,
               enumLabels: [
                 ...oldProperty.enumLabels!,
                 `${suggestedEnumValue} (label)`,
               ],
+              default: newEnumValues[0], // Set default to the first enum value
             } as AnnotationNumericPropertySpec);
           },
         });
@@ -806,7 +811,7 @@ export class AnnotationSchemaView extends Tab {
         if (!comparedProperties.same) {
           // If only the default value changed, we can update that
           const isNumeric = isAnnotationTypeNumeric(propertySchema.type);
-          if (isNumeric && comparedProperties.defaultValueChanged) {
+          if (isNumeric && comparedProperties.onlyDefaultChanged) {
             annotationUIProperty.setNumericDefaultValueOnly(
               propertySchema.default,
             );

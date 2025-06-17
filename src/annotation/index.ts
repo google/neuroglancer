@@ -568,7 +568,7 @@ export function ensureUniqueAnnotationPropertyIds(
 export function compareAnnotationSpecProperties(
   a: Readonly<AnnotationPropertySpec>,
   b: Readonly<AnnotationPropertySpec>,
-): { same: boolean; defaultValueChanged: boolean } {
+): { same: boolean; onlyDefaultChanged: boolean } {
   const sameExcludingDefault = () => {
     if (a.type !== b.type || a.identifier !== b.identifier) return false;
     if (a.description !== b.description) return false;
@@ -595,8 +595,10 @@ export function compareAnnotationSpecProperties(
     return true;
   };
   const defaultValueChanged = a.default !== b.default;
-  const same = sameExcludingDefault() && !defaultValueChanged;
-  return { same, defaultValueChanged };
+  let same = sameExcludingDefault();
+  const onlyDefaultChanged = same && defaultValueChanged;
+  same = same || defaultValueChanged;
+  return { same, onlyDefaultChanged };
 }
 
 function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
