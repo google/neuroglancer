@@ -568,37 +568,22 @@ export function ensureUniqueAnnotationPropertyIds(
 export function compareAnnotationSpecProperties(
   a: Readonly<AnnotationPropertySpec>,
   b: Readonly<AnnotationPropertySpec>,
-): { same: boolean; onlyDefaultChanged: boolean } {
-  const sameExcludingDefault = () => {
-    if (a.type !== b.type || a.identifier !== b.identifier) return false;
-    if (a.description !== b.description) return false;
-
-    // If there are enum values, we need to check them.
-    if (
-      isAnnotationNumericPropertySpec(a) !== isAnnotationNumericPropertySpec(b)
-    ) {
-      return false;
-    }
-    if (
-      isAnnotationNumericPropertySpec(a) &&
-      isAnnotationNumericPropertySpec(b)
-    ) {
-      if (a.min !== b.min || a.max !== b.max || a.step !== b.step) return false;
-      if (a.enumValues !== b.enumValues) {
-        if (!arraysEqual(a.enumValues || [], b.enumValues || [])) return false;
-      }
-      if (a.enumLabels !== b.enumLabels) {
-        if (!arraysEqual(a.enumLabels || [], b.enumLabels || [])) return false;
-      }
-    }
-    // At this point, we know that everything is the same, except for maybe the default value.
-    return true;
+) {
+  const bothNumeric =
+    isAnnotationNumericPropertySpec(a) && isAnnotationNumericPropertySpec(b);
+  const sameValues = {
+    type: a.type === b.type,
+    identifier: a.identifier === b.identifier,
+    description: a.description === b.description,
+    default: a.default === b.default,
+    enumValues:
+      bothNumeric && arraysEqual(a.enumValues || [], b.enumValues || []),
+    enumLabels:
+      bothNumeric && arraysEqual(a.enumLabels || [], b.enumLabels || []),
   };
-  const defaultValueChanged = a.default !== b.default;
-  let same = sameExcludingDefault();
-  const onlyDefaultChanged = same && defaultValueChanged;
-  same = same || defaultValueChanged;
-  return { same, onlyDefaultChanged };
+  // Same if all of the above are true.
+  const same = Object.values(sameValues).every((x) => x);
+  return { same, sameValues };
 }
 
 function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {

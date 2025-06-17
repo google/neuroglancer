@@ -177,17 +177,15 @@ class AnnotationUIProperty extends RefCounted {
     if (isAnnotationTypeNumeric(type)) {
       this.defaultValueElements[0].value = numberToStringFixed(defaultValue, 4);
     }
+    this.spec.default = defaultValue;
   }
   makeUI() {
     const { element, spec, readonly } = this;
     const enumLabels = "enumLabels" in spec ? spec.enumLabels : undefined;
     element.appendChild(this.createNameCell(spec.identifier));
-    element.appendChild(
-      this.createTypeCell(spec.type, spec.identifier, enumLabels),
-    );
-    element.appendChild(
-      this.createDefaultValueCell(spec.identifier, spec.type),
-    );
+    const type = isBooleanType(enumLabels) ? "bool" : spec.type;
+    element.appendChild(this.createTypeCell(spec.identifier, type, enumLabels));
+    element.appendChild(this.createDefaultValueCell(spec.identifier, type));
 
     if (!readonly) {
       const deleteIcon = document.createElement("span");
@@ -237,8 +235,8 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createTypeCell(
-    type: AnnotationType,
     identifier: string,
+    type: AnnotationUIType,
     enumLabels?: string[],
   ): HTMLDivElement {
     const typeText = this.createTypeTextElement(type, enumLabels);
@@ -249,8 +247,7 @@ class AnnotationUIProperty extends RefCounted {
     );
     typeCell.appendChild(typeText);
 
-    const isBoolean = isBooleanType(enumLabels);
-    const readonly = this.readonly || isBoolean;
+    const readonly = this.readonly || type === "bool";
     typeCell.dataset.readonly = String(readonly);
     if (!readonly) {
       typeCell.title =
@@ -266,8 +263,9 @@ class AnnotationUIProperty extends RefCounted {
 
   private createDefaultValueCell(
     identifier: string,
-    type: AnnotationType | "bool",
+    type: AnnotationUIType,
   ): HTMLDivElement {
+    console.log(type, identifier);
     const container = document.createElement("div");
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
@@ -321,6 +319,22 @@ class AnnotationUIProperty extends RefCounted {
           } as AnnotationColorPropertySpec);
         };
       }
+    } else if (type === "bool") {
+      const boolInput = this.createInputElement({
+        type: "checkbox",
+        value: String(oldProperty.default),
+        className: "neuroglancer-annotation-schema-default-input",
+      });
+      boolInput.checked = oldProperty.default === 1;
+      inputs.push(boolInput);
+      changeFunction = (event: Event) => {
+        const newValue = (event.target as HTMLInputElement).checked;
+        this.updateProperty(oldProperty, {
+          ...oldProperty,
+          default: newValue ? 1 : 0,
+        } as AnnotationPropertySpec);
+      };
+      container.appendChild(boolInput);
     } else if (
       type.startsWith("int") ||
       type.startsWith("uint") ||
@@ -554,12 +568,12 @@ class AnnotationUIProperty extends RefCounted {
     return input;
   }
   private createTypeTextElement(
-    type: AnnotationType,
+    type: AnnotationUIType,
     enumLabels?: string[],
   ): HTMLSpanElement {
     const typeText = document.createElement("span");
 
-    if (isBooleanType(enumLabels)) {
+    if (type === "bool") {
       typeText.textContent = "Boolean";
       return typeText;
     }
@@ -639,7 +653,7 @@ class AnnotationUIProperty extends RefCounted {
     this.typeChangeDropdown = dropdown;
   }
   private createIconWrapper(
-    type: AnnotationType,
+    type: AnnotationUIType,
     enumLabels?: string[],
   ): HTMLSpanElement {
     const iconWrapper = document.createElement("span");
@@ -817,7 +831,16 @@ export class AnnotationSchemaView extends Tab {
         if (!comparedProperties.same) {
           // If only the default value changed, we can update that
           const isNumeric = isAnnotationTypeNumeric(propertySchema.type);
-          if (isNumeric && comparedProperties.onlyDefaultChanged) {
+          let allSame = true;
+          const sameValues = comparedProperties.sameValues;
+          for (const key in sameValues) {
+            if (key === "default") continue; // Skip default value
+            if (!sameValues[key as keyof typeof sameValues]) {
+              allSame = false;
+              break;
+            }
+          }
+          if (isNumeric && allSame && !sameValues.default) {
             annotationUIProperty.setNumericDefaultValueOnly(
               propertySchema.default,
             );
