@@ -53,7 +53,6 @@ import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
 import { saveBlobToFile } from "#src/util/file_download.js";
 import { StatusMessage } from "#src/status.js";
-import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { DataType } from "#src/util/data_type.js";
 import { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
@@ -62,6 +61,7 @@ import { ColorWidget } from "#src/widget/color.js";
 import { removeChildren } from "#src/util/dom.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -81,7 +81,7 @@ type AnnotationUIType = AnnotationType | "bool";
 
 interface InputConfig {
   type: string;
-  value?: number | string;
+  inputValue?: number | string;
   className?: string;
 }
 
@@ -212,7 +212,7 @@ class AnnotationUIProperty extends RefCounted {
   ): HTMLDivElement {
     const nameInput = this.createInputElement({
       type: "text",
-      value: identifier,
+      inputValue: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
     const cell = this.createTableCell(nameInput, "");
@@ -290,7 +290,7 @@ class AnnotationUIProperty extends RefCounted {
     identifier: string,
     type: AnnotationUIType,
   ): HTMLDivElement {
-    console.log(type, identifier);
+    console.log("remaking", type, identifier);
     const container = document.createElement("div");
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
@@ -308,8 +308,9 @@ class AnnotationUIProperty extends RefCounted {
     if (type.startsWith("rgb")) {
       const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
       const colorInput = new ColorWidget(watchableColor);
-      colorInput.element.className =
-        "neuroglancer-annotation-schema-color-input";
+      colorInput.element.classList.add(
+        "neuroglancer-annotation-schema-color-input",
+      );
       inputs.push(colorInput.element);
       changeFunction = () => {
         const newColor = colorInput.getRGB();
@@ -323,7 +324,7 @@ class AnnotationUIProperty extends RefCounted {
         const alphaInput = this.createInputElement(
           {
             type: "number",
-            value: alpha.toFixed(2),
+            inputValue: alpha,
             className: "neuroglancer-annotation-schema-default-input",
           },
           { min: 0, max: 1, step: 0.01 },
@@ -347,7 +348,7 @@ class AnnotationUIProperty extends RefCounted {
     } else if (type === "bool") {
       const boolInput = this.createInputElement({
         type: "checkbox",
-        value: String(oldProperty.default),
+        inputValue: String(oldProperty.default),
         className: "neuroglancer-annotation-schema-default-input",
       });
       boolInput.checked = oldProperty.default === 1;
@@ -374,7 +375,7 @@ class AnnotationUIProperty extends RefCounted {
         const numberInput = this.createInputElement(
           {
             type: "number",
-            value: String(oldProperty.default),
+            inputValue: oldProperty.default,
             className: "neuroglancer-annotation-schema-default-input",
           },
           {
@@ -433,7 +434,7 @@ class AnnotationUIProperty extends RefCounted {
           // TODO ideally this should stop you from adding the same enum value
           const nameInput = this.createInputElement({
             type: "text",
-            value: label,
+            inputValue: label,
             className: "neuroglancer-annotation-schema-default-input",
           });
           if (!this.readonly) {
@@ -453,7 +454,7 @@ class AnnotationUIProperty extends RefCounted {
           const valueInput = this.createInputElement(
             {
               type: "number",
-              value: value,
+              inputValue: value,
               className: "neuroglancer-annotation-schema-default-input",
             },
             {
@@ -532,75 +533,28 @@ class AnnotationUIProperty extends RefCounted {
     config: InputConfig,
     numberConfig?: NumberConfig,
   ): HTMLInputElement {
-    const input = document.createElement("input");
     const readonly = this.readonly;
+    const input =
+      config.type === "number"
+        ? createBoundedNumberInputElement(
+            {
+              inputValue: config.inputValue as number,
+              className: config.className,
+              readonly,
+            },
+            numberConfig,
+          )
+        : document.createElement("input");
     input.dataset.readonly = String(readonly);
     input.disabled = readonly;
-    if (!this.readonly && config.type === "number" && numberConfig) {
-      let { min, max, step } = numberConfig;
-      // If the dataType is provided, we can set min, max, and step based on it
-      const dataType = numberConfig.dataType;
-      if (dataType !== undefined) {
-        step = dataType === DataType.FLOAT32 ? 0.1 : 1;
-        const bounds =
-          dataType === DataType.FLOAT32
-            ? [undefined, undefined]
-            : defaultDataTypeRange[dataType];
-        min = bounds[0] as number | undefined;
-        max = bounds[1] as number | undefined;
-      }
-      input.min = min !== undefined ? String(min) : "";
-      input.max = max !== undefined ? String(max) : "";
-      step = step ?? 1;
-      input.step = String(step);
-      const withinBounds = (value: number) => {
-        return (
-          (min === undefined || value >= min) &&
-          (max === undefined || value <= max)
-        );
-      };
-      this.registerEventListener(input, "change", (event: Event) => {
-        if (!event.target) return;
-        const inputValue = (event.target as HTMLInputElement).value;
-        const newValue = parseFloat(inputValue);
-        // Ensure the new value is within bounds
-        if (!withinBounds(newValue)) {
-          // reset to the closest bound
-          if (min !== undefined && newValue < min) {
-            input.value = String(min);
-          } else if (max !== undefined && newValue > max) {
-            input.value = String(max);
-          }
-        }
-      });
 
-      this.registerEventListener(input, "wheel", (event: WheelEvent) => {
-        const deltaY = event.deltaY;
-        if (deltaY === 0) return; // No change
-        const dataType = numberConfig.dataType;
-        let currentValue = parseFloat(input.value);
-        if (dataType !== DataType.FLOAT32 && dataType !== undefined) {
-          currentValue = parseInt(input.value, 10);
-        }
-        const newValue = deltaY < 0 ? currentValue + step : currentValue - step;
-        // Ensure the new value is within bounds
-        if (withinBounds(newValue)) {
-          input.value = String(newValue);
-          // Trigger change event
-          const changeEvent = new Event("change", { bubbles: true });
-          input.dispatchEvent(changeEvent);
-        }
-      });
-    }
     input.type = config.type;
-    if (typeof config.value === "number") {
-      input.value = numberToStringFixed(config.value, 4); // For numbers, format to 2 decimal places
-    } else {
-      input.value = config.value || "";
+    if (typeof config.inputValue !== "number") {
+      if (config.className) input.classList.add(config.className);
+      input.value = config.inputValue || "";
+      input.autocomplete = "off";
+      input.spellcheck = false;
     }
-    input.autocomplete = "off";
-    input.spellcheck = false;
-    if (config.className) input.classList.add(config.className);
     return input;
   }
   private createTypeTextElement(
