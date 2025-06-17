@@ -68,13 +68,13 @@ export function createBoundedNumberInputElement(
         currentValue = parseInt(input.value, 10);
       }
       const newValue = deltaY < 0 ? currentValue + step : currentValue - step;
-      // Ensure the new value is within bounds
-      if (withinBounds(newValue)) {
-        input.value = String(newValue);
-        // Trigger change event
-        const changeEvent = new Event("change", { bubbles: true });
-        input.dispatchEvent(changeEvent);
-      }
+      // If you are at the min or max and try to scroll further
+      const oldValue = parseFloat(input.value);
+      if (oldValue === max && deltaY < 0) return;
+      if (oldValue === min && deltaY > 0) return;
+      input.value = String(newValue);
+      const changeEvent = new Event("change", { bubbles: true });
+      input.dispatchEvent(changeEvent);
     });
   }
   input.type = "number";
