@@ -41,6 +41,7 @@ import {
   AnnotationType,
   annotationTypeHandlers,
   formatNumericProperty,
+  propertyTypeDataType,
 } from "#src/annotation/index.js";
 import {
   AnnotationLayer,
@@ -114,6 +115,19 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
+
+export function isBooleanType(enumLabels?: string[]): boolean {
+  return (
+    (enumLabels?.includes("False") &&
+      enumLabels?.includes("True") &&
+      enumLabels.length === 2) ||
+    false
+  );
+}
+export function isEnumType(enumLabels?: string[]): boolean {
+  return (enumLabels && enumLabels.length > 0) || false;
+}
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -1921,18 +1935,10 @@ export function UserLayerWithAnnotationsMixin<
                         annotationLayer.source.update(reference, newAnnotation);
                         annotationLayer.source.commit(reference);
                       };
-                  if (sourceReadonly) {
-                    valueElement = document.createElement("span");
-                    valueElementSetter = (value) => {
-                      valueElement.textContent = value;
-                    };
-                  } else {
-                    valueElement = document.createElement("input");
-                    (valueElement as HTMLInputElement).type = "number";
-                    valueElementSetter = (value) => {
-                      (valueElement as HTMLInputElement).value = value;
-                    };
-                  }
+                  valueElement = document.createElement("span");
+                  valueElementSetter = (value) => {
+                    valueElement.textContent = value;
+                  };
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
                   );
@@ -2010,13 +2016,74 @@ export function UserLayerWithAnnotationsMixin<
                       );
                     }
                   } else {
-                    const valueToSet = sourceReadonly
-                      ? formatNumericProperty(
-                          property as AnnotationNumericPropertySpec,
-                          value,
-                        )
-                      : value;
-                    valueElementSetter(valueToSet);
+                    if (sourceReadonly) {
+                      const valueToSet = formatNumericProperty(
+                        property as AnnotationNumericPropertySpec,
+                        value,
+                      );
+                      valueElementSetter(valueToSet);
+                    } else {
+                      const propertyAsNum =
+                        property as AnnotationNumericPropertySpec;
+                      const isBool = isBooleanType(propertyAsNum.enumLabels);
+                      const isEnum = isEnumType(propertyAsNum.enumLabels);
+                      if (isBool) {
+                        const input = document.createElement("input");
+                        input.type = "checkbox";
+                        input.checked = Boolean(value);
+                        input.addEventListener("change", () => {
+                          changeFunction(input.checked ? 1 : 0);
+                        });
+                        valueElement = input;
+                      } else if (isEnum) {
+                        // Make a dropdown which combines the enum labels and values.
+                        const options = [];
+                        for (
+                          let j = 0;
+                          j < propertyAsNum.enumLabels!.length;
+                          ++j
+                        ) {
+                          options.push({
+                            label: propertyAsNum.enumLabels![j],
+                            value: propertyAsNum.enumValues![j],
+                          });
+                        }
+                        const select = document.createElement("select");
+                        select.classList.add(
+                          "neuroglancer-annotation-property-select",
+                        );
+                        for (const option of options) {
+                          const optionElement =
+                            document.createElement("option");
+                          optionElement.value = String(option.value);
+                          optionElement.textContent = `${option.label} (${numberToStringFixed(option.value, 2)})`;
+                          select.appendChild(optionElement);
+                        }
+                        select.value = String(value);
+                        select.addEventListener("change", () => {
+                          changeFunction(select.value);
+                        });
+                        valueElement = select;
+                      } else {
+                        const input = createBoundedNumberInputElement(
+                          {
+                            inputValue: value,
+                          },
+                          {
+                            dataType: propertyTypeDataType[propertyAsNum.type],
+                          },
+                        );
+                        valueElement = input;
+                        valueElement.addEventListener("change", () => {
+                          const inputValue = input.valueAsNumber;
+                          if (propertyAsNum.type !== "float32") {
+                            changeFunction(Math.floor(inputValue));
+                          } else {
+                            changeFunction(inputValue);
+                          }
+                        });
+                      }
+                    }
                   }
                   label.appendChild(valueElement);
                   parent.appendChild(label);

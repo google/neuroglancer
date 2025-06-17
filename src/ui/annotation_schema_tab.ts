@@ -54,7 +54,11 @@ import { Tab } from "#src/widget/tab_view.js";
 import { saveBlobToFile } from "#src/util/file_download.js";
 import { StatusMessage } from "#src/status.js";
 import { DataType } from "#src/util/data_type.js";
-import { UserLayerWithAnnotations } from "#src/ui/annotations.js";
+import {
+  UserLayerWithAnnotations,
+  isBooleanType,
+  isEnumType,
+} from "#src/ui/annotations.js";
 import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
@@ -83,6 +87,7 @@ interface InputConfig {
   type: string;
   inputValue?: number | string;
   className?: string;
+  decimals?: number; // For number inputs, how many decimals to show
 }
 
 interface NumberConfig {
@@ -90,18 +95,6 @@ interface NumberConfig {
   min?: number;
   max?: number;
   step?: number;
-}
-
-function isBooleanType(enumValues?: string[]): boolean {
-  return (
-    (enumValues?.includes("False") &&
-      enumValues?.includes("True") &&
-      enumValues.length === 2) ||
-    false
-  );
-}
-function isEnumType(enumValues?: string[]): boolean {
-  return (enumValues && enumValues.length > 0) || false;
 }
 
 class AnnotationUIProperty extends RefCounted {
@@ -326,6 +319,7 @@ class AnnotationUIProperty extends RefCounted {
             type: "number",
             inputValue: alpha,
             className: "neuroglancer-annotation-schema-default-input",
+            decimals: 2,
           },
           { min: 0, max: 1, step: 0.01 },
         );
@@ -540,6 +534,7 @@ class AnnotationUIProperty extends RefCounted {
             {
               inputValue: config.inputValue as number,
               className: config.className,
+              numDecimals: config.decimals,
               readonly,
             },
             numberConfig,
