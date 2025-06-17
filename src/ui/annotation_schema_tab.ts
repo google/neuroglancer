@@ -395,28 +395,32 @@ class AnnotationUIProperty extends RefCounted {
       } else {
         const enumContainer = document.createElement("div");
         enumContainer.className = "enum-container";
-        const addEnumButton = makeAddButton({
-          title: "Add new enum option",
-          onClick: () => {
-            let suggestedEnumValue = 0;
-            while (enumValues.includes(suggestedEnumValue))
-              ++suggestedEnumValue;
-            const newEnumValues = [
-              ...oldProperty.enumValues!,
-              suggestedEnumValue,
-            ];
-            this.updateProperty(oldProperty, {
-              ...oldProperty,
-              enumValues: newEnumValues,
-              enumLabels: [
-                ...oldProperty.enumLabels!,
-                `${suggestedEnumValue} (label)`,
-              ],
-              default: newEnumValues[0], // Set default to the first enum value
-            } as AnnotationNumericPropertySpec);
-          },
-        });
-        enumContainer.appendChild(addEnumButton);
+        let addEnumButton: HTMLElement | null = null;
+        if (!this.readonly) {
+          addEnumButton = makeAddButton({
+            title: "Add new enum option",
+            onClick: () => {
+              let suggestedEnumValue = 0;
+              while (enumValues.includes(suggestedEnumValue))
+                ++suggestedEnumValue;
+              const newEnumValues = [
+                ...oldProperty.enumValues!,
+                suggestedEnumValue,
+              ];
+              this.updateProperty(oldProperty, {
+                ...oldProperty,
+                enumValues: newEnumValues,
+                enumLabels: [
+                  ...oldProperty.enumLabels!,
+                  `${suggestedEnumValue} (label)`,
+                ],
+                default: newEnumValues[0], // Set default to the first enum value
+              } as AnnotationNumericPropertySpec);
+            },
+          });
+          enumContainer.appendChild(addEnumButton);
+        }
+
         // For each enum entry, create a row with name, and value
         const addEnumEntry = (
           value: number,
@@ -427,47 +431,50 @@ class AnnotationUIProperty extends RefCounted {
           enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
           // TODO ideally this should stop you from adding the same enum value
-          // or the same label
           const nameInput = this.createInputElement({
             type: "text",
             value: label,
             className: "neuroglancer-annotation-schema-default-input",
           });
-          nameInput.addEventListener("change", (event) => {
-            const newLabel = (event.target as HTMLInputElement).value;
-            this.updateProperty(oldProperty, {
-              ...oldProperty,
-              enumLabels: oldProperty.enumLabels!.map((l, i) =>
-                i === enumIndex ? newLabel : l,
-              ),
-            } as AnnotationNumericPropertySpec);
-          });
+          if (!this.readonly) {
+            nameInput.addEventListener("change", (event) => {
+              const newLabel = (event.target as HTMLInputElement).value;
+              this.updateProperty(oldProperty, {
+                ...oldProperty,
+                enumLabels: oldProperty.enumLabels!.map((l, i) =>
+                  i === enumIndex ? newLabel : l,
+                ),
+              } as AnnotationNumericPropertySpec);
+            });
+          }
 
           const annotationType =
             this.parentView.mapUITypeToAnnotationType(type);
           const valueInput = this.createInputElement(
             {
               type: "number",
-              value: String(value),
+              value: value,
               className: "neuroglancer-annotation-schema-default-input",
             },
             {
               dataType: propertyTypeDataType[annotationType],
             },
           );
-          valueInput.addEventListener("change", (event) => {
-            const inputValue = (event.target as HTMLInputElement).value;
-            const newValue =
-              type === "float32"
-                ? parseFloat(inputValue)
-                : parseInt(inputValue, 10);
-            this.updateProperty(oldProperty, {
-              ...oldProperty,
-              enumValues: oldProperty.enumValues!.map((v, i) =>
-                i === enumIndex ? newValue : v,
-              ),
-            } as AnnotationNumericPropertySpec);
-          });
+          if (!this.readonly) {
+            valueInput.addEventListener("change", (event) => {
+              const inputValue = (event.target as HTMLInputElement).value;
+              const newValue =
+                type === "float32"
+                  ? parseFloat(inputValue)
+                  : parseInt(inputValue, 10);
+              this.updateProperty(oldProperty, {
+                ...oldProperty,
+                enumValues: oldProperty.enumValues!.map((v, i) =>
+                  i === enumIndex ? newValue : v,
+                ),
+              } as AnnotationNumericPropertySpec);
+            });
+          }
 
           enumRow.appendChild(nameInput);
           enumRow.appendChild(valueInput);
@@ -491,12 +498,12 @@ class AnnotationUIProperty extends RefCounted {
                 enumValues: newEnumValues,
                 enumLabels: newEnumLabels,
               } as AnnotationNumericPropertySpec);
-
-              enumRow.remove();
             });
             enumRow.appendChild(deleteIcon);
+            enumContainer.insertBefore(enumRow, addEnumButton);
+          } else {
+            enumContainer.appendChild(enumRow);
           }
-          enumContainer.insertBefore(enumRow, addEnumButton);
         };
         for (let i = 0; i < enumValues.length; i++) {
           addEnumEntry(enumValues[i], enumLabels[i], i);
@@ -570,7 +577,11 @@ class AnnotationUIProperty extends RefCounted {
       this.registerEventListener(input, "wheel", (event: WheelEvent) => {
         const deltaY = event.deltaY;
         if (deltaY === 0) return; // No change
-        const currentValue = parseFloat(input.value);
+        const dataType = numberConfig.dataType;
+        let currentValue = parseFloat(input.value);
+        if (dataType !== DataType.FLOAT32 && dataType !== undefined) {
+          currentValue = parseInt(input.value, 10);
+        }
         const newValue = deltaY < 0 ? currentValue + step : currentValue - step;
         // Ensure the new value is within bounds
         if (withinBounds(newValue)) {
