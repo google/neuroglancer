@@ -1377,6 +1377,14 @@ export class LocalAnnotationSource extends AnnotationSource {
     this.properties.changed.dispatch();
   }
 
+  removeAllProperties() {
+    this.properties.value = [];
+    for (const annotation of this) {
+      annotation.properties = [];
+    }
+    this.properties.changed.dispatch();
+  }
+
   removeProperty(identifier: string) {
     const propertyIndex = this.properties.value.findIndex(
       (x) => x.identifier === identifier,

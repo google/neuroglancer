@@ -1217,6 +1217,7 @@ export class AnnotationSchemaView extends Tab {
         const states = this.annotationStates.states;
         states.forEach((state) => {
           const source = state.source as LocalAnnotationSource;
+          source.removeAllProperties();
           for (const property of parsedSchema) {
             console.log("Adding property", property);
             source.addProperty(property);
