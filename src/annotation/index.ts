@@ -568,35 +568,22 @@ export function ensureUniqueAnnotationPropertyIds(
 export function compareAnnotationSpecProperties(
   a: Readonly<AnnotationPropertySpec>,
   b: Readonly<AnnotationPropertySpec>,
-): { same: boolean; defaultValueChanged: boolean } {
-  const sameExcludingDefault = () => {
-    if (a.type !== b.type || a.identifier !== b.identifier) return false;
-    if (a.description !== b.description) return false;
-
-    // If there are enum values, we need to check them.
-    if (
-      isAnnotationNumericPropertySpec(a) !== isAnnotationNumericPropertySpec(b)
-    ) {
-      return false;
-    }
-    if (
-      isAnnotationNumericPropertySpec(a) &&
-      isAnnotationNumericPropertySpec(b)
-    ) {
-      if (a.min !== b.min || a.max !== b.max || a.step !== b.step) return false;
-      if (a.enumValues !== b.enumValues) {
-        if (!arraysEqual(a.enumValues || [], b.enumValues || [])) return false;
-      }
-      if (a.enumLabels !== b.enumLabels) {
-        if (!arraysEqual(a.enumLabels || [], b.enumLabels || [])) return false;
-      }
-    }
-    // At this point, we know that everything is the same, except for maybe the default value.
-    return true;
+) {
+  const bothNumeric =
+    isAnnotationNumericPropertySpec(a) && isAnnotationNumericPropertySpec(b);
+  const sameValues = {
+    type: a.type === b.type,
+    identifier: a.identifier === b.identifier,
+    description: a.description === b.description,
+    default: a.default === b.default,
+    enumValues:
+      bothNumeric && arraysEqual(a.enumValues || [], b.enumValues || []),
+    enumLabels:
+      bothNumeric && arraysEqual(a.enumLabels || [], b.enumLabels || []),
   };
-  const defaultValueChanged = a.default !== b.default;
-  const same = sameExcludingDefault() && !defaultValueChanged;
-  return { same, defaultValueChanged };
+  // Same if all of the above are true.
+  const same = Object.values(sameValues).every((x) => x);
+  return { same, sameValues };
 }
 
 function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
@@ -1390,6 +1377,14 @@ export class LocalAnnotationSource extends AnnotationSource {
     this.properties.changed.dispatch();
   }
 
+  removeAllProperties() {
+    this.properties.value = [];
+    for (const annotation of this) {
+      annotation.properties = [];
+    }
+    this.properties.changed.dispatch();
+  }
+
   removeProperty(identifier: string) {
     const propertyIndex = this.properties.value.findIndex(
       (x) => x.identifier === identifier,
@@ -1409,7 +1404,6 @@ export class LocalAnnotationSource extends AnnotationSource {
     oldProperty: AnnotationPropertySpec,
     newProperty: AnnotationPropertySpec,
   ) {
-    // Can only convert between numeric types.
     const { type: oldType } = oldProperty;
     const { type: newType } = newProperty;
     const isConvertible = canConvertTypes(oldType, newType);
@@ -1421,9 +1415,6 @@ export class LocalAnnotationSource extends AnnotationSource {
     }
 
     const convertValue = (value: any) => {
-      if (value === oldProperty.default) {
-        return newProperty.default;
-      }
       if (oldType === "rgb" && newType === "rgba") {
         const rgba = new Uint8Array(4);
         rgba[0] = value[0];
