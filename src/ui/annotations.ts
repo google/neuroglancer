@@ -28,6 +28,7 @@ import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   Annotation,
   AnnotationId,
+  AnnotationNumericPropertySpec,
   AnnotationReference,
   AxisAlignedBoundingBox,
   Ellipsoid,
@@ -78,6 +79,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
+  packColor,
   serializeColor,
   unpackRGB,
   unpackRGBA,
@@ -88,7 +90,7 @@ import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
-import { vec3 } from "#src/util/geom.js";
+import { vec3, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
 import {
   EventActionMap,
@@ -111,6 +113,7 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -1905,52 +1908,62 @@ export function UserLayerWithAnnotationsMixin<
                   const value = annotation.properties[i];
                   let valueElement: HTMLElement;
                   let valueElementSetter: (value: any) => void;
+                  const changeFunction = sourceReadonly
+                    ? (inputValue: any) => {
+                        inputValue;
+                      }
+                    : (inputValue: any) => {
+                        const newAnnotation = reference.value;
+                        if (newAnnotation == null) {
+                          return;
+                        }
+                        newAnnotation.properties[i] = inputValue;
+                        annotationLayer.source.update(reference, newAnnotation);
+                        annotationLayer.source.commit(reference);
+                      };
                   if (sourceReadonly) {
                     valueElement = document.createElement("span");
                     valueElementSetter = (value) => {
                       valueElement.textContent = value;
                     };
                   } else {
-                    // TODO check how components in shader widgets etc are made
-                    // to try and reuse them
                     valueElement = document.createElement("input");
-                    // TODO type based on property.type
                     (valueElement as HTMLInputElement).type = "number";
-                    // TODO RGBA color might need two inputs
                     valueElementSetter = (value) => {
                       (valueElement as HTMLInputElement).value = value;
                     };
-                    (valueElement as HTMLInputElement).addEventListener(
-                      "change",
-                      () => {
-                        const x = (valueElement as HTMLInputElement).value;
-                        const newAnnotation = reference.value;
-                        // TODO switch on type
-                        newAnnotation!.properties[i] = Number(x);
-                        annotationLayer.source.update(
-                          reference,
-                          newAnnotation!,
-                        );
-                        annotationLayer.source.commit(reference);
-                      },
-                    );
                   }
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
                   );
-                  switch (property.type) {
-                    case "rgb": {
-                      const colorVec = unpackRGB(value);
+                  valueElement.dataset.readonly = sourceReadonly.toString();
+                  const makeColorWidget = (inputColor: vec3) => {
+                    const watchableColor = new WatchableValue(inputColor);
+                    const colorInput = new ColorWidget(watchableColor);
+                    colorInput.element.classList.add(
+                      "neuroglancer-annotation-property-color",
+                    );
+                    return colorInput;
+                  };
+                  if (property.type === "rgb") {
+                    const colorVec = unpackRGB(value);
+                    if (sourceReadonly) {
                       const hex = serializeColor(colorVec);
                       valueElementSetter(hex);
                       valueElement.style.backgroundColor = hex;
                       valueElement.style.color = useWhiteBackground(colorVec)
                         ? "white"
                         : "black";
-                      break;
+                    } else {
+                      const colorInput = makeColorWidget(colorVec);
+                      colorInput.element.addEventListener("change", () => {
+                        changeFunction(packColor(colorInput.getRGB()));
+                      });
+                      valueElement = colorInput.element;
                     }
-                    case "rgba": {
-                      const colorVec = unpackRGB(value);
+                  } else if (property.type === "rgba") {
+                    const colorVec = unpackRGB(value);
+                    if (sourceReadonly) {
                       valueElementSetter(serializeColor(unpackRGBA(value)));
                       valueElement.style.backgroundColor = serializeColor(
                         unpackRGB(value),
@@ -1958,14 +1971,52 @@ export function UserLayerWithAnnotationsMixin<
                       valueElement.style.color = useWhiteBackground(colorVec)
                         ? "white"
                         : "black";
-                      break;
+                    } else {
+                      const colorInput = makeColorWidget(colorVec);
+                      const alpha = unpackRGBA(value)[3];
+                      const alphaInput = createBoundedNumberInputElement(
+                        {
+                          inputValue: alpha,
+                        },
+                        {
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                        },
+                      );
+                      const rgbaContainer = document.createElement("div");
+                      rgbaContainer.classList.add(
+                        "neuroglancer-annotation-property-container",
+                      );
+                      rgbaContainer.appendChild(colorInput.element);
+                      rgbaContainer.appendChild(alphaInput);
+                      valueElement = rgbaContainer;
+                      const rgbaChangeFunction = () => {
+                        const rgb = colorInput.getRGB();
+                        const alpha = alphaInput.valueAsNumber;
+                        const colorVec = vec4.fromValues(
+                          rgb[0],
+                          rgb[1],
+                          rgb[2],
+                          alpha,
+                        );
+                        changeFunction(packColor(colorVec));
+                      };
+                      colorInput.element.addEventListener("change", () =>
+                        rgbaChangeFunction(),
+                      );
+                      alphaInput.addEventListener("change", () =>
+                        rgbaChangeFunction(),
+                      );
                     }
-                    default:
-                      const valueToSet = sourceReadonly
-                        ? formatNumericProperty(property, value)
-                        : value;
-                      valueElementSetter(valueToSet);
-                      break;
+                  } else {
+                    const valueToSet = sourceReadonly
+                      ? formatNumericProperty(
+                          property as AnnotationNumericPropertySpec,
+                          value,
+                        )
+                      : value;
+                    valueElementSetter(valueToSet);
                   }
                   label.appendChild(valueElement);
                   parent.appendChild(label);

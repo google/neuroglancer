@@ -332,7 +332,7 @@ class AnnotationUIProperty extends RefCounted {
         inputs.push(alphaInput);
         changeFunction = () => {
           const newColor = colorInput.getRGB();
-          const newAlpha = parseFloat(alphaInput.value);
+          const newAlpha = alphaInput.valueAsNumber;
           const colorVec = vec4.fromValues(
             newColor[0],
             newColor[1],
