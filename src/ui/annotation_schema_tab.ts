@@ -85,6 +85,7 @@ interface InputConfig {
 }
 
 interface NumberConfig {
+  dataType?: DataType;
   min?: number;
   max?: number;
   step?: number;
@@ -120,7 +121,6 @@ class AnnotationUIProperty extends RefCounted {
     return this.parentView.readonly.value;
   }
   private removeProperty(indentifier: string) {
-    this.parentView.annotationUIProperties.delete(indentifier);
     this.parentView.removeProperty(indentifier);
   }
   private renameProperty(oldIdentifier: string, newIdentifier: string) {
@@ -184,16 +184,14 @@ class AnnotationUIProperty extends RefCounted {
       this.createDefaultValueCell(spec.identifier, spec.type),
     );
 
-    // TODO skm needs to listen?
-    // Delete Cell
     if (!readonly) {
       const deleteIcon = document.createElement("span");
       deleteIcon.innerHTML = svg_bin;
       deleteIcon.title = "Delete annotation property";
       deleteIcon.style.cursor = "pointer";
-      deleteIcon.addEventListener("click", () => {
-        const propertyIdentifer = spec.identifier;
-        this.removeProperty(propertyIdentifer);
+      this.registerEventListener(deleteIcon, "click", () => {
+        const propertyIdentifier = spec.identifier;
+        this.removeProperty(propertyIdentifier);
       });
 
       const deleteCell = this.createTableCell(
@@ -219,20 +217,14 @@ class AnnotationUIProperty extends RefCounted {
       // Replace dash and spaces with underscores
       let sanitizedValue = rawValue.replace(/-/g, "_");
       sanitizedValue = rawValue.replace(/\s+/g, "_");
-      // Lowercase the value
       sanitizedValue = sanitizedValue.toLowerCase();
       // Remove any non-alphanumeric characters except underscores
       sanitizedValue = sanitizedValue.replace(/[^a-z0-9_]/g, "");
       if (sanitizedValue === "") {
-        console.log(
-          "Empty identifier, reverting to original value.",
-          identifier,
-        );
         sanitizedValue = identifier;
         (event.target as HTMLInputElement).value = identifier; // Revert input value
       } else {
         sanitizedValue = this.ensureUniquePropertyIdentifier(sanitizedValue);
-        console.log("Renaming property from", identifier, "to", sanitizedValue);
         this.renameProperty(identifier, sanitizedValue);
       }
     });
@@ -318,7 +310,6 @@ class AnnotationUIProperty extends RefCounted {
             newColor[2],
             newAlpha,
           );
-          console.log("newColor: ", newColor, packColor(colorVec));
           this.updateProperty(oldProperty, {
             ...oldProperty,
             default: packColor(colorVec),
@@ -336,12 +327,6 @@ class AnnotationUIProperty extends RefCounted {
       const { enumValues, enumLabels } = oldProperty;
       if (enumValues === undefined || enumLabels === undefined) {
         const dataType = propertyTypeDataType[type as AnnotationType];
-        const step = dataType === DataType.FLOAT32 ? 0.01 : 1;
-        const bounds =
-          dataType === DataType.FLOAT32
-            ? [undefined, undefined]
-            : defaultDataTypeRange[dataType!];
-
         const numberInput = this.createInputElement(
           {
             type: "number",
@@ -349,9 +334,7 @@ class AnnotationUIProperty extends RefCounted {
             className: "neuroglancer-annotation-schema-default-input",
           },
           {
-            min: bounds[0] as number,
-            max: bounds[1] as number,
-            step: step,
+            dataType,
           },
         );
         inputs.push(numberInput);
@@ -411,11 +394,18 @@ class AnnotationUIProperty extends RefCounted {
             } as AnnotationNumericPropertySpec);
           });
 
-          const valueInput = this.createInputElement({
-            type: "number",
-            value: String(value),
-            className: "neuroglancer-annotation-schema-default-input",
-          });
+          const annotationType =
+            this.parentView.mapUITypeToAnnotationType(type);
+          const valueInput = this.createInputElement(
+            {
+              type: "number",
+              value: String(value),
+              className: "neuroglancer-annotation-schema-default-input",
+            },
+            {
+              dataType: propertyTypeDataType[annotationType],
+            },
+          );
           valueInput.addEventListener("change", (event) => {
             const inputValue = (event.target as HTMLInputElement).value;
             const newValue =
@@ -489,22 +479,51 @@ class AnnotationUIProperty extends RefCounted {
     const readonly = this.readonly;
     input.dataset.readonly = String(readonly);
     input.disabled = readonly;
-    if (!this.readonly && config.type === "number") {
-      if (numberConfig?.min !== undefined) input.min = String(numberConfig.min);
-      if (numberConfig?.max !== undefined) input.max = String(numberConfig.max);
-      if (numberConfig?.step !== undefined)
-        input.step = String(numberConfig.step);
+    if (!this.readonly && config.type === "number" && numberConfig) {
+      let { min, max, step } = numberConfig;
+      // If the dataType is provided, we can set min, max, and step based on it
+      const dataType = numberConfig.dataType;
+      if (dataType !== undefined) {
+        step = dataType === DataType.FLOAT32 ? 0.1 : 1;
+        const bounds =
+          dataType === DataType.FLOAT32
+            ? [undefined, undefined]
+            : defaultDataTypeRange[dataType];
+        min = bounds[0] as number | undefined;
+        max = bounds[1] as number | undefined;
+      }
+      input.min = min !== undefined ? String(min) : "";
+      input.max = max !== undefined ? String(max) : "";
+      step = step ?? 1;
+      input.step = String(step);
+      const withinBounds = (value: number) => {
+        return (
+          (min === undefined || value >= min) &&
+          (max === undefined || value <= max)
+        );
+      };
+      this.registerEventListener(input, "change", (event: Event) => {
+        if (!event.target) return;
+        const inputValue = (event.target as HTMLInputElement).value;
+        const newValue = parseFloat(inputValue);
+        // Ensure the new value is within bounds
+        if (!withinBounds(newValue)) {
+          // reset to the closest bound
+          if (min !== undefined && newValue < min) {
+            input.value = String(min);
+          } else if (max !== undefined && newValue > max) {
+            input.value = String(max);
+          }
+        }
+      });
+
       this.registerEventListener(input, "wheel", (event: WheelEvent) => {
         const deltaY = event.deltaY;
         if (deltaY === 0) return; // No change
         const currentValue = parseFloat(input.value);
-        const step = numberConfig?.step || 1;
         const newValue = deltaY < 0 ? currentValue + step : currentValue - step;
         // Ensure the new value is within bounds
-        if (
-          (numberConfig?.min === undefined || newValue >= numberConfig.min) &&
-          (numberConfig?.max === undefined || newValue <= numberConfig.max)
-        ) {
+        if (withinBounds(newValue)) {
           input.value = String(newValue);
           // Trigger change event
           const changeEvent = new Event("change", { bubbles: true });
@@ -513,7 +532,6 @@ class AnnotationUIProperty extends RefCounted {
       });
     }
     input.type = config.type;
-    console.log("input type: ", config.type, "hi");
     if (typeof config.value === "number") {
       input.value = numberToStringFixed(config.value, 4); // For numbers, format to 2 decimal places
     } else {
