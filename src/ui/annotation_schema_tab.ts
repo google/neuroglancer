@@ -890,7 +890,12 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private createSchemaTableHeader() {
-    let tableHeaders = ["Name", "Type", "Default value"];
+    const tableHeaders = ["Name", "Type", "Default value"];
+    const tableTitles = [
+      "Hover a name to see the property description",
+      "The type of the property",
+      "For enums, these are the available options, first entry is the default value.",
+    ];
 
     const addButtonField = document.createElement("div");
     addButtonField.className =
@@ -898,16 +903,19 @@ export class AnnotationSchemaView extends Tab {
 
     const headerRow = document.createElement("div");
     headerRow.classList.add("neuroglancer-annotation-schema-header-row");
-    tableHeaders.forEach((text) => {
+    for (let i = 0; i < tableHeaders.length; ++i) {
+      const text = tableHeaders[i];
+      const title = tableTitles[i];
       const cell = this.createTableCell(text);
       if (text === "Default value") {
         cell.classList.add(
           "neuroglancer-annotation-schema-default-value-header",
         );
       }
+      cell.title = title;
       this.defaultValueHeaderCell = cell;
       headerRow.appendChild(cell);
-    });
+    }
     // Append a blank cell for the delete icon
     if (!this.readonly.value) {
       const deleteHeader = this.createTableCell(
