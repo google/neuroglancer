@@ -1961,7 +1961,6 @@ export function UserLayerWithAnnotationsMixin<
                       break;
                     }
                     default:
-                      console.log(property, value);
                       const valueToSet = sourceReadonly
                         ? formatNumericProperty(property, value)
                         : value;

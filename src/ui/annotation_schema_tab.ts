@@ -214,16 +214,27 @@ class AnnotationUIProperty extends RefCounted {
     nameInput.dataset.readonly = String(this.readonly);
     if (this.readonly) return cell;
     this.registerEventListener(nameInput, "change", (event: Event) => {
-      // If the input is readonly, we don't want to do anything
-      if (this.readonly) return;
+      if (!event.target) return;
       const rawValue = (event.target as HTMLInputElement).value;
-      let sanitizedValue = rawValue.replace(/\s+/g, "_");
+      // Replace dash and spaces with underscores
+      let sanitizedValue = rawValue.replace(/-/g, "_");
+      sanitizedValue = rawValue.replace(/\s+/g, "_");
+      // Lowercase the value
+      sanitizedValue = sanitizedValue.toLowerCase();
+      // Remove any non-alphanumeric characters except underscores
+      sanitizedValue = sanitizedValue.replace(/[^a-z0-9_]/g, "");
       if (sanitizedValue === "") {
+        console.log(
+          "Empty identifier, reverting to original value.",
+          identifier,
+        );
         sanitizedValue = identifier;
+        (event.target as HTMLInputElement).value = identifier; // Revert input value
       } else {
         sanitizedValue = this.ensureUniquePropertyIdentifier(sanitizedValue);
+        console.log("Renaming property from", identifier, "to", sanitizedValue);
+        this.renameProperty(identifier, sanitizedValue);
       }
-      this.renameProperty(identifier, sanitizedValue);
     });
     return cell;
   }
