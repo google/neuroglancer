@@ -62,7 +62,6 @@ import { ColorWidget } from "#src/widget/color.js";
 import { removeChildren } from "#src/util/dom.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { Overlay } from "#src/overlay.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -809,14 +808,39 @@ export class AnnotationSchemaView extends Tab {
     });
     schemaActionButtons.appendChild(copyButton);
 
-    const makeConfirmModal = () => {
-      new AnnotationSchemaPasteConfirmModal(this);
-    };
+    const confirmPasteModal = document.createElement("div");
+    confirmPasteModal.className =
+      "neuroglancer-annotation-schema-confirm-paste-modal";
+    const confirmPasteText = document.createElement("p");
+    confirmPasteText.textContent =
+      "Pasting a schema will overwrite the current schema. Are you sure you want to do this?";
+    confirmPasteModal.appendChild(confirmPasteText);
+    const confirmPasteButton = document.createElement("button");
+    confirmPasteButton.textContent = "Confirm Paste";
+    confirmPasteButton.className =
+      "neuroglancer-annotation-schema-confirm-paste-button";
+    confirmPasteButton.addEventListener("click", () => {
+      this.pasteSchemaFromClipboard();
+      confirmPasteModal.style.display = "none";
+    });
+    confirmPasteModal.appendChild(confirmPasteButton);
+    const cancelPasteButton = document.createElement("button");
+    cancelPasteButton.textContent = "Cancel";
+    cancelPasteButton.className =
+      "neuroglancer-annotation-schema-cancel-paste-button";
+    cancelPasteButton.addEventListener("click", () => {
+      confirmPasteModal.style.display = "none";
+    });
+    confirmPasteModal.appendChild(cancelPasteButton);
+    confirmPasteModal.style.display = "none"; // Initially hidden
+    schemaActionButtons.appendChild(confirmPasteModal);
 
     this.schemaPasteButton = makeIcon({
       title: "Paste schema from clipboard",
       svg: svg_clipboard,
-      onClick: () => makeConfirmModal(),
+      onClick: () => {
+        confirmPasteModal.style.display = "block";
+      },
     });
     schemaActionButtons.appendChild(this.schemaPasteButton);
 
@@ -1215,7 +1239,7 @@ export class AnnotationSchemaView extends Tab {
     });
   }
 
-  pasteSchemaFromClipboard() {
+  private pasteSchemaFromClipboard() {
     navigator.clipboard.readText().then((text) => {
       try {
         const parsedSchema = parseAnnotationPropertySpecs(JSON.parse(text));
@@ -1280,36 +1304,6 @@ export class AnnotationSchemaView extends Tab {
       this.defaultValueHeaderCell.dataset.enums = String(hasEnums);
     }
     this.populateSchemaTable();
-  }
-}
-
-class AnnotationSchemaPasteConfirmModal extends Overlay {
-  constructor(public schemaView: AnnotationSchemaView) {
-    super();
-    this.content.classList.add(
-      "neuroglancer-annotation-schema-confirm-paste-modal",
-    );
-    const confirmPasteText = document.createElement("p");
-    confirmPasteText.textContent =
-      "Pasting a schema will overwrite the current schema. Are you sure you want to do this?";
-    this.content.appendChild(confirmPasteText);
-    const confirmPasteButton = document.createElement("button");
-    confirmPasteButton.textContent = "Confirm Paste";
-    confirmPasteButton.className =
-      "neuroglancer-annotation-schema-confirm-paste-button";
-    confirmPasteButton.addEventListener("click", () => {
-      schemaView.pasteSchemaFromClipboard();
-      this.close();
-    });
-    this.content.appendChild(confirmPasteButton);
-    const cancelPasteButton = document.createElement("button");
-    cancelPasteButton.textContent = "Cancel";
-    cancelPasteButton.className =
-      "neuroglancer-annotation-schema-cancel-paste-button";
-    cancelPasteButton.addEventListener("click", () => {
-      this.close();
-    });
-    this.content.appendChild(cancelPasteButton);
   }
 }
 
