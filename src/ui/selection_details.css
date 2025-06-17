@@ -63,7 +63,7 @@
 }
 
 .neuroglancer-selection-details-layer-body {
-  padding: 2px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
 }

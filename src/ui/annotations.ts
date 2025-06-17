@@ -1873,12 +1873,14 @@ export function UserLayerWithAnnotationsMixin<
 
                 // Add the ID to the annotation details.
                 const label = document.createElement("label");
-                label.classList.add("neuroglancer-annotation-property");
+                label.classList.add("neuroglancer-annotation-property", "neuroglancer-annotation-property-id");
                 const idElement = document.createElement("span");
                 idElement.classList.add(
                   "neuroglancer-annotation-property-label",
                 );
                 idElement.textContent = "ID";
+                idElement.style.opacity = "0.8";
+                idElement.style.fontSize = "12px";
                 label.appendChild(idElement);
                 const valueElement = document.createElement("span");
                 valueElement.classList.add(
