@@ -26,6 +26,7 @@ import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
+import svg_edit from "ikonate/icons/edit.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
@@ -182,7 +183,7 @@ class AnnotationUIProperty extends RefCounted {
   makeUI() {
     const { element, spec, readonly } = this;
     const enumLabels = "enumLabels" in spec ? spec.enumLabels : undefined;
-    element.appendChild(this.createNameCell(spec.identifier));
+    element.appendChild(this.createNameCell(spec.identifier, spec.description));
     const type = isBooleanType(enumLabels) ? "bool" : spec.type;
     element.appendChild(this.createTypeCell(spec.identifier, type, enumLabels));
     element.appendChild(this.createDefaultValueCell(spec.identifier, type));
@@ -205,15 +206,39 @@ class AnnotationUIProperty extends RefCounted {
     }
   }
 
-  private createNameCell(identifier: string): HTMLDivElement {
+  private createNameCell(
+    identifier: string,
+    description?: string,
+  ): HTMLDivElement {
     const nameInput = this.createInputElement({
       type: "text",
       value: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
     const cell = this.createTableCell(nameInput, "");
+    if (description) {
+      cell.title = description;
+    }
     nameInput.dataset.readonly = String(this.readonly);
     if (this.readonly) return cell;
+    // Add a little icon to the right of the input that lets you change the description
+    const descriptionIcon = makeIcon({
+      svg: svg_edit,
+      title: "Change description",
+    });
+    this.registerEventListener(descriptionIcon, "click", () => {
+      const newDescription = prompt(
+        "Enter a new description for this property:",
+        description,
+      );
+      if (newDescription !== null) {
+        this.updateProperty(this.spec, {
+          ...this.spec,
+          description: newDescription,
+        } as AnnotationPropertySpec);
+      }
+    });
+    cell.appendChild(descriptionIcon);
     this.registerEventListener(nameInput, "change", (event: Event) => {
       if (!event.target) return;
       const rawValue = (event.target as HTMLInputElement).value;
