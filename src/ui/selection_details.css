@@ -48,14 +48,15 @@
 .neuroglancer-selection-details-layer {
   margin-top: 4px;
   margin-bottom: 4px;
-  border: 1px solid #222;
+  border: 1px solid #1f1f1f;
 }
 
 .neuroglancer-selection-details-layer-title {
   cursor: pointer;
-  background-color: #222;
+  background-color: #1f1f1f;
   font-family: sans-serif;
   font-size: 10pt;
+  padding: 2px 4px;
 }
 
 .neuroglancer-selection-details-layer-title:hover {
