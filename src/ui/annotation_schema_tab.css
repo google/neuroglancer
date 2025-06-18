@@ -205,6 +205,7 @@
 .neuroglancer-annotation-schema-color-input {
   background: #222;
   border: none;
-  padding: 1px 0;
+  border-radius: 2px;
+  padding: 2px;
   width: 100%;
 }

@@ -1889,7 +1889,7 @@ export function UserLayerWithAnnotationsMixin<
                 const sourceReadonly = annotationLayer.source.readonly;
 
                 // Add the ID to the annotation details.
-                const label = document.createElement("label");
+                const label = document.createElement("div");
                 label.classList.add("neuroglancer-annotation-property", "neuroglancer-annotation-property-id");
                 const idElement = document.createElement("span");
                 idElement.classList.add(
@@ -1922,6 +1922,7 @@ export function UserLayerWithAnnotationsMixin<
                     label.title = description;
                   }
                   const value = annotation.properties[i];
+                  const valueElementWrapper = document.createElement("div");
                   let valueElement: HTMLElement;
                   let valueElementSetter: (value: any) => void;
                   const changeFunction = sourceReadonly
@@ -1941,6 +1942,7 @@ export function UserLayerWithAnnotationsMixin<
                   valueElementSetter = (value) => {
                     valueElement.textContent = value;
                   };
+                  valueElementWrapper.classList.add("neuroglancer-annotation-property-value-wrapper");
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
                   );
@@ -1992,6 +1994,7 @@ export function UserLayerWithAnnotationsMixin<
                           step: 0.01,
                         },
                       );
+                      alphaInput.classList.add("neuroglancer-annotation-property-value-input")
                       const rgbaContainer = document.createElement("div");
                       rgbaContainer.classList.add(
                         "neuroglancer-annotation-property-container",
@@ -2032,6 +2035,7 @@ export function UserLayerWithAnnotationsMixin<
                       if (isBool) {
                         const input = document.createElement("input");
                         input.type = "checkbox";
+                        input.id = `boolean-checkbox-${i}`
                         input.checked = Boolean(value);
                         input.addEventListener("change", () => {
                           changeFunction(input.checked ? 1 : 0);
@@ -2051,6 +2055,7 @@ export function UserLayerWithAnnotationsMixin<
                           });
                         }
                         const select = document.createElement("select");
+                        select.id = `integer-select-${i}`
                         select.classList.add(
                           "neuroglancer-annotation-property-select",
                         );
@@ -2075,6 +2080,8 @@ export function UserLayerWithAnnotationsMixin<
                             dataType: propertyTypeDataType[propertyAsNum.type],
                           },
                         );
+                        input.id = `number-input-${i}`;
+                        input.classList.add("neuroglancer-annotation-property-value-input")
                         valueElement = input;
                         valueElement.addEventListener("change", () => {
                           const inputValue = input.valueAsNumber;
@@ -2087,7 +2094,8 @@ export function UserLayerWithAnnotationsMixin<
                       }
                     }
                   }
-                  label.appendChild(valueElement);
+                  valueElementWrapper.appendChild(valueElement);
+                  label.appendChild(valueElementWrapper);
                   parent.appendChild(label);
                 }
 
