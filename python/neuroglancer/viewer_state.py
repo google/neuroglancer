@@ -1106,7 +1106,9 @@ class PolyLineAnnotation(Annotation):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, type="polyline", **kwargs)
 
-    points = wrapped_property("points", typed_list(array_wrapper(np.float32)))
+    points = wrapped_property(
+        "points", typed_list(array_wrapper(array_wrapper(np.float32)))
+    )
 
 
 @export
