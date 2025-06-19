@@ -76,7 +76,7 @@ import {
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { ArraySpliceOp } from "#src/util/array.js";
+import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
   serializeColor,
