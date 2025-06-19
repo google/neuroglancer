@@ -238,30 +238,89 @@ div.neuroglancer-annotation-details-description {
 .neuroglancer-related-segment-list-header {
   display: flex;
   flex-direction: row;
+  align-items: center;
 }
 
 .neuroglancer-related-segment-list {
-  /*  border: 1px solid #333;
-  margin: 3px;*/
+  margin: 4px 0;
 }
 
 .neuroglancer-annotation-property {
   display: flex;
   flex-direction: row;
+  align-items: center;
   font-family: sans-serif;
   font-size: small;
   user-select: text;
+  gap: 12px;
+  padding: 2px;
+  border-bottom: 1px solid #222;
 }
 
-.neuroglancer-annotation-property-label {
-  color: #999;
+.neuroglancer-annotation-property-id {
+  border-bottom: none;
+  margin-bottom: 8px;
+  padding: 0;
 }
 
 .neuroglancer-annotation-property-value {
-  text-align: right;
   font-family: monospace;
-  font-size: medium;
+}
+
+.neuroglancer-annotation-property-id .neuroglancer-annotation-property-value {
+  padding: 0;
   flex: 1;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.neuroglancer-annotation-property-id .neuroglancer-annotation-property-label {
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+.neuroglancer-annotation-property-label {
+  color: white;
+  flex: 1;
+}
+
+.neuroglancer-annotation-property-value-wrapper {
+  flex: 1;
+  display: inline-flex;
+  justify-content: right;
+}
+
+.neuroglancer-annotation-property-value-input {
+  text-align: left;
+  font-family: monospace;
+  font-size: 12px;
+  width: 100%;
+  color: white;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.30);
+  outline: none;
+  border: 1px solid transparent;
+}
+
+.neuroglancer-annotation-property-value-input::placeholder {
+  color: rgba(255, 255, 255, 0.40);
+}
+
+.neuroglancer-annotation-property-value-input:hover {
+  background: rgba(255, 255, 255, 0.40);
+}
+
+.neuroglancer-annotation-property-value-input:focus {
+  border-color:#016DCC;
+  background: rgba(255, 255, 255, 0.30);
+}
+
+.neuroglancer-annotation-property-select {
+  padding: 2px 4px;
+  border-radius: 2px;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 510;
 }
 
 input.neuroglancer-segment-list-entry-id {
@@ -281,4 +340,23 @@ input.neuroglancer-segment-list-entry-id {
 .neuroglancer-selection-annotation-status {
   font-family: sans-serif;
   font-size: small;
+}
+
+.neuroglancer-annotation-property-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.neuroglancer-annotation-property-color {
+  background: #222;
+  border: none;
+  border-radius: 2px;
+  padding: 2px;
+  width: 100%;
+}
+
+.neuroglancer-related-segment-list-header-checkbox {
+  min-width: 17px;
 }
