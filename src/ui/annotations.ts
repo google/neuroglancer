@@ -1896,8 +1896,6 @@ export function UserLayerWithAnnotationsMixin<
                   "neuroglancer-annotation-property-label",
                 );
                 idElement.textContent = "ID";
-                idElement.style.opacity = "0.8";
-                idElement.style.fontSize = "12px";
                 label.appendChild(idElement);
                 const valueElement = document.createElement("span");
                 valueElement.classList.add(
@@ -1995,6 +1993,7 @@ export function UserLayerWithAnnotationsMixin<
                         },
                       );
                       alphaInput.classList.add("neuroglancer-annotation-property-value-input")
+                      alphaInput.name = `neuroglancer-annotation-property-color-value-${i}`;
                       const rgbaContainer = document.createElement("div");
                       rgbaContainer.classList.add(
                         "neuroglancer-annotation-property-container",
@@ -2035,12 +2034,13 @@ export function UserLayerWithAnnotationsMixin<
                       if (isBool) {
                         const input = document.createElement("input");
                         input.type = "checkbox";
-                        input.id = `boolean-checkbox-${i}`
+                        input.name = `neuroglancer-annotation-property-value-checkbox-${i}`
                         input.checked = Boolean(value);
                         input.addEventListener("change", () => {
                           changeFunction(input.checked ? 1 : 0);
                         });
                         valueElement = input;
+                        valueElementWrapper.style.justifyContent = "center";
                       } else if (isEnum) {
                         // Make a dropdown which combines the enum labels and values.
                         const options = [];
@@ -2055,7 +2055,7 @@ export function UserLayerWithAnnotationsMixin<
                           });
                         }
                         const select = document.createElement("select");
-                        select.id = `integer-select-${i}`
+                        select.name = `neuroglancer-annotation-property-select-${i}`
                         select.classList.add(
                           "neuroglancer-annotation-property-select",
                         );
@@ -2080,8 +2080,8 @@ export function UserLayerWithAnnotationsMixin<
                             dataType: propertyTypeDataType[propertyAsNum.type],
                           },
                         );
-                        input.id = `number-input-${i}`;
                         input.classList.add("neuroglancer-annotation-property-value-input")
+                        input.name = `neuroglancer-annotation-property-value-input-${i}`
                         valueElement = input;
                         valueElement.addEventListener("change", () => {
                           const inputValue = input.valueAsNumber;

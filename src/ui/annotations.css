@@ -242,8 +242,6 @@ div.neuroglancer-annotation-details-description {
 }
 
 .neuroglancer-related-segment-list {
-  /*  border: 1px solid #333;
-  margin: 3px;*/
   margin: 4px 0;
 }
 
@@ -255,7 +253,7 @@ div.neuroglancer-annotation-details-description {
   font-size: small;
   user-select: text;
   gap: 12px;
-  padding: 3px 2px;
+  padding: 2px;
   border-bottom: 1px solid #222;
 }
 
@@ -271,17 +269,25 @@ div.neuroglancer-annotation-details-description {
 
 .neuroglancer-annotation-property-id .neuroglancer-annotation-property-value {
   padding: 0;
+  flex: 1;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.neuroglancer-annotation-property-id .neuroglancer-annotation-property-label {
+  opacity: 0.8;
+  font-size: 12px;
 }
 
 .neuroglancer-annotation-property-label {
-  color: #fff;
+  color: white;
   flex: 1;
 }
 
 .neuroglancer-annotation-property-value-wrapper {
   flex: 1;
   display: inline-flex;
-  justify-content: center;
+  justify-content: right;
 }
 
 .neuroglancer-annotation-property-value-input {
@@ -294,7 +300,7 @@ div.neuroglancer-annotation-details-description {
   padding: 2px;
   background: rgba(255, 255, 255, 0.30);
   outline: none;
-  border: none;
+  border: 1px solid transparent;
 }
 
 .neuroglancer-annotation-property-value-input::placeholder {
@@ -306,7 +312,7 @@ div.neuroglancer-annotation-details-description {
 }
 
 .neuroglancer-annotation-property-value-input:focus {
-  border: 1px solid #016DCC;
+  border-color:#016DCC;
   background: rgba(255, 255, 255, 0.30);
 }
 
