@@ -304,6 +304,9 @@ class AnnotationUIProperty extends RefCounted {
       colorInput.element.classList.add(
         "neuroglancer-annotation-schema-color-input",
       );
+      if(this.readonly){
+        colorInput.element.disabled = true;
+      }
       inputs.push(colorInput.element);
       changeFunction = () => {
         const newColor = colorInput.getRGB();
