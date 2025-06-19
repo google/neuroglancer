@@ -136,6 +136,7 @@ python_apigen_modules = {
     "neuroglancer.viewer_config_state": "python/api/",
     "neuroglancer.trackable_state": "python/api/",
     "neuroglancer.json_wrappers": "python/api/",
+    "neuroglancer.read_precomputed_annotations": "python/api/read_precomputed_annotations.",
     "neuroglancer": "python/api/",
 }
 
@@ -147,6 +148,10 @@ python_apigen_default_groups = [
     (r"class:neuroglancer\.viewer_state\..*Layer", "viewer-state-layers"),
     (r"class:neuroglancer\.viewer\..*", "core"),
     (r"class:neuroglancer\.server\..*", "server"),
+    (
+        r"(class|data|function):neuroglancer\.read_precomputed_annotations\..*",
+        "annotation-io",
+    ),
 ]
 
 python_apigen_rst_prolog = """

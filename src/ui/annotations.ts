@@ -77,7 +77,6 @@ import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bi
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
-import { arraysEqual } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
   serializeColor,
@@ -373,14 +372,9 @@ export class AnnotationLayerView extends Tab {
         localDimensionIndices.push(localDim);
       }
     }
-    if (
-      !arraysEqual(globalDimensionIndices, this.globalDimensionIndices) ||
-      !arraysEqual(localDimensionIndices, this.localDimensionIndices)
-    ) {
-      this.localDimensionIndices = localDimensionIndices;
-      this.globalDimensionIndices = globalDimensionIndices;
-      ++this.curCoordinateSpaceGeneration;
-    }
+    this.localDimensionIndices = localDimensionIndices;
+    this.globalDimensionIndices = globalDimensionIndices;
+    ++this.curCoordinateSpaceGeneration;
   }
 
   constructor(
