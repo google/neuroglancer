@@ -619,10 +619,9 @@ def number_or_string_or_array(value):
         return number_or_string(value)
     except TypeError:
         if not (isinstance(value, np.ndarray) or isinstance(value, list)):
-            raise TypeError(f"Expected number, string, or array, got {type(value)}")
+            raise TypeError
         for v in value:
-            if not isinstance(v, numbers.Real | str):
-                raise TypeError(f"Expected number or string in array, got {type(v)}")
+            number_or_string(v)
         return value
 
 
