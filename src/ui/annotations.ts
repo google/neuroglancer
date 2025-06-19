@@ -1442,6 +1442,8 @@ function makeRelatedSegmentList(
       if (segmentationDisplayState != null) {
         headerCheckbox = document.createElement("input");
         headerCheckbox.type = "checkbox";
+        headerCheckbox.classList.add("neuroglancer-related-segment-list-header-checkbox");
+        headerCheckbox.name = "neuroglancer-related-segment-list-header-checkbox"
         headerCheckbox.addEventListener("change", () => {
           const { visibleSegments } =
             segmentationDisplayState.segmentationGroupState.value;

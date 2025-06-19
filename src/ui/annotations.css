@@ -293,9 +293,8 @@ div.neuroglancer-annotation-details-description {
 .neuroglancer-annotation-property-value-input {
   text-align: left;
   font-family: monospace;
-  font-size: medium;
-  flex: 1;
   font-size: 12px;
+  width: 100%;
   color: white;
   padding: 2px;
   background: rgba(255, 255, 255, 0.30);
@@ -356,4 +355,8 @@ input.neuroglancer-segment-list-entry-id {
   border-radius: 2px;
   padding: 2px;
   width: 100%;
+}
+
+.neuroglancer-related-segment-list-header-checkbox {
+  min-width: 17px;
 }
