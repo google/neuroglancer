@@ -1,3 +1,7 @@
+.neuroglancer-annotations-schema-tab {
+  overflow-y: auto;
+}
+
 .neuroglancer-annotation-schema-grid {
   display: flex;
   flex-direction: column;
