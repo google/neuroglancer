@@ -363,8 +363,13 @@ class AnnotationReader:
     def _get_dtype(self, encoded: bytes) -> np.dtype:
         """Returns the dtype for the encoded annotation."""
         if self.annotation_type == "polyline":
-            num_points = np.frombuffer(encoded, dtype="<u4", count=1)[0]
-            geometry = ("geometry", "<f4", (num_points * self.coordinate_space.rank,))
+            num_points_value = np.frombuffer(encoded, dtype="<u4", count=1)[0]
+            num_points = ("num_points", "<u4")
+            geometry = (
+                "geometry",
+                "<f4",
+                (num_points_value * self.coordinate_space.rank,),
+            )
             return np.dtype([num_points, geometry] + self._property_dtype)
         return self._dtype
 

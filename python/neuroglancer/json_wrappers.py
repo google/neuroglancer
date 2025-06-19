@@ -613,6 +613,19 @@ def typed_list(wrapped_type: Callable[[Any], T], validator=None) -> type[List[T]
     return _List
 
 
+def number_or_string_or_array(value):
+    """A type that accepts numbers, strings, or arrays of numbers/strings."""
+    try:
+        return number_or_string(value)
+    except TypeError:
+        if not (isinstance(value, np.ndarray) or isinstance(value, list)):
+            raise TypeError(f"Expected number, string, or array, got {type(value)}")
+        for v in value:
+            if not isinstance(v, numbers.Real | str):
+                raise TypeError(f"Expected number or string in array, got {type(v)}")
+        return value
+
+
 def number_or_string(value):
     if not isinstance(value, numbers.Real | str):
         raise TypeError

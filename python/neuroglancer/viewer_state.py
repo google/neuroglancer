@@ -23,7 +23,6 @@ import re
 import typing
 
 import numpy as np
-import numpy.typing
 
 from . import local_volume, segment_colors, skeleton
 from .coordinate_space import CoordinateArray, CoordinateSpace, DimensionScale
@@ -37,6 +36,7 @@ from .json_wrappers import (
     array_wrapper,
     bool_or_string,
     number_or_string,
+    number_or_string_or_array,
     optional,
     typed_list,
     typed_map,
@@ -1071,7 +1071,7 @@ class Annotation(JsonObjectWrapper, metaclass=_AnnotationMetaclass):
     type = wrapped_property("type", str)
     description = wrapped_property("description", optional(str))
     segments = wrapped_property("segments", optional(typed_list(typed_list(np.uint64))))
-    props = wrapped_property("props", optional(typed_list(number_or_string)))
+    props = wrapped_property("props", typed_list(number_or_string_or_array))
 
     def __new__(cls, obj=None, _readonly: bool = False, **kwargs):
         """Coerces the argument to an `Annotation`."""
@@ -1106,9 +1106,7 @@ class PolyLineAnnotation(Annotation):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, type="polyline", **kwargs)
 
-    points = wrapped_property(
-        "points", typed_list(array_wrapper(array_wrapper(np.float32)))
-    )
+    points = wrapped_property("points", typed_list(typed_list(number_or_string)))
 
 
 @export
