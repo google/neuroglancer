@@ -394,15 +394,16 @@ class AnnotationReader:
         count = np.frombuffer(encoded, dtype="<u8", count=1)[0]
         offset = 8
         if self.annotation_type == "polyline":
-            decoded = []
-            for i in range(count):
+            decoded_parts = []
+            for _ in range(count):
                 encoded_subset = encoded[offset:]
                 dtype = self._get_dtype(encoded_subset)
                 decoded_polyline = np.frombuffer(encoded_subset, dtype=dtype, count=1)[
                     0
                 ]
-                decoded.append(decoded_polyline)
+                decoded_parts.append(decoded_polyline)
                 offset += decoded_polyline.nbytes
+            decoded = np.array(decoded_parts, dtype=object)
         else:
             decoded = np.frombuffer(
                 encoded, dtype=self._dtype, count=count, offset=offset
