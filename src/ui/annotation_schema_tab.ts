@@ -536,72 +536,92 @@ class AnnotationUIProperty extends RefCounted {
     const readonly = this.readonly;
 
     if (config.type === "number") {
-      const input = createBoundedNumberInputElement(
-        {
-          inputValue: config.inputValue as number,
-          className: config.className,
-          numDecimals: config.decimals,
-          readonly,
-        },
-        numberConfig,
-      );
-      input.dataset.readonly = String(readonly);
-      input.disabled = readonly;
-      return input;
+      return this.createNumberInput(config, numberConfig, readonly);
     }
 
     if (config.type === "text") {
-      if (config.useTextarea) {
-        const textarea = document.createElement("textarea");
-        textarea.dataset.readonly = String(readonly);
-        textarea.disabled = readonly;
-
-        if (config.className) textarea.classList.add(config.className);
-        textarea.value = String(config.inputValue || "");
-        textarea.autocomplete = "off";
-        textarea.spellcheck = false;
-
-        const resizeTextarea = () => {
-          textarea.style.height = 'auto';
-          textarea.style.height = `${textarea.scrollHeight}px`;
-        };
-
-        resizeTextarea();
-
-        textarea.addEventListener('input', resizeTextarea);
-
-        if (typeof ResizeObserver !== 'undefined') {
-          const observer = new ResizeObserver(resizeTextarea);
-          observer.observe(textarea);
-        }
-        
-        return textarea;
-      } else {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.dataset.readonly = String(readonly);
-        input.disabled = readonly;
-
-        if (config.className) input.classList.add(config.className);
-        input.value = String(config.inputValue || "");
-        input.autocomplete = "off";
-        input.spellcheck = false;
-        return input;
-      }
+      return config.useTextarea
+        ? this.createTextAreaElement(config, readonly)
+        : this.createTextInputElement(config, readonly);
     }
 
     const input = document.createElement("input");
-    input.dataset.readonly = String(readonly);
-    input.disabled = readonly;
     input.type = config.type;
-
-    if (typeof config.inputValue !== "number") {
-      if (config.className) input.classList.add(config.className);
-      input.value = String(config.inputValue || "");
-      input.autocomplete = "off";
-      input.spellcheck = false;
-    }
+    this.setCommonInputAttributes(input, config, readonly);
     return input;
+  }
+
+  private createNumberInput(
+    config: InputConfig,
+    numberConfig: NumberConfig | undefined,
+    readonly: boolean
+  ): HTMLInputElement {
+    const input = createBoundedNumberInputElement(
+      {
+        inputValue: config.inputValue as number,
+        className: config.className,
+        numDecimals: config.decimals,
+        readonly,
+      },
+      numberConfig,
+    );
+    this.setCommonInputAttributes(input, config, readonly);
+    return input;
+  }
+
+  private createTextAreaElement(
+    config: InputConfig,
+    readonly: boolean
+  ): HTMLTextAreaElement {
+    const textarea = document.createElement("textarea");
+    this.setCommonInputAttributes(textarea, config, readonly);
+
+    const resizeTextarea = () => {
+      textarea.style.height = 'auto';
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20;
+      const minHeight = lineHeight;
+      const scrollHeight = textarea.scrollHeight;
+      textarea.style.height = `${Math.max(minHeight, scrollHeight)}px`;
+    };
+
+    resizeTextarea();
+
+    textarea.addEventListener('input', resizeTextarea);
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(resizeTextarea);
+      observer.observe(textarea);
+    }
+
+    return textarea;
+  }
+
+  private createTextInputElement(
+    config: InputConfig,
+    readonly: boolean
+  ): HTMLInputElement {
+    const input = document.createElement("input");
+    input.type = "text";
+    this.setCommonInputAttributes(input, config, readonly);
+    return input;
+  }
+
+  private setCommonInputAttributes(
+    element: HTMLInputElement | HTMLTextAreaElement,
+    config: InputConfig,
+    readonly: boolean
+  ): void {
+    element.dataset.readonly = String(readonly);
+    element.disabled = readonly;
+
+    if (config.className) {
+      element.classList.add(config.className);
+    }
+
+    if (typeof config.inputValue !== "number" || element instanceof HTMLTextAreaElement) {
+      element.value = String(config.inputValue || "");
+      element.autocomplete = "off";
+      element.spellcheck = false;
+    }
   }
 
   private createTypeTextElement(
