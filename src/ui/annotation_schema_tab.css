@@ -165,6 +165,7 @@
 
 .neuroglancer-annotation-schema-enum-entry textarea {
   min-width: 50px;
+  height: auto !important;
 }
 
 .neuroglancer-annotation-schema-enum-entry input[type="number"] {
@@ -201,6 +202,7 @@
   resize: none;
   overflow: hidden;
   min-width: 42px;
+  padding: 2px;
 }
 
 .neuroglancer-annotation-schema-default-input[data-readonly="true"] {

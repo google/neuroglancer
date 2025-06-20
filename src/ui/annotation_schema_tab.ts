@@ -576,7 +576,37 @@ class AnnotationUIProperty extends RefCounted {
     const textarea = document.createElement("textarea");
     this.setCommonInputAttributes(textarea, config, readonly);
 
-    const resizeTextarea = () => {
+    const calculateRows = (content: string): number => {
+      if (!content) return 1;
+
+      const avgCharWidth = 8;
+      const textareaWidth = textarea.clientWidth || 300;
+      const charsPerLine = Math.floor(textareaWidth / avgCharWidth);
+
+      const lines = content.split('\n');
+      let totalRows = 0;
+
+      lines.forEach(line => {
+        if (line.length === 0) {
+          totalRows += 1;
+        } else {
+          totalRows += Math.ceil(line.length / charsPerLine);
+        }
+      });
+
+      const minRows = 1;
+      const maxRows = 5;
+
+      return Math.max(minRows, Math.min(maxRows, totalRows));
+    };
+
+    const updateTextareaSize = () => {
+      const content = textarea.value;
+      const calculatedRows = calculateRows(content);
+
+      textarea.rows = calculatedRows;
+      textarea.setAttribute('rows', calculatedRows.toString());
+
       textarea.style.height = 'auto';
       const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20;
       const minHeight = lineHeight;
@@ -584,13 +614,20 @@ class AnnotationUIProperty extends RefCounted {
       textarea.style.height = `${Math.max(minHeight, scrollHeight)}px`;
     };
 
-    resizeTextarea();
+    const initialRows = calculateRows(textarea.value || '');
+    textarea.rows = initialRows;
+    textarea.setAttribute('rows', initialRows.toString());
 
-    textarea.addEventListener('input', resizeTextarea);
+    textarea.addEventListener('input', updateTextareaSize);
+
     if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(resizeTextarea);
+      const observer = new ResizeObserver(() => {
+        setTimeout(updateTextareaSize, 0);
+      });
       observer.observe(textarea);
     }
+
+    setTimeout(updateTextareaSize, 0);
 
     return textarea;
   }
