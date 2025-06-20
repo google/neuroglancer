@@ -84,10 +84,11 @@ type AnnotationType = AnnotationPropertySpec["type"];
 type AnnotationUIType = AnnotationType | "bool";
 
 interface InputConfig {
-  type: string;
+  type: "number" | "text" | "checkbox";
   inputValue?: number | string;
   className?: string;
   decimals?: number; // For number inputs, how many decimals to show
+  useTextarea?: boolean;
 }
 
 interface NumberConfig {
@@ -100,7 +101,7 @@ interface NumberConfig {
 class AnnotationUIProperty extends RefCounted {
   public element: HTMLDivElement = document.createElement("div");
   private defaultValueCell: HTMLDivElement | null = null;
-  private defaultValueElements: HTMLInputElement[] = [];
+  private defaultValueElements: (HTMLInputElement | HTMLTextAreaElement)[] = [];
   private typeChangeDropdown: HTMLDivElement | null = null;
   private typeChanged = new NullarySignal();
   constructor(
@@ -288,7 +289,7 @@ class AnnotationUIProperty extends RefCounted {
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
 
-    let inputs: HTMLInputElement[] = [];
+    let inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
     let changeFunction: (event: Event) => void;
     const oldProperty = this.getPropertyByIdentifier(identifier);
     if (oldProperty === undefined) {
@@ -304,7 +305,7 @@ class AnnotationUIProperty extends RefCounted {
       colorInput.element.classList.add(
         "neuroglancer-annotation-schema-color-input",
       );
-      if(this.readonly){
+      if (this.readonly) {
         colorInput.element.disabled = true;
       }
       inputs.push(colorInput.element);
@@ -325,7 +326,7 @@ class AnnotationUIProperty extends RefCounted {
             decimals: 2,
           },
           { min: 0, max: 1, step: 0.01 },
-        );
+        ) as HTMLInputElement;
         inputs.push(alphaInput);
         changeFunction = () => {
           const newColor = colorInput.getRGB();
@@ -347,7 +348,7 @@ class AnnotationUIProperty extends RefCounted {
         type: "checkbox",
         inputValue: String(oldProperty.default),
         className: "neuroglancer-annotation-schema-default-input",
-      });
+      }) as HTMLInputElement;
       boolInput.checked = oldProperty.default === 1;
       inputs.push(boolInput);
       changeFunction = (event: Event) => {
@@ -433,6 +434,7 @@ class AnnotationUIProperty extends RefCounted {
             type: "text",
             inputValue: label,
             className: "neuroglancer-annotation-schema-default-input",
+            useTextarea: true
           });
           if (!this.readonly) {
             nameInput.addEventListener("change", (event) => {
@@ -526,35 +528,82 @@ class AnnotationUIProperty extends RefCounted {
     this.defaultValueCell = cell;
     return cell;
   }
+
   private createInputElement(
     config: InputConfig,
     numberConfig?: NumberConfig,
-  ): HTMLInputElement {
+  ): HTMLInputElement | HTMLTextAreaElement {
     const readonly = this.readonly;
-    const input =
-      config.type === "number"
-        ? createBoundedNumberInputElement(
-            {
-              inputValue: config.inputValue as number,
-              className: config.className,
-              numDecimals: config.decimals,
-              readonly,
-            },
-            numberConfig,
-          )
-        : document.createElement("input");
+
+    if (config.type === "number") {
+      const input = createBoundedNumberInputElement(
+        {
+          inputValue: config.inputValue as number,
+          className: config.className,
+          numDecimals: config.decimals,
+          readonly,
+        },
+        numberConfig,
+      );
+      input.dataset.readonly = String(readonly);
+      input.disabled = readonly;
+      return input;
+    }
+
+    if (config.type === "text") {
+      if (config.useTextarea) {
+        const textarea = document.createElement("textarea");
+        textarea.dataset.readonly = String(readonly);
+        textarea.disabled = readonly;
+
+        if (config.className) textarea.classList.add(config.className);
+        textarea.value = String(config.inputValue || "");
+        textarea.autocomplete = "off";
+        textarea.spellcheck = false;
+
+        const resizeTextarea = () => {
+          textarea.style.height = 'auto';
+          textarea.style.height = `${textarea.scrollHeight}px`;
+        };
+
+        resizeTextarea();
+
+        textarea.addEventListener('input', resizeTextarea);
+
+        if (typeof ResizeObserver !== 'undefined') {
+          const observer = new ResizeObserver(resizeTextarea);
+          observer.observe(textarea);
+        }
+        
+        return textarea;
+      } else {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.dataset.readonly = String(readonly);
+        input.disabled = readonly;
+
+        if (config.className) input.classList.add(config.className);
+        input.value = String(config.inputValue || "");
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        return input;
+      }
+    }
+
+    const input = document.createElement("input");
     input.dataset.readonly = String(readonly);
     input.disabled = readonly;
-
     input.type = config.type;
+
     if (typeof config.inputValue !== "number") {
       if (config.className) input.classList.add(config.className);
-      input.value = config.inputValue || "";
+      input.value = String(config.inputValue || "");
       input.autocomplete = "off";
       input.spellcheck = false;
     }
     return input;
   }
+
   private createTypeTextElement(
     type: AnnotationUIType,
     enumLabels?: string[],
