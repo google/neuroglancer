@@ -575,28 +575,30 @@ class AnnotationUIProperty extends RefCounted {
     readonly: boolean,
   ): HTMLTextAreaElement {
     const textarea = document.createElement("textarea");
+    textarea.rows = 1;
     this.setCommonInputAttributes(textarea, config, readonly);
 
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        textarea.blur();
+      }
+    });
+
     const calculateRows = (content: string): number => {
-      if (!content) return 1;
-
       const avgCharWidth = 8.5;
-      const textareaWidth = textarea.clientWidth || 300;
-      const charsPerLine = Math.floor(textareaWidth / (avgCharWidth));
+      const minRows = 1;
+      const maxRows = 5;
 
+      if (!content) return minRows;
+
+      const textareaWidth = textarea.clientWidth || 300;
+      const charsPerLine = textareaWidth / avgCharWidth;
       const lines = content.split("\n");
       let totalRows = 0;
 
       lines.forEach((line) => {
-        if (line.length === 0) {
-          totalRows += 1;
-        } else {
-          totalRows += Math.ceil(line.length / charsPerLine);
-        }
+        totalRows += Math.max(Math.ceil(line.length / charsPerLine), 1);
       });
-
-      const minRows = 1;
-      const maxRows = 5;
 
       return Math.max(minRows, Math.min(maxRows, totalRows));
     };
@@ -606,20 +608,12 @@ class AnnotationUIProperty extends RefCounted {
       const calculatedRows = calculateRows(content);
 
       textarea.rows = calculatedRows;
-      textarea.setAttribute("rows", calculatedRows.toString());
-
-      textarea.style.height = "auto";
-      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20;
-      const minHeight = lineHeight;
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight);
       const scrollHeight = textarea.scrollHeight;
-      textarea.style.height = `${Math.max(minHeight, scrollHeight)}px`;
+      textarea.style.height = `${Math.max(lineHeight, scrollHeight) || 20}px`;
     };
     const debouncedUpdateTextareaSize =
       animationFrameDebounce(updateTextareaSize);
-
-    const initialRows = calculateRows(textarea.value || "");
-    textarea.rows = initialRows;
-    textarea.setAttribute("rows", initialRows.toString());
 
     textarea.addEventListener("input", debouncedUpdateTextareaSize);
     const resizeObserver = new ResizeObserver(() => {
