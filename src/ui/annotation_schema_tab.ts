@@ -59,7 +59,12 @@ import {
   isBooleanType,
   isEnumType,
 } from "#src/ui/annotations.js";
-import { packColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
+import {
+  packColor,
+  serializeColor,
+  unpackRGB,
+  unpackRGBA,
+} from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -167,11 +172,20 @@ class AnnotationUIProperty extends RefCounted {
   ): string {
     return this.parentView.getIconForType(type, enumLabels);
   }
-  public setNumericDefaultValueOnly(defaultValue: number) {
+  public setDefaultValueOnly(defaultValue: number) {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
     if (isAnnotationTypeNumeric(type)) {
       this.defaultValueElements[0].value = numberToStringFixed(defaultValue, 4);
+    }
+    // For color types, we need to unpack the color and set the RGB values
+    else if (type.startsWith("rgb")) {
+      const rgbColor = unpackRGB(defaultValue);
+      this.defaultValueElements[0].value = serializeColor(rgbColor);
+      if (type === "rgba") {
+        const alpha = unpackRGBA(defaultValue)[3];
+        this.defaultValueElements[1].value = numberToStringFixed(alpha, 2);
+      }
     }
     this.spec.default = defaultValue;
   }
@@ -285,7 +299,6 @@ class AnnotationUIProperty extends RefCounted {
     identifier: string,
     type: AnnotationUIType,
   ): HTMLDivElement {
-    console.log("remaking", type, identifier);
     const container = document.createElement("div");
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
@@ -929,7 +942,6 @@ export class AnnotationSchemaView extends Tab {
       const annotationUIProperty = this.annotationUIProperties.get(
         propertySchema.identifier,
       );
-      // If the property is undefined, it means it is a new property
       if (annotationUIProperty === undefined) {
         // Create a new AnnotationUIProperty and add it to the map
         this.annotationUIProperties.set(
@@ -946,22 +958,19 @@ export class AnnotationSchemaView extends Tab {
         // If the property is the same, we can skip updating it
         if (!comparedProperties.same) {
           // If only the default value changed, we can update that
-          const isNumeric = isAnnotationTypeNumeric(propertySchema.type);
-          let allSame = true;
+          let allSameExceptDefault = true;
           const sameValues = comparedProperties.sameValues;
           for (const key in sameValues) {
             if (key === "default") continue; // Skip default value
             if (!sameValues[key as keyof typeof sameValues]) {
-              allSame = false;
+              allSameExceptDefault = false;
               break;
             }
           }
-          if (isNumeric && allSame && !sameValues.default) {
-            annotationUIProperty.setNumericDefaultValueOnly(
-              propertySchema.default,
-            );
+          if (allSameExceptDefault && !sameValues.default) {
+            // Only the default changed, just update that
+            annotationUIProperty.setDefaultValueOnly(propertySchema.default);
           } else {
-            // If the property has changed otherwise, we need to create a new one
             this.annotationUIProperties.set(
               propertySchema.identifier,
               new AnnotationUIProperty(propertySchema, this),

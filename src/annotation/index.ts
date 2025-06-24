@@ -571,15 +571,19 @@ export function compareAnnotationSpecProperties(
 ) {
   const bothNumeric =
     isAnnotationNumericPropertySpec(a) && isAnnotationNumericPropertySpec(b);
+  const bothColor =
+    !isAnnotationNumericPropertySpec(a) && !isAnnotationNumericPropertySpec(b);
   const sameValues = {
     type: a.type === b.type,
     identifier: a.identifier === b.identifier,
     description: a.description === b.description,
     default: a.default === b.default,
     enumValues:
-      bothNumeric && arraysEqual(a.enumValues || [], b.enumValues || []),
+      bothColor ||
+      (bothNumeric && arraysEqual(a.enumValues || [], b.enumValues || [])),
     enumLabels:
-      bothNumeric && arraysEqual(a.enumLabels || [], b.enumLabels || []),
+      bothColor ||
+      (bothNumeric && arraysEqual(a.enumLabels || [], b.enumLabels || [])),
   };
   // Same if all of the above are true.
   const same = Object.values(sameValues).every((x) => x);

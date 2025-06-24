@@ -218,4 +218,5 @@
   border-radius: 2px;
   padding: 2px;
   width: 100%;
+  flex: 1 0 0;
 }
