@@ -913,7 +913,10 @@ export class AnnotationSchemaView extends Tab {
       title: "Paste schema from clipboard",
       svg: svg_clipboard,
       onClick: () => {
-        confirmPasteContainer.style.display = "block";
+        // If there is any existing schema, then show a confirm first
+        const hasExistingSchema = this.annotationUIProperties.size > 0;
+        if (hasExistingSchema) confirmPasteContainer.style.display = "block";
+        else this.pasteSchemaFromClipboard();
       },
     });
     schemaActionButtons.appendChild(this.schemaPasteButton);
