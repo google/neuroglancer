@@ -194,7 +194,7 @@
   color: white;
   resize: none;
   overflow: hidden;
-  padding: 2px;
+  font-family: sans-serif;
 }
 
 .neuroglancer-annotation-schema-default-value-input[data-readonly="true"] {
