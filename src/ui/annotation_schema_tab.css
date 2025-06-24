@@ -220,3 +220,7 @@
   width: 100%;
   flex: 1 0 0;
 }
+
+.neuroglancer-annotation-description-header-close {
+  background-color: black;
+}

@@ -27,6 +27,7 @@ import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
+import svg_close from "ikonate/icons/close.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
@@ -72,6 +73,7 @@ import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { Overlay } from "#src/overlay.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -102,6 +104,74 @@ interface NumberConfig {
   min?: number;
   max?: number;
   step?: number;
+}
+
+class AnnotationDescriptionEditDialog extends Overlay {
+  constructor(parent: AnnotationUIProperty) {
+    super();
+
+    this.content.classList.add("neuroglancer-annotation-description-editor");
+
+    const header = document.createElement("div");
+    header.classList.add("neuroglancer-annotation-description-header");
+    const headerTitle = document.createElement("span");
+    headerTitle.classList.add(
+      "neuroglancer-annotation-description-header-title",
+    );
+    headerTitle.textContent = "Edit Description";
+    const headerClose = makeIcon({
+      svg: svg_close,
+      onClick: () => {
+        this.close();
+      },
+    });
+    headerClose.classList.add(
+      "neuroglancer-annotation-description-header-close",
+    );
+    // TODO move to css
+    headerClose.style.fill = "#fff";
+    header.appendChild(headerTitle);
+    header.appendChild(headerClose);
+    this.content.appendChild(header);
+
+    const mainBody = document.createElement("div");
+    mainBody.classList.add("neuroglancer-annotation-description-body");
+    const textInputElement = document.createElement("textarea");
+    textInputElement.classList.add(
+      "neuroglancer-annotation-description-text-input",
+    );
+    textInputElement.rows = 5;
+    textInputElement.placeholder = "Add a description for this property...";
+    textInputElement.textContent = parent.spec.description || "";
+    mainBody.appendChild(textInputElement);
+    this.content.appendChild(mainBody);
+
+    const footer = document.createElement("div");
+    footer.classList.add("neuroglancer-annotation-description-footer");
+    const saveButton = document.createElement("button");
+    saveButton.classList.add("neuroglancer-annotation-description-save-button");
+    saveButton.textContent = "Save changes";
+    saveButton.addEventListener("click", () => {
+      const newDescription = textInputElement.value.trim();
+      if (newDescription !== parent.spec.description && newDescription !== "") {
+        parent.updateProperty(parent.spec, {
+          ...parent.spec,
+          description: newDescription,
+        } as AnnotationPropertySpec);
+      }
+    });
+    const cancelButton = document.createElement("button");
+    cancelButton.classList.add(
+      "neuroglancer-annotation-description-cancel-button",
+    );
+    cancelButton.textContent = "Discard changes";
+    cancelButton.addEventListener("click", () => {
+      this.close();
+    });
+    footer.appendChild(cancelButton);
+    footer.appendChild(saveButton);
+    this.content.appendChild(footer);
+  }
 }
 
 class AnnotationUIProperty extends RefCounted {
@@ -145,7 +215,7 @@ class AnnotationUIProperty extends RefCounted {
   ): AnnotationPropertySpec | undefined {
     return this.parentView.getPropertyByIdentifier(identifier);
   }
-  private updateProperty<T extends AnnotationPropertySpec>(
+  public updateProperty<T extends AnnotationPropertySpec>(
     oldProperty: T,
     newProperty: T,
   ) {
@@ -236,16 +306,7 @@ class AnnotationUIProperty extends RefCounted {
       title: "Change description",
     });
     this.registerEventListener(descriptionIcon, "click", () => {
-      const newDescription = prompt(
-        "Enter a new description for this property:",
-        description,
-      );
-      if (newDescription !== null) {
-        this.updateProperty(this.spec, {
-          ...this.spec,
-          description: newDescription,
-        } as AnnotationPropertySpec);
-      }
+      new AnnotationDescriptionEditDialog(this);
     });
     cell.appendChild(descriptionIcon);
     this.registerEventListener(nameInput, "change", (event: Event) => {
