@@ -164,12 +164,7 @@
 }
 
 .neuroglancer-annotation-schema-enum-entry textarea {
-  min-width: 50px;
-  height: auto !important;
-}
-
-.neuroglancer-annotation-schema-enum-entry input[type="number"] {
-  max-width: 42px;
+  height: auto
 }
 
 .neuroglancer-annotation-schema-name-input {
@@ -180,8 +175,6 @@
   font-size: 13px;
   color: white;
   border: none;
-  resize: none;
-  overflow: hidden;
 }
 
 .neuroglancer-annotation-schema-name-input[data-readonly="false"]:hover {
@@ -192,7 +185,7 @@
   background: transparent;
 }
 
-.neuroglancer-annotation-schema-default-input {
+.neuroglancer-annotation-schema-default-value-input {
   width: 100%;
   flex: 1 0 0;
   box-sizing: border-box;
@@ -201,15 +194,14 @@
   color: white;
   resize: none;
   overflow: hidden;
-  min-width: 42px;
   padding: 2px;
 }
 
-.neuroglancer-annotation-schema-default-input[data-readonly="true"] {
+.neuroglancer-annotation-schema-default-value-input[data-readonly="true"] {
   background: none;
 }
 
-.neuroglancer-annotation-schema-default-input[data-readonly="false"]:hover {
+.neuroglancer-annotation-schema-default-value-input[data-readonly="false"]:hover {
   background: rgba(255, 255, 255, 0.4);
 }
 

@@ -323,7 +323,7 @@ class AnnotationUIProperty extends RefCounted {
           {
             type: "number",
             inputValue: alpha,
-            className: "neuroglancer-annotation-schema-default-input",
+            className: "neuroglancer-annotation-schema-default-value-input",
             decimals: 2,
           },
           { min: 0, max: 1, step: 0.01 },
@@ -348,7 +348,7 @@ class AnnotationUIProperty extends RefCounted {
       const boolInput = this.createInputElement({
         type: "checkbox",
         inputValue: String(oldProperty.default),
-        className: "neuroglancer-annotation-schema-default-input",
+        className: "neuroglancer-annotation-schema-default-value-input",
       }) as HTMLInputElement;
       boolInput.checked = oldProperty.default === 1;
       inputs.push(boolInput);
@@ -375,7 +375,7 @@ class AnnotationUIProperty extends RefCounted {
           {
             type: "number",
             inputValue: oldProperty.default,
-            className: "neuroglancer-annotation-schema-default-input",
+            className: "neuroglancer-annotation-schema-default-value-input",
           },
           {
             dataType,
@@ -431,10 +431,12 @@ class AnnotationUIProperty extends RefCounted {
           enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
           // TODO ideally this should stop you from adding the same enum value
+          // But neuroglancer doesn't crash if you do, so for now we trust the
+          // user input
           const nameInput = this.createInputElement({
             type: "text",
             inputValue: label,
-            className: "neuroglancer-annotation-schema-default-input",
+            className: "neuroglancer-annotation-schema-default-value-input",
             useTextarea: true,
           });
           if (!this.readonly) {
@@ -455,7 +457,7 @@ class AnnotationUIProperty extends RefCounted {
             {
               type: "number",
               inputValue: value,
-              className: "neuroglancer-annotation-schema-default-input",
+              className: "neuroglancer-annotation-schema-default-value-input",
             },
             {
               dataType: propertyTypeDataType[annotationType],
@@ -585,7 +587,7 @@ class AnnotationUIProperty extends RefCounted {
     });
 
     const calculateRows = (content: string): number => {
-      const avgCharWidth = 8.5;
+      const avgCharWidth = 9;
       const minRows = 1;
       const maxRows = 5;
 
@@ -603,17 +605,12 @@ class AnnotationUIProperty extends RefCounted {
       return Math.max(minRows, Math.min(maxRows, totalRows));
     };
 
-    const updateTextareaSize = () => {
+    const updateTextareaRows = () => {
       const content = textarea.value;
-      const calculatedRows = calculateRows(content);
-
-      textarea.rows = calculatedRows;
-      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight);
-      const scrollHeight = textarea.scrollHeight;
-      textarea.style.height = `${Math.max(lineHeight, scrollHeight) || 20}px`;
+      textarea.rows = calculateRows(content);
     };
     const debouncedUpdateTextareaSize =
-      animationFrameDebounce(updateTextareaSize);
+      animationFrameDebounce(updateTextareaRows);
 
     textarea.addEventListener("input", debouncedUpdateTextareaSize);
     const resizeObserver = new ResizeObserver(() => {
