@@ -66,6 +66,7 @@ import { removeChildren } from "#src/util/dom.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -434,7 +435,7 @@ class AnnotationUIProperty extends RefCounted {
             type: "text",
             inputValue: label,
             className: "neuroglancer-annotation-schema-default-input",
-            useTextarea: true
+            useTextarea: true,
           });
           if (!this.readonly) {
             nameInput.addEventListener("change", (event) => {
@@ -554,7 +555,7 @@ class AnnotationUIProperty extends RefCounted {
   private createNumberInput(
     config: InputConfig,
     numberConfig: NumberConfig | undefined,
-    readonly: boolean
+    readonly: boolean,
   ): HTMLInputElement {
     const input = createBoundedNumberInputElement(
       {
@@ -571,7 +572,7 @@ class AnnotationUIProperty extends RefCounted {
 
   private createTextAreaElement(
     config: InputConfig,
-    readonly: boolean
+    readonly: boolean,
   ): HTMLTextAreaElement {
     const textarea = document.createElement("textarea");
     this.setCommonInputAttributes(textarea, config, readonly);
@@ -579,14 +580,14 @@ class AnnotationUIProperty extends RefCounted {
     const calculateRows = (content: string): number => {
       if (!content) return 1;
 
-      const avgCharWidth = 8;
+      const avgCharWidth = 8.5;
       const textareaWidth = textarea.clientWidth || 300;
-      const charsPerLine = Math.floor(textareaWidth / avgCharWidth);
+      const charsPerLine = Math.floor(textareaWidth / (avgCharWidth));
 
-      const lines = content.split('\n');
+      const lines = content.split("\n");
       let totalRows = 0;
 
-      lines.forEach(line => {
+      lines.forEach((line) => {
         if (line.length === 0) {
           totalRows += 1;
         } else {
@@ -605,36 +606,34 @@ class AnnotationUIProperty extends RefCounted {
       const calculatedRows = calculateRows(content);
 
       textarea.rows = calculatedRows;
-      textarea.setAttribute('rows', calculatedRows.toString());
+      textarea.setAttribute("rows", calculatedRows.toString());
 
-      textarea.style.height = 'auto';
+      textarea.style.height = "auto";
       const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20;
       const minHeight = lineHeight;
       const scrollHeight = textarea.scrollHeight;
       textarea.style.height = `${Math.max(minHeight, scrollHeight)}px`;
     };
+    const debouncedUpdateTextareaSize =
+      animationFrameDebounce(updateTextareaSize);
 
-    const initialRows = calculateRows(textarea.value || '');
+    const initialRows = calculateRows(textarea.value || "");
     textarea.rows = initialRows;
-    textarea.setAttribute('rows', initialRows.toString());
+    textarea.setAttribute("rows", initialRows.toString());
 
-    textarea.addEventListener('input', updateTextareaSize);
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        setTimeout(updateTextareaSize, 0);
-      });
-      observer.observe(textarea);
-    }
-
-    setTimeout(updateTextareaSize, 0);
+    textarea.addEventListener("input", debouncedUpdateTextareaSize);
+    const resizeObserver = new ResizeObserver(() => {
+      debouncedUpdateTextareaSize();
+    });
+    resizeObserver.observe(textarea);
+    debouncedUpdateTextareaSize();
 
     return textarea;
   }
 
   private createTextInputElement(
     config: InputConfig,
-    readonly: boolean
+    readonly: boolean,
   ): HTMLInputElement {
     const input = document.createElement("input");
     input.type = "text";
@@ -645,7 +644,7 @@ class AnnotationUIProperty extends RefCounted {
   private setCommonInputAttributes(
     element: HTMLInputElement | HTMLTextAreaElement,
     config: InputConfig,
-    readonly: boolean
+    readonly: boolean,
   ): void {
     element.dataset.readonly = String(readonly);
     element.disabled = readonly;
@@ -654,7 +653,10 @@ class AnnotationUIProperty extends RefCounted {
       element.classList.add(config.className);
     }
 
-    if (typeof config.inputValue !== "number" || element instanceof HTMLTextAreaElement) {
+    if (
+      typeof config.inputValue !== "number" ||
+      element instanceof HTMLTextAreaElement
+    ) {
       element.value = String(config.inputValue || "");
       element.autocomplete = "off";
       element.spellcheck = false;
