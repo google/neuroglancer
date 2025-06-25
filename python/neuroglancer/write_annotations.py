@@ -91,6 +91,26 @@ def _get_dtype_for_properties(
     return dtype
 
 
+def _convert_rgb_to_uint8(rgb: str) -> tuple[int, int, int]:
+    """Convert an RGB hex string to a tuple of uint8 values."""
+    if rgb.startswith("#"):
+        rgb = rgb[1:]
+    if len(rgb) != 6:
+        raise ValueError(f"Invalid RGB format: {rgb}")
+    return (int(rgb[0:2], 16), int(rgb[2:4], 16), int(rgb[4:6], 16))
+
+
+def _convert_rgba_to_uint8(rgba: str) -> tuple[int, int, int, int]:
+    """Convert an RGBA hex string to a tuple of uint8 values."""
+    if rgba.startswith("#"):
+        rgba = rgba[1:]
+    if len(rgba) != 8:
+        raise ValueError(f"Invalid RGBA format: {rgba}")
+    color = _convert_rgb_to_uint8(rgba[:6])
+    alpha = int(rgba[6:8], 16)
+    return (*color, alpha)
+
+
 class AnnotationWriter:
     annotations: list[Annotation]
     related_annotations: list[dict[int, list[Annotation]]]
@@ -189,8 +209,16 @@ class AnnotationWriter:
         encoded[()]["geometry"] = coords  # type: ignore[call-overload]
 
         for i, p in enumerate(self.properties):
+            default_value = p.default
             if p.id in kwargs:
-                encoded[()][f"property{i}"] = kwargs.pop(p.id)  # type: ignore[call-overload]
+                default_value = kwargs.pop(p.id)
+            if isinstance(default_value, str) and p.type in ("rgb", "rgba"):
+                if p.type == "rgb":
+                    default_value = _convert_rgb_to_uint8(default_value)
+                else:
+                    default_value = _convert_rgba_to_uint8(default_value)
+            if default_value is not None:
+                encoded[()][f"property{i}"] = default_value  # type: ignore[call-overload]
 
         related_ids = []
         for relationship in self.relationships:
