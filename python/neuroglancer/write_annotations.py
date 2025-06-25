@@ -97,7 +97,7 @@ def _convert_rgb_to_uint8(rgb: str) -> tuple[int, int, int]:
         rgb = rgb[1:]
     if len(rgb) != 6:
         raise ValueError(f"Invalid RGB format: {rgb}")
-    return tuple(int(rgb[i : i + 2], 16) for i in (0, 2, 4))
+    return (int(rgb[0:2], 16), int(rgb[2:4], 16), int(rgb[4:6], 16))
 
 
 def _convert_rgba_to_uint8(rgba: str) -> tuple[int, int, int, int]:
