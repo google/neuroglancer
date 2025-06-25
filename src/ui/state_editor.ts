@@ -50,6 +50,7 @@ export class StateEditorDialog extends CodeEditorDialog {
       "neuroglancer-state-editor-save-container",
     );
     const applyButton = (this.applyButton = document.createElement("button"));
+    applyButton.classList.add("neuroglancer-state-editor-apply-button");
     applyButton.textContent = "Apply changes";
     saveAndCloseWrapper.appendChild(applyButton);
     applyButton.addEventListener("click", () => this.applyChanges());
@@ -61,7 +62,7 @@ export class StateEditorDialog extends CodeEditorDialog {
     saveAndCloseWrapper.appendChild(closeButton);
     closeButton.addEventListener("click", () => {
       this.applyChanges();
-      this.dispose();
+      this.close();
     });
 
     const downloadButton = (this.downloadButton =
