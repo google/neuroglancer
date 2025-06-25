@@ -67,6 +67,7 @@ export class StateEditorDialog extends CodeEditorDialog {
 
     const downloadButton = (this.downloadButton =
       document.createElement("button"));
+    downloadButton.classList.add("neuroglancer-state-editor-download-button");
     downloadButton.textContent = "Download";
     downloadButton.title = "Download state as a JSON file";
     downloadButton.addEventListener("click", () => this.downloadState());
