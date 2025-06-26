@@ -584,6 +584,11 @@ export function compareAnnotationSpecProperties(
     enumLabels:
       bothColor ||
       (bothNumeric && arraysEqual(a.enumLabels || [], b.enumLabels || [])),
+    enumLength:
+      bothColor ||
+      (bothNumeric &&
+        (a.enumValues?.length === b.enumValues?.length ||
+          a.enumLabels?.length === b.enumLabels?.length)),
   };
   // Same if all of the above are true.
   const same = Object.values(sameValues).every((x) => x);

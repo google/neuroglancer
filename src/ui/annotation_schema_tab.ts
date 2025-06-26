@@ -74,6 +74,7 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { FramedDialog, } from "#src/overlay.js";
+import { arraysEqual } from "#src/util/array.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -204,7 +205,7 @@ class AnnotationUIProperty extends RefCounted {
   ): string {
     return this.parentView.getIconForType(type, enumLabels);
   }
-  public setDefaultValueOnly(defaultValue: number) {
+  public updateDefaultValue(defaultValue: number) {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
     if (isAnnotationTypeNumeric(type)) {
@@ -220,6 +221,13 @@ class AnnotationUIProperty extends RefCounted {
       }
     }
     this.spec.default = defaultValue;
+  }
+  public updateEnumValues(enumValues: number[]) {
+    const inputs = this.defaultValueElements;
+    for (let i = 0; i < enumValues.length; i++) {
+      const input = inputs[i];
+      input.value = numberToStringFixed(enumValues[i], 4);
+    }
   }
   makeUI() {
     const { element, spec, readonly } = this;
@@ -269,10 +277,14 @@ class AnnotationUIProperty extends RefCounted {
       inputValue: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
-    nameInput.name = "neuroglancer-annotation-schema-name-input"
+    const cell = this.createTableCell(nameInput, "");
+    if (description) {
+      cell.title = description;
+    }
+    nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`;
     nameInput.dataset.readonly = String(this.readonly);
 
-    const cell = this.createTableCell(document.createElement("div"), "");
+    // const cell = this.createTableCell(document.createElement("div"), "");
 
     if (description) {
       const iconWrapper = document.createElement("span");
@@ -345,6 +357,7 @@ class AnnotationUIProperty extends RefCounted {
 
     let inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
     let changeFunction: (event: Event) => void;
+    let isEnum = false;
     const oldProperty = this.getPropertyByIdentifier(identifier);
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
@@ -381,6 +394,7 @@ class AnnotationUIProperty extends RefCounted {
           },
           { min: 0, max: 1, step: 0.01 },
         ) as HTMLInputElement;
+        alphaInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
         inputs.push(alphaInput);
         changeFunction = () => {
           const newColor = colorInput.getRGB();
@@ -404,6 +418,7 @@ class AnnotationUIProperty extends RefCounted {
         className: "neuroglancer-annotation-schema-default-value-input",
       }) as HTMLInputElement;
       boolInput.checked = oldProperty.default === 1;
+      boolInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
       inputs.push(boolInput);
       changeFunction = (event: Event) => {
         const newValue = (event.target as HTMLInputElement).checked;
@@ -434,6 +449,7 @@ class AnnotationUIProperty extends RefCounted {
             dataType,
           },
         );
+        numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
         inputs.push(numberInput);
         changeFunction = (event: Event) => {
           const newValue = (event.target as HTMLInputElement).value;
@@ -449,22 +465,25 @@ class AnnotationUIProperty extends RefCounted {
         const enumContainer = document.createElement("div");
         enumContainer.className = "enum-container";
         let addEnumButton: HTMLElement | null = null;
+        isEnum = true;
         if (!this.readonly) {
           addEnumButton = makeAddButton({
             title: "Add new enum option",
             onClick: () => {
+              const currentProperty = this.getPropertyByIdentifier(
+                identifier,
+              ) as AnnotationNumericPropertySpec;
+              const currentEnumValues = currentProperty.enumValues!;
               let suggestedEnumValue = 0;
-              while (enumValues.includes(suggestedEnumValue))
+              while (currentEnumValues.includes(suggestedEnumValue)) {
                 ++suggestedEnumValue;
-              const newEnumValues = [
-                ...oldProperty.enumValues!,
-                suggestedEnumValue,
-              ];
-              this.updateProperty(oldProperty, {
-                ...oldProperty,
+              }
+              const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
+              this.updateProperty(currentProperty, {
+                ...currentProperty,
                 enumValues: newEnumValues,
                 enumLabels: [
-                  ...oldProperty.enumLabels!,
+                  ...currentProperty.enumLabels!,
                   `${suggestedEnumValue} (label)`,
                 ],
                 default: newEnumValues[0], // Set default to the first enum value
@@ -483,7 +502,7 @@ class AnnotationUIProperty extends RefCounted {
           const enumRow = document.createElement("div");
           enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
-          // TODO ideally this should stop you from adding the same enum value
+          // TODO ideally this could maybe stop you from adding the same enum value
           // But neuroglancer doesn't crash if you do, so for now we trust the
           // user input
           const nameInput = this.createInputElement({
@@ -492,6 +511,7 @@ class AnnotationUIProperty extends RefCounted {
             className: "neuroglancer-annotation-schema-default-value-input",
             useTextarea: true,
           });
+          nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`;
           if (!this.readonly) {
             nameInput.addEventListener("change", (event) => {
               const newLabel = (event.target as HTMLInputElement).value;
@@ -516,6 +536,7 @@ class AnnotationUIProperty extends RefCounted {
               dataType: propertyTypeDataType[annotationType],
             },
           );
+          valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
           if (!this.readonly) {
             valueInput.addEventListener("change", (event) => {
               const inputValue = (event.target as HTMLInputElement).value;
@@ -523,9 +544,12 @@ class AnnotationUIProperty extends RefCounted {
                 type === "float32"
                   ? parseFloat(inputValue)
                   : parseInt(inputValue, 10);
-              this.updateProperty(oldProperty, {
-                ...oldProperty,
-                enumValues: oldProperty.enumValues!.map((v, i) =>
+              const currentProperty = this.getPropertyByIdentifier(
+                identifier,
+              ) as AnnotationNumericPropertySpec;
+              this.updateProperty(currentProperty, {
+                ...currentProperty,
+                enumValues: currentProperty.enumValues!.map((v, i) =>
                   i === enumIndex ? newValue : v,
                 ),
               } as AnnotationNumericPropertySpec);
@@ -534,6 +558,7 @@ class AnnotationUIProperty extends RefCounted {
 
           enumRow.appendChild(nameInput);
           enumRow.appendChild(valueInput);
+          inputs.push(valueInput);
 
           if (!this.readonly) {
             const deleteIcon = document.createElement("span");
@@ -541,16 +566,19 @@ class AnnotationUIProperty extends RefCounted {
             deleteIcon.innerHTML = svg_bin;
             deleteIcon.title = "Delete enum row";
             deleteIcon.style.cursor = "pointer";
+            const currentProperty = this.getPropertyByIdentifier(
+              identifier,
+            ) as AnnotationNumericPropertySpec;
             deleteIcon.addEventListener("click", () => {
-              const newEnumValues = oldProperty.enumValues!.filter(
+              const newEnumValues = currentProperty.enumValues!.filter(
                 (_, i) => i !== enumIndex,
               );
-              const newEnumLabels = oldProperty.enumLabels!.filter(
+              const newEnumLabels = currentProperty.enumLabels!.filter(
                 (_, i) => i !== enumIndex,
               );
 
-              this.updateProperty(oldProperty, {
-                ...oldProperty,
+              this.updateProperty(currentProperty, {
+                ...currentProperty,
                 enumValues: newEnumValues,
                 enumLabels: newEnumLabels,
               } as AnnotationNumericPropertySpec);
@@ -568,11 +596,12 @@ class AnnotationUIProperty extends RefCounted {
         container.appendChild(enumContainer);
       }
     }
-    // TODO (SKM) - again may need to unregister the event listeners
     inputs.forEach((input) => {
-      container.appendChild(input);
-      if (!this.readonly) {
-        this.registerEventListener(input, "change", changeFunction);
+      if (!isEnum) {
+        container.appendChild(input);
+        if (!this.readonly) {
+          this.registerEventListener(input, "change", changeFunction);
+        }
       }
     });
     this.defaultValueElements = inputs;
@@ -759,7 +788,6 @@ class AnnotationUIProperty extends RefCounted {
     );
   }
 
-  // TODO a bit unfortunate that we can open multiple of these
   private createDropdownElement(
     availableOptions: AnnotationType[],
     identifier: string,
@@ -907,6 +935,8 @@ export class AnnotationSchemaView extends Tab {
       "neuroglancer-annotation-schema-text-container";
     schemaActionButtons.className =
       "neuroglancer-annotation-schema-action-buttons";
+    this.schemaViewTextElement.className =
+      "neuroglancer-annotation-schema-main-text";
     schemaTextContainer.appendChild(this.schemaViewTextElement);
     schemaTextContainer.appendChild(schemaActionButtons);
 
@@ -930,6 +960,11 @@ export class AnnotationSchemaView extends Tab {
     confirmPasteText.textContent =
       "Pasting a schema will overwrite the current schema. Are you sure you want to do this?";
     confirmPasteContainer.appendChild(confirmPasteText);
+
+    const confirmPasteActionContainer = document.createElement("div");
+    confirmPasteActionContainer.className =
+      "neuroglancer-annotation-schema-confirm-paste-action";
+
     const confirmPasteButton = document.createElement("button");
     confirmPasteButton.textContent = "Confirm Paste";
     confirmPasteButton.className =
@@ -937,16 +972,22 @@ export class AnnotationSchemaView extends Tab {
     confirmPasteButton.addEventListener("click", () => {
       this.pasteSchemaFromClipboard();
       confirmPasteContainer.style.display = "none";
+      this.schemaPasteButton.classList.remove(
+        "neuroglancer-annotation-schema-action-button-selected",
+      );
     });
-    confirmPasteContainer.appendChild(confirmPasteButton);
+    confirmPasteActionContainer.appendChild(confirmPasteButton);
     const cancelPasteButton = document.createElement("button");
     cancelPasteButton.textContent = "Cancel";
     cancelPasteButton.className =
       "neuroglancer-annotation-schema-cancel-paste-button";
     cancelPasteButton.addEventListener("click", () => {
       confirmPasteContainer.style.display = "none";
+      this.schemaPasteButton.classList.remove(
+        "neuroglancer-annotation-schema-action-button-selected",
+      );
     });
-    confirmPasteContainer.appendChild(cancelPasteButton);
+    confirmPasteActionContainer.appendChild(cancelPasteButton);
     confirmPasteContainer.style.display = "none"; // Initially hidden
 
     this.schemaPasteButton = makeIcon({
@@ -955,12 +996,18 @@ export class AnnotationSchemaView extends Tab {
       onClick: () => {
         // If there is any existing schema, then show a confirm first
         const hasExistingSchema = this.annotationUIProperties.size > 0;
-        if (hasExistingSchema) confirmPasteContainer.style.display = "block";
-        else this.pasteSchemaFromClipboard();
+        if (hasExistingSchema) {
+          confirmPasteContainer.style.display = "flex";
+          this.schemaPasteButton.classList.add(
+            "neuroglancer-annotation-schema-action-button-selected",
+          );
+        } else this.pasteSchemaFromClipboard();
       },
     });
+    confirmPasteContainer.appendChild(confirmPasteActionContainer);
+
     schemaActionButtons.appendChild(this.schemaPasteButton);
-    schemaActionButtons.appendChild(confirmPasteContainer);
+    schemaTextContainer.appendChild(confirmPasteContainer);
 
     this.element.appendChild(schemaTextContainer);
     this.element.appendChild(this.schemaTable);
@@ -971,11 +1018,12 @@ export class AnnotationSchemaView extends Tab {
     this.createAnnotationSchemaDropdown();
   }
 
-  private updateSchemaRepresentation() {
+  private updateSchemaRepresentation(): boolean {
     // Check to see if the new IDs match the old keys
     const oldKeys = Array.from(this.annotationUIProperties.keys());
     const newKeys = this.schema.map((property) => property.identifier);
     // All the old keys that are not in the new keys need to be removed
+    let needsUpdate = !arraysEqual(oldKeys, newKeys);
     for (const oldKey of oldKeys) {
       if (!newKeys.includes(oldKey)) {
         this.annotationUIProperties.delete(oldKey);
@@ -1010,22 +1058,35 @@ export class AnnotationSchemaView extends Tab {
               break;
             }
           }
-          if (allSameExceptDefault && !sameValues.default) {
+          if (
+            (allSameExceptDefault && !sameValues.default) ||
+            (sameValues.enumLength && !sameValues.enumValues)
+          ) {
             // Only the default changed, just update that
-            annotationUIProperty.setDefaultValueOnly(propertySchema.default);
+            if (!sameValues.default) {
+              annotationUIProperty.updateDefaultValue(propertySchema.default);
+            }
+            if (sameValues.enumLength && !sameValues.enumValues) {
+              annotationUIProperty.updateEnumValues(
+                (propertySchema as AnnotationNumericPropertySpec).enumValues!,
+              );
+            }
           } else {
             this.annotationUIProperties.set(
               propertySchema.identifier,
               new AnnotationUIProperty(propertySchema, this),
             );
+            needsUpdate = true;
           }
         }
       }
     }
+    return needsUpdate;
   }
 
   private populateSchemaTable() {
-    this.updateSchemaRepresentation();
+    const needUpdate = this.updateSchemaRepresentation();
+    if (!needUpdate) return;
     removeChildren(this.schemaTableBody);
     const hasEnums = this.includesEnumProperties();
     this.schema.forEach((property) => {
@@ -1173,7 +1234,6 @@ export class AnnotationSchemaView extends Tab {
       document.addEventListener("mousedown", handleOutsideClick);
     };
 
-    // TODO: not efficient, but for now we do this every update
     this.schemaTableAddButtonField = document.createElement("div");
     this.schemaTableAddButtonField.className =
       "neuroglancer-annotation-schema-add-button-field";
@@ -1370,7 +1430,7 @@ export class AnnotationSchemaView extends Tab {
           const source = state.source as LocalAnnotationSource;
           source.removeAllProperties();
           for (const property of parsedSchema) {
-            console.log("Adding property", property);
+            console.debug("Adding property", property);
             source.addProperty(property);
           }
         });
@@ -1389,7 +1449,6 @@ export class AnnotationSchemaView extends Tab {
     });
   }
 
-  // TODO should probably cache this
   private extractSchema() {
     const schema: Readonly<AnnotationPropertySpec>[] = [];
     let readonly = true;
@@ -1417,7 +1476,6 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateView() {
-    // TODO somehow need to know if big update - key based?
     const { schema, readonly } = this.extractSchema();
     this.schema = schema;
     this.readonly.value = readonly;
