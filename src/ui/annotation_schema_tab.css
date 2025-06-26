@@ -221,13 +221,18 @@
   border-radius: 2px;
   box-sizing: border-box;
   background: transparent;
+  border: 1px solid transparent;
   font-size: 13px;
   color: white;
-  border: none;
 }
 
 .neuroglancer-annotation-schema-name-input[data-readonly="false"]:hover {
   background: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-schema-name-input:focus {
+  border-color:#016DCC;
+  outline: none;
 }
 
 .neuroglancer-annotation-schema-name-input:hover:focus {
@@ -235,15 +240,32 @@
 }
 
 .neuroglancer-annotation-schema-default-value-input {
+  text-align: left;
+  font-family: monospace;
+  font-size: 12px;
   width: 100%;
+  color: white;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.30);
+  outline: none;
+  border: 1px solid transparent;
   flex: 1 0 0;
   box-sizing: border-box;
-  border: none;
-  background: rgba(255, 255, 255, 0.3);
-  color: white;
   resize: none;
   overflow: hidden;
-  font-family: sans-serif;
+}
+
+.neuroglancer-annotation-schema-default-value-input::placeholder {
+  color: rgba(255, 255, 255, 0.40);
+}
+
+.neuroglancer-annotation-schema-default-value-input:hover {
+  background: rgba(255, 255, 255, 0.40);
+}
+
+.neuroglancer-annotation-schema-default-value-input:focus {
+  border-color:#016DCC;
+  background: rgba(255, 255, 255, 0.30);
 }
 
 .neuroglancer-annotation-schema-default-value-input[data-readonly="true"] {

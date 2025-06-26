@@ -298,6 +298,7 @@ class AnnotationUIProperty extends RefCounted {
     if (description) {
       cell.title = description;
     }
+    nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`
     nameInput.dataset.readonly = String(this.readonly);
     if (this.readonly) return cell;
     // Add a little icon to the right of the input that lets you change the description
@@ -402,6 +403,7 @@ class AnnotationUIProperty extends RefCounted {
           },
           { min: 0, max: 1, step: 0.01 },
         ) as HTMLInputElement;
+        alphaInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`
         inputs.push(alphaInput);
         changeFunction = () => {
           const newColor = colorInput.getRGB();
@@ -425,6 +427,7 @@ class AnnotationUIProperty extends RefCounted {
         className: "neuroglancer-annotation-schema-default-value-input",
       }) as HTMLInputElement;
       boolInput.checked = oldProperty.default === 1;
+      boolInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`
       inputs.push(boolInput);
       changeFunction = (event: Event) => {
         const newValue = (event.target as HTMLInputElement).checked;
@@ -455,6 +458,7 @@ class AnnotationUIProperty extends RefCounted {
             dataType,
           },
         );
+        numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`
         inputs.push(numberInput);
         changeFunction = (event: Event) => {
           const newValue = (event.target as HTMLInputElement).value;
@@ -513,6 +517,7 @@ class AnnotationUIProperty extends RefCounted {
             className: "neuroglancer-annotation-schema-default-value-input",
             useTextarea: true,
           });
+          nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`
           if (!this.readonly) {
             nameInput.addEventListener("change", (event) => {
               const newLabel = (event.target as HTMLInputElement).value;
@@ -537,6 +542,7 @@ class AnnotationUIProperty extends RefCounted {
               dataType: propertyTypeDataType[annotationType],
             },
           );
+          valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`
           if (!this.readonly) {
             valueInput.addEventListener("change", (event) => {
               const inputValue = (event.target as HTMLInputElement).value;
