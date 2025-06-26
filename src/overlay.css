@@ -22,7 +22,6 @@
   top: 0;
   left: 0;
   background-color: rgba(0, 0, 0, 0.8);
-  outline: none;
 }
 
 .overlay-content {
@@ -33,6 +32,7 @@
   background-color: white;
   z-index: 100;
   color: black;
+  padding: 1em;
 }
 
 .neuroglancer-framed-dialog-header {

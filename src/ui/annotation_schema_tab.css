@@ -233,6 +233,7 @@
 .neuroglancer-annotation-description-editor {
   min-width: 400px;
   border-radius: 0.25rem;
+  padding: 0;
 }
 
 .neuroglancer-annotation-description-editor-text-input {
