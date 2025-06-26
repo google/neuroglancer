@@ -1237,8 +1237,19 @@ export class AnnotationSchemaView extends Tab {
 
       document.body.appendChild(dropdown);
       const rect = addButton.getBoundingClientRect();
+      const dropdownHeight = dropdown.offsetHeight;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      if (spaceBelow >= dropdownHeight || spaceBelow > spaceAbove) {
+        // Enough space - position below
+        dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+      } else {
+        // Not enough space - position above
+        dropdown.style.top = `${(rect.top + window.scrollY - dropdownHeight) - 10}px`;
+      }
+
       dropdown.style.left = `${rect.left}px`;
-      dropdown.style.top = `${rect.bottom + window.scrollY}px`;
 
       const handleOutsideClick = (e: MouseEvent) => {
         if (dropdown && !dropdown.contains(e.target as Node)) {
