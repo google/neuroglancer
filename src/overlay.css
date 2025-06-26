@@ -86,6 +86,7 @@
   opacity: 0.6;
 }
 
-.neuroglancer-framed-dialog-close-icon:hover {
-  background-color: transparent;
+.neuroglancer-framed-dialog-close-icon:hover svg {
+  stroke: white;
+  opacity: 1;
 }
