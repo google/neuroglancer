@@ -233,41 +233,13 @@
 .neuroglancer-annotation-description-editor {
   min-width: 400px;
   border-radius: 0.25rem;
-  padding: 0;
-  outline: none;
-}
-
-.neuroglancer-annotation-description-editor-header {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #E6E6E6
-}
-
-.neuroglancer-annotation-description-editor-header-title {
-  color: #141415;
-  font-size: 15px;
-  font-style: normal;
-  font-weight: 590;
-  line-height: normal;
-}
-
-.neuroglancer-annotation-description-editor-header-close-icon svg {
-  stroke: #141415;
-  opacity: 0.6;
-}
-
-.neuroglancer-annotation-description-editor-header-close-icon:hover {
-  background-color: transparent;
-}
-
-.neuroglancer-annotation-description-editor-body {
-  display: flex;
-  padding: 1rem;
 }
 
 .neuroglancer-annotation-description-editor-text-input {
   width: 100%;
   padding: var(--spacing-lg, 12px) 14px;
   gap: var(--spacing-md, 8px);
+  font-family: sans-serif;
   border-radius: 2px;
   border: 1px solid #D0D5DD;
   background: #FFF;
@@ -275,37 +247,7 @@
 }
 
 .neuroglancer-annotation-description-editor-text-input:focus {
-  border: 2px solid #0474FF;
+  border-color:#0474FF;
   box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
   outline: none;
-}
-
-.neuroglancer-annotation-description-editor-footer {
-  display: flex;
-  padding: 12px 16px;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid #E6E6E6;
-}
-
-.neuroglancer-annotation-description-editor-save-button,
-.neuroglancer-annotation-description-editor-close-button {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #D0D5DD;
-  background: #FFF;
-  box-shadow: 0px 0px 0px 1px rgba(16, 24, 40, 0.18) inset, 0px -2px 0px 0px rgba(16, 24, 40, 0.05) inset, 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
-
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 590;
-  line-height: 20px;
-  color: #344054;
-  cursor: pointer;
-}
-
-.neuroglancer-annotation-description-editor-save-button:hover,
-.neuroglancer-annotation-description-editor-close-button:hover {
-  background: #F9FAFB;
 }
