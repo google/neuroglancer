@@ -69,16 +69,21 @@ export class FramedDialog extends Overlay {
   header: HTMLDivElement;
   headerTitle: HTMLSpanElement;
   closeMenuIcon: HTMLElement;
+  closeButton: HTMLButtonElement;
   body: HTMLDivElement;
   footer: HTMLDivElement;
-  constructor(title: string = "Dialog", extraClassPrefix?: string) {
+  constructor(
+    title: string = "Dialog",
+    closeText: string = "Close",
+    extraClassPrefix?: string,
+  ) {
     super();
     this.content.classList.add("neuroglancer-framed-dialog");
 
     const header = (this.header = document.createElement("div"));
     const closeMenuIcon = (this.closeMenuIcon = makeIcon({ svg: svg_close }));
     closeMenuIcon.addEventListener("click", () => this.close());
-    closeMenuIcon.classList.add("neuroglancer-framed-dialog-close");
+    closeMenuIcon.classList.add("neuroglancer-framed-dialog-close-icon");
     const headerTitle = (this.headerTitle = document.createElement("span"));
     headerTitle.textContent = title;
     headerTitle.classList.add("neuroglancer-framed-dialog-title");
@@ -93,15 +98,22 @@ export class FramedDialog extends Overlay {
 
     const footer = (this.footer = document.createElement("div"));
     footer.classList.add("neuroglancer-framed-dialog-footer");
+    const closeFooterButton = (this.closeButton =
+      document.createElement("button"));
+    closeFooterButton.textContent = closeText;
+    closeFooterButton.classList.add("neuroglancer-framed-dialog-close-button");
+    closeFooterButton.addEventListener("click", () => this.close());
+    footer.appendChild(closeFooterButton);
     this.content.appendChild(this.footer);
 
     if (extraClassPrefix !== undefined) {
       this.content.classList.add(`${extraClassPrefix}`);
       this.header.classList.add(`${extraClassPrefix}-header`);
       this.headerTitle.classList.add(`${extraClassPrefix}-title`);
-      this.closeMenuIcon.classList.add(`${extraClassPrefix}-close`);
+      this.closeMenuIcon.classList.add(`${extraClassPrefix}-close-icon`);
       this.body.classList.add(`${extraClassPrefix}-body`);
       this.footer.classList.add(`${extraClassPrefix}-footer`);
+      this.closeButton.classList.add(`${extraClassPrefix}-close-button`);
     }
   }
 }

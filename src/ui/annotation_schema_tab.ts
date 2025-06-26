@@ -108,7 +108,7 @@ interface NumberConfig {
 
 class AnnotationDescriptionEditDialog extends FramedDialog {
   constructor(parent: AnnotationUIProperty) {
-    super("Edit Description", "neuroglancer-annotation-description-editor");
+    super("Edit Description", "Discard changes", "neuroglancer-annotation-description-editor");
 
     const textInputElement = document.createElement("textarea");
     textInputElement.classList.add(
@@ -121,7 +121,7 @@ class AnnotationDescriptionEditDialog extends FramedDialog {
 
     const saveButton = document.createElement("button");
     saveButton.classList.add("neuroglancer-annotation-description-editor-save-button");
-    saveButton.textContent = "Save changes";
+    saveButton.textContent = "Save & close";
     saveButton.addEventListener("click", () => {
       const newDescription = textInputElement.value.trim();
       if (newDescription !== parent.spec.description && newDescription !== "") {
@@ -130,16 +130,8 @@ class AnnotationDescriptionEditDialog extends FramedDialog {
           description: newDescription,
         } as AnnotationPropertySpec);
       }
-    });
-    const cancelButton = document.createElement("button");
-    cancelButton.classList.add(
-      "neuroglancer-annotation-description-editor-cancel-button",
-    );
-    cancelButton.textContent = "Discard changes";
-    cancelButton.addEventListener("click", () => {
       this.close();
     });
-    this.footer.appendChild(cancelButton);
     this.footer.appendChild(saveButton);
   }
 }

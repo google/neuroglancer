@@ -250,12 +250,12 @@
   line-height: normal;
 }
 
-.neuroglancer-annotation-description-editor-header-close svg {
+.neuroglancer-annotation-description-editor-header-close-icon svg {
   stroke: #141415;
   opacity: 0.6;
 }
 
-.neuroglancer-annotation-description-editor-header-close:hover {
+.neuroglancer-annotation-description-editor-header-close-icon:hover {
   background-color: transparent;
 }
 
@@ -290,7 +290,7 @@
 }
 
 .neuroglancer-annotation-description-editor-save-button,
-.neuroglancer-annotation-description-editor-cancel-button {
+.neuroglancer-annotation-description-editor-close-button {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid #D0D5DD;
@@ -306,6 +306,6 @@
 }
 
 .neuroglancer-annotation-description-editor-save-button:hover,
-.neuroglancer-annotation-description-editor-cancel-button:hover {
+.neuroglancer-annotation-description-editor-close-button:hover {
   background: #F9FAFB;
 }
