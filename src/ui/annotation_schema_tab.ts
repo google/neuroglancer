@@ -277,14 +277,10 @@ class AnnotationUIProperty extends RefCounted {
       inputValue: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
-    const cell = this.createTableCell(nameInput, "");
-    if (description) {
-      cell.title = description;
-    }
     nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`;
     nameInput.dataset.readonly = String(this.readonly);
 
-    // const cell = this.createTableCell(document.createElement("div"), "");
+    const cell = this.createTableCell(document.createElement("div"), "");
 
     if (description) {
       const iconWrapper = document.createElement("span");
@@ -1133,10 +1129,15 @@ export class AnnotationSchemaView extends Tab {
     }
     // Append a blank cell for the delete icon
     if (!this.readonly.value) {
+      const descriptionHeader = this.createTableCell(
+        "",
+        "neuroglancer-annotation-schema-description-header",
+      );
       const deleteHeader = this.createTableCell(
         "",
         "neuroglancer-annotation-schema-delete-header",
       );
+      headerRow.appendChild(descriptionHeader);
       headerRow.appendChild(deleteHeader);
     }
     this.schemaTable.appendChild(headerRow);
