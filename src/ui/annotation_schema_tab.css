@@ -31,7 +31,9 @@
 .neuroglancer-annotation-schema-row:hover
   .neuroglancer-annotation-schema-delete-cell,
 .neuroglancer-annotation-schema-enum-entry:hover
-  .neuroglancer-annotation-schema-delete-icon {
+  .neuroglancer-annotation-schema-delete-icon,
+.neuroglancer-annotation-schema-row:hover
+  .neuroglancer-annotation-schema-description-cell {
   opacity: 1;
   visibility: visible;
 }
@@ -87,6 +89,13 @@
   border-bottom: none;
   border-right: none;
   max-width: 1.25rem;
+}
+
+.neuroglancer-annotation-schema-description-cell {
+  max-width: 1.25rem;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
 }
 
 .neuroglancer-annotation-schema-header-row {
@@ -221,6 +230,85 @@
   flex: 1 0 0;
 }
 
-.neuroglancer-annotation-description-header-close {
-  background-color: black;
+.neuroglancer-annotation-description-editor {
+  min-width: 400px;
+  border-radius: 0.25rem;
+  padding: 0;
+  outline: none;
+}
+
+.neuroglancer-annotation-description-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #E6E6E6;
+}
+
+.neuroglancer-annotation-description-header-title {
+  color: #141415;
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 590;
+  line-height: normal;
+}
+
+.neuroglancer-annotation-description-header-close svg {
+  stroke: #141415;
+  opacity: 0.6;
+}
+
+.neuroglancer-annotation-description-header-close:hover {
+  background-color: transparent;
+}
+
+.neuroglancer-annotation-description-body {
+  display: flex;
+  padding: 1rem;
+}
+
+.neuroglancer-annotation-description-text-input {
+  width: 100%;
+  padding: var(--spacing-lg, 12px) 14px;
+  gap: var(--spacing-md, 8px);
+  border-radius: 2px;
+  border: 1px solid #D0D5DD;
+  background: #FFF;
+  resize: none;
+}
+
+.neuroglancer-annotation-description-text-input:focus {
+  border: 2px solid #0474FF;
+  box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  outline: none;
+}
+
+.neuroglancer-annotation-description-footer {
+  display: flex;
+  padding: 12px 16px;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #E6E6E6;
+}
+
+.neuroglancer-annotation-description-save-button,
+.neuroglancer-annotation-description-cancel-button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #D0D5DD;
+  background: #FFF;
+  box-shadow: 0px 0px 0px 1px rgba(16, 24, 40, 0.18) inset, 0px -2px 0px 0px rgba(16, 24, 40, 0.05) inset, 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 590;
+  line-height: 20px;
+  color: #344054;
+  cursor: pointer;
+}
+
+.neuroglancer-annotation-description-save-button:hover,
+.neuroglancer-annotation-description-cancel-button:hover {
+  background: #F9FAFB;
 }

@@ -28,6 +28,7 @@ import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
 import svg_close from "ikonate/icons/close.svg?raw";
+import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
@@ -128,8 +129,6 @@ class AnnotationDescriptionEditDialog extends Overlay {
     headerClose.classList.add(
       "neuroglancer-annotation-description-header-close",
     );
-    // TODO move to css
-    headerClose.style.fill = "#fff";
     header.appendChild(headerTitle);
     header.appendChild(headerClose);
     this.content.appendChild(header);
@@ -268,6 +267,19 @@ class AnnotationUIProperty extends RefCounted {
     element.appendChild(this.createDefaultValueCell(spec.identifier, type));
 
     if (!readonly) {
+      // Add a little icon to the right of the input that lets you change the description
+      const descriptionIcon = makeIcon({
+        svg: svg_edit,
+        title: "Change description",
+      });
+      this.registerEventListener(descriptionIcon, "click", () => {
+        new AnnotationDescriptionEditDialog(this);
+      });
+      const descriptionCell = this.createTableCell(
+        descriptionIcon,
+        "neuroglancer-annotation-schema-description-cell"
+      );
+      element.appendChild(descriptionCell);
       const deleteIcon = document.createElement("span");
       deleteIcon.innerHTML = svg_bin;
       deleteIcon.title = "Delete annotation property";
@@ -294,21 +306,24 @@ class AnnotationUIProperty extends RefCounted {
       inputValue: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
-    const cell = this.createTableCell(nameInput, "");
-    if (description) {
-      cell.title = description;
-    }
+    nameInput.name = "neuroglancer-annotation-schema-name-input"
     nameInput.dataset.readonly = String(this.readonly);
+
+    const cell = this.createTableCell(document.createElement("div"), "");
+
+    if (description) {
+      const iconWrapper = document.createElement("span");
+      iconWrapper.classList.add(
+        "neuroglancer-annotation-schema-cell-icon-wrapper",
+      );
+      iconWrapper.innerHTML = svg_info;
+      iconWrapper.title = description
+      cell.appendChild(iconWrapper);
+    }
+    cell.appendChild(nameInput);
+
     if (this.readonly) return cell;
-    // Add a little icon to the right of the input that lets you change the description
-    const descriptionIcon = makeIcon({
-      svg: svg_edit,
-      title: "Change description",
-    });
-    this.registerEventListener(descriptionIcon, "click", () => {
-      new AnnotationDescriptionEditDialog(this);
-    });
-    cell.appendChild(descriptionIcon);
+
     this.registerEventListener(nameInput, "change", (event: Event) => {
       if (!event.target) return;
       const rawValue = (event.target as HTMLInputElement).value;
@@ -326,6 +341,7 @@ class AnnotationUIProperty extends RefCounted {
         this.renameProperty(identifier, sanitizedValue);
       }
     });
+
     return cell;
   }
 
