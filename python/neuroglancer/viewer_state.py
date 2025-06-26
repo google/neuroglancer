@@ -1165,7 +1165,7 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
         "shaderControls", ShaderControls
     )
     swap_visible_segments_on_move = swapVisibleSegmentsOnMove = wrapped_property(
-        "swapVisibleSegmentsOnMove", optional(bool, True)
+        "swapVisbleSegmentsOnMove", optional(bool, True)
     )
 
     @staticmethod
