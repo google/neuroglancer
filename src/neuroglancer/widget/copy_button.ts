@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import svg_copy from 'ikonate/icons/copy.svg';
+import svg_copy from 'ikonate/icons/copy.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeCopyButton(options: MakeIconOptions = {}) {

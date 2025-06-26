@@ -17,7 +17,7 @@
 import '../noselect.css';
 import './layer_bar.css';
 
-import svg_plus from 'ikonate/icons/plus.svg';
+import svg_plus from 'ikonate/icons/plus.svg?raw';
 import {addNewLayer, deleteLayer, makeLayer, ManagedUserLayer} from 'neuroglancer/layer';
 import {LayerGroupViewer} from 'neuroglancer/layer_group_viewer';
 import {NavigationLinkType} from 'neuroglancer/navigation_state';

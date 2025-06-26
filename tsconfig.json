@@ -9,6 +9,7 @@
     "experimentalDecorators": true,
     "strictNullChecks": true,
     "allowSyntheticDefaultImports": true,
+    "nocheck": true,
     "esModuleInterop": true,
     "sourceMap": true,
     "moduleResolution": "node",

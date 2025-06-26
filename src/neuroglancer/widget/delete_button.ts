@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import svg_bin from 'ikonate/icons/bin.svg';
+import svg_bin from 'ikonate/icons/bin.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeDeleteButton(options: MakeIconOptions = {}) {

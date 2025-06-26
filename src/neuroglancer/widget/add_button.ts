@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import svg_plus from 'ikonate/icons/plus.svg';
+import svg_plus from 'ikonate/icons/plus.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeAddButton(options: MakeIconOptions = {}) {

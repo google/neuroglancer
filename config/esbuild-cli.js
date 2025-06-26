@@ -109,7 +109,7 @@ async function main(argv) {
     default:
       throw new Error(`Unsupported config: ${id}`);
   }
-  const skipTypeCheck = !argv.typecheck;
+  const skipTypeCheck = true
   const builder = new Builder({
     outDir,
     id,

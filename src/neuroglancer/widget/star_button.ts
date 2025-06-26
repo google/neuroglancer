@@ -16,7 +16,7 @@
 
 import './star_button.css';
 
-import svg_star from 'ikonate/icons/star.svg';
+import svg_star from 'ikonate/icons/star.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeStarButton(options: MakeIconOptions = {}) {

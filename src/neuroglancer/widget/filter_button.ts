@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import svg_filter from 'ikonate/icons/filter.svg';
+import svg_filter from 'ikonate/icons/filter.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeFilterButton(options: MakeIconOptions = {}) {

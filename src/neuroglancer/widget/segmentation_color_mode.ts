@@ -16,7 +16,7 @@
 
 import './segmentation_color_mode.css';
 
-import svg_rotate from 'ikonate/icons/rotate.svg';
+import svg_rotate from 'ikonate/icons/rotate.svg?raw';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {observeWatchable} from 'neuroglancer/trackable_value';
 import {vec3} from 'neuroglancer/util/geom';

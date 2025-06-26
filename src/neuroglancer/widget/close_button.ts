@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import svg_close from 'ikonate/icons/close.svg';
+import svg_close from 'ikonate/icons/close.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeCloseButton(options: MakeIconOptions = {}) {

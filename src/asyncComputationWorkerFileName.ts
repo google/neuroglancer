@@ -4,4 +4,4 @@
 // `/static/js/async_computation.bundle.js`. Hardcoding is needed because there
 // is no other way to specify to Neuroglancer the path of this file after
 // Hedwig's build:
-export const asyncComputationWorkerFileName  = '/static/js/async_computation.bundle.js';
+export const asyncComputationWorkerFileName  = '/test-generated-files/async_computation.bundle.js';

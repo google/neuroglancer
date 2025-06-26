@@ -16,8 +16,8 @@
 
 import './selection_details.css';
 
-import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
-import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
+import svg_arrowLeft from 'ikonate/icons/arrow-left.svg?raw';
+import svg_arrowRight from 'ikonate/icons/arrow-right.svg?raw';
 import {SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {SidePanel, SidePanelManager} from 'neuroglancer/ui/side_panel';

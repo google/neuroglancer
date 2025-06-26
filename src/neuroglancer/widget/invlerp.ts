@@ -16,8 +16,8 @@
 
 import './invlerp.css';
 
-import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
-import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
+import svg_arrowLeft from 'ikonate/icons/arrow-left.svg?raw';
+import svg_arrowRight from 'ikonate/icons/arrow-right.svg?raw';
 import {DisplayContext, IndirectRenderedPanel} from 'neuroglancer/display_context';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ToolActivation} from 'neuroglancer/ui/tool';

@@ -16,7 +16,7 @@
 
 import './eye_button.css';
 
-import svg_eye_crossed from 'ikonate/icons/eye-crossed.svg';
+import svg_eye_crossed from 'ikonate/icons/eye-crossed.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeEyeButton(options: MakeIconOptions = {}) {

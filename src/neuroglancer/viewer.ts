@@ -17,10 +17,10 @@
 import './viewer.css';
 import './noselect.css';
 
-import svg_controls_alt from 'ikonate/icons/controls-alt.svg';
-import svg_layers from 'ikonate/icons/layers.svg';
-import svg_list from 'ikonate/icons/list.svg';
-import svg_settings from 'ikonate/icons/settings.svg';
+import svg_controls_alt from 'ikonate/icons/controls-alt.svg?raw';
+import svg_layers from 'ikonate/icons/layers.svg?raw';
+import svg_list from 'ikonate/icons/list.svg?raw';
+import svg_settings from 'ikonate/icons/settings.svg?raw';
 import debounce from 'lodash/debounce';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {makeCoordinateSpace, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import svg_maximize from 'ikonate/icons/maximise.svg';
+import svg_maximize from 'ikonate/icons/maximise.svg?raw';
 import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
 export function makeMaximizeButton(options: MakeIconOptions = {}) {

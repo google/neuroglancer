@@ -20,8 +20,8 @@
 
 import './coordinate_transform.css';
 
-import svg_updateArrow from 'ikonate/icons/arrow-up.svg';
-import svg_plus from 'ikonate/icons/plus.svg';
+import svg_updateArrow from 'ikonate/icons/arrow-up.svg?raw';
+import svg_plus from 'ikonate/icons/plus.svg?raw';
 import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateSpaceTransform, coordinateSpaceTransformsEquivalent, extendTransformedBoundingBoxUpToRank, getDefaultInputScale, getDimensionNameValidity, getInferredOutputScale, homogeneousTransformSubmatrix, isLocalDimension, makeCoordinateSpace, makeSingletonDimTransformedBoundingBox, newDimensionId, permuteCoordinateSpace, validateDimensionNames, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';

@@ -20,7 +20,7 @@
 
 import './layer_side_panel.css';
 
-import svg_cursor from 'ikonate/icons/cursor.svg';
+import svg_cursor from 'ikonate/icons/cursor.svg?raw';
 import {changeLayerName, changeLayerType, deleteLayer, layerTypes, ManagedUserLayer, SelectedLayerState, UserLayer} from 'neuroglancer/layer';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {CachedWatchableValue, observeWatchable} from 'neuroglancer/trackable_value';

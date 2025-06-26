@@ -16,9 +16,9 @@
 
 import './position_widget.css';
 
-import svg_pause from 'ikonate/icons/pause.svg';
-import svg_play from 'ikonate/icons/play.svg';
-import svg_video from 'ikonate/icons/video.svg';
+import svg_pause from 'ikonate/icons/pause.svg?raw';
+import svg_play from 'ikonate/icons/play.svg?raw';
+import svg_video from 'ikonate/icons/video.svg?raw';
 import {clampAndRoundCoordinateToVoxelCenter, CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {CoordinateSpacePlaybackVelocity, Position, VelocityBoundaryBehavior} from 'neuroglancer/navigation_state';

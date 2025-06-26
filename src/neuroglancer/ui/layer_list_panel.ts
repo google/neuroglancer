@@ -16,9 +16,9 @@
 
 import './layer_list_panel.css';
 
-import svg_controls_alt from 'ikonate/icons/controls-alt.svg';
-import svg_eye_crossed from 'ikonate/icons/eye-crossed.svg';
-import svg_eye from 'ikonate/icons/eye.svg';
+import svg_controls_alt from 'ikonate/icons/controls-alt.svg?raw';
+import svg_eye_crossed from 'ikonate/icons/eye-crossed.svg?raw';
+import svg_eye from 'ikonate/icons/eye.svg?raw';
 import {deleteLayer, LayerManager, ManagedUserLayer, TopLevelLayerListSpecification} from 'neuroglancer/layer';
 import {TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {DropLayers, registerLayerBarDragLeaveHandler, registerLayerBarDropHandlers, registerLayerDragHandlers} from 'neuroglancer/ui/layer_drag_and_drop';
