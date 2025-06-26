@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import svg_close from "ikonate/icons/close.svg?raw";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {
@@ -21,6 +22,7 @@ import {
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
 import "#src/overlay.css";
+import { makeIcon } from "#src/widget/icon.js";
 
 export const overlayKeyboardHandlerPriority = 100;
 
@@ -60,5 +62,46 @@ export class Overlay extends RefCounted {
     --overlaysOpen;
     document.body.removeChild(this.container);
     super.disposed();
+  }
+}
+
+export class FramedDialog extends Overlay {
+  header: HTMLDivElement;
+  headerTitle: HTMLSpanElement;
+  closeMenuIcon: HTMLElement;
+  body: HTMLDivElement;
+  footer: HTMLDivElement;
+  constructor(title: string = "Dialog", extraClassPrefix?: string) {
+    super();
+    this.content.classList.add("neuroglancer-framed-dialog");
+
+    const header = (this.header = document.createElement("div"));
+    const closeMenuIcon = (this.closeMenuIcon = makeIcon({ svg: svg_close }));
+    closeMenuIcon.addEventListener("click", () => this.close());
+    closeMenuIcon.classList.add("neuroglancer-framed-dialog-close");
+    const headerTitle = (this.headerTitle = document.createElement("span"));
+    headerTitle.textContent = title;
+    headerTitle.classList.add("neuroglancer-framed-dialog-title");
+    header.classList.add("neuroglancer-framed-dialog-header");
+    header.appendChild(headerTitle);
+    header.appendChild(closeMenuIcon);
+    this.content.appendChild(header);
+
+    const body = (this.body = document.createElement("div"));
+    body.classList.add("neuroglancer-framed-dialog-body");
+    this.content.appendChild(body);
+
+    const footer = (this.footer = document.createElement("div"));
+    footer.classList.add("neuroglancer-framed-dialog-footer");
+    this.content.appendChild(this.footer);
+
+    if (extraClassPrefix !== undefined) {
+      this.content.classList.add(`${extraClassPrefix}`);
+      this.header.classList.add(`${extraClassPrefix}-header`);
+      this.headerTitle.classList.add(`${extraClassPrefix}-title`);
+      this.closeMenuIcon.classList.add(`${extraClassPrefix}-close`);
+      this.body.classList.add(`${extraClassPrefix}-body`);
+      this.footer.classList.add(`${extraClassPrefix}-footer`);
+    }
   }
 }

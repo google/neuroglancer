@@ -27,7 +27,6 @@ import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
-import svg_close from "ikonate/icons/close.svg?raw";
 import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
@@ -74,7 +73,7 @@ import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { Overlay } from "#src/overlay.js";
+import { FramedDialog, } from "#src/overlay.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -107,48 +106,21 @@ interface NumberConfig {
   step?: number;
 }
 
-class AnnotationDescriptionEditDialog extends Overlay {
+class AnnotationDescriptionEditDialog extends FramedDialog {
   constructor(parent: AnnotationUIProperty) {
-    super();
+    super("Edit Description", "neuroglancer-annotation-description-editor");
 
-    this.content.classList.add("neuroglancer-annotation-description-editor");
-
-    const header = document.createElement("div");
-    header.classList.add("neuroglancer-annotation-description-header");
-    const headerTitle = document.createElement("span");
-    headerTitle.classList.add(
-      "neuroglancer-annotation-description-header-title",
-    );
-    headerTitle.textContent = "Edit Description";
-    const headerClose = makeIcon({
-      svg: svg_close,
-      onClick: () => {
-        this.close();
-      },
-    });
-    headerClose.classList.add(
-      "neuroglancer-annotation-description-header-close",
-    );
-    header.appendChild(headerTitle);
-    header.appendChild(headerClose);
-    this.content.appendChild(header);
-
-    const mainBody = document.createElement("div");
-    mainBody.classList.add("neuroglancer-annotation-description-body");
     const textInputElement = document.createElement("textarea");
     textInputElement.classList.add(
-      "neuroglancer-annotation-description-text-input",
+      "neuroglancer-annotation-description-editor-text-input",
     );
     textInputElement.rows = 5;
     textInputElement.placeholder = "Add a description for this property...";
     textInputElement.textContent = parent.spec.description || "";
-    mainBody.appendChild(textInputElement);
-    this.content.appendChild(mainBody);
+    this.body.appendChild(textInputElement);
 
-    const footer = document.createElement("div");
-    footer.classList.add("neuroglancer-annotation-description-footer");
     const saveButton = document.createElement("button");
-    saveButton.classList.add("neuroglancer-annotation-description-save-button");
+    saveButton.classList.add("neuroglancer-annotation-description-editor-save-button");
     saveButton.textContent = "Save changes";
     saveButton.addEventListener("click", () => {
       const newDescription = textInputElement.value.trim();
@@ -161,15 +133,14 @@ class AnnotationDescriptionEditDialog extends Overlay {
     });
     const cancelButton = document.createElement("button");
     cancelButton.classList.add(
-      "neuroglancer-annotation-description-cancel-button",
+      "neuroglancer-annotation-description-editor-cancel-button",
     );
     cancelButton.textContent = "Discard changes";
     cancelButton.addEventListener("click", () => {
       this.close();
     });
-    footer.appendChild(cancelButton);
-    footer.appendChild(saveButton);
-    this.content.appendChild(footer);
+    this.footer.appendChild(cancelButton);
+    this.footer.appendChild(saveButton);
   }
 }
 

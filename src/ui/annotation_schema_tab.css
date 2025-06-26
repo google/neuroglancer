@@ -237,15 +237,11 @@
   outline: none;
 }
 
-.neuroglancer-annotation-description-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.neuroglancer-annotation-description-editor-header {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #E6E6E6;
 }
 
-.neuroglancer-annotation-description-header-title {
+.neuroglancer-annotation-description-editor-header-title {
   color: #141415;
   font-size: 15px;
   font-style: normal;
@@ -253,21 +249,21 @@
   line-height: normal;
 }
 
-.neuroglancer-annotation-description-header-close svg {
+.neuroglancer-annotation-description-editor-header-close svg {
   stroke: #141415;
   opacity: 0.6;
 }
 
-.neuroglancer-annotation-description-header-close:hover {
+.neuroglancer-annotation-description-editor-header-close:hover {
   background-color: transparent;
 }
 
-.neuroglancer-annotation-description-body {
+.neuroglancer-annotation-description-editor-body {
   display: flex;
   padding: 1rem;
 }
 
-.neuroglancer-annotation-description-text-input {
+.neuroglancer-annotation-description-editor-text-input {
   width: 100%;
   padding: var(--spacing-lg, 12px) 14px;
   gap: var(--spacing-md, 8px);
@@ -277,13 +273,13 @@
   resize: none;
 }
 
-.neuroglancer-annotation-description-text-input:focus {
+.neuroglancer-annotation-description-editor-text-input:focus {
   border: 2px solid #0474FF;
   box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
   outline: none;
 }
 
-.neuroglancer-annotation-description-footer {
+.neuroglancer-annotation-description-editor-footer {
   display: flex;
   padding: 12px 16px;
   justify-content: flex-end;
@@ -292,8 +288,8 @@
   border-top: 1px solid #E6E6E6;
 }
 
-.neuroglancer-annotation-description-save-button,
-.neuroglancer-annotation-description-cancel-button {
+.neuroglancer-annotation-description-editor-save-button,
+.neuroglancer-annotation-description-editor-cancel-button {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid #D0D5DD;
@@ -308,7 +304,7 @@
   cursor: pointer;
 }
 
-.neuroglancer-annotation-description-save-button:hover,
-.neuroglancer-annotation-description-cancel-button:hover {
+.neuroglancer-annotation-description-editor-save-button:hover,
+.neuroglancer-annotation-description-editor-cancel-button:hover {
   background: #F9FAFB;
 }
