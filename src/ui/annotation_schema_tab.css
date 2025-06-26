@@ -19,13 +19,13 @@
 
 .neuroglancer-annotation-schema-text-container {
   padding: 0.25rem;
-  color: rgba(255, 255, 255, 0.6);
 }
 
-.neuroglancer-annotation-schema-text-container p {
+.neuroglancer-annotation-schema-main-text {
   margin-top: 0;
   margin-bottom: 0.25rem;
   padding: 0.25rem;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .neuroglancer-annotation-schema-row:hover
@@ -98,8 +98,57 @@
   align-items: center;
 }
 
-.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon {
-  opacity: 60%;
+.neuroglancer-annotation-schema-action-buttons svg {
+  stroke: rgba(255, 255, 255, 0.60);
+}
+
+.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon:hover,
+.neuroglancer-annotation-schema-action-button-selected {
+  background-color: #333;
+}
+
+.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon:hover svg,
+.neuroglancer-annotation-schema-action-button-selected svg {
+  stroke: white;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-modal {
+  flex-direction: column;
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+
+  border-radius: 2px;
+  background: #222;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-modal p {
+  margin: 0;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-action {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-button {
+  background-color: #fff;
+  border: none;
+}
+
+.neuroglancer-annotation-schema-cancel-paste-button {
+  border: 1px solid #FFF;
+  background-color: transparent;
+  color: white;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-button,
+.neuroglancer-annotation-schema-cancel-paste-button {
+  padding: 6px 12px;
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
 }
 
 .neuroglancer-annotation-schema-add-button-field {

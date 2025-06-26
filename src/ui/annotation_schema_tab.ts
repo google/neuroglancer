@@ -928,6 +928,7 @@ export class AnnotationSchemaView extends Tab {
       "neuroglancer-annotation-schema-text-container";
     schemaActionButtons.className =
       "neuroglancer-annotation-schema-action-buttons";
+    this.schemaViewTextElement.className = "neuroglancer-annotation-schema-main-text";
     schemaTextContainer.appendChild(this.schemaViewTextElement);
     schemaTextContainer.appendChild(schemaActionButtons);
 
@@ -951,6 +952,10 @@ export class AnnotationSchemaView extends Tab {
     confirmPasteText.textContent =
       "Pasting a schema will overwrite the current schema. Are you sure you want to do this?";
     confirmPasteContainer.appendChild(confirmPasteText);
+
+    const confirmPasteActionContainer = document.createElement("div");
+    confirmPasteActionContainer.className = "neuroglancer-annotation-schema-confirm-paste-action";
+
     const confirmPasteButton = document.createElement("button");
     confirmPasteButton.textContent = "Confirm Paste";
     confirmPasteButton.className =
@@ -958,16 +963,18 @@ export class AnnotationSchemaView extends Tab {
     confirmPasteButton.addEventListener("click", () => {
       this.pasteSchemaFromClipboard();
       confirmPasteContainer.style.display = "none";
+      this.schemaPasteButton.classList.remove("neuroglancer-annotation-schema-action-button-selected");
     });
-    confirmPasteContainer.appendChild(confirmPasteButton);
+    confirmPasteActionContainer.appendChild(confirmPasteButton);
     const cancelPasteButton = document.createElement("button");
     cancelPasteButton.textContent = "Cancel";
     cancelPasteButton.className =
       "neuroglancer-annotation-schema-cancel-paste-button";
     cancelPasteButton.addEventListener("click", () => {
       confirmPasteContainer.style.display = "none";
+      this.schemaPasteButton.classList.remove("neuroglancer-annotation-schema-action-button-selected");
     });
-    confirmPasteContainer.appendChild(cancelPasteButton);
+    confirmPasteActionContainer.appendChild(cancelPasteButton);
     confirmPasteContainer.style.display = "none"; // Initially hidden
 
     this.schemaPasteButton = makeIcon({
@@ -976,12 +983,17 @@ export class AnnotationSchemaView extends Tab {
       onClick: () => {
         // If there is any existing schema, then show a confirm first
         const hasExistingSchema = this.annotationUIProperties.size > 0;
-        if (hasExistingSchema) confirmPasteContainer.style.display = "block";
+        if (hasExistingSchema) {
+          confirmPasteContainer.style.display = "flex";
+          this.schemaPasteButton.classList.add("neuroglancer-annotation-schema-action-button-selected");
+        }
         else this.pasteSchemaFromClipboard();
       },
     });
+    confirmPasteContainer.appendChild(confirmPasteActionContainer);
+
     schemaActionButtons.appendChild(this.schemaPasteButton);
-    schemaActionButtons.appendChild(confirmPasteContainer);
+    schemaTextContainer.appendChild(confirmPasteContainer)
 
     this.element.appendChild(schemaTextContainer);
     this.element.appendChild(this.schemaTable);
