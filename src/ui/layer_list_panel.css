@@ -78,6 +78,7 @@
 .neuroglancer-layer-list-panel-color-value-wrapper {
   position: relative;
   padding: 5px;
+  cursor: pointer;
 }
 
 .neuroglancer-layer-list-panel-color-value {
