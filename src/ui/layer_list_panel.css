@@ -160,3 +160,8 @@
   > .neuroglancer-layer-list-panel-item-controls {
   display: none;
 }
+
+.neuroglancer-layer-list-panel-item:not(:hover)
+  > .neuroglancer-layer-list-panel-item-visibility {
+  display: none;
+}

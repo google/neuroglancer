@@ -254,9 +254,6 @@ class LayerListItem extends RefCounted {
     );
     element.appendChild(numberElement);
     element.appendChild(
-      this.registerDisposer(new LayerVisibilityWidget(layer)).element,
-    );
-    element.appendChild(
       this.registerDisposer(new LayerColorWidget(panel, layer)).element,
     );
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
@@ -265,6 +262,11 @@ class LayerListItem extends RefCounted {
       this.registerDisposer(makeSelectedLayerSidePanelCheckboxIcon(layer))
         .element,
     );
+    const visibilityIcon = new LayerVisibilityWidget(layer);
+    visibilityIcon.element.classList.add(
+      "neuroglancer-layer-list-panel-item-visibility",
+    );
+    element.appendChild(visibilityIcon.element);
     const deleteButton = makeDeleteButton({
       title: "Delete layer",
       onClick: () => {
