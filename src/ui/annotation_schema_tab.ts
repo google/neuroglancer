@@ -650,6 +650,55 @@ class AnnotationUIProperty extends RefCounted {
     return input;
   }
 
+  // private createTextAreaElement(
+  //   config: InputConfig,
+  //   readonly: boolean,
+  // ): HTMLTextAreaElement {
+  //   const textarea = document.createElement("textarea");
+  //   textarea.rows = 1;
+  //   this.setCommonInputAttributes(textarea, config, readonly);
+
+  //   textarea.addEventListener("keydown", (event) => {
+  //     if (event.key === "Enter") {
+  //       textarea.blur();
+  //     }
+  //   });
+
+  //   const calculateRows = (content: string): number => {
+  //     const avgCharWidth = 9;
+  //     const minRows = 1;
+  //     const maxRows = 5;
+
+  //     if (!content) return minRows;
+
+  //     const textareaWidth = textarea.clientWidth || 300;
+  //     const charsPerLine = textareaWidth / avgCharWidth;
+  //     const lines = content.split("\n");
+  //     let totalRows = 0;
+
+  //     lines.forEach((line) => {
+  //       totalRows += Math.max(Math.ceil(line.length / charsPerLine), 1);
+  //     });
+
+  //     return Math.max(minRows, Math.min(maxRows, totalRows));
+  //   };
+
+  //   const updateTextareaRows = () => {
+  //     const content = textarea.value;
+  //     textarea.rows = calculateRows(content);
+  //   };
+  //   const debouncedUpdateTextareaSize =
+  //     animationFrameDebounce(updateTextareaRows);
+
+  //   textarea.addEventListener("input", debouncedUpdateTextareaSize);
+  //   const resizeObserver = new ResizeObserver(() => {
+  //     debouncedUpdateTextareaSize();
+  //   });
+  //   resizeObserver.observe(textarea);
+  //   debouncedUpdateTextareaSize();
+
+  //   return textarea;
+  // }
   private createTextAreaElement(
     config: InputConfig,
     readonly: boolean,
@@ -658,44 +707,14 @@ class AnnotationUIProperty extends RefCounted {
     textarea.rows = 1;
     this.setCommonInputAttributes(textarea, config, readonly);
 
+    textarea.style.minHeight = '1lh';
+    textarea.style.maxHeight = '10lh';
+
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         textarea.blur();
       }
     });
-
-    const calculateRows = (content: string): number => {
-      const avgCharWidth = 9;
-      const minRows = 1;
-      const maxRows = 5;
-
-      if (!content) return minRows;
-
-      const textareaWidth = textarea.clientWidth || 300;
-      const charsPerLine = textareaWidth / avgCharWidth;
-      const lines = content.split("\n");
-      let totalRows = 0;
-
-      lines.forEach((line) => {
-        totalRows += Math.max(Math.ceil(line.length / charsPerLine), 1);
-      });
-
-      return Math.max(minRows, Math.min(maxRows, totalRows));
-    };
-
-    const updateTextareaRows = () => {
-      const content = textarea.value;
-      textarea.rows = calculateRows(content);
-    };
-    const debouncedUpdateTextareaSize =
-      animationFrameDebounce(updateTextareaRows);
-
-    textarea.addEventListener("input", debouncedUpdateTextareaSize);
-    const resizeObserver = new ResizeObserver(() => {
-      debouncedUpdateTextareaSize();
-    });
-    resizeObserver.observe(textarea);
-    debouncedUpdateTextareaSize();
 
     return textarea;
   }

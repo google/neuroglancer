@@ -223,7 +223,10 @@
 }
 
 .neuroglancer-annotation-schema-enum-entry textarea {
-  height: auto
+  height: auto;
+  field-sizing: content;
+  max-width: 66px;
+  resize: none;
 }
 
 .neuroglancer-annotation-schema-name-input {
