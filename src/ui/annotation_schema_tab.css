@@ -17,6 +17,10 @@
   align-items: flex-start;
 }
 
+.neuroglancer-annotation-schema-row:hover {
+  background-color: #111;
+}
+
 .neuroglancer-annotation-schema-text-container {
   padding: 0.25rem;
 }
@@ -30,12 +34,15 @@
 
 .neuroglancer-annotation-schema-row:hover
   .neuroglancer-annotation-schema-delete-cell,
-.neuroglancer-annotation-schema-enum-entry:hover
-  .neuroglancer-annotation-schema-delete-icon,
 .neuroglancer-annotation-schema-row:hover
   .neuroglancer-annotation-schema-description-cell {
   opacity: 1;
   visibility: visible;
+}
+
+.neuroglancer-annotation-schema-enum-entry:hover
+  .neuroglancer-annotation-schema-delete-icon {
+  display: block;
 }
 
 .neuroglancer-annotation-schema-delete-cell svg,
@@ -178,10 +185,14 @@
   align-items: center;
 }
 
-.neuroglancer-annotation-schema-delete-cell,
-.neuroglancer-annotation-schema-delete-icon {
+.neuroglancer-annotation-schema-delete-cell {
   visibility: hidden;
   opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.neuroglancer-annotation-schema-delete-icon {
+  display: none;
   transition: opacity 0.2s ease-in-out;
 }
 
