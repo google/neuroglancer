@@ -86,7 +86,7 @@ const DEBUG_VERTICES = false;
  * in the display of the wrong data (i.e. the previous rather than next plane), we always shift
  * toward the "next" plane by this small amount.
  */
-const CHUNK_POSITION_EPSILON = 1e-3;
+export const CHUNK_POSITION_EPSILON = 1e-3;
 
 const tempMat4 = mat4.create();
 
@@ -339,7 +339,7 @@ export abstract class SliceViewVolumeRenderLayer<
     ShaderParameters,
     ShaderContext
   >;
-  private tempChunkPosition: Float32Array;
+  protected tempChunkPosition: Float32Array;
   shaderParameters: WatchableValueInterface<ShaderParameters>;
   highestResolutionLoadedVoxelSize: Float32Array | undefined;
   private vertexIdHelper: VertexIdHelper;
@@ -362,6 +362,7 @@ export abstract class SliceViewVolumeRenderLayer<
     this.registerDisposer(
       shaderParameters.changed.add(this.redrawNeeded.dispatch),
     );
+
     // The shader depends on the `ChunkFormat` (which is a property of the `VolumeChunkSource`), the
     // `ShaderParameters` (which are determined by the derived RenderLayer class), the number of
     // channel dimensions, and the data histogram channel specifications.

@@ -68,9 +68,14 @@ import {
   TrackableRelativeDisplayScales,
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
+import "#src/noselect.css";
 import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
+import { registerBoundingBoxToolForViewer } from "#src/sliceview/bbox.js";
+import { registerBrushToolForViewer } from "#src/sliceview/brush.js";
+import { registerEraserToolForViewer } from "#src/sliceview/eraser.js";
+import { registerPointToolForViewer } from "#src/sliceview/point_tool.js";
 import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
@@ -82,6 +87,7 @@ import {
   observeWatchable,
   TrackableValue,
 } from "#src/trackable_value.js";
+import "#src/ui/layer_data_sources_tab.js";
 import {
   LayerArchiveCountWidget,
   LayerListPanel,
@@ -129,6 +135,7 @@ import {
   CompoundTrackable,
   optionallyRestoreFromJsonMember,
 } from "#src/util/trackable.js";
+import "#src/viewer.css";
 import type {
   ViewerState,
   VisibilityPrioritySpecification,
@@ -213,7 +220,7 @@ function setViewerUiConfiguration(
 
 export interface ViewerOptions
   extends ViewerUIOptions,
-    VisibilityPrioritySpecification {
+  VisibilityPrioritySpecification {
   dataContext: Owned<DataManagementContext>;
   element: HTMLElement;
   credentialsManager: CredentialsManager;
@@ -228,9 +235,9 @@ const defaultViewerOptions =
   "undefined" !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS
     ? NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS
     : {
-        showLayerDialog: true,
-        resetStateWhenEmpty: true,
-      };
+      showLayerDialog: true,
+      resetStateWhenEmpty: true,
+    };
 
 class TrackableViewerState extends CompoundTrackable {
   constructor(public viewer: Borrowed<Viewer>) {
@@ -1157,6 +1164,9 @@ export class Viewer extends RefCounted implements ViewerState {
   activateTool(uppercase: string) {
     this.globalToolBinder.activate(uppercase);
   }
+  deactivateTool() {
+    this.globalToolBinder.deactivate_();
+  }
 
   deactivateTools() {
     this.globalToolBinder.deactivate();
@@ -1215,3 +1225,7 @@ export class Viewer extends RefCounted implements ViewerState {
 registerDimensionToolForViewer(Viewer);
 registerDimensionToolForLayerGroupViewer(LayerGroupViewer);
 registerDimensionToolForUserLayer(UserLayer);
+registerBrushToolForViewer(Viewer);
+registerEraserToolForViewer(Viewer);
+registerBoundingBoxToolForViewer(Viewer)
+registerPointToolForViewer(Viewer)

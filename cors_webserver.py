@@ -31,6 +31,13 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 class RequestHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
+        # Disable caching
+        self.send_header(
+            "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"
+        )
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        # Allow CORS
         self.send_header("Access-Control-Allow-Origin", "*")
         SimpleHTTPRequestHandler.end_headers(self)
 

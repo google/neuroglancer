@@ -18,20 +18,16 @@ import copy
 import inspect
 import numbers
 import threading
-from collections.abc import (
-    Callable,
-    ItemsView,
-    Iterable,
-    Iterator,
-    KeysView,
-    ValuesView,
-)
+from collections.abc import ItemsView, Iterable, Iterator, KeysView, ValuesView
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Generic,
     Literal,
+    Optional,
     TypeVar,
+    Union,
     cast,
     overload,
 )
@@ -254,7 +250,7 @@ def optional(wrapper, default_value=None, validator=None):
     modified_wrapper.supports_validation = modified_validator
 
     if default_value is None:
-        _map_type_annotation(modified_wrapper, wrapper, lambda t: t | None)
+        _map_type_annotation(modified_wrapper, wrapper, lambda t: Optional[t])
     else:
         _map_type_annotation(modified_wrapper, wrapper, lambda t: t)
 
@@ -314,13 +310,13 @@ class Map(Generic[K, V], JsonObjectWrapper):
         return _MapItemsView(self)
 
     @overload
-    def get(self, key: K) -> V | None: ...
+    def get(self, key: K) -> Optional[V]: ...
 
     @overload
     def get(self, key: K, default: V) -> V: ...
 
     @overload
-    def get(self, key: K, default: T) -> V | T: ...
+    def get(self, key: K, default: T) -> Union[V, T]: ...
 
     def get(self, key: K, default=None):
         """Returns the mapped value, or the specified default."""
@@ -343,18 +339,18 @@ class Map(Generic[K, V], JsonObjectWrapper):
         Raises:
           KeyError: if the key is not present in the map.
         """
-        str_key = str(key)
+        key = str(key)  # type: ignore[assignment]
         with self._lock:
-            if str_key not in self._json_data:
+            if key not in self._json_data:
                 raise KeyError(key)
-            return self._get_wrapped(str_key, type(self)._value_type)
+            return self._get_wrapped(key, type(self)._value_type)
 
     def __setitem__(self, key: K, value: V):
         """Sets the specified key to the specified value."""
-        str_key = str(key)
+        key = str(key)  # type: ignore[assignment]
         with self._lock:
-            self._set_wrapped(str_key, value, type(self)._value_validator)
-            self._json_data[str_key] = None  # placeholder
+            self._set_wrapped(key, value, type(self)._value_validator)
+            self._json_data[key] = None  # placeholder
 
     def __delitem__(self, key: K):
         """Deletes the entry with the specified key.
@@ -364,7 +360,7 @@ class Map(Generic[K, V], JsonObjectWrapper):
         """
         if self._readonly:
             raise AttributeError
-        str_key = str(key)
+        str_key = str(key)  # type: ignore[assignment]
         with self._lock:
             del self._json_data[str_key]
             self._cached_wrappers.pop(str_key, None)
@@ -373,41 +369,6 @@ class Map(Generic[K, V], JsonObjectWrapper):
         key_validator = type(self)._key_validator
         for key in self._json_data:
             yield key_validator(key)
-
-    @overload
-    def pop(self, key: K, /) -> V: ...
-
-    @overload
-    def pop(self, key: K, default: V, /) -> V: ...
-
-    @overload
-    def pop(self, key: K, default: T, /) -> V | T: ...
-
-    def pop(self, key: K, /, *args):
-        """Removes and returns the mapped value associated with the specified key.
-
-        Returns:
-          The mapped value, or :py:param:`default` if :py:param:`key` is not
-          specified and :py:param:`default` is specified.
-
-        Raises:
-          KeyError: if the key is not present and :py:param:`default` is not
-            specified.
-        """
-        if self._readonly:
-            raise AttributeError
-        str_key = str(key)
-        if len(args) > 1:
-            raise ValueError("Expected at most one default argument")
-        with self._lock:
-            if str_key in self._json_data:
-                value = self._get_wrapped(str_key, type(self)._value_type)
-                del self._json_data[str_key]
-                self._cached_wrappers.pop(str_key, None)
-                return value
-            if len(args) == 0:
-                raise KeyError(key)
-            return args[0]
 
 
 class _MapKeysView(Generic[K], collections.abc.KeysView[K]):
@@ -489,7 +450,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
 
 
 def typed_set(wrapped_type: Callable[[Any], T]):
-    def wrapper(x, _readonly=False) -> set[T] | frozenset[T]:
+    def wrapper(x, _readonly=False) -> Union[set[T], frozenset[T]]:
         set_type = frozenset if _readonly else set
         kwargs: dict[str, Any] = dict()
         if hasattr(wrapped_type, "supports_readonly"):
@@ -529,7 +490,7 @@ class List(Generic[T]):
     def __init__(self, json_data=None, _readonly=False):
         if json_data is None:
             json_data = []
-        if not isinstance(json_data, list | tuple | np.ndarray):
+        if not isinstance(json_data, (list, tuple, np.ndarray)):
             raise ValueError
         self._readonly = _readonly
         validator = type(self)._validator
@@ -555,7 +516,7 @@ class List(Generic[T]):
     @overload
     def __setitem__(self, key: slice, value: Iterable[T]): ...
 
-    def __setitem__(self, key: int | slice, value: T | Iterable[T]):
+    def __setitem__(self, key: Union[int, slice], value: Union[T, Iterable[T]]):
         """Assigns to the specified index or slice."""
         if self._readonly:
             raise AttributeError
@@ -614,18 +575,18 @@ def typed_list(wrapped_type: Callable[[Any], T], validator=None) -> type[List[T]
 
 
 def number_or_string(value):
-    if not isinstance(value, numbers.Real | str):
+    if not isinstance(value, numbers.Real) and not isinstance(value, str):
         raise TypeError
     return value
 
 
-_set_type_annotation(number_or_string, numbers.Real | str)
+_set_type_annotation(number_or_string, Union[numbers.Real, str])
 
 
 def bool_or_string(value):
-    if not isinstance(value, bool | str):
+    if not isinstance(value, (bool, str)):
         raise TypeError
     return value
 
 
-_set_type_annotation(bool_or_string, bool | str)
+_set_type_annotation(bool_or_string, Union[bool, str])

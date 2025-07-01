@@ -570,9 +570,9 @@ export class DataSourceRegistry extends RefCounted {
         });
         return applyCompletionOffset(
           url.length -
-            finalComponent.length +
-            parsedFinalComponent.scheme.length +
-            1,
+          finalComponent.length +
+          parsedFinalComponent.scheme.length +
+          1,
           completions,
         );
       }
@@ -600,12 +600,11 @@ export class DataSourceRegistry extends RefCounted {
 }
 
 export class KvStoreBasedDataSourceLegacyUrlAdapter
-  implements DataSourceProvider
-{
+  implements DataSourceProvider {
   constructor(
     public base: KvStoreBasedDataSourceProvider,
     public scheme = base.scheme,
-  ) {}
+  ) { }
 
   get hidden() {
     return true;

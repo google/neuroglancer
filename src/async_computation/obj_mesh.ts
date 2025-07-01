@@ -66,7 +66,6 @@ registerAsyncComputation(
     };
 
     const size = mesh.vertexPositions.byteLength + mesh.indices.byteLength;
-    console.log(mesh);
 
     return {
       value: { data: mesh, size },

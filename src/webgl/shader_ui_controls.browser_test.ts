@@ -885,7 +885,11 @@ void main() {
               sortedControlPoints: sortedControlPoints,
               channel: [],
               defaultColor: vec3.fromValues(0, 0, 1),
+<<<<<<< HEAD
               window: [0n, 2000n],
+=======
+              window: [Uint64.fromNumber(0), Uint64.fromNumber(2000)],
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
             },
           },
         ],

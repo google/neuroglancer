@@ -8,7 +8,7 @@
     "url": "git+https://github.com/google/neuroglancer.git"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=20.11 <21 || >=21.2"
   },
   "browserslist": [
     "last 2 Chrome versions",
@@ -16,6 +16,7 @@
     "last 2 Safari versions"
   ],
   "scripts": {
+    "generate-code": "tsx ./config/generate_code.ts",
     "update-conditions": "tsx ./build_tools/update-conditions.ts",
     "prepare": "tsx ./build_tools/build-package.ts --inplace --if-not-toplevel",
     "prepack": "tsx ./build_tools/build-package.ts --inplace",
@@ -29,496 +30,370 @@
     "build-python:watch": "tsx ./build_tools/cli.ts --python build --watch",
     "test": "vitest --run",
     "test:watch": "vitest watch",
-    "example-project-test": "playwright test",
     "benchmark": "vitest bench --run",
     "benchmark:watch": "vitest bench",
-    "lint:check": "oxlint && eslint . --cache --format codeframe",
-    "lint:fix": "oxlint --fix && eslint . --cache --fix --format codeframe && prettier --cache -w -l .",
+    "lint:check": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format:check": "prettier --cache . -c",
     "format:fix": "prettier --cache -w -l .",
     "typecheck": "tsc --noEmit",
-    "typecheck:watch": "tsc --noEmit --watch",
     "version": "tsx ./build_tools/after-version-change.ts"
   },
   "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@iodigital/vite-plugin-msw": "^2.0.0",
-    "@playwright/browser-chromium": "^1.50.1",
-    "@playwright/test": "^1.50.1",
-    "@rspack/cli": "^1.2.2",
-    "@rspack/core": "^1.2.2",
     "@types/codemirror": "5.60.15",
     "@types/gl-matrix": "^2.4.5",
-    "@types/http-server": "^0.12.4",
-    "@types/jsdom": "^21.1.7",
     "@types/lodash-es": "^4.17.12",
-    "@types/node": "^22.13.1",
-    "@types/yargs": "^17.0.33",
-    "@vitest/browser": "^3.0.5",
-    "@vitest/ui": "^3.0.5",
-    "@vitest/web-worker": "^3.0.5",
-    "cookie": "^1.0.2",
+    "@types/node": "^20.14.12",
+    "@types/pako": "^2.0.3",
+    "@types/yargs": "^17.0.32",
+    "@typescript-eslint/eslint-plugin": "^7.17.0",
+    "@typescript-eslint/parser": "^7.17.0",
+    "@vitest/browser": "^2.0.4",
+    "@vitest/ui": "^2.0.4",
     "css-loader": "^7.1.2",
-    "esbuild": "^0.24.2",
-    "eslint": "^9.19.0",
+    "esbuild": "^0.23.0",
+    "esbuild-loader": "^4.2.2",
+    "eslint": "^8.56.0",
     "eslint-formatter-codeframe": "^7.32.1",
-    "eslint-import-resolver-typescript": "^3.7.0",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-oxlint": "^0.15.9",
-    "eslint-rspack-plugin": "^4.2.1",
-    "express": "^4.21.2",
-    "fzstd": "^0.1.1",
-    "glob": "^11.0.1",
-    "http-server": "^14.1.1",
-    "jsdom": "^26.0.0",
-    "msw": "^2.7.0",
-    "oxlint": "^0.15.9",
-    "playwright": "^1.50.1",
-    "prettier": "3.4.2",
-    "ts-checker-rspack-plugin": "^1.1.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.23.0",
-    "vitest": "^3.0.5",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-interactive": "^10.8.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-webpack-plugin": "^4.0.1",
+    "fork-ts-checker-webpack-plugin": "^6.5.3",
+    "glob": "^11.0.0",
+    "html-webpack-plugin": "^5.6.0",
+    "mini-css-extract-plugin": "^2.9.0",
+    "prettier": "3.3.3",
+    "style-loader": "^4.0.0",
+    "svg-inline-loader": "^0.8.2",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.4",
+    "webdriverio": "^8.39.1",
+    "webpack": "^5.93.0",
     "webpack-bundle-analyzer": "^4.10.2",
-    "webpack-merge": "^6.0.1",
-    "yargs": "^17.7.2",
-    "yauzl": "^3.2.0"
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.4",
+    "webpack-merge": "^6.0.1"
   },
   "dependencies": {
     "codemirror": "^5.61.1",
-    "core-js": "^3.40.0",
-    "crc-32": "^1.2.2",
     "gl-matrix": "3.1.0",
+    "glsl-editor": "^1.0.0",
     "ikonate": "github:mikolajdobrucki/ikonate#a86b4107c6ec717e7877f880a930d1ccf0b59d89",
     "lodash-es": "^4.17.21",
-    "msgpackr": "^1.11.2",
     "nifti-reader-js": "^0.6.8",
     "numcodecs": "^0.3.2",
-    "valibot": "^1.0.0-beta.15"
+    "pako": "^2.1.0"
   },
   "overrides": {
     "@puppeteer/browsers": ">=2"
   },
   "files": [
-    "src/**/*",
-    "typings/**/*",
-    "tsconfig.json"
+    "lib/**/*"
   ],
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/main_module.ts",
-    "./unstable/*.js": "./src/*.ts",
-    "./unstable/*": "./src/*"
+    "./*.js": "./src/*.ts",
+    "./*": "./src/*"
   },
   "imports": {
     "#src/third_party/jpgjs/jpg.js": "./src/third_party/jpgjs/jpg.js",
-    "#src/async_computation/decode_zstd.js": {
-      "node": "./src/async_computation/decode_zstd_node.ts",
-      "default": "./src/async_computation/decode_zstd.ts"
-    },
     "#src/*.js": "./src/*.ts",
     "#src/*": "./src/*",
-    "#tests/fixtures/msw": {
-      "node": "./tests/fixtures/msw_node.ts",
-      "default": "./tests/fixtures/msw_browser.ts"
-    },
-    "#tests/fixtures/gl": {
-      "node": "./tests/fixtures/gl_node.ts",
-      "default": "./tests/fixtures/gl_browser.ts"
-    },
-    "#tests/*.js": "./tests/*.ts",
     "#testdata/*": "./testdata/*",
     "#datasource/boss/backend": {
       "neuroglancer/datasource/boss:enabled": "./src/datasource/boss/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/boss:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/boss:disabled": "./src/datasource/boss/backend.ts",
       "default": "./src/datasource/boss/backend.ts"
     },
     "#datasource/boss/async_computation": {
       "neuroglancer/datasource/boss:enabled": "./src/datasource/boss/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/boss:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/boss:disabled": "./src/datasource/boss/async_computation.ts",
       "default": "./src/datasource/boss/async_computation.ts"
     },
     "#datasource/boss/register_default": {
       "neuroglancer/datasource/boss:enabled": "./src/datasource/boss/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/boss:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/boss:disabled": "./src/datasource/boss/register_default.ts",
       "default": "./src/datasource/boss/register_default.ts"
     },
     "#datasource/boss/register_credentials_provider": {
       "neuroglancer/python": "./src/util/false.ts",
       "neuroglancer/datasource/boss:enabled": "./src/datasource/boss/register_credentials_provider.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/boss:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/boss:disabled": "./src/datasource/boss/register_credentials_provider.ts",
       "default": "./src/datasource/boss/register_credentials_provider.ts"
     },
     "#datasource/brainmaps/backend": {
       "neuroglancer/datasource/brainmaps:enabled": "./src/datasource/brainmaps/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/brainmaps:disabled": "./src/datasource/brainmaps/backend.ts",
       "default": "./src/datasource/brainmaps/backend.ts"
     },
     "#datasource/brainmaps/async_computation": {
       "neuroglancer/datasource/brainmaps:enabled": "./src/datasource/brainmaps/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/brainmaps:disabled": "./src/datasource/brainmaps/async_computation.ts",
       "default": "./src/datasource/brainmaps/async_computation.ts"
     },
     "#datasource/brainmaps/register_default": {
       "neuroglancer/datasource/brainmaps:enabled": "./src/datasource/brainmaps/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/brainmaps:disabled": "./src/datasource/brainmaps/register_default.ts",
       "default": "./src/datasource/brainmaps/register_default.ts"
     },
     "#datasource/brainmaps/register_credentials_provider": {
       "neuroglancer/python": "./src/util/false.ts",
       "neuroglancer/datasource/brainmaps:enabled": "./src/datasource/brainmaps/register_credentials_provider.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/brainmaps:disabled": "./src/datasource/brainmaps/register_credentials_provider.ts",
       "default": "./src/datasource/brainmaps/register_credentials_provider.ts"
     },
     "#datasource/deepzoom/backend": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/deepzoom:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/deepzoom:disabled": "./src/datasource/deepzoom/backend.ts",
       "default": "./src/datasource/deepzoom/backend.ts"
     },
     "#datasource/deepzoom/async_computation": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/deepzoom:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/deepzoom:disabled": "./src/datasource/deepzoom/async_computation.ts",
       "default": "./src/datasource/deepzoom/async_computation.ts"
     },
     "#datasource/deepzoom/register_default": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/deepzoom:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/deepzoom:disabled": "./src/datasource/deepzoom/register_default.ts",
       "default": "./src/datasource/deepzoom/register_default.ts"
     },
     "#datasource/dvid/backend": {
       "neuroglancer/datasource/dvid:enabled": "./src/datasource/dvid/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/dvid:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/dvid:disabled": "./src/datasource/dvid/backend.ts",
       "default": "./src/datasource/dvid/backend.ts"
     },
     "#datasource/dvid/async_computation": {
       "neuroglancer/datasource/dvid:enabled": "./src/datasource/dvid/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/dvid:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/dvid:disabled": "./src/datasource/dvid/async_computation.ts",
       "default": "./src/datasource/dvid/async_computation.ts"
     },
     "#datasource/dvid/register_default": {
       "neuroglancer/datasource/dvid:enabled": "./src/datasource/dvid/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/dvid:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/dvid:disabled": "./src/datasource/dvid/register_default.ts",
       "default": "./src/datasource/dvid/register_default.ts"
     },
     "#datasource/dvid/register_credentials_provider": {
       "neuroglancer/python": "./src/util/false.ts",
       "neuroglancer/datasource/dvid:enabled": "./src/datasource/dvid/register_credentials_provider.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/dvid:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/dvid:disabled": "./src/datasource/dvid/register_credentials_provider.ts",
       "default": "./src/datasource/dvid/register_credentials_provider.ts"
     },
     "#datasource/graphene/backend": {
       "neuroglancer/datasource/graphene:enabled": "./src/datasource/graphene/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/graphene:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/graphene:disabled": "./src/datasource/graphene/backend.ts",
       "default": "./src/datasource/graphene/backend.ts"
     },
     "#datasource/graphene/async_computation": {
       "neuroglancer/datasource/graphene:enabled": "./src/datasource/graphene/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/graphene:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/graphene:disabled": "./src/datasource/graphene/async_computation.ts",
       "default": "./src/datasource/graphene/async_computation.ts"
     },
     "#datasource/graphene/register_default": {
       "neuroglancer/datasource/graphene:enabled": "./src/datasource/graphene/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/graphene:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/graphene:disabled": "./src/datasource/graphene/register_default.ts",
       "default": "./src/datasource/graphene/register_default.ts"
+    },
+    "#datasource/middleauth/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/middleauth:enabled": "./src/datasource/middleauth/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/middleauth:disabled": "./src/datasource/middleauth/register_credentials_provider.ts",
+      "default": "./src/datasource/middleauth/register_credentials_provider.ts"
     },
     "#datasource/n5/backend": {
       "neuroglancer/datasource/n5:enabled": "./src/datasource/n5/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/n5:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/n5:disabled": "./src/datasource/n5/backend.ts",
       "default": "./src/datasource/n5/backend.ts"
     },
     "#datasource/n5/async_computation": {
       "neuroglancer/datasource/n5:enabled": "./src/datasource/n5/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/n5:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/n5:disabled": "./src/datasource/n5/async_computation.ts",
       "default": "./src/datasource/n5/async_computation.ts"
     },
     "#datasource/n5/register_default": {
       "neuroglancer/datasource/n5:enabled": "./src/datasource/n5/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/n5:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/n5:disabled": "./src/datasource/n5/register_default.ts",
       "default": "./src/datasource/n5/register_default.ts"
+    },
+    "#datasource/ngauth/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/ngauth:enabled": "./src/datasource/ngauth/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/ngauth:disabled": "./src/datasource/ngauth/register_credentials_provider.ts",
+      "default": "./src/datasource/ngauth/register_credentials_provider.ts"
+    },
+    "#datasource/nggraph/backend": {
+      "neuroglancer/datasource/nggraph:enabled": "./src/datasource/nggraph/backend.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/nggraph:disabled": "./src/datasource/nggraph/backend.ts",
+      "default": "./src/datasource/nggraph/backend.ts"
     },
     "#datasource/nggraph/register_default": {
       "neuroglancer/datasource/nggraph:enabled": "./src/datasource/nggraph/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/nggraph:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/nggraph:disabled": "./src/datasource/nggraph/register_default.ts",
       "default": "./src/datasource/nggraph/register_default.ts"
     },
     "#datasource/nifti/backend": {
       "neuroglancer/datasource/nifti:enabled": "./src/datasource/nifti/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/nifti:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/nifti:disabled": "./src/datasource/nifti/backend.ts",
       "default": "./src/datasource/nifti/backend.ts"
+    },
+    "#datasource/nifti/async_computation": {
+      "neuroglancer/datasource/nifti:enabled": "./src/datasource/nifti/async_computation.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/nifti:disabled": "./src/datasource/nifti/async_computation.ts",
+      "default": "./src/datasource/nifti/async_computation.ts"
     },
     "#datasource/nifti/register_default": {
       "neuroglancer/datasource/nifti:enabled": "./src/datasource/nifti/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/nifti:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/nifti:disabled": "./src/datasource/nifti/register_default.ts",
       "default": "./src/datasource/nifti/register_default.ts"
     },
     "#datasource/obj/backend": {
       "neuroglancer/datasource/obj:enabled": "./src/datasource/obj/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/obj:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/obj:disabled": "./src/datasource/obj/backend.ts",
       "default": "./src/datasource/obj/backend.ts"
     },
     "#datasource/obj/async_computation": {
       "neuroglancer/datasource/obj:enabled": "./src/datasource/obj/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/obj:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/obj:disabled": "./src/datasource/obj/async_computation.ts",
       "default": "./src/datasource/obj/async_computation.ts"
     },
     "#datasource/obj/register_default": {
       "neuroglancer/datasource/obj:enabled": "./src/datasource/obj/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/obj:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/obj:disabled": "./src/datasource/obj/register_default.ts",
       "default": "./src/datasource/obj/register_default.ts"
     },
     "#datasource/precomputed/backend": {
       "neuroglancer/datasource/precomputed:enabled": "./src/datasource/precomputed/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/precomputed:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/precomputed:disabled": "./src/datasource/precomputed/backend.ts",
       "default": "./src/datasource/precomputed/backend.ts"
     },
     "#datasource/precomputed/async_computation": {
       "neuroglancer/datasource/precomputed:enabled": "./src/datasource/precomputed/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/precomputed:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/precomputed:disabled": "./src/datasource/precomputed/async_computation.ts",
       "default": "./src/datasource/precomputed/async_computation.ts"
     },
     "#datasource/precomputed/register_default": {
       "neuroglancer/datasource/precomputed:enabled": "./src/datasource/precomputed/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/precomputed:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/precomputed:disabled": "./src/datasource/precomputed/register_default.ts",
       "default": "./src/datasource/precomputed/register_default.ts"
     },
     "#datasource/python/backend": {
       "neuroglancer/python": "./src/datasource/python/backend.ts",
       "default": "./src/util/false.ts"
     },
-    "#datasource/python/register_default": {
-      "neuroglancer/python": "./src/datasource/python/register_default.ts",
-      "default": "./src/util/false.ts"
-    },
     "#datasource/render/backend": {
       "neuroglancer/datasource/render:enabled": "./src/datasource/render/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/render:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/render:disabled": "./src/datasource/render/backend.ts",
       "default": "./src/datasource/render/backend.ts"
     },
     "#datasource/render/async_computation": {
       "neuroglancer/datasource/render:enabled": "./src/datasource/render/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/render:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/render:disabled": "./src/datasource/render/async_computation.ts",
       "default": "./src/datasource/render/async_computation.ts"
     },
     "#datasource/render/register_default": {
       "neuroglancer/datasource/render:enabled": "./src/datasource/render/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/render:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/render:disabled": "./src/datasource/render/register_default.ts",
       "default": "./src/datasource/render/register_default.ts"
     },
     "#datasource/vtk/backend": {
       "neuroglancer/datasource/vtk:enabled": "./src/datasource/vtk/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/vtk:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/vtk:disabled": "./src/datasource/vtk/backend.ts",
       "default": "./src/datasource/vtk/backend.ts"
     },
     "#datasource/vtk/async_computation": {
       "neuroglancer/datasource/vtk:enabled": "./src/datasource/vtk/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/vtk:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/vtk:disabled": "./src/datasource/vtk/async_computation.ts",
       "default": "./src/datasource/vtk/async_computation.ts"
     },
     "#datasource/vtk/register_default": {
       "neuroglancer/datasource/vtk:enabled": "./src/datasource/vtk/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/vtk:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/vtk:disabled": "./src/datasource/vtk/register_default.ts",
       "default": "./src/datasource/vtk/register_default.ts"
     },
     "#datasource/zarr/backend": {
       "neuroglancer/datasource/zarr:enabled": "./src/datasource/zarr/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/zarr:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/zarr:disabled": "./src/datasource/zarr/backend.ts",
       "default": "./src/datasource/zarr/backend.ts"
     },
     "#datasource/zarr/async_computation": {
       "neuroglancer/datasource/zarr:enabled": "./src/datasource/zarr/async_computation.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/zarr:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/zarr:disabled": "./src/datasource/zarr/async_computation.ts",
       "default": "./src/datasource/zarr/async_computation.ts"
     },
     "#datasource/zarr/register_default": {
       "neuroglancer/datasource/zarr:enabled": "./src/datasource/zarr/register_default.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
-      "neuroglancer/datasource/zarr:disabled": "./src/util/false.ts",
+      "neuroglancer/datasource/zarr:disabled": "./src/datasource/zarr/register_default.ts",
       "default": "./src/datasource/zarr/register_default.ts"
-    },
-    "#kvstore/byte_range/register": {
-      "neuroglancer/kvstore/byte_range:enabled": "./src/kvstore/byte_range/register.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/byte_range:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/byte_range/register.ts"
-    },
-    "#kvstore/gcs/register": {
-      "neuroglancer/kvstore/gcs:enabled": "./src/kvstore/gcs/register.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/gcs:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/gcs/register.ts"
-    },
-    "#kvstore/gzip/register": {
-      "neuroglancer/kvstore/gzip:enabled": "./src/kvstore/gzip/register.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/gzip:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/gzip/register.ts"
-    },
-    "#kvstore/http/register_frontend": {
-      "neuroglancer/kvstore/http:enabled": "./src/kvstore/http/register_frontend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/http:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/http/register_frontend.ts"
-    },
-    "#kvstore/http/register_backend": {
-      "neuroglancer/kvstore/http:enabled": "./src/kvstore/http/register_backend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/http:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/http/register_backend.ts"
-    },
-    "#kvstore/icechunk/async_computation": {
-      "neuroglancer/kvstore/icechunk:enabled": "./src/kvstore/icechunk/async_computation.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/icechunk:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/icechunk/async_computation.ts"
-    },
-    "#kvstore/icechunk/register_frontend": {
-      "neuroglancer/kvstore/icechunk:enabled": "./src/kvstore/icechunk/register_frontend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/icechunk:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/icechunk/register_frontend.ts"
-    },
-    "#kvstore/icechunk/register_backend": {
-      "neuroglancer/kvstore/icechunk:enabled": "./src/kvstore/icechunk/register_backend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/icechunk:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/icechunk/register_backend.ts"
-    },
-    "#kvstore/middleauth/register_frontend": {
-      "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register_frontend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/middleauth:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/middleauth/register_frontend.ts"
-    },
-    "#kvstore/middleauth/register_backend": {
-      "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register_backend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/middleauth:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/middleauth/register_backend.ts"
-    },
-    "#kvstore/middleauth/register_credentials_provider": {
-      "neuroglancer/python": "./src/util/false.ts",
-      "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register_credentials_provider.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/middleauth:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/middleauth/register_credentials_provider.ts"
-    },
-    "#kvstore/ngauth/register": {
-      "neuroglancer/kvstore/ngauth:enabled": "./src/kvstore/ngauth/register.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/ngauth:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/ngauth/register.ts"
-    },
-    "#kvstore/ngauth/register_credentials_provider": {
-      "neuroglancer/python": "./src/util/false.ts",
-      "neuroglancer/kvstore/ngauth:enabled": "./src/kvstore/ngauth/register_credentials_provider.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/ngauth:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/ngauth/register_credentials_provider.ts"
-    },
-    "#kvstore/ocdbt/async_computation": {
-      "neuroglancer/kvstore/ocdbt:enabled": "./src/kvstore/ocdbt/async_computation.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/ocdbt:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/ocdbt/async_computation.ts"
-    },
-    "#kvstore/ocdbt/register_frontend": {
-      "neuroglancer/kvstore/ocdbt:enabled": "./src/kvstore/ocdbt/register_frontend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/ocdbt:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/ocdbt/register_frontend.ts"
-    },
-    "#kvstore/ocdbt/register_backend": {
-      "neuroglancer/kvstore/ocdbt:enabled": "./src/kvstore/ocdbt/register_backend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/ocdbt:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/ocdbt/register_backend.ts"
-    },
-    "#kvstore/s3/register_frontend": {
-      "neuroglancer/kvstore/s3:enabled": "./src/kvstore/s3/register_frontend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/s3:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/s3/register_frontend.ts"
-    },
-    "#kvstore/s3/register_backend": {
-      "neuroglancer/kvstore/s3:enabled": "./src/kvstore/s3/register_backend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/s3:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/s3/register_backend.ts"
-    },
-    "#kvstore/zip/register_frontend": {
-      "neuroglancer/kvstore/zip:enabled": "./src/kvstore/zip/register_frontend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/zip:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/zip/register_frontend.ts"
-    },
-    "#kvstore/zip/register_backend": {
-      "neuroglancer/kvstore/zip:enabled": "./src/kvstore/zip/register_backend.ts",
-      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
-      "neuroglancer/kvstore/zip:disabled": "./src/util/false.ts",
-      "default": "./src/kvstore/zip/register_backend.ts"
     },
     "#layer/annotation": {
       "neuroglancer/layer/annotation:enabled": "./src/layer/annotation/index.ts",
       "neuroglancer/layer:none_by_default": "./src/util/false.ts",
-      "neuroglancer/layer/annotation:disabled": "./src/util/false.ts",
       "default": "./src/layer/annotation/index.ts"
+    },
+    "#layer/brush": {
+      "neuroglancer/layer/brush:enabled": "./src/layer/brush/index.ts",
+      "neuroglancer/layer:none_by_default": "./src/util/false.ts",
+      "default": "./src/layer/brush/index.ts"
     },
     "#layer/image": {
       "neuroglancer/layer/image:enabled": "./src/layer/image/index.ts",
       "neuroglancer/layer:none_by_default": "./src/util/false.ts",
-      "neuroglancer/layer/image:disabled": "./src/util/false.ts",
       "default": "./src/layer/image/index.ts"
     },
     "#layer/segmentation": {
       "neuroglancer/layer/segmentation:enabled": "./src/layer/segmentation/index.ts",
       "neuroglancer/layer:none_by_default": "./src/util/false.ts",
-      "neuroglancer/layer/segmentation:disabled": "./src/util/false.ts",
       "default": "./src/layer/segmentation/index.ts"
     },
     "#layer/single_mesh": {
       "neuroglancer/layer/single_mesh:enabled": "./src/layer/single_mesh/index.ts",
       "neuroglancer/layer:none_by_default": "./src/util/false.ts",
-      "neuroglancer/layer/single_mesh:disabled": "./src/util/false.ts",
       "default": "./src/layer/single_mesh/index.ts"
     },
     "#main": {

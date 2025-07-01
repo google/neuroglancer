@@ -45,6 +45,7 @@ import {
 } from "#src/layer/layer_data_source.js";
 import type {
   DisplayDimensions,
+  DisplayPose,
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import {
@@ -603,7 +604,7 @@ export class UserLayer extends RefCounted {
   }
 
   // Derived classes should override.
-  handleAction(_action: string, _context: LayerActionContext): void {}
+  handleAction(_action: string, _context: LayerActionContext): void { }
 
   selectedValueToJson(value: any) {
     return value;
@@ -1108,6 +1109,7 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationType: AnnotationType | undefined = undefined;
   pageX: number;
   pageY: number;
+  pose: DisplayPose | undefined = undefined;
 
   private forcerFunction: (() => void) | undefined = undefined;
 
@@ -1246,8 +1248,13 @@ const DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE = {
 
 export class TrackableDataSelectionState
   extends RefCounted
+<<<<<<< HEAD
   implements TrackableValueInterface<PersistentViewerSelectionState | undefined>
 {
+=======
+  implements
+  TrackableValueInterface<PersistentViewerSelectionState | undefined> {
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   changed = new NullarySignal();
   history: PersistentViewerSelectionState[] = [];
   historyIndex = 0;
@@ -1521,7 +1528,7 @@ export class VisibleRenderLayerTracker<
 
   constructor(
     public layerManager: LayerManager,
-    public renderLayerType: { new (...args: any[]): RenderLayerType },
+    public renderLayerType: { new(...args: any[]): RenderLayerType },
     public view: View,
     public roles: WatchableSet<RenderLayerRole>,
     private layerAdded: (
@@ -1590,7 +1597,7 @@ export function makeRenderedPanelVisibleLayerTracker<
   RenderLayerType extends VisibilityTrackedRenderLayer<View>,
 >(
   layerManager: LayerManager,
-  renderLayerType: { new (...args: any[]): RenderLayerType },
+  renderLayerType: { new(...args: any[]): RenderLayerType },
   roles: WatchableSet<RenderLayerRole>,
   panel: View,
   layerAdded?: (layer: RenderLayerType, info: VisibleLayerInfo<View>) => void,
@@ -1716,7 +1723,9 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     }
     const existingLayer = this.layer_;
     if (existingLayer !== undefined) {
-      this.existingLayerDisposer!();
+      if (this.existingLayerDisposer) {
+        this.existingLayerDisposer();
+      }
       this.existingLayerDisposer = undefined;
       this.maybeDeleteNewLayer(existingLayer);
     }

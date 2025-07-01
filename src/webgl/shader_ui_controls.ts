@@ -252,9 +252,9 @@ export function parseDirectiveParameters(input: string | undefined): {
 
 type DirectiveParseResult =
   | {
-      control: ShaderUiControl;
-      errors: undefined;
-    }
+    control: ShaderUiControl;
+    errors: undefined;
+  }
   | { errors: string[] };
 
 function parseSliderDirective(
@@ -847,8 +847,7 @@ function encodeControls(controls: Controls | undefined) {
 }
 
 export class WatchableShaderUiControls
-  implements WatchableValueInterface<Controls | undefined>
-{
+  implements WatchableValueInterface<Controls | undefined> {
   changed = new NullarySignal();
   controls: Controls | undefined = undefined;
   get value() {
@@ -1217,8 +1216,7 @@ function getControlTrackable(control: ShaderUiControl): {
           }
           if (v < control.min || v > control.max) {
             throw new Error(
-              `${JSON.stringify(x)} is outside valid range [${control.min}, ${
-                control.max
+              `${JSON.stringify(x)} is outside valid range [${control.min}, ${control.max
               }]`,
             );
           }
@@ -1314,8 +1312,7 @@ export function getFallbackBuilderState(
 
 export class ShaderControlState
   extends RefCounted
-  implements Trackable, WatchableValueInterface<ShaderControlMap>
-{
+  implements Trackable, WatchableValueInterface<ShaderControlMap> {
   changed = new NullarySignal();
   controls = new WatchableShaderUiControls();
   parseErrors: WatchableValueInterface<ShaderControlParseError[]>;
@@ -1683,7 +1680,7 @@ export function setControlsInShader(
       const controlState = state.get(name);
       const value =
         controlState !== undefined &&
-        JSON.stringify(controlState.control) === JSON.stringify(control)
+          JSON.stringify(controlState.control) === JSON.stringify(control)
           ? controlState.trackable.value
           : control.default;
       setControlInShader(gl, shader, name, control, value);

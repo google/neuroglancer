@@ -102,9 +102,9 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
 
     def set_state(
         self,
-        new_state: typing.Any | State,
-        generation: Generation | None = None,
-        existing_generation: Generation | None = None,
+        new_state: typing.Union[typing.Any, State],
+        generation: typing.Optional[Generation] = None,
+        existing_generation: typing.Optional[Generation] = None,
     ) -> Generation:
         """
         Sets a new value.
@@ -173,7 +173,7 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
         if lock:
             self._lock.acquire()
         try:
-            existing_generation: Generation | None
+            existing_generation: typing.Optional[Generation]
             new_state, existing_generation = self.state_and_generation
             new_state = copy.deepcopy(new_state)
             yield new_state

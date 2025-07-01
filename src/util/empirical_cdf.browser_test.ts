@@ -23,14 +23,25 @@ import {
   dataTypeIntervalEqual,
   defaultDataTypeRange,
 } from "#src/util/lerp.js";
+<<<<<<< HEAD
+=======
+import { Uint64 } from "#src/util/uint64.js";
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 
 // The first and last bin are for values below the lower bound/above the upper
 // To simulate output from the GLSL shader function on CPU
 function countDataInBins(
+<<<<<<< HEAD
   inputData: (number | bigint)[],
   dataType: DataType,
   min: number | bigint,
   max: number | bigint,
+=======
+  inputData: (number | Uint64)[],
+  dataType: DataType,
+  min: number | Uint64,
+  max: number | Uint64,
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   numDataBins: number = 254,
 ): Float32Array {
   // Total number of bins is numDataBins + 2, one for values below the lower
@@ -38,8 +49,15 @@ function countDataInBins(
   const counts = new Float32Array(numDataBins + 2).fill(0);
   let binSize: number;
   let binIndex: number;
+<<<<<<< HEAD
   if (dataType === DataType.UINT64) {
     binSize = Number((max as bigint) - (min as bigint)) / numDataBins;
+=======
+  const numerator64 = new Uint64();
+  if (dataType === DataType.UINT64) {
+    Uint64.subtract(numerator64, max as Uint64, min as Uint64);
+    binSize = numerator64.toNumber() / numDataBins;
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   } else {
     binSize = ((max as number) - (min as number)) / numDataBins;
   }
@@ -51,9 +69,14 @@ function countDataInBins(
       counts[numDataBins + 1]++;
     } else {
       if (dataType === DataType.UINT64) {
+<<<<<<< HEAD
         binIndex = Math.floor(
           Number((value as bigint) - (min as bigint)) / binSize,
         );
+=======
+        Uint64.subtract(numerator64, value as Uint64, min as Uint64);
+        binIndex = Math.floor(numerator64.toNumber() / binSize);
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       } else {
         binIndex = Math.floor(((value as number) - (min as number)) / binSize);
       }
@@ -75,7 +98,11 @@ describe("empirical_cdf", () => {
           dataValues,
           dataType,
         );
+<<<<<<< HEAD
         checkPercentileAccuracy(dataRange, range);
+=======
+        checkPercentileAccuracy(dataRange, range, dataType);
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       });
     }
   }
@@ -91,7 +118,11 @@ describe("empirical_cdf", () => {
           dataValues,
           dataType,
         );
+<<<<<<< HEAD
         checkPercentileAccuracy(dataRange, range);
+=======
+        checkPercentileAccuracy(dataRange, range, dataType);
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       });
     }
   }
@@ -109,7 +140,11 @@ describe("empirical_cdf", () => {
           dataValues,
           dataType,
         );
+<<<<<<< HEAD
         checkPercentileAccuracy(dataRange, range, 0, 1, tolerance);
+=======
+        checkPercentileAccuracy(dataRange, range, dataType, 0, 1, tolerance);
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       });
     }
   }
@@ -129,7 +164,17 @@ describe("empirical_cdf", () => {
           minPercentile,
           maxPercentile,
         );
+<<<<<<< HEAD
         checkPercentileAccuracy(dataRange, range, minPercentile, maxPercentile);
+=======
+        checkPercentileAccuracy(
+          dataRange,
+          range,
+          dataType,
+          minPercentile,
+          maxPercentile,
+        );
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       });
     }
   }
@@ -149,7 +194,17 @@ describe("empirical_cdf", () => {
           minPercentile,
           maxPercentile,
         );
+<<<<<<< HEAD
         checkPercentileAccuracy(dataRange, range, minPercentile, maxPercentile);
+=======
+        checkPercentileAccuracy(
+          dataRange,
+          range,
+          dataType,
+          minPercentile,
+          maxPercentile,
+        );
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       });
     }
   }
@@ -174,6 +229,10 @@ describe("empirical_cdf", () => {
         checkPercentileAccuracy(
           dataRange,
           range,
+<<<<<<< HEAD
+=======
+          dataType,
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
           minPercentile,
           maxPercentile,
           tolerance,
@@ -204,7 +263,11 @@ function findPercentilesFromIterativeHistogram(
 ) {
   const data =
     inputDataType === DataType.UINT64
+<<<<<<< HEAD
       ? inputDataValues.map(BigInt)
+=======
+      ? inputDataValues.map((v) => Uint64.fromNumber(v))
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       : inputDataValues;
   let numIterations = 0;
   const startRange = determineInitialDataRange(inputDataType);
@@ -226,7 +289,14 @@ function findPercentilesFromIterativeHistogram(
       inputDataType,
     ).range;
     ++numIterations;
+<<<<<<< HEAD
   } while (!dataTypeIntervalEqual(oldRange, newRange) && numIterations < 32);
+=======
+  } while (
+    !dataTypeIntervalEqual(inputDataType, oldRange, newRange) &&
+    numIterations < 32
+  );
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   expect(numIterations, "Too many iterations").toBeLessThan(16);
   return newRange;
 }
@@ -234,12 +304,27 @@ function findPercentilesFromIterativeHistogram(
 function checkPercentileAccuracy(
   actualDataRange: [number, number],
   computedPercentiles: DataTypeInterval,
+<<<<<<< HEAD
+=======
+  inputDataType: DataType,
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   minPercentile: number = 0.0,
   maxPercentile: number = 1.0,
   tolerance: number = 0,
 ) {
+<<<<<<< HEAD
   const min = Number(computedPercentiles[0]);
   const max = Number(computedPercentiles[1]);
+=======
+  const min =
+    inputDataType === DataType.UINT64
+      ? (computedPercentiles[0] as Uint64).toNumber()
+      : (computedPercentiles[0] as number);
+  const max =
+    inputDataType === DataType.UINT64
+      ? (computedPercentiles[1] as Uint64).toNumber()
+      : (computedPercentiles[1] as number);
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   const diff = actualDataRange[1] - actualDataRange[0];
   const correctRange = [
     actualDataRange[0] + minPercentile * diff,

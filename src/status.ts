@@ -18,11 +18,16 @@ import "#src/status.css";
 
 import { makeCloseButton } from "#src/widget/close_button.js";
 
+<<<<<<< HEAD
 let statusContainer: HTMLElement | undefined;
 let modalStatusContainer: HTMLElement | undefined;
 
 // Exported for use by #tests/fixtures/status_message_handler.js
 export const statusMessages = new Set<StatusMessage>();
+=======
+let statusContainer: HTMLElement | null = null;
+let modalStatusContainer: HTMLElement | null = null;
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 
 export const DEFAULT_STATUS_DELAY = 200;
 
@@ -76,10 +81,40 @@ export function getStatusMessageContainers() {
 
 export class StatusMessage {
   element: HTMLElement;
+<<<<<<< HEAD
   private modalElementWrapper: HTMLElement | undefined;
   private timer: number | null;
   private visibility = true;
   constructor(delay: Delay = false, modal = false) {
+=======
+  modalElementWrapper: HTMLElement | undefined;
+  private timer: number | null;
+  constructor(delay: Delay = false, modal = false) {
+    if (statusContainer === null) {
+      statusContainer = document.createElement("ul");
+      statusContainer.id = "statusContainer";
+      const el: HTMLElement | null = document.getElementById(
+        "neuroglancer-container",
+      );
+      if (el) {
+        el.appendChild(statusContainer);
+      } else {
+        document.body.appendChild(statusContainer);
+      }
+    }
+    if (modal && modalStatusContainer === null) {
+      modalStatusContainer = document.createElement("ul");
+      modalStatusContainer.id = "statusContainerModal";
+      const el: HTMLElement | null = document.getElementById(
+        "neuroglancer-container",
+      );
+      if (el) {
+        el.appendChild(modalStatusContainer);
+      } else {
+        document.body.appendChild(modalStatusContainer);
+      }
+    }
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
     const element = document.createElement("li");
     this.element = element;
     if (delay === true) {
@@ -92,7 +127,27 @@ export class StatusMessage {
     } else {
       this.timer = null;
     }
+<<<<<<< HEAD
     statusMessages.add(this);
+=======
+    if (modal) {
+      const modalElementWrapper = document.createElement("div");
+      const dismissModalElement = makeCloseButton({
+        title: "Dismiss",
+        onClick: () => {
+          this.dismissModal();
+        },
+      });
+      dismissModalElement.classList.add("dismiss-modal");
+      dismissModalElement.addEventListener("click", () => this.dismissModal());
+      modalElementWrapper.appendChild(dismissModalElement);
+      modalElementWrapper.appendChild(element);
+      this.modalElementWrapper = modalElementWrapper;
+      modalStatusContainer!.appendChild(modalElementWrapper);
+    } else {
+      statusContainer.appendChild(element);
+    }
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   }
 
   [Symbol.dispose]() {
@@ -105,10 +160,21 @@ export class StatusMessage {
     } else {
       statusContainer!.removeChild(this.element);
     }
+<<<<<<< HEAD
+=======
+    this.element = <any>undefined;
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }
     statusMessages.delete(this);
+  }
+  dismissModal() {
+    if (this.modalElementWrapper) {
+      modalStatusContainer!.removeChild(this.modalElementWrapper);
+      this.modalElementWrapper = undefined;
+      statusContainer!.appendChild(this.element);
+    }
   }
   setText(text: string, makeVisible?: boolean) {
     this.element.textContent = text;

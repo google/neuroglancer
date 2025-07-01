@@ -94,6 +94,12 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     ...checkboxLayerControl((layer) => layer.displayState.hideSegmentZero),
   },
   {
+    label: "Allow brush",
+    toolJson: json_keys.ALLOW_BRUSH_JSON_KEY,
+    title: "allow drawing brush strokes",
+    ...checkboxLayerControl((layer) => layer.displayState.allowBrush),
+  },
+  {
     label: "Base segment coloring",
     toolJson: json_keys.BASE_SEGMENT_COLORING_JSON_KEY,
     title: "Color base segments individually",

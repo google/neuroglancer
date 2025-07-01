@@ -34,7 +34,7 @@ import {
 import { arraysEqual, scatterUpdate } from "#src/util/array.js";
 import type { ValueOrError } from "#src/util/error.js";
 import type { vec3 } from "#src/util/geom.js";
-import { mat4, getDependentTransformInputDimensions } from "#src/util/geom.js";
+import { getDependentTransformInputDimensions, mat4 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
 import * as vector from "#src/util/vector.js";
 import { prod } from "#src/util/vector.js";
@@ -149,6 +149,7 @@ function scaleTransformSubmatrix(
 ) {
   const { scales: baseInputScales } = baseInputSpace;
   const { scales: baseOutputScales, rank: baseOutputRank } = baseOutputSpace;
+
   const stride = rank + 1;
   for (let baseOutputDim = 0; baseOutputDim < baseOutputRank; ++baseOutputDim) {
     const outputDim = baseToOutputDimensions[baseOutputDim];

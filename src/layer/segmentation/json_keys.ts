@@ -4,6 +4,7 @@ export const OBJECT_ALPHA_JSON_KEY = "objectAlpha";
 export const SATURATION_JSON_KEY = "saturation";
 export const HOVER_HIGHLIGHT_JSON_KEY = "hoverHighlight";
 export const HIDE_SEGMENT_ZERO_JSON_KEY = "hideSegmentZero";
+export const ALLOW_BRUSH_JSON_KEY = "allowBrush";
 export const BASE_SEGMENT_COLORING_JSON_KEY = "baseSegmentColoring";
 export const IGNORE_NULL_VISIBLE_SET_JSON_KEY = "ignoreNullVisibleSet";
 export const MESH_JSON_KEY = "mesh";

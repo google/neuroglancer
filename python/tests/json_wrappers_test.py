@@ -39,13 +39,6 @@ def test_map_construct():
     assert m.get(10) == 15
     assert m.get(10, 16) == 15
 
-    with pytest.raises(KeyError):
-        m.pop(30)
-
-    assert m.pop(15, None) is None
-    assert m.pop(15, "abc") == "abc"
-    assert m.pop(10) == 15
-
 
 def test_list_construct():
     x = IntList([1, "2", 3])

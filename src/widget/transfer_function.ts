@@ -48,6 +48,10 @@ import {
 } from "#src/util/lerp.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+<<<<<<< HEAD
+=======
+import { Uint64 } from "#src/util/uint64.js";
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import { GLBuffer, getMemoizedBuffer } from "#src/webgl/buffer.js";
@@ -694,9 +698,41 @@ class TransferFunctionPanel extends IndirectRenderedPanel {
   get drawOrder() {
     return 1;
   }
+<<<<<<< HEAD
   transferFunction: TransferFunction;
   controller: TransferFunctionController;
   private dataValuesBuffer;
+=======
+  transferFunction = this.registerDisposer(
+    new TransferFunction(
+      this.parent.dataType,
+      this.parent.trackable,
+      TRANSFER_FUNCTION_PANEL_SIZE,
+    ),
+  );
+  controller = this.registerDisposer(
+    new TransferFunctionController(
+      this.element,
+      this.parent.dataType,
+      this.transferFunction,
+      () => this.parent.trackable.value,
+      (value: TransferFunctionParameters) => {
+        this.parent.trackable.value = value;
+      },
+    ),
+  );
+  private dataValuesBuffer = this.registerDisposer(
+    getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => {
+      const array = new Uint8Array(NUM_CDF_LINES * VERTICES_PER_LINE);
+      for (let i = 0; i < NUM_CDF_LINES; ++i) {
+        for (let j = 0; j < VERTICES_PER_LINE; ++j) {
+          array[i * VERTICES_PER_LINE + j] = i;
+        }
+      }
+      return array;
+    }),
+  ).value;
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 
   constructor(public parent: TransferFunctionWidget) {
     super(parent.display, document.createElement("div"), parent.visibility);
@@ -1537,7 +1573,16 @@ class TransferFunctionController extends RefCounted {
     function calculateControlPointGrabDistance() {
       let windowSize = 0.0;
       if (dataType == DataType.UINT64) {
+<<<<<<< HEAD
         windowSize = Number((window[1] as bigint) - (window[0] as bigint));
+=======
+        const tempUint = new Uint64();
+        windowSize = Uint64.subtract(
+          tempUint,
+          window[1] as Uint64,
+          window[0] as Uint64,
+        ).toNumber();
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       } else if (dataType == DataType.FLOAT32) {
         // Floating point data can have very small windows with many points
         windowSize = 1.0 / CONTROL_POINT_X_GRAB_DISTANCE;
@@ -1602,7 +1647,13 @@ class TransferFunctionController extends RefCounted {
  * Widget for the transfer function. Creates the UI elements required for the transfer function.
  */
 class TransferFunctionWidget extends Tab {
+<<<<<<< HEAD
   private transferFunctionPanel;
+=======
+  private transferFunctionPanel = this.registerDisposer(
+    new TransferFunctionPanel(this),
+  );
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   autoRangeFinder: AutoRangeFinder;
   window = this.createWindowBoundInputs();
 
@@ -1628,9 +1679,12 @@ class TransferFunctionWidget extends Tab {
     public histogramIndex: number,
   ) {
     super(visibility);
+<<<<<<< HEAD
     this.transferFunctionPanel = this.registerDisposer(
       new TransferFunctionPanel(this),
     );
+=======
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
     this.registerDisposer(
       histogramSpecifications.visibility.add(this.visibility),
     );
@@ -1650,7 +1704,15 @@ class TransferFunctionWidget extends Tab {
     // If no points and no window, set the default control points for the transfer function
     const currentWindow = this.trackable.value.window;
     const defaultWindow = defaultDataTypeRange[this.dataType];
+<<<<<<< HEAD
     const windowUnset = dataTypeIntervalEqual(currentWindow, defaultWindow);
+=======
+    const windowUnset = dataTypeIntervalEqual(
+      this.dataType,
+      currentWindow,
+      defaultWindow,
+    );
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
     if (this.trackable.value.sortedControlPoints.length === 0 && windowUnset) {
       this.autoRangeFinder.autoComputeRange(0, 1);
     }

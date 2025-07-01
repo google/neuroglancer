@@ -508,6 +508,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     }
     mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
     mouseState.displayDimensions = displayDimensions;
+    mouseState.pose = this.navigationState.pose;
 
     setPosition(0, 0, unsnappedPosition);
 

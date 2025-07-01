@@ -15,9 +15,9 @@
  */
 
 import "#src/datasource/zarr/codec/blosc/decode.js";
-import "#src/datasource/zarr/codec/zstd/decode.js";
 import "#src/datasource/zarr/codec/bytes/decode.js";
 import "#src/datasource/zarr/codec/crc32c/decode.js";
+import "#src/datasource/zarr/codec/zstd/decode.js";
 
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";

@@ -55,12 +55,8 @@ properties:
     default: true
   showSlices:
     type: boolean
-    title: "Indicates whether to show cross sections in the 3-d view of `~DataPanelLayoutType.4panel` and `~DataPanelLayoutType.4panel-alt` layouts."
+    title: "Indicates whether to show cross sections in the 3-d view of `~DataPanelLayoutType.4panel` layouts."
     default: true
-  hideCrossSectionBackground3D:
-    type: boolean
-    title: "Indicates whether to hide the background of cross-section views in the 3-d view of `~DataPanelLayoutType.4panel` and `~DataPanelLayoutType.4panel-alt` layouts."
-    default: false
   gpuMemoryLimit:
     type: integer
     title: "GPU memory limit, in bytes."
@@ -171,35 +167,12 @@ definitions:
     $id: DataPanelLayoutType
     title: "Specifies a layout of 3-d projection and 2-d cross-section views for a layer group."
     oneOf:
-      - const: "4panel-alt"
-        title: "2x2 grid layout with `.xy`, `.yz`, `.xz`, and `.3d` panels."
-        description: |
-          .. list-table::
-
-             * - `.xy` cross-section view
-               - `.yz` cross-section view
-             * - `.xz` cross-section view
-               - `.3d` projection view
-
-          If `~ViewerState.showSlices` is ``true``, the `.3d` projection panel
-          also includes the `.xy`, `.yz`, and `.xz` cross-sections as well.
       - const: "4panel"
         title: "2x2 grid layout with `.xy`, `.xz`, `.3d`, and `.yz` panels."
         description: |
-          .. list-table::
-
-             * - `.xy` cross-section view
-               - `.xz` cross-section view
-             * - `.3d` projection view
-               - `.yz` cross-section view
-
-          If `~ViewerState.showSlices` is ``true``, the `.3d` projection panel
-          also includes the `.xy`, `.xz`, and `.yz` cross-sections as well.
-
-          .. note::
-
-             This layout contains the same panels as `.4panel-alt`, but in a
-             different arrangement.
+          The top left is an `.xy` cross-section view, the top right is an `.xz`
+          cross-section view, the bottom left is a `.3d` projection view, and the
+          bottom right is a `.yz` cross-section view.
       - const: "xy"
         title: "Single cross-section view in the default orientation."
         description: |
@@ -219,11 +192,8 @@ definitions:
       - const: "3d"
         title: "Single 3-d projection view."
       - const: "xy-3d"
-        title: "Side-by-side layout with `.xy` and `.3d` panels."
       - const: "xz-3d"
-        title: "Side-by-side layout with `.xz` and `.3d` panels."
       - const: "yz-3d"
-        title: "Side-by-side layout with `.yz` and `.3d` panels."
   DataPanelLayout:
     $id: DataPanelLayout
     title: "Describes the :ref:`data views<data-view>` to display."

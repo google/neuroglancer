@@ -158,13 +158,11 @@ class LayerWidget extends RefCounted {
       layer === this.panel.selectedLayer.layer
     ).toString();
     element.dataset.pick = layer.pickEnabled.toString();
-    let title = `Click to ${
-      layer.visible ? "hide" : "show"
-    }, control+click to show side panel`;
+    let title = `Click to ${layer.visible ? "hide" : "show"
+      }, control+click to show side panel`;
     if (layer.supportsPickOption) {
-      title += `, alt+click to ${
-        layer.pickEnabled ? "disable" : "enable"
-      } spatial object selection`;
+      title += `, alt+click to ${layer.pickEnabled ? "disable" : "enable"
+        } spatial object selection`;
     }
     title += ", drag to move, shift+drag to copy";
     element.title = title;
@@ -395,13 +393,11 @@ export class LayerBar extends RefCounted {
             layerChunkProgressInfo.numPrefetchChunksAvailable;
         }
       }
-      widget.visibleProgress.style.width = `${
-        (numVisibleChunksAvailable / Math.max(1, numVisibleChunksNeeded)) * 100
-      }%`;
-      widget.prefetchProgress.style.width = `${
-        (numPrefetchChunksAvailable / Math.max(1, numPrefetchChunksNeeded)) *
+      widget.visibleProgress.style.width = `${(numVisibleChunksAvailable / Math.max(1, numVisibleChunksNeeded)) * 100
+        }%`;
+      widget.prefetchProgress.style.width = `${(numPrefetchChunksAvailable / Math.max(1, numPrefetchChunksNeeded)) *
         100
-      }%`;
+        }%`;
     }
   }
 

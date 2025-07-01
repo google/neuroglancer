@@ -7,13 +7,6 @@ on:
     tags:
       - v**
   pull_request:
-  workflow_dispatch:
-    inputs:
-      debug_enabled:
-        type: boolean
-        description: "Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)"
-        required: false
-        default: false
 
 jobs:
   client:
@@ -31,20 +24,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 20.x
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
-      # uv required for javascript tests
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: false
-      # go needed for fake_gcs_server used by the javascript tests
-      - name: Setup go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
-      - run: npm ci
+            examples/**/package-lock.json
+      - run: npm install
       - run: npm run format:fix
       - name: Check for dirty working directory
         run: git diff --exit-code
@@ -62,6 +47,7 @@ jobs:
       - run: npm run build-package
       - run: npm publish --dry-run
         working-directory: dist/package
+      - uses: ./.github/actions/setup-firefox
       - name: Run JavaScript tests (including WebGL)
         run: npm test
         if: ${{ runner.os != 'macOS' }}
@@ -82,36 +68,6 @@ jobs:
           name: client
           path: dist/client
         if: ${{ runner.os == 'Linux' }}
-  example-project-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: "pnpm"
-          cache-dependency-path: |
-            examples/**/pnpm-lock.yaml
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: "npm"
-          cache-dependency-path: |
-            package-lock.json
-      - run: npm ci
-      - run: npm run example-project-test -- --reporter=html
-      - name: Upload report and built clients
-        uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: example-project-test-results
-          path: |
-            playwright-report/
-            examples/*/*/dist/
 
   # Builds Python package and runs Python tests
   #
@@ -136,30 +92,28 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: false
+          node-version: 20.x
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      # Uncomment the action below for an interactive shell
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
+      - name: Install Python packaging/test tools
+        run: pip install tox nox wheel numpy -r python/requirements-test.txt
       - uses: ./.github/actions/setup-firefox
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
-      - run: uvx nox -s lint format mypy
+      - run: nox -s lint format mypy
       - name: Check for dirty working directory
         run: git diff --exit-code
-      - name: Run python tests (skip browser tests)
-        run: uvx nox -s test -- --skip-browser-tests
-        if: ${{ runner.os != 'Linux' }}
-      - name: Run python tests (include browser tests)
-        run: uvx nox -s test_xvfb -- --browser firefox
-        if: ${{ runner.os == 'Linux' }}
+      - name: Test with tox
+        run: tox -e ${{ fromJSON('["skip-browser-tests","firefox-xvfb"]')[runner.os == 'Linux'] }}
       # Verify that editable install works
-      - name: Test in editable form
-        run: uvx nox -s test_editable
+      - name: Install in editable form
+        run: pip install -e . --config-settings editable_mode=strict
+      - name: Run Python tests against editable install (excluding WebGL)
+        working-directory: python/tests
+        run: pytest -vv --skip-browser-tests
 
   python-build-package:
     strategy:
@@ -185,35 +139,36 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 20.x
           cache: "npm"
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: false
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: 3.x
-      - name: Get uv cache dir
-        id: uv-cache
+      - name: Get pip cache dir
+        id: pip-cache
         run: |
-          echo "dir=$(uv cache dir)" >> "$GITHUB_OUTPUT"
-      - run: npm ci
+          echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
+      - run: npm install
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
           npm run build-python -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"
         shell: bash
       - name: Check for dirty working directory
         run: git diff --exit-code
+      - name: Install setuptools
+        run: pip install setuptools
       - name: Build Python source distribution (sdist)
-        run: uv build --sdist
+        run: python setup.py sdist --format gztar
         if: ${{ runner.os == 'Linux' }}
+      - name: Install cibuildwheel
+        run: pip install cibuildwheel
       - name: Build Python wheels
-        run: uvx nox -s cibuildwheel
+        run: bash -xve ./python/build_tools/cibuildwheel.sh
         env:
-          # On Linux, share uv cache with manylinux docker containers
-          CIBW_ENVIRONMENT_LINUX: UV_CACHE_DIR=/host${{ steps.uv-cache.outputs.dir }}
-          CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.uv-cache.outputs.dir }}
+          # On Linux, share pip cache with manylinux docker containers
+          CIBW_ENVIRONMENT_LINUX: PIP_CACHE_DIR=/host${{ steps.pip-cache.outputs.dir }}
+          CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.pip-cache.outputs.dir }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
@@ -227,9 +182,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: false
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -238,8 +190,10 @@ jobs:
         uses: ts-graphviz/setup-graphviz@b1de5da23ed0a6d14e0aeee8ed52fdd87af2363c # v2.0.2
         with:
           macos-skip-brew-update: "true"
+      - name: Install nox
+        run: pip install nox
       - name: Build docs
-        run: uvx nox -s docs
+        run: nox -s docs
       - name: Upload docs as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -260,7 +214,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 20.x
           registry-url: "https://registry.npmjs.org"
       - uses: actions/download-artifact@v4
         with:

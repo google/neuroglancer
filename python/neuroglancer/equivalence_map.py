@@ -16,6 +16,7 @@
 import collections
 import copy
 from collections.abc import ItemsView, Iterator, KeysView
+from typing import Optional
 
 
 class EquivalenceMap:
@@ -90,7 +91,7 @@ class EquivalenceMap:
         self._prev_next.clear()
         self._min_values.clear()
 
-    def union(self, *elements: int) -> int | None:
+    def union(self, *elements: int) -> Optional[int]:
         """Unions the equivalence classes containing the specified elements."""
         if self._readonly:
             raise AttributeError

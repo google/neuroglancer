@@ -39,7 +39,11 @@
   padding: 2px;
 }
 
+<<<<<<< HEAD
 #neuroglancer-status-container-modal {
+=======
+#statusContainerModal {
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   pointer-events: none;
   position: absolute;
   z-index: 100;
@@ -57,16 +61,26 @@
   grid-row-gap: 10px;
 }
 
+<<<<<<< HEAD
 #neuroglancer-status-container-modal > div {
+=======
+#statusContainerModal > div {
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   pointer-events: initial;
   position: relative;
   background-color: #808080;
   padding: 20px;
   padding-top: 30px;
+<<<<<<< HEAD
   border: 1px solid white;
 }
 
 #neuroglancer-status-container-modal > div > div:first-child {
+=======
+}
+
+#statusContainerModal > div > div:first-child {
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   position: absolute;
   top: 4px;
   right: 4px;
@@ -74,6 +88,10 @@
   padding: 0;
 }
 
+<<<<<<< HEAD
 #neuroglancer-status-container-modal li {
+=======
+#statusContainerModal li {
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   display: block;
 }

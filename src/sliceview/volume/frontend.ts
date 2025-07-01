@@ -31,6 +31,7 @@ import type {
   VolumeSourceOptions,
   VolumeType,
 } from "#src/sliceview/volume/base.js";
+import type { SliceViewSegmentationDisplayState } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -196,6 +197,12 @@ export class VolumeChunkSource
     this.tempPositionWithinChunk = new Uint32Array(rank);
   }
 
+  groupState?: SliceViewSegmentationDisplayState;
+
+  setDisplayState(state: SliceViewSegmentationDisplayState) {
+    this.groupState = state;
+  }
+
   static encodeSpec(spec: SliceViewChunkSpecification) {
     const s = spec as VolumeChunkSpecification;
     return {
@@ -220,6 +227,7 @@ export class VolumeChunkSource
     const chunkGridPosition = this.tempChunkGridPosition;
     const positionWithinChunk = this.tempPositionWithinChunk;
     const { spec } = this;
+
     {
       const { chunkDataSize } = spec;
       for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {

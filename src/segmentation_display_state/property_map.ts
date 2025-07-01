@@ -230,6 +230,129 @@ export class PreprocessedSegmentPropertyMap {
     if (label.length === 0) return undefined;
     return label;
   }
+
+  addSegment(id: Uint64, properties: Record<string, any> = {}): number {
+    const { segmentPropertyMap } = this;
+    const { inlineProperties } = segmentPropertyMap;
+
+    if (!inlineProperties) {
+      throw new Error(
+        "Cannot add segment to property map without inlineProperties",
+      );
+    }
+
+    const existingIndex = this.getSegmentInlineIndex(id);
+    if (existingIndex !== -1) {
+      return existingIndex;
+    }
+
+    const numSegments = inlineProperties.ids.length / 2;
+
+    const newIds = new Uint32Array(inlineProperties.ids.length + 2);
+    newIds.set(inlineProperties.ids);
+    newIds[inlineProperties.ids.length] = id.low;
+    newIds[inlineProperties.ids.length + 1] = id.high;
+
+    inlineProperties.ids = newIds;
+
+    for (const property of inlineProperties.properties) {
+      if (
+        property.type === "string" ||
+        property.type === "label" ||
+        property.type === "description"
+      ) {
+        const stringProperty = property as InlineSegmentStringProperty;
+        const newValue = (properties[property.id] as string | undefined) || "";
+        stringProperty.values = [...stringProperty.values, newValue];
+      } else if (property.type === "tags") {
+        const tagsProperty = property as InlineSegmentTagsProperty;
+        const newTags = (properties[property.id] as string[] | undefined) || [];
+
+        let tagValue = "";
+        for (const tag of newTags) {
+          let tagIndex = tagsProperty.tags.indexOf(tag);
+          if (tagIndex === -1) {
+            tagIndex = tagsProperty.tags.length;
+            tagsProperty.tags.push(tag);
+            tagsProperty.tagDescriptions.push("");
+          }
+          tagValue += String.fromCharCode(tagIndex);
+        }
+
+        tagValue = [...tagValue].sort().join("");
+
+        tagsProperty.values = [...tagsProperty.values, tagValue];
+      } else if (property.type === "number") {
+        const numProperty = property as InlineSegmentNumericalProperty;
+        const newValue = properties[property.id] as number | undefined;
+
+        const Constructor = numProperty.values
+          .constructor as TypedArrayConstructor;
+        const newValues = new Constructor(numProperty.values.length + 1);
+        newValues.set(numProperty.values);
+
+        newValues[numProperty.values.length] =
+          newValue !== undefined ? newValue : NaN;
+        numProperty.values = newValues;
+      }
+    }
+
+    this.inlineIdToIndex = makeUint64PermutationHashMap(inlineProperties.ids);
+
+    return numSegments;
+  }
+
+  updateSegmentProperty(id: Uint64, propertyId: string, value: any): boolean {
+    const index = this.getSegmentInlineIndex(id);
+    if (index === -1) {
+      return false; // Segment not found
+    }
+
+    const { inlineProperties } = this.segmentPropertyMap;
+    if (!inlineProperties) return false;
+
+    const property = inlineProperties.properties.find(
+      (p) => p.id === propertyId,
+    );
+    if (!property) return false;
+
+    if (
+      property.type === "string" ||
+      property.type === "label" ||
+      property.type === "description"
+    ) {
+      (property as InlineSegmentStringProperty).values[index] = String(value);
+      return true;
+    } else if (property.type === "tags") {
+      const tagsProperty = property as InlineSegmentTagsProperty;
+      const tags = value as string[];
+
+      // Encode tags as character codes
+      let tagValue = "";
+      for (const tag of tags) {
+        let tagIndex = tagsProperty.tags.indexOf(tag);
+        if (tagIndex === -1) {
+          // Add new tag to the tags array
+          tagIndex = tagsProperty.tags.length;
+          tagsProperty.tags.push(tag);
+          tagsProperty.tagDescriptions.push(""); // Empty description for new tag
+        }
+        tagValue += String.fromCharCode(tagIndex);
+      }
+
+      // Sort by character code as required
+      tagValue = [...tagValue].sort().join("");
+
+      tagsProperty.values[index] = tagValue;
+      return true;
+    } else if (property.type === "number") {
+      const numProperty = property as InlineSegmentNumericalProperty;
+      numProperty.values[index] = Number(value);
+      return true;
+    }
+
+    return false;
+  }
 }
 
 function remapArray<T>(

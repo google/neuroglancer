@@ -18,8 +18,12 @@
  * @file Tab for showing layer data sources and coordinate transforms.
  */
 
+<<<<<<< HEAD
 import "#src/ui/layer_data_sources_tab.css";
 import { LocalDataSource } from "#src/datasource/local.js";
+=======
+import { LocalDataSource } from "#src/datasource/index.js";
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
 import {
   changeLayerName,
@@ -38,6 +42,7 @@ import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import "#src/ui/layer_data_sources_tab.css";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { DataType } from "#src/util/data_type.js";
@@ -241,6 +246,9 @@ export class DataSourceSubsourceView extends RefCounted {
           break;
         case LocalDataSource.equivalences:
           sourceTypeStr = "local segmentation graph";
+          break;
+        case LocalDataSource.brush:
+          sourceTypeStr = "local brush";
           break;
       }
     } else if (subsource.staticAnnotations !== undefined) {

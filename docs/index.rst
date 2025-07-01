@@ -18,11 +18,6 @@ Neuroglancer
 
 .. toctree::
    :hidden:
-
-   datasource/index
-
-.. toctree::
-   :hidden:
    :caption: JSON API
 
    json/api/index

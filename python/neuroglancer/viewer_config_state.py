@@ -53,8 +53,8 @@ def export(obj):
 @export
 class SegmentIdMapEntry(typing.NamedTuple):
     key: int
-    value: int | None = None
-    label: str | None = None
+    value: typing.Optional[int] = None
+    label: typing.Optional[str] = None
 
 
 @export
@@ -71,7 +71,9 @@ def layer_selected_value(x):
     return None
 
 
-_set_type_annotation(layer_selected_value, None | numbers.Number | SegmentIdMapEntry)
+_set_type_annotation(
+    layer_selected_value, typing.Union[None, numbers.Number, SegmentIdMapEntry]
+)
 
 
 @export
@@ -96,34 +98,6 @@ class LayerSelectedValues(_LayerSelectedValuesBase):
 
 
 @export
-class PanelResolutionData(JsonObjectWrapper):
-    __slots__ = ()
-    type = wrapped_property("type", str)
-    width = wrapped_property("width", int)
-    height = wrapped_property("height", int)
-    resolution = wrapped_property("resolution", str)
-
-
-@export
-class LayerResolutionData(JsonObjectWrapper):
-    __slots__ = ()
-    name = wrapped_property("name", str)
-    type = wrapped_property("type", str)
-    resolution = wrapped_property("resolution", str)
-
-
-@export
-class ScreenshotResolutionMetadata(JsonObjectWrapper):
-    __slots__ = ()
-    panel_resolution_data = panelResolutionData = wrapped_property(
-        "panelResolutionData", typed_list(PanelResolutionData)
-    )
-    layer_resolution_data = layerResolutionData = wrapped_property(
-        "layerResolutionData", typed_list(LayerResolutionData)
-    )
-
-
-@export
 class ScreenshotReply(JsonObjectWrapper):
     __slots__ = ()
     id = wrapped_property("id", str)
@@ -132,9 +106,6 @@ class ScreenshotReply(JsonObjectWrapper):
     height = wrapped_property("height", int)
     image_type = imageType = wrapped_property("imageType", str)
     depth_data = depthData = wrapped_property("depthData", optional(base64.b64decode))
-    resolution_metadata = resolutionMetadata = wrapped_property(
-        "resolutionMetadata", ScreenshotResolutionMetadata
-    )
 
     @property
     def image_pixels(self):
@@ -348,7 +319,6 @@ class ConfigState(JsonObjectWrapper):
     show_ui_controls = showUIControls = wrapped_property(
         "showUIControls", optional(bool, True)
     )
-    show_top_bar = showTopBar = wrapped_property("showTopBar", optional(bool, True))
     show_location = showLocation = wrapped_property(
         "showLocation", optional(bool, True)
     )
@@ -363,12 +333,6 @@ class ConfigState(JsonObjectWrapper):
     )
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
         "showLayerSidePanelButton", optional(bool, True)
-    )
-    show_screenshot_button = showScreenshotButton = wrapped_property(
-        "showScreenshotButton", optional(bool, True)
-    )
-    show_tool_palette_button = showToolPaletteButton = wrapped_property(
-        "showToolPaletteButton", optional(bool, True)
     )
     show_layer_list_panel_button = showLayerListPanelButton = wrapped_property(
         "showLayerListPanelButton", optional(bool, True)

@@ -50,6 +50,7 @@ import {
 import type { AnyConstructor } from "#src/util/mixin.js";
 import { Signal } from "#src/util/signal.js";
 
+
 const TOOL_KEY_PATTERN = /^[A-Z]$/;
 
 export type InputEventMapBinder = (
@@ -148,7 +149,7 @@ export abstract class LegacyTool<
   }
   abstract trigger(mouseState: MouseSelectionState): void;
   abstract toJSON(): any;
-  deactivate(): void {}
+  deactivate(): void { }
   abstract description: string;
   unbind() {
     const { layer } = this;
@@ -242,8 +243,7 @@ export function registerTool<Context extends object>(
 
 export class SelectedLegacyTool
   extends RefCounted
-  implements TrackableValueInterface<LegacyTool | undefined>
-{
+  implements TrackableValueInterface<LegacyTool | undefined> {
   changed = new Signal();
   private value_: Owned<LegacyTool> | undefined;
 

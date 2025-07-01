@@ -970,9 +970,12 @@ export function getObjectColor(
   color[3] = alpha;
   getBaseObjectColor(displayState, objectId, color);
   let saturation = displayState.saturation.value;
+
+  // Only apply highlight if segment is visible and hover highlight is enabled
   if (
     displayState.hoverHighlight.value &&
-    displayState.segmentSelectionState.isSelected(objectId)
+    displayState.segmentSelectionState.isSelected(objectId) &&
+    displayState.segmentationGroupState.value.visibleSegments.has(objectId)
   ) {
     if (saturation > 0.5) {
       saturation = saturation -= 0.5;
@@ -980,6 +983,7 @@ export function getObjectColor(
       saturation += 0.5;
     }
   }
+
   for (let i = 0; i < 3; ++i) {
     color[i] = color[i] * saturation + (1 - saturation);
   }

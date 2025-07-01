@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { debounce } from "lodash-es";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import type {
   ChunkManager,
@@ -84,10 +83,11 @@ import {
   FramebufferConfiguration,
   makeTextureBuffers,
 } from "#src/webgl/offscreen.js";
-import type { ShaderModule, ShaderBuilder } from "#src/webgl/shader.js";
+import type { ShaderBuilder, ShaderModule } from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
+import { debounce } from "lodash-es";
 
 export type GenericChunkKey = string;
 
@@ -95,7 +95,7 @@ class FrontendSliceViewBase extends SliceViewBase<
   SliceViewChunkSource,
   SliceViewRenderLayer,
   FrontendTransformedSource
-> {}
+> { }
 const Base = withSharedVisibility(FrontendSliceViewBase);
 
 export interface FrontendTransformedSource<
@@ -608,12 +608,11 @@ export interface SliceViewChunkSourceOptions<
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export abstract class SliceViewChunkSource<
-    Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
-    ChunkType extends SliceViewChunk = SliceViewChunk,
-  >
+  Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
+  ChunkType extends SliceViewChunk = SliceViewChunk,
+>
   extends ChunkSource
-  implements SliceViewChunkSourceInterface
-{
+  implements SliceViewChunkSourceInterface {
   declare chunks: Map<string, ChunkType>;
 
   declare OPTIONS: SliceViewChunkSourceOptions<Spec>;
@@ -911,7 +910,7 @@ export abstract class MultiscaleSliceViewChunkSource<
     options: SourceOptions,
   ): SliceViewSingleResolutionSource<Source>[][];
 
-  constructor(public chunkManager: Borrowed<ChunkManager>) {}
+  constructor(public chunkManager: Borrowed<ChunkManager>) { }
 }
 
 export function getVolumetricTransformedSources(
@@ -991,11 +990,11 @@ export function getVolumetricTransformedSources(
         if (chunkDataSize[chunkDim] !== size) {
           throw new Error(
             "Channel dimension " +
-              transform.layerDimensionNames[
-                transform.channelToRenderLayerDimensions[channelDim]
-              ] +
-              ` has extent ${size} but corresponding chunk dimension has extent ` +
-              `${chunkDataSize[chunkDim]}`,
+            transform.layerDimensionNames[
+            transform.channelToRenderLayerDimensions[channelDim]
+            ] +
+            ` has extent ${size} but corresponding chunk dimension has extent ` +
+            `${chunkDataSize[chunkDim]}`,
           );
         }
         nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;

@@ -17,9 +17,12 @@
 /**
  * @file User interface for display and editing annotations.
  */
+<<<<<<< HEAD
 
 import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
+=======
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 import {
   AnnotationDisplayState,
   AnnotationLayerState,
@@ -72,6 +75,8 @@ import {
   registerNested,
   WatchableValue,
 } from "#src/trackable_value.js";
+import "#src/ui/annotations.css";
+
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -114,8 +119,7 @@ import { VirtualList } from "#src/widget/virtual_list.js";
 
 export class MergedAnnotationStates
   extends RefCounted
-  implements WatchableValueInterface<readonly AnnotationLayerState[]>
-{
+  implements WatchableValueInterface<readonly AnnotationLayerState[]> {
   changed = new NullarySignal();
   isLoadingChanged = new NullarySignal();
   states: Borrowed<AnnotationLayerState>[] = [];
@@ -233,10 +237,10 @@ interface AnnotationLayerViewAttachedState {
 export class AnnotationLayerView extends Tab {
   private previousSelectedState:
     | {
-        annotationId: string;
-        annotationLayerState: AnnotationLayerState;
-        pin: boolean;
-      }
+      annotationId: string;
+      annotationLayerState: AnnotationLayerState;
+      pin: boolean;
+    }
     | undefined = undefined;
   private previousHoverId: string | undefined = undefined;
   private previousHoverAnnotationLayerState: AnnotationLayerState | undefined =
@@ -470,6 +474,7 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(ellipsoidButton);
+<<<<<<< HEAD
     const helpIcon = makeIcon({
       title:
         "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Rendering' tab.",
@@ -478,6 +483,8 @@ export class AnnotationLayerView extends Tab {
     });
     helpIcon.style.marginLeft = "auto";
     mutableControls.appendChild(helpIcon);
+=======
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
@@ -575,7 +582,7 @@ export class AnnotationLayerView extends Tab {
         selectionState !== undefined &&
         previousSelectedState.annotationId === selectionState.annotationId &&
         previousSelectedState.annotationLayerState ===
-          selectionState.annotationLayerState &&
+        selectionState.annotationLayerState &&
         previousSelectedState.pin === selectionState.pin)
     ) {
       return;
@@ -1105,10 +1112,10 @@ function getMousePositionInAnnotationCoordinates(
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
   inProgressAnnotation: WatchableValue<
     | {
-        annotationLayer: AnnotationLayerState;
-        reference: AnnotationReference;
-        disposer: () => void;
-      }
+      annotationLayer: AnnotationLayerState;
+      reference: AnnotationReference;
+      disposer: () => void;
+    }
     | undefined
   > = new WatchableValue(undefined);
 
@@ -1590,7 +1597,7 @@ function makeRelatedSegmentList(
 
 const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
 export function UserLayerWithAnnotationsMixin<
-  TBase extends { new (...args: any[]): UserLayer },
+  TBase extends { new(...args: any[]): UserLayer },
 >(Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
     annotationStates = this.registerDisposer(new MergedAnnotationStates());
@@ -1751,8 +1758,8 @@ export function UserLayerWithAnnotationsMixin<
                   annotation = handler.deserialize(
                     dataView,
                     baseOffset +
-                      annotationPropertySerializer.propertyGroupBytes[0] *
-                        annotationIndex,
+                    annotationPropertySerializer.propertyGroupBytes[0] *
+                    annotationIndex,
                     isLittleEndian,
                     rank,
                     state.annotationId!,
@@ -1955,6 +1962,7 @@ export function UserLayerWithAnnotationsMixin<
                         sourceReadonly
                           ? undefined
                           : (newIds) => {
+<<<<<<< HEAD
                               const annotation = reference.value;
                               if (annotation == null) {
                                 return;
@@ -1979,6 +1987,32 @@ export function UserLayerWithAnnotationsMixin<
                               );
                               annotationLayer.source.commit(reference);
                             },
+=======
+                            const annotation = reference.value;
+                            if (annotation == null) {
+                              return;
+                            }
+                            let { relatedSegments } = annotation;
+                            if (relatedSegments === undefined) {
+                              relatedSegments =
+                                annotationLayer.source.relationships.map(
+                                  () => [],
+                                );
+                            } else {
+                              relatedSegments = relatedSegments.slice();
+                            }
+                            relatedSegments[relationshipIndex] = newIds;
+                            const newAnnotation = {
+                              ...annotation,
+                              relatedSegments,
+                            };
+                            annotationLayer.source.update(
+                              reference,
+                              newAnnotation,
+                            );
+                            annotationLayer.source.commit(reference);
+                          },
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
                       ),
                     ).element,
                   );

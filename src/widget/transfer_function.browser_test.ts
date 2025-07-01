@@ -89,7 +89,11 @@ describe("Create default transfer function", () => {
     it(`Creates two default transfer function points for ${DataType[dataType]} over a custom window`, () => {
       const window =
         dataType === DataType.UINT64
+<<<<<<< HEAD
           ? ([0n, 100n] as [bigint, bigint])
+=======
+          ? ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64])
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
           : ([0, 100] as [number, number]);
       transferFunction.generateDefaultControlPoints(null, window);
       expect(transferFunction.sortedControlPoints.controlPoints.length).toBe(2);
@@ -105,7 +109,11 @@ describe("Create default transfer function", () => {
     it(`Creates two default transfer function points for ${DataType[dataType]} with a defined range`, () => {
       const range =
         dataType === DataType.UINT64
+<<<<<<< HEAD
           ? ([0n, 100n] as [bigint, bigint])
+=======
+          ? ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64])
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
           : ([0, 100] as [number, number]);
       transferFunction.generateDefaultControlPoints(range);
       expect(transferFunction.sortedControlPoints.controlPoints.length).toBe(2);
@@ -119,13 +127,23 @@ describe("Create default transfer function", () => {
     it(`Creates a window which bounds the control points for ${DataType[dataType]}`, () => {
       const range =
         dataType === DataType.UINT64
+<<<<<<< HEAD
           ? ([0n, 100n] as [bigint, bigint])
+=======
+          ? ([Uint64.ZERO, Uint64.fromNumber(100)] as [Uint64, Uint64])
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
           : ([0, 100] as [number, number]);
       const pointInputValues = [0, 20, 40, 60, 80, 100];
       transferFunction.sortedControlPoints.clear();
       for (const inputValue of pointInputValues) {
         const valueToAdd =
+<<<<<<< HEAD
           dataType === DataType.UINT64 ? BigInt(inputValue) : inputValue;
+=======
+          dataType === DataType.UINT64
+            ? Uint64.fromNumber(inputValue)
+            : inputValue;
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
         transferFunction.addPoint(
           new ControlPoint(valueToAdd, vec4.fromValues(0, 0, 0, 0)),
         );
@@ -133,7 +151,11 @@ describe("Create default transfer function", () => {
       transferFunction.generateDefaultWindow();
       const window = transferFunction.trackable.value.window;
       expect(
+<<<<<<< HEAD
         dataTypeIntervalEqual(window, range),
+=======
+        dataTypeIntervalEqual(dataType, window, range),
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
         `Got ${window} expected ${range}`,
       ).toBeTruthy();
     });

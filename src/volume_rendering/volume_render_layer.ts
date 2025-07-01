@@ -66,9 +66,12 @@ import {
 } from "#src/volume_rendering/base.js";
 import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
-  VolumeRenderingModes,
   isProjectionMode,
   trackableShaderModeValue,
+<<<<<<< HEAD
+=======
+  VolumeRenderingModes,
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   drawBoxes,
@@ -218,7 +221,10 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
   backend: ChunkRenderLayerFrontend;
+<<<<<<< HEAD
   highestResolutionLoadedVoxelSize: Float32Array | undefined;
+=======
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
   private modeOverride: TrackableVolumeRenderingModeValue;
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
@@ -414,18 +420,40 @@ vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 
 gl_Position.z = 0.0;
 `);
           builder.addFragmentCode(`
+uniform sampler3D uBrushTexture;
+uniform bool uBrushEnabled;
+
 vec3 curChunkPosition;
 float depthAtRayPosition;
 vec4 outputColor;
 float revealage;
 void userMain();
+
+float getBrushValue(vec3 position) {
+  if (!uBrushEnabled) return -1.0;
+  vec3 texCoord = position / uChunkDataSize;
+  return texture(uBrushTexture, texCoord).r;
+}
+
+void userMain();
 `);
+
+          // Before defineChunkDataShaderAccess is called (around line 501)
+          builder.addFragmentCode(`
+  float getDataValue(vec3 position) {
+    float brushValue = getBrushValue(position);
+    if (brushValue >= 0.0) {
+      return brushValue;
+    }
+  }   
+  `);
           defineChunkDataShaderAccess(
             builder,
             chunkFormat,
             shaderParametersState.numChannelDimensions,
             "curChunkPosition",
           );
+
           builder.addFragmentCode([
             glsl_emitIntensity,
             glsl_rgbaEmit,
@@ -738,6 +766,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       VolumeRenderingAttachmentState
     >,
   ) {
+    console.log("drawing");
     if (!renderContext.emitColor) return;
     const allSources = attachment.state!.sources.value;
     if (allSources.length === 0) return;

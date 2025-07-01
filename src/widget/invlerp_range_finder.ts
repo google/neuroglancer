@@ -171,7 +171,11 @@ export class AutoRangeFinder extends RefCounted {
     let foundRange = false;
     if (dataType !== DataType.FLOAT32) {
       foundRange = autoRangeData.previouslyComputedRanges.some((prevRange) =>
+<<<<<<< HEAD
         dataTypeIntervalEqual(prevRange, newRange),
+=======
+        dataTypeIntervalEqual(dataType, prevRange, newRange),
+>>>>>>> 0aacf094 (Ichnaea working code on top of v2.40.1)
       );
     } else {
       foundRange = autoRangeData.previouslyComputedRanges.some(

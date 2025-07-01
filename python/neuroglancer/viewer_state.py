@@ -152,17 +152,6 @@ def export_tool(tool_class):
     return tool_class
 
 
-@export
-class LayerTool(Tool):
-    __slots__ = ()
-
-    layer = wrapped_property("layer", optional(str))
-    """Name of the layer to which this tool applies.
-
-    Only valid for tools contained within `~ToolPalette.tools`.
-    """
-
-
 @export_tool
 class PlacePointTool(Tool):
     __slots__ = ()
@@ -188,164 +177,164 @@ class PlaceEllipsoidTool(Tool):
 
 
 @export_tool
-class BlendTool(LayerTool):
+class BlendTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "blend"
 
 
 @export_tool
-class OpacityTool(LayerTool):
+class OpacityTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "opacity"
 
 
 @export_tool
-class VolumeRenderingTool(LayerTool):
+class VolumeRenderingTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "volumeRendering"
 
 
 @export_tool
-class VolumeRenderingGainTool(LayerTool):
+class VolumeRenderingGainTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "volumeRenderingGain"
 
 
 @export_tool
-class VolumeRenderingDepthSamplesTool(LayerTool):
+class VolumeRenderingDepthSamplesTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "volumeRenderingDepthSamples"
 
 
 @export_tool
-class CrossSectionRenderScaleTool(LayerTool):
+class CrossSectionRenderScaleTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "crossSectionRenderScale"
 
 
 @export_tool
-class SelectedAlphaTool(LayerTool):
+class SelectedAlphaTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "selectedAlpha"
 
 
 @export_tool
-class NotSelectedAlphaTool(LayerTool):
+class NotSelectedAlphaTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "notSelectedAlpha"
 
 
 @export_tool
-class ObjectAlphaTool(LayerTool):
+class ObjectAlphaTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "objectAlpha"
 
 
 @export_tool
-class HideSegmentZeroTool(LayerTool):
+class HideSegmentZeroTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "hideSegmentZero"
 
 
 @export_tool
-class HoverHighlightTool(LayerTool):
+class HoverHighlightTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "hoverHighlight"
 
 
 @export_tool
-class BaseSegmentColoringTool(LayerTool):
+class BaseSegmentColoringTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "baseSegmentColoring"
 
 
 @export_tool
-class IgnoreNullVisibleSetTool(LayerTool):
+class IgnoreNullVisibleSetTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "ignoreNullVisibleSet"
 
 
 @export_tool
-class ColorSeedTool(LayerTool):
+class ColorSeedTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "colorSeed"
 
 
 @export_tool
-class SegmentDefaultColorTool(LayerTool):
+class SegmentDefaultColorTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "segmentDefaultColor"
 
 
 @export_tool
-class MeshRenderScaleTool(LayerTool):
+class MeshRenderScaleTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "meshRenderScale"
 
 
 @export_tool
-class MeshSilhouetteRenderingTool(LayerTool):
+class MeshSilhouetteRenderingTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "meshSilhouetteRendering"
 
 
 @export_tool
-class SaturationTool(LayerTool):
+class SaturationTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "saturation"
 
 
 @export_tool
-class SkeletonRenderingMode2dTool(LayerTool):
+class SkeletonRenderingMode2dTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.mode2d"
 
 
 @export_tool
-class SkeletonRenderingMode3dTool(LayerTool):
+class SkeletonRenderingMode3dTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.mode3d"
 
 
 @export_tool
-class SkeletonRenderingLineWidth2dTool(LayerTool):
+class SkeletonRenderingLineWidth2dTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.lineWidth2d"
 
 
 @export_tool
-class SkeletonRenderingLineWidth3dTool(LayerTool):
+class SkeletonRenderingLineWidth3dTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "skeletonRendering.lineWidth3d"
 
 
 @export_tool
-class ShaderControlTool(LayerTool):
+class ShaderControlTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "shaderControl"
     control = wrapped_property("control", str)
 
 
 @export_tool
-class MergeSegmentsTool(LayerTool):
+class MergeSegmentsTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "mergeSegments"
 
 
 @export_tool
-class SplitSegmentsTool(LayerTool):
+class SplitSegmentsTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "splitSegments"
 
 
 @export_tool
-class SelectSegmentsTool(LayerTool):
+class SelectSegmentsTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "selectSegments"
 
 
 @export_tool
-class DimensionTool(LayerTool):
+class DimensionTool(Tool):
     __slots__ = ()
     TOOL_TYPE = "dimension"
     dimension = wrapped_property("dimension", str)
@@ -353,7 +342,6 @@ class DimensionTool(LayerTool):
 
 @export
 class SidePanelLocation(JsonObjectWrapper):
-    __slots__ = ()
     side = wrapped_property("side", optional(str))
     visible = wrapped_property("visible", optional(bool))
     size = wrapped_property("size", optional(int))
@@ -363,15 +351,7 @@ class SidePanelLocation(JsonObjectWrapper):
 
 
 @export
-class ToolPalette(SidePanelLocation):
-    __slots__ = ()
-    tools = wrapped_property("tools", typed_list(Tool))
-    query = wrapped_property("query", optional(str))
-
-
-@export
 class SelectedLayerState(SidePanelLocation):
-    __slots__ = ()
     layer = wrapped_property("layer", optional(str))
 
 
@@ -462,7 +442,7 @@ class CoordinateSpaceTransform(JsonObjectWrapper):
 
 
 def data_source_url(x):
-    if isinstance(x, local_volume.LocalVolume | skeleton.SkeletonSource):
+    if isinstance(x, (local_volume.LocalVolume, skeleton.SkeletonSource)):
         return x
     if not isinstance(x, str):
         raise TypeError
@@ -488,7 +468,7 @@ class LayerDataSource(JsonObjectWrapper):
 
     def __init__(self, json_data=None, *args, **kwargs):
         if isinstance(json_data, str) or isinstance(
-            json_data, local_volume.LocalVolume | skeleton.SkeletonSource
+            json_data, (local_volume.LocalVolume, skeleton.SkeletonSource)
         ):
             json_data = {"url": json_data}
         super().__init__(json_data, *args, **kwargs)
@@ -514,11 +494,13 @@ class LayerDataSources(_LayerDataSourcesBase):
     def __init__(self, json_data=None, **kwargs):
         if isinstance(
             json_data,
-            LayerDataSource
-            | str
-            | local_volume.LocalVolume
-            | skeleton.SkeletonSource
-            | dict,
+            (
+                LayerDataSource,
+                str,
+                local_volume.LocalVolume,
+                skeleton.SkeletonSource,
+                dict,
+            ),
         ):
             json_data = [json_data]
         elif isinstance(json_data, LayerDataSources):
@@ -574,7 +556,7 @@ def _shader_control_parameters(v, _readonly=False):
 
 _set_type_annotation(
     _shader_control_parameters,
-    numbers.Number | str | InvlerpParameters | TransferFunctionParameters,
+    typing.Union[numbers.Number, str, InvlerpParameters, TransferFunctionParameters],
 )
 
 
@@ -749,10 +731,10 @@ class StarredSegments(collections.abc.MutableMapping[int, bool]):
         self.setdefault(segment_id, True)
 
     @typing.overload
-    def get(self, segment_id: int) -> bool | None: ...
+    def get(self, segment_id: int) -> typing.Optional[bool]: ...
 
     @typing.overload
-    def get(self, segment_id: int, default: T) -> bool | T: ...
+    def get(self, segment_id: int, default: T) -> typing.Union[bool, T]: ...
 
     def get(self, segment_id: int, default=None):
         """Checks if a segment is visible.
@@ -823,7 +805,7 @@ class StarredSegments(collections.abc.MutableMapping[int, bool]):
         other: typing.Union[
             "StarredSegments",
             collections.abc.MutableMapping[int, bool],
-            typing.Iterable[int | str | tuple[int, bool]],
+            typing.Iterable[typing.Union[int, str, tuple[int, bool]]],
         ],
     ):
         """Merges in additional starred segments."""
@@ -1597,7 +1579,7 @@ def data_panel_layout_wrapper(default_value="xy"):
 
 
 data_panel_layout_types = frozenset(
-    ["xy", "yz", "xz", "xy-3d", "yz-3d", "xz-3d", "4panel", "4panel-alt", "3d"]
+    ["xy", "yz", "xz", "xy-3d", "yz-3d", "xz-3d", "4panel", "3d"]
 )
 
 
@@ -1606,7 +1588,7 @@ def layout_specification(x, _readonly=False):
         x = "4panel"
     if isinstance(x, str):
         x = {"type": str(x)}
-    if isinstance(x, StackLayout | LayerGroupViewer | DataPanelLayout):
+    if isinstance(x, (StackLayout, LayerGroupViewer, DataPanelLayout)):
         return type(x)(x.to_json(), _readonly=_readonly)
     if not isinstance(x, dict):
         raise ValueError
@@ -1797,9 +1779,6 @@ class ViewerState(JsonObjectWrapper):
         "projectionOrientation", optional(array_wrapper(np.float32, 4))
     )
     show_slices = showSlices = wrapped_property("showSlices", optional(bool, True))
-    hide_cross_section_background_3d = hideCrossSectionBackground3D = wrapped_property(
-        "hideCrossSectionBackground3D", optional(bool, False)
-    )
     show_axis_lines = showAxisLines = wrapped_property(
         "showAxisLines", optional(bool, True)
     )
@@ -1847,9 +1826,6 @@ class ViewerState(JsonObjectWrapper):
     )
     tool_bindings = toolBindings = wrapped_property(
         "toolBindings", typed_map(key_type=str, value_type=Tool)
-    )
-    tool_palettes = toolPalettes = wrapped_property(
-        "toolPalettes", typed_map(key_type=str, value_type=ToolPalette)
     )
 
     @staticmethod
