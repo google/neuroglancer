@@ -175,7 +175,7 @@
   left: 50%;
   width: 18px;
   height: 1px;
-  background-color: rgb(255, 255, 255);
+  background-color: #bbb;
   transform: translate(-50%, -50%) rotate(135deg);
   z-index: 1;
 }
