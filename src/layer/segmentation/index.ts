@@ -543,6 +543,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
   useTempSegmentStatedColors2d: SharedWatchableValue<boolean>;
+  hasVolume = new TrackableBoolean(false, false);
 
   filterBySegmentLabel: (id: bigint) => void;
 
@@ -750,6 +751,7 @@ export class SegmentationUserLayer extends Base {
     const isGroupRoot =
       this.displayState.linkedSegmentationGroup.root.value === this;
     let updatedGraph: SegmentationGraphSource | undefined;
+    let hasVolume = false;
     for (const loadedSubsource of subsources) {
       if (this.addStaticAnnotations(loadedSubsource)) continue;
       const { volume, mesh, segmentPropertyMap, segmentationGraph, local } =
@@ -762,6 +764,7 @@ export class SegmentationUserLayer extends Base {
             );
             continue;
         }
+        hasVolume = true;
         loadedSubsource.activate(
           () =>
             loadedSubsource.addRenderLayer(
@@ -884,6 +887,7 @@ export class SegmentationUserLayer extends Base {
         updatedSegmentPropertyMaps,
       );
     this.displayState.originalSegmentationGroupState.graph.value = updatedGraph;
+    this.displayState.hasVolume.value = hasVolume;
   }
 
   getLegacyDataSourceSpecifications(
@@ -1307,12 +1311,14 @@ export class SegmentationUserLayer extends Base {
       );
     const showAllByDefaultDisposer =
       this.displayState.ignoreNullVisibleSet.changed.add(callback);
+    const hasVolumeDisposer = this.displayState.hasVolume.changed.add(callback);
     return () => {
       disposer();
       defaultColorDisposer();
       visibleSegmentDisposer();
       colorHashChangeDisposer();
       showAllByDefaultDisposer();
+      hasVolumeDisposer();
     };
   }
 
@@ -1330,9 +1336,10 @@ export class SegmentationUserLayer extends Base {
       0;
     const isFixedColorOnly = fixedColor !== undefined && !hasMappedColors;
     const showAllByDefault = displayState.ignoreNullVisibleSet.value;
+    const hasVolume = displayState.hasVolume.value;
 
     if (noVisibleSegments) {
-      if (!showAllByDefault) return []; // No segments visible
+      if (!showAllByDefault || !hasVolume) return []; // No segments visible
       if (isFixedColorOnly) return [getCssColor(fixedColor)];
       return undefined; // Rainbow colors
     }
