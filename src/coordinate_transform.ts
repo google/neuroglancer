@@ -283,7 +283,6 @@ export function coordinateSpaceFromJson(
   allowNumericalDimensions = false,
 ): CoordinateSpace {
   if (obj === undefined) return emptyInvalidCoordinateSpace;
-  verifyObject(obj);
   const isLegacyDict = obj.constructor === Object;
   const unparsedNames = isLegacyDict
     ? Object.keys(obj)
@@ -299,7 +298,8 @@ export function coordinateSpaceFromJson(
         handleCoordinateArray(mem, units, i, scales, coordinateArrays);
       });
     } else {
-      handleCoordinateArray(obj[i], units, i, scales, coordinateArrays);
+      const mem = "scale" in obj[i] ? obj[i].scale : obj[i];
+      handleCoordinateArray(mem, units, i, scales, coordinateArrays);
     }
   }
   return makeCoordinateSpace({
@@ -370,8 +370,7 @@ export function coordinateSpaceToJson(coordinateSpace: CoordinateSpace): any {
     } else {
       json.push({
         name: name,
-        scales: scales[i],
-        units: units[i],
+        scale: [scales[i], units[i]],
       });
     }
   }
