@@ -303,11 +303,10 @@ export function coordinateSpaceFromJson(
     }
   }
   return makeCoordinateSpace({
-    valid: true,
+    valid: false,
     names,
     units,
     scales,
-    rank,
     coordinateArrays,
   });
 }
