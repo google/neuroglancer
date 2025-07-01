@@ -281,8 +281,6 @@ class LayerListItem extends RefCounted {
     visibilityIcon.element.classList.add(
       "neuroglancer-layer-list-panel-item-visibility",
     );
-    // TODO temp hiding
-    visibilityIcon.element.style.display = "none"
     element.appendChild(visibilityIcon.element);
     const deleteButton = makeDeleteButton({
       title: "Delete layer",
@@ -406,6 +404,7 @@ export class LayerListPanel extends SidePanel {
         }
         item.element.dataset.selected = (layer === selectedLayer).toString();
         item.element.dataset.archived = layer.archived.toString();
+        item.element.dataset.visible = layer.visible.toString();
         yield item.element;
       }
       for (const [userLayer, item] of items) {
