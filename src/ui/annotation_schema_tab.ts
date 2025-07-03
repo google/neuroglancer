@@ -73,8 +73,9 @@ import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { FramedDialog, } from "#src/overlay.js";
+import { FramedDialog } from "#src/overlay.js";
 import { arraysEqual } from "#src/util/array.js";
+import { defaultDataTypeRange } from "#src/util/lerp.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -109,7 +110,11 @@ interface NumberConfig {
 
 class AnnotationDescriptionEditDialog extends FramedDialog {
   constructor(parent: AnnotationUIProperty) {
-    super("Edit Description", "Discard changes", "neuroglancer-annotation-description-editor");
+    super(
+      "Edit Description",
+      "Discard changes",
+      "neuroglancer-annotation-description-editor",
+    );
 
     const textInputElement = document.createElement("textarea");
     textInputElement.classList.add(
@@ -121,7 +126,9 @@ class AnnotationDescriptionEditDialog extends FramedDialog {
     this.body.appendChild(textInputElement);
 
     const saveButton = document.createElement("button");
-    saveButton.classList.add("neuroglancer-annotation-description-editor-save-button");
+    saveButton.classList.add(
+      "neuroglancer-annotation-description-editor-save-button",
+    );
     saveButton.textContent = "Save & close";
     saveButton.addEventListener("click", () => {
       const newDescription = textInputElement.value.trim();
@@ -248,7 +255,7 @@ class AnnotationUIProperty extends RefCounted {
       });
       const descriptionCell = this.createTableCell(
         descriptionIcon,
-        "neuroglancer-annotation-schema-description-cell"
+        "neuroglancer-annotation-schema-description-cell",
       );
       element.appendChild(descriptionCell);
       const deleteIcon = document.createElement("span");
@@ -288,7 +295,7 @@ class AnnotationUIProperty extends RefCounted {
         "neuroglancer-annotation-schema-cell-icon-wrapper",
       );
       iconWrapper.innerHTML = svg_info;
-      iconWrapper.title = description
+      iconWrapper.title = description;
       cell.appendChild(iconWrapper);
     }
     cell.appendChild(nameInput);
@@ -342,6 +349,28 @@ class AnnotationUIProperty extends RefCounted {
 
     return typeCell;
   }
+
+  private suggestEnumValue = (
+    inputValues: number[],
+    bounds: [number, number],
+    startingValue = 0,
+    direction: "up" | "down" = "up",
+  ) => {
+    let suggestedEnumValue = startingValue;
+    let wrapped = false;
+    while (inputValues.includes(suggestedEnumValue)) {
+      const increment = direction === "up" ? 1 : -1;
+      suggestedEnumValue += increment;
+      if (suggestedEnumValue > bounds[1]) {
+        if (wrapped) {
+          throw new Error("No more unique values available in the enum.");
+        }
+        suggestedEnumValue = bounds[0]; // Wrap around to the lower bound if we exceed the upper bound
+        wrapped = true;
+      }
+    }
+    return suggestedEnumValue;
+  };
 
   private createDefaultValueCell(
     identifier: string,
@@ -463,6 +492,8 @@ class AnnotationUIProperty extends RefCounted {
         let addEnumButton: HTMLElement | null = null;
         isEnum = true;
         if (!this.readonly) {
+          const dataType = propertyTypeDataType[type as AnnotationType];
+          const bounds = defaultDataTypeRange[dataType!] as [number, number];
           addEnumButton = makeAddButton({
             title: "Add new enum option",
             onClick: () => {
@@ -470,10 +501,10 @@ class AnnotationUIProperty extends RefCounted {
                 identifier,
               ) as AnnotationNumericPropertySpec;
               const currentEnumValues = currentProperty.enumValues!;
-              let suggestedEnumValue = 0;
-              while (currentEnumValues.includes(suggestedEnumValue)) {
-                ++suggestedEnumValue;
-              }
+              const suggestedEnumValue = this.suggestEnumValue(
+                currentEnumValues,
+                bounds,
+              );
               const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
               this.updateProperty(currentProperty, {
                 ...currentProperty,
@@ -498,9 +529,6 @@ class AnnotationUIProperty extends RefCounted {
           const enumRow = document.createElement("div");
           enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
-          // TODO ideally this could maybe stop you from adding the same enum value
-          // But neuroglancer doesn't crash if you do, so for now we trust the
-          // user input
           const nameInput = this.createInputElement({
             type: "text",
             inputValue: label,
@@ -534,18 +562,34 @@ class AnnotationUIProperty extends RefCounted {
           );
           valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
           if (!this.readonly) {
+            const dataType = propertyTypeDataType[annotationType];
+            const bounds = defaultDataTypeRange[dataType!] as [number, number];
+            let lastValue = value;
             valueInput.addEventListener("change", (event) => {
               const inputValue = (event.target as HTMLInputElement).value;
-              const newValue =
+              let newValue =
                 type === "float32"
                   ? parseFloat(inputValue)
                   : parseInt(inputValue, 10);
+              const direction = newValue > lastValue ? "up" : "down";
               const currentProperty = this.getPropertyByIdentifier(
                 identifier,
               ) as AnnotationNumericPropertySpec;
+              const currentEnumValues = currentProperty.enumValues!;
+              newValue = this.suggestEnumValue(
+                currentEnumValues,
+                bounds,
+                newValue,
+                direction,
+              );
+              lastValue = newValue;
+              (event.target as HTMLInputElement).value = numberToStringFixed(
+                newValue,
+                4,
+              );
               this.updateProperty(currentProperty, {
                 ...currentProperty,
-                enumValues: currentProperty.enumValues!.map((v, i) =>
+                enumValues: currentEnumValues.map((v, i) =>
                   i === enumIndex ? newValue : v,
                 ),
               } as AnnotationNumericPropertySpec);
@@ -1231,7 +1275,7 @@ export class AnnotationSchemaView extends Tab {
         dropdown.style.top = `${rect.bottom + window.scrollY}px`;
       } else {
         // Not enough space - position above
-        dropdown.style.top = `${(rect.top + window.scrollY - dropdownHeight) - 10}px`;
+        dropdown.style.top = `${rect.top + window.scrollY - dropdownHeight - 10}px`;
       }
 
       dropdown.style.left = `${rect.left}px`;
