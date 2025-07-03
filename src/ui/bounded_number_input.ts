@@ -58,7 +58,6 @@ export function createBoundedNumberInputElement(
         }
       }
     });
-
   }
   input.type = "number";
   input.value = numberToStringFixed(

@@ -297,22 +297,22 @@ div.neuroglancer-annotation-details-description {
   width: 100%;
   color: white;
   padding: 2px;
-  background: rgba(255, 255, 255, 0.30);
+  background: rgba(255, 255, 255, 0.3);
   outline: none;
   border: 1px solid transparent;
 }
 
 .neuroglancer-annotation-property-value-input::placeholder {
-  color: rgba(255, 255, 255, 0.40);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .neuroglancer-annotation-property-value-input:hover {
-  background: rgba(255, 255, 255, 0.40);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .neuroglancer-annotation-property-value-input:focus {
-  border-color:#016DCC;
-  background: rgba(255, 255, 255, 0.30);
+  border-color: #016dcc;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .neuroglancer-annotation-property-select {
