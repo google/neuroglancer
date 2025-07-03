@@ -1411,8 +1411,9 @@ export class LocalAnnotationSource extends AnnotationSource {
 
   updateProperty(
     oldProperty: AnnotationPropertySpec,
-    newProperty: AnnotationPropertySpec,
+    newPropertyValues: Partial<AnnotationPropertySpec>,
   ) {
+    const newProperty = { ...oldProperty, ...newPropertyValues };
     const { type: oldType } = oldProperty;
     const { type: newType } = newProperty;
     const isConvertible = canConvertTypes(oldType, newType);

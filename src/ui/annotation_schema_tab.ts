@@ -31,7 +31,6 @@ import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
-  AnnotationColorPropertySpec,
   AnnotationNumericPropertySpec,
   AnnotationPropertySpec,
   LocalAnnotationSource,
@@ -133,10 +132,7 @@ class AnnotationDescriptionEditDialog extends FramedDialog {
     saveButton.addEventListener("click", () => {
       const newDescription = textInputElement.value.trim();
       if (newDescription !== parent.spec.description && newDescription !== "") {
-        parent.updateProperty(parent.spec, {
-          ...parent.spec,
-          description: newDescription,
-        } as AnnotationPropertySpec);
+        parent.updateProperty(parent.spec, { description: newDescription });
       }
       this.close();
     });
@@ -175,19 +171,16 @@ class AnnotationUIProperty extends RefCounted {
       console.warn(`Property with name ${oldIdentifier} not found.`);
       return;
     }
-    this.updateProperty(oldProperty, {
-      ...oldProperty,
-      identifier: newIdentifier,
-    });
+    this.updateProperty(oldProperty, { identifier: newIdentifier });
   }
   private getPropertyByIdentifier(
     identifier: string,
   ): AnnotationPropertySpec | undefined {
     return this.parentView.getPropertyByIdentifier(identifier);
   }
-  public updateProperty<T extends AnnotationPropertySpec>(
-    oldProperty: T,
-    newProperty: T,
+  public updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newProperty: Partial<AnnotationPropertySpec>,
   ) {
     this.parentView.updateProperty(oldProperty, newProperty);
   }
@@ -403,10 +396,7 @@ class AnnotationUIProperty extends RefCounted {
       inputs.push(colorInput.element);
       changeFunction = () => {
         const newColor = colorInput.getRGB();
-        this.updateProperty(oldProperty, {
-          ...oldProperty,
-          default: packColor(newColor),
-        } as AnnotationColorPropertySpec);
+        this.updateProperty(oldProperty, { default: packColor(newColor) });
       };
       if (type === "rgba") {
         const alpha = unpackRGBA(oldProperty.default)[3];
@@ -430,10 +420,7 @@ class AnnotationUIProperty extends RefCounted {
             newColor[2],
             newAlpha,
           );
-          this.updateProperty(oldProperty, {
-            ...oldProperty,
-            default: packColor(colorVec),
-          } as AnnotationColorPropertySpec);
+          this.updateProperty(oldProperty, { default: packColor(colorVec) });
         };
       }
     } else if (type === "bool") {
@@ -447,10 +434,7 @@ class AnnotationUIProperty extends RefCounted {
       inputs.push(boolInput);
       changeFunction = (event: Event) => {
         const newValue = (event.target as HTMLInputElement).checked;
-        this.updateProperty(oldProperty, {
-          ...oldProperty,
-          default: newValue ? 1 : 0,
-        } as AnnotationPropertySpec);
+        this.updateProperty(oldProperty, { default: newValue ? 1 : 0 });
       };
       container.appendChild(boolInput);
     } else if (
@@ -477,14 +461,12 @@ class AnnotationUIProperty extends RefCounted {
         numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
         inputs.push(numberInput);
         changeFunction = (event: Event) => {
-          const newValue = (event.target as HTMLInputElement).value;
-          this.updateProperty(oldProperty, {
-            ...oldProperty,
-            default:
-              dataType === DataType.FLOAT32
-                ? parseFloat(newValue)
-                : parseInt(newValue, 10),
-          } as AnnotationNumericPropertySpec);
+          const newInputValue = (event.target as HTMLInputElement).value;
+          const newValue =
+            dataType === DataType.FLOAT32
+              ? parseFloat(newInputValue)
+              : parseInt(newInputValue, 10);
+          this.updateProperty(oldProperty, { default: newValue });
         };
       } else {
         const enumContainer = document.createElement("div");
@@ -507,7 +489,6 @@ class AnnotationUIProperty extends RefCounted {
               );
               const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
               this.updateProperty(currentProperty, {
-                ...currentProperty,
                 enumValues: newEnumValues,
                 enumLabels: [
                   ...currentProperty.enumLabels!,
@@ -540,11 +521,10 @@ class AnnotationUIProperty extends RefCounted {
             nameInput.addEventListener("change", (event) => {
               const newLabel = (event.target as HTMLInputElement).value;
               this.updateProperty(oldProperty, {
-                ...oldProperty,
                 enumLabels: oldProperty.enumLabels!.map((l, i) =>
                   i === enumIndex ? newLabel : l,
                 ),
-              } as AnnotationNumericPropertySpec);
+              });
             });
           }
 
@@ -588,11 +568,10 @@ class AnnotationUIProperty extends RefCounted {
                 4,
               );
               this.updateProperty(currentProperty, {
-                ...currentProperty,
                 enumValues: currentEnumValues.map((v, i) =>
                   i === enumIndex ? newValue : v,
                 ),
-              } as AnnotationNumericPropertySpec);
+              });
             });
           }
 
@@ -618,10 +597,9 @@ class AnnotationUIProperty extends RefCounted {
               );
 
               this.updateProperty(currentProperty, {
-                ...currentProperty,
                 enumValues: newEnumValues,
                 enumLabels: newEnumLabels,
-              } as AnnotationNumericPropertySpec);
+              });
             });
             enumRow.appendChild(deleteIcon);
             enumContainer.insertBefore(enumRow, addEnumButton);
@@ -903,7 +881,6 @@ class AnnotationUIProperty extends RefCounted {
 
     this.typeChanged.dispatch();
     this.updateProperty(oldProperty, {
-      ...oldProperty,
       type: newType,
       default: defaultValue,
     });
@@ -1429,12 +1406,12 @@ export class AnnotationSchemaView extends Tab {
     this.annotationStates.changed.dispatch();
   }
 
-  updateProperty<T extends AnnotationPropertySpec>(
-    oldProperty: T,
-    newProperty: T,
+  updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newPropertyValues: Partial<AnnotationPropertySpec>,
   ) {
     this.mutableSources.forEach((s) => {
-      s.updateProperty(oldProperty, newProperty);
+      s.updateProperty(oldProperty, newPropertyValues);
     });
     this.annotationStates.changed.dispatch();
   }
