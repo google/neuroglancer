@@ -116,6 +116,7 @@ import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { nearlyEqual } from "#src/util/number.js";
 
 export function isBooleanType(enumLabels?: string[]): boolean {
   return (
@@ -2056,16 +2057,30 @@ export function UserLayerWithAnnotationsMixin<
                       } else if (isEnum) {
                         // Make a dropdown which combines the enum labels and values.
                         const options = [];
+                        let optionsHasDefault = false;
                         for (
                           let j = 0;
                           j < propertyAsNum.enumLabels!.length;
                           ++j
                         ) {
+                          const optionValue = propertyAsNum.enumValues![j];
+                          if (nearlyEqual(optionValue, value)) {
+                            optionsHasDefault = true;
+                          }
                           options.push({
                             label: propertyAsNum.enumLabels![j],
-                            value: propertyAsNum.enumValues![j],
+                            value: optionValue,
                           });
                         }
+                        // We need to check if the current value is in the enum values.
+                        // Otherwise we need to add it as an option.
+                        if (!optionsHasDefault) {
+                          options.unshift({
+                            label: `Non-schema value`,
+                            value: value,
+                          });
+                        }
+
                         const select = document.createElement("select");
                         select.name = `neuroglancer-annotation-property-select-${i}`;
                         select.classList.add(
