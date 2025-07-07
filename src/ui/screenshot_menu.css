@@ -34,7 +34,7 @@
   outline: 0;
 }
 
-.neuroglancer-screenshot-dialog {
+.neuroglancer-screenshot {
   width: 48.75rem;
   padding: 0;
   margin: 1.25rem auto;
@@ -46,11 +46,13 @@
   font-family: sans-serif;
 }
 
-.neuroglancer-screenshot-main-body-container {
+.neuroglancer-screenshot-body {
   height: auto;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
   overflow-x: hidden;
+  display: block;
+  padding: 0;
 }
 
 .neuroglancer-screenshot-title {
@@ -73,11 +75,10 @@
 }
 
 /* Div at the top which contains the close */
-.neuroglancer-screenshot-close {
-  border-bottom: 1px solid var(--gray50);
+.neuroglancer-screenshot-header {
   display: flex;
   align-items: center;
-  padding: 0.75rem 1rem;
+  padding: 1.5rem 1rem;
   gap: 10px;
 }
 
@@ -185,7 +186,7 @@
   padding: 0;
 }
 
-.neuroglancer-screenshot-close-button {
+.neuroglancer-screenshot-close-icon {
   margin-left: auto;
   background-color: transparent;
   border: 0;
@@ -218,8 +219,8 @@
 }
 
 .neuroglancer-screenshot-resolution-preview-container {
-  border-top: 1px solid var(--gray50);
-  border-bottom: 1px solid var(--gray50);
+  border-top: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
   background: var(--gray500);
   width: 100%;
   padding: 1rem 1rem 0.5rem 1rem;
@@ -339,11 +340,10 @@
 }
 
 /* Footer with progress and buttons */
-.neuroglancer-screenshot-footer-container {
+.neuroglancer-screenshot-footer {
   margin: 0;
   display: flex;
   padding: 0.75rem 1rem;
-  border-top: 1px solid var(--gray50);
 }
 
 .neuroglancer-screenshot-progress-text {
