@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
- .neuroglancer-shader-code-editor-dialog-body .neuroglancer-shader-code-widget {
+.neuroglancer-shader-code-editor-dialog-body .neuroglancer-shader-code-widget {
   width: 80vw;
-  height: 100%;
+  height: 65vh;
 }
 
 .neuroglancer-shader-code-editor-dialog

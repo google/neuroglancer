@@ -186,12 +186,6 @@
   padding: 0;
 }
 
-.neuroglancer-screenshot-close-icon {
-  margin-left: auto;
-  background-color: transparent;
-  border: 0;
-}
-
 /* Screenshot resolution table - voxel resolution, panel resolution */
 .neuroglancer-screenshot-size-text {
   margin: 0.75rem 0 0.75rem 0;
@@ -327,10 +321,13 @@
   height: 1rem;
 }
 
+.neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-icon svg {
+  stroke: #141415;
+}
+
 .neuroglancer-screenshot-dialog .neuroglancer-icon {
   width: 1rem;
   height: 1rem;
-  min-width: inherit;
   min-height: inherit;
   padding: 0;
 }
@@ -350,11 +347,11 @@
   margin: 0;
   flex: 1;
   font-weight: 590;
-  cursor: pointer;
   padding: 0;
   font-size: 0.813rem;
   align-self: center;
   color: var(--primary700);
+  cursor: wait;
 }
 
 .neuroglancer-screenshot-footer-button {
@@ -366,6 +363,7 @@
   font-weight: 590;
   color: var(--gray800);
   margin: 0 0 0 0.25rem;
+  cursor: pointer;
 }
 
 .neuroglancer-screenshot-footer-button:disabled {

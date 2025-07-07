@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
- .neuroglancer-overlay {
+.neuroglancer-overlay {
   height: 100%;
   width: 100%;
   position: fixed;
@@ -46,7 +46,7 @@
 
 .neuroglancer-framed-dialog-body {
   display: flex;
-  padding: 1.5rem;
+  padding: 0 1.5rem;
   overflow: auto;
 }
 
@@ -61,19 +61,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-top: 1px solid #ccc;
   margin-top: 1px;
 }
 
 .neuroglancer-framed-dialog-primary-button {
+  margin-left: auto;
+}
+
+.neuroglancer-framed-dialog-close-icon {
   background-color: transparent;
   border: none;
   padding: 0;
-}
-
-.neuroglancer-framed-dialog-primary-button:hover {
-  background: none;
 }
 
 .neuroglancer-framed-dialog-close-icon svg {
