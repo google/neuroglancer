@@ -283,6 +283,11 @@ export function coordinateSpaceFromJson(
   allowNumericalDimensions = false,
 ): CoordinateSpace {
   if (obj === undefined) return emptyInvalidCoordinateSpace;
+  if (obj === null || typeof obj !== "object") {
+    throw new Error(
+      `Invalid coordinate space JSON: expected object or array, but received ${JSON.stringify(obj)}.`,
+    );
+  }
   const isLegacyDict = obj.constructor === Object;
   const unparsedNames = isLegacyDict
     ? Object.keys(obj)
