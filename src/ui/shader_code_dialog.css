@@ -14,61 +14,12 @@
  * limitations under the License.
  */
 
-.neuroglancer-code-editor-dialog .neuroglancer-shader-code-widget {
+ .neuroglancer-shader-code-editor-dialog-body .neuroglancer-shader-code-widget {
   width: 80vw;
-  height: 65vh;
+  height: 100%;
 }
 
-.neuroglancer-code-editor-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1.5rem;
-  border-bottom: 1px solid #ccc;
-  height: 2rem;
-  margin-bottom: 1px;
-}
-
-.neuroglancer-code-editor-dialog-body {
-  padding: 0 1.5rem;
-  overflow: auto;
-}
-
-.neuroglancer-code-editor-dialog-title {
-  margin-right: auto;
-  font-size: large;
-  font-weight: bold;
-  color: #333;
-}
-
-.neuroglancer-code-editor-dialog-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1.5rem;
-  border-top: 1px solid #ccc;
-  margin-top: 1px;
-}
-
-.neuroglancer-code-editor-dialog-close-icon {
-  background-color: transparent;
-  border: none;
-  padding: 0;
-}
-
-.neuroglancer-code-editor-dialog-close-icon:hover {
-  background: none;
-}
-
-.neuroglancer-code-editor-dialog-close-icon svg {
-  stroke: rgba(20, 20, 21, 0.4);
-}
-
-.neuroglancer-shader-code-editor-dialog-close-button {
-  margin-left: auto;
-  cursor: pointer;
-}
-
-.neuroglancer-code-editor-dialog .neuroglancer-single-mesh-attribute-widget {
+.neuroglancer-shader-code-editor-dialog
+  .neuroglancer-single-mesh-attribute-widget {
   max-height: 12vh;
 }
