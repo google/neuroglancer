@@ -65,7 +65,7 @@
 .neuroglancer-layer-item-label {
   display: inline-block;
   position: relative;
-  padding-right: 3px;
+  padding: 0 1px;
   z-index: 1;
 }
 
@@ -133,6 +133,7 @@
 .neuroglancer-layer-item-label-wrapper {
   position: relative;
   overflow: hidden;
+  margin: 0 2px;
 }
 
 .neuroglancer-layer-item-label-color {

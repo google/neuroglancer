@@ -115,20 +115,25 @@ class LayerColorWidget extends RefCounted {
   constructor(
     public panel: LayerListPanel,
     public layer: ManagedUserLayer,
+    onClick?: () => void,
   ) {
     super();
     const { colorIndicator, element } = this;
     colorIndicator.className = "neuroglancer-layer-list-panel-color-value";
     element.className = "neuroglancer-layer-list-panel-color-value-wrapper";
     element.appendChild(colorIndicator);
+    if (onClick !== undefined) {
+      element.addEventListener("click", onClick);
+    }
     const updateLayerColorWidget = () => {
       const colors = this.layer.layerBarColors;
       const setNoColor = () => {
         colorIndicator.style.background = "";
         colorIndicator.style.backgroundColor = "";
         colorIndicator.dataset.color = "unsupported";
-        colorIndicator.title =
-          "Layer type does not support color legend or is currently not rendered";
+        this.updateTooltip(
+          "does not support a color legend or has no visible segments",
+        );
       };
       if (!this.layer.supportsLayerBarColorSyncOption || colors?.length === 0) {
         setNoColor();
@@ -136,8 +141,7 @@ class LayerColorWidget extends RefCounted {
       }
       const setRainbow = () => {
         colorIndicator.dataset.color = "rainbow";
-        colorIndicator.title =
-          "Multi-colored layer or layer with uncertain color";
+        this.updateTooltip("is multi-colored or has unknown color");
       };
       if (colors === undefined) {
         setRainbow();
@@ -148,7 +152,7 @@ class LayerColorWidget extends RefCounted {
         colorIndicator.style.background = "";
         colorIndicator.style.backgroundColor = colors[0];
         colorIndicator.dataset.color = "solid";
-        colorIndicator.title = "Primary layer color";
+        this.updateTooltip(`has a single primary color`);
       };
 
       const setMultiColor = () => {
@@ -158,7 +162,7 @@ class LayerColorWidget extends RefCounted {
           colors.reverse(),
           true /*conic*/,
         );
-        colorIndicator.title = "Primary layer colors";
+        this.updateTooltip(`has multiple primary colors`);
       };
       if (colors.length === 1) setSingleColor();
       else setMultiColor();
@@ -185,6 +189,16 @@ class LayerColorWidget extends RefCounted {
     element.dataset.visible = this.layer.visible.toString();
     listenForColorChange();
     updateLayerColorWidget();
+  }
+
+  private updateTooltip(message: string) {
+    const { visible, archived } = this.layer;
+    if (!visible || archived) {
+      const stateMessage = archived ? "archived" : "hidden";
+      this.element.title = `This layer is ${stateMessage}.\nClick to show layer.`;
+    } else {
+      this.element.title = `This visible layer ${message}.\nClick to hide layer.`;
+    }
   }
 }
 
@@ -253,18 +267,21 @@ class LayerListItem extends RefCounted {
       ).element,
     );
     element.appendChild(numberElement);
-    element.appendChild(
-      this.registerDisposer(new LayerVisibilityWidget(layer)).element,
-    );
-    element.appendChild(
-      this.registerDisposer(new LayerColorWidget(panel, layer)).element,
-    );
+    const colorIndicator = new LayerColorWidget(panel, layer, () => {
+      this.layer.setVisible(!this.layer.visible);
+    });
+    element.appendChild(colorIndicator.element);
     element.appendChild(new LayerTypeIndicatorWidget(layer).element);
     element.appendChild(layerNameWidget.element);
     element.appendChild(
       this.registerDisposer(makeSelectedLayerSidePanelCheckboxIcon(layer))
         .element,
     );
+    const visibilityIcon = new LayerVisibilityWidget(layer);
+    visibilityIcon.element.classList.add(
+      "neuroglancer-layer-list-panel-item-visibility",
+    );
+    element.appendChild(visibilityIcon.element);
     const deleteButton = makeDeleteButton({
       title: "Delete layer",
       onClick: () => {
@@ -387,6 +404,7 @@ export class LayerListPanel extends SidePanel {
         }
         item.element.dataset.selected = (layer === selectedLayer).toString();
         item.element.dataset.archived = layer.archived.toString();
+        item.element.dataset.visible = layer.visible.toString();
         yield item.element;
       }
       for (const [userLayer, item] of items) {
