@@ -67,6 +67,7 @@ export class StateEditorDialog extends FramedDialog {
       mode: { name: "javascript", json: true },
       foldGutter: true,
       gutters: ["CodeMirror-lint-markers", "CodeMirror-foldgutter"],
+      lineNumbers: true,
     });
     this.updateView();
 
