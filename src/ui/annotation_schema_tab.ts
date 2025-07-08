@@ -58,6 +58,7 @@ import {
   UserLayerWithAnnotations,
   isBooleanType,
   isEnumType,
+  appendDescriptionIcon
 } from "#src/ui/annotations.js";
 import {
   packColor,
@@ -295,12 +296,7 @@ class AnnotationUIProperty extends RefCounted {
     const cell = this.createTableCell(document.createElement("div"), "");
 
     if (description) {
-      const iconWrapper = document.createElement("span");
-      iconWrapper.classList.add(
-        "neuroglancer-annotation-schema-cell-icon-wrapper",
-      );
-      iconWrapper.innerHTML = svg_info;
-      iconWrapper.title = description;
+      const iconWrapper = appendDescriptionIcon(description);
       cell.appendChild(iconWrapper);
     }
     cell.appendChild(nameInput);

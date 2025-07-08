@@ -131,6 +131,17 @@ export function isEnumType(enumLabels?: string[]): boolean {
   return (enumLabels && enumLabels.length > 0) || false;
 }
 
+export function appendDescriptionIcon(description: string) {
+  const iconWrapper = document.createElement("span");
+  iconWrapper.classList.add(
+    "neuroglancer-annotation-schema-cell-icon-wrapper",
+  );
+  iconWrapper.innerHTML = svg_info;
+  iconWrapper.title = description;
+
+  return iconWrapper;
+}
+
 export class MergedAnnotationStates
   extends RefCounted
   implements WatchableValueInterface<readonly AnnotationLayerState[]>
@@ -1925,13 +1936,8 @@ export function UserLayerWithAnnotationsMixin<
                   label.appendChild(nameWrapper);
 
                   const { description } = property;
-                  if (description !== undefined && description) {
-                    const iconWrapper = document.createElement("span");
-                    iconWrapper.classList.add(
-                      "neuroglancer-annotation-property-cell-icon-wrapper",
-                    );
-                    iconWrapper.innerHTML = svg_info;
-                    iconWrapper.title = description;
+                  if (description) {
+                    const iconWrapper = appendDescriptionIcon(description);
                     nameWrapper.appendChild(iconWrapper);
                   }
 
