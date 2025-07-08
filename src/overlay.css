@@ -70,21 +70,6 @@
   margin-top: 1px;
 }
 
-.neuroglancer-framed-dialog-footer button {
-  border-radius: 0.5rem;
-  border: 1px solid #d0d5dd;
-  background: white;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.813rem;
-  font-weight: 590;
-  color: #344054;
-  cursor: pointer;
-}
-
-.neuroglancer-framed-dialog-footer button:hover {
-  color: #141415;
-}
-
 .neuroglancer-framed-dialog-primary-button {
   margin-left: auto;
 }
