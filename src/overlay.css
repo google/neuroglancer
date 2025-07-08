@@ -34,6 +34,10 @@
   color: black;
 }
 
+.neuroglancer-framed-dialog:focus-visible {
+  outline: none;
+}
+
 .neuroglancer-framed-dialog-header {
   display: flex;
   align-items: center;
