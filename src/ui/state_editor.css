@@ -24,3 +24,7 @@
   justify-content: flex-end;
   align-items: center;
 }
+
+.neuroglancer-state-editor-save-container button {
+  margin: 0 0 0 0.25rem;
+}

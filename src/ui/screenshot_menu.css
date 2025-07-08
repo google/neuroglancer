@@ -361,15 +361,7 @@
 }
 
 .neuroglancer-screenshot-footer-button {
-  border-radius: 0.5rem;
-  border: 1px solid var(--gray300);
-  background: white;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.813rem;
-  font-weight: 590;
-  color: var(--gray800);
   margin: 0 0 0 0.25rem;
-  cursor: pointer;
 }
 
 .neuroglancer-screenshot-footer-button:disabled {
