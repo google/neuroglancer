@@ -42,7 +42,8 @@
 
 .neuroglancer-annotation-schema-enum-entry:hover
   .neuroglancer-annotation-schema-delete-icon {
-  display: block;
+  opacity: 1;
+  visibility: visible;
 }
 
 .neuroglancer-annotation-schema-delete-cell svg,
@@ -185,14 +186,10 @@
   align-items: center;
 }
 
-.neuroglancer-annotation-schema-delete-cell {
+.neuroglancer-annotation-schema-delete-cell,
+.neuroglancer-annotation-schema-delete-icon {
   visibility: hidden;
   opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-}
-
-.neuroglancer-annotation-schema-delete-icon {
-  display: none;
   transition: opacity 0.2s ease-in-out;
 }
 
@@ -228,7 +225,7 @@
 
 .neuroglancer-annotation-schema-enum-entry {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 2px;
   margin-bottom: 2px;
 }
