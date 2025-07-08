@@ -315,39 +315,30 @@ export class ScreenshotDialog extends FramedDialog {
   }
 
   private setupHelpTooltips() {
-    const generalSettingsTooltip = makeIcon({
-      svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.generalSettingsTooltip),
-    });
-
-    const orthographicSettingsTooltip = makeIcon({
-      svg: svg_help,
-      title: TOOLTIPS.orthographicSettingsTooltip,
-    });
-    orthographicSettingsTooltip.classList.add(
-      "neuroglancer-screenshot-resolution-table-tooltip",
+    const makeTooltip = (title: string, inTable = false) => {
+      const tooltip = makeIcon({
+        svg: svg_help,
+        title: splitIntoLines(title),
+      });
+      tooltip.classList.add("neuroglancer-screenshot-tooltip");
+      if (inTable) {
+        tooltip.classList.add(
+          "neuroglancer-screenshot-resolution-table-tooltip",
+        );
+      }
+      return tooltip;
+    };
+    const generalSettingsTooltip = makeTooltip(TOOLTIPS.generalSettingsTooltip);
+    const orthographicSettingsTooltip = makeTooltip(
+      TOOLTIPS.orthographicSettingsTooltip,
+      true,
     );
-
-    const layerDataTooltip = makeIcon({
-      svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.layerDataTooltip),
-    });
-    layerDataTooltip.classList.add(
-      "neuroglancer-screenshot-resolution-table-tooltip",
+    const layerDataTooltip = makeTooltip(TOOLTIPS.layerDataTooltip, true);
+    const scaleFactorHelpTooltip = makeTooltip(
+      TOOLTIPS.scaleFactorHelpTooltip,
+      true,
     );
-
-    const scaleFactorHelpTooltip = makeIcon({
-      svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.scaleFactorHelpTooltip),
-    });
-
-    const panelScaleTooltip = makeIcon({
-      svg: svg_help,
-      title: splitIntoLines(TOOLTIPS.panelScaleTooltip),
-    });
-    panelScaleTooltip.classList.add(
-      "neuroglancer-screenshot-resolution-table-tooltip",
-    );
+    const panelScaleTooltip = makeTooltip(TOOLTIPS.panelScaleTooltip, true);
 
     return (this.helpTooltips = {
       generalSettingsTooltip,

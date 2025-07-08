@@ -258,11 +258,17 @@
   outline: 0;
   border: 0;
   cursor: pointer;
-  height: 1rem;
   margin-left: auto;
   position: relative;
-  width: 33.33%;
   justify-content: flex-end;
+}
+
+.neuroglancer-screenshot-copy-icon:hover svg {
+  stroke: var(--gray600);
+}
+
+.neuroglancer-screenshot-copy-icon:hover {
+  background-color: var(--gray300);
 }
 
 .neuroglancer-screenshot-dimension {
@@ -313,25 +319,27 @@
 }
 
 /* Icons in the dialog */
-.neuroglancer-screenshot-dialog .neuroglancer-icon svg {
-  stroke: rgba(20, 20, 21, 0.4);
+.neuroglancer-screenshot-tooltip svg,
+.neuroglancer-screenshot-copy-icon svg {
+  stroke: var(--gray400);
   width: 1rem;
   height: 1rem;
 }
 
-.neuroglancer-screenshot-dialog .neuroglancer-screenshot-close-icon svg {
-  stroke: #141415;
-}
-
-.neuroglancer-screenshot-dialog .neuroglancer-icon {
+.neuroglancer-screenshot-tooltip {
+  padding: 0;
   width: 1rem;
   height: 1rem;
   min-height: inherit;
-  padding: 0;
+  cursor: auto;
 }
 
-.neuroglancer-screenshot-dialog .neuroglancer-icon:hover {
+.neuroglancer-screenshot-tooltip:hover {
   background: none;
+}
+
+.neuroglancer-screenshot-tooltip:hover svg{
+  stroke: var(--gray600);
 }
 
 /* Footer with progress and buttons */
