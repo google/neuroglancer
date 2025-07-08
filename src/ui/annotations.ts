@@ -83,8 +83,7 @@ import {
   packColor,
   serializeColor,
   unpackRGB,
-  unpackRGBA,
-  useWhiteBackground,
+  unpackRGBA
 } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
@@ -1800,6 +1799,7 @@ export function UserLayerWithAnnotationsMixin<
                     annotation === null ? "Annotation not found" : "Loading...";
                 }
               }
+
               if (annotation != null) {
                 const layerRank =
                   chunkTransform.error === undefined
@@ -1932,20 +1932,27 @@ export function UserLayerWithAnnotationsMixin<
                   const valueElementWrapper = document.createElement("div");
                   let valueElement: HTMLElement;
                   let valueElementSetter: (value: any) => void;
+                  let labelElementSetter: (value: any) => any;
                   const changeFunction = sourceReadonly
                     ? (inputValue: any) => {
-                        inputValue;
-                      }
+                      inputValue;
+                    }
                     : (inputValue: any) => {
-                        const newAnnotation = reference.value;
-                        if (newAnnotation == null) {
-                          return;
-                        }
-                        newAnnotation.properties[i] = inputValue;
-                        annotationLayer.source.update(reference, newAnnotation);
-                        annotationLayer.source.commit(reference);
-                      };
+                      const newAnnotation = reference.value;
+                      if (newAnnotation == null) {
+                        return;
+                      }
+                      newAnnotation.properties[i] = inputValue;
+                      annotationLayer.source.update(reference, newAnnotation);
+                      annotationLayer.source.commit(reference);
+                    };
                   valueElement = document.createElement("span");
+                  labelElementSetter = (value) => {
+                    const label = document.createElement("span");
+                    label.textContent = value;
+                    label.style.textTransform = "uppercase";
+                    return label;
+                  };
                   valueElementSetter = (value) => {
                     valueElement.textContent = value;
                   };
@@ -1964,15 +1971,26 @@ export function UserLayerWithAnnotationsMixin<
                     );
                     return colorInput;
                   };
+
+                  const createColorPreviewBox = (hexColor: string) => {
+                    const previewBox = document.createElement("div");
+                    const colorSwatch = document.createElement("span");
+
+                    colorSwatch.style.background = hexColor;
+                    previewBox.appendChild(colorSwatch);
+                    previewBox.className = "neuroglancer-annotation-property-color-readable";
+
+                    return previewBox;
+                  };
+
                   if (property.type === "rgb") {
                     const colorVec = unpackRGB(value);
                     if (sourceReadonly) {
                       const hex = serializeColor(colorVec);
-                      valueElementSetter(hex);
-                      valueElement.style.backgroundColor = hex;
-                      valueElement.style.color = useWhiteBackground(colorVec)
-                        ? "white"
-                        : "black";
+                      const previewBox = createColorPreviewBox(hex);
+                      
+                      valueElement.appendChild(previewBox);
+                      valueElement.appendChild(labelElementSetter(hex));
                     } else {
                       const colorInput = makeColorWidget(colorVec);
                       colorInput.element.addEventListener("change", () => {
@@ -1983,13 +2001,11 @@ export function UserLayerWithAnnotationsMixin<
                   } else if (property.type === "rgba") {
                     const colorVec = unpackRGB(value);
                     if (sourceReadonly) {
-                      valueElementSetter(serializeColor(unpackRGBA(value)));
-                      valueElement.style.backgroundColor = serializeColor(
-                        unpackRGB(value),
-                      );
-                      valueElement.style.color = useWhiteBackground(colorVec)
-                        ? "white"
-                        : "black";
+                      const hex = serializeColor(colorVec);
+                      const previewBox = createColorPreviewBox(hex);
+                      
+                      valueElement.appendChild(previewBox);
+                      valueElement.appendChild(labelElementSetter(hex));
                     } else {
                       const colorInput = makeColorWidget(colorVec);
                       const alpha = unpackRGBA(value)[3];
@@ -2148,30 +2164,30 @@ export function UserLayerWithAnnotationsMixin<
                         sourceReadonly
                           ? undefined
                           : (newIds) => {
-                              const annotation = reference.value;
-                              if (annotation == null) {
-                                return;
-                              }
-                              let { relatedSegments } = annotation;
-                              if (relatedSegments === undefined) {
-                                relatedSegments =
-                                  annotationLayer.source.relationships.map(
-                                    () => new BigUint64Array(0),
-                                  );
-                              } else {
-                                relatedSegments = relatedSegments.slice();
-                              }
-                              relatedSegments[relationshipIndex] = newIds;
-                              const newAnnotation = {
-                                ...annotation,
-                                relatedSegments,
-                              };
-                              annotationLayer.source.update(
-                                reference,
-                                newAnnotation,
-                              );
-                              annotationLayer.source.commit(reference);
-                            },
+                            const annotation = reference.value;
+                            if (annotation == null) {
+                              return;
+                            }
+                            let { relatedSegments } = annotation;
+                            if (relatedSegments === undefined) {
+                              relatedSegments =
+                                annotationLayer.source.relationships.map(
+                                  () => new BigUint64Array(0),
+                                );
+                            } else {
+                              relatedSegments = relatedSegments.slice();
+                            }
+                            relatedSegments[relationshipIndex] = newIds;
+                            const newAnnotation = {
+                              ...annotation,
+                              relatedSegments,
+                            };
+                            annotationLayer.source.update(
+                              reference,
+                              newAnnotation,
+                            );
+                            annotationLayer.source.commit(reference);
+                          },
                       ),
                     ).element,
                   );
