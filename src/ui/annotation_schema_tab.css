@@ -46,6 +46,11 @@
   visibility: visible;
 }
 
+.neuroglancer-annotation-schema-enum-entry:hover
+  .neuroglancer-annotation-schema-delete-icon {
+  border-color: #222;
+}
+
 .neuroglancer-annotation-schema-delete-cell svg,
 .neuroglancer-annotation-schema-delete-icon svg {
   width: 1rem;
@@ -97,6 +102,12 @@
   border-bottom: none;
   border-right: none;
   max-width: 1.25rem;
+}
+
+.neuroglancer-annotation-schema-delete-icon {
+  min-width: 1.25rem;
+  border-right: 1px solid transparent;
+  padding-right: 2px;
 }
 
 .neuroglancer-annotation-schema-description-cell,
