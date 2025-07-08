@@ -163,8 +163,8 @@ class LayerListItem extends RefCounted {
             changed: layer.layerChanged,
           },
           {
-            enableTitle: "Archive layer (disable and remove from layer groups)",
-            disableTitle:
+            enabledTitle: "Archive layer (disable and remove from layer groups)",
+            disabledTitle:
               "Unarchive layer (enable and add to all layer groups)",
           },
         ),
