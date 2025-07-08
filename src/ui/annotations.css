@@ -257,6 +257,12 @@ div.neuroglancer-annotation-details-description {
   border-bottom: 1px solid #222;
 }
 
+.neuroglancer-annotation-property-name-wrapper {
+  flex: 1;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
 .neuroglancer-annotation-property-id {
   border-bottom: none;
   margin-bottom: 8px;
@@ -281,7 +287,6 @@ div.neuroglancer-annotation-details-description {
 
 .neuroglancer-annotation-property-label {
   color: white;
-  flex: 1;
 }
 
 .neuroglancer-annotation-property-value-wrapper {
@@ -359,4 +364,31 @@ input.neuroglancer-segment-list-entry-id {
 
 .neuroglancer-related-segment-list-header-checkbox {
   min-width: 17px;
+}
+
+.neuroglancer-annotation-property-cell-icon-wrapper {
+  display: inline-flex;
+  text-decoration: none;
+  align-self: center;
+  white-space: nowrap;
+  min-width: 12px;
+  min-height: 12px;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font: 12px sans-serif;
+  font-weight: 900;
+  user-select: none;
+}
+
+.neuroglancer-annotation-property-cell-icon-wrapper svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+  fill: transparent;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
