@@ -74,10 +74,7 @@
 
 /* Div at the top which contains the close */
 .neuroglancer-screenshot-header {
-  display: flex;
-  align-items: center;
   padding: 1.5rem 1rem;
-  gap: 10px;
 }
 
 /* Filename input menu */
