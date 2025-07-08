@@ -27,7 +27,6 @@ import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
-import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
