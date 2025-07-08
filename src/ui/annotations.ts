@@ -1947,12 +1947,31 @@ export function UserLayerWithAnnotationsMixin<
                       annotationLayer.source.commit(reference);
                     };
                   valueElement = document.createElement("span");
-                  labelElementSetter = (value) => {
+                  labelElementSetter = (color) => {
                     const label = document.createElement("span");
-                    label.textContent = value;
+                    label.textContent = formatColor(color);
                     label.style.textTransform = "uppercase";
                     return label;
                   };
+
+                  const formatColor = (color: string): string => {
+                    if (color.startsWith('#')) {
+                      return color;
+                    }
+
+                    const rgbaMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)/i);
+                    if (!rgbaMatch) return color;
+
+                    const [_, r, g, b, a] = rgbaMatch;
+                    const hex = rgbToHex(parseInt(r), parseInt(g), parseInt(b));
+
+                    return a !== undefined ? `${hex} ${parseFloat(a).toFixed(1)}` : hex;
+                  };
+
+                  const rgbToHex = (r: number, g: number, b: number): string => {
+                    return `#${[r, g, b].map(v => Math.min(255, Math.max(0, v)).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+                  };
+
                   valueElementSetter = (value) => {
                     valueElement.textContent = value;
                   };
@@ -2001,8 +2020,8 @@ export function UserLayerWithAnnotationsMixin<
                   } else if (property.type === "rgba") {
                     const colorVec = unpackRGB(value);
                     if (sourceReadonly) {
-                      const hex = serializeColor(colorVec);
-                      const previewBox = createColorPreviewBox(hex);
+                      const hex = serializeColor(unpackRGBA(value));
+                      const previewBox = createColorPreviewBox(serializeColor(unpackRGB(value)));
                       
                       valueElement.appendChild(previewBox);
                       valueElement.appendChild(labelElementSetter(hex));
