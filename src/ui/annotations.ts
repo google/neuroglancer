@@ -19,6 +19,7 @@
  */
 
 import svg_help from "ikonate/icons/help.svg?raw";
+import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -1918,16 +1919,29 @@ export function UserLayerWithAnnotationsMixin<
                   const property = properties[i];
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
+
+                  const nameWrapper = document.createElement("span");
+                  nameWrapper.classList.add("neuroglancer-annotation-property-name-wrapper");
+                  label.appendChild(nameWrapper);
+
+                  const { description } = property;
+                  if (description !== undefined && description) {
+                    const iconWrapper = document.createElement("span");
+                    iconWrapper.classList.add(
+                      "neuroglancer-annotation-property-cell-icon-wrapper",
+                    );
+                    iconWrapper.innerHTML = svg_info;
+                    iconWrapper.title = description;
+                    nameWrapper.appendChild(iconWrapper);
+                  }
+
                   const idElement = document.createElement("span");
                   idElement.classList.add(
                     "neuroglancer-annotation-property-label",
                   );
                   idElement.textContent = property.identifier;
-                  label.appendChild(idElement);
-                  const { description } = property;
-                  if (description !== undefined) {
-                    label.title = description;
-                  }
+                  nameWrapper.appendChild(idElement);
+
                   const value = annotation.properties[i];
                   const valueElementWrapper = document.createElement("div");
                   let valueElement: HTMLElement;
