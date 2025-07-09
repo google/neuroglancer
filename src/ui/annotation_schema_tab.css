@@ -244,7 +244,7 @@
 .neuroglancer-annotation-schema-enum-entry textarea {
   height: auto;
   field-sizing: content;
-  max-width: 66px;
+  max-width: 5.75rem;
   resize: none;
 }
 
