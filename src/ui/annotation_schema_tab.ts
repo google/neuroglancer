@@ -27,11 +27,9 @@ import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
-import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
-  AnnotationColorPropertySpec,
   AnnotationNumericPropertySpec,
   AnnotationPropertySpec,
   LocalAnnotationSource,
@@ -59,6 +57,7 @@ import {
   UserLayerWithAnnotations,
   isBooleanType,
   isEnumType,
+  appendDescriptionIcon
 } from "#src/ui/annotations.js";
 import {
   packColor,
@@ -73,8 +72,9 @@ import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { FramedDialog, } from "#src/overlay.js";
+import { FramedDialog } from "#src/overlay.js";
 import { arraysEqual } from "#src/util/array.js";
+import { defaultDataTypeRange } from "#src/util/lerp.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -107,9 +107,25 @@ interface NumberConfig {
   step?: number;
 }
 
+function getCssStyle(element: HTMLElement, prop: string): string {
+  return window.getComputedStyle(element, null).getPropertyValue(prop);
+}
+
+function getCanvasFont(el = document.body) {
+  const fontWeight = getCssStyle(el, "font-weight") || "normal";
+  const fontSize = getCssStyle(el, "font-size") || "13px";
+  const fontFamily = getCssStyle(el, "font-family") || "Sans-serif";
+
+  return `${fontWeight} ${fontSize} ${fontFamily}`;
+}
+
 class AnnotationDescriptionEditDialog extends FramedDialog {
   constructor(parent: AnnotationUIProperty) {
-    super("Edit Description", "Discard changes", "neuroglancer-annotation-description-editor");
+    super(
+      "Edit Description",
+      "Discard changes",
+      "neuroglancer-annotation-description-editor",
+    );
 
     const textInputElement = document.createElement("textarea");
     textInputElement.classList.add(
@@ -121,15 +137,14 @@ class AnnotationDescriptionEditDialog extends FramedDialog {
     this.body.appendChild(textInputElement);
 
     const saveButton = document.createElement("button");
-    saveButton.classList.add("neuroglancer-annotation-description-editor-save-button");
+    saveButton.classList.add(
+      "neuroglancer-annotation-description-editor-save-button",
+    );
     saveButton.textContent = "Save & close";
     saveButton.addEventListener("click", () => {
       const newDescription = textInputElement.value.trim();
       if (newDescription !== parent.spec.description && newDescription !== "") {
-        parent.updateProperty(parent.spec, {
-          ...parent.spec,
-          description: newDescription,
-        } as AnnotationPropertySpec);
+        parent.updateProperty(parent.spec, { description: newDescription });
       }
       this.close();
     });
@@ -168,19 +183,16 @@ class AnnotationUIProperty extends RefCounted {
       console.warn(`Property with name ${oldIdentifier} not found.`);
       return;
     }
-    this.updateProperty(oldProperty, {
-      ...oldProperty,
-      identifier: newIdentifier,
-    });
+    this.updateProperty(oldProperty, { identifier: newIdentifier });
   }
   private getPropertyByIdentifier(
     identifier: string,
   ): AnnotationPropertySpec | undefined {
     return this.parentView.getPropertyByIdentifier(identifier);
   }
-  public updateProperty<T extends AnnotationPropertySpec>(
-    oldProperty: T,
-    newProperty: T,
+  public updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newProperty: Partial<AnnotationPropertySpec>,
   ) {
     this.parentView.updateProperty(oldProperty, newProperty);
   }
@@ -248,7 +260,7 @@ class AnnotationUIProperty extends RefCounted {
       });
       const descriptionCell = this.createTableCell(
         descriptionIcon,
-        "neuroglancer-annotation-schema-description-cell"
+        "neuroglancer-annotation-schema-description-cell",
       );
       element.appendChild(descriptionCell);
       const deleteIcon = document.createElement("span");
@@ -283,12 +295,7 @@ class AnnotationUIProperty extends RefCounted {
     const cell = this.createTableCell(document.createElement("div"), "");
 
     if (description) {
-      const iconWrapper = document.createElement("span");
-      iconWrapper.classList.add(
-        "neuroglancer-annotation-schema-cell-icon-wrapper",
-      );
-      iconWrapper.innerHTML = svg_info;
-      iconWrapper.title = description
+      const iconWrapper = appendDescriptionIcon(description);
       cell.appendChild(iconWrapper);
     }
     cell.appendChild(nameInput);
@@ -343,6 +350,28 @@ class AnnotationUIProperty extends RefCounted {
     return typeCell;
   }
 
+  private suggestEnumValue = (
+    inputValues: number[],
+    bounds: [number, number],
+    startingValue = 0,
+    direction: "up" | "down" = "up",
+  ) => {
+    let suggestedEnumValue = startingValue;
+    let wrapped = false;
+    while (inputValues.includes(suggestedEnumValue)) {
+      const increment = direction === "up" ? 1 : -1;
+      suggestedEnumValue += increment;
+      if (suggestedEnumValue > bounds[1]) {
+        if (wrapped) {
+          throw new Error("No more unique values available in the enum.");
+        }
+        suggestedEnumValue = bounds[0]; // Wrap around to the lower bound if we exceed the upper bound
+        wrapped = true;
+      }
+    }
+    return suggestedEnumValue;
+  };
+
   private createDefaultValueCell(
     identifier: string,
     type: AnnotationUIType,
@@ -374,10 +403,7 @@ class AnnotationUIProperty extends RefCounted {
       inputs.push(colorInput.element);
       changeFunction = () => {
         const newColor = colorInput.getRGB();
-        this.updateProperty(oldProperty, {
-          ...oldProperty,
-          default: packColor(newColor),
-        } as AnnotationColorPropertySpec);
+        this.updateProperty(oldProperty, { default: packColor(newColor) });
       };
       if (type === "rgba") {
         const alpha = unpackRGBA(oldProperty.default)[3];
@@ -401,10 +427,7 @@ class AnnotationUIProperty extends RefCounted {
             newColor[2],
             newAlpha,
           );
-          this.updateProperty(oldProperty, {
-            ...oldProperty,
-            default: packColor(colorVec),
-          } as AnnotationColorPropertySpec);
+          this.updateProperty(oldProperty, { default: packColor(colorVec) });
         };
       }
     } else if (type === "bool") {
@@ -418,10 +441,7 @@ class AnnotationUIProperty extends RefCounted {
       inputs.push(boolInput);
       changeFunction = (event: Event) => {
         const newValue = (event.target as HTMLInputElement).checked;
-        this.updateProperty(oldProperty, {
-          ...oldProperty,
-          default: newValue ? 1 : 0,
-        } as AnnotationPropertySpec);
+        this.updateProperty(oldProperty, { default: newValue ? 1 : 0 });
       };
       container.appendChild(boolInput);
     } else if (
@@ -448,14 +468,12 @@ class AnnotationUIProperty extends RefCounted {
         numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
         inputs.push(numberInput);
         changeFunction = (event: Event) => {
-          const newValue = (event.target as HTMLInputElement).value;
-          this.updateProperty(oldProperty, {
-            ...oldProperty,
-            default:
-              dataType === DataType.FLOAT32
-                ? parseFloat(newValue)
-                : parseInt(newValue, 10),
-          } as AnnotationNumericPropertySpec);
+          const newInputValue = (event.target as HTMLInputElement).value;
+          const newValue =
+            dataType === DataType.FLOAT32
+              ? parseFloat(newInputValue)
+              : parseInt(newInputValue, 10);
+          this.updateProperty(oldProperty, { default: newValue });
         };
       } else {
         const enumContainer = document.createElement("div");
@@ -463,6 +481,8 @@ class AnnotationUIProperty extends RefCounted {
         let addEnumButton: HTMLElement | null = null;
         isEnum = true;
         if (!this.readonly) {
+          const dataType = propertyTypeDataType[type as AnnotationType];
+          const bounds = defaultDataTypeRange[dataType!] as [number, number];
           addEnumButton = makeAddButton({
             title: "Add new enum option",
             onClick: () => {
@@ -470,13 +490,12 @@ class AnnotationUIProperty extends RefCounted {
                 identifier,
               ) as AnnotationNumericPropertySpec;
               const currentEnumValues = currentProperty.enumValues!;
-              let suggestedEnumValue = 0;
-              while (currentEnumValues.includes(suggestedEnumValue)) {
-                ++suggestedEnumValue;
-              }
+              const suggestedEnumValue = this.suggestEnumValue(
+                currentEnumValues,
+                bounds,
+              );
               const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
               this.updateProperty(currentProperty, {
-                ...currentProperty,
                 enumValues: newEnumValues,
                 enumLabels: [
                   ...currentProperty.enumLabels!,
@@ -498,9 +517,6 @@ class AnnotationUIProperty extends RefCounted {
           const enumRow = document.createElement("div");
           enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
-          // TODO ideally this could maybe stop you from adding the same enum value
-          // But neuroglancer doesn't crash if you do, so for now we trust the
-          // user input
           const nameInput = this.createInputElement({
             type: "text",
             inputValue: label,
@@ -512,11 +528,10 @@ class AnnotationUIProperty extends RefCounted {
             nameInput.addEventListener("change", (event) => {
               const newLabel = (event.target as HTMLInputElement).value;
               this.updateProperty(oldProperty, {
-                ...oldProperty,
                 enumLabels: oldProperty.enumLabels!.map((l, i) =>
                   i === enumIndex ? newLabel : l,
                 ),
-              } as AnnotationNumericPropertySpec);
+              });
             });
           }
 
@@ -534,21 +549,36 @@ class AnnotationUIProperty extends RefCounted {
           );
           valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
           if (!this.readonly) {
+            const dataType = propertyTypeDataType[annotationType];
+            const bounds = defaultDataTypeRange[dataType!] as [number, number];
+            let lastValue = value;
             valueInput.addEventListener("change", (event) => {
               const inputValue = (event.target as HTMLInputElement).value;
-              const newValue =
+              let newValue =
                 type === "float32"
                   ? parseFloat(inputValue)
                   : parseInt(inputValue, 10);
+              const direction = newValue > lastValue ? "up" : "down";
               const currentProperty = this.getPropertyByIdentifier(
                 identifier,
               ) as AnnotationNumericPropertySpec;
+              const currentEnumValues = currentProperty.enumValues!;
+              newValue = this.suggestEnumValue(
+                currentEnumValues,
+                bounds,
+                newValue,
+                direction,
+              );
+              lastValue = newValue;
+              (event.target as HTMLInputElement).value = numberToStringFixed(
+                newValue,
+                4,
+              );
               this.updateProperty(currentProperty, {
-                ...currentProperty,
-                enumValues: currentProperty.enumValues!.map((v, i) =>
+                enumValues: currentEnumValues.map((v, i) =>
                   i === enumIndex ? newValue : v,
                 ),
-              } as AnnotationNumericPropertySpec);
+              });
             });
           }
 
@@ -574,10 +604,9 @@ class AnnotationUIProperty extends RefCounted {
               );
 
               this.updateProperty(currentProperty, {
-                ...currentProperty,
                 enumValues: newEnumValues,
                 enumLabels: newEnumLabels,
-              } as AnnotationNumericPropertySpec);
+              });
             });
             enumRow.appendChild(deleteIcon);
             enumContainer.insertBefore(enumRow, addEnumButton);
@@ -715,6 +744,41 @@ class AnnotationUIProperty extends RefCounted {
         textarea.blur();
       }
     });
+
+    const calculateRows = (content: string): number => {
+      const minRows = 1;
+      const maxRows = 5;
+
+      if (!content) return minRows;
+
+      const lines = content.split("\n");
+      let totalRows = 0;
+
+      const font = getCanvasFont(textarea);
+      const padding = getCssStyle(textarea, "padding");
+      const textareaWidth =
+        (textarea.clientWidth || 300) - (parseFloat(padding) || 0) * 2;
+      lines.forEach((line) => {
+        const lineTextWidth = this.parentView.getTextWidth(line, font);
+        totalRows += Math.max(Math.ceil(lineTextWidth / textareaWidth), 1);
+      });
+
+      return Math.max(minRows, Math.min(maxRows, totalRows));
+    };
+
+    const updateTextareaRows = () => {
+      const content = textarea.value;
+      textarea.rows = calculateRows(content);
+    };
+    const debouncedUpdateTextareaSize =
+      animationFrameDebounce(updateTextareaRows);
+
+    textarea.addEventListener("input", debouncedUpdateTextareaSize);
+    const resizeObserver = new ResizeObserver(() => {
+      debouncedUpdateTextareaSize();
+    });
+    resizeObserver.observe(textarea);
+    debouncedUpdateTextareaSize();
 
     return textarea;
   }
@@ -878,7 +942,6 @@ class AnnotationUIProperty extends RefCounted {
 
     this.typeChanged.dispatch();
     this.updateProperty(oldProperty, {
-      ...oldProperty,
       type: newType,
       default: defaultValue,
     });
@@ -899,6 +962,7 @@ export class AnnotationSchemaView extends Tab {
   private defaultValueHeaderCell: HTMLDivElement | null = null;
   public annotationUIProperties: Map<string, AnnotationUIProperty> = new Map();
   public readonly: WatchableValueInterface<boolean>;
+  public textWidthCanvas: HTMLCanvasElement | null = null;
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -924,6 +988,28 @@ export class AnnotationSchemaView extends Tab {
         this.updateOnReadonlyChange();
       }),
     );
+  }
+
+  /**
+   * Uses canvas.measureText to compute and return the width of the given text of given font in pixels.
+   *
+   * @param {String} text The text to be rendered.
+   * @param {String} font The css font descriptor that text is to be rendered with (e.g. "bold 14px verdana").
+   *
+   * @see https://stackoverflow.com/questions/118241/calculate-text-width-with-javascript/21015393#21015393
+   */
+  getTextWidth(text: string, font: string): number {
+    if (this.textWidthCanvas === null) {
+      this.textWidthCanvas = document.createElement("canvas");
+    }
+    const context = this.textWidthCanvas.getContext("2d");
+    if (context === null) {
+      const avgCharWidth = 8; // Fallback average character width
+      return text.length * avgCharWidth;
+    }
+    context.font = font;
+    const metrics = context.measureText(text);
+    return metrics.width;
   }
 
   private updateOnReadonlyChange = () => {
@@ -1250,7 +1336,7 @@ export class AnnotationSchemaView extends Tab {
         dropdown.style.top = `${rect.bottom + window.scrollY}px`;
       } else {
         // Not enough space - position above
-        dropdown.style.top = `${(rect.top + window.scrollY - dropdownHeight) - 10}px`;
+        dropdown.style.top = `${rect.top + window.scrollY - dropdownHeight - 10}px`;
       }
 
       dropdown.style.left = `${rect.left}px`;
@@ -1404,12 +1490,12 @@ export class AnnotationSchemaView extends Tab {
     this.annotationStates.changed.dispatch();
   }
 
-  updateProperty<T extends AnnotationPropertySpec>(
-    oldProperty: T,
-    newProperty: T,
+  updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newPropertyValues: Partial<AnnotationPropertySpec>,
   ) {
     this.mutableSources.forEach((s) => {
-      s.updateProperty(oldProperty, newProperty);
+      s.updateProperty(oldProperty, newPropertyValues);
     });
     this.annotationStates.changed.dispatch();
   }

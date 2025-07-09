@@ -19,6 +19,7 @@
  */
 
 import svg_help from "ikonate/icons/help.svg?raw";
+import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -84,7 +85,6 @@ import {
   serializeColor,
   unpackRGB,
   unpackRGBA,
-  useWhiteBackground,
 } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
@@ -116,6 +116,7 @@ import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { nearlyEqual } from "#src/util/number.js";
 
 export function isBooleanType(enumLabels?: string[]): boolean {
   return (
@@ -127,6 +128,15 @@ export function isBooleanType(enumLabels?: string[]): boolean {
 }
 export function isEnumType(enumLabels?: string[]): boolean {
   return (enumLabels && enumLabels.length > 0) || false;
+}
+
+export function appendDescriptionIcon(description: string) {
+  const iconWrapper = document.createElement("span");
+  iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
+  iconWrapper.innerHTML = svg_info;
+  iconWrapper.title = description;
+
+  return iconWrapper;
 }
 
 export class MergedAnnotationStates
@@ -1442,8 +1452,11 @@ function makeRelatedSegmentList(
       if (segmentationDisplayState != null) {
         headerCheckbox = document.createElement("input");
         headerCheckbox.type = "checkbox";
-        headerCheckbox.classList.add("neuroglancer-related-segment-list-header-checkbox");
-        headerCheckbox.name = "neuroglancer-related-segment-list-header-checkbox"
+        headerCheckbox.classList.add(
+          "neuroglancer-related-segment-list-header-checkbox",
+        );
+        headerCheckbox.name =
+          "neuroglancer-related-segment-list-header-checkbox";
         headerCheckbox.addEventListener("change", () => {
           const { visibleSegments } =
             segmentationDisplayState.segmentationGroupState.value;
@@ -1796,6 +1809,7 @@ export function UserLayerWithAnnotationsMixin<
                     annotation === null ? "Annotation not found" : "Loading...";
                 }
               }
+
               if (annotation != null) {
                 const layerRank =
                   chunkTransform.error === undefined
@@ -1892,39 +1906,54 @@ export function UserLayerWithAnnotationsMixin<
 
                 // Add the ID to the annotation details.
                 const label = document.createElement("div");
-                label.classList.add("neuroglancer-annotation-property", "neuroglancer-annotation-property-id");
+                label.classList.add(
+                  "neuroglancer-annotation-property",
+                  "neuroglancer-annotation-property-id",
+                );
                 const idElement = document.createElement("span");
                 idElement.classList.add(
                   "neuroglancer-annotation-property-label",
                 );
                 idElement.textContent = "ID";
                 label.appendChild(idElement);
-                const valueElement = document.createElement("span");
-                valueElement.classList.add(
+                const idValueElement = document.createElement("span");
+                idValueElement.classList.add(
                   "neuroglancer-annotation-property-value",
                 );
-                valueElement.textContent = reference.id;
-                label.appendChild(valueElement);
+                idValueElement.textContent = reference.id;
+                label.appendChild(idValueElement);
                 parent.appendChild(label);
 
                 for (let i = 0, count = properties.length; i < count; ++i) {
                   const property = properties[i];
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
+
+                  const nameWrapper = document.createElement("span");
+                  nameWrapper.classList.add(
+                    "neuroglancer-annotation-property-name-wrapper",
+                  );
+                  label.appendChild(nameWrapper);
+
+                  const { description } = property;
+                  if (description) {
+                    const iconWrapper = appendDescriptionIcon(description);
+                    nameWrapper.appendChild(iconWrapper);
+                  }
+
                   const idElement = document.createElement("span");
                   idElement.classList.add(
                     "neuroglancer-annotation-property-label",
                   );
                   idElement.textContent = property.identifier;
-                  label.appendChild(idElement);
-                  const { description } = property;
-                  if (description !== undefined) {
-                    label.title = description;
-                  }
+                  nameWrapper.appendChild(idElement);
+
                   const value = annotation.properties[i];
                   const valueElementWrapper = document.createElement("div");
-                  let valueElement: HTMLElement;
-                  let valueElementSetter: (value: any) => void;
+                  let valueElement: HTMLElement =
+                    document.createElement("span");
+                  // Just in case the frontend does not properly prevent
+                  // the user from editing read-only properties.
                   const changeFunction = sourceReadonly
                     ? (inputValue: any) => {
                         inputValue;
@@ -1938,11 +1967,10 @@ export function UserLayerWithAnnotationsMixin<
                         annotationLayer.source.update(reference, newAnnotation);
                         annotationLayer.source.commit(reference);
                       };
-                  valueElement = document.createElement("span");
-                  valueElementSetter = (value) => {
-                    valueElement.textContent = value;
-                  };
-                  valueElementWrapper.classList.add("neuroglancer-annotation-property-value-wrapper");
+
+                  valueElementWrapper.classList.add(
+                    "neuroglancer-annotation-property-value-wrapper",
+                  );
                   valueElement.classList.add(
                     "neuroglancer-annotation-property-value",
                   );
@@ -1955,71 +1983,89 @@ export function UserLayerWithAnnotationsMixin<
                     );
                     return colorInput;
                   };
-                  if (property.type === "rgb") {
+
+                  const createColorPreviewBox = (hexColor: string) => {
+                    const previewBox = document.createElement("div");
+                    const colorSwatch = document.createElement("span");
+
+                    colorSwatch.style.background = hexColor;
+                    previewBox.appendChild(colorSwatch);
+                    previewBox.className =
+                      "neuroglancer-annotation-property-color-readable";
+
+                    return previewBox;
+                  };
+
+                  if (property.type.startsWith("rgb")) {
+                    // TODO this is messy, Sean to refactor.
                     const colorVec = unpackRGB(value);
+                    const hex = serializeColor(colorVec);
+                    let colorInput: ColorWidget | undefined;
                     if (sourceReadonly) {
-                      const hex = serializeColor(colorVec);
-                      valueElementSetter(hex);
-                      valueElement.style.backgroundColor = hex;
-                      valueElement.style.color = useWhiteBackground(colorVec)
-                        ? "white"
-                        : "black";
+                      let previewBox: HTMLElement;
+
+                      const textLabel = document.createElement("span");
+                      if (property.type === "rgb") {
+                        previewBox = createColorPreviewBox(hex);
+                        textLabel.textContent = hex.toUpperCase();
+                      } else {
+                        const fullHex = serializeColor(unpackRGBA(value));
+                        previewBox = createColorPreviewBox(fullHex);
+                        textLabel.textContent = fullHex.toUpperCase();
+                      }
+                      valueElement.appendChild(previewBox);
+                      valueElement.appendChild(textLabel);
                     } else {
-                      const colorInput = makeColorWidget(colorVec);
-                      colorInput.element.addEventListener("change", () => {
-                        changeFunction(packColor(colorInput.getRGB()));
-                      });
-                      valueElement = colorInput.element;
+                      colorInput = makeColorWidget(colorVec);
+                      if (property.type === "rgb") {
+                        colorInput.element.addEventListener("change", () => {
+                          changeFunction(packColor(colorInput!.getRGB()));
+                        });
+                        valueElement = colorInput.element;
+                      }
                     }
-                  } else if (property.type === "rgba") {
-                    const colorVec = unpackRGB(value);
-                    if (sourceReadonly) {
-                      valueElementSetter(serializeColor(unpackRGBA(value)));
-                      valueElement.style.backgroundColor = serializeColor(
-                        unpackRGB(value),
-                      );
-                      valueElement.style.color = useWhiteBackground(colorVec)
-                        ? "white"
-                        : "black";
-                    } else {
-                      const colorInput = makeColorWidget(colorVec);
-                      const alpha = unpackRGBA(value)[3];
-                      const alphaInput = createBoundedNumberInputElement(
-                        {
-                          inputValue: alpha,
-                        },
-                        {
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                        },
-                      );
-                      alphaInput.classList.add("neuroglancer-annotation-property-value-input")
-                      alphaInput.name = `neuroglancer-annotation-property-color-value-${i}`;
-                      const rgbaContainer = document.createElement("div");
-                      rgbaContainer.classList.add(
-                        "neuroglancer-annotation-property-container",
-                      );
-                      rgbaContainer.appendChild(colorInput.element);
-                      rgbaContainer.appendChild(alphaInput);
-                      valueElement = rgbaContainer;
-                      const rgbaChangeFunction = () => {
-                        const rgb = colorInput.getRGB();
-                        const alpha = alphaInput.valueAsNumber;
-                        const colorVec = vec4.fromValues(
-                          rgb[0],
-                          rgb[1],
-                          rgb[2],
-                          alpha,
+                    if (property.type === "rgba") {
+                      if (!sourceReadonly) {
+                        const alpha = unpackRGBA(value)[3];
+                        const alphaInput = createBoundedNumberInputElement(
+                          {
+                            inputValue: alpha,
+                          },
+                          {
+                            min: 0,
+                            max: 1,
+                            step: 0.01,
+                          },
                         );
-                        changeFunction(packColor(colorVec));
-                      };
-                      colorInput.element.addEventListener("change", () =>
-                        rgbaChangeFunction(),
-                      );
-                      alphaInput.addEventListener("change", () =>
-                        rgbaChangeFunction(),
-                      );
+                        alphaInput.classList.add(
+                          "neuroglancer-annotation-property-value-input",
+                        );
+                        alphaInput.name = `neuroglancer-annotation-property-color-value-${i}`;
+                        const rgbaContainer = document.createElement("div");
+                        rgbaContainer.classList.add(
+                          "neuroglancer-annotation-property-container",
+                        );
+                        rgbaContainer.appendChild(colorInput!.element);
+                        rgbaContainer.appendChild(alphaInput);
+                        valueElement = rgbaContainer;
+                        const rgbaChangeFunction = () => {
+                          const rgb = colorInput!.getRGB();
+                          const alpha = alphaInput.valueAsNumber;
+                          const colorVec = vec4.fromValues(
+                            rgb[0],
+                            rgb[1],
+                            rgb[2],
+                            alpha,
+                          );
+                          changeFunction(packColor(colorVec));
+                        };
+                        colorInput!.element.addEventListener("change", () =>
+                          rgbaChangeFunction(),
+                        );
+                        alphaInput.addEventListener("change", () =>
+                          rgbaChangeFunction(),
+                        );
+                      }
                     }
                   } else {
                     if (sourceReadonly) {
@@ -2027,7 +2073,7 @@ export function UserLayerWithAnnotationsMixin<
                         property as AnnotationNumericPropertySpec,
                         value,
                       );
-                      valueElementSetter(valueToSet);
+                      valueElement.textContent = valueToSet;
                     } else {
                       const propertyAsNum =
                         property as AnnotationNumericPropertySpec;
@@ -2036,7 +2082,7 @@ export function UserLayerWithAnnotationsMixin<
                       if (isBool) {
                         const input = document.createElement("input");
                         input.type = "checkbox";
-                        input.name = `neuroglancer-annotation-property-value-checkbox-${i}`
+                        input.name = `neuroglancer-annotation-property-value-checkbox-${i}`;
                         input.checked = Boolean(value);
                         input.addEventListener("change", () => {
                           changeFunction(input.checked ? 1 : 0);
@@ -2046,18 +2092,32 @@ export function UserLayerWithAnnotationsMixin<
                       } else if (isEnum) {
                         // Make a dropdown which combines the enum labels and values.
                         const options = [];
+                        let optionsHasDefault = false;
                         for (
                           let j = 0;
                           j < propertyAsNum.enumLabels!.length;
                           ++j
                         ) {
+                          const optionValue = propertyAsNum.enumValues![j];
+                          if (nearlyEqual(optionValue, value)) {
+                            optionsHasDefault = true;
+                          }
                           options.push({
                             label: propertyAsNum.enumLabels![j],
-                            value: propertyAsNum.enumValues![j],
+                            value: optionValue,
                           });
                         }
+                        // We need to check if the current value is in the enum values.
+                        // Otherwise we need to add it as an option.
+                        if (!optionsHasDefault) {
+                          options.unshift({
+                            label: `Non-schema value`,
+                            value: value,
+                          });
+                        }
+
                         const select = document.createElement("select");
-                        select.name = `neuroglancer-annotation-property-select-${i}`
+                        select.name = `neuroglancer-annotation-property-select-${i}`;
                         select.classList.add(
                           "neuroglancer-annotation-property-select",
                         );
@@ -2082,8 +2142,10 @@ export function UserLayerWithAnnotationsMixin<
                             dataType: propertyTypeDataType[propertyAsNum.type],
                           },
                         );
-                        input.classList.add("neuroglancer-annotation-property-value-input")
-                        input.name = `neuroglancer-annotation-property-value-input-${i}`
+                        input.classList.add(
+                          "neuroglancer-annotation-property-value-input",
+                        );
+                        input.name = `neuroglancer-annotation-property-value-input-${i}`;
                         valueElement = input;
                         valueElement.addEventListener("change", () => {
                           const inputValue = input.valueAsNumber;

@@ -58,24 +58,6 @@ export function createBoundedNumberInputElement(
         }
       }
     });
-
-    input.addEventListener("wheel", (event: WheelEvent) => {
-      const deltaY = event.deltaY;
-      if (deltaY === 0) return; // No change
-      const dataType = numberConfig.dataType;
-      let currentValue = parseFloat(input.value);
-      if (dataType !== DataType.FLOAT32 && dataType !== undefined) {
-        currentValue = parseInt(input.value, 10);
-      }
-      const newValue = deltaY < 0 ? currentValue + step : currentValue - step;
-      // If you are at the min or max and try to scroll further
-      const oldValue = parseFloat(input.value);
-      if (oldValue === max && deltaY < 0) return;
-      if (oldValue === min && deltaY > 0) return;
-      input.value = String(newValue);
-      const changeEvent = new Event("change", { bubbles: true });
-      input.dispatchEvent(changeEvent);
-    });
   }
   input.type = "number";
   input.value = numberToStringFixed(
