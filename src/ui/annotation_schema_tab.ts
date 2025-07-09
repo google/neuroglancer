@@ -477,7 +477,7 @@ class AnnotationUIProperty extends RefCounted {
         };
       } else {
         const enumContainer = document.createElement("div");
-        enumContainer.className = "enum-container";
+        enumContainer.className = "neuroglancer-annotation-schema-enum-container";
         let addEnumButton: HTMLElement | null = null;
         isEnum = true;
         if (!this.readonly) {

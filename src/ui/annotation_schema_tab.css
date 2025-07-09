@@ -40,6 +40,10 @@
   visibility: visible;
 }
 
+.neuroglancer-annotation-schema-enum-container {
+  width: 100%;
+}
+
 .neuroglancer-annotation-schema-enum-entry:hover
   .neuroglancer-annotation-schema-delete-icon {
   opacity: 1;
