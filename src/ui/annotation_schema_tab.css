@@ -245,11 +245,10 @@
   margin-bottom: 2px;
 }
 
-.neuroglancer-annotation-schema-enum-entry textarea {
+.neuroglancer-annotation-schema-enum-entry-textarea {
   height: auto;
-  padding: 0;
-  max-width: 5.75rem;
-  resize: none;
+  padding: 0 !important;
+  overflow-y: auto !important;
 }
 
 .neuroglancer-annotation-schema-name-input {

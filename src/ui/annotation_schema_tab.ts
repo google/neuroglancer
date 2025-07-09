@@ -513,6 +513,7 @@ class AnnotationUIProperty extends RefCounted {
             useTextarea: true,
           });
           nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`;
+          nameInput.classList.add("neuroglancer-annotation-schema-enum-entry-textarea");
           if (!this.readonly) {
             nameInput.addEventListener("change", (event) => {
               const newLabel = (event.target as HTMLInputElement).value;
@@ -677,7 +678,7 @@ class AnnotationUIProperty extends RefCounted {
     this.setCommonInputAttributes(textarea, config, readonly);
 
     textarea.style.minHeight = "1lh";
-    textarea.style.maxHeight = "10lh";
+    textarea.style.maxHeight = "15lh";
 
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -687,7 +688,7 @@ class AnnotationUIProperty extends RefCounted {
 
     const calculateRows = (): number => {
       const minRows = 1;
-      const maxRows = 10;
+      const maxRows = 15;
 
       const originalRows = textarea.rows;
       textarea.rows = 1;
