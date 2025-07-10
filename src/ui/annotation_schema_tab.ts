@@ -133,6 +133,7 @@ class AnnotationUIProperty extends RefCounted {
   private defaultValueElements: (HTMLInputElement | HTMLTextAreaElement)[] = [];
   private typeChangeDropdown: HTMLDivElement | null = null;
   private typeChanged = new NullarySignal();
+
   constructor(
     public spec: AnnotationPropertySpec,
     private parentView: AnnotationSchemaView,
@@ -142,16 +143,20 @@ class AnnotationUIProperty extends RefCounted {
     this.element.classList.add("neuroglancer-annotation-schema-row");
     this.makeUI();
   }
+
   get readonly() {
     return this.parentView.readonly.value;
   }
+
   public updateTableRowSize(hasEnums: boolean) {
     if (this.defaultValueCell === null) return;
     this.defaultValueCell.dataset.enums = String(hasEnums);
   }
+
   private removeProperty(indentifier: string) {
     this.parentView.removeProperty(indentifier);
   }
+
   private renameProperty(oldIdentifier: string, newIdentifier: string) {
     const oldProperty = this.getPropertyByIdentifier(oldIdentifier);
     if (oldProperty === undefined) {
@@ -160,38 +165,38 @@ class AnnotationUIProperty extends RefCounted {
     }
     this.updateProperty(oldProperty, { identifier: newIdentifier });
   }
+
   private getPropertyByIdentifier(
     identifier: string,
   ): AnnotationPropertySpec | undefined {
     return this.parentView.getPropertyByIdentifier(identifier);
   }
+
   public updateProperty(
     oldProperty: AnnotationPropertySpec,
     newProperty: Partial<AnnotationPropertySpec>,
   ) {
     this.parentView.updateProperty(oldProperty, newProperty);
   }
+
   private createTableCell(
     content: string | HTMLElement,
     className?: string,
   ): HTMLDivElement {
     return this.parentView.createTableCell(content, className);
   }
+
   private ensureUniquePropertyIdentifier(identifier: string) {
     return this.parentView.ensureUniquePropertyIdentifier(identifier);
   }
+
   private getDisplayNameForType(
     type: AnnotationUIType,
     enumLabels?: string[],
   ): string {
     return this.parentView.getDisplayNameForType(type, enumLabels);
   }
-  private getIconForType(
-    type: AnnotationUIType,
-    enumLabels?: string[],
-  ): string {
-    return this.parentView.getIconForType(type, enumLabels);
-  }
+
   public updateDefaultValue(defaultValue: number) {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
@@ -303,7 +308,7 @@ class AnnotationUIProperty extends RefCounted {
     enumLabels?: string[],
   ): HTMLDivElement {
     const typeText = this.createTypeTextElement(type, enumLabels);
-    const iconWrapper = this.createIconWrapper(type, enumLabels);
+    const iconWrapper = this.parentView.createIconWrapper(type, enumLabels);
     const typeCell = this.createTableCell(
       iconWrapper,
       "neuroglancer-annotation-schema-type-cell",
@@ -936,7 +941,7 @@ class AnnotationUIProperty extends RefCounted {
       const option = document.createElement("div");
       option.className = "neuroglancer-annotation-schema-dropdown-option";
 
-      const iconWrapper = this.createIconWrapper(newType);
+      const iconWrapper = this.parentView.createIconWrapper(newType);
       const label = document.createElement("span");
       label.textContent = this.getDisplayNameForType(newType);
 
@@ -951,18 +956,6 @@ class AnnotationUIProperty extends RefCounted {
       dropdown.appendChild(option);
     });
     this.typeChangeDropdown = dropdown;
-  }
-
-  private createIconWrapper(
-    type: AnnotationUIType,
-    enumLabels?: string[],
-  ): HTMLSpanElement {
-    const icon = makeIcon({
-      svg: this.getIconForType(type, enumLabels),
-      clickable: false,
-    });
-    icon.classList.add("neuroglancer-annotation-schema-type-icon");
-    return icon;
   }
 
   private positionDropdown(
@@ -1313,11 +1306,7 @@ export class AnnotationSchemaView extends Tab {
 
           const option = document.createElement("div");
           option.className = "neuroglancer-annotation-schema-dropdown-option";
-          const iconWrapper = document.createElement("span");
-          iconWrapper.classList.add(
-            "neuroglancer-annotation-schema-cell-icon-wrapper",
-          );
-          iconWrapper.innerHTML = this.getIconForType(type);
+          const iconWrapper = this.createIconWrapper(type, undefined, isEnum);
 
           const text = document.createElement("span");
           const displayName = this.getDisplayNameForType(type);
@@ -1431,6 +1420,19 @@ export class AnnotationSchemaView extends Tab {
     return type;
   }
 
+  createIconWrapper(
+    type: AnnotationUIType,
+    enumLabels?: string[],
+    isEnum?: boolean,
+  ): HTMLSpanElement {
+    const icon = makeIcon({
+      svg: this.getIconForType(type, enumLabels, isEnum),
+      clickable: false,
+    });
+    icon.classList.add("neuroglancer-annotation-schema-type-icon");
+    return icon;
+  }
+
   ensureUniquePropertyIdentifier(suggestedIdentifier: string) {
     const allProperties = this.schema;
     const initalName = suggestedIdentifier;
@@ -1452,10 +1454,14 @@ export class AnnotationSchemaView extends Tab {
     return "Other";
   }
 
-  getIconForType(type: AnnotationUIType, enumValues?: string[]): string {
+  getIconForType(
+    type: AnnotationUIType,
+    enumValues?: string[],
+    isEnum?: boolean,
+  ): string {
     const isBoolean = isBooleanType(enumValues);
     if (isBoolean || type === "bool") return svg_check;
-    if (isEnumType(enumValues)) return svg_format_size;
+    if (isEnum || isEnumType(enumValues)) return svg_format_size;
     if (isAnnotationTypeNumeric(type)) return svg_numbers;
     return svg_palette;
   }
