@@ -2099,7 +2099,7 @@ export function UserLayerWithAnnotationsMixin<
                           ++j
                         ) {
                           const optionValue = propertyAsNum.enumValues![j];
-                          if (nearlyEqual(optionValue, value)) {
+                          if (nearlyEqual(optionValue, value, 1e-3)) {
                             optionsHasDefault = true;
                           }
                           options.push({
