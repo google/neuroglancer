@@ -242,23 +242,6 @@
   margin-bottom: 2px;
 }
 
-.neuroglancer-annotation-textarea {
-  height: auto;
-  padding: 0;
-  min-height: 1lh;
-  max-height: 15lh;
-  line-height: 18px;
-  resize: none;
-  font-size: small;
-  overflow: hidden;
-}
-
-.neuroglancer-annotation-textarea[data-readonly="true"] {
-  background: none;
-  border: none;
-  outline: none;
-}
-
 .neuroglancer-annotation-schema-name-input {
   width: 100%;
   border-radius: 2px;
@@ -267,6 +250,7 @@
   border: 1px solid transparent;
   font-size: small;
   color: white;
+  font-family: sans-serif;
 }
 
 .neuroglancer-annotation-schema-name-input[data-readonly="false"]:hover {
