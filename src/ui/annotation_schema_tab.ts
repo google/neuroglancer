@@ -266,6 +266,7 @@ class AnnotationUIProperty extends RefCounted {
     const nameInput = this.createInputElement(identifier, {
       type: "text",
       className: "neuroglancer-annotation-schema-name-input",
+      useTextarea: true,
     });
     nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`;
     nameInput.dataset.readonly = String(this.readonly);
@@ -793,6 +794,7 @@ class AnnotationUIProperty extends RefCounted {
     const textarea = document.createElement("textarea");
     textarea.rows = 1;
     this.setCommonInputAttributes(inputValue, textarea, config, readonly);
+    textarea.classList.add("neuroglancer-annotation-schema-textarea");
 
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
