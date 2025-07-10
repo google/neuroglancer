@@ -266,6 +266,7 @@
   padding: 0;
   overflow-y: auto;
   min-height: 1lh;
+  max-height: 15lh;
   line-height: 18px;
 }
 
