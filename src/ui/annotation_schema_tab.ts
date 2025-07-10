@@ -19,16 +19,16 @@
  * See https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md
  */
 
-import svg_numbers from "ikonate/icons/hash.svg?raw";
-import svg_palette from "ikonate/icons/drop.svg?raw";
-import svg_check from "ikonate/icons/ok-circle.svg?raw";
-import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_bin from "ikonate/icons/bin.svg?raw";
+import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
-import svg_format_size from "ikonate/icons/text.svg?raw";
+import svg_palette from "ikonate/icons/drop.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
+import svg_numbers from "ikonate/icons/hash.svg?raw";
+import svg_check from "ikonate/icons/ok-circle.svg?raw";
+import svg_format_size from "ikonate/icons/text.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
-import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
+import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
   AnnotationNumericPropertySpec,
   AnnotationPropertySpec,
@@ -42,70 +42,55 @@ import {
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
+import { FramedDialog } from "#src/overlay.js";
+import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { RefCounted, type Borrowed } from "#src/util/disposable.js";
-import { stableStringify } from "#src/util/json.js";
-import { makeAddButton } from "#src/widget/add_button.js";
-import { makeCopyButton } from "#src/widget/copy_button.js";
-import { makeIcon } from "#src/widget/icon.js";
-import { Tab } from "#src/widget/tab_view.js";
-import { saveBlobToFile } from "#src/util/file_download.js";
-import { StatusMessage } from "#src/status.js";
-import { DataType } from "#src/util/data_type.js";
+import type {
+  AnnotationColorKey,
+  AnnotationPropertyType,
+} from "#src/ui/annotation_properties.js";
 import {
-  UserLayerWithAnnotations,
+  ANNOTATION_TYPES,
+  makeBoolCheckbox,
+  makeDescriptionIcon,
+  makeEditableColorProperty,
+  makeReadonlyColorProperty,
   isBooleanType,
   isEnumType,
-  appendDescriptionIcon,
-} from "#src/ui/annotations.js";
+} from "#src/ui/annotation_properties.js";
+import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
+import type { NumberDisplayConfig } from "#src/ui/bounded_number_input.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { arraysEqual } from "#src/util/array.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import {
   packColor,
   serializeColor,
   unpackRGB,
   unpackRGBA,
 } from "#src/util/color.js";
-import { vec3, vec4 } from "#src/util/geom.js";
-import { ColorWidget } from "#src/widget/color.js";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted, type Borrowed } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
-import { NullarySignal } from "#src/util/signal.js";
-import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
-import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { FramedDialog } from "#src/overlay.js";
-import { arraysEqual } from "#src/util/array.js";
+import { saveBlobToFile } from "#src/util/file_download.js";
+import { vec3, vec4 } from "#src/util/geom.js";
+import { stableStringify } from "#src/util/json.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
-import { setClipboard } from "#src/util/clipboard.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { NullarySignal } from "#src/util/signal.js";
+import { makeAddButton } from "#src/widget/add_button.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { makeIcon } from "#src/widget/icon.js";
+import { Tab } from "#src/widget/tab_view.js";
 
-const ANNOTATION_TYPES: AnnotationType[] = [
-  "rgb",
-  "rgba",
-  "float32",
-  "int8",
-  "int16",
-  "int32",
-  "uint8",
-  "uint16",
-  "uint32",
-];
 const ANNOTATION_UI_TYPES: AnnotationUIType[] = ["bool", ...ANNOTATION_TYPES];
+type AnnotationUIType = AnnotationPropertyType | "bool";
 
-type AnnotationType = AnnotationPropertySpec["type"];
-type AnnotationUIType = AnnotationType | "bool";
-
-interface InputConfig {
+interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
-  inputValue?: number | string;
-  className?: string;
-  decimals?: number; // For number inputs, how many decimals to show
   useTextarea?: boolean;
-}
-
-interface NumberConfig {
-  dataType?: DataType;
-  min?: number;
-  max?: number;
-  step?: number;
 }
 
 class AnnotationDescriptionEditDialog extends FramedDialog {
@@ -147,6 +132,7 @@ class AnnotationUIProperty extends RefCounted {
   private defaultValueElements: (HTMLInputElement | HTMLTextAreaElement)[] = [];
   private typeChangeDropdown: HTMLDivElement | null = null;
   private typeChanged = new NullarySignal();
+
   constructor(
     public spec: AnnotationPropertySpec,
     private parentView: AnnotationSchemaView,
@@ -156,16 +142,20 @@ class AnnotationUIProperty extends RefCounted {
     this.element.classList.add("neuroglancer-annotation-schema-row");
     this.makeUI();
   }
+
   get readonly() {
     return this.parentView.readonly.value;
   }
+
   public updateTableRowSize(hasEnums: boolean) {
     if (this.defaultValueCell === null) return;
     this.defaultValueCell.dataset.enums = String(hasEnums);
   }
+
   private removeProperty(indentifier: string) {
     this.parentView.removeProperty(indentifier);
   }
+
   private renameProperty(oldIdentifier: string, newIdentifier: string) {
     const oldProperty = this.getPropertyByIdentifier(oldIdentifier);
     if (oldProperty === undefined) {
@@ -174,38 +164,38 @@ class AnnotationUIProperty extends RefCounted {
     }
     this.updateProperty(oldProperty, { identifier: newIdentifier });
   }
+
   private getPropertyByIdentifier(
     identifier: string,
   ): AnnotationPropertySpec | undefined {
     return this.parentView.getPropertyByIdentifier(identifier);
   }
+
   public updateProperty(
     oldProperty: AnnotationPropertySpec,
     newProperty: Partial<AnnotationPropertySpec>,
   ) {
     this.parentView.updateProperty(oldProperty, newProperty);
   }
+
   private createTableCell(
     content: string | HTMLElement,
     className?: string,
   ): HTMLDivElement {
     return this.parentView.createTableCell(content, className);
   }
+
   private ensureUniquePropertyIdentifier(identifier: string) {
     return this.parentView.ensureUniquePropertyIdentifier(identifier);
   }
+
   private getDisplayNameForType(
     type: AnnotationUIType,
     enumLabels?: string[],
   ): string {
     return this.parentView.getDisplayNameForType(type, enumLabels);
   }
-  private getIconForType(
-    type: AnnotationUIType,
-    enumLabels?: string[],
-  ): string {
-    return this.parentView.getIconForType(type, enumLabels);
-  }
+
   public updateDefaultValue(defaultValue: number) {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
@@ -240,15 +230,15 @@ class AnnotationUIProperty extends RefCounted {
 
     if (!readonly) {
       // Add a little icon to the right of the input that lets you change the description
-      const descriptionIcon = makeIcon({
+      const descriptionEditIcon = makeIcon({
         svg: svg_edit,
         title: "Change description",
       });
-      this.registerEventListener(descriptionIcon, "click", () => {
+      this.registerEventListener(descriptionEditIcon, "click", () => {
         new AnnotationDescriptionEditDialog(this);
       });
       const descriptionCell = this.createTableCell(
-        descriptionIcon,
+        descriptionEditIcon,
         "neuroglancer-annotation-schema-description-cell",
       );
       element.appendChild(descriptionCell);
@@ -273,9 +263,8 @@ class AnnotationUIProperty extends RefCounted {
     identifier: string,
     description?: string,
   ): HTMLDivElement {
-    const nameInput = this.createInputElement({
+    const nameInput = this.createInputElement(identifier, {
       type: "text",
-      inputValue: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
     nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`;
@@ -284,7 +273,7 @@ class AnnotationUIProperty extends RefCounted {
     const cell = this.createTableCell(document.createElement("div"), "");
 
     if (description) {
-      const iconWrapper = appendDescriptionIcon(description);
+      const iconWrapper = makeDescriptionIcon(description);
       cell.appendChild(iconWrapper);
     }
     cell.appendChild(nameInput);
@@ -318,7 +307,7 @@ class AnnotationUIProperty extends RefCounted {
     enumLabels?: string[],
   ): HTMLDivElement {
     const typeText = this.createTypeTextElement(type, enumLabels);
-    const iconWrapper = this.createIconWrapper(type, enumLabels);
+    const iconWrapper = this.parentView.createIconWrapper(type, enumLabels);
     const typeCell = this.createTableCell(
       iconWrapper,
       "neuroglancer-annotation-schema-type-cell",
@@ -369,9 +358,6 @@ class AnnotationUIProperty extends RefCounted {
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
 
-    let inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
-    let changeFunction: (event: Event) => void;
-    let isEnum = false;
     const oldProperty = this.getPropertyByIdentifier(identifier);
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
@@ -380,248 +366,381 @@ class AnnotationUIProperty extends RefCounted {
         "neuruoglancer-annotation-schema-default-value-cell",
       );
     }
+
+    const inputs = this.createInputsForType(type, oldProperty, container);
+
+    return this.createFinalCell(container, inputs);
+  }
+
+  private createInputsForType(
+    type: AnnotationUIType,
+    oldProperty: any,
+    container: HTMLDivElement,
+  ): (HTMLInputElement | HTMLTextAreaElement)[] {
     if (type.startsWith("rgb")) {
-      const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
-      const colorInput = new ColorWidget(watchableColor);
-      colorInput.element.classList.add(
-        "neuroglancer-annotation-schema-color-input",
-      );
-      if (this.readonly) {
-        colorInput.element.disabled = true;
-      }
-      inputs.push(colorInput.element);
-      changeFunction = () => {
-        const newColor = colorInput.getRGB();
-        this.updateProperty(oldProperty, { default: packColor(newColor) });
-      };
-      if (type === "rgba") {
-        const alpha = unpackRGBA(oldProperty.default)[3];
-        const alphaInput = this.createInputElement(
-          {
-            type: "number",
-            inputValue: alpha,
-            className: "neuroglancer-annotation-schema-default-value-input",
-            decimals: 2,
-          },
-          { min: 0, max: 1, step: 0.01 },
-        ) as HTMLInputElement;
-        alphaInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
-        inputs.push(alphaInput);
-        changeFunction = () => {
-          const newColor = colorInput.getRGB();
-          const newAlpha = alphaInput.valueAsNumber;
-          const colorVec = vec4.fromValues(
-            newColor[0],
-            newColor[1],
-            newColor[2],
-            newAlpha,
-          );
-          this.updateProperty(oldProperty, { default: packColor(colorVec) });
-        };
-      }
+      return this.createColorInputs(type, oldProperty, container);
     } else if (type === "bool") {
-      const boolInput = this.createInputElement({
-        type: "checkbox",
-        inputValue: String(oldProperty.default),
-        className: "neuroglancer-annotation-schema-default-value-input",
-      }) as HTMLInputElement;
-      boolInput.checked = oldProperty.default === 1;
-      boolInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
-      inputs.push(boolInput);
-      changeFunction = (event: Event) => {
-        const newValue = (event.target as HTMLInputElement).checked;
-        this.updateProperty(oldProperty, { default: newValue ? 1 : 0 });
-      };
-      container.appendChild(boolInput);
+      return this.createBooleanInputs(oldProperty, container);
     } else if (
-      type.startsWith("int") ||
-      type.startsWith("uint") ||
-      type === "float32"
+      "enumLabels" in oldProperty &&
+      isEnumType(oldProperty.enumLabels)
     ) {
-      const oldProperty = this.getPropertyByIdentifier(
-        identifier,
-      ) as AnnotationNumericPropertySpec;
-      const { enumValues, enumLabels } = oldProperty;
-      if (enumValues === undefined || enumLabels === undefined) {
-        const dataType = propertyTypeDataType[type as AnnotationType];
-        const numberInput = this.createInputElement(
-          {
-            type: "number",
-            inputValue: oldProperty.default,
-            className: "neuroglancer-annotation-schema-default-value-input",
-          },
-          {
-            dataType,
-          },
-        );
-        numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
-        inputs.push(numberInput);
-        changeFunction = (event: Event) => {
-          const newInputValue = (event.target as HTMLInputElement).value;
-          const newValue =
-            dataType === DataType.FLOAT32
-              ? parseFloat(newInputValue)
-              : parseInt(newInputValue, 10);
-          this.updateProperty(oldProperty, { default: newValue });
-        };
-      } else {
-        const enumContainer = document.createElement("div");
-        enumContainer.className =
-          "neuroglancer-annotation-schema-enum-container";
-        let addEnumButton: HTMLElement | null = null;
-        isEnum = true;
-        if (!this.readonly) {
-          const dataType = propertyTypeDataType[type as AnnotationType];
-          const bounds = defaultDataTypeRange[dataType!] as [number, number];
-          addEnumButton = makeAddButton({
-            title: "Add new enum option",
-            onClick: () => {
-              const currentProperty = this.getPropertyByIdentifier(
-                identifier,
-              ) as AnnotationNumericPropertySpec;
-              const currentEnumValues = currentProperty.enumValues!;
-              const suggestedEnumValue = this.suggestEnumValue(
-                currentEnumValues,
-                bounds,
-              );
-              const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
-              this.updateProperty(currentProperty, {
-                enumValues: newEnumValues,
-                enumLabels: [
-                  ...currentProperty.enumLabels!,
-                  `${suggestedEnumValue} (label)`,
-                ],
-                default: newEnumValues[0], // Set default to the first enum value
-              } as AnnotationNumericPropertySpec);
-            },
-          });
-          enumContainer.appendChild(addEnumButton);
-        }
-
-        // For each enum entry, create a row with name, and value
-        const addEnumEntry = (
-          value: number,
-          label: string,
-          enumIndex: number,
-        ) => {
-          const enumRow = document.createElement("div");
-          enumRow.className = "neuroglancer-annotation-schema-enum-entry";
-
-          const nameInput = this.createInputElement({
-            type: "text",
-            inputValue: label,
-            className: "neuroglancer-annotation-schema-default-value-input",
-            useTextarea: true,
-          });
-          nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`;
-          nameInput.classList.add(
-            "neuroglancer-annotation-schema-enum-entry-textarea",
-          );
-          if (!this.readonly) {
-            nameInput.addEventListener("change", (event) => {
-              const newLabel = (event.target as HTMLInputElement).value;
-              this.updateProperty(oldProperty, {
-                enumLabels: oldProperty.enumLabels!.map((l, i) =>
-                  i === enumIndex ? newLabel : l,
-                ),
-              });
-            });
-          }
-
-          const annotationType =
-            this.parentView.mapUITypeToAnnotationType(type);
-          const valueInput = this.createInputElement(
-            {
-              type: "number",
-              inputValue: value,
-              className: "neuroglancer-annotation-schema-default-value-input",
-            },
-            {
-              dataType: propertyTypeDataType[annotationType],
-            },
-          );
-          valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
-          if (!this.readonly) {
-            const dataType = propertyTypeDataType[annotationType];
-            const bounds = defaultDataTypeRange[dataType!] as [number, number];
-            let lastValue = value;
-            valueInput.addEventListener("change", (event) => {
-              const inputValue = (event.target as HTMLInputElement).value;
-              let newValue =
-                type === "float32"
-                  ? parseFloat(inputValue)
-                  : parseInt(inputValue, 10);
-              const direction = newValue > lastValue ? "up" : "down";
-              const currentProperty = this.getPropertyByIdentifier(
-                identifier,
-              ) as AnnotationNumericPropertySpec;
-              const currentEnumValues = currentProperty.enumValues!;
-              newValue = this.suggestEnumValue(
-                currentEnumValues,
-                bounds,
-                newValue,
-                direction,
-              );
-              lastValue = newValue;
-              (event.target as HTMLInputElement).value = numberToStringFixed(
-                newValue,
-                4,
-              );
-              this.updateProperty(currentProperty, {
-                enumValues: currentEnumValues.map((v, i) =>
-                  i === enumIndex ? newValue : v,
-                ),
-              });
-            });
-          }
-
-          enumRow.appendChild(nameInput);
-          enumRow.appendChild(valueInput);
-          inputs.push(valueInput);
-
-          if (!this.readonly) {
-            const deleteIcon = document.createElement("span");
-            deleteIcon.className = "neuroglancer-annotation-schema-delete-icon";
-            deleteIcon.innerHTML = svg_bin;
-            deleteIcon.title = "Delete enum row";
-            deleteIcon.style.cursor = "pointer";
-            const currentProperty = this.getPropertyByIdentifier(
-              identifier,
-            ) as AnnotationNumericPropertySpec;
-            deleteIcon.addEventListener("click", () => {
-              const newEnumValues = currentProperty.enumValues!.filter(
-                (_, i) => i !== enumIndex,
-              );
-              const newEnumLabels = currentProperty.enumLabels!.filter(
-                (_, i) => i !== enumIndex,
-              );
-
-              this.updateProperty(currentProperty, {
-                enumValues: newEnumValues,
-                enumLabels: newEnumLabels,
-              });
-            });
-            enumRow.appendChild(deleteIcon);
-            enumContainer.insertBefore(enumRow, addEnumButton);
-          } else {
-            enumContainer.appendChild(enumRow);
-          }
-        };
-        for (let i = 0; i < enumValues.length; i++) {
-          addEnumEntry(enumValues[i], enumLabels[i], i);
-        }
-
-        container.appendChild(enumContainer);
-      }
+      return this.createEnumInputs(type, oldProperty, container);
+    } else {
+      return this.createNumericInputs(type, oldProperty, container);
     }
+  }
+
+  private createColorInputs(
+    type: AnnotationUIType,
+    oldProperty: any,
+    container: HTMLDivElement,
+  ): HTMLInputElement[] {
+    const inputs: HTMLInputElement[] = [];
+
+    if (this.readonly) {
+      const colorPreview = makeReadonlyColorProperty(
+        oldProperty.default,
+        type as AnnotationColorKey,
+      );
+      container.appendChild(colorPreview);
+      return inputs;
+    }
+
+    const colorProperty = makeEditableColorProperty(
+      oldProperty.default,
+      type as AnnotationColorKey,
+    );
+    inputs.push(colorProperty.color.element);
+
+    const changeFunction = this.createColorChangeFunction(
+      type,
+      colorProperty,
+      oldProperty,
+    );
+
+    if (type !== "rgb") {
+      inputs.push(colorProperty.alpha!);
+    }
+
     inputs.forEach((input) => {
-      if (!isEnum) {
-        container.appendChild(input);
-        if (!this.readonly) {
-          this.registerEventListener(input, "change", changeFunction);
-        }
+      if (!this.readonly) {
+        this.registerEventListener(input, "change", changeFunction);
       }
     });
+    container.appendChild(colorProperty.element);
+
+    return inputs;
+  }
+
+  private createColorChangeFunction(
+    type: AnnotationUIType,
+    colorProperty: any,
+    oldProperty: any,
+  ): (event: Event) => void {
+    if (type === "rgb") {
+      return () => {
+        const newColor = colorProperty.color.getRGB();
+        this.updateProperty(oldProperty, { default: packColor(newColor) });
+      };
+    } else {
+      return () => {
+        const newColor = colorProperty.color.getRGB();
+        const newAlpha = colorProperty.alpha!.valueAsNumber;
+        const colorVec = vec4.fromValues(
+          newColor[0],
+          newColor[1],
+          newColor[2],
+          newAlpha,
+        );
+        this.updateProperty(oldProperty, { default: packColor(colorVec) });
+      };
+    }
+  }
+
+  private createBooleanInputs(
+    oldProperty: any,
+    container: HTMLDivElement,
+  ): HTMLInputElement[] {
+    const checkbox = makeBoolCheckbox(oldProperty.default === 1);
+    checkbox.classList.add(
+      "neuroglancer-annotation-schema-default-value-input",
+    );
+    checkbox.name = `neuroglancer-annotation-schema-default-value-input-bool`;
+
+    const changeFunction = (event: Event) => {
+      const newValue = (event.target as HTMLInputElement).checked;
+      this.updateProperty(oldProperty, { default: newValue ? 1 : 0 });
+    };
+
+    container.appendChild(checkbox);
+    if (!this.readonly) {
+      this.registerEventListener(checkbox, "change", changeFunction);
+    }
+
+    return [checkbox];
+  }
+
+  private createEnumInputs(
+    type: AnnotationUIType,
+    oldProperty: any,
+    container: HTMLDivElement,
+  ): (HTMLInputElement | HTMLTextAreaElement)[] {
+    const { enumValues, enumLabels } = oldProperty;
+    const enumContainer = document.createElement("div");
+    enumContainer.className = "neuroglancer-annotation-schema-enum-container";
+
+    const inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
+
+    for (let i = 0; i < enumValues!.length; i++) {
+      const entryInputs = this.createEnumEntry(
+        enumValues![i],
+        enumLabels![i],
+        i,
+        type,
+        oldProperty,
+        enumContainer,
+      );
+      inputs.push(...entryInputs);
+    }
+
+    if (!this.readonly) {
+      const addButton = this.createAddEnumButton(type, oldProperty);
+      enumContainer.appendChild(addButton);
+    }
+
+    container.appendChild(enumContainer);
+    return inputs;
+  }
+
+  private createNumericInputs(
+    type: AnnotationUIType,
+    oldProperty: any,
+    container: HTMLDivElement,
+  ): HTMLInputElement[] {
+    const dataType = propertyTypeDataType[type as AnnotationPropertyType];
+    const numberInput = this.createInputElement(oldProperty.default, {
+      type: "number",
+      className: "neuroglancer-annotation-schema-default-value-input",
+      dataType,
+    });
+    numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
+
+    const changeFunction = (event: Event) => {
+      const newInputValue = (event.target as HTMLInputElement).value;
+      const newValue =
+        dataType === DataType.FLOAT32
+          ? parseFloat(newInputValue)
+          : parseInt(newInputValue, 10);
+      this.updateProperty(oldProperty, { default: newValue });
+    };
+
+    container.appendChild(numberInput);
+    if (!this.readonly) {
+      this.registerEventListener(numberInput, "change", changeFunction);
+    }
+
+    return [numberInput as HTMLInputElement];
+  }
+
+  private createAddEnumButton(
+    type: AnnotationUIType,
+    oldProperty: any,
+  ): HTMLElement {
+    const dataType = propertyTypeDataType[type as AnnotationPropertyType];
+    const bounds = defaultDataTypeRange[dataType!] as [number, number];
+
+    return makeAddButton({
+      title: "Add new enum option",
+      onClick: () => {
+        const currentProperty = this.getPropertyByIdentifier(
+          oldProperty.identifier,
+        ) as AnnotationNumericPropertySpec;
+        const currentEnumValues = currentProperty.enumValues!;
+        const suggestedEnumValue = this.suggestEnumValue(
+          currentEnumValues,
+          bounds,
+        );
+        const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
+
+        this.updateProperty(currentProperty, {
+          enumValues: newEnumValues,
+          enumLabels: [
+            ...currentProperty.enumLabels!,
+            `${suggestedEnumValue} (label)`,
+          ],
+          default: newEnumValues[0],
+        } as AnnotationNumericPropertySpec);
+      },
+    });
+  }
+
+  private createEnumEntry(
+    value: number,
+    label: string,
+    enumIndex: number,
+    type: AnnotationUIType,
+    oldProperty: any,
+    enumContainer: HTMLDivElement,
+  ): (HTMLInputElement | HTMLTextAreaElement)[] {
+    const enumRow = document.createElement("div");
+    enumRow.className = "neuroglancer-annotation-schema-enum-entry";
+
+    const nameInput = this.createEnumNameInput(label, enumIndex, oldProperty);
+    const valueInput = this.createEnumValueInput(
+      value,
+      enumIndex,
+      type,
+      oldProperty,
+    );
+
+    enumRow.appendChild(nameInput);
+    enumRow.appendChild(valueInput);
+
+    if (!this.readonly) {
+      const deleteIcon = this.createEnumDeleteIcon(enumIndex, oldProperty);
+      enumRow.appendChild(deleteIcon);
+    }
+
+    enumContainer.appendChild(enumRow);
+    return [nameInput, valueInput];
+  }
+
+  private createEnumNameInput(
+    label: string,
+    enumIndex: number,
+    oldProperty: any,
+  ): HTMLTextAreaElement {
+    const nameInput = this.createInputElement(label, {
+      type: "text",
+      className: "neuroglancer-annotation-schema-default-value-input",
+      useTextarea: true,
+    });
+    nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`;
+    nameInput.classList.add(
+      "neuroglancer-annotation-schema-enum-entry-textarea",
+    );
+
+    if (!this.readonly) {
+      nameInput.addEventListener("change", (event) => {
+        const newLabel = (event.target as HTMLInputElement).value;
+        this.updateProperty(oldProperty, {
+          enumLabels: oldProperty.enumLabels!.map((l: string, i: number) =>
+            i === enumIndex ? newLabel : l,
+          ),
+        });
+      });
+    }
+
+    return nameInput as HTMLTextAreaElement;
+  }
+
+  private createEnumValueInput(
+    value: number,
+    enumIndex: number,
+    type: AnnotationUIType,
+    oldProperty: any,
+  ): HTMLInputElement {
+    const annotationType = this.parentView.mapUITypeToAnnotationType(type);
+    const valueInput = this.createInputElement(value, {
+      type: "number",
+      className: "neuroglancer-annotation-schema-default-value-input",
+      dataType: propertyTypeDataType[annotationType],
+    }) as HTMLInputElement;
+    valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
+
+    if (!this.readonly) {
+      this.addEnumValueChangeListener(
+        valueInput,
+        enumIndex,
+        type,
+        oldProperty,
+        value,
+      );
+    }
+
+    return valueInput;
+  }
+
+  private createEnumDeleteIcon(
+    enumIndex: number,
+    oldProperty: any,
+  ): HTMLSpanElement {
+    const deleteIcon = document.createElement("span");
+    deleteIcon.className = "neuroglancer-annotation-schema-delete-icon";
+    deleteIcon.innerHTML = svg_bin;
+    deleteIcon.title = "Delete enum row";
+    deleteIcon.style.cursor = "pointer";
+
+    const currentProperty = this.getPropertyByIdentifier(
+      oldProperty.identifier,
+    ) as AnnotationNumericPropertySpec;
+
+    deleteIcon.addEventListener("click", () => {
+      const newEnumValues = currentProperty.enumValues!.filter(
+        (_, i) => i !== enumIndex,
+      );
+      const newEnumLabels = currentProperty.enumLabels!.filter(
+        (_, i) => i !== enumIndex,
+      );
+
+      this.updateProperty(currentProperty, {
+        enumValues: newEnumValues,
+        enumLabels: newEnumLabels,
+      });
+    });
+
+    return deleteIcon;
+  }
+
+  private addEnumValueChangeListener(
+    valueInput: HTMLInputElement,
+    enumIndex: number,
+    type: AnnotationUIType,
+    oldProperty: any,
+    initialValue: number,
+  ): void {
+    const annotationType = this.parentView.mapUITypeToAnnotationType(type);
+    const dataType = propertyTypeDataType[annotationType];
+    const bounds = defaultDataTypeRange[dataType!] as [number, number];
+    let lastValue = initialValue;
+
+    valueInput.addEventListener("change", (event) => {
+      const inputValue = (event.target as HTMLInputElement).value;
+      let newValue =
+        type === "float32" ? parseFloat(inputValue) : parseInt(inputValue, 10);
+
+      const direction = newValue > lastValue ? "up" : "down";
+      const currentProperty = this.getPropertyByIdentifier(
+        oldProperty.identifier,
+      ) as AnnotationNumericPropertySpec;
+      const currentEnumValues = currentProperty.enumValues!;
+
+      newValue = this.suggestEnumValue(
+        currentEnumValues,
+        bounds,
+        newValue,
+        direction,
+      );
+
+      lastValue = newValue;
+      (event.target as HTMLInputElement).value = numberToStringFixed(
+        newValue,
+        4,
+      );
+
+      this.updateProperty(currentProperty, {
+        enumValues: currentEnumValues.map((v, i) =>
+          i === enumIndex ? newValue : v,
+        ),
+      });
+    });
+  }
+
+  private createFinalCell(
+    container: HTMLDivElement,
+    inputs: (HTMLInputElement | HTMLTextAreaElement)[],
+  ): HTMLDivElement {
     this.defaultValueElements = inputs;
     const cell = this.createTableCell(
       container,
@@ -633,52 +752,49 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createInputElement(
+    inputValue: number | string,
     config: InputConfig,
-    numberConfig?: NumberConfig,
   ): HTMLInputElement | HTMLTextAreaElement {
     const readonly = this.readonly;
 
     if (config.type === "number") {
-      return this.createNumberInput(config, numberConfig, readonly);
+      return this.createNumberInput(inputValue as number, config, readonly);
     }
 
     if (config.type === "text") {
       return config.useTextarea
-        ? this.createTextAreaElement(config, readonly)
-        : this.createTextInputElement(config, readonly);
+        ? this.createTextAreaElement(inputValue as string, config, readonly)
+        : this.createTextInputElement(inputValue as string, config, readonly);
     }
 
     const input = document.createElement("input");
     input.type = config.type;
-    this.setCommonInputAttributes(input, config, readonly);
+    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
   private createNumberInput(
+    inputValue: number,
     config: InputConfig,
-    numberConfig: NumberConfig | undefined,
     readonly: boolean,
   ): HTMLInputElement {
-    const input = createBoundedNumberInputElement(
-      {
-        inputValue: config.inputValue as number,
-        className: config.className,
-        numDecimals: config.decimals,
-        readonly,
-      },
-      numberConfig,
-    );
-    this.setCommonInputAttributes(input, config, readonly);
+    const input = createBoundedNumberInputElement(inputValue, {
+      className: config.className,
+      numDecimals: config.numDecimals,
+      readonly,
+    });
+    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
   private createTextAreaElement(
+    inputValue: string,
     config: InputConfig,
     readonly: boolean,
   ): HTMLTextAreaElement {
     const textarea = document.createElement("textarea");
     textarea.rows = 1;
-    this.setCommonInputAttributes(textarea, config, readonly);
+    this.setCommonInputAttributes(inputValue, textarea, config, readonly);
 
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -723,16 +839,18 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createTextInputElement(
+    inputValue: string,
     config: InputConfig,
     readonly: boolean,
   ): HTMLInputElement {
     const input = document.createElement("input");
     input.type = "text";
-    this.setCommonInputAttributes(input, config, readonly);
+    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
   private setCommonInputAttributes(
+    inputValue: number | string,
     element: HTMLInputElement | HTMLTextAreaElement,
     config: InputConfig,
     readonly: boolean,
@@ -745,10 +863,10 @@ class AnnotationUIProperty extends RefCounted {
     }
 
     if (
-      typeof config.inputValue !== "number" ||
+      typeof inputValue !== "number" ||
       element instanceof HTMLTextAreaElement
     ) {
-      element.value = String(config.inputValue || "");
+      element.value = String(inputValue || "");
       element.autocomplete = "off";
       element.spellcheck = false;
     }
@@ -775,10 +893,10 @@ class AnnotationUIProperty extends RefCounted {
   }
   private showTypeChangeDropdown(
     anchorElement: HTMLElement,
-    currentType: AnnotationType,
+    currentType: AnnotationPropertyType,
     identifier: string,
   ) {
-    const availableOptions: AnnotationType[] = [];
+    const availableOptions: AnnotationPropertyType[] = [];
     for (const type of ANNOTATION_TYPES) {
       if (canConvertTypes(currentType, type)) {
         availableOptions.push(type);
@@ -807,7 +925,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createDropdownElement(
-    availableOptions: AnnotationType[],
+    availableOptions: AnnotationPropertyType[],
     identifier: string,
   ) {
     const dropdown = document.createElement("div");
@@ -822,7 +940,7 @@ class AnnotationUIProperty extends RefCounted {
       const option = document.createElement("div");
       option.className = "neuroglancer-annotation-schema-dropdown-option";
 
-      const iconWrapper = this.createIconWrapper(newType);
+      const iconWrapper = this.parentView.createIconWrapper(newType);
       const label = document.createElement("span");
       label.textContent = this.getDisplayNameForType(newType);
 
@@ -838,17 +956,6 @@ class AnnotationUIProperty extends RefCounted {
     });
     this.typeChangeDropdown = dropdown;
   }
-  private createIconWrapper(
-    type: AnnotationUIType,
-    enumLabels?: string[],
-  ): HTMLSpanElement {
-    const iconWrapper = document.createElement("span");
-    iconWrapper.classList.add(
-      "neuroglancer-annotation-schema-cell-icon-wrapper",
-    );
-    iconWrapper.innerHTML = this.getIconForType(type, enumLabels);
-    return iconWrapper;
-  }
 
   private positionDropdown(
     dropdown: HTMLDivElement,
@@ -860,7 +967,10 @@ class AnnotationUIProperty extends RefCounted {
     dropdown.style.top = `${rect.bottom}px`;
   }
 
-  private handleTypeChange(newType: AnnotationType, identifier: string) {
+  private handleTypeChange(
+    newType: AnnotationPropertyType,
+    identifier: string,
+  ) {
     const oldProperty = this.getPropertyByIdentifier(identifier);
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
@@ -1195,11 +1305,7 @@ export class AnnotationSchemaView extends Tab {
 
           const option = document.createElement("div");
           option.className = "neuroglancer-annotation-schema-dropdown-option";
-          const iconWrapper = document.createElement("span");
-          iconWrapper.classList.add(
-            "neuroglancer-annotation-schema-cell-icon-wrapper",
-          );
-          iconWrapper.innerHTML = this.getIconForType(type);
+          const iconWrapper = this.createIconWrapper(type, undefined, isEnum);
 
           const text = document.createElement("span");
           const displayName = this.getDisplayNameForType(type);
@@ -1236,7 +1342,7 @@ export class AnnotationSchemaView extends Tab {
         });
       };
       populateDropDown(ANNOTATION_UI_TYPES, false);
-      // Now do it again for the numeric types
+      // Now do it again for the numeric types as enums
       populateDropDown(
         ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
         true,
@@ -1313,6 +1419,19 @@ export class AnnotationSchemaView extends Tab {
     return type;
   }
 
+  createIconWrapper(
+    type: AnnotationUIType,
+    enumLabels?: string[],
+    isEnum?: boolean,
+  ): HTMLSpanElement {
+    const icon = makeIcon({
+      svg: this.getIconForType(type, enumLabels, isEnum),
+      clickable: false,
+    });
+    icon.classList.add("neuroglancer-annotation-schema-type-icon");
+    return icon;
+  }
+
   ensureUniquePropertyIdentifier(suggestedIdentifier: string) {
     const allProperties = this.schema;
     const initalName = suggestedIdentifier;
@@ -1334,10 +1453,14 @@ export class AnnotationSchemaView extends Tab {
     return "Other";
   }
 
-  getIconForType(type: AnnotationUIType, enumValues?: string[]): string {
+  getIconForType(
+    type: AnnotationUIType,
+    enumValues?: string[],
+    isEnum?: boolean,
+  ): string {
     const isBoolean = isBooleanType(enumValues);
     if (isBoolean || type === "bool") return svg_check;
-    if (isEnumType(enumValues)) return svg_format_size;
+    if (isEnum || isEnumType(enumValues)) return svg_format_size;
     if (isAnnotationTypeNumeric(type)) return svg_numbers;
     return svg_palette;
   }
@@ -1352,7 +1475,7 @@ export class AnnotationSchemaView extends Tab {
     );
   }
 
-  mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationType {
+  mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationPropertyType {
     if (uiType === "bool") return "uint8";
     return uiType;
   }

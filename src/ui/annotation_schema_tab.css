@@ -1,3 +1,19 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 .neuroglancer-annotations-schema-tab {
   overflow-y: auto;
 }
@@ -60,6 +76,17 @@
   overflow: hidden;
 }
 
+.neuroglancer-annotation-schema-type-icon {
+  min-width: 12px;
+  min-height: 12px;
+  margin-right: 2px;
+}
+
+.neuroglancer-annotation-schema-type-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
 .neuroglancer-annotation-schema-enum-entry:hover
   .neuroglancer-annotation-schema-delete-icon {
   opacity: 1;
@@ -87,34 +114,6 @@
   flex: 1;
   display: inline-flex;
   align-items: center;
-}
-
-.neuroglancer-annotation-schema-cell-icon-wrapper {
-  display: inline-flex;
-  text-decoration: none;
-  align-self: center;
-  white-space: nowrap;
-  min-width: 12px;
-  min-height: 12px;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font: 12px sans-serif;
-  font-weight: 900;
-  margin-right: 4px;
-  user-select: none;
-}
-
-.neuroglancer-annotation-schema-cell-icon-wrapper svg {
-  width: 12px;
-  height: 12px;
-  opacity: 0.6;
-  fill: transparent;
-  stroke: white;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
 }
 
 .neuroglancer-annotation-schema-delete-cell,
@@ -321,15 +320,6 @@
   background: rgba(255, 255, 255, 0.4);
 }
 
-.neuroglancer-annotation-schema-color-input {
-  background: #222;
-  border: none;
-  border-radius: 2px;
-  padding: 2px;
-  width: 100%;
-  flex: 1 0 0;
-}
-
 .neuroglancer-annotation-description-editor {
   min-width: 400px;
   border-radius: 0.25rem;
@@ -345,6 +335,7 @@
   border: 1px solid #d0d5dd;
   background: #fff;
   resize: none;
+  overflow-y: hidden;
 }
 
 .neuroglancer-annotation-description-editor-text-input:focus {

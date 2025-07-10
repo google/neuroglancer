@@ -1,15 +1,27 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import { DataType } from "#src/util/data_type.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 
-interface InputConfig {
-  inputValue?: number;
+export interface NumberDisplayConfig {
   numDecimals?: number;
   className?: string;
   readonly?: boolean;
-}
-
-interface NumberConfig {
   dataType?: DataType;
   min?: number;
   max?: number;
@@ -17,14 +29,19 @@ interface NumberConfig {
 }
 
 export function createBoundedNumberInputElement(
-  config: InputConfig,
-  numberConfig?: NumberConfig,
+  inputValue: number,
+  config: NumberDisplayConfig,
 ): HTMLInputElement {
   const input = document.createElement("input");
-  if (numberConfig && !config.readonly) {
-    let { min, max, step } = numberConfig;
+  const hasNumberConfig =
+    config.min !== undefined ||
+    config.max !== undefined ||
+    config.step !== undefined ||
+    config.dataType !== undefined;
+  if (!config.readonly && hasNumberConfig) {
+    let { min, max, step } = config;
     // If the dataType is provided, we can set min, max, and step based on it
-    const dataType = numberConfig.dataType;
+    const dataType = config.dataType;
     if (dataType !== undefined) {
       step = dataType === DataType.FLOAT32 ? 0.1 : 1;
       const bounds =
@@ -60,10 +77,7 @@ export function createBoundedNumberInputElement(
     });
   }
   input.type = "number";
-  input.value = numberToStringFixed(
-    config.inputValue || 0,
-    config.numDecimals || 4,
-  );
+  input.value = numberToStringFixed(inputValue, config.numDecimals || 4);
   input.autocomplete = "off";
   input.spellcheck = false;
   if (config.className) input.classList.add(config.className);
