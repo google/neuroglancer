@@ -56,13 +56,12 @@ import {
   makeDescriptionIcon,
   makeEditableColorProperty,
   makeReadonlyColorProperty,
+  isBooleanType,
+  isEnumType,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
-import { isBooleanType, isEnumType } from "#src/ui/annotation_properties.js";
-import {
-  createBoundedNumberInputElement,
-  NumberDisplayConfig,
-} from "#src/ui/bounded_number_input.js";
+import type { NumberDisplayConfig } from "#src/ui/bounded_number_input.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";

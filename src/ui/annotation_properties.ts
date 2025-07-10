@@ -16,6 +16,7 @@
 
 import "#src/ui/annotation_properties.css";
 
+import svg_info from "ikonate/icons/info.svg?raw";
 import type {
   AnnotationColorPropertySpec,
   AnnotationPropertySpec,
@@ -24,7 +25,6 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { ColorWidget } from "#src/widget/color.js";
-import svg_info from "ikonate/icons/info.svg?raw";
 import { makeIcon } from "#src/widget/icon.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
