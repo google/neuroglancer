@@ -57,7 +57,7 @@ import {
   UserLayerWithAnnotations,
   isBooleanType,
   isEnumType,
-  appendDescriptionIcon
+  appendDescriptionIcon,
 } from "#src/ui/annotations.js";
 import {
   packColor,
@@ -75,6 +75,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { FramedDialog } from "#src/overlay.js";
 import { arraysEqual } from "#src/util/array.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
+import { setClipboard } from "#src/util/clipboard.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -1478,12 +1479,12 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private copySchemaToClipboard() {
-    navigator.clipboard.writeText(this.jsonSchema).then(() => {
-      StatusMessage.showTemporaryMessage(
-        "Annotation schema copied to clipboard",
-        /*duration=*/ 2000,
-      );
-    });
+    const success = setClipboard(this.jsonSchema);
+    const copyMessage = success ? "copied" : "failed to copy";
+    StatusMessage.showTemporaryMessage(
+      `Annotation schema ${copyMessage} to clipboard`,
+      /*duration=*/ 2000,
+    );
   }
 
   private pasteSchemaFromClipboard() {
