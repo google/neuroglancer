@@ -108,18 +108,6 @@ interface NumberConfig {
   step?: number;
 }
 
-function getCssStyle(element: HTMLElement, prop: string): string {
-  return window.getComputedStyle(element, null).getPropertyValue(prop);
-}
-
-function getCanvasFont(el = document.body) {
-  const fontWeight = getCssStyle(el, "font-weight") || "normal";
-  const fontSize = getCssStyle(el, "font-size") || "13px";
-  const fontFamily = getCssStyle(el, "font-family") || "Sans-serif";
-
-  return `${fontWeight} ${fontSize} ${fontFamily}`;
-}
-
 class AnnotationDescriptionEditDialog extends FramedDialog {
   constructor(parent: AnnotationUIProperty) {
     super(
@@ -478,7 +466,8 @@ class AnnotationUIProperty extends RefCounted {
         };
       } else {
         const enumContainer = document.createElement("div");
-        enumContainer.className = "enum-container";
+        enumContainer.className =
+          "neuroglancer-annotation-schema-enum-container";
         let addEnumButton: HTMLElement | null = null;
         isEnum = true;
         if (!this.readonly) {
@@ -525,6 +514,9 @@ class AnnotationUIProperty extends RefCounted {
             useTextarea: true,
           });
           nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`;
+          nameInput.classList.add(
+            "neuroglancer-annotation-schema-enum-entry-textarea",
+          );
           if (!this.readonly) {
             nameInput.addEventListener("change", (event) => {
               const newLabel = (event.target as HTMLInputElement).value;
@@ -694,30 +686,28 @@ class AnnotationUIProperty extends RefCounted {
       }
     });
 
-    const calculateRows = (content: string): number => {
+    const calculateRows = (): number => {
       const minRows = 1;
-      const maxRows = 5;
+      const maxRows = 15;
 
-      if (!content) return minRows;
+      const originalRows = textarea.rows;
+      textarea.rows = 1;
+      const lineHeight =
+        parseFloat(getComputedStyle(textarea).lineHeight) || 18;
+      const rows = Math.ceil(textarea.scrollHeight / lineHeight);
+      console.log(textarea.scrollHeight, lineHeight, rows, textarea.value);
 
-      const lines = content.split("\n");
-      let totalRows = 0;
-
-      const font = getCanvasFont(textarea);
-      const padding = getCssStyle(textarea, "padding");
-      const textareaWidth =
-        (textarea.clientWidth || 300) - (parseFloat(padding) || 0) * 2;
-      lines.forEach((line) => {
-        const lineTextWidth = this.parentView.getTextWidth(line, font);
-        totalRows += Math.max(Math.ceil(lineTextWidth / textareaWidth), 1);
-      });
-
-      return Math.max(minRows, Math.min(maxRows, totalRows));
+      textarea.rows = originalRows;
+      if (rows > maxRows) {
+        textarea.style.overflowY = "auto";
+      } else {
+        textarea.style.overflowY = "hidden";
+      }
+      return Math.max(minRows, Math.min(maxRows, rows));
     };
 
     const updateTextareaRows = () => {
-      const content = textarea.value;
-      textarea.rows = calculateRows(content);
+      textarea.rows = calculateRows();
     };
     const debouncedUpdateTextareaSize =
       animationFrameDebounce(updateTextareaRows);
@@ -937,28 +927,6 @@ export class AnnotationSchemaView extends Tab {
         this.updateOnReadonlyChange();
       }),
     );
-  }
-
-  /**
-   * Uses canvas.measureText to compute and return the width of the given text of given font in pixels.
-   *
-   * @param {String} text The text to be rendered.
-   * @param {String} font The css font descriptor that text is to be rendered with (e.g. "bold 14px verdana").
-   *
-   * @see https://stackoverflow.com/questions/118241/calculate-text-width-with-javascript/21015393#21015393
-   */
-  getTextWidth(text: string, font: string): number {
-    if (this.textWidthCanvas === null) {
-      this.textWidthCanvas = document.createElement("canvas");
-    }
-    const context = this.textWidthCanvas.getContext("2d");
-    if (context === null) {
-      const avgCharWidth = 8; // Fallback average character width
-      return text.length * avgCharWidth;
-    }
-    context.font = font;
-    const metrics = context.measureText(text);
-    return metrics.width;
   }
 
   private updateOnReadonlyChange = () => {
