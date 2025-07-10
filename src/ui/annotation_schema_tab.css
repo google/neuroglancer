@@ -321,15 +321,6 @@
   background: rgba(255, 255, 255, 0.4);
 }
 
-.neuroglancer-annotation-schema-color-input {
-  background: #222;
-  border: none;
-  border-radius: 2px;
-  padding: 2px;
-  width: 100%;
-  flex: 1 0 0;
-}
-
 .neuroglancer-annotation-description-editor {
   min-width: 400px;
   border-radius: 0.25rem;

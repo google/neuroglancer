@@ -66,7 +66,6 @@ import {
   unpackRGBA,
 } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
-import { ColorWidget } from "#src/widget/color.js";
 import { removeChildren } from "#src/util/dom.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
@@ -76,6 +75,11 @@ import { FramedDialog } from "#src/overlay.js";
 import { arraysEqual } from "#src/util/array.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { setClipboard } from "#src/util/clipboard.js";
+import {
+  AnnotationColorKey,
+  makeEditableColorProperty,
+  makeReadonlyColorProperty,
+} from "#src/ui/annotation_properties.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -381,43 +385,38 @@ class AnnotationUIProperty extends RefCounted {
       );
     }
     if (type.startsWith("rgb")) {
-      const watchableColor = new WatchableValue(unpackRGB(oldProperty.default));
-      const colorInput = new ColorWidget(watchableColor);
-      colorInput.element.classList.add(
-        "neuroglancer-annotation-schema-color-input",
-      );
       if (this.readonly) {
-        colorInput.element.disabled = true;
-      }
-      inputs.push(colorInput.element);
-      changeFunction = () => {
-        const newColor = colorInput.getRGB();
-        this.updateProperty(oldProperty, { default: packColor(newColor) });
-      };
-      if (type === "rgba") {
-        const alpha = unpackRGBA(oldProperty.default)[3];
-        const alphaInput = this.createInputElement(
-          {
-            type: "number",
-            inputValue: alpha,
-            className: "neuroglancer-annotation-schema-default-value-input",
-            decimals: 2,
-          },
-          { min: 0, max: 1, step: 0.01 },
-        ) as HTMLInputElement;
-        alphaInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
-        inputs.push(alphaInput);
-        changeFunction = () => {
-          const newColor = colorInput.getRGB();
-          const newAlpha = alphaInput.valueAsNumber;
-          const colorVec = vec4.fromValues(
-            newColor[0],
-            newColor[1],
-            newColor[2],
-            newAlpha,
-          );
-          this.updateProperty(oldProperty, { default: packColor(colorVec) });
-        };
+        const colorPreview = makeReadonlyColorProperty(
+          oldProperty.default,
+          type as AnnotationColorKey,
+        );
+        container.appendChild(colorPreview);
+      } else {
+        const colorProperty = makeEditableColorProperty(
+          oldProperty.default,
+          type as AnnotationColorKey,
+        );
+        inputs.push(colorProperty.color.element);
+
+        if (type === "rgb") {
+          changeFunction = () => {
+            const newColor = colorProperty.color.getRGB();
+            this.updateProperty(oldProperty, { default: packColor(newColor) });
+          };
+        } else {
+          inputs.push(colorProperty.alpha!);
+          changeFunction = () => {
+            const newColor = colorProperty.color.getRGB();
+            const newAlpha = colorProperty.alpha!.valueAsNumber;
+            const colorVec = vec4.fromValues(
+              newColor[0],
+              newColor[1],
+              newColor[2],
+              newAlpha,
+            );
+            this.updateProperty(oldProperty, { default: packColor(colorVec) });
+          };
+        }
       }
     } else if (type === "bool") {
       const boolInput = this.createInputElement({
@@ -659,15 +658,13 @@ class AnnotationUIProperty extends RefCounted {
     numberConfig: NumberConfig | undefined,
     readonly: boolean,
   ): HTMLInputElement {
-    const input = createBoundedNumberInputElement(
-      {
-        inputValue: config.inputValue as number,
-        className: config.className,
-        numDecimals: config.decimals,
-        readonly,
-      },
-      numberConfig,
-    );
+    const input = createBoundedNumberInputElement({
+      inputValue: config.inputValue as number,
+      className: config.className,
+      numDecimals: config.decimals,
+      readonly,
+      ...numberConfig,
+    });
     this.setCommonInputAttributes(input, config, readonly);
     return input;
   }

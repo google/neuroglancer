@@ -1,0 +1,50 @@
+.neuroglancer-annotation-property-value-input {
+  text-align: left;
+  font-family: monospace;
+  font-size: 12px;
+  width: 100%;
+  color: white;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  outline: none;
+  border: 1px solid transparent;
+}
+
+.neuroglancer-annotation-property-value-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-property-value-input:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-property-value-input:focus {
+  border-color: #016dcc;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.neuroglancer-annotation-property-color {
+  background: #222;
+  border: none;
+  border-radius: 2px;
+  padding: 2px;
+  width: 100%;
+}
+
+.neuroglancer-annotation-property-color-preview {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  padding: 0.125rem;
+  border-radius: 0.125rem;
+  background-color: #333;
+  vertical-align: middle;
+  box-sizing: border-box;
+  justify-content: center;
+  align-items: center;
+}
+
+.neuroglancer-annotation-property-color-preview span {
+  width: 0.5rem;
+  height: 0.5rem;
+}

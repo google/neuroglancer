@@ -2,14 +2,11 @@ import { DataType } from "#src/util/data_type.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 
-interface InputConfig {
+interface NumberDisplayConfig {
   inputValue?: number;
   numDecimals?: number;
   className?: string;
   readonly?: boolean;
-}
-
-interface NumberConfig {
   dataType?: DataType;
   min?: number;
   max?: number;
@@ -17,14 +14,18 @@ interface NumberConfig {
 }
 
 export function createBoundedNumberInputElement(
-  config: InputConfig,
-  numberConfig?: NumberConfig,
+  config: NumberDisplayConfig,
 ): HTMLInputElement {
   const input = document.createElement("input");
-  if (numberConfig && !config.readonly) {
-    let { min, max, step } = numberConfig;
+  const hasNumberConfig =
+    config.min !== undefined ||
+    config.max !== undefined ||
+    config.step !== undefined ||
+    config.dataType !== undefined;
+  if (!config.readonly && hasNumberConfig) {
+    let { min, max, step } = config;
     // If the dataType is provided, we can set min, max, and step based on it
-    const dataType = numberConfig.dataType;
+    const dataType = config.dataType;
     if (dataType !== undefined) {
       step = dataType === DataType.FLOAT32 ? 0.1 : 1;
       const bounds =

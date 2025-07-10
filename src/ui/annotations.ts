@@ -80,12 +80,7 @@ import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
-import {
-  packColor,
-  serializeColor,
-  unpackRGB,
-  unpackRGBA,
-} from "#src/util/color.js";
+import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -117,6 +112,11 @@ import { VirtualList } from "#src/widget/virtual_list.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { nearlyEqual } from "#src/util/number.js";
+import {
+  AnnotationColorKey,
+  makeReadonlyColorProperty,
+  makeEditableColorProperty,
+} from "#src/ui/annotation_properties.js";
 
 export function isBooleanType(enumLabels?: string[]): boolean {
   return (
@@ -1975,82 +1975,33 @@ export function UserLayerWithAnnotationsMixin<
                     "neuroglancer-annotation-property-value",
                   );
                   valueElement.dataset.readonly = sourceReadonly.toString();
-                  const makeColorWidget = (inputColor: vec3) => {
-                    const watchableColor = new WatchableValue(inputColor);
-                    const colorInput = new ColorWidget(watchableColor);
-                    colorInput.element.classList.add(
-                      "neuroglancer-annotation-property-color",
-                    );
-                    return colorInput;
-                  };
-
-                  const createColorPreviewBox = (hexColor: string) => {
-                    const previewBox = document.createElement("div");
-                    const colorSwatch = document.createElement("span");
-
-                    colorSwatch.style.background = hexColor;
-                    previewBox.appendChild(colorSwatch);
-                    previewBox.className =
-                      "neuroglancer-annotation-property-color-readable";
-
-                    return previewBox;
-                  };
 
                   if (property.type.startsWith("rgb")) {
-                    // TODO this is messy, Sean to refactor.
-                    const colorVec = unpackRGB(value);
-                    const hex = serializeColor(colorVec);
-                    let colorInput: ColorWidget | undefined;
                     if (sourceReadonly) {
-                      let previewBox: HTMLElement;
-
-                      const textLabel = document.createElement("span");
-                      if (property.type === "rgb") {
-                        previewBox = createColorPreviewBox(hex);
-                        textLabel.textContent = hex.toUpperCase();
-                      } else {
-                        const fullHex = serializeColor(unpackRGBA(value));
-                        previewBox = createColorPreviewBox(fullHex);
-                        textLabel.textContent = fullHex.toUpperCase();
-                      }
-                      valueElement.appendChild(previewBox);
-                      valueElement.appendChild(textLabel);
+                      valueElement = makeReadonlyColorProperty(
+                        value,
+                        property.type as AnnotationColorKey,
+                      );
                     } else {
-                      colorInput = makeColorWidget(colorVec);
+                      const colorProperty = makeEditableColorProperty(
+                        value,
+                        property.type as AnnotationColorKey,
+                      );
+                      valueElement = colorProperty.element;
                       if (property.type === "rgb") {
-                        colorInput.element.addEventListener("change", () => {
-                          changeFunction(packColor(colorInput!.getRGB()));
-                        });
-                        valueElement = colorInput.element;
-                      }
-                    }
-                    if (property.type === "rgba") {
-                      if (!sourceReadonly) {
-                        const alpha = unpackRGBA(value)[3];
-                        const alphaInput = createBoundedNumberInputElement(
-                          {
-                            inputValue: alpha,
-                          },
-                          {
-                            min: 0,
-                            max: 1,
-                            step: 0.01,
+                        colorProperty.color.registerEventListener(
+                          colorProperty.color.element,
+                          "change",
+                          () => {
+                            changeFunction(
+                              packColor(colorProperty.color.getRGB()),
+                            );
                           },
                         );
-                        alphaInput.classList.add(
-                          "neuroglancer-annotation-property-value-input",
-                        );
-                        alphaInput.name = `neuroglancer-annotation-property-color-value-${i}`;
-                        const rgbaContainer = document.createElement("div");
-                        rgbaContainer.classList.add(
-                          "neuroglancer-annotation-property-container",
-                        );
-                        rgbaContainer.appendChild(colorInput!.element);
-                        rgbaContainer.appendChild(alphaInput);
-                        valueElement = rgbaContainer;
+                      } else {
                         const rgbaChangeFunction = () => {
-                          const rgb = colorInput!.getRGB();
-                          const alpha = alphaInput.valueAsNumber;
+                          const rgb = colorProperty.color.getRGB();
+                          const alpha = colorProperty.alpha!.valueAsNumber;
                           const colorVec = vec4.fromValues(
                             rgb[0],
                             rgb[1],
@@ -2059,11 +2010,14 @@ export function UserLayerWithAnnotationsMixin<
                           );
                           changeFunction(packColor(colorVec));
                         };
-                        colorInput!.element.addEventListener("change", () =>
-                          rgbaChangeFunction(),
+                        colorProperty.color.registerEventListener(
+                          colorProperty.color.element,
+                          "change",
+                          rgbaChangeFunction,
                         );
-                        alphaInput.addEventListener("change", () =>
-                          rgbaChangeFunction(),
+                        colorProperty.alpha!.addEventListener(
+                          "change",
+                          rgbaChangeFunction,
                         );
                       }
                     }
@@ -2134,14 +2088,10 @@ export function UserLayerWithAnnotationsMixin<
                         });
                         valueElement = select;
                       } else {
-                        const input = createBoundedNumberInputElement(
-                          {
-                            inputValue: value,
-                          },
-                          {
-                            dataType: propertyTypeDataType[propertyAsNum.type],
-                          },
-                        );
+                        const input = createBoundedNumberInputElement({
+                          inputValue: value,
+                          dataType: propertyTypeDataType[propertyAsNum.type],
+                        });
                         input.classList.add(
                           "neuroglancer-annotation-property-value-input",
                         );
