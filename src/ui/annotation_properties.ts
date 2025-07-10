@@ -26,6 +26,7 @@ import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeIcon } from "#src/widget/icon.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 export type AnnotationPropertyType = AnnotationPropertySpec["type"];
@@ -51,6 +52,61 @@ function createColorPreviewBox(hexColor: string) {
   previewBox.className = "neuroglancer-annotation-property-color-preview";
 
   return previewBox;
+}
+
+export function createTextAreaElement(
+  inputValue: string,
+  readonly: boolean,
+): HTMLTextAreaElement {
+  const textarea = document.createElement("textarea");
+  textarea.rows = 1;
+  textarea.classList.add("neuroglancer-annotation-textarea");
+
+  textarea.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      textarea.blur();
+    }
+  });
+
+  const calculateRows = (): number => {
+    const minRows = 1;
+    const maxRows = 15;
+
+    const originalRows = textarea.rows;
+    textarea.rows = 1;
+    const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 18;
+    const rows = Math.ceil(textarea.scrollHeight / lineHeight);
+    console.log(textarea.scrollHeight, lineHeight, rows, textarea.value);
+
+    textarea.rows = originalRows;
+    if (rows > maxRows) {
+      textarea.style.overflowY = "auto";
+    } else {
+      textarea.style.overflowY = "hidden";
+    }
+    return Math.max(minRows, Math.min(maxRows, rows));
+  };
+
+  const updateTextareaRows = () => {
+    textarea.rows = calculateRows();
+  };
+  const debouncedUpdateTextareaSize =
+    animationFrameDebounce(updateTextareaRows);
+
+  textarea.addEventListener("input", debouncedUpdateTextareaSize);
+  const resizeObserver = new ResizeObserver(() => {
+    debouncedUpdateTextareaSize();
+  });
+  resizeObserver.observe(textarea);
+  debouncedUpdateTextareaSize();
+
+  textarea.dataset.readonly = String(readonly);
+  textarea.disabled = readonly;
+  textarea.autocomplete = "off";
+  textarea.spellcheck = false;
+  textarea.value = String(inputValue || "");
+
+  return textarea;
 }
 
 export function isBooleanType(enumLabels?: string[]): boolean {

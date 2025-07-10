@@ -58,11 +58,11 @@ import {
   makeReadonlyColorProperty,
   isBooleanType,
   isEnumType,
+  createTextAreaElement,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import type { NumberDisplayConfig } from "#src/ui/bounded_number_input.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
-import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
@@ -90,7 +90,6 @@ type AnnotationUIType = AnnotationPropertyType | "bool";
 
 interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
-  useTextarea?: boolean;
 }
 
 class AnnotationDescriptionEditDialog extends FramedDialog {
@@ -266,7 +265,6 @@ class AnnotationUIProperty extends RefCounted {
     const nameInput = this.createInputElement(identifier, {
       type: "text",
       className: "neuroglancer-annotation-schema-name-input",
-      useTextarea: true,
     });
     nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`;
     nameInput.dataset.readonly = String(this.readonly);
@@ -615,7 +613,6 @@ class AnnotationUIProperty extends RefCounted {
     const nameInput = this.createInputElement(label, {
       type: "text",
       className: "neuroglancer-annotation-schema-default-value-input",
-      useTextarea: true,
     });
     nameInput.name = `neuroglancer-annotation-schema-enum-input-text-${enumIndex}`;
     nameInput.classList.add(
@@ -755,21 +752,19 @@ class AnnotationUIProperty extends RefCounted {
     config: InputConfig,
   ): HTMLInputElement | HTMLTextAreaElement {
     const readonly = this.readonly;
+    let input: HTMLInputElement | HTMLTextAreaElement | undefined;
 
     if (config.type === "number") {
-      return this.createNumberInput(inputValue as number, config, readonly);
+      input = this.createNumberInput(inputValue as number, config, readonly);
+    } else if (config.type === "text") {
+      input = createTextAreaElement(inputValue as string, readonly);
+    } else {
+      input = document.createElement("input");
+      input.type = config.type;
     }
 
-    if (config.type === "text") {
-      return config.useTextarea
-        ? this.createTextAreaElement(inputValue as string, config, readonly)
-        : this.createTextInputElement(inputValue as string, config, readonly);
-    }
-
-    const input = document.createElement("input");
-    input.type = config.type;
-    this.setCommonInputAttributes(inputValue, input, config, readonly);
-    return input;
+    this.setCommonInputAttributes(inputValue, input!, config, readonly);
+    return input!;
   }
 
   private createNumberInput(
@@ -782,70 +777,6 @@ class AnnotationUIProperty extends RefCounted {
       numDecimals: config.numDecimals,
       readonly,
     });
-    this.setCommonInputAttributes(inputValue, input, config, readonly);
-    return input;
-  }
-
-  private createTextAreaElement(
-    inputValue: string,
-    config: InputConfig,
-    readonly: boolean,
-  ): HTMLTextAreaElement {
-    const textarea = document.createElement("textarea");
-    textarea.rows = 1;
-    this.setCommonInputAttributes(inputValue, textarea, config, readonly);
-    textarea.classList.add("neuroglancer-annotation-schema-textarea");
-
-    textarea.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        textarea.blur();
-      }
-    });
-
-    const calculateRows = (): number => {
-      const minRows = 1;
-      const maxRows = 15;
-
-      const originalRows = textarea.rows;
-      textarea.rows = 1;
-      const lineHeight =
-        parseFloat(getComputedStyle(textarea).lineHeight) || 18;
-      const rows = Math.ceil(textarea.scrollHeight / lineHeight);
-      console.log(textarea.scrollHeight, lineHeight, rows, textarea.value);
-
-      textarea.rows = originalRows;
-      if (rows > maxRows) {
-        textarea.style.overflowY = "auto";
-      } else {
-        textarea.style.overflowY = "hidden";
-      }
-      return Math.max(minRows, Math.min(maxRows, rows));
-    };
-
-    const updateTextareaRows = () => {
-      textarea.rows = calculateRows();
-    };
-    const debouncedUpdateTextareaSize =
-      animationFrameDebounce(updateTextareaRows);
-
-    textarea.addEventListener("input", debouncedUpdateTextareaSize);
-    const resizeObserver = new ResizeObserver(() => {
-      debouncedUpdateTextareaSize();
-    });
-    resizeObserver.observe(textarea);
-    debouncedUpdateTextareaSize();
-
-    return textarea;
-  }
-
-  private createTextInputElement(
-    inputValue: string,
-    config: InputConfig,
-    readonly: boolean,
-  ): HTMLInputElement {
-    const input = document.createElement("input");
-    input.type = "text";
-    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
