@@ -19,7 +19,6 @@
  */
 
 import svg_help from "ikonate/icons/help.svg?raw";
-import svg_info from "ikonate/icons/info.svg?raw";
 import "#src/ui/annotations.css";
 import {
   AnnotationDisplayState,
@@ -79,6 +78,7 @@ import type { AnnotationColorKey } from "#src/ui/annotation_properties.js";
 import {
   makeReadonlyColorProperty,
   makeEditableColorProperty,
+  makeDescriptionIcon,
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
@@ -128,15 +128,6 @@ export function isBooleanType(enumLabels?: string[]): boolean {
 }
 export function isEnumType(enumLabels?: string[]): boolean {
   return (enumLabels && enumLabels.length > 0) || false;
-}
-
-export function appendDescriptionIcon(description: string) {
-  const iconWrapper = document.createElement("span");
-  iconWrapper.classList.add("neuroglancer-annotation-schema-cell-icon-wrapper");
-  iconWrapper.innerHTML = svg_info;
-  iconWrapper.title = description;
-
-  return iconWrapper;
 }
 
 export class MergedAnnotationStates
@@ -1937,7 +1928,7 @@ export function UserLayerWithAnnotationsMixin<
 
                   const { description } = property;
                   if (description) {
-                    const iconWrapper = appendDescriptionIcon(description);
+                    const iconWrapper = makeDescriptionIcon(description);
                     nameWrapper.appendChild(iconWrapper);
                   }
 

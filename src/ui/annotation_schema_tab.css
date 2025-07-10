@@ -105,34 +105,6 @@
   align-items: center;
 }
 
-.neuroglancer-annotation-schema-cell-icon-wrapper {
-  display: inline-flex;
-  text-decoration: none;
-  align-self: center;
-  white-space: nowrap;
-  min-width: 12px;
-  min-height: 12px;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font: 12px sans-serif;
-  font-weight: 900;
-  margin-right: 4px;
-  user-select: none;
-}
-
-.neuroglancer-annotation-schema-cell-icon-wrapper svg {
-  width: 12px;
-  height: 12px;
-  opacity: 0.6;
-  fill: transparent;
-  stroke: white;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
 .neuroglancer-annotation-schema-delete-cell,
 .neuroglancer-annotation-schema-delete-header {
   border-bottom: none;

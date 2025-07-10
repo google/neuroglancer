@@ -48,15 +48,12 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { AnnotationColorKey } from "#src/ui/annotation_properties.js";
 import {
+  makeDescriptionIcon,
   makeEditableColorProperty,
   makeReadonlyColorProperty,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
-import {
-  isBooleanType,
-  isEnumType,
-  appendDescriptionIcon,
-} from "#src/ui/annotations.js";
+import { isBooleanType, isEnumType } from "#src/ui/annotations.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
@@ -244,15 +241,15 @@ class AnnotationUIProperty extends RefCounted {
 
     if (!readonly) {
       // Add a little icon to the right of the input that lets you change the description
-      const descriptionIcon = makeIcon({
+      const descriptionEditIcon = makeIcon({
         svg: svg_edit,
         title: "Change description",
       });
-      this.registerEventListener(descriptionIcon, "click", () => {
+      this.registerEventListener(descriptionEditIcon, "click", () => {
         new AnnotationDescriptionEditDialog(this);
       });
       const descriptionCell = this.createTableCell(
-        descriptionIcon,
+        descriptionEditIcon,
         "neuroglancer-annotation-schema-description-cell",
       );
       element.appendChild(descriptionCell);
@@ -288,7 +285,7 @@ class AnnotationUIProperty extends RefCounted {
     const cell = this.createTableCell(document.createElement("div"), "");
 
     if (description) {
-      const iconWrapper = appendDescriptionIcon(description);
+      const iconWrapper = makeDescriptionIcon(description);
       cell.appendChild(iconWrapper);
     }
     cell.appendChild(nameInput);
@@ -835,13 +832,14 @@ class AnnotationUIProperty extends RefCounted {
     });
     this.typeChangeDropdown = dropdown;
   }
+  // TODO replace
   private createIconWrapper(
     type: AnnotationUIType,
     enumLabels?: string[],
   ): HTMLSpanElement {
     const iconWrapper = document.createElement("span");
     iconWrapper.classList.add(
-      "neuroglancer-annotation-schema-cell-icon-wrapper",
+      "neuroglancer-annotation-schema-description-icon",
     );
     iconWrapper.innerHTML = this.getIconForType(type, enumLabels);
     return iconWrapper;

@@ -338,7 +338,7 @@ input.neuroglancer-segment-list-entry-id {
   min-width: 17px;
 }
 
-.neuroglancer-annotation-property-cell-icon-wrapper {
+.neuroglancer-annotation-property-cell-icon {
   display: inline-flex;
   text-decoration: none;
   align-self: center;
@@ -353,7 +353,7 @@ input.neuroglancer-segment-list-entry-id {
   user-select: none;
 }
 
-.neuroglancer-annotation-property-cell-icon-wrapper svg {
+.neuroglancer-annotation-property-cell-icon svg {
   width: 12px;
   height: 12px;
   opacity: 0.6;

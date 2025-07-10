@@ -64,3 +64,19 @@
   width: 0.5rem;
   height: 0.5rem;
 }
+
+.neuroglancer-annotation-description-icon {
+  min-width: 12px;
+  min-height: 12px;
+  margin-right: 2px;
+}
+
+.neuroglancer-annotation-description-icon svg {
+  width: 12px;
+  height: 12px;
+  stroke: #ccc;
+}
+
+.neuroglancer-annotation-description-icon:hover svg {
+  stroke: white;
+}

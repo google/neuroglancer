@@ -21,6 +21,8 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { ColorWidget } from "#src/widget/color.js";
+import svg_info from "ikonate/icons/info.svg?raw";
+import { makeIcon } from "#src/widget/icon.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 
@@ -33,6 +35,28 @@ function createColorPreviewBox(hexColor: string) {
   previewBox.className = "neuroglancer-annotation-property-color-preview";
 
   return previewBox;
+}
+
+export function isBooleanType(enumLabels?: string[]): boolean {
+  return (
+    (enumLabels?.includes("False") &&
+      enumLabels?.includes("True") &&
+      enumLabels.length === 2) ||
+    false
+  );
+}
+export function isEnumType(enumLabels?: string[]): boolean {
+  return (enumLabels && enumLabels.length > 0) || false;
+}
+
+export function makeDescriptionIcon(description: string) {
+  const icon = makeIcon({
+    svg: svg_info,
+    title: description,
+    clickable: false,
+  });
+  icon.classList.add("neuroglancer-annotation-description-icon");
+  return icon;
 }
 
 export function makeReadonlyColorProperty(
