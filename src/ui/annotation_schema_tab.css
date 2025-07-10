@@ -265,6 +265,8 @@
   height: auto;
   padding: 0;
   overflow-y: auto;
+  min-height: 1lh;
+  line-height: 18px;
 }
 
 .neuroglancer-annotation-schema-name-input {
