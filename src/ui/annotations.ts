@@ -79,6 +79,8 @@ import {
   makeReadonlyColorProperty,
   makeEditableColorProperty,
   makeDescriptionIcon,
+  isBooleanType,
+  isEnumType,
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
@@ -117,18 +119,6 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
-
-export function isBooleanType(enumLabels?: string[]): boolean {
-  return (
-    (enumLabels?.includes("False") &&
-      enumLabels?.includes("True") &&
-      enumLabels.length === 2) ||
-    false
-  );
-}
-export function isEnumType(enumLabels?: string[]): boolean {
-  return (enumLabels && enumLabels.length > 0) || false;
-}
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -2079,8 +2069,7 @@ export function UserLayerWithAnnotationsMixin<
                         });
                         valueElement = select;
                       } else {
-                        const input = createBoundedNumberInputElement({
-                          inputValue: value,
+                        const input = createBoundedNumberInputElement(value, {
                           dataType: propertyTypeDataType[propertyAsNum.type],
                         });
                         input.classList.add(

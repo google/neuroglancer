@@ -324,6 +324,7 @@
   border: 1px solid #d0d5dd;
   background: #fff;
   resize: none;
+  overflow-y: hidden;
 }
 
 .neuroglancer-annotation-description-editor-text-input:focus {

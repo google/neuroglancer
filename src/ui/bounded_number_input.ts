@@ -18,8 +18,7 @@ import { DataType } from "#src/util/data_type.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
 
-interface NumberDisplayConfig {
-  inputValue?: number;
+export interface NumberDisplayConfig {
   numDecimals?: number;
   className?: string;
   readonly?: boolean;
@@ -30,6 +29,7 @@ interface NumberDisplayConfig {
 }
 
 export function createBoundedNumberInputElement(
+  inputValue: number,
   config: NumberDisplayConfig,
 ): HTMLInputElement {
   const input = document.createElement("input");
@@ -77,10 +77,7 @@ export function createBoundedNumberInputElement(
     });
   }
   input.type = "number";
-  input.value = numberToStringFixed(
-    config.inputValue || 0,
-    config.numDecimals || 4,
-  );
+  input.value = numberToStringFixed(inputValue, config.numDecimals || 4);
   input.autocomplete = "off";
   input.spellcheck = false;
   if (config.className) input.classList.add(config.className);

@@ -16,7 +16,10 @@
 
 import "#src/ui/annotation_properties.css";
 
-import type { AnnotationColorPropertySpec } from "#src/annotation/index.js";
+import type {
+  AnnotationColorPropertySpec,
+  AnnotationPropertySpec,
+} from "#src/annotation/index.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
@@ -25,6 +28,19 @@ import svg_info from "ikonate/icons/info.svg?raw";
 import { makeIcon } from "#src/widget/icon.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
+export type AnnotationPropertyType = AnnotationPropertySpec["type"];
+
+export const ANNOTATION_TYPES: AnnotationPropertyType[] = [
+  "rgb",
+  "rgba",
+  "float32",
+  "int8",
+  "int16",
+  "int32",
+  "uint8",
+  "uint16",
+  "uint32",
+];
 
 function createColorPreviewBox(hexColor: string) {
   const previewBox = document.createElement("div");
@@ -102,8 +118,7 @@ export function makeEditableColorProperty(
   let alphaInput: HTMLInputElement | undefined;
   if (isRGBA) {
     // Extra alpha input
-    alphaInput = createBoundedNumberInputElement({
-      inputValue: unpackRGBA(packedColor)[3],
+    alphaInput = createBoundedNumberInputElement(unpackRGBA(packedColor)[3], {
       numDecimals: 2,
       min: 0,
       max: 1,

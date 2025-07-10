@@ -46,15 +46,22 @@ import { FramedDialog } from "#src/overlay.js";
 import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import type { AnnotationColorKey } from "#src/ui/annotation_properties.js";
+import type {
+  AnnotationColorKey,
+  AnnotationPropertyType,
+} from "#src/ui/annotation_properties.js";
 import {
+  ANNOTATION_TYPES,
   makeDescriptionIcon,
   makeEditableColorProperty,
   makeReadonlyColorProperty,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
-import { isBooleanType, isEnumType } from "#src/ui/annotations.js";
-import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { isBooleanType, isEnumType } from "#src/ui/annotation_properties.js";
+import {
+  createBoundedNumberInputElement,
+  NumberDisplayConfig,
+} from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
@@ -78,35 +85,12 @@ import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-const ANNOTATION_TYPES: AnnotationType[] = [
-  "rgb",
-  "rgba",
-  "float32",
-  "int8",
-  "int16",
-  "int32",
-  "uint8",
-  "uint16",
-  "uint32",
-];
 const ANNOTATION_UI_TYPES: AnnotationUIType[] = ["bool", ...ANNOTATION_TYPES];
+type AnnotationUIType = AnnotationPropertyType | "bool";
 
-type AnnotationType = AnnotationPropertySpec["type"];
-type AnnotationUIType = AnnotationType | "bool";
-
-interface InputConfig {
+interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
-  inputValue?: number | string;
-  className?: string;
-  decimals?: number; // For number inputs, how many decimals to show
   useTextarea?: boolean;
-}
-
-interface NumberConfig {
-  dataType?: DataType;
-  min?: number;
-  max?: number;
-  step?: number;
 }
 
 class AnnotationDescriptionEditDialog extends FramedDialog {
@@ -274,9 +258,8 @@ class AnnotationUIProperty extends RefCounted {
     identifier: string,
     description?: string,
   ): HTMLDivElement {
-    const nameInput = this.createInputElement({
+    const nameInput = this.createInputElement(identifier, {
       type: "text",
-      inputValue: identifier,
       className: "neuroglancer-annotation-schema-name-input",
     });
     nameInput.name = `neuroglancer-annotation-schema-name-input-${identifier}`;
@@ -416,9 +399,8 @@ class AnnotationUIProperty extends RefCounted {
         }
       }
     } else if (type === "bool") {
-      const boolInput = this.createInputElement({
+      const boolInput = this.createInputElement(String(oldProperty.default), {
         type: "checkbox",
-        inputValue: String(oldProperty.default),
         className: "neuroglancer-annotation-schema-default-value-input",
       }) as HTMLInputElement;
       boolInput.checked = oldProperty.default === 1;
@@ -439,17 +421,12 @@ class AnnotationUIProperty extends RefCounted {
       ) as AnnotationNumericPropertySpec;
       const { enumValues, enumLabels } = oldProperty;
       if (enumValues === undefined || enumLabels === undefined) {
-        const dataType = propertyTypeDataType[type as AnnotationType];
-        const numberInput = this.createInputElement(
-          {
-            type: "number",
-            inputValue: oldProperty.default,
-            className: "neuroglancer-annotation-schema-default-value-input",
-          },
-          {
-            dataType,
-          },
-        );
+        const dataType = propertyTypeDataType[type as AnnotationPropertyType];
+        const numberInput = this.createInputElement(oldProperty.default, {
+          type: "number",
+          className: "neuroglancer-annotation-schema-default-value-input",
+          dataType,
+        });
         numberInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
         inputs.push(numberInput);
         changeFunction = (event: Event) => {
@@ -467,7 +444,7 @@ class AnnotationUIProperty extends RefCounted {
         let addEnumButton: HTMLElement | null = null;
         isEnum = true;
         if (!this.readonly) {
-          const dataType = propertyTypeDataType[type as AnnotationType];
+          const dataType = propertyTypeDataType[type as AnnotationPropertyType];
           const bounds = defaultDataTypeRange[dataType!] as [number, number];
           addEnumButton = makeAddButton({
             title: "Add new enum option",
@@ -503,9 +480,8 @@ class AnnotationUIProperty extends RefCounted {
           const enumRow = document.createElement("div");
           enumRow.className = "neuroglancer-annotation-schema-enum-entry";
 
-          const nameInput = this.createInputElement({
+          const nameInput = this.createInputElement(label, {
             type: "text",
-            inputValue: label,
             className: "neuroglancer-annotation-schema-default-value-input",
             useTextarea: true,
           });
@@ -526,16 +502,11 @@ class AnnotationUIProperty extends RefCounted {
 
           const annotationType =
             this.parentView.mapUITypeToAnnotationType(type);
-          const valueInput = this.createInputElement(
-            {
-              type: "number",
-              inputValue: value,
-              className: "neuroglancer-annotation-schema-default-value-input",
-            },
-            {
-              dataType: propertyTypeDataType[annotationType],
-            },
-          );
+          const valueInput = this.createInputElement(value, {
+            type: "number",
+            className: "neuroglancer-annotation-schema-default-value-input",
+            dataType: propertyTypeDataType[annotationType],
+          });
           valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
           if (!this.readonly) {
             const dataType = propertyTypeDataType[annotationType];
@@ -629,50 +600,49 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createInputElement(
+    inputValue: number | string,
     config: InputConfig,
-    numberConfig?: NumberConfig,
   ): HTMLInputElement | HTMLTextAreaElement {
     const readonly = this.readonly;
 
     if (config.type === "number") {
-      return this.createNumberInput(config, numberConfig, readonly);
+      return this.createNumberInput(inputValue as number, config, readonly);
     }
 
     if (config.type === "text") {
       return config.useTextarea
-        ? this.createTextAreaElement(config, readonly)
-        : this.createTextInputElement(config, readonly);
+        ? this.createTextAreaElement(inputValue as string, config, readonly)
+        : this.createTextInputElement(inputValue as string, config, readonly);
     }
 
     const input = document.createElement("input");
     input.type = config.type;
-    this.setCommonInputAttributes(input, config, readonly);
+    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
   private createNumberInput(
+    inputValue: number,
     config: InputConfig,
-    numberConfig: NumberConfig | undefined,
     readonly: boolean,
   ): HTMLInputElement {
-    const input = createBoundedNumberInputElement({
-      inputValue: config.inputValue as number,
+    const input = createBoundedNumberInputElement(inputValue, {
       className: config.className,
-      numDecimals: config.decimals,
+      numDecimals: config.numDecimals,
       readonly,
-      ...numberConfig,
     });
-    this.setCommonInputAttributes(input, config, readonly);
+    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
   private createTextAreaElement(
+    inputValue: string,
     config: InputConfig,
     readonly: boolean,
   ): HTMLTextAreaElement {
     const textarea = document.createElement("textarea");
     textarea.rows = 1;
-    this.setCommonInputAttributes(textarea, config, readonly);
+    this.setCommonInputAttributes(inputValue, textarea, config, readonly);
 
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -717,16 +687,18 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createTextInputElement(
+    inputValue: string,
     config: InputConfig,
     readonly: boolean,
   ): HTMLInputElement {
     const input = document.createElement("input");
     input.type = "text";
-    this.setCommonInputAttributes(input, config, readonly);
+    this.setCommonInputAttributes(inputValue, input, config, readonly);
     return input;
   }
 
   private setCommonInputAttributes(
+    inputValue: number | string,
     element: HTMLInputElement | HTMLTextAreaElement,
     config: InputConfig,
     readonly: boolean,
@@ -739,10 +711,10 @@ class AnnotationUIProperty extends RefCounted {
     }
 
     if (
-      typeof config.inputValue !== "number" ||
+      typeof inputValue !== "number" ||
       element instanceof HTMLTextAreaElement
     ) {
-      element.value = String(config.inputValue || "");
+      element.value = String(inputValue || "");
       element.autocomplete = "off";
       element.spellcheck = false;
     }
@@ -769,10 +741,10 @@ class AnnotationUIProperty extends RefCounted {
   }
   private showTypeChangeDropdown(
     anchorElement: HTMLElement,
-    currentType: AnnotationType,
+    currentType: AnnotationPropertyType,
     identifier: string,
   ) {
-    const availableOptions: AnnotationType[] = [];
+    const availableOptions: AnnotationPropertyType[] = [];
     for (const type of ANNOTATION_TYPES) {
       if (canConvertTypes(currentType, type)) {
         availableOptions.push(type);
@@ -801,7 +773,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createDropdownElement(
-    availableOptions: AnnotationType[],
+    availableOptions: AnnotationPropertyType[],
     identifier: string,
   ) {
     const dropdown = document.createElement("div");
@@ -855,7 +827,10 @@ class AnnotationUIProperty extends RefCounted {
     dropdown.style.top = `${rect.bottom}px`;
   }
 
-  private handleTypeChange(newType: AnnotationType, identifier: string) {
+  private handleTypeChange(
+    newType: AnnotationPropertyType,
+    identifier: string,
+  ) {
     const oldProperty = this.getPropertyByIdentifier(identifier);
     if (oldProperty === undefined) {
       console.warn(`Property with name ${identifier} not found.`);
@@ -1347,7 +1322,7 @@ export class AnnotationSchemaView extends Tab {
     );
   }
 
-  mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationType {
+  mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationPropertyType {
     if (uiType === "bool") return "uint8";
     return uiType;
   }
