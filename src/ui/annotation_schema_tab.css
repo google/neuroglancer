@@ -241,6 +241,11 @@
   margin-bottom: 2px;
 }
 
+.neuroglancer-annotation-schema-enum-entry .neuroglancer-annotation-schema-default-value-input {
+  line-height: 18px;
+  padding: 0;
+}
+
 .neuroglancer-annotation-schema-name-input {
   width: 100%;
   border-radius: 2px;
