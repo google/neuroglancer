@@ -76,6 +76,17 @@
   overflow: hidden;
 }
 
+.neuroglancer-annotation-schema-type-icon {
+  min-width: 12px;
+  min-height: 12px;
+  margin-right: 2px;
+}
+
+.neuroglancer-annotation-schema-type-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
 .neuroglancer-annotation-schema-enum-entry:hover
   .neuroglancer-annotation-schema-delete-icon {
   opacity: 1;

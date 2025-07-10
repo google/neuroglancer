@@ -804,17 +804,16 @@ class AnnotationUIProperty extends RefCounted {
     });
     this.typeChangeDropdown = dropdown;
   }
-  // TODO replace
   private createIconWrapper(
     type: AnnotationUIType,
     enumLabels?: string[],
   ): HTMLSpanElement {
-    const iconWrapper = document.createElement("span");
-    iconWrapper.classList.add(
-      "neuroglancer-annotation-schema-description-icon",
-    );
-    iconWrapper.innerHTML = this.getIconForType(type, enumLabels);
-    return iconWrapper;
+    const icon = makeIcon({
+      svg: this.getIconForType(type, enumLabels),
+      clickable: false,
+    });
+    icon.classList.add("neuroglancer-annotation-schema-type-icon");
+    return icon;
   }
 
   private positionDropdown(
@@ -1206,7 +1205,7 @@ export class AnnotationSchemaView extends Tab {
         });
       };
       populateDropDown(ANNOTATION_UI_TYPES, false);
-      // Now do it again for the numeric types
+      // Now do it again for the numeric types as enums
       populateDropDown(
         ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
         true,
