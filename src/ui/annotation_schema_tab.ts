@@ -242,13 +242,13 @@ class AnnotationUIProperty extends RefCounted {
         "neuroglancer-annotation-schema-description-cell",
       );
       element.appendChild(descriptionCell);
-      const deleteIcon = document.createElement("span");
-      deleteIcon.innerHTML = svg_bin;
-      deleteIcon.title = "Delete annotation property";
-      deleteIcon.style.cursor = "pointer";
-      this.registerEventListener(deleteIcon, "click", () => {
-        const propertyIdentifier = spec.identifier;
-        this.removeProperty(propertyIdentifier);
+      const deleteIcon = makeIcon({
+        svg: svg_bin,
+        title: "Delete annotation property",
+        onClick: () => {
+          const propertyIdentifier = spec.identifier;
+          this.removeProperty(propertyIdentifier);
+        },
       });
 
       const deleteCell = this.createTableCell(
@@ -666,29 +666,27 @@ class AnnotationUIProperty extends RefCounted {
     enumIndex: number,
     oldProperty: any,
   ): HTMLSpanElement {
-    const deleteIcon = document.createElement("span");
-    deleteIcon.className = "neuroglancer-annotation-schema-delete-icon";
-    deleteIcon.innerHTML = svg_bin;
-    deleteIcon.title = "Delete enum row";
-    deleteIcon.style.cursor = "pointer";
+    const deleteIcon = makeIcon({
+      svg: svg_bin,
+      title: "Delete enum row",
+      onClick: () => {
+        const currentProperty = this.getPropertyByIdentifier(
+          oldProperty.identifier,
+        ) as AnnotationNumericPropertySpec;
+        const newEnumValues = currentProperty.enumValues!.filter(
+          (_, i) => i !== enumIndex,
+        );
+        const newEnumLabels = currentProperty.enumLabels!.filter(
+          (_, i) => i !== enumIndex,
+        );
 
-    const currentProperty = this.getPropertyByIdentifier(
-      oldProperty.identifier,
-    ) as AnnotationNumericPropertySpec;
-
-    deleteIcon.addEventListener("click", () => {
-      const newEnumValues = currentProperty.enumValues!.filter(
-        (_, i) => i !== enumIndex,
-      );
-      const newEnumLabels = currentProperty.enumLabels!.filter(
-        (_, i) => i !== enumIndex,
-      );
-
-      this.updateProperty(currentProperty, {
-        enumValues: newEnumValues,
-        enumLabels: newEnumLabels,
-      });
+        this.updateProperty(currentProperty, {
+          enumValues: newEnumValues,
+          enumLabels: newEnumLabels,
+        });
+      },
     });
+    deleteIcon.classList.add("neuroglancer-annotation-schema-delete-icon");
 
     return deleteIcon;
   }

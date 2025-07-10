@@ -74,6 +74,7 @@
   box-sizing: border-box;
   resize: none;
   overflow: hidden;
+  height: 20px;
 }
 
 .neuroglancer-annotation-schema-type-icon {
@@ -221,6 +222,7 @@
   visibility: hidden;
   opacity: 0;
   transition: opacity 0.2s ease-in-out;
+  align-self: auto;
 }
 
 .neuroglancer-annotation-schema-dropdown {
@@ -255,7 +257,7 @@
 
 .neuroglancer-annotation-schema-enum-entry {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 2px;
   margin-bottom: 2px;
 }

@@ -24,6 +24,7 @@
   background: rgba(255, 255, 255, 0.3);
   outline: none;
   border: 1px solid transparent;
+  height: 20px;
 }
 
 .neuroglancer-annotation-property-value-input::placeholder {
@@ -42,9 +43,10 @@
 .neuroglancer-annotation-property-color {
   background: #222;
   border: none;
-  border-radius: 2px;
-  padding: 2px;
+  border-radius: 1px;
+  padding: 0;
   width: 100%;
+  height: 21px;
 }
 
 .neuroglancer-annotation-property-color-preview {
