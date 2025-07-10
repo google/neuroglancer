@@ -74,7 +74,6 @@
   box-sizing: border-box;
   resize: none;
   overflow: hidden;
-  height: 20px;
 }
 
 .neuroglancer-annotation-schema-type-icon {
@@ -97,18 +96,6 @@
 .neuroglancer-annotation-schema-enum-entry:hover
   .neuroglancer-annotation-schema-delete-icon {
   border-color: #222;
-}
-
-.neuroglancer-annotation-schema-delete-cell svg,
-.neuroglancer-annotation-schema-delete-icon svg {
-  width: 1rem;
-  height: 1rem;
-  fill: transparent;
-  stroke: white;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
 }
 
 .neuroglancer-annotation-schema-cell {
@@ -149,11 +136,6 @@
 
 .neuroglancer-annotation-schema-action-buttons svg {
   stroke: rgba(255, 255, 255, 0.6);
-}
-
-.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon:hover,
-.neuroglancer-annotation-schema-action-button-selected {
-  background-color: #333;
 }
 
 .neuroglancer-annotation-schema-action-buttons .neuroglancer-icon:hover svg,
@@ -279,6 +261,7 @@
   border: 1px solid transparent;
   font-size: 13px;
   color: white;
+  height: 20px;
 }
 
 .neuroglancer-annotation-schema-name-input[data-readonly="false"]:hover {
@@ -315,8 +298,16 @@
   background: rgba(255, 255, 255, 0.4);
 }
 
+.neuroglancer-annotation-schema-type-cell {
+  height: 20px;
+}
+
 .neuroglancer-annotation-schema-type-cell[data-readonly="false"] {
   cursor: pointer;
+}
+.neuroglancer-annotation-schema-type-cell[data-readonly="true"]
+  .neuroglancer-info-icon {
+  cursor: default;
 }
 .neuroglancer-annotation-schema-type-cell[data-readonly="false"]:hover {
   background: rgba(255, 255, 255, 0.4);
