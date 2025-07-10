@@ -52,6 +52,7 @@ import type {
 } from "#src/ui/annotation_properties.js";
 import {
   ANNOTATION_TYPES,
+  makeBoolCheckbox,
   makeDescriptionIcon,
   makeEditableColorProperty,
   makeReadonlyColorProperty,
@@ -399,23 +400,23 @@ class AnnotationUIProperty extends RefCounted {
         }
       }
     } else if (type === "bool") {
-      const boolInput = this.createInputElement(String(oldProperty.default), {
-        type: "checkbox",
-        className: "neuroglancer-annotation-schema-default-value-input",
-      }) as HTMLInputElement;
-      boolInput.checked = oldProperty.default === 1;
-      boolInput.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
-      inputs.push(boolInput);
+      const checkbox = makeBoolCheckbox(oldProperty.default === 1);
+      checkbox.classList.add(
+        "neuroglancer-annotation-schema-default-value-input",
+      );
+      checkbox.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
+      checkbox.name = `neuroglancer-annotation-schema-default-value-input-${type}`;
+      inputs.push(checkbox);
       changeFunction = (event: Event) => {
         const newValue = (event.target as HTMLInputElement).checked;
         this.updateProperty(oldProperty, { default: newValue ? 1 : 0 });
       };
-      container.appendChild(boolInput);
     } else if (
       type.startsWith("int") ||
       type.startsWith("uint") ||
       type === "float32"
     ) {
+      // Regular numeric types
       const oldProperty = this.getPropertyByIdentifier(
         identifier,
       ) as AnnotationNumericPropertySpec;
@@ -438,6 +439,7 @@ class AnnotationUIProperty extends RefCounted {
           this.updateProperty(oldProperty, { default: newValue });
         };
       } else {
+        // Enum type
         const enumContainer = document.createElement("div");
         enumContainer.className =
           "neuroglancer-annotation-schema-enum-container";
@@ -804,6 +806,7 @@ class AnnotationUIProperty extends RefCounted {
     });
     this.typeChangeDropdown = dropdown;
   }
+
   private createIconWrapper(
     type: AnnotationUIType,
     enumLabels?: string[],

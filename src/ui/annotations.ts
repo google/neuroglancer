@@ -81,6 +81,7 @@ import {
   makeDescriptionIcon,
   isBooleanType,
   isEnumType,
+  makeBoolCheckbox,
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
@@ -2015,14 +2016,17 @@ export function UserLayerWithAnnotationsMixin<
                       const isBool = isBooleanType(propertyAsNum.enumLabels);
                       const isEnum = isEnumType(propertyAsNum.enumLabels);
                       if (isBool) {
-                        const input = document.createElement("input");
-                        input.type = "checkbox";
-                        input.name = `neuroglancer-annotation-property-value-checkbox-${i}`;
-                        input.checked = Boolean(value);
-                        input.addEventListener("change", () => {
-                          changeFunction(input.checked ? 1 : 0);
-                        });
-                        valueElement = input;
+                        valueElement = makeBoolCheckbox(
+                          value,
+                          (event: Event) => {
+                            if (!event.target) return;
+                            changeFunction(
+                              (event.target as HTMLInputElement).checked
+                                ? 1
+                                : 0,
+                            );
+                          },
+                        );
                         valueElementWrapper.style.justifyContent = "center";
                       } else if (isEnum) {
                         // Make a dropdown which combines the enum labels and values.

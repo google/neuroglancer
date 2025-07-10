@@ -61,8 +61,25 @@ export function isBooleanType(enumLabels?: string[]): boolean {
     false
   );
 }
+
 export function isEnumType(enumLabels?: string[]): boolean {
   return (enumLabels && enumLabels.length > 0) || false;
+}
+
+export function makeBoolCheckbox(
+  value: boolean | number,
+  onChange?: (event: Event) => void,
+): HTMLInputElement {
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = Boolean(value);
+  checkbox.classList.add("neuroglancer-annotation-property-checkbox");
+  if (onChange) {
+    checkbox.addEventListener("change", (event) => {
+      onChange(event);
+    });
+  }
+  return checkbox;
 }
 
 export function makeDescriptionIcon(description: string) {
