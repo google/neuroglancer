@@ -319,13 +319,6 @@ input.neuroglancer-segment-list-entry-id {
   font-size: small;
 }
 
-.neuroglancer-annotation-property-container {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-}
-
 .neuroglancer-annotation-property-color {
   background: #222;
   border: none;

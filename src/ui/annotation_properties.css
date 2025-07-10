@@ -80,3 +80,17 @@
 .neuroglancer-annotation-description-icon:hover svg {
   stroke: white;
 }
+
+.neuroglancer-annotation-property-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.neuroglancer-annotation-property-container[data-readonly="false"] {
+  width: 100%;
+}
+
+.neuroglancer-annotation-property-container[data-readonly="false"] {
+  gap: 4px;
+}

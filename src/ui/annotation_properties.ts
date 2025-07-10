@@ -99,6 +99,7 @@ export function makeReadonlyColorProperty(
   const isRGBA = type === "rgba";
   const colorContainer = document.createElement("div");
   colorContainer.classList.add("neuroglancer-annotation-property-container");
+  colorContainer.dataset.readonly = "true";
 
   const hexValue = serializeColor(
     isRGBA ? unpackRGBA(packColor) : unpackRGB(packColor),
@@ -124,7 +125,7 @@ export function makeEditableColorProperty(
   const isRGBA = type === "rgba";
   const colorContainer = document.createElement("div");
   colorContainer.classList.add("neuroglancer-annotation-property-container");
-
+  colorContainer.dataset.readonly = "false";
   // Base rgb color setter
   const colorOnly = unpackRGB(packedColor);
   const watchableColor = new WatchableValue(colorOnly);
