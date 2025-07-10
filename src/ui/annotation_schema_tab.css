@@ -44,6 +44,22 @@
   width: 100%;
 }
 
+.neuroglancer-annotation-schema-default-value-input {
+  text-align: left;
+  font-family: monospace;
+  font-size: 12px;
+  width: 100%;
+  color: white;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  outline: none;
+  border: 1px solid transparent;
+  flex: 1 0 0;
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+}
+
 .neuroglancer-annotation-schema-enum-entry:hover
   .neuroglancer-annotation-schema-delete-icon {
   opacity: 1;
@@ -247,8 +263,8 @@
 
 .neuroglancer-annotation-schema-enum-entry-textarea {
   height: auto;
-  padding: 0 !important;
-  overflow-y: auto !important;
+  padding: 0;
+  overflow-y: auto;
 }
 
 .neuroglancer-annotation-schema-name-input {
@@ -272,22 +288,6 @@
 
 .neuroglancer-annotation-schema-name-input:hover:focus {
   background: transparent;
-}
-
-.neuroglancer-annotation-schema-default-value-input {
-  text-align: left;
-  font-family: monospace;
-  font-size: 12px;
-  width: 100%;
-  color: white;
-  padding: 2px;
-  background: rgba(255, 255, 255, 0.3);
-  outline: none;
-  border: 1px solid transparent;
-  flex: 1 0 0;
-  box-sizing: border-box;
-  resize: none;
-  overflow: hidden;
 }
 
 .neuroglancer-annotation-schema-default-value-input::placeholder {
