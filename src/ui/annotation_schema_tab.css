@@ -62,8 +62,6 @@
 
 .neuroglancer-annotation-schema-default-value-input {
   text-align: left;
-  font-family: monospace;
-  font-size: 12px;
   width: 100%;
   color: white;
   padding: 2px;
@@ -247,11 +245,18 @@
 .neuroglancer-annotation-textarea {
   height: auto;
   padding: 0;
-  overflow-y: auto;
   min-height: 1lh;
   max-height: 15lh;
   line-height: 18px;
   resize: none;
+  font-size: small;
+  overflow: hidden;
+}
+
+.neuroglancer-annotation-textarea[data-readonly="true"] {
+  background: none;
+  border: none;
+  outline: none;
 }
 
 .neuroglancer-annotation-schema-name-input {
@@ -261,7 +266,6 @@
   background: transparent;
   border: 1px solid transparent;
   font-size: small;
-  font-family: sans-serif;
   color: white;
 }
 
