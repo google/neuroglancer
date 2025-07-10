@@ -366,6 +366,7 @@ class AnnotationUIProperty extends RefCounted {
       );
     }
     if (type.startsWith("rgb")) {
+      // Color types
       if (this.readonly) {
         const colorPreview = makeReadonlyColorProperty(
           oldProperty.default,
@@ -400,6 +401,7 @@ class AnnotationUIProperty extends RefCounted {
         }
       }
     } else if (type === "bool") {
+      // Enums with only True/False values
       const checkbox = makeBoolCheckbox(oldProperty.default === 1);
       checkbox.classList.add(
         "neuroglancer-annotation-schema-default-value-input",
@@ -415,6 +417,7 @@ class AnnotationUIProperty extends RefCounted {
       "enumLabels" in oldProperty &&
       isEnumType(oldProperty.enumLabels)
     ) {
+      // Enums of any type
       const { enumValues, enumLabels } = oldProperty;
       const enumContainer = document.createElement("div");
       enumContainer.className = "neuroglancer-annotation-schema-enum-container";
