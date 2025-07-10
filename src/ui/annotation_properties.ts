@@ -61,6 +61,7 @@ export function createTextAreaElement(
   const textarea = document.createElement("textarea");
   textarea.rows = 1;
   textarea.classList.add("neuroglancer-annotation-textarea");
+  textarea.value = String(inputValue || "");
 
   textarea.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -104,7 +105,6 @@ export function createTextAreaElement(
   textarea.disabled = readonly;
   textarea.autocomplete = "off";
   textarea.spellcheck = false;
-  textarea.value = String(inputValue || "");
 
   return textarea;
 }
