@@ -1,10 +1,10 @@
 import "#src/ui/annotation_properties.css";
 
+import type { AnnotationColorPropertySpec } from "#src/annotation/index.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { ColorWidget } from "#src/widget/color.js";
-import { AnnotationColorPropertySpec } from "../annotation";
-import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 

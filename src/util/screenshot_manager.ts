@@ -31,6 +31,7 @@ import {
   getFormattedNames,
 } from "#src/ui/statistics.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { saveBlobToFile } from "#src/util/file_download.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import {
@@ -38,7 +39,6 @@ import {
   type PanelViewport,
 } from "#src/util/viewer_resolution_stats.js";
 import type { Viewer } from "#src/viewer.js";
-import { saveBlobToFile } from "#src/util/file_download.js";
 
 export const MAX_RENDER_AREA_PIXELS = 5100 * 5100;
 const SCREENSHOT_TIMEOUT = 3000;

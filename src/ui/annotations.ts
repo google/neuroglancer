@@ -75,6 +75,12 @@ import {
   registerNested,
   WatchableValue,
 } from "#src/trackable_value.js";
+import type { AnnotationColorKey } from "#src/ui/annotation_properties.js";
+import {
+  makeReadonlyColorProperty,
+  makeEditableColorProperty,
+} from "#src/ui/annotation_properties.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -95,6 +101,8 @@ import {
 } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { nearlyEqual } from "#src/util/number.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import * as vector from "#src/util/vector.js";
@@ -109,14 +117,6 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
-import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
-import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { nearlyEqual } from "#src/util/number.js";
-import {
-  AnnotationColorKey,
-  makeReadonlyColorProperty,
-  makeEditableColorProperty,
-} from "#src/ui/annotation_properties.js";
 
 export function isBooleanType(enumLabels?: string[]): boolean {
   return (

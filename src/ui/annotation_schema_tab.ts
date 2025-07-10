@@ -19,16 +19,16 @@
  * See https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md
  */
 
-import svg_numbers from "ikonate/icons/hash.svg?raw";
-import svg_palette from "ikonate/icons/drop.svg?raw";
-import svg_check from "ikonate/icons/ok-circle.svg?raw";
-import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_bin from "ikonate/icons/bin.svg?raw";
+import svg_clipboard from "ikonate/icons/clipboard.svg?raw";
 import svg_download from "ikonate/icons/download.svg?raw";
-import svg_format_size from "ikonate/icons/text.svg?raw";
+import svg_palette from "ikonate/icons/drop.svg?raw";
 import svg_edit from "ikonate/icons/edit.svg?raw";
+import svg_numbers from "ikonate/icons/hash.svg?raw";
+import svg_check from "ikonate/icons/ok-circle.svg?raw";
+import svg_format_size from "ikonate/icons/text.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
-import { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
+import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
   AnnotationNumericPropertySpec,
   AnnotationPropertySpec,
@@ -42,44 +42,44 @@ import {
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
+import { FramedDialog } from "#src/overlay.js";
+import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { RefCounted, type Borrowed } from "#src/util/disposable.js";
-import { stableStringify } from "#src/util/json.js";
-import { makeAddButton } from "#src/widget/add_button.js";
-import { makeCopyButton } from "#src/widget/copy_button.js";
-import { makeIcon } from "#src/widget/icon.js";
-import { Tab } from "#src/widget/tab_view.js";
-import { saveBlobToFile } from "#src/util/file_download.js";
-import { StatusMessage } from "#src/status.js";
-import { DataType } from "#src/util/data_type.js";
+import type { AnnotationColorKey } from "#src/ui/annotation_properties.js";
 import {
-  UserLayerWithAnnotations,
+  makeEditableColorProperty,
+  makeReadonlyColorProperty,
+} from "#src/ui/annotation_properties.js";
+import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
+import {
   isBooleanType,
   isEnumType,
   appendDescriptionIcon,
 } from "#src/ui/annotations.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { arraysEqual } from "#src/util/array.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import {
   packColor,
   serializeColor,
   unpackRGB,
   unpackRGBA,
 } from "#src/util/color.js";
-import { vec3, vec4 } from "#src/util/geom.js";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted, type Borrowed } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
-import { NullarySignal } from "#src/util/signal.js";
-import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
-import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { FramedDialog } from "#src/overlay.js";
-import { arraysEqual } from "#src/util/array.js";
+import { saveBlobToFile } from "#src/util/file_download.js";
+import { vec3, vec4 } from "#src/util/geom.js";
+import { stableStringify } from "#src/util/json.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
-import { setClipboard } from "#src/util/clipboard.js";
-import {
-  AnnotationColorKey,
-  makeEditableColorProperty,
-  makeReadonlyColorProperty,
-} from "#src/ui/annotation_properties.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { NullarySignal } from "#src/util/signal.js";
+import { makeAddButton } from "#src/widget/add_button.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
+import { makeIcon } from "#src/widget/icon.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 const ANNOTATION_TYPES: AnnotationType[] = [
   "rgb",
@@ -373,7 +373,7 @@ class AnnotationUIProperty extends RefCounted {
     container.className =
       "neuroglancer-annotation-schema-default-value-cell-container";
 
-    let inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
+    const inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
     let changeFunction: (event: Event) => void;
     let isEnum = false;
     const oldProperty = this.getPropertyByIdentifier(identifier);
