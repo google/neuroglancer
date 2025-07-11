@@ -210,7 +210,8 @@ div.neuroglancer-annotation-details-description {
 .neuroglancer-selected-annotation-details-delete {
   grid-rows: 1 / -1;
   grid-column: delete;
-  align-self: start;
+  display: inline-grid;
+  justify-content: center;
 }
 
 .neuroglancer-selected-annotation-details-position-dim {
@@ -249,6 +250,10 @@ div.neuroglancer-annotation-details-description {
   gap: 12px;
   padding: 2px;
   border-bottom: 1px solid #222;
+}
+
+.neuroglancer-annotation-property:hover {
+  background-color: #111;
 }
 
 .neuroglancer-annotation-property-name-wrapper {

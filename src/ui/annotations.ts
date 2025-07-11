@@ -1868,16 +1868,18 @@ export function UserLayerWithAnnotationsMixin<
                 }
 
                 if (!annotationLayer.source.readonly) {
+                  const buttonWrapper = document.createElement("div");
                   const button = makeDeleteButton({
                     title: "Delete annotation",
                     onClick: () => {
                       annotationLayer.source.delete(reference);
                     },
                   });
-                  button.classList.add(
+                  buttonWrapper.classList.add(
                     "neuroglancer-selected-annotation-details-delete",
                   );
-                  positionGrid.appendChild(button);
+                  buttonWrapper.appendChild(button);
+                  positionGrid.appendChild(buttonWrapper);
                 }
 
                 const {
