@@ -46,6 +46,7 @@
   padding: 0;
   width: 100%;
   height: 21px;
+  cursor: pointer;
 }
 
 .neuroglancer-annotation-property-color-preview {
@@ -110,4 +111,8 @@
   background: none;
   border: none;
   outline: none;
+}
+
+.neuroglancer-annotation-property-checkbox {
+  cursor: pointer;
 }
