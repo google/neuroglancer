@@ -214,13 +214,13 @@ function setupLayerPostCreation(
       color = channel.color;
     }
     shaderControlState.get("color")!.trackable.value = color;
-    const contrast = shaderControlState.get("contrast")!;
-    const trackableContrast = contrast.trackable;
     if (
       channel?.range !== undefined &&
       channel?.window !== undefined &&
       !ignoreInputMetadata
     ) {
+      const contrast = shaderControlState.get("contrast")!;
+      const trackableContrast = contrast.trackable;
       trackableContrast.value = {
         ...trackableContrast.value,
         range: channel.range,
@@ -229,6 +229,8 @@ function setupLayerPostCreation(
     } else if (active) {
       // Wait for some data to be loaded before setting the contrast
       const debouncedSetContrast = debounce(() => {
+        const contrast = shaderControlState.get("contrast")!;
+        const trackableContrast = contrast.trackable;
         trackableContrast.value = {
           ...trackableContrast.value,
           autoCompute: true,
@@ -238,25 +240,21 @@ function setupLayerPostCreation(
     }
   };
 
-  const setDefaultsWhenReady = () => {
-    const maxWait = 2000;
-    const startTime = Date.now();
-    const waitForShaderWidgetsReady = debounce(() => {
-      const shaderControlState = userImageLayer.shaderControlState.value;
-      const contrast = shaderControlState.get("contrast");
-      if (contrast !== undefined || Date.now() - startTime > maxWait) {
-        waitForShaderWidgetsReady.cancel();
-        if (contrast !== undefined) {
-          // Set up the widgets
-          setupWidgetsFunction();
-        }
-      } else {
-        // Continue polling
-        waitForShaderWidgetsReady();
-      }
-    }, 100);
+  const shaderControlState = userImageLayer.shaderControlState;
+  const checkReadyAndSetup = () => {
+    if (
+      shaderControlState.controls.value &&
+      shaderControlState.controls.value.get("contrast") !== undefined
+    ) {
+      setupWidgetsFunction();
+      return true;
+    }
+    return false;
+  };
 
-    waitForShaderWidgetsReady();
+  const setDefaultsWhenReady = () => {
+    if (checkReadyAndSetup()) return;
+    shaderControlState.controls.changed.addOnce(checkReadyAndSetup);
   };
 
   const setVolumeRenderingSamples = () => {
