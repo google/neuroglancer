@@ -313,7 +313,8 @@ export function createImageLayerAsMultiChannel(
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
-    const name = channelMetadata?.label ?? `${startingName} c${chanName}`;
+    const nameSuffix = channelMetadata?.label ?? `c${chanName}`;
+    const name = `${startingName} ${nameSuffix}`;
     let addedLayer: any = managedLayer;
     if (i == 0) {
       changeLayerName(managedLayer, name);
