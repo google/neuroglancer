@@ -32,6 +32,8 @@ import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
+import { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
+import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 
 type MakeLayerFn = (
   manager: LayerListSpecification,
@@ -228,15 +230,56 @@ function setupLayerPostCreation(
       };
     } else if (active) {
       // Wait for some data to be loaded before setting the contrast
-      const debouncedSetContrast = debounce(() => {
-        const contrast = shaderControlState.get("contrast")!;
+      let allowedRetries = 15;
+      const setContrast = () => {
+        const contrast = shaderControlState.get("contrast");
+        if (!contrast) return;
         const trackableContrast = contrast.trackable;
         trackableContrast.value = {
           ...trackableContrast.value,
           autoCompute: true,
         };
-      }, 2000);
-      debouncedSetContrast();
+      };
+      const debouncedCheckDataReady = debounce(() => {
+        checkDataReady();
+      }, 500);
+
+      const checkDataReady = () => {
+        const contrast = shaderControlState.get("contrast");
+        if (!contrast) {
+          debouncedCheckDataReady();
+          return;
+        }
+        const trackableContrast = contrast.trackable;
+        const range = trackableContrast.value.range;
+        const dataType = (
+          userImageLayer.shaderControlState.controls.value!.get(
+            "contrast",
+          ) as ShaderImageInvlerpControl
+        ).dataType;
+        const defaultRange = defaultDataTypeRange[dataType];
+        const dataReady = !dataTypeIntervalEqual(range, defaultRange);
+        if (!dataReady) {
+          if (allowedRetries <= 0) {
+            console.warn(
+              "Data not ready after multiple attempts. Using default contrast.",
+            );
+            trackableContrast.value = {
+              ...trackableContrast.value,
+              autoCompute: true,
+            };
+            return;
+          }
+          allowedRetries--;
+          setContrast();
+          debouncedCheckDataReady();
+        }
+      };
+      // The first wait should give some time for data to load in
+      const longerWait = debounce(() => {
+        checkDataReady();
+      }, 1200);
+      longerWait();
     }
   };
 
