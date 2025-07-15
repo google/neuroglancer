@@ -125,7 +125,7 @@ function calculateLocalDimensions(managedLayer: ManagedUserLayer) {
     ? totalLocalChannels
     : 0;
   return {
-    totalLocalChannels,
+    dataLocalChannels: totalLocalChannels,
     lowerBounds,
     upperBounds,
     localDimensionRank,
@@ -280,8 +280,9 @@ export function createImageLayerAsMultiChannel(
   if (managedLayer.layer?.type !== "image") return;
 
   renameChannelDimensions(managedLayer.layer);
-  const { totalLocalChannels, lowerBounds, upperBounds, localDimensionRank } =
+  const { dataLocalChannels, lowerBounds, upperBounds, localDimensionRank } =
     calculateLocalDimensions(managedLayer);
+  const totalLocalChannels = Math.max(dataLocalChannels, 1);
 
   if (totalLocalChannels <= 1 && checkForMultipleChannels) return;
 
@@ -303,7 +304,7 @@ export function createImageLayerAsMultiChannel(
   changeLayerName(managedLayer, `${startingName} chan0`);
   const postCreationSetupFunctions: Array<() => void> = [];
   const ignoreInputMetadata = checkLayerInputMetadataForErrors(managedLayer);
-  if (ignoreInputMetadata) {
+  if (ignoreInputMetadata && getChannelMetadata(managedLayer) !== undefined) {
     console.warn(
       "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
     );
@@ -311,8 +312,11 @@ export function createImageLayerAsMultiChannel(
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
-    const nameSuffix = channelMetadata?.label ?? `c${chanName}`;
-    const name = `${startingName} ${nameSuffix}`;
+    const nameSuffix =
+      (channelMetadata?.label ?? totalLocalChannels === 1)
+        ? ""
+        : `c${chanName}`;
+    const name = `${startingName}${nameSuffix ? ` ${nameSuffix}` : ""}`;
     let addedLayer: any = managedLayer;
     if (i == 0) {
       changeLayerName(managedLayer, name);
