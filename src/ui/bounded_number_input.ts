@@ -69,8 +69,16 @@ export function createBoundedNumberInputElement(
     };
     input.addEventListener("change", (event: Event) => {
       if (!event.target) return;
-      const inputValue = (event.target as HTMLInputElement).value;
-      const newValue = parseFloat(inputValue);
+      const inputEventValue = (event.target as HTMLInputElement).value;
+      const newValue = parseFloat(inputEventValue);
+      if (isNaN(newValue)) {
+        // If the value is not a number, reset to the initial value
+        (event.target as HTMLInputElement).value = numberToStringFixed(
+          inputValue,
+          config.numDecimals || 4,
+        );
+        return;
+      }
       // Ensure the new value is within bounds
       if (!withinBounds(newValue)) {
         // reset to the closest bound

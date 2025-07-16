@@ -247,4 +247,17 @@ describe("createBoundedNumberInputElement", () => {
 
     expect(input.value).toBe("10");
   });
+
+  it("handles NaN input gracefully", () => {
+    const input = createBoundedNumberInputElement(5, {
+      min: 0,
+      max: 10,
+    });
+
+    // Simulate user entering NaN
+    input.value = "";
+    input.dispatchEvent(new Event("change"));
+
+    expect(input.value).toBe("5"); // Should reset to initial value
+  });
 });
