@@ -753,7 +753,6 @@ class AnnotationUIProperty extends RefCounted {
           i === enumIndex ? newValue : v,
         ),
       });
-      console.log(this.getPropertyByIdentifier(oldProperty.identifier));
     });
   }
 
