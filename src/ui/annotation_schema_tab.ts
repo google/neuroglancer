@@ -215,7 +215,8 @@ class AnnotationUIProperty extends RefCounted {
   public updateEnumValues(enumValues: number[]) {
     const inputs = this.defaultValueElements;
     for (let i = 0; i < enumValues.length; i++) {
-      const input = inputs[i];
+      // Always comes in pairs: [name, value], so 2*i + 1 is always the value input
+      const input = inputs[2 * i + 1];
       input.value = numberToStringFixed(enumValues[i], 4);
     }
   }
@@ -736,6 +737,7 @@ class AnnotationUIProperty extends RefCounted {
           i === enumIndex ? newValue : v,
         ),
       });
+      console.log(this.getPropertyByIdentifier(oldProperty.identifier));
     });
   }
 
