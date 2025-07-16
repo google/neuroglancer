@@ -308,9 +308,8 @@
 }
 
 .neuroglancer-annotation-description-editor {
-  min-width: 400px;
+  min-width: 600px;
   border-radius: 0.25rem;
-  padding: 0;
 }
 
 .neuroglancer-annotation-description-editor-text-input {
@@ -321,8 +320,9 @@
   border-radius: 2px;
   border: 1px solid #d0d5dd;
   background: #fff;
-  overflow-y: hidden;
+  overflow-y: auto;
   resize: none;
+  height: 20vh;
 }
 
 .neuroglancer-annotation-description-editor-text-input:focus {

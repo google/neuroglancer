@@ -39,6 +39,10 @@
   outline: none;
 }
 
+.neuroglancer-framed-dialog {
+  padding: 0;
+}
+
 .neuroglancer-framed-dialog-header {
   display: flex;
   align-items: center;

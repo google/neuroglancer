@@ -71,12 +71,13 @@
   min-width: 12px;
   min-height: 12px;
   margin-right: 2px;
+  cursor: default;
 }
 
 .neuroglancer-annotation-description-icon svg {
   width: 12px;
   height: 12px;
-  stroke: #ccc;
+  stroke: #ddd;
 }
 
 .neuroglancer-annotation-description-icon:hover svg {
