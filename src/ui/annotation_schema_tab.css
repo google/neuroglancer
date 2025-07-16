@@ -241,7 +241,8 @@
   margin-bottom: 2px;
 }
 
-.neuroglancer-annotation-schema-enum-entry .neuroglancer-annotation-schema-default-value-input {
+.neuroglancer-annotation-schema-enum-entry
+  .neuroglancer-annotation-schema-default-value-input {
   line-height: 18px;
   padding: 0;
 }
@@ -321,10 +322,15 @@
   border: 1px solid #d0d5dd;
   background: #fff;
   overflow-y: hidden;
+  resize: none;
 }
 
 .neuroglancer-annotation-description-editor-text-input:focus {
   border-color: #0474ff;
   box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
   outline: none;
+}
+
+.neuroglancer-annotation-description-editor-save-button {
+  cursor: pointer;
 }

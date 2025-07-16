@@ -35,6 +35,10 @@
   padding: 1em;
 }
 
+.neuroglancer-framed-dialog:focus-within {
+  outline: none;
+}
+
 .neuroglancer-framed-dialog-header {
   display: flex;
   align-items: center;
@@ -62,23 +66,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem;
+  padding: 1.1rem 1.5rem;
   border-top: 1px solid #ccc;
   margin-top: 1px;
 }
 
-.neuroglancer-framed-dialog-close {
-  background-color: transparent;
-  border: none;
-  padding: 0;
-}
-
-.neuroglancer-framed-dialog-close:hover {
-  background: none;
-}
-
-.neuroglancer-framed-dialog-close svg {
-  stroke: rgba(20, 20, 21, 0.4);
+.neuroglancer-framed-dialog-close-button {
+  cursor: pointer;
 }
 
 .neuroglancer-framed-dialog-close-icon svg {
