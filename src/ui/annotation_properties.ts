@@ -77,7 +77,6 @@ export function createTextAreaElement(
     textarea.rows = 1;
     const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 18;
     const rows = Math.ceil(textarea.scrollHeight / lineHeight);
-    console.log(textarea.scrollHeight, lineHeight, rows, textarea.value);
 
     textarea.rows = originalRows;
     if (rows > maxRows) {

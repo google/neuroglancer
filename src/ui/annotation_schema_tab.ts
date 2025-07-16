@@ -340,6 +340,9 @@ class AnnotationUIProperty extends RefCounted {
       suggestedEnumValue += increment;
       if (suggestedEnumValue > bounds[1]) {
         if (wrapped) {
+          StatusMessage.showTemporaryMessage(
+            "No more unique values available in the enum. Please remove some existing values.",
+          );
           throw new Error("No more unique values available in the enum.");
         }
         suggestedEnumValue = bounds[0]; // Wrap around to the lower bound if we exceed the upper bound
@@ -547,7 +550,10 @@ class AnnotationUIProperty extends RefCounted {
     oldProperty: any,
   ): HTMLElement {
     const dataType = propertyTypeDataType[type as AnnotationPropertyType];
-    const bounds = defaultDataTypeRange[dataType!] as [number, number];
+    let bounds = defaultDataTypeRange[dataType!] as [number, number];
+    if (dataType === DataType.FLOAT32) {
+      bounds = [-3.40282347e38, 3.40282347e38];
+    }
 
     return makeAddButton({
       title: "Add new enum option",
