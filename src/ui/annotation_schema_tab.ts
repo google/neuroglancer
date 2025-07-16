@@ -335,6 +335,13 @@ class AnnotationUIProperty extends RefCounted {
     direction: "up" | "down" = "up",
   ) => {
     let suggestedEnumValue = startingValue;
+    if (
+      suggestedEnumValue === undefined ||
+      suggestedEnumValue === null ||
+      isNaN(suggestedEnumValue)
+    ) {
+      suggestedEnumValue = 0;
+    }
     let wrapped = false;
     while (inputValues.includes(suggestedEnumValue)) {
       const increment = direction === "up" ? 1 : -1;
@@ -348,6 +355,15 @@ class AnnotationUIProperty extends RefCounted {
         }
         suggestedEnumValue = bounds[0]; // Wrap around to the lower bound if we exceed the upper bound
         wrapped = true;
+      }
+      if (suggestedEnumValue < bounds[0]) {
+        if (wrapped) {
+          StatusMessage.showTemporaryMessage(
+            "No more unique values available in the enum. Please remove some existing values.",
+          );
+          throw new Error("No more unique values available in the enum.");
+        }
+        suggestedEnumValue = bounds[1]; // Wrap around to the upper bound if we go below the lower bound
       }
     }
     return suggestedEnumValue;
