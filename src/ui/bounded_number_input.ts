@@ -39,7 +39,9 @@ export function createBoundedNumberInputElement(
     config.step !== undefined ||
     config.dataType !== undefined;
   if (!config.readonly && hasNumberConfig) {
-    let { min, max, step } = config;
+    let min;
+    let max;
+    let step;
     // If the dataType is provided, we can set min, max, and step based on it
     const dataType = config.dataType;
     if (dataType !== undefined) {
@@ -51,6 +53,10 @@ export function createBoundedNumberInputElement(
       min = bounds[0] as number | undefined;
       max = bounds[1] as number | undefined;
     }
+    // Config overrides dataType bounds
+    min = config.min ?? min;
+    max = config.max ?? max;
+    step = config.step ?? step;
     input.min = min !== undefined ? String(min) : "";
     input.max = max !== undefined ? String(max) : "";
     step = step ?? 1;
