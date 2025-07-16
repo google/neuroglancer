@@ -1402,7 +1402,8 @@ export class AnnotationSchemaView extends Tab {
       (property) =>
         "enumValues" in property &&
         property.enumValues &&
-        property.enumValues.length > 0,
+        property.enumValues.length > 0 &&
+        !isBooleanType(property.enumLabels),
     );
   }
 
