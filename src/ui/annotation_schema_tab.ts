@@ -362,7 +362,7 @@ class AnnotationUIProperty extends RefCounted {
       console.warn(`Property with name ${identifier} not found.`);
       return this.createTableCell(
         container,
-        "neuruoglancer-annotation-schema-default-value-cell",
+        "neuroglancer-annotation-schema-default-value-cell",
       );
     }
 
@@ -1365,15 +1365,15 @@ export class AnnotationSchemaView extends Tab {
 
   ensureUniquePropertyIdentifier(suggestedIdentifier: string) {
     const allProperties = this.schema;
-    const initalName = suggestedIdentifier;
-    let uniqueIdenifier = suggestedIdentifier;
+    const initialName = suggestedIdentifier;
+    let uniqueIdentifier = suggestedIdentifier;
     let suffix = 0;
     while (
-      allProperties.some((property) => property.identifier === uniqueIdenifier)
+      allProperties.some((property) => property.identifier === uniqueIdentifier)
     ) {
-      uniqueIdenifier = `${initalName}_${++suffix}`;
+      uniqueIdentifier = `${initialName}_${++suffix}`;
     }
-    return uniqueIdenifier;
+    return uniqueIdentifier;
   }
 
   private getCategoryForType(type: AnnotationUIType, isEnum = false): string {
