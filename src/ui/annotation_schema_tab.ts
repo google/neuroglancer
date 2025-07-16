@@ -781,6 +781,7 @@ class AnnotationUIProperty extends RefCounted {
     const input = createBoundedNumberInputElement(inputValue, {
       className: config.className,
       numDecimals: config.numDecimals,
+      dataType: config.dataType,
       readonly,
     });
     return input;
