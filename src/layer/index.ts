@@ -2472,11 +2472,9 @@ export class AutoUserLayer extends UserLayer {
       this.registerDisposer(
         this.managedLayer.readyStateChanged.add(() => {
           if (this.managedLayer.isReady()) {
-            createImageLayerAsMultiChannel(
-              this.managedLayer,
-              makeLayer,
-              true /* checkMultipleChannels*/,
-            );
+            // If you want to restore the old auto image setup, pass true here
+            // This will then make the previous image layer setup
+            createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
           }
         }),
       );

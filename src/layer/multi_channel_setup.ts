@@ -32,6 +32,8 @@ import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
+import { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
+import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 
 type MakeLayerFn = (
   manager: LayerListSpecification,
@@ -125,7 +127,7 @@ function calculateLocalDimensions(managedLayer: ManagedUserLayer) {
     ? totalLocalChannels
     : 0;
   return {
-    totalLocalChannels,
+    dataLocalChannels: totalLocalChannels,
     lowerBounds,
     upperBounds,
     localDimensionRank,
@@ -202,61 +204,111 @@ function setupLayerPostCreation(
   const active = channel?.active ?? channelIndex <= 3;
   addedLayer.setArchived(!active);
 
-  const setupWidgetsFunction = () => {
-    const shaderControlState = userImageLayer.shaderControlState.value;
-    let color = DEFAULT_ARRAY_COLORS.get(
-      channelIndex % DEFAULT_ARRAY_COLORS.size,
-    );
-    if (totalLocalChannels === 1) {
-      color = new Float32Array([1, 1, 1]);
-    }
-    if (channel?.color !== undefined && !ignoreInputMetadata) {
-      color = channel.color;
-    }
-    shaderControlState.get("color")!.trackable.value = color;
-    const contrast = shaderControlState.get("contrast")!;
+  const shaderControlState = userImageLayer.shaderControlState;
+  const shaderControlValue = shaderControlState.value;
+
+  const determineColor = (): Float32Array | undefined => {
+    if (totalLocalChannels === 1) return new Float32Array([1, 1, 1]);
+    if (channel?.color !== undefined && !ignoreInputMetadata)
+      return channel.color;
+    return DEFAULT_ARRAY_COLORS.get(channelIndex % DEFAULT_ARRAY_COLORS.size);
+  };
+
+  const applyContrastFromChannelMetadata = () => {
+    const contrast = shaderControlValue.get("contrast");
+    if (!contrast) return;
+
     const trackableContrast = contrast.trackable;
+    trackableContrast.value = {
+      ...trackableContrast.value,
+      range: channel!.range,
+      window: channel!.window,
+    };
+  };
+
+  const autoComputeContrast = () => {
+    const contrast = shaderControlValue.get("contrast");
+    if (!contrast) return;
+    const trackableContrast = contrast.trackable;
+    trackableContrast.value = {
+      ...trackableContrast.value,
+      autoCompute: true,
+    };
+  };
+
+  const setupAutoContrast = () => {
+    let allowedRetries = 15;
+
+    const checkDataReady = () => {
+      const contrast = shaderControlValue.get("contrast");
+      if (!contrast) {
+        debouncedCheckDataReady();
+        return;
+      }
+      const trackableContrast = contrast.trackable;
+      const range = trackableContrast.value.range;
+      const dataType = (
+        shaderControlState.controls.value!.get(
+          "contrast",
+        ) as ShaderImageInvlerpControl
+      ).dataType;
+      const defaultRange = defaultDataTypeRange[dataType];
+      const dataReady = !dataTypeIntervalEqual(range, defaultRange);
+      if (!dataReady) {
+        if (allowedRetries <= 0) {
+          console.warn(
+            "Data not ready after multiple attempts. Using default contrast.",
+          );
+          trackableContrast.value = {
+            ...trackableContrast.value,
+            autoCompute: true,
+          };
+          return;
+        }
+        allowedRetries--;
+        autoComputeContrast();
+        debouncedCheckDataReady();
+      }
+    };
+    const debouncedCheckDataReady = debounce(() => {
+      checkDataReady();
+    }, 500);
+    // The first wait should give some time for data to load in
+    const firstCheckForData = debounce(() => {
+      checkDataReady();
+    }, 1200);
+    firstCheckForData();
+  };
+
+  const setupWidgetsFunction = () => {
+    shaderControlValue.get("color")!.trackable.value = determineColor();
     if (
       channel?.range !== undefined &&
       channel?.window !== undefined &&
       !ignoreInputMetadata
     ) {
-      trackableContrast.value = {
-        ...trackableContrast.value,
-        range: channel.range,
-        window: channel.window,
-      };
+      applyContrastFromChannelMetadata();
     } else if (active) {
-      // Wait for some data to be loaded before setting the contrast
-      const debouncedSetContrast = debounce(() => {
-        trackableContrast.value = {
-          ...trackableContrast.value,
-          autoCompute: true,
-        };
-      }, 2000);
-      debouncedSetContrast();
+      setupAutoContrast();
     }
   };
 
-  const setDefaultsWhenReady = () => {
-    const maxWait = 2000;
-    const startTime = Date.now();
-    const waitForShaderWidgetsReady = debounce(() => {
-      const shaderControlState = userImageLayer.shaderControlState.value;
-      const contrast = shaderControlState.get("contrast");
-      if (contrast !== undefined || Date.now() - startTime > maxWait) {
-        waitForShaderWidgetsReady.cancel();
-        if (contrast !== undefined) {
-          // Set up the widgets
-          setupWidgetsFunction();
-        }
-      } else {
-        // Continue polling
-        waitForShaderWidgetsReady();
-      }
-    }, 100);
+  const checkShaderControlsReadyAndSetup = () => {
+    if (
+      shaderControlState.controls.value &&
+      shaderControlState.controls.value.get("contrast") !== undefined
+    ) {
+      setupWidgetsFunction();
+      return true;
+    }
+    return false;
+  };
 
-    waitForShaderWidgetsReady();
+  const setShaderDefaultsWhenReady = () => {
+    if (checkShaderControlsReadyAndSetup()) return;
+    shaderControlState.controls.changed.addOnce(
+      checkShaderControlsReadyAndSetup,
+    );
   };
 
   const setVolumeRenderingSamples = () => {
@@ -271,7 +323,7 @@ function setupLayerPostCreation(
 
   postCreationSetupFunctions.push(setVolumeRenderingSamples);
   postCreationSetupFunctions.push(set2DBlending);
-  postCreationSetupFunctions.push(setDefaultsWhenReady);
+  postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
 }
 
 export function createImageLayerAsMultiChannel(
@@ -282,8 +334,9 @@ export function createImageLayerAsMultiChannel(
   if (managedLayer.layer?.type !== "image") return;
 
   renameChannelDimensions(managedLayer.layer);
-  const { totalLocalChannels, lowerBounds, upperBounds, localDimensionRank } =
+  const { dataLocalChannels, lowerBounds, upperBounds, localDimensionRank } =
     calculateLocalDimensions(managedLayer);
+  const totalLocalChannels = Math.max(dataLocalChannels, 1);
 
   if (totalLocalChannels <= 1 && checkForMultipleChannels) return;
 
@@ -305,7 +358,7 @@ export function createImageLayerAsMultiChannel(
   changeLayerName(managedLayer, `${startingName} chan0`);
   const postCreationSetupFunctions: Array<() => void> = [];
   const ignoreInputMetadata = checkLayerInputMetadataForErrors(managedLayer);
-  if (ignoreInputMetadata) {
+  if (ignoreInputMetadata && getChannelMetadata(managedLayer) !== undefined) {
     console.warn(
       "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
     );
@@ -313,8 +366,14 @@ export function createImageLayerAsMultiChannel(
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
-    const nameSuffix = channelMetadata?.label ?? `c${chanName}`;
-    const name = `${startingName} ${nameSuffix}`;
+    let nameSuffix = "";
+    if (channelMetadata?.label) {
+      nameSuffix = ` ${channelMetadata.label}`;
+    } else if (totalLocalChannels !== 1) {
+      nameSuffix = ` c${chanName}`;
+    }
+
+    const name = `${startingName}${nameSuffix}`;
     let addedLayer: any = managedLayer;
     if (i == 0) {
       changeLayerName(managedLayer, name);
