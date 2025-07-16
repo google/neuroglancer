@@ -151,8 +151,8 @@ class AnnotationUIProperty extends RefCounted {
     this.defaultValueCell.dataset.enums = String(hasEnums);
   }
 
-  private removeProperty(indentifier: string) {
-    this.parentView.removeProperty(indentifier);
+  private removeProperty(identifier: string) {
+    this.parentView.removeProperty(identifier);
   }
 
   private renameProperty(oldIdentifier: string, newIdentifier: string) {
