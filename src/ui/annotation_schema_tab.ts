@@ -1055,9 +1055,7 @@ export class AnnotationSchemaView extends Tab {
     confirmPasteButton.addEventListener("click", () => {
       this.pasteSchemaFromClipboard();
       confirmPasteContainer.style.display = "none";
-      this.schemaPasteButton.classList.remove(
-        "neuroglancer-annotation-schema-action-button-selected",
-      );
+      this.schemaPasteButton.dataset.selected = "false";
     });
     confirmPasteActionContainer.appendChild(confirmPasteButton);
     const cancelPasteButton = document.createElement("button");
@@ -1066,9 +1064,7 @@ export class AnnotationSchemaView extends Tab {
       "neuroglancer-annotation-schema-cancel-paste-button";
     cancelPasteButton.addEventListener("click", () => {
       confirmPasteContainer.style.display = "none";
-      this.schemaPasteButton.classList.remove(
-        "neuroglancer-annotation-schema-action-button-selected",
-      );
+      this.schemaPasteButton.dataset.selected = "false";
     });
     confirmPasteActionContainer.appendChild(cancelPasteButton);
     confirmPasteContainer.style.display = "none"; // Initially hidden
@@ -1081,12 +1077,11 @@ export class AnnotationSchemaView extends Tab {
         const hasExistingSchema = this.annotationUIProperties.size > 0;
         if (hasExistingSchema) {
           confirmPasteContainer.style.display = "flex";
-          this.schemaPasteButton.classList.add(
-            "neuroglancer-annotation-schema-action-button-selected",
-          );
+          this.schemaPasteButton.dataset.selected = "true";
         } else this.pasteSchemaFromClipboard();
       },
     });
+    this.schemaPasteButton.dataset.selected = "false";
     confirmPasteContainer.appendChild(confirmPasteActionContainer);
 
     schemaActionButtons.appendChild(this.schemaPasteButton);

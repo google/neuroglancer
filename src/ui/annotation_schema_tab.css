@@ -136,7 +136,7 @@
 }
 
 .neuroglancer-annotation-schema-action-buttons .neuroglancer-icon:hover svg,
-.neuroglancer-annotation-schema-action-button-selected svg {
+.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon[data-selected="true"] svg {
   stroke: white;
 }
 
