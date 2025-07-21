@@ -989,6 +989,7 @@ export class AnnotationSchemaView extends Tab {
   public annotationUIProperties: Map<string, AnnotationUIProperty> = new Map();
   public readonly: WatchableValueInterface<boolean>;
   public textWidthCanvas: HTMLCanvasElement | null = null;
+  private addPropertyDropdown: HTMLDivElement = document.createElement("div");
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -1248,78 +1249,66 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private createAnnotationSchemaDropdown() {
-    let dropdown: HTMLDivElement | null = null;
+    this.addPropertyDropdown.className =
+      "neuroglancer-annotation-schema-dropdown";
+    const dropdown = this.addPropertyDropdown;
 
-    const handleAddPropertyClick = () => {
-      if (dropdown) {
-        dropdown.remove();
-        dropdown = null;
-        return;
-      }
+    const populateDropDown = (types: AnnotationUIType[], isEnum = false) => {
+      let previousHeaderText: string | null = null;
+      types.forEach((type) => {
+        const newHeaderText = isEnum ? "Enum" : this.getCategoryForType(type);
+        if (previousHeaderText !== newHeaderText) {
+          const header = document.createElement("div");
+          header.className = "neuroglancer-annotation-schema-dropdown-header";
+          header.textContent = newHeaderText;
+          dropdown.appendChild(header);
+          previousHeaderText = newHeaderText;
+        }
 
-      dropdown = document.createElement("div");
-      dropdown.className = "neuroglancer-annotation-schema-dropdown";
+        const option = document.createElement("div");
+        option.className = "neuroglancer-annotation-schema-dropdown-option";
+        const iconWrapper = this.createIconWrapper(type, undefined, isEnum);
 
-      // The numeric types are all given the option to be "raw" or "enum"
-      // So we handle the numeric types again at the end
+        const text = document.createElement("span");
+        const displayName = this.getDisplayNameForType(type);
+        text.textContent = displayName;
 
-      const populateDropDown = (types: AnnotationUIType[], isEnum = false) => {
-        let previousHeaderText: string | null = null;
-        types.forEach((type) => {
-          const newHeaderText = isEnum ? "Enum" : this.getCategoryForType(type);
-          if (previousHeaderText !== newHeaderText) {
-            const header = document.createElement("div");
-            header.className = "neuroglancer-annotation-schema-dropdown-header";
-            header.textContent = newHeaderText;
-            dropdown?.appendChild(header);
-            previousHeaderText = newHeaderText;
-          }
+        option.appendChild(iconWrapper);
+        option.appendChild(text);
 
-          const option = document.createElement("div");
-          option.className = "neuroglancer-annotation-schema-dropdown-option";
-          const iconWrapper = this.createIconWrapper(type, undefined, isEnum);
-
-          const text = document.createElement("span");
-          const displayName = this.getDisplayNameForType(type);
-          text.textContent = displayName;
-
-          option.appendChild(iconWrapper);
-          option.appendChild(text);
-
-          option.addEventListener(
-            "mouseover",
-            () => (option.style.backgroundColor = "#333"),
+        option.addEventListener(
+          "mouseover",
+          () => (option.style.backgroundColor = "#333"),
+        );
+        option.addEventListener(
+          "mouseout",
+          () => (option.style.backgroundColor = ""),
+        );
+        option.addEventListener("click", () => {
+          const name = this.ensureUniquePropertyIdentifier(
+            type.replace(/\s+/g, "_"),
           );
-          option.addEventListener(
-            "mouseout",
-            () => (option.style.backgroundColor = ""),
-          );
-          option.addEventListener("click", () => {
-            const name = this.ensureUniquePropertyIdentifier(
-              type.replace(/\s+/g, "_"),
-            );
-            const newProperty = {
-              type: this.mapUITypeToAnnotationType(type),
-              identifier: name,
-              default: this.defaultValuePerType(type),
-              description: "",
-              ...this.setupInitialEnumsIfNeeded(type, isEnum),
-            } as AnnotationPropertySpec;
-            this.addProperty(newProperty);
-            dropdown?.remove();
-            dropdown = null;
-          });
-
-          dropdown?.appendChild(option);
+          const newProperty = {
+            type: this.mapUITypeToAnnotationType(type),
+            identifier: name,
+            default: this.defaultValuePerType(type),
+            description: "",
+            ...this.setupInitialEnumsIfNeeded(type, isEnum),
+          } as AnnotationPropertySpec;
+          this.addProperty(newProperty);
+          this.closeDropdown();
         });
-      };
-      populateDropDown(ANNOTATION_UI_TYPES, false);
-      // Now do it again for the numeric types as enums
-      populateDropDown(
-        ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
-        true,
-      );
 
+        dropdown.appendChild(option);
+      });
+    };
+    populateDropDown(ANNOTATION_UI_TYPES, false);
+    // Now do it again for the numeric types as enums
+    populateDropDown(
+      ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
+      true,
+    );
+    const handleAddPropertyClick = () => {
       document.body.appendChild(dropdown);
       const rect = addButton.getBoundingClientRect();
       const dropdownHeight = dropdown.offsetHeight;
@@ -1336,14 +1325,10 @@ export class AnnotationSchemaView extends Tab {
 
       dropdown.style.left = `${rect.left}px`;
 
-      const handleOutsideClick = (e: MouseEvent) => {
-        if (dropdown && !dropdown.contains(e.target as Node)) {
-          dropdown.remove();
-          dropdown = null;
-          document.removeEventListener("mousedown", handleOutsideClick);
-        }
-      };
-      document.addEventListener("mousedown", handleOutsideClick);
+      document.addEventListener(
+        "pointerdown",
+        this.clickOutsideDropdownHandler,
+      );
     };
 
     this.schemaTableAddButtonField = document.createElement("div");
@@ -1356,6 +1341,22 @@ export class AnnotationSchemaView extends Tab {
 
     this.schemaTableAddButtonField.appendChild(addButton);
     this.schemaTable.appendChild(this.schemaTableAddButtonField);
+  }
+
+  private clickOutsideDropdownHandler = (e: MouseEvent) => {
+    const { target } = e;
+    if (target instanceof Node && this.addPropertyDropdown?.contains(target)) {
+      return;
+    }
+    this.closeDropdown();
+  };
+
+  private closeDropdown() {
+    this.addPropertyDropdown.remove();
+    document.removeEventListener(
+      "pointerdown",
+      this.clickOutsideDropdownHandler,
+    );
   }
 
   public createTableCell = (
@@ -1614,6 +1615,10 @@ export class AnnotationSchemaView extends Tab {
       this.defaultValueHeaderCell.dataset.enums = String(hasEnums);
     }
     this.populateSchemaTable();
+  }
+
+  dispose(): void {
+    this.closeDropdown();
   }
 }
 
