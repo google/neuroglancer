@@ -293,7 +293,7 @@
 }
 
 .neuroglancer-annotation-schema-type-cell {
-  height: 20px;
+  min-height: 20px;
 }
 
 .neuroglancer-annotation-schema-type-cell[data-readonly="false"] {
