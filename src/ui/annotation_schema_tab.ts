@@ -131,6 +131,7 @@ class AnnotationUIProperty extends RefCounted {
   private defaultValueElements: (HTMLInputElement | HTMLTextAreaElement)[] = [];
   private typeChangeDropdown: HTMLDivElement | null = null;
   private typeChanged = new NullarySignal();
+  public isTypeDropdownExpanded = false;
 
   constructor(
     public spec: AnnotationPropertySpec,
@@ -851,6 +852,14 @@ class AnnotationUIProperty extends RefCounted {
     currentType: AnnotationPropertyType,
     identifier: string,
   ) {
+    if (this.isTypeDropdownExpanded) return;
+    // Check if any other dropdowns are open and close them
+    const parent = this.parentView;
+    for (const property of parent.annotationUIProperties.values()) {
+      if (property.isTypeDropdownExpanded) {
+        property.closeDropdown();
+      }
+    }
     const availableOptions: AnnotationPropertyType[] = [];
     for (const type of ANNOTATION_TYPES) {
       if (canConvertTypes(currentType, type)) {
@@ -862,22 +871,35 @@ class AnnotationUIProperty extends RefCounted {
       this.createDropdownElement(availableOptions, identifier);
     }
     const dropdown = this.typeChangeDropdown!;
+    this.isTypeDropdownExpanded = true;
 
     document.body.appendChild(dropdown);
     this.positionDropdown(dropdown, anchorElement);
-    const clickOutsideHandler = (e: MouseEvent) => {
-      if (!dropdown.contains(e.target as Node)) {
-        dropdown.remove();
-        document.removeEventListener("click", clickOutsideHandler);
-      }
-    };
-    document.addEventListener("click", clickOutsideHandler);
-    this.registerDisposer(
-      this.typeChanged.add(() =>
-        document.removeEventListener("click", clickOutsideHandler),
-      ),
+    this.registerEventListener(
+      document,
+      "pointerdown",
+      this.clickOutsideDropdownHandler,
     );
   }
+
+  private closeDropdown() {
+    if (this.typeChangeDropdown && this.isTypeDropdownExpanded) {
+      this.typeChangeDropdown.remove();
+      this.isTypeDropdownExpanded = false;
+      document.removeEventListener(
+        "pointerdown",
+        this.clickOutsideDropdownHandler,
+      );
+    }
+  }
+
+  private clickOutsideDropdownHandler = (e: MouseEvent) => {
+    const { target } = e;
+    if (target instanceof Node && this.typeChangeDropdown?.contains(target)) {
+      return;
+    }
+    this.closeDropdown();
+  };
 
   private createDropdownElement(
     availableOptions: AnnotationPropertyType[],
@@ -905,7 +927,7 @@ class AnnotationUIProperty extends RefCounted {
       this.registerEventListener(option, "click", (e: MouseEvent) => {
         e.stopPropagation();
         this.handleTypeChange(newType, identifier);
-        dropdown.remove();
+        this.closeDropdown();
       });
       dropdown.appendChild(option);
     });
