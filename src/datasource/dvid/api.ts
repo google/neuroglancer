@@ -80,7 +80,7 @@ export function fetchWithDVIDCredentials(
     credentialsProvider,
     input,
     init,
-    (credentials: DVIDToken, init: RequestInit) => {
+    async (credentials: DVIDToken, init: RequestInit) => {
       const newInit: RequestInit = { ...init };
       if (credentials.token) {
         newInit.headers = {

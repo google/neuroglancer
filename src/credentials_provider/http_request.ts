@@ -31,7 +31,8 @@ export async function fetchOkWithCredentials<Credentials>(
   applyCredentials: (
     credentials: Credentials,
     requestInit: RequestInit & { progressListener?: ProgressListener },
-  ) => RequestInit & { progressListener?: ProgressListener },
+    requestInfo: RequestInfo,
+  ) => Promise<RequestInit & { progressListener?: ProgressListener }>,
   errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
 ): Promise<Response> {
   let credentials: CredentialsWithGeneration<Credentials> | undefined;
@@ -50,10 +51,14 @@ export async function fetchOkWithCredentials<Credentials>(
       progressListener: init.progressListener,
     });
     try {
-      return await fetchOk(
-        typeof input === "function" ? input(credentials.credentials) : input,
-        applyCredentials(credentials.credentials, init),
+      const resolved_input =
+        typeof input === "function" ? input(credentials.credentials) : input;
+      const resolved_init = await applyCredentials(
+        credentials.credentials,
+        init,
+        resolved_input,
       );
+      return await fetchOk(resolved_input, resolved_init);
     } catch (error) {
       if (error instanceof HttpError) {
         if (errorHandler(error, credentials.credentials) === "refresh") {
@@ -71,7 +76,8 @@ export function fetchOkWithCredentialsAdapter<Credentials>(
   applyCredentials: (
     credentials: Credentials,
     requestInit: RequestInit & { progressListener?: ProgressListener },
-  ) => RequestInit & { progressListener?: ProgressListener },
+    requestInfo: RequestInfo,
+  ) => Promise<RequestInit & { progressListener?: ProgressListener }>,
   errorHandler: (httpError: HttpError, credentials: Credentials) => "refresh",
 ): FetchOk {
   return (input, init = {}) =>
