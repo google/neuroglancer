@@ -600,7 +600,7 @@ function parseAnnotations(
   propertySerializer: AnnotationPropertySerializer,
 ): AnnotationGeometryData {
   const dv = new DataView(buffer);
-  if (buffer.byteLength <= 8) throw new Error("Expected at least 8 bytes");
+  if (buffer.byteLength < 8) throw new Error("Expected at least 8 bytes");
   const countLow = dv.getUint32(0, /*littleEndian=*/ true);
   const countHigh = dv.getUint32(4, /*littleEndian=*/ true);
   if (countHigh !== 0) throw new Error("Annotation count too high");
