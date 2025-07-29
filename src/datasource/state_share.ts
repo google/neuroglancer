@@ -107,11 +107,12 @@ export class StateShare extends RefCounted {
             const protocol = new URL(selectedStateServer).protocol;
             const link = `${window.location.origin}${window.location.pathname}#!${protocol}${stateUrlWithoutProtocol}`;
 
-            setClipboard(link).then(() => {
-              StatusMessage.showTemporaryMessage(
-                "Share link copied to clipboard",
-              );
-            });
+            const result = setClipboard(link);
+            StatusMessage.showTemporaryMessage(
+              result
+              ? "Share link copied to clipboard"
+              : "Failed to copy share link to clipboard",
+            );
           })
           .catch(() => {
             StatusMessage.showTemporaryMessage(
