@@ -1124,8 +1124,8 @@ export class PaletteListDropdownItem extends RefCounted {
     element.appendChild(
       this.registerDisposer(
         new TrackableBooleanCheckbox(state.location.watchableVisible, {
-          enableTitle: "Show tool palette",
-          disableTitle: "Hide tool palette",
+          enabledTitle: "Hide tool palette",
+          disabledTitle: "Show tool palette",
         }),
       ).element,
     );
