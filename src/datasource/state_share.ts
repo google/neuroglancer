@@ -1,9 +1,9 @@
 import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { StatusMessage } from "#src/status.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { bigintToStringJsonReplacer } from "#src/util/json.js";
-import { setClipboard } from "#src/util/clipboard.js";
 import type { Viewer } from "#src/viewer.js";
 import { makeIcon } from "#src/widget/icon.js";
 
