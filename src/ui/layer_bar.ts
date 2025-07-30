@@ -216,6 +216,7 @@ export class LayerBar extends RefCounted {
     public layerGroupViewer: LayerGroupViewer,
     public getLayoutSpecForDrag: () => any,
     public showLayerHoverValues: WatchableValueInterface<boolean>,
+    public showAllPlotBounds?: WatchableValueInterface<boolean>,
   ) {
     super();
     this.positionWidget = this.registerDisposer(
@@ -225,6 +226,7 @@ export class LayerBar extends RefCounted {
         {
           velocity: this.viewerNavigationState.velocity.velocity,
           getToolBinder: () => this.layerGroupViewer.toolBinder,
+          showAllPlotBounds: showAllPlotBounds,
         },
       ),
     );
