@@ -1516,7 +1516,6 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
           const velocityInputWidget = context.registerDisposer(
             new NumberInputWidget(velocityModel),
           );
-          velocityInputWidget.inputElement.disabled = true;
           velocityInputWidget.element.insertBefore(
             negateButton,
             velocityInputWidget.element.firstChild,
