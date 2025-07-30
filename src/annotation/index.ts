@@ -23,6 +23,7 @@ import type {
   CoordinateSpaceTransform,
   WatchableCoordinateSpaceTransform,
 } from "#src/coordinate_transform.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import {
   packColor,
@@ -108,10 +109,16 @@ export interface AnnotationNumericPropertySpec
   step?: number;
 }
 
+export function isAnnotationTypeNumeric(
+  type: AnnotationPropertySpec["type"],
+): boolean {
+  return type !== "rgb" && type !== "rgba";
+}
+
 export function isAnnotationNumericPropertySpec(
   spec: AnnotationPropertySpec,
 ): spec is AnnotationNumericPropertySpec {
-  return spec.type !== "rgb" && spec.type !== "rgba";
+  return isAnnotationTypeNumeric(spec.type);
 }
 
 export const propertyTypeDataType: Record<
@@ -558,6 +565,36 @@ export function ensureUniqueAnnotationPropertyIds(
   }
 }
 
+export function compareAnnotationSpecProperties(
+  a: Readonly<AnnotationPropertySpec>,
+  b: Readonly<AnnotationPropertySpec>,
+) {
+  const bothNumeric =
+    isAnnotationNumericPropertySpec(a) && isAnnotationNumericPropertySpec(b);
+  const bothColor =
+    !isAnnotationNumericPropertySpec(a) && !isAnnotationNumericPropertySpec(b);
+  const sameValues = {
+    type: a.type === b.type,
+    identifier: a.identifier === b.identifier,
+    description: a.description === b.description,
+    default: a.default === b.default,
+    enumValues:
+      bothColor ||
+      (bothNumeric && arraysEqual(a.enumValues || [], b.enumValues || [])),
+    enumLabels:
+      bothColor ||
+      (bothNumeric && arraysEqual(a.enumLabels || [], b.enumLabels || [])),
+    enumLength:
+      bothColor ||
+      (bothNumeric &&
+        a.enumValues?.length === b.enumValues?.length &&
+        a.enumLabels?.length === b.enumLabels?.length),
+  };
+  // Same if all of the above are true.
+  const same = Object.values(sameValues).every((x) => x);
+  return { same, sameValues };
+}
+
 function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   verifyObject(obj);
   const identifier = verifyObjectProperty(obj, "id", parseAnnotationPropertyId);
@@ -611,7 +648,7 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   } as AnnotationPropertySpec;
 }
 
-function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
+function annotationPropertySpecToJson(spec: Readonly<AnnotationPropertySpec>) {
   const defaultValue = spec.default;
   const handler = annotationPropertyTypeHandlers[spec.type];
   const isNumeric = isAnnotationNumericPropertySpec(spec);
@@ -632,7 +669,7 @@ function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
 }
 
 export function annotationPropertySpecsToJson(
-  specs: AnnotationPropertySpec[] | undefined,
+  specs: readonly Readonly<AnnotationPropertySpec>[] | undefined,
 ) {
   if (specs === undefined || specs.length === 0) return undefined;
   return specs.map(annotationPropertySpecToJson);
@@ -1013,7 +1050,7 @@ export const annotationTypeHandlers: Record<
 export interface AnnotationSchema {
   rank: number;
   relationships: readonly string[];
-  properties: readonly AnnotationPropertySpec[];
+  properties: WatchableValue<readonly Readonly<AnnotationPropertySpec>[]>;
 }
 
 export function annotationToJson(
@@ -1033,8 +1070,8 @@ export function annotationToJson(
       Array.from(segments, (x) => x.toString()),
     );
   }
-  if (schema.properties.length !== 0) {
-    const propertySpecs = schema.properties;
+  const propertySpecs = schema.properties.value;
+  if (propertySpecs.length !== 0) {
     result.props = annotation.properties.map((prop, i) =>
       annotationPropertyTypeHandlers[propertySpecs[i].type].serializeJson(prop),
     );
@@ -1083,9 +1120,9 @@ function restoreAnnotation(
     );
   });
   const properties = verifyObjectProperty(obj, "props", (propsObj) => {
-    const propSpecs = schema.properties;
+    const propSpecs = schema.properties.value;
     if (propsObj === undefined) return propSpecs.map((x) => x.default);
-    return parseArray(expectArray(propsObj, schema.properties.length), (x, i) =>
+    return parseArray(expectArray(propsObj, propSpecs.length), (x, i) =>
       annotationPropertyTypeHandlers[propSpecs[i].type].deserializeJson(x),
     );
   });
@@ -1133,13 +1170,15 @@ export class AnnotationSource
   constructor(
     rank: number,
     public readonly relationships: readonly string[] = [],
-    public readonly properties: Readonly<AnnotationPropertySpec>[] = [],
+    public readonly properties: WatchableValue<
+      readonly Readonly<AnnotationPropertySpec>[]
+    > = new WatchableValue([]),
   ) {
     super();
     this.rank_ = rank;
     this.annotationPropertySerializers = makeAnnotationPropertySerializers(
       rank,
-      properties,
+      properties.value,
     );
   }
 
@@ -1273,6 +1312,30 @@ export class AnnotationSource
   }
 }
 
+export function canConvertTypes(
+  oldType: AnnotationPropertySpec["type"],
+  newType: AnnotationPropertySpec["type"],
+): boolean {
+  if (oldType === newType) return true;
+  const isOldTypeNumeric = isAnnotationTypeNumeric(oldType);
+  const isNewTypeNumeric = isAnnotationTypeNumeric(newType);
+  if (isOldTypeNumeric !== isNewTypeNumeric) return false;
+  if (oldType === "rgb" && newType === "rgba") return true;
+  if (newType === "float32") return true;
+
+  // Can convert between uint or int if newType is higher precision.
+  const sameFamily =
+    (oldType.startsWith("uint") && newType.startsWith("uint")) ||
+    (oldType.startsWith("int") && newType.startsWith("int"));
+
+  if (sameFamily) {
+    const oldBits = parseInt(oldType.replace(/\D/g, ""), 10);
+    const newBits = parseInt(newType.replace(/\D/g, ""), 10);
+    return oldBits < newBits;
+  }
+  return false;
+}
+
 export class LocalAnnotationSource extends AnnotationSource {
   private curCoordinateTransform: CoordinateSpaceTransform;
 
@@ -1283,7 +1346,9 @@ export class LocalAnnotationSource extends AnnotationSource {
 
   constructor(
     public watchableTransform: WatchableCoordinateSpaceTransform,
-    properties: AnnotationPropertySpec[],
+    public readonly properties: WatchableValue<
+      AnnotationPropertySpec[]
+    > = new WatchableValue([]),
     relationships: string[],
   ) {
     super(watchableTransform.value.sourceRank, relationships, properties);
@@ -1291,6 +1356,102 @@ export class LocalAnnotationSource extends AnnotationSource {
     this.registerDisposer(
       watchableTransform.changed.add(() => this.ensureUpdated()),
     );
+
+    this.registerDisposer(
+      properties.changed.add(() => {
+        this.updateAnnotationPropertySerializers();
+        this.changed.dispatch();
+      }),
+    );
+  }
+
+  updateAnnotationPropertySerializers() {
+    this.annotationPropertySerializers = makeAnnotationPropertySerializers(
+      this.rank_,
+      this.properties.value,
+    );
+  }
+
+  addProperty(property: AnnotationPropertySpec) {
+    const { identifier } = property;
+    const properties = this.properties.value;
+    if (properties.some((p) => p.identifier === identifier)) {
+      console.error(`Property ${identifier} already exists`);
+      return;
+    }
+    properties.push(property);
+    for (const annotation of this) {
+      annotation.properties.push(property.default);
+    }
+    this.properties.changed.dispatch();
+  }
+
+  removeAllProperties() {
+    this.properties.value = [];
+    for (const annotation of this) {
+      annotation.properties = [];
+    }
+    this.properties.changed.dispatch();
+  }
+
+  removeProperty(identifier: string) {
+    const propertyIndex = this.properties.value.findIndex(
+      (x) => x.identifier === identifier,
+    );
+    if (propertyIndex === -1) {
+      console.error(`Property ${identifier} does not exist`);
+      return;
+    }
+    this.properties.value.splice(propertyIndex, 1);
+    for (const annotation of this) {
+      annotation.properties.splice(propertyIndex, 1);
+    }
+    this.properties.changed.dispatch();
+  }
+
+  updateProperty(
+    oldProperty: AnnotationPropertySpec,
+    newPropertyValues: Partial<AnnotationPropertySpec>,
+  ) {
+    const newProperty = { ...oldProperty, ...newPropertyValues };
+    const { type: oldType } = oldProperty;
+    const { type: newType } = newProperty;
+    const isConvertible = canConvertTypes(oldType, newType);
+    if (!isConvertible) {
+      console.error(
+        `Cannot convert property ${oldProperty.identifier} from ${oldProperty.type} to ${newProperty.type}`,
+      );
+      return;
+    }
+
+    const convertValue = (value: any) => {
+      if (oldType === "rgb" && newType === "rgba") {
+        const rgba = new Uint8Array(4);
+        rgba[0] = value[0];
+        rgba[1] = value[1];
+        rgba[2] = value[2];
+        rgba[3] = 255;
+        return rgba;
+      }
+      return value;
+    };
+
+    const { identifier } = oldProperty;
+    const properties = this.properties.value;
+    const propertyIndex = properties.findIndex(
+      (x) => x.identifier === identifier,
+    );
+    if (propertyIndex === -1) {
+      console.error(`Property ${identifier} does not exist`);
+      return;
+    }
+    properties[propertyIndex] = newProperty;
+    for (const annotation of this) {
+      annotation.properties[propertyIndex] = convertValue(
+        annotation.properties[propertyIndex],
+      );
+    }
+    this.properties.changed.dispatch();
   }
 
   ensureUpdated() {
@@ -1347,10 +1508,7 @@ export class LocalAnnotationSource extends AnnotationSource {
     }
     if (this.rank_ !== sourceRank) {
       this.rank_ = sourceRank;
-      this.annotationPropertySerializers = makeAnnotationPropertySerializers(
-        this.rank_,
-        this.properties,
-      );
+      this.updateAnnotationPropertySerializers();
     }
     this.changed.dispatch();
   }
