@@ -31,6 +31,7 @@ import {
   getFormattedNames,
 } from "#src/ui/statistics.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { saveBlobToFile } from "#src/util/file_download.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import {
@@ -45,18 +46,6 @@ const SCREENSHOT_TIMEOUT = 3000;
 export interface ScreenshotLoadStatistics extends ScreenshotChunkStatistics {
   timestamp: number;
   gpuMemoryCapacity: number;
-}
-
-function saveBlobToFile(blob: Blob, filename: string) {
-  const a = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = filename;
-  try {
-    a.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 function setExtension(filename: string, extension: string = ".png"): string {

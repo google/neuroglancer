@@ -156,15 +156,9 @@ div.neuroglancer-annotation-details-description {
   font: 10pt sans-serif;
 }
 
-.neuroglancer-annotation-details-position {
-}
-
 .neuroglancer-annotation-toolbox {
   display: flex;
   align-items: stretch;
-}
-
-.neuroglancer-annotation-segment-list {
 }
 
 .neuroglancer-annotation-segment-item {
@@ -216,7 +210,8 @@ div.neuroglancer-annotation-details-description {
 .neuroglancer-selected-annotation-details-delete {
   grid-rows: 1 / -1;
   grid-column: delete;
-  align-self: start;
+  display: inline-grid;
+  justify-content: center;
 }
 
 .neuroglancer-selected-annotation-details-position-dim {
@@ -238,30 +233,75 @@ div.neuroglancer-annotation-details-description {
 .neuroglancer-related-segment-list-header {
   display: flex;
   flex-direction: row;
+  align-items: center;
 }
 
 .neuroglancer-related-segment-list {
-  /*  border: 1px solid #333;
-  margin: 3px;*/
+  margin: 4px 0;
 }
 
 .neuroglancer-annotation-property {
   display: flex;
   flex-direction: row;
+  align-items: center;
   font-family: sans-serif;
   font-size: small;
   user-select: text;
+  gap: 12px;
+  padding: 2px;
+  border-bottom: 1px solid #222;
 }
 
-.neuroglancer-annotation-property-label {
-  color: #999;
+.neuroglancer-annotation-property:hover {
+  background-color: #111;
+}
+
+.neuroglancer-annotation-property-name-wrapper {
+  flex: 1;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.neuroglancer-annotation-property-id {
+  border-bottom: none;
+  margin-bottom: 8px;
+  padding: 0;
 }
 
 .neuroglancer-annotation-property-value {
-  text-align: right;
   font-family: monospace;
-  font-size: medium;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.neuroglancer-annotation-property-id .neuroglancer-annotation-property-value {
+  padding: 0;
   flex: 1;
+  justify-content: flex-end;
+}
+
+.neuroglancer-annotation-property-id .neuroglancer-annotation-property-label {
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+.neuroglancer-annotation-property-label {
+  color: white;
+}
+
+.neuroglancer-annotation-property-value-wrapper {
+  flex: 1;
+  display: inline-flex;
+  justify-content: right;
+}
+
+.neuroglancer-annotation-property-select {
+  padding: 2px 4px;
+  border-radius: 2px;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 510;
 }
 
 input.neuroglancer-segment-list-entry-id {
@@ -281,4 +321,8 @@ input.neuroglancer-segment-list-entry-id {
 .neuroglancer-selection-annotation-status {
   font-family: sans-serif;
   font-size: small;
+}
+
+.neuroglancer-related-segment-list-header-checkbox {
+  min-width: 17px;
 }

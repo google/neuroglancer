@@ -1,0 +1,336 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-annotations-schema-tab {
+  overflow-y: auto;
+}
+
+.neuroglancer-annotation-schema-grid {
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+}
+
+.neuroglancer-annotation-schema-row,
+.neuroglancer-annotation-schema-header-row {
+  display: flex;
+  padding: 4px 2px;
+  border-bottom: 1px solid #222;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.neuroglancer-annotation-schema-row:hover {
+  background-color: #111;
+}
+
+.neuroglancer-annotation-schema-text-container {
+  padding: 0.25rem;
+}
+
+.neuroglancer-annotation-schema-main-text {
+  margin-top: 0;
+  margin-bottom: 0.25rem;
+  padding: 0.25rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.neuroglancer-annotation-schema-row:hover
+  .neuroglancer-annotation-schema-delete-cell,
+.neuroglancer-annotation-schema-row:hover
+  .neuroglancer-annotation-schema-description-cell {
+  opacity: 1;
+  visibility: visible;
+}
+
+.neuroglancer-annotation-schema-enum-container {
+  width: 100%;
+}
+
+.neuroglancer-annotation-schema-default-value-input {
+  text-align: left;
+  width: 100%;
+  color: white;
+  background: rgba(255, 255, 255, 0.3);
+  outline: none;
+  border: 1px solid transparent;
+  flex: 1 0 0;
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+}
+
+.neuroglancer-annotation-schema-type-icon {
+  min-width: 12px;
+  min-height: 12px;
+  margin-right: 2px;
+}
+
+.neuroglancer-annotation-schema-type-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.neuroglancer-annotation-schema-enum-entry:hover
+  .neuroglancer-annotation-schema-delete-icon {
+  opacity: 1;
+  visibility: visible;
+}
+
+.neuroglancer-annotation-schema-enum-entry:hover
+  .neuroglancer-annotation-schema-delete-icon {
+  border-color: #222;
+}
+
+.neuroglancer-annotation-schema-cell {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.neuroglancer-annotation-schema-delete-cell,
+.neuroglancer-annotation-schema-delete-header {
+  border-bottom: none;
+  border-right: none;
+  max-width: 1.25rem;
+}
+
+.neuroglancer-annotation-schema-delete-icon {
+  min-width: 1.25rem;
+  border-right: 1px solid transparent;
+  padding-right: 2px;
+}
+
+.neuroglancer-annotation-schema-description-cell,
+.neuroglancer-annotation-schema-description-header {
+  max-width: 1.25rem;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.neuroglancer-annotation-schema-header-row {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.neuroglancer-annotation-schema-action-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.neuroglancer-annotation-schema-action-buttons svg {
+  stroke: rgba(255, 255, 255, 0.6);
+}
+
+.neuroglancer-annotation-schema-action-buttons .neuroglancer-icon:hover svg,
+.neuroglancer-annotation-schema-action-button-selected svg {
+  stroke: white;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-modal {
+  flex-direction: column;
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+
+  border-radius: 2px;
+  background: #222;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-modal p {
+  margin: 0;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-action {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-button {
+  background-color: #fff;
+  border: none;
+}
+
+.neuroglancer-annotation-schema-cancel-paste-button {
+  border: 1px solid #fff;
+  background-color: transparent;
+  color: white;
+}
+
+.neuroglancer-annotation-schema-confirm-paste-button,
+.neuroglancer-annotation-schema-cancel-paste-button {
+  padding: 6px 12px;
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+.neuroglancer-annotation-schema-add-button-field {
+  width: 100%;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.neuroglancer-annotation-schema-default-value-cell[data-enums="true"],
+.neuroglancer-annotation-schema-default-value-header[data-enums="true"] {
+  flex: 2;
+}
+
+.neuroglancer-annotation-schema-default-value-cell-container {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.neuroglancer-annotation-schema-delete-cell,
+.neuroglancer-annotation-schema-delete-icon {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  align-self: auto;
+}
+
+.neuroglancer-annotation-schema-dropdown {
+  font-family: sans-serif;
+  position: absolute;
+  border: 0.5px solid #fff;
+  background: #111;
+  padding: 2px;
+  z-index: 1000;
+  min-width: 160px;
+  margin-top: 5px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.neuroglancer-annotation-schema-dropdown-header {
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0.25rem;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.neuroglancer-annotation-schema-dropdown-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.25rem;
+  margin-bottom: 2px;
+  gap: 0.25rem;
+  font-size: 13px;
+}
+
+.neuroglancer-annotation-schema-enum-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.neuroglancer-annotation-schema-enum-entry
+  .neuroglancer-annotation-schema-default-value-input {
+  line-height: 18px;
+  padding: 0;
+}
+
+.neuroglancer-annotation-schema-name-input {
+  width: 100%;
+  border-radius: 2px;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: small;
+  color: white;
+  font-family: sans-serif;
+}
+
+.neuroglancer-annotation-schema-name-input[data-readonly="false"]:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-schema-name-input:focus {
+  border-color: #016dcc;
+  outline: none;
+}
+
+.neuroglancer-annotation-schema-name-input:hover:focus {
+  background: transparent;
+}
+
+.neuroglancer-annotation-schema-default-value-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-schema-default-value-input:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-schema-default-value-input:focus {
+  border-color: #016dcc;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.neuroglancer-annotation-schema-default-value-input[data-readonly="true"] {
+  background: none;
+}
+
+.neuroglancer-annotation-schema-default-value-input[data-readonly="false"]:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-schema-type-cell {
+  height: 20px;
+}
+
+.neuroglancer-annotation-schema-type-cell[data-readonly="false"] {
+  cursor: pointer;
+}
+.neuroglancer-annotation-schema-type-cell[data-readonly="true"]
+  .neuroglancer-info-icon {
+  cursor: default;
+}
+.neuroglancer-annotation-schema-type-cell[data-readonly="false"]:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.neuroglancer-annotation-description-editor {
+  min-width: 600px;
+  border-radius: 0.25rem;
+}
+
+.neuroglancer-annotation-description-editor-text-input {
+  width: 100%;
+  padding: var(--spacing-lg, 12px) 14px;
+  gap: var(--spacing-md, 8px);
+  font-family: sans-serif;
+  border-radius: 2px;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  overflow-y: auto;
+  resize: none;
+  height: 20vh;
+}
+
+.neuroglancer-annotation-description-editor-text-input:focus {
+  border-color: #0474ff;
+  box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  outline: none;
+}
+
+.neuroglancer-annotation-description-editor-save-button {
+  cursor: pointer;
+}
