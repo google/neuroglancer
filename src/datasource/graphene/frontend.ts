@@ -2402,17 +2402,19 @@ class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
     );
     // Switch selected layer to the layer associated with the tool
     // to enable to place line tool. Swap back when deactivating.
-    const { selectedLayer } = this.layer.manager.root;
+    const { selectedLayer, selectionState } = this.layer.manager.root;
     const previousSelectedLayer = selectedLayer.layer;
     const previousSelectedLayerVisible = selectedLayer.visible;
     const previousTool = tool.value;
     selectedLayer.layer = this.layer.managedLayer;
     selectedLayer.visible = true;
     tool.value = lineTool;
+    const prevousSelectionState = selectionState.toJSON();
     activation.registerDisposer(() => {
       selectedLayer.layer = previousSelectedLayer;
       selectedLayer.visible = previousSelectedLayerVisible;
       tool.value = previousTool;
+      selectionState.restoreState(prevousSelectionState);
     });
     const { merges, autoSubmit } = mergeState;
     const { body, header } =
