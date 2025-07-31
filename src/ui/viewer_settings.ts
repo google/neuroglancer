@@ -102,6 +102,7 @@ export class ViewerSettingsPanel extends SidePanel {
       "Concurrent chunk requests",
       viewer.chunkQueueManager.capacities.download.itemLimit,
     );
+    addLimitWidget("Url update rate limit (ms)", viewer.urlRateLimit);
 
     const addCheckbox = (
       label: string,
@@ -115,6 +116,8 @@ export class ViewerSettingsPanel extends SidePanel {
       labelElement.appendChild(checkbox.element);
       scroll.appendChild(labelElement);
     };
+    addCheckbox("Save state to url", viewer.saveStateUrl);
+    addCheckbox("Save state to session storage", viewer.saveStateSession);
     addCheckbox("Show axis lines", viewer.showAxisLines);
     addCheckbox("Show scale bar", viewer.showScaleBar);
     addCheckbox("Show cross sections in 3-d", viewer.showPerspectiveSliceViews);
