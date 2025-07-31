@@ -43,6 +43,7 @@ import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
 } from "#src/layer/layer_data_source.js";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 import type {
   DisplayDimensions,
   WatchableDisplayDimensionRenderInfo,
@@ -2468,6 +2469,15 @@ export class AutoUserLayer extends UserLayer {
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
+      this.registerDisposer(
+        this.managedLayer.readyStateChanged.add(() => {
+          if (this.managedLayer.isReady()) {
+            // If you want to restore the old auto image setup, pass true here
+            // This will then make the previous image layer setup
+            createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
+          }
+        }),
+      );
     }
   }
 }
