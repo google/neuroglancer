@@ -17,7 +17,6 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
-import { Overlay } from "#src/overlay.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { LinkedLayerGroupWidget } from "#src/widget/linked_layer.js";
@@ -80,13 +79,13 @@ export class DisplayOptionsTab extends Tab {
           parent.appendChild(
             makeShaderCodeWidgetTopRow(
               this.layer,
-              codeWidget,
-              ShaderCodeOverlay,
+              codeWidget.element,
+              makeSkeletonShaderCodeWidget,
               {
-                title: "Documentation on image layer rendering",
+                title: "Documentation on skeleton rendering",
                 href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+                type: "Skeleton",
               },
-              "neuroglancer-segmentation-dropdown-skeleton-shader-header",
             ),
           );
           parent.appendChild(codeWidget.element);
@@ -109,20 +108,5 @@ export class DisplayOptionsTab extends Tab {
       ),
     );
     element.appendChild(skeletonControls.element);
-  }
-}
-
-class ShaderCodeOverlay extends Overlay {
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: SegmentationUserLayer) {
-    super();
-    this.codeWidget = this.registerDisposer(
-      makeSkeletonShaderCodeWidget(layer),
-    );
-    this.content.classList.add(
-      "neuroglancer-segmentation-layer-skeleton-shader-overlay",
-    );
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
   }
 }

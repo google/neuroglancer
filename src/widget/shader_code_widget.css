@@ -18,10 +18,12 @@
   border: 1px solid red;
 }
 
-.neuroglancer-shader-code-widget.valid-input {
-  border: 1px solid green;
-}
-
 .neuroglancer-shader-code-widget {
   border: 1px solid transparent;
+}
+
+.neuroglancer-shader-code-widget-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
 }
