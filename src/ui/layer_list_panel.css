@@ -1,3 +1,19 @@
+/**
+ * @license
+ * Copyright 2023 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 .neuroglancer-layer-list-panel-items {
   display: flex;
   flex-direction: column;
@@ -16,19 +32,6 @@
   margin: 2px;
   align-items: center;
   gap: 0px 2px;
-}
-
-.neuroglancer-layer-list-panel-item input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-}
-
-.neuroglancer-layer-list-panel-eye-icon {
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  display: flex;
 }
 
 .neuroglancer-layer-list-panel-item[data-selected="true"] {
@@ -50,6 +53,31 @@
   stroke: #999;
 }
 
+.neuroglancer-layer-list-panel-item[data-visible="false"] {
+  color: #bbb;
+}
+.neuroglancer-layer-list-panel-item[data-visible="false"]
+  .neuroglancer-layer-list-panel-item-name {
+  color: #bbb;
+}
+.neuroglancer-layer-list-panel-item[data-visible="false"]
+  .neuroglancer-layer-type-indicator {
+  color: #bbb;
+}
+
+.neuroglancer-layer-list-panel-item input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+}
+
+.neuroglancer-layer-list-panel-eye-icon {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
 .neuroglancer-layer-list-panel-item-name {
   line-height: 20px;
   padding: 0;
@@ -62,11 +90,93 @@
 
 .neuroglancer-layer-list-panel-item-number {
   font-family: sans-serif;
-  color: white;
   font-weight: bold;
   display: inline-block;
   text-align: right;
   line-height: 18px;
+}
+
+.neuroglancer-layer-list-panel-item input[type="checkbox"] {
+  width: "1rem";
+  height: "1rem";
+  margin: "0.25rem";
+}
+
+.neuroglancer-layer-list-panel-color-value-wrapper {
+  position: relative;
+  padding: 5px;
+  cursor: pointer;
+}
+
+.neuroglancer-layer-list-panel-color-value {
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+  overflow: hidden;
+}
+
+.neuroglancer-layer-list-panel-color-value[data-color="rainbow"] {
+  position: relative;
+}
+
+.neuroglancer-layer-list-panel-color-value[data-color="rainbow"]::before {
+  content: "";
+  position: absolute;
+  top: -17.5%;
+  left: -17.5%;
+  width: 135%;
+  height: 135%;
+  background: conic-gradient(
+    from 0deg,
+    #ab47bc 0deg,
+    #ffca28 72deg,
+    #66bb6a 144deg,
+    #26a69a 216deg,
+    #5c6bc0 288deg,
+    #ab47bc 360deg
+  );
+  filter: blur(0.5px);
+  transform: scale(1.35);
+}
+
+.neuroglancer-layer-list-panel-color-value[data-color="unsupported"] {
+  background-image: linear-gradient(
+      45deg,
+      rgba(128, 128, 128, 1.5) 25%,
+      transparent 25%
+    ),
+    linear-gradient(-45deg, rgba(128, 128, 128, 1.5) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 1.5) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 1.5) 75%);
+  background-size: 4px 4px;
+  background-position:
+    0 0,
+    0 2px,
+    2px -2px,
+    -2px 0px;
+}
+
+.neuroglancer-layer-list-panel-color-value-wrapper[data-visible="false"]
+  .neuroglancer-layer-list-panel-color-value {
+  opacity: 0.3;
+}
+
+.neuroglancer-layer-list-panel-item[data-archived="true"]
+  .neuroglancer-layer-list-panel-color-value {
+  visibility: hidden;
+}
+
+/* Place a / over the color value in widget when it is not visible */
+.neuroglancer-layer-list-panel-color-value-wrapper[data-visible="false"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 1px;
+  background-color: #bbb;
+  transform: translate(-50%, -50%) rotate(135deg);
+  z-index: 1;
 }
 
 .neuroglancer-layer-list-panel-item:not(:hover)
@@ -76,5 +186,10 @@
 
 .neuroglancer-layer-list-panel-item:not(:hover)
   > .neuroglancer-layer-list-panel-item-controls {
+  display: none;
+}
+
+.neuroglancer-layer-list-panel-item:not(:hover)
+  > .neuroglancer-layer-list-panel-item-visibility {
   display: none;
 }

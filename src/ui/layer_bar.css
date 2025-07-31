@@ -62,15 +62,11 @@
   border-color: #daa520;
 }
 
-.neuroglancer-layer-item[data-pick="true"] .neuroglancer-layer-item-label {
-  background-color: #939;
-}
-
 .neuroglancer-layer-item-label {
   display: inline-block;
   position: relative;
-  background-color: #222;
-  padding-right: 3px;
+  padding: 0 1px;
+  z-index: 1;
 }
 
 .neuroglancer-layer-item-number {
@@ -132,6 +128,26 @@
   display: grid;
   grid-template-columns: min-content;
   align-items: center;
+}
+
+.neuroglancer-layer-item-label-wrapper {
+  position: relative;
+  overflow: hidden;
+  margin: 0 2px;
+}
+
+.neuroglancer-layer-item-label-color {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.neuroglancer-layer-item-label-color[data-color="multi"] {
+  transform: scale(1.2);
+  filter: blur(8px);
 }
 
 .neuroglancer-layer-item-value {
