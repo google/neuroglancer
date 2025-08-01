@@ -706,6 +706,16 @@ export function verifyIntegerArray(a: unknown) {
   return <number[]>a;
 }
 
+export function verifyFloatArray(a: unknown) {
+  if (!Array.isArray(a)) {
+    throw new Error(`Expected array, received: ${JSON.stringify(a)}.`);
+  }
+  for (const x of a) {
+    verifyFloat(x);
+  }
+  return <number[]>a;
+}
+
 export function verifyBoolean(x: any) {
   if (typeof x !== "boolean") {
     throw new Error(`Expected boolean, received: ${JSON.stringify(x)}`);
