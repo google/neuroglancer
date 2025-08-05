@@ -213,8 +213,7 @@ void emitDefault() {
 highp vec3 vertexA = readAttribute0(aVertexIndex.x);
 highp vec3 vertexB = readAttribute0(aVertexIndex.y);
 highp uint lineEndpointIndex = getLineEndpointIndex();
-highp uint vertexIndex = aVertexIndex.x * lineEndpointIndex + aVertexIndex.y * (1u - lineEndpointIndex);
-highp uint vertexIndex2 = aVertexIndex.y * lineEndpointIndex + aVertexIndex.x * (1u - lineEndpointIndex);
+highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 setLineWidth(uLineWidth);
 `;
           const { vertexAttributes } = this;
@@ -222,7 +221,7 @@ setLineWidth(uLineWidth);
           for (let i = 1; i < numAttributes; ++i) {
             const info = vertexAttributes[i];
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
-            vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex2);\n`; // TODO, why is vertexIndex2 correct?
+            vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addVertexCode(`#define ${info.name} vCustom${i}\n`);
           }
           vertexMain += `
