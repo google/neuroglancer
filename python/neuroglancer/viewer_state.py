@@ -1164,6 +1164,9 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
     shader_controls = shaderControls = wrapped_property(
         "shaderControls", ShaderControls
     )
+    swap_visible_segments_on_move = swapVisibleSegmentsOnMove = wrapped_property(
+        "swapVisbleSegmentsOnMove", optional(bool, True)
+    )
 
     @staticmethod
     def interpolate(a, b, t):
