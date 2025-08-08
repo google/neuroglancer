@@ -16,9 +16,15 @@
 
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
+import type {
+  SingleChannelMetadata,
+  ChannelMetadata,
+} from "#src/datasource/index.js";
+import { parseRGBColorSpecification } from "#src/util/color.js";
 import {
   parseArray,
   parseFixedLengthArray,
+  verifyBoolean,
   verifyFiniteFloat,
   verifyFinitePositiveFloat,
   verifyObject,
@@ -26,6 +32,7 @@ import {
   verifyOptionalObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import { clampToInterval } from "#src/util/lerp.js";
 import * as matrix from "#src/util/matrix.js";
 import { allSiPrefixes } from "#src/util/si_units.js";
 
@@ -37,6 +44,11 @@ export interface OmeMultiscaleScale {
 export interface OmeMultiscaleMetadata {
   scales: OmeMultiscaleScale[];
   coordinateSpace: CoordinateSpace;
+}
+
+export interface OmeMetadata {
+  multiscale: OmeMultiscaleMetadata;
+  channels: ChannelMetadata | undefined;
 }
 
 const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
@@ -70,6 +82,75 @@ interface Axis {
   unit: string;
   scale: number;
   type: string | undefined;
+}
+
+function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
+  verifyObject(omeroChannel);
+
+  const getProp = <T>(
+    key: string,
+    verifier: (value: unknown) => T,
+  ): T | undefined => verifyOptionalObjectProperty(omeroChannel, key, verifier);
+  const inputWindow = getProp("window", verifyObject);
+  const getWindowProp = <T>(
+    key: string,
+    verifier: (value: unknown) => T,
+  ): T | undefined =>
+    inputWindow
+      ? verifyOptionalObjectProperty(inputWindow, key, verifier)
+      : undefined;
+
+  const active = getProp("active", verifyBoolean);
+  const coefficient = getProp("coefficient", verifyFiniteFloat);
+  let colorString = getProp("color", verifyString);
+  // If six hex digits, needs the # in front of the hex color
+  if (colorString && /^[0-9a-f]{6}$/i.test(colorString)) {
+    colorString = `#${colorString}`;
+  }
+  const color = parseRGBColorSpecification(colorString);
+  const inverted = getProp("inverted", verifyBoolean);
+  const label = getProp("label", verifyString);
+
+  const windowMin = getWindowProp("min", verifyFiniteFloat);
+  const windowMax = getWindowProp("max", verifyFiniteFloat);
+  const windowStart = getWindowProp("start", verifyFiniteFloat);
+  const windowEnd = getWindowProp("end", verifyFiniteFloat);
+
+  const window =
+    windowMin !== undefined && windowMax !== undefined
+      ? ([windowMin, windowMax] as [number, number])
+      : undefined;
+
+  const range =
+    windowStart !== undefined && windowEnd !== undefined
+      ? inverted
+        ? ([windowEnd, windowStart] as [number, number])
+        : ([windowStart, windowEnd] as [number, number])
+      : undefined;
+  // If there is a window, then clamp the range to the window.
+  if (window !== undefined && range !== undefined) {
+    range[0] = clampToInterval(window, range[0]) as number;
+    range[1] = clampToInterval(window, range[1]) as number;
+  }
+
+  return {
+    active,
+    label,
+    color,
+    coefficient,
+    range,
+    window,
+  };
+}
+
+function parseOmeroMetadata(omero: unknown): ChannelMetadata {
+  verifyObject(omero);
+  const name = verifyOptionalObjectProperty(omero, "name", verifyString);
+  const channels = verifyObjectProperty(omero, "channels", (x) =>
+    parseArray(x, parseOmeroChannel),
+  );
+
+  return { name, channels };
 }
 
 function parseOmeAxis(axis: unknown): Axis {
@@ -266,9 +347,10 @@ export function parseOmeMetadata(
   url: string,
   attrs: any,
   zarrVersion: number,
-): OmeMultiscaleMetadata | undefined {
+): OmeMetadata | undefined {
   const ome = attrs.ome;
   const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
+  const omero = attrs.omero;
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
@@ -301,7 +383,9 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    return parseOmeMultiscale(url, multiscale);
+    const multiScaleInfo = parseOmeMultiscale(url, multiscale);
+    const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
+    return { multiscale: multiScaleInfo, channels: channelMetadata };
   }
   if (errors.length !== 0) {
     throw new Error(errors[0]);

@@ -435,6 +435,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   updateFinished = new NullarySignal();
   continuousCameraMotionStarted = new NullarySignal();
   continuousCameraMotionFinished = new NullarySignal();
+  multiChannelSetupFinished = new NullarySignal();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
   canvasRect: DOMRect | undefined;
