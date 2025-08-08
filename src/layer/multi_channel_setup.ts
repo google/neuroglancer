@@ -32,8 +32,8 @@ import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
-import { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
+import type { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
 
 type MakeLayerFn = (
   manager: LayerListSpecification,
