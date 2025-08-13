@@ -185,12 +185,25 @@ export class UserLayer extends RefCounted {
   }
 
   static supportsPickOption = false;
+  static supportsLayerBarColorSyncOption = false;
 
   pick = new TrackableBoolean(true, true);
 
   selectionState: UserLayerSelectionState;
 
   messages = new MessageList();
+
+  observeLayerColor(_: () => void): () => void {
+    return () => {};
+  }
+
+  get automaticLayerBarColors(): string[] | undefined {
+    return [];
+  }
+
+  get layerBarColors(): string[] | undefined {
+    return this.automaticLayerBarColors;
+  }
 
   initializeSelectionState(state: this["selectionState"]) {
     state.generation = -1;
@@ -738,6 +751,28 @@ export class ManagedUserLayer extends RefCounted {
     ) {
       userLayer.pick.value = value;
     }
+  }
+
+  get layerBarColors(): string[] | undefined {
+    const userLayer = this.layer;
+    return userLayer?.layerBarColors;
+  }
+
+  observeLayerColor(callback: () => void): () => void {
+    const userLayer = this.layer;
+    if (userLayer !== null) {
+      return userLayer.observeLayerColor(callback);
+    }
+    return () => {};
+  }
+
+  get supportsLayerBarColorSyncOption() {
+    const userLayer = this.layer;
+    return (
+      userLayer !== null &&
+      (userLayer.constructor as typeof UserLayer)
+        .supportsLayerBarColorSyncOption
+    );
   }
 
   /**

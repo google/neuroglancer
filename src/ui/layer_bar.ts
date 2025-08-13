@@ -29,6 +29,11 @@ import {
   registerLayerDragHandlers,
 } from "#src/ui/layer_drag_and_drop.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import {
+  createSteppedCssGradient,
+  parseRGBColorSpecification,
+  useWhiteBackground,
+} from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
@@ -41,12 +46,14 @@ class LayerWidget extends RefCounted {
   element = document.createElement("div");
   layerNumberElement = document.createElement("div");
   labelElement = document.createElement("div");
+  labelColorElement = document.createElement("div");
   visibleProgress = document.createElement("div");
   prefetchProgress = document.createElement("div");
   labelElementText = document.createTextNode("");
   valueElement = document.createElement("div");
   maxLength = 0;
   prevValueText = "";
+  private colorChangeDisposer: () => void = () => {};
 
   constructor(
     public layer: ManagedUserLayer,
@@ -56,6 +63,7 @@ class LayerWidget extends RefCounted {
     const {
       element,
       labelElement,
+      labelColorElement,
       layerNumberElement,
       valueElement,
       visibleProgress,
@@ -71,6 +79,12 @@ class LayerWidget extends RefCounted {
     prefetchProgress.className = "neuroglancer-layer-item-prefetch-progress";
     layerNumberElement.className = "neuroglancer-layer-item-number";
     valueElement.className = "neuroglancer-layer-item-value";
+
+    labelColorElement.className = "neuroglancer-layer-item-label-color";
+    const labelWrapper = document.createElement("div");
+    labelWrapper.className = "neuroglancer-layer-item-label-wrapper";
+    labelWrapper.appendChild(labelElement);
+    labelWrapper.appendChild(labelColorElement);
 
     const valueContainer = document.createElement("div");
     valueContainer.className = "neuroglancer-layer-item-value-container";
@@ -103,12 +117,14 @@ class LayerWidget extends RefCounted {
       deleteLayer(this.layer);
       event.stopPropagation();
     });
+
+    // Compose the layer's title bar
     element.appendChild(layerNumberElement);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
-    element.appendChild(labelElement);
+    element.appendChild(labelWrapper);
     element.appendChild(valueContainer);
     const positionWidget = this.registerDisposer(
       new PositionWidget(
@@ -121,6 +137,20 @@ class LayerWidget extends RefCounted {
         },
       ),
     );
+
+    const listenForColorChange = () => {
+      if (!this.layer.isReady()) return;
+      this.colorChangeDisposer();
+      this.colorChangeDisposer = layer.observeLayerColor(() => {
+        this.setColor();
+      });
+    };
+    this.registerDisposer(this.colorChangeDisposer);
+    this.registerDisposer(
+      this.layer.readyStateChanged.add(listenForColorChange),
+    );
+    listenForColorChange();
+
     element.appendChild(positionWidget.element);
     positionWidget.element.addEventListener("click", (event: MouseEvent) => {
       event.stopPropagation();
@@ -150,14 +180,54 @@ class LayerWidget extends RefCounted {
     registerLayerBarDropHandlers(this.panel, element, this.layer);
   }
 
+  setColor() {
+    const { labelColorElement, labelElement, layer } = this;
+
+    const setNoColor = () => {
+      labelColorElement.style.background = "";
+      labelColorElement.style.backgroundColor = "";
+      labelElement.style.color = "";
+      labelColorElement.dataset.color = "solid";
+    };
+
+    const colors = layer.layerBarColors;
+    if (
+      !layer.supportsLayerBarColorSyncOption ||
+      !layer.visible ||
+      colors === undefined ||
+      colors.length === 0
+    ) {
+      setNoColor();
+      return;
+    }
+
+    const setSolidColor = () => {
+      labelColorElement.style.background = "";
+      labelColorElement.style.backgroundColor = colors[0];
+      labelColorElement.dataset.color = "solid";
+      const textColor = useWhiteBackground(
+        parseRGBColorSpecification(colors[0]),
+      )
+        ? "white"
+        : "black";
+      labelElement.style.color = textColor;
+    };
+
+    const setMultiColor = () => {
+      labelColorElement.style.background = createSteppedCssGradient(colors);
+      labelColorElement.dataset.color = "multi";
+      labelElement.style.color = "white";
+    };
+
+    if (colors.length === 1) setSolidColor();
+    else setMultiColor();
+  }
+
   update() {
-    const { layer, element } = this;
-    this.labelElementText.textContent = layer.name;
+    const { layer, element, panel, labelElementText } = this;
+    labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
-    element.dataset.selected = (
-      layer === this.panel.selectedLayer.layer
-    ).toString();
-    element.dataset.pick = layer.pickEnabled.toString();
+    element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
     let title = `Click to ${
       layer.visible ? "hide" : "show"
     }, control+click to show side panel`;
@@ -168,6 +238,7 @@ class LayerWidget extends RefCounted {
     }
     title += ", drag to move, shift+drag to copy";
     element.title = title;
+    this.setColor();
   }
 
   disposed() {
