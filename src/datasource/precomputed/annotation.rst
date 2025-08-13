@@ -79,8 +79,8 @@ Within the annotation id index, each annotation is encoded in the following bina
   - For :json:`"line"` type, the first endpoint position followed by the second endpoint position.
   - For :json:`"axis_aligned_bounding_box"` type, the first position followed by the second position.
   - For :json:`"ellipsoid"` type, the center position followed by the radii vector.
-  - For :json:`"polyline"` type, first the number of positions as a uint32le value,
-    followed by the position vectors as float32le.
+  - For :json:`"polyline"` type, first the number of points as a uint32le value,
+    followed by the vectors of each point as float32le.
 
 - For each property of type :json:`"uint32"`, :json:`"int32"`, or
   :json:`"float32"`: the value encoded as a little endian value.
