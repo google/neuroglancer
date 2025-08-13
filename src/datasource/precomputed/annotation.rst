@@ -4,13 +4,13 @@ Annotation format
 =================
 
 The precomputed annotation format defines an annotation collection for a given
-n-dimensional coordinate space and one of the following four geometry types:
+n-dimensional coordinate space and one of the following five geometry types:
 
 - Points (represented by a single position)
 - Line segments (represented by the two endpoint positions)
 - Axis-aligned bounding boxes (represented by two positions)
 - Axis-aligned ellipsoids (represented by a center position and radii vector)
-- Polylines (represented by a list of at least two positions)
+- Polylines (represented by the number of points in the line, followed by the positions of the points)
 
 All annotations within the annotation collection have the same geometry type.
 
@@ -79,8 +79,7 @@ Within the annotation id index, each annotation is encoded in the following bina
   - For :json:`"line"` type, the first endpoint position followed by the second endpoint position.
   - For :json:`"axis_aligned_bounding_box"` type, the first position followed by the second position.
   - For :json:`"ellipsoid"` type, the center position followed by the radii vector.
-  - For :json:`"polyline"` type, first the number of points as a uint32le value,
-    followed by the vectors of each point as float32le.
+  - For :json:`"polyline"` type, the number of points as a uint32le value, followed by the position of each point as float32le.
 
 - For each property of type :json:`"uint32"`, :json:`"int32"`, or
   :json:`"float32"`: the value encoded as a little endian value.
