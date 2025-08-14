@@ -63,6 +63,12 @@ def setup_viewer(viewer):
             neuroglancer.EllipsoidAnnotation,
             2,
         ),
+        (
+            "annotatePolyline",
+            neuroglancer.PlacePolylineTool,
+            neuroglancer.PolyLineAnnotation,
+            3,
+        ),
     ],
 )
 def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
@@ -78,11 +84,14 @@ def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
         chain = chain.move_to_element_with_offset(
             webdriver.root_element, 100 + 50 * i, 100 + 50 * i
         ).click()
+        if tool == "annotatePolyline" and i == num_clicks - 1:
+            chain.key_down(Keys.ENTER)
+            chain.key_up(Keys.ENTER)
     chain.key_up(Keys.CONTROL)
     chain.perform()
     webdriver.sync()
     annotations = webdriver.viewer.state.layers["a"].annotations
     assert len(annotations) == 1
     assert isinstance(annotations[0], annotation_class)
-    if tool in ("annotatePoint", "annotateLine"):
+    if tool in ("annotatePoint", "annotateLine", "annotatePolyline"):
         assert list(annotations[0].segments[0]) == [42]

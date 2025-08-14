@@ -46,6 +46,7 @@ properties:
       - "line"
       - "axis_aligned_bounding_box"
       - "ellipsoid"
+      - "polyline"
   properties:
     title: Additional properties associated with each annotation.
     type: array

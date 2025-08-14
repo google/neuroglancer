@@ -246,6 +246,38 @@ export function findClosestMatchInSortedArray<T>(
 }
 
 /**
+ * Performs a directional binary search to find the index of the first element in `haystack`
+ * that satisfies the given `predicate`.
+ *
+ * @param direction - 'asc' to find the lowest qualifying index (default),
+ *                    'desc' to find the highest qualifying index.
+ * @returns The index of the matching element, or -1 if none found.
+ */
+export function findFirstInSortedArray<T>(
+  haystack: ArrayLike<T>,
+  predicate: (item: T) => boolean,
+  direction: "asc" | "desc" = "asc",
+  low: number = 0,
+  high: number = haystack.length,
+): number {
+  let result = -1;
+
+  while (low < high) {
+    const mid = (low + high - 1) >> 1;
+    const match = predicate(haystack[mid]);
+
+    if (match) {
+      result = mid;
+      direction === "asc" ? (high = mid) : (low = mid + 1);
+    } else {
+      direction === "asc" ? (low = mid + 1) : (high = mid);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Returns the first index in `[begin, end)` for which `predicate` is `true`, or returns `end` if no
  * such index exists.
  *

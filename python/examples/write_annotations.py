@@ -1,5 +1,6 @@
 import argparse
 import atexit
+import os
 import shutil
 import tempfile
 
@@ -27,6 +28,7 @@ def write_some_annotations(
             type="float32",
             default=14.0,
         ),
+        neuroglancer.AnnotationPropertySpec(id="cell_type", type="uint16"),
         neuroglancer.AnnotationPropertySpec(
             id="p_int8",
             type="int8",
@@ -88,7 +90,7 @@ def write_some_annotations(
     # Any property not specified will use the default value defined
     # in the AnnotationPropertySpec.
     writer.add_point(
-        [20, 30, 40],
+        [10, 10, 20],
         point_color=(0, 255, 0),
         size=10,
         p_int8=1,
@@ -118,8 +120,32 @@ def write_some_annotations(
         p_fnum32=3.0,
         p_boola=0,
     )
+
     writer.add_point([40, 20, 24])
-    writer.write(output_dir)
+    writer.write(os.path.join(output_dir, "point"))
+
+    writer = neuroglancer.write_annotations.AnnotationWriter(
+        coordinate_space=coordinate_space,
+        annotation_type="polyline",
+        properties=[
+            neuroglancer.AnnotationPropertySpec(id="size", type="float32"),
+            neuroglancer.AnnotationPropertySpec(id="cell_type", type="uint16"),
+            neuroglancer.AnnotationPropertySpec(id="point_color", type="rgba"),
+        ],
+    )
+    writer.add_polyline(
+        [[25, 10, 20], [10, 15, 20]],
+        size=10,
+        cell_type=16,
+        point_color=(0, 255, 0, 255),
+    )
+    writer.add_polyline(
+        [[5, 17, 29], [10, 15, 30], [40, 20, 15]],
+        size=6,
+        cell_type=12,
+        point_color=(255, 0, 0, 255),
+    )
+    writer.write(os.path.join(output_dir, "polyline"))
 
 
 if __name__ == "__main__":
@@ -148,8 +174,8 @@ if __name__ == "__main__":
                 dimensions=coordinate_space,
             ),
         )
-        s.layers["annotations"] = neuroglancer.AnnotationLayer(
-            source=f"precomputed://{server.url}",
+        s.layers["points"] = neuroglancer.AnnotationLayer(
+            source=f"precomputed://{server.url}/point",
             tab="rendering",
             shader="""
 void main() {
@@ -158,7 +184,17 @@ void main() {
 }
         """,
         )
-        s.selected_layer.layer = "annotations"
+        s.layers["polylines"] = neuroglancer.AnnotationLayer(
+            source=f"precomputed://{server.url}/polyline",
+            tab="rendering",
+            shader="""
+void main() {
+setColor(prop_point_color());
+setLineWidth(prop_size());
+}
+        """,
+        )
+        s.selected_layer.layer = "points"
         s.selected_layer.visible = True
         s.show_slices = False
     print(viewer)
