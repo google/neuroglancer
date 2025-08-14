@@ -122,7 +122,6 @@ def write_some_annotations(
     )
 
     writer.add_point([40, 20, 24])
-    writer.add_point([20, 30, 40], size=10, cell_type=16, point_color=(0, 255, 0, 255))
     writer.write(os.path.join(output_dir, "point"))
 
     writer = neuroglancer.write_annotations.AnnotationWriter(
@@ -141,9 +140,9 @@ def write_some_annotations(
         point_color=(0, 255, 0, 255),
     )
     writer.add_polyline(
-        [[5, 17, 29], [10, 15, 30], [40, 20, 25]],
-        size=30,
-        cell_type=16,
+        [[5, 17, 29], [10, 15, 30], [40, 20, 15]],
+        size=6,
+        cell_type=12,
         point_color=(255, 0, 0, 255),
     )
     writer.write(os.path.join(output_dir, "polyline"))
