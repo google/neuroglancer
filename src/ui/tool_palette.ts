@@ -1074,6 +1074,27 @@ export class MultiToolPaletteManager extends RefCounted {
     );
     this.registerDisposer(this.state.changedShallow.add(debouncedUpdatePanels));
     this.updatePanels();
+    this.registerDisposer(
+      this.sidePanelManager.display.multiChannelSetupFinished.add(() => {
+        // Check for the canned shader control palette
+        const shaderControlPalette = CANNED_PALETTES[2];
+        const existingPalettes = this.state.palettes;
+        for (const palette of existingPalettes) {
+          if (palette.query.value === shaderControlPalette.query) {
+            return;
+          }
+        }
+        const newPalette = this.state.addNew({
+          name: shaderControlPalette.name,
+          location: {
+            ...DEFAULT_TOOL_PALETTE_PANEL_LOCATION,
+            side: "left",
+            row: 0,
+          },
+        });
+        newPalette.query.value = shaderControlPalette.query;
+      }),
+    );
   }
 
   private updatePanels() {
@@ -1124,8 +1145,8 @@ export class PaletteListDropdownItem extends RefCounted {
     element.appendChild(
       this.registerDisposer(
         new TrackableBooleanCheckbox(state.location.watchableVisible, {
-          enableTitle: "Show tool palette",
-          disableTitle: "Hide tool palette",
+          enabledTitle: "Hide tool palette",
+          disabledTitle: "Show tool palette",
         }),
       ).element,
     );

@@ -124,8 +124,16 @@ function parseOwnerInfo(obj: any): OwnerInfo {
 
   for (const stackObj of stackObjs) {
     const stackName = verifyObjectProperty(stackObj, "stackId", parseStackName);
-    const stackInfo = parseStackInfo(stackObj);
-
+    let stackInfo: StackInfo | undefined;
+    try {
+      stackInfo = parseStackInfo(stackObj);
+    } catch (e) {
+      console.warn(
+        `Failed to parse stack info for stack ${stackName} in owner ${owner}:`,
+        e,
+      );
+      continue;
+    }
     if (stackInfo !== undefined) {
       const projectName = stackInfo.project;
       let projectInfo = projects.get(projectName);

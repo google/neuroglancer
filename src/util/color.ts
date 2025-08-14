@@ -217,3 +217,25 @@ export class TrackableOptionalRGB extends WatchableValue<vec3 | undefined> {
     }
   }
 }
+
+export function createSteppedCssGradient(colors: string[], conic = false) {
+  const numSteps = colors.length;
+  if (conic) {
+    const stepSize = 360.0 / numSteps;
+    return `conic-gradient(${colors
+      .map((color, i) => {
+        const start = Math.round(i * stepSize);
+        const end = Math.round((i + 1) * stepSize);
+        return `${color} ${start}deg, ${color} ${end}deg`;
+      })
+      .join(", ")})`;
+  }
+  const stepSize = 100.0 / numSteps;
+  return `linear-gradient(to right, ${colors
+    .map((color, i) => {
+      const start = Math.round(i * stepSize);
+      const end = Math.round((i + 1) * stepSize);
+      return `${color} ${start}%, ${color} ${end}%`;
+    })
+    .join(", ")})`;
+}

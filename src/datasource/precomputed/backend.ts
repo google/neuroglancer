@@ -603,7 +603,7 @@ function parseAnnotations(
   // FIXME: convert endian in order to support big endian platforms
   const isLittleEndian = true;
   // First, compute simple sanity checks for sizes etc. to verify that the buffer is well-formed.
-  if (buffer.byteLength <= 8) throw new Error("Expected at least 8 bytes");
+  if (buffer.byteLength < 8) throw new Error("Expected at least 8 bytes");
   const dv = new DataView(buffer);
   const countHigh = dv.getUint32(4, isLittleEndian);
   if (countHigh !== 0) throw new Error("Annotation count too high");
