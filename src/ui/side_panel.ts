@@ -335,7 +335,7 @@ export class SidePanelManager extends RefCounted {
   }
 
   /**
-   * One a panel is added to a flex group, the panel no longer controls the
+   * Once a panel is added to a flex group, the panel no longer controls the
    * size of the flex group. This resets the flex group sizes so that
    * panels can set the size of the flex group. This is useful when
    * panel sizes are manually set from the JSON state.
