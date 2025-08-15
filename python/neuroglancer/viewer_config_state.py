@@ -379,6 +379,9 @@ class ConfigState(JsonObjectWrapper):
     show_panel_borders = showPanelBorders = wrapped_property(
         "showPanelBorders", optional(bool, True)
     )
+    show_all_dimension_plot_bounds = showAllDimensionPlotBounds = wrapped_property(
+        "showAllDimensionPlotBounds", optional(bool, True)
+    )
     scale_bar_options = scaleBarOptions = wrapped_property(
         "scaleBarOptions", ScaleBarOptions
     )
