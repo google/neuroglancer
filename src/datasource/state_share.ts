@@ -1,6 +1,7 @@
 import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { StatusMessage } from "#src/status.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { bigintToStringJsonReplacer } from "#src/util/json.js";
 import type { Viewer } from "#src/viewer.js";
@@ -104,12 +105,14 @@ export class StateShare extends RefCounted {
               stateUrlProtcol.length,
             );
             const protocol = new URL(selectedStateServer).protocol;
-            const link = `${window.location.origin}/#!${protocol}${stateUrlWithoutProtocol}`;
-            navigator.clipboard.writeText(link).then(() => {
-              StatusMessage.showTemporaryMessage(
-                "Share link copied to clipboard",
-              );
-            });
+            const link = `${window.location.origin}${window.location.pathname}#!${protocol}${stateUrlWithoutProtocol}`;
+
+            const result = setClipboard(link);
+            StatusMessage.showTemporaryMessage(
+              result
+              ? "Share link copied to clipboard"
+              : "Failed to copy share link to clipboard",
+            );
           })
           .catch(() => {
             StatusMessage.showTemporaryMessage(
