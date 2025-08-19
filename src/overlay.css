@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-.overlay {
+.neuroglancer-overlay {
   height: 100%;
   width: 100%;
   position: fixed;
-  z-index: 99;
+  z-index: 100;
   top: 0;
   left: 0;
   background-color: rgba(0, 0, 0, 0.8);
 }
 
-.overlay-content {
+.neuroglancer-overlay-content {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -32,5 +32,60 @@
   background-color: white;
   z-index: 100;
   color: black;
-  padding: 1em;
+}
+
+.neuroglancer-framed-dialog:focus-visible {
+  outline: none;
+}
+
+.neuroglancer-framed-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid #ccc;
+  height: 2rem;
+  margin-bottom: 1px;
+}
+
+.neuroglancer-framed-dialog-body {
+  display: flex;
+  padding: 0 1.5rem;
+  overflow: auto;
+}
+
+.neuroglancer-framed-dialog-title {
+  margin-right: auto;
+  font-size: large;
+  font-weight: bold;
+  color: #333;
+}
+
+.neuroglancer-framed-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #ccc;
+  margin-top: 1px;
+}
+
+.neuroglancer-framed-dialog-primary-button {
+  margin-left: auto;
+}
+
+.neuroglancer-framed-dialog-close-icon {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+}
+
+.neuroglancer-framed-dialog-close-icon svg {
+  stroke: #141415;
+  opacity: 0.6;
+}
+
+.neuroglancer-framed-dialog-close-icon:hover svg {
+  stroke: white;
+  opacity: 1;
 }

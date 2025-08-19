@@ -39,7 +39,6 @@ import {
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
@@ -775,16 +774,6 @@ function makeShaderCodeWidget(layer: AnnotationUserLayer) {
   });
 }
 
-class ShaderCodeOverlay extends Overlay {
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: AnnotationUserLayer) {
-    super();
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
-  }
-}
-
 class RenderingOptionsTab extends Tab {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
@@ -838,13 +827,13 @@ class RenderingOptionsTab extends Tab {
     element.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
-        this.codeWidget,
-        ShaderCodeOverlay,
+        this.codeWidget.element,
+        makeShaderCodeWidget,
         {
-          title: "Documentation on image layer rendering",
+          title: "Documentation on annotation layer rendering",
           href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
+          type: "Annotation",
         },
-        "neuroglancer-annotation-dropdown-shader-top-row",
       ),
     );
 
