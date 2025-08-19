@@ -22,6 +22,7 @@ import {
 } from "#src/annotation/annotation_layer_state.js";
 import type {
   AnnotationReference,
+  AxisAlignedBoundingBox,
   Line,
   Point,
 } from "#src/annotation/index.js";
@@ -176,6 +177,7 @@ import {
   verifyEnumString,
   verifyFiniteFloat,
   verifyFinitePositiveFloat,
+  verifyFloatArray,
   verifyInt,
   verifyNonnegativeInt,
   verifyObject,
@@ -192,6 +194,12 @@ import type { Trackable } from "#src/util/trackable.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeIcon } from "#src/widget/icon.js";
+import {
+  addLayerControlToOptionsTab,
+  registerLayerControl,
+} from "#src/widget/layer_control.js";
+import { RPC } from "#src/worker_rpc.js";
+import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 
 function vec4FromVec3(vec: vec3, alpha = 0) {
   const res = vec4.clone([...vec]);
@@ -211,13 +219,119 @@ const BLUE_COLOR_SEGMENT_PACKED = BigInt(packColor(BLUE_COLOR_SEGMENT));
 const TRANSPARENT_COLOR_PACKED = BigInt(packColor(TRANSPARENT_COLOR));
 const MULTICUT_OFF_COLOR = vec4.fromValues(0, 0, 0, 0.5);
 
+class GrapheneState extends RefCounted implements Trackable {
+  changed = new NullarySignal();
+
+  public multicutState = new MulticutState();
+  public mergeState = new MergeState();
+
+  public focusBoundingBox = new TrackableValue<Float32Array | undefined>(
+    undefined,
+    (val) => {
+      const x = verifyFloatArray(val);
+      return new Float32Array(x);
+    },
+  );
+  public focusBoundingBoxSize = new TrackableValue(0, verifyNonnegativeInt);
+  public focusTrackGlobalPosition = new TrackableBoolean(true);
+
+  constructor() {
+    super();
+    this.registerDisposer(
+      this.multicutState.changed.add(() => {
+        this.changed.dispatch();
+      }),
+    );
+    this.registerDisposer(
+      this.mergeState.changed.add(() => {
+        this.changed.dispatch();
+      }),
+    );
+    this.registerDisposer(
+      this.focusBoundingBox.changed.add(() => {
+        this.changed.dispatch();
+      }),
+    );
+    this.registerDisposer(
+      this.focusBoundingBoxSize.changed.add(() => {
+        this.changed.dispatch();
+      }),
+    );
+    this.registerDisposer(
+      this.focusTrackGlobalPosition.changed.add(() => {
+        this.changed.dispatch();
+      }),
+    );
+  }
+
+  reset() {
+    this.multicutState.reset();
+    this.mergeState.reset();
+    this.focusBoundingBox.reset();
+    this.focusBoundingBoxSize.reset();
+    this.focusTrackGlobalPosition.reset();
+  }
+
+  toJSON() {
+    return {
+      [MULTICUT_JSON_KEY]: this.multicutState.toJSON(),
+      [MERGE_JSON_KEY]: this.mergeState.toJSON(),
+      [FOCUS_BOUNDING_BOX_JSON_KEY]:
+        this.focusBoundingBox.value === undefined
+          ? undefined
+          : Array.from(this.focusBoundingBox.value),
+      [FOCUS_BOUNDING_BOX_SIZE_JSON_KEY]: this.focusBoundingBoxSize.toJSON(),
+      [FOCUS_TRACK_GLOBAL_POSITION_JSON_KEY]:
+        this.focusTrackGlobalPosition.toJSON(),
+    };
+  }
+
+  restoreState(x: any) {
+    verifyOptionalObjectProperty(x, MULTICUT_JSON_KEY, (value) => {
+      this.multicutState.restoreState(value);
+    });
+    verifyOptionalObjectProperty(x, MERGE_JSON_KEY, (value) => {
+      this.mergeState.restoreState(value);
+    });
+    verifyOptionalObjectProperty(x, FOCUS_BOUNDING_BOX_JSON_KEY, (value) => {
+      this.focusBoundingBox.restoreState(value);
+    });
+    verifyOptionalObjectProperty(
+      x,
+      FOCUS_BOUNDING_BOX_SIZE_JSON_KEY,
+      (value) => {
+        this.focusBoundingBoxSize.restoreState(value);
+      },
+    );
+    verifyOptionalObjectProperty(
+      x,
+      FOCUS_TRACK_GLOBAL_POSITION_JSON_KEY,
+      (value) => {
+        this.focusTrackGlobalPosition.restoreState(value);
+      },
+    );
+  }
+}
+
 class GrapheneMeshSource extends WithParameters(
   WithSharedKvStoreContext(MeshSource),
   MeshSourceParameters,
+  GrapheneState,
 ) {
   getFragmentKey(objectKey: string | null, fragmentId: string) {
     objectKey;
     return getGrapheneFragmentKey(fragmentId);
+  }
+
+  initializeCounterpart(rpc: RPC, options: MeshSourceParameters): void {
+    const focusBoundingBox = SharedWatchableValue.makeFromExisting(
+      rpc!,
+      this.state.focusBoundingBox,
+    );
+    super.initializeCounterpart(rpc, {
+      ...options,
+      focusBoundingBox: focusBoundingBox.rpcId!,
+    });
   }
 }
 
@@ -514,10 +628,12 @@ function parseGrapheneShardingParameters(
 function getShardedMeshSource(
   sharedKvStoreContext: SharedKvStoreContext,
   parameters: MeshSourceParameters,
+  state: GrapheneState,
 ) {
   return sharedKvStoreContext.chunkManager.getChunkSource(GrapheneMeshSource, {
     sharedKvStoreContext,
     parameters,
+    state,
   });
 }
 
@@ -526,7 +642,9 @@ async function getMeshSource(
   url: string,
   fragmentUrl: string,
   nBitsForLayerId: number,
+  chunkSize: vec3,
   options: ProgressOptions,
+  state: GrapheneState,
 ) {
   const { metadata, segmentPropertyMap } = await getMeshMetadata(
     sharedKvStoreContext,
@@ -539,10 +657,11 @@ async function getMeshSource(
     lod: 0,
     sharding: metadata?.sharding,
     nBitsForLayerId,
+    chunkSize,
   };
   const transform = metadata?.transform || mat4.create();
   return {
-    source: getShardedMeshSource(sharedKvStoreContext, parameters),
+    source: getShardedMeshSource(sharedKvStoreContext, parameters, state),
     transform,
     segmentPropertyMap,
   };
@@ -654,7 +773,9 @@ async function getVolumeDataSource(
         ),
       ),
       info.graph.nBitsForLayerId,
+      info.graph.chunkSize,
       options,
+      state,
     );
     const subsourceToModelSubspaceTransform =
       getSubsourceToModelSubspaceTransform(info);
@@ -823,43 +944,9 @@ const SINK_JSON_KEY = "sink";
 const SOURCE_JSON_KEY = "source";
 const MERGED_ROOT_JSON_KEY = "mergedRoot";
 const LOCKED_JSON_KEY = "locked";
-
-class GrapheneState implements Trackable {
-  changed = new NullarySignal();
-
-  public multicutState = new MulticutState();
-  public mergeState = new MergeState();
-
-  constructor() {
-    this.multicutState.changed.add(() => {
-      this.changed.dispatch();
-    });
-    this.mergeState.changed.add(() => {
-      this.changed.dispatch();
-    });
-  }
-
-  reset() {
-    this.multicutState.reset();
-    this.mergeState.reset();
-  }
-
-  toJSON() {
-    return {
-      [MULTICUT_JSON_KEY]: this.multicutState.toJSON(),
-      [MERGE_JSON_KEY]: this.mergeState.toJSON(),
-    };
-  }
-
-  restoreState(x: any) {
-    verifyOptionalObjectProperty(x, MULTICUT_JSON_KEY, (value) => {
-      this.multicutState.restoreState(value);
-    });
-    verifyOptionalObjectProperty(x, MERGE_JSON_KEY, (value) => {
-      this.mergeState.restoreState(value);
-    });
-  }
-}
+const FOCUS_BOUNDING_BOX_JSON_KEY = "focusBoundingBox";
+const FOCUS_BOUNDING_BOX_SIZE_JSON_KEY = "focusBoundingBoxSize";
+const FOCUS_TRACK_GLOBAL_POSITION_JSON_KEY = "focusTrackGlobalPosition";
 
 export interface SegmentSelection {
   segmentId: bigint;
@@ -1069,6 +1156,10 @@ class MulticutState extends RefCounted implements Trackable {
   }
 }
 
+const clamp = (val: number, min: number, max: number) => {
+  return Math.max(min, Math.min(max, val));
+};
+
 class GraphConnection extends SegmentationGraphSourceConnection {
   public annotationLayerStates: AnnotationLayerState[] = [];
   public mergeAnnotationState: AnnotationLayerState;
@@ -1080,6 +1171,86 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     public state: GrapheneState,
   ) {
     super(graph, layer.displayState.segmentationGroupState.value);
+
+    const updateMeshBounds = () => {
+      const {
+        focusBoundingBox: { value: focusBoundingBox },
+      } = state;
+      if (!focusBoundingBox) {
+        layer.displayState.bounds.value = undefined;
+        return;
+      }
+      const { rank } = this.chunkSource;
+      const { resolution } = this.chunkSource.info.scales[0];
+      const bounds = new Float32Array(rank * 2);
+      for (let i = 0; i < rank; i++) {
+        bounds[i] = focusBoundingBox[i] * resolution[i];
+        bounds[i + rank] = focusBoundingBox[i + rank] * resolution[i];
+      }
+      layer.displayState.bounds.value = bounds;
+    };
+    updateMeshBounds();
+    this.registerDisposer(state.focusBoundingBox.changed.add(updateMeshBounds));
+
+    const updateFocusBoundingBox = () => {
+      const {
+        focusBoundingBoxSize: { value: focusBoundingBoxSize },
+      } = state;
+      if (focusBoundingBoxSize === 0) {
+        state.focusBoundingBox.value = undefined;
+        return;
+      }
+      const { rank } = this.chunkSource;
+      const { resolution, size, voxelOffset } = this.chunkSource.info.scales[0];
+      const boundingBox = new Float32Array(rank * 2);
+
+      let center: Float32Array<ArrayBufferLike> = new Float32Array(rank);
+
+      const currentBoundingBox = state.focusBoundingBox.value;
+      if (state.focusTrackGlobalPosition.value) {
+        const centerPosition = getGlobalPositionInLayerCoordinates(
+          layer.managedLayer.manager.root.globalPosition.value,
+          this.layer,
+        );
+        if (!centerPosition) {
+          return;
+        }
+        center = centerPosition;
+      } else if (currentBoundingBox) {
+        for (let i = 0; i < rank; i++) {
+          center[i] =
+            (currentBoundingBox[i] + currentBoundingBox[i + rank]) / 2;
+        }
+      }
+      for (let i = 0; i < rank; i++) {
+        const boundingBoxLength =
+          (focusBoundingBoxSize ** 3 * resolution[0]) / resolution[i];
+        boundingBox[i] = clamp(
+          Math.round(center[i] - boundingBoxLength / 2),
+          voxelOffset[i],
+          voxelOffset[i] + size[i],
+        );
+        boundingBox[i + rank] = clamp(
+          Math.round(center[i] + boundingBoxLength / 2),
+          voxelOffset[i],
+          voxelOffset[i] + size[i],
+        );
+      }
+      state.focusBoundingBox.value = boundingBox;
+    };
+
+    this.registerDisposer(
+      layer.managedLayer.manager.root.globalPosition.changed.add(() => {
+        if (state.focusTrackGlobalPosition.value) {
+          updateFocusBoundingBox();
+        }
+      }),
+    );
+    this.registerDisposer(
+      state.focusBoundingBoxSize.changed.add(updateFocusBoundingBox),
+    );
+    updateFocusBoundingBox();
+
     const segmentsState = layer.displayState.segmentationGroupState.value;
     segmentsState.selectedSegments.changed.add(
       (segmentIds: bigint[] | bigint | null, add: boolean) => {
@@ -1120,7 +1291,55 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     );
     synchronizeAnnotationSource(multicutState.sinks, redGroup);
     synchronizeAnnotationSource(multicutState.sources, blueGroup);
-    annotationLayerStates.push(redGroup, blueGroup);
+
+    const focusArea = makeColoredAnnotationState(
+      layer,
+      loadedSubsource,
+      "focus area",
+      vec3.fromValues(0.0, 1.0, 0.8),
+    );
+
+    const focusAreaChunk = makeColoredAnnotationState(
+      layer,
+      loadedSubsource,
+      "focus area chunk",
+      vec3.fromValues(1.0, 0.0, 0.4),
+    );
+
+    const updateFocusBoundingBoxAnnotation = () => {
+      const annotationSource = focusArea.source;
+      for (const annotation of annotationSource) {
+        annotationSource.delete(annotationSource.getReference(annotation.id));
+      }
+      const annotationSource2 = focusAreaChunk.source;
+      for (const annotation of annotationSource2) {
+        annotationSource2.delete(annotationSource2.getReference(annotation.id));
+      }
+      const {
+        focusBoundingBox: { value: focusBoundingBox },
+      } = state;
+      if (focusBoundingBox === undefined) return;
+      const { rank } = this.chunkSource;
+
+      {
+        const pointA = new Float32Array(focusBoundingBox.slice(0, rank));
+        const pointB = new Float32Array(focusBoundingBox.slice(rank));
+        const annotation: AxisAlignedBoundingBox = {
+          id: "",
+          pointA,
+          pointB,
+          type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
+          properties: [],
+        };
+        annotationSource.add(annotation);
+      }
+    };
+
+    updateFocusBoundingBoxAnnotation();
+
+    state.focusBoundingBox.changed.add(updateFocusBoundingBoxAnnotation);
+
+    annotationLayerStates.push(redGroup, blueGroup, focusArea, focusAreaChunk);
 
     if (layer.tool.value instanceof MergeSegmentsPlaceLineTool) {
       layer.tool.value = undefined;
@@ -1746,6 +1965,24 @@ class GrapheneGraphSource extends SegmentationGraphSource {
     parent.style.display = "contents";
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-segmentation-toolbox";
+    parent.appendChild(
+      addLayerControlToOptionsTab(
+        tab,
+        layer,
+        tab.visibility,
+        focusBoundingBoxSizeControl,
+      ),
+    );
+    {
+      const checkbox = tab.registerDisposer(
+        new TrackableBooleanCheckbox(this.state.focusTrackGlobalPosition),
+      );
+      const label = document.createElement("label");
+      label.appendChild(document.createTextNode("Focus track global position"));
+      label.title = "todo";
+      label.appendChild(checkbox.element);
+      parent.appendChild(label);
+    }
     toolbox.appendChild(
       makeToolButton(context, layer.toolBinder, {
         toolJson: GRAPHENE_MULTICUT_SEGMENTS_TOOL_ID,
@@ -2025,7 +2262,7 @@ const synchronizeAnnotationSource = (
   }
 };
 
-function getMousePositionInLayerCoordinates(
+function getGlobalPositionInLayerCoordinates(
   unsnappedPosition: Float32Array,
   layer: SegmentationUserLayer,
 ): Float32Array | undefined {
@@ -2057,13 +2294,43 @@ const getPoint = (
   mouseState: MouseSelectionState,
 ) => {
   if (mouseState.updateUnconditionally()) {
-    return getMousePositionInLayerCoordinates(
+    return getGlobalPositionInLayerCoordinates(
       mouseState.unsnappedPosition,
       layer,
     );
   }
   return undefined;
 };
+
+const GRAPHENE_FOCUS_BOUNDING_BOX_SIZE_JSON_KEY =
+  "grapheneFocusBoundingBoxSize";
+
+const focusBoundingBoxSizeControl = {
+  label: "Focus Bounding Box Size",
+  toolJson: GRAPHENE_FOCUS_BOUNDING_BOX_SIZE_JSON_KEY,
+  title: "",
+  ...rangeLayerControl<SegmentationUserLayer>((layer) => {
+    const {
+      graphConnection: { value: graphConnection },
+    } = layer;
+    if (graphConnection && graphConnection instanceof GraphConnection) {
+      graphConnection.state.focusBoundingBoxSize;
+      return {
+        value: graphConnection.state.focusBoundingBoxSize,
+        options: {
+          min: 0,
+          max: 100,
+          step: 1,
+        },
+      };
+    }
+    return {
+      value: new WatchableValue(0),
+    };
+  }),
+};
+
+registerLayerControl(SegmentationUserLayer, focusBoundingBoxSizeControl);
 
 const MULTICUT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift?+control+mousedown0": { action: "set-anchor" },
