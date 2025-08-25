@@ -2003,7 +2003,6 @@ export function UserLayerWithAnnotationsMixin<
                       }
                     }
                   } else if (property.type === "bool") {
-                    // Boolean
                     if (sourceReadonly) {
                       valueElement = document.createElement("span");
                       valueElement.textContent = value ? "True" : "False";
@@ -2011,7 +2010,7 @@ export function UserLayerWithAnnotationsMixin<
                       valueElement = makeBoolCheckbox(value, (event) => {
                         if (!event.target) return;
                         changeFunction(
-                          (event.target as HTMLInputElement).checked? 1 : 0,
+                          (event.target as HTMLInputElement).checked ? 1 : 0,
                         );
                       });
                       valueElementWrapper.style.justifyContent = "center";

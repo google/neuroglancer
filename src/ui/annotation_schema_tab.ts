@@ -84,7 +84,6 @@ import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-// TODO not really needed now
 interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
 }
@@ -1251,7 +1250,10 @@ export class AnnotationSchemaView extends Tab {
       "neuroglancer-annotation-schema-dropdown";
     const dropdown = this.addPropertyDropdown;
 
-    const populateDropDown = (types: AnnotationPropertyType[], isEnum = false) => {
+    const populateDropDown = (
+      types: AnnotationPropertyType[],
+      isEnum = false,
+    ) => {
       let previousHeaderText: string | null = null;
       types.forEach((type) => {
         const newHeaderText = isEnum ? "Enum" : this.getCategoryForType(type);
@@ -1416,7 +1418,10 @@ export class AnnotationSchemaView extends Tab {
     return uniqueIdentifier;
   }
 
-  private getCategoryForType(type: AnnotationPropertyType, isEnum = false): string {
+  private getCategoryForType(
+    type: AnnotationPropertyType,
+    isEnum = false,
+  ): string {
     if (type === "bool") return "General";
     if (type === "rgb" || type === "rgba") return "Color";
     if (isEnum && isAnnotationTypeNumeric(type)) return "Enum";
@@ -1458,7 +1463,10 @@ export class AnnotationSchemaView extends Tab {
     return 0;
   }
 
-  private setupInitialEnumsIfNeeded(type: AnnotationPropertyType, isEnum = false) {
+  private setupInitialEnumsIfNeeded(
+    type: AnnotationPropertyType,
+    isEnum = false,
+  ) {
     if (isEnum && isAnnotationTypeNumeric(type)) {
       return {
         enumValues: [0],
