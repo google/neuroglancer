@@ -98,6 +98,11 @@ export interface AnnotationColorPropertySpec
   default: number;
 }
 
+export interface AnnotationBoolPropertySpec extends AnnotationPropertySpecBase {
+  type: "bool";
+  default: number;
+}
+
 export interface AnnotationNumericPropertySpec
   extends AnnotationPropertySpecBase {
   type: "float32" | "uint32" | "int32" | "uint16" | "int16" | "uint8" | "int8";
@@ -112,7 +117,7 @@ export interface AnnotationNumericPropertySpec
 export function isAnnotationTypeNumeric(
   type: AnnotationPropertySpec["type"],
 ): boolean {
-  return type !== "rgb" && type !== "rgba";
+  return type !== "rgb" && type !== "rgba" && type !== "bool";
 }
 
 export function isAnnotationNumericPropertySpec(
@@ -132,13 +137,15 @@ export const propertyTypeDataType: Record<
   int16: DataType.INT16,
   uint8: DataType.UINT8,
   int8: DataType.INT8,
+  bool: DataType.UINT8,
   rgb: undefined,
   rgba: undefined,
 };
 
 export type AnnotationPropertySpec =
   | AnnotationColorPropertySpec
-  | AnnotationNumericPropertySpec;
+  | AnnotationNumericPropertySpec
+  | AnnotationBoolPropertySpec;
 
 export interface AnnotationPropertyTypeHandler {
   serializedBytes(rank: number): number;
@@ -333,6 +340,27 @@ export const annotationPropertyTypeHandlers: {
     },
     serializeJson(value: number) {
       return value;
+    },
+  },
+  bool: {
+    serializedBytes() {
+      return 1;
+    },
+    alignment() {
+      return 1;
+    },
+    serializeCode(property: string, offset: string) {
+      return `dv.setUint8(${offset}, ${property} ? 1 : 0);`;
+    },
+    deserializeCode(property: string, offset: string) {
+      return `${property} = dv.getUint8(${offset}) !== 0;`;
+    },
+    deserializeJson(obj: unknown) {
+      if (typeof obj === "boolean") return obj ? 1 : 0;
+      return verifyInt(obj) ? 1 : 0;
+    },
+    serializeJson(value: number) {
+      return value !== 0;
     },
   },
 };
@@ -530,6 +558,8 @@ export function formatAnnotationPropertyValue(
       return serializeColor(unpackRGB(value));
     case "rgba":
       return serializeColor(unpackRGBA(value));
+    case "bool":
+      return value ? "true" : "false";
     default:
       return formatNumericProperty(property, value);
   }

@@ -56,7 +56,6 @@ import {
   makeDescriptionIcon,
   makeEditableColorProperty,
   makeReadonlyColorProperty,
-  isBooleanType,
   isEnumType,
   createTextAreaElement,
 } from "#src/ui/annotation_properties.js";
@@ -85,9 +84,7 @@ import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-const ANNOTATION_UI_TYPES: AnnotationUIType[] = ["bool", ...ANNOTATION_TYPES];
-type AnnotationUIType = AnnotationPropertyType | "bool";
-
+// TODO not really needed now
 interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
 }
@@ -190,7 +187,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private getDisplayNameForType(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     enumLabels?: string[],
   ): string {
     return this.parentView.getDisplayNameForType(type, enumLabels);
@@ -225,9 +222,12 @@ class AnnotationUIProperty extends RefCounted {
     const { element, spec, readonly } = this;
     const enumLabels = "enumLabels" in spec ? spec.enumLabels : undefined;
     element.appendChild(this.createNameCell(spec.identifier, spec.description));
-    const type = isBooleanType(enumLabels) ? "bool" : spec.type;
-    element.appendChild(this.createTypeCell(spec.identifier, type, enumLabels));
-    element.appendChild(this.createDefaultValueCell(spec.identifier, type));
+    element.appendChild(
+      this.createTypeCell(spec.identifier, spec.type, enumLabels),
+    );
+    element.appendChild(
+      this.createDefaultValueCell(spec.identifier, spec.type),
+    );
 
     if (!readonly) {
       // Add a little icon to the right of the input that lets you change the description
@@ -304,7 +304,7 @@ class AnnotationUIProperty extends RefCounted {
 
   private createTypeCell(
     identifier: string,
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     enumLabels?: string[],
   ): HTMLDivElement {
     const typeText = this.createTypeTextElement(type, enumLabels);
@@ -372,7 +372,7 @@ class AnnotationUIProperty extends RefCounted {
 
   private createDefaultValueCell(
     identifier: string,
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
   ): HTMLDivElement {
     const container = document.createElement("div");
     container.className =
@@ -393,7 +393,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createInputsForType(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
     container: HTMLDivElement,
   ): (HTMLInputElement | HTMLTextAreaElement)[] {
@@ -412,7 +412,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createColorInputs(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
     container: HTMLDivElement,
   ): HTMLInputElement[] {
@@ -454,7 +454,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createColorChangeFunction(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     colorProperty: any,
     oldProperty: any,
   ): (event: Event) => void {
@@ -502,7 +502,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createEnumInputs(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
     container: HTMLDivElement,
   ): (HTMLInputElement | HTMLTextAreaElement)[] {
@@ -534,7 +534,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createNumericInputs(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
     container: HTMLDivElement,
   ): HTMLInputElement[] {
@@ -564,7 +564,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createAddEnumButton(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
   ): HTMLElement {
     const dataType = propertyTypeDataType[type as AnnotationPropertyType];
@@ -602,7 +602,7 @@ class AnnotationUIProperty extends RefCounted {
     value: number,
     label: string,
     enumIndex: number,
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
     enumContainer: HTMLDivElement,
   ): (HTMLInputElement | HTMLTextAreaElement)[] {
@@ -660,14 +660,13 @@ class AnnotationUIProperty extends RefCounted {
   private createEnumValueInput(
     value: number,
     enumIndex: number,
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
   ): HTMLInputElement {
-    const annotationType = this.parentView.mapUITypeToAnnotationType(type);
     const valueInput = this.createInputElement(value, {
       type: "number",
       className: "neuroglancer-annotation-schema-default-value-input",
-      dataType: propertyTypeDataType[annotationType],
+      dataType: propertyTypeDataType[type],
     }) as HTMLInputElement;
     valueInput.name = `neuroglancer-annotation-schema-enum-input-value-${enumIndex}`;
 
@@ -716,12 +715,11 @@ class AnnotationUIProperty extends RefCounted {
   private addEnumValueChangeListener(
     valueInput: HTMLInputElement,
     enumIndex: number,
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     oldProperty: any,
     initialValue: number,
   ): void {
-    const annotationType = this.parentView.mapUITypeToAnnotationType(type);
-    const dataType = propertyTypeDataType[annotationType];
+    const dataType = propertyTypeDataType[type];
     const bounds = defaultDataTypeRange[dataType!] as [number, number];
     let lastValue = initialValue;
 
@@ -829,7 +827,7 @@ class AnnotationUIProperty extends RefCounted {
   }
 
   private createTypeTextElement(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     enumLabels?: string[],
   ): HTMLSpanElement {
     const typeText = document.createElement("span");
@@ -1253,7 +1251,7 @@ export class AnnotationSchemaView extends Tab {
       "neuroglancer-annotation-schema-dropdown";
     const dropdown = this.addPropertyDropdown;
 
-    const populateDropDown = (types: AnnotationUIType[], isEnum = false) => {
+    const populateDropDown = (types: AnnotationPropertyType[], isEnum = false) => {
       let previousHeaderText: string | null = null;
       types.forEach((type) => {
         const newHeaderText = isEnum ? "Enum" : this.getCategoryForType(type);
@@ -1289,7 +1287,7 @@ export class AnnotationSchemaView extends Tab {
             type.replace(/\s+/g, "_"),
           );
           const newProperty = {
-            type: this.mapUITypeToAnnotationType(type),
+            type,
             identifier: name,
             default: this.defaultValuePerType(type),
             description: "",
@@ -1302,7 +1300,7 @@ export class AnnotationSchemaView extends Tab {
         dropdown.appendChild(option);
       });
     };
-    populateDropDown(ANNOTATION_UI_TYPES, false);
+    populateDropDown(ANNOTATION_TYPES, false);
     // Now do it again for the numeric types as enums
     populateDropDown(
       ANNOTATION_TYPES.filter((t) => isAnnotationTypeNumeric(t)),
@@ -1379,10 +1377,10 @@ export class AnnotationSchemaView extends Tab {
   };
 
   public getDisplayNameForType(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     enumLabels?: string[],
   ): string {
-    if (isBooleanType(enumLabels) || type === "bool") return "Boolean";
+    if (type === "bool") return "Boolean";
     if (type === "rgb") return "RGB";
     if (type === "rgba") return "RGBa";
     if (isAnnotationTypeNumeric(type)) {
@@ -1393,7 +1391,7 @@ export class AnnotationSchemaView extends Tab {
   }
 
   createIconWrapper(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     enumLabels?: string[],
     isEnum?: boolean,
   ): HTMLSpanElement {
@@ -1418,7 +1416,7 @@ export class AnnotationSchemaView extends Tab {
     return uniqueIdentifier;
   }
 
-  private getCategoryForType(type: AnnotationUIType, isEnum = false): string {
+  private getCategoryForType(type: AnnotationPropertyType, isEnum = false): string {
     if (type === "bool") return "General";
     if (type === "rgb" || type === "rgba") return "Color";
     if (isEnum && isAnnotationTypeNumeric(type)) return "Enum";
@@ -1427,12 +1425,11 @@ export class AnnotationSchemaView extends Tab {
   }
 
   getIconForType(
-    type: AnnotationUIType,
+    type: AnnotationPropertyType,
     enumValues?: string[],
     isEnum?: boolean,
   ): string {
-    const isBoolean = isBooleanType(enumValues);
-    if (isBoolean || type === "bool") return svg_check;
+    if (type === "bool") return svg_check;
     if (isEnum || isEnumType(enumValues)) return svg_format_size;
     if (isAnnotationTypeNumeric(type)) return svg_numbers;
     return svg_palette;
@@ -1444,17 +1441,11 @@ export class AnnotationSchemaView extends Tab {
       (property) =>
         "enumValues" in property &&
         property.enumValues &&
-        property.enumValues.length > 0 &&
-        !isBooleanType(property.enumLabels),
+        property.enumValues.length > 0,
     );
   }
 
-  mapUITypeToAnnotationType(uiType: AnnotationUIType): AnnotationPropertyType {
-    if (uiType === "bool") return "uint8";
-    return uiType;
-  }
-
-  private defaultValuePerType(uiType: AnnotationUIType): number {
+  private defaultValuePerType(uiType: AnnotationPropertyType): number {
     if (uiType === "bool") {
       return 1;
     }
@@ -1467,13 +1458,7 @@ export class AnnotationSchemaView extends Tab {
     return 0;
   }
 
-  private setupInitialEnumsIfNeeded(type: AnnotationUIType, isEnum = false) {
-    if (type === "bool") {
-      return {
-        enumValues: [0, 1],
-        enumLabels: ["False", "True"],
-      };
-    }
+  private setupInitialEnumsIfNeeded(type: AnnotationPropertyType, isEnum = false) {
     if (isEnum && isAnnotationTypeNumeric(type)) {
       return {
         enumValues: [0],

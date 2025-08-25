@@ -32,6 +32,7 @@ export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 export type AnnotationPropertyType = AnnotationPropertySpec["type"];
 
 export const ANNOTATION_TYPES: AnnotationPropertyType[] = [
+  "bool",
   "rgb",
   "rgba",
   "float32",
@@ -106,15 +107,6 @@ export function createTextAreaElement(
   textarea.spellcheck = false;
 
   return textarea;
-}
-
-export function isBooleanType(enumLabels?: string[]): boolean {
-  return (
-    (enumLabels?.includes("False") &&
-      enumLabels?.includes("True") &&
-      enumLabels.length === 2) ||
-    false
-  );
 }
 
 export function isEnumType(enumLabels?: string[]): boolean {

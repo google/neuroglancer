@@ -79,7 +79,6 @@ import {
   makeReadonlyColorProperty,
   makeEditableColorProperty,
   makeDescriptionIcon,
-  isBooleanType,
   isEnumType,
   makeBoolCheckbox,
 } from "#src/ui/annotation_properties.js";
@@ -2003,6 +2002,20 @@ export function UserLayerWithAnnotationsMixin<
                         );
                       }
                     }
+                  } else if (property.type === "bool") {
+                    // Boolean
+                    if (sourceReadonly) {
+                      valueElement = document.createElement("span");
+                      valueElement.textContent = value ? "True" : "False";
+                    } else {
+                      valueElement = makeBoolCheckbox(value, (event) => {
+                        if (!event.target) return;
+                        changeFunction(
+                          (event.target as HTMLInputElement).checked? 1 : 0,
+                        );
+                      });
+                      valueElementWrapper.style.justifyContent = "center";
+                    }
                   } else {
                     // Numeric or enums
                     if (sourceReadonly) {
@@ -2016,22 +2029,8 @@ export function UserLayerWithAnnotationsMixin<
                       // Editable properties require knowing the type
                       const propertyAsNum =
                         property as AnnotationNumericPropertySpec;
-                      const isBool = isBooleanType(propertyAsNum.enumLabels);
                       const isEnum = isEnumType(propertyAsNum.enumLabels);
-                      if (isBool) {
-                        valueElement = makeBoolCheckbox(
-                          value,
-                          (event: Event) => {
-                            if (!event.target) return;
-                            changeFunction(
-                              (event.target as HTMLInputElement).checked
-                                ? 1
-                                : 0,
-                            );
-                          },
-                        );
-                        valueElementWrapper.style.justifyContent = "center";
-                      } else if (isEnum) {
+                      if (isEnum) {
                         // Make a dropdown which combines the enum labels and values.
                         const options = [];
                         let optionsHasDefault = false;
