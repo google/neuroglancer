@@ -625,6 +625,10 @@ def number_or_string_or_array(value):
         return value
 
 
+_set_type_annotation(
+    number_or_string_or_array, numbers.Real | str | List[numbers.Real | str]
+)
+
 def number_or_string(value):
     if not isinstance(value, numbers.Real | str):
         raise TypeError
