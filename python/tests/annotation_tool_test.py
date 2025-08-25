@@ -19,6 +19,9 @@ import pytest
 
 
 def setup_viewer(viewer):
+    volume_coords = neuroglancer.CoordinateSpace(
+        names=["x", "y", "z"], units="nm", scales=[10, 10, 10]
+    )
     with viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(
             names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
@@ -27,7 +30,7 @@ def setup_viewer(viewer):
             name="seg",
             layer=neuroglancer.SegmentationLayer(
                 source=neuroglancer.LocalVolume(
-                    data=np.array([[[42]]], dtype=np.uint32), dimensions=s.dimensions
+                    data=np.array([[[42]]], dtype=np.uint32), dimensions=volume_coords
                 )
             ),
         )
@@ -41,7 +44,8 @@ def setup_viewer(viewer):
             ),
         )
         s.layout = "xy"
-        s.cross_section_scale = 1e-6
+        s.cross_section_scale = 1e-2
+        s.position = [5, 5, 0.5]
         s.show_axis_lines = False
         s.selected_layer.layer = "a"
 
@@ -63,6 +67,12 @@ def setup_viewer(viewer):
             neuroglancer.EllipsoidAnnotation,
             2,
         ),
+        (
+            "annotatePolyline",
+            neuroglancer.PlacePolylineTool,
+            neuroglancer.PolyLineAnnotation,
+            3,
+        ),
     ],
 )
 def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
@@ -75,14 +85,16 @@ def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
     webdriver.sync()
     chain = webdriver.action_chain().key_down(Keys.CONTROL)
     for i in range(num_clicks):
-        chain = chain.move_to_element_with_offset(
-            webdriver.root_element, 100 + 50 * i, 100 + 50 * i
+        chain.move_to_element_with_offset(
+            webdriver.root_element, 10 + 10 * i, 10 + 10 * i
         ).click()
     chain.key_up(Keys.CONTROL)
+    if tool == "annotatePolyline":
+        chain.send_keys(Keys.RETURN, Keys.ENTER)
     chain.perform()
     webdriver.sync()
     annotations = webdriver.viewer.state.layers["a"].annotations
     assert len(annotations) == 1
     assert isinstance(annotations[0], annotation_class)
-    if tool in ("annotatePoint", "annotateLine"):
+    if tool in ("annotatePoint", "annotateLine", "annotatePolyline"):
         assert list(annotations[0].segments[0]) == [42]
