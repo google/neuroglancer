@@ -172,7 +172,7 @@ highp vec3 vertexA = readAttribute0(aVertexIndex.x);
 highp vec3 vertexB = readAttribute0(aVertexIndex.y);
 emitLine(uProjection, vertexA, vertexB, uLineWidth);
 highp uint lineEndpointIndex = getLineEndpointIndex();
-highp uint vertexIndex = aVertexIndex.x * lineEndpointIndex + aVertexIndex.y * (1u - lineEndpointIndex);
+highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 `;
 
           builder.addFragmentCode(`

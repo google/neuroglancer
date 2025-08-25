@@ -43,6 +43,7 @@ import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
 } from "#src/layer/layer_data_source.js";
+import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
 import type {
   DisplayDimensions,
   WatchableDisplayDimensionRenderInfo,
@@ -184,12 +185,25 @@ export class UserLayer extends RefCounted {
   }
 
   static supportsPickOption = false;
+  static supportsLayerBarColorSyncOption = false;
 
   pick = new TrackableBoolean(true, true);
 
   selectionState: UserLayerSelectionState;
 
   messages = new MessageList();
+
+  observeLayerColor(_: () => void): () => void {
+    return () => {};
+  }
+
+  get automaticLayerBarColors(): string[] | undefined {
+    return [];
+  }
+
+  get layerBarColors(): string[] | undefined {
+    return this.automaticLayerBarColors;
+  }
 
   initializeSelectionState(state: this["selectionState"]) {
     state.generation = -1;
@@ -737,6 +751,28 @@ export class ManagedUserLayer extends RefCounted {
     ) {
       userLayer.pick.value = value;
     }
+  }
+
+  get layerBarColors(): string[] | undefined {
+    const userLayer = this.layer;
+    return userLayer?.layerBarColors;
+  }
+
+  observeLayerColor(callback: () => void): () => void {
+    const userLayer = this.layer;
+    if (userLayer !== null) {
+      return userLayer.observeLayerColor(callback);
+    }
+    return () => {};
+  }
+
+  get supportsLayerBarColorSyncOption() {
+    const userLayer = this.layer;
+    return (
+      userLayer !== null &&
+      (userLayer.constructor as typeof UserLayer)
+        .supportsLayerBarColorSyncOption
+    );
   }
 
   /**
@@ -2468,6 +2504,15 @@ export class AutoUserLayer extends UserLayer {
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
+      this.registerDisposer(
+        this.managedLayer.readyStateChanged.add(() => {
+          if (this.managedLayer.isReady()) {
+            // If you want to restore the old auto image setup, pass true here
+            // This will then make the previous image layer setup
+            createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
+          }
+        }),
+      );
     }
   }
 }

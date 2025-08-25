@@ -26,6 +26,7 @@ import {
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import type {
+  ChannelMetadata,
   DataSource,
   GetKvStoreBasedDataSourceOptions,
   KvStoreBasedDataSourceProvider,
@@ -509,23 +510,25 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           zarrVersion: this.zarrVersion,
           explicitDimensionSeparator: dimensionSeparator,
         });
+        let channelMetadata: ChannelMetadata | undefined;
         if (metadata === undefined) {
           throw new Error("No zarr metadata found");
         }
         let multiscaleInfo: ZarrMultiscaleInfo;
         if (metadata.nodeType === "group") {
           // May be an OME-zarr multiscale dataset.
-          const multiscale = parseOmeMetadata(
+          const omeMetadata = parseOmeMetadata(
             kvStoreUrl,
             metadata.userAttributes,
             metadata.zarrVersion,
           );
-          if (multiscale === undefined) {
+          if (omeMetadata === undefined) {
             throw new Error("Neither array nor OME multiscale metadata found");
           }
+          channelMetadata = omeMetadata.channels;
           multiscaleInfo = await resolveOmeMultiscale(
             sharedKvStoreContext,
-            multiscale,
+            omeMetadata.multiscale,
             {
               ...progressOptions,
               zarrVersion: metadata.zarrVersion,
@@ -545,6 +548,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),
+          channelMetadata,
           subsources: [
             {
               id: "default",

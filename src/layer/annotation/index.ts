@@ -51,6 +51,7 @@ import {
 import {
   makeCachedLazyDerivedWatchableValue,
   WatchableValue,
+  observeWatchable,
 } from "#src/trackable_value.js";
 import { AnnotationSchemaTab } from "#src/ui/annotation_schema_tab.js";
 import type {
@@ -760,8 +761,37 @@ export class AnnotationUserLayer extends Base {
     return x;
   }
 
+  observeLayerColor(callback: () => void) {
+    const disposer = super.observeLayerColor(callback);
+    const subDisposer = observeWatchable(
+      callback,
+      this.annotationDisplayState.color,
+    );
+    const shaderDisposer = observeWatchable(
+      callback,
+      this.annotationDisplayState.shader,
+    );
+    return () => {
+      disposer();
+      subDisposer();
+      shaderDisposer();
+    };
+  }
+
+  get automaticLayerBarColors() {
+    const shaderHasDefaultColor =
+      this.annotationDisplayState.shader.value.includes("defaultColor");
+    if (shaderHasDefaultColor && this.annotationDisplayState.color.value) {
+      const [r, g, b] = this.annotationDisplayState.color.value;
+      return [`rgb(${r * 255}, ${g * 255}, ${b * 255})`];
+    }
+
+    return undefined;
+  }
+
   static type = "annotation";
   static typeAbbreviation = "ann";
+  static supportsLayerBarColorSyncOption = true;
 }
 
 function makeShaderCodeWidget(layer: AnnotationUserLayer) {
