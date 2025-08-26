@@ -1743,9 +1743,12 @@ export function UserLayerWithAnnotationsMixin<
         throttle(() => {
           if (!newAnnotation) return;
           this.allowDependentAnnotationViewUpdate.value = false;
-          annotationLayer.source.update(reference, newAnnotation);
-          annotationLayer.source.commit(reference);
-          this.allowDependentAnnotationViewUpdate.value = false;
+          try {
+            annotationLayer.source.update(reference, newAnnotation);
+            annotationLayer.source.commit(reference);
+          } finally {
+            this.allowDependentAnnotationViewUpdate.value = true;
+          }
         }, 500),
       );
 
