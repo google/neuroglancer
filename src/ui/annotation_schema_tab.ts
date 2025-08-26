@@ -1488,6 +1488,7 @@ export class AnnotationSchemaView extends Tab {
       s.addProperty(property);
     });
     this.annotationStates.changed.dispatch();
+    this.layer.layersChanged.dispatch();
   }
 
   removeProperty(propertyIdentifer: string) {
@@ -1495,6 +1496,7 @@ export class AnnotationSchemaView extends Tab {
       s.removeProperty(propertyIdentifer);
     });
     this.annotationStates.changed.dispatch();
+    this.layer.layersChanged.dispatch();
   }
 
   updateProperty(
