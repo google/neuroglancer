@@ -66,10 +66,14 @@ import {
   registerCallbackWhenSegmentationDisplayStateChanged,
   SegmentWidgetFactory,
 } from "#src/segmentation_display_state/frontend.js";
-import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
+} from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
+  ConditionalWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   registerNested,
   WatchableValue,
@@ -1615,6 +1619,7 @@ export function UserLayerWithAnnotationsMixin<
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
+    allowDependentAnnotationViewUpdate = new TrackableBoolean(true);
     static supportColorPickerInAnnotationTab = true;
 
     constructor(...args: any[]) {
@@ -1737,20 +1742,31 @@ export function UserLayerWithAnnotationsMixin<
       const throttledUpdate = context.registerCancellable(
         throttle(() => {
           if (!newAnnotation) return;
+          this.allowDependentAnnotationViewUpdate.value = false;
           annotationLayer.source.update(reference, newAnnotation);
           annotationLayer.source.commit(reference);
+          this.allowDependentAnnotationViewUpdate.value = false;
         }, 500),
+      );
+
+      const watchableVisibility = context.registerDisposer(
+        new AggregateWatchableValue(() => ({
+          annotation: reference,
+          chunkTransform: annotationLayer.chunkTransform,
+        })),
+      );
+
+      const watchableShouldUpdate = context.registerDisposer(
+        new ConditionalWatchableValue(
+          watchableVisibility,
+          this.allowDependentAnnotationViewUpdate,
+        ),
       );
 
       parent.appendChild(
         context.registerDisposer(
           new DependentViewWidget(
-            context.registerDisposer(
-              new AggregateWatchableValue(() => ({
-                annotation: reference,
-                chunkTransform: annotationLayer.chunkTransform,
-              })),
-            ),
+            watchableShouldUpdate,
             ({ annotation, chunkTransform }, parent, context) => {
               let statusText: string | undefined;
               if (annotation == null) {
