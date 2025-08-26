@@ -119,6 +119,7 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
+import { throttle } from "lodash-es";
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -1732,6 +1733,15 @@ export function UserLayerWithAnnotationsMixin<
       const reference = context.registerDisposer(
         annotationLayer.source.getReference(state.annotationId),
       );
+      let newAnnotation = reference.value;
+      const throttledUpdate = context.registerCancellable(
+        throttle(() => {
+          if (!newAnnotation) return;
+          annotationLayer.source.update(reference, newAnnotation);
+          annotationLayer.source.commit(reference);
+        }, 500),
+      );
+
       parent.appendChild(
         context.registerDisposer(
           new DependentViewWidget(
@@ -1941,13 +1951,11 @@ export function UserLayerWithAnnotationsMixin<
                         inputValue;
                       }
                     : (inputValue: any) => {
-                        const newAnnotation = reference.value;
-                        if (newAnnotation == null) {
-                          return;
-                        }
+                        if (newAnnotation == null)
+                          newAnnotation = reference.value;
+                        if (newAnnotation == null) return;
                         newAnnotation.properties[i] = inputValue;
-                        annotationLayer.source.update(reference, newAnnotation);
-                        annotationLayer.source.commit(reference);
+                        throttledUpdate();
                       };
 
                   valueElementWrapper.classList.add(
@@ -1970,14 +1978,12 @@ export function UserLayerWithAnnotationsMixin<
                       );
                       valueElementWrapper.appendChild(colorProperty.element);
                       if (property.type === "rgb") {
-                        colorProperty.color.registerEventListener(
-                          colorProperty.color.element,
-                          "change",
-                          () => {
+                        context.registerDisposer(
+                          colorProperty.model.changed.add(() => {
                             changeFunction(
                               packColor(colorProperty.color.getRGB()),
                             );
-                          },
+                          }),
                         );
                       } else {
                         const rgbaChangeFunction = () => {
@@ -1991,10 +1997,8 @@ export function UserLayerWithAnnotationsMixin<
                           );
                           changeFunction(packColor(colorVec));
                         };
-                        colorProperty.color.registerEventListener(
-                          colorProperty.color.element,
-                          "change",
-                          rgbaChangeFunction,
+                        context.registerDisposer(
+                          colorProperty.model.changed.add(rgbaChangeFunction),
                         );
                         colorProperty.alpha!.addEventListener(
                           "change",

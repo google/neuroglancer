@@ -27,6 +27,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeIcon } from "#src/widget/icon.js";
+import { vec3 } from "#src/util/geom.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 export type AnnotationPropertyType = AnnotationPropertySpec["type"];
@@ -167,6 +168,7 @@ export function makeEditableColorProperty(
 ): {
   element: HTMLElement;
   color: ColorWidget;
+  model: WatchableValue<vec3>;
   alpha?: HTMLInputElement;
 } {
   const isRGBA = type === "rgba";
@@ -196,6 +198,7 @@ export function makeEditableColorProperty(
   return {
     element: colorContainer,
     color: colorInput,
+    model: watchableColor,
     alpha: alphaInput,
   };
 }
