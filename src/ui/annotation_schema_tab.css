@@ -60,6 +60,37 @@
   width: 100%;
 }
 
+.neuroglancer-annotation-schema-enum-default-selector {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.neuroglancer-annotation-schema-enum-default-label {
+  margin-right: 8px;
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+}
+
+.neuroglancer-annotation-schema-enum-default-select {
+  flex: 1;
+  background: #2a2a2a;
+  border: 1px solid #555;
+  color: white;
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.neuroglancer-annotation-schema-enum-default-select:focus {
+  border-color: #007acc;
+  outline: none;
+}
+
 .neuroglancer-annotation-schema-default-value-input {
   text-align: left;
   width: 100%;

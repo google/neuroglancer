@@ -511,6 +511,12 @@ class AnnotationUIProperty extends RefCounted {
 
     const inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
 
+    // Add default value selector at the top
+    if (!this.readonly) {
+      const defaultSelector = this.createEnumDefaultSelector(oldProperty);
+      enumContainer.appendChild(defaultSelector);
+    }
+
     for (let i = 0; i < enumValues!.length; i++) {
       const entryInputs = this.createEnumEntry(
         enumValues![i],
@@ -530,6 +536,38 @@ class AnnotationUIProperty extends RefCounted {
 
     container.appendChild(enumContainer);
     return inputs;
+  }
+
+  private createEnumDefaultSelector(oldProperty: any): HTMLDivElement {
+    const selectorContainer = document.createElement("div");
+    selectorContainer.className = "neuroglancer-annotation-schema-enum-default-selector";
+    
+    const label = document.createElement("label");
+    label.textContent = "Default value: ";
+    label.className = "neuroglancer-annotation-schema-enum-default-label";
+    
+    const select = document.createElement("select");
+    select.className = "neuroglancer-annotation-schema-enum-default-select";
+    
+    // Populate options
+    oldProperty.enumValues.forEach((value: number, index: number) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = oldProperty.enumLabels[index];
+      option.selected = value === oldProperty.default;
+      select.appendChild(option);
+    });
+    
+    // Handle selection change
+    select.addEventListener("change", (event) => {
+      const selectedValue = parseFloat((event.target as HTMLSelectElement).value);
+      this.updateProperty(oldProperty, { default: selectedValue });
+    });
+    
+    selectorContainer.appendChild(label);
+    selectorContainer.appendChild(select);
+    
+    return selectorContainer;
   }
 
   private createNumericInputs(
@@ -585,13 +623,19 @@ class AnnotationUIProperty extends RefCounted {
         );
         const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
 
+        // Keep the current default value if it's still valid, otherwise use the first value
+        const currentDefault = currentProperty.default;
+        const newDefault = newEnumValues.includes(currentDefault) 
+          ? currentDefault 
+          : newEnumValues[0];
+
         this.updateProperty(currentProperty, {
           enumValues: newEnumValues,
           enumLabels: [
             ...currentProperty.enumLabels!,
             `${suggestedEnumValue} (label)`,
           ],
-          default: newEnumValues[0],
+          default: newDefault,
         } as AnnotationNumericPropertySpec);
       },
     });
@@ -700,9 +744,16 @@ class AnnotationUIProperty extends RefCounted {
           (_, i) => i !== enumIndex,
         );
 
+        // If we're deleting the current default value, set the new default to the first remaining value
+        const deletedValue = currentProperty.enumValues![enumIndex];
+        const newDefault = currentProperty.default === deletedValue 
+          ? newEnumValues[0] 
+          : currentProperty.default;
+
         this.updateProperty(currentProperty, {
           enumValues: newEnumValues,
           enumLabels: newEnumLabels,
+          default: newDefault,
         });
       },
     });
