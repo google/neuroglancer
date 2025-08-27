@@ -63,10 +63,7 @@
 .neuroglancer-annotation-schema-enum-default-selector {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  margin-bottom: 12px;
 }
 
 .neuroglancer-annotation-schema-enum-default-label {
@@ -82,8 +79,6 @@
   padding: 2px 4px;
   border-radius: 2px;
   font-size: 12px;
-  max-width: 100px;
-  min-width: 20px;
   width: 100%;
 }
 
