@@ -115,6 +115,7 @@ import { vec3 } from "#src/util/geom.js";
 import {
   parseFixedLengthArray,
   verifyFinitePositiveFloat,
+  verifyNonnegativeInt,
   verifyObject,
   verifyOptionalObjectProperty,
   verifyString,
@@ -248,6 +249,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("projectionScale", viewer.projectionScale);
     this.add("projectionDepth", viewer.projectionDepthRange);
     this.add("layers", viewer.layerSpecification);
+    this.add("urlHashRateLimit", viewer.urlHashRateLimit);
     this.add("showAxisLines", viewer.showAxisLines);
     this.add("wireFrame", viewer.wireFrame);
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
@@ -422,6 +424,7 @@ export class Viewer extends RefCounted implements ViewerState {
   selectedLayer = this.registerDisposer(
     new SelectedLayerState(this.layerManager.addRef()),
   );
+  urlHashRateLimit = new TrackableValue<number>(200, verifyNonnegativeInt);
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
