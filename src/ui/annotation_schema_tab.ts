@@ -511,7 +511,6 @@ class AnnotationUIProperty extends RefCounted {
 
     const inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
 
-    // Add default value selector at the top
     if (!this.readonly) {
       const defaultSelector = this.createEnumDefaultSelector(oldProperty);
       enumContainer.appendChild(defaultSelector);
@@ -538,35 +537,45 @@ class AnnotationUIProperty extends RefCounted {
     return inputs;
   }
 
-  private createEnumDefaultSelector(oldProperty: any): HTMLDivElement {
+  private createEnumDefaultSelector(
+    enumProperty: AnnotationNumericPropertySpec,
+  ): HTMLDivElement {
     const selectorContainer = document.createElement("div");
-    selectorContainer.className = "neuroglancer-annotation-schema-enum-default-selector";
-    
+    selectorContainer.className =
+      "neuroglancer-annotation-schema-enum-default-selector";
+
     const label = document.createElement("label");
     label.textContent = "Default value: ";
     label.className = "neuroglancer-annotation-schema-enum-default-label";
-    
+
     const select = document.createElement("select");
     select.className = "neuroglancer-annotation-schema-enum-default-select";
-    
-    // Populate options
-    oldProperty.enumValues.forEach((value: number, index: number) => {
+
+    enumProperty.enumValues?.forEach((value: number, index: number) => {
       const option = document.createElement("option");
       option.value = String(value);
-      option.textContent = oldProperty.enumLabels[index];
-      option.selected = value === oldProperty.default;
+      if (!enumProperty.enumLabels) {
+        option.textContent = "Non-schema value";
+      } else {
+        option.textContent = enumProperty.enumLabels[index];
+      }
+      option.selected = value === enumProperty.default;
       select.appendChild(option);
     });
-    
-    // Handle selection change
+
     select.addEventListener("change", (event) => {
-      const selectedValue = parseFloat((event.target as HTMLSelectElement).value);
-      this.updateProperty(oldProperty, { default: selectedValue });
+      const selectedValue = parseFloat(
+        (event.target as HTMLSelectElement).value,
+      );
+      const existingProperty = this.getPropertyByIdentifier(
+        enumProperty.identifier,
+      ) as AnnotationNumericPropertySpec;
+      this.updateProperty(existingProperty, { default: selectedValue });
     });
-    
+
     selectorContainer.appendChild(label);
     selectorContainer.appendChild(select);
-    
+
     return selectorContainer;
   }
 
@@ -623,10 +632,12 @@ class AnnotationUIProperty extends RefCounted {
         );
         const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
 
-        // Keep the current default value if it's still valid, otherwise use the first value
+        // Keep the current default value if it's still valid
+        // otherwise use the first value
+        // this could occur if the user deletes all values then adds a new one
         const currentDefault = currentProperty.default;
-        const newDefault = newEnumValues.includes(currentDefault) 
-          ? currentDefault 
+        const newDefault = newEnumValues.includes(currentDefault)
+          ? currentDefault
           : newEnumValues[0];
 
         this.updateProperty(currentProperty, {
@@ -746,9 +757,10 @@ class AnnotationUIProperty extends RefCounted {
 
         // If we're deleting the current default value, set the new default to the first remaining value
         const deletedValue = currentProperty.enumValues![enumIndex];
-        const newDefault = currentProperty.default === deletedValue 
-          ? newEnumValues[0] 
-          : currentProperty.default;
+        const newDefault =
+          currentProperty.default === deletedValue
+            ? (newEnumValues[0] ?? 0)
+            : currentProperty.default;
 
         this.updateProperty(currentProperty, {
           enumValues: newEnumValues,
@@ -1521,7 +1533,7 @@ export class AnnotationSchemaView extends Tab {
     if (isEnum && isAnnotationTypeNumeric(type)) {
       return {
         enumValues: [0],
-        enumLabels: ["Default"],
+        enumLabels: ["0 (label)"],
       };
     }
     return {};
