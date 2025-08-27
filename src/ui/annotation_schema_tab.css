@@ -73,17 +73,18 @@
   margin-right: 8px;
   font-size: 12px;
   color: #ccc;
-  white-space: nowrap;
 }
 
 .neuroglancer-annotation-schema-enum-default-select {
-  flex: 1;
   background: #2a2a2a;
   border: 1px solid #555;
   color: white;
   padding: 2px 4px;
   border-radius: 2px;
   font-size: 12px;
+  max-width: 100px;
+  min-width: 20px;
+  width: 100%;
 }
 
 .neuroglancer-annotation-schema-enum-default-select:focus {
