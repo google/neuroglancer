@@ -25,6 +25,7 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
+import type { vec3 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -167,6 +168,7 @@ export function makeEditableColorProperty(
 ): {
   element: HTMLElement;
   color: ColorWidget;
+  model: WatchableValue<vec3>;
   alpha?: HTMLInputElement;
 } {
   const isRGBA = type === "rgba";
@@ -196,6 +198,7 @@ export function makeEditableColorProperty(
   return {
     element: colorContainer,
     color: colorInput,
+    model: watchableColor,
     alpha: alphaInput,
   };
 }

@@ -20,6 +20,7 @@
 
 import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
+import { throttle } from "lodash-es";
 import {
   AnnotationDisplayState,
   AnnotationLayerState,
@@ -66,10 +67,14 @@ import {
   registerCallbackWhenSegmentationDisplayStateChanged,
   SegmentWidgetFactory,
 } from "#src/segmentation_display_state/frontend.js";
-import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
+} from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
+  ConditionalWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   registerNested,
   WatchableValue,
@@ -1614,6 +1619,7 @@ export function UserLayerWithAnnotationsMixin<
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
+    allowDependentAnnotationViewUpdate = new TrackableBoolean(true);
     static supportColorPickerInAnnotationTab = true;
 
     constructor(...args: any[]) {
@@ -1732,15 +1738,38 @@ export function UserLayerWithAnnotationsMixin<
       const reference = context.registerDisposer(
         annotationLayer.source.getReference(state.annotationId),
       );
+      let newAnnotation = reference.value;
+      const throttledUpdate = context.registerCancellable(
+        throttle(() => {
+          if (!newAnnotation) return;
+          this.allowDependentAnnotationViewUpdate.value = false;
+          try {
+            annotationLayer.source.update(reference, newAnnotation);
+            annotationLayer.source.commit(reference);
+          } finally {
+            this.allowDependentAnnotationViewUpdate.value = true;
+          }
+        }, 500),
+      );
+
+      const watchableVisibility = context.registerDisposer(
+        new AggregateWatchableValue(() => ({
+          annotation: reference,
+          chunkTransform: annotationLayer.chunkTransform,
+        })),
+      );
+
+      const watchableShouldUpdate = context.registerDisposer(
+        new ConditionalWatchableValue(
+          watchableVisibility,
+          this.allowDependentAnnotationViewUpdate,
+        ),
+      );
+
       parent.appendChild(
         context.registerDisposer(
           new DependentViewWidget(
-            context.registerDisposer(
-              new AggregateWatchableValue(() => ({
-                annotation: reference,
-                chunkTransform: annotationLayer.chunkTransform,
-              })),
-            ),
+            watchableShouldUpdate,
             ({ annotation, chunkTransform }, parent, context) => {
               let statusText: string | undefined;
               if (annotation == null) {
@@ -1941,13 +1970,11 @@ export function UserLayerWithAnnotationsMixin<
                         inputValue;
                       }
                     : (inputValue: any) => {
-                        const newAnnotation = reference.value;
-                        if (newAnnotation == null) {
-                          return;
-                        }
+                        if (newAnnotation == null)
+                          newAnnotation = reference.value;
+                        if (newAnnotation == null) return;
                         newAnnotation.properties[i] = inputValue;
-                        annotationLayer.source.update(reference, newAnnotation);
-                        annotationLayer.source.commit(reference);
+                        throttledUpdate();
                       };
 
                   valueElementWrapper.classList.add(
@@ -1970,14 +1997,12 @@ export function UserLayerWithAnnotationsMixin<
                       );
                       valueElementWrapper.appendChild(colorProperty.element);
                       if (property.type === "rgb") {
-                        colorProperty.color.registerEventListener(
-                          colorProperty.color.element,
-                          "change",
-                          () => {
+                        context.registerDisposer(
+                          colorProperty.model.changed.add(() => {
                             changeFunction(
                               packColor(colorProperty.color.getRGB()),
                             );
-                          },
+                          }),
                         );
                       } else {
                         const rgbaChangeFunction = () => {
@@ -1991,10 +2016,8 @@ export function UserLayerWithAnnotationsMixin<
                           );
                           changeFunction(packColor(colorVec));
                         };
-                        colorProperty.color.registerEventListener(
-                          colorProperty.color.element,
-                          "change",
-                          rgbaChangeFunction,
+                        context.registerDisposer(
+                          colorProperty.model.changed.add(rgbaChangeFunction),
                         );
                         colorProperty.alpha!.addEventListener(
                           "change",
