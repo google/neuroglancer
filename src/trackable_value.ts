@@ -506,6 +506,12 @@ export class IndirectTrackableValue<U, T>
   }
 }
 
+/**
+ * A WatchableValue that only updates its value and dispatches change notifications
+ * when the enableWatchable is true. When the enableWatchable is false, the last
+ * value is retained.
+ * This essentially allows "pausing" of a WatchableValue.
+ */
 export class ConditionalWatchableValue<T>
   extends RefCounted
   implements WatchableValueInterface<T>

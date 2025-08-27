@@ -25,9 +25,9 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { serializeColor, unpackRGB, unpackRGBA } from "#src/util/color.js";
+import type { vec3 } from "#src/util/geom.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeIcon } from "#src/widget/icon.js";
-import { vec3 } from "#src/util/geom.js";
 
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 export type AnnotationPropertyType = AnnotationPropertySpec["type"];

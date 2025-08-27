@@ -20,6 +20,7 @@
 
 import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
+import { throttle } from "lodash-es";
 import {
   AnnotationDisplayState,
   AnnotationLayerState,
@@ -123,7 +124,6 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
-import { throttle } from "lodash-es";
 
 export class MergedAnnotationStates
   extends RefCounted
