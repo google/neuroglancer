@@ -1091,7 +1091,10 @@ export class AnnotationSchemaView extends Tab {
 
   private updateAnnotationText() {
     const setOrViewText = this.readonly.value ? "View read-only" : "Set";
-    this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.`;
+    const setExplainText = this.readonly.value
+      ? ""
+      : " Changing a default value in the schema is not retroactive and only applies to new annotations.";
+    this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.${setExplainText}`;
   }
 
   private updateElementVisibility() {
