@@ -196,7 +196,14 @@ class AnnotationUIProperty extends RefCounted {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
     if (isAnnotationTypeNumeric(type)) {
-      this.defaultValueElements[0].value = numberToStringFixed(defaultValue, 4);
+      const enumLabels = (this.spec as AnnotationNumericPropertySpec)
+        .enumLabels;
+      if (!isEnumType(enumLabels)) {
+        this.defaultValueElements[0].value = numberToStringFixed(
+          defaultValue,
+          4,
+        );
+      }
     }
     // For color types, we need to unpack the color and set the RGB values
     else if (type.startsWith("rgb")) {
