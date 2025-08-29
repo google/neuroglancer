@@ -310,7 +310,7 @@ export const annotationPropertyTypeHandlers: {
   },
   int8: {
     serializedBytes() {
-      return 2;
+      return 1;
     },
     alignment() {
       return 1;
