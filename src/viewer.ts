@@ -288,7 +288,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("selectedStateServer", viewer.selectedStateServer);
     this.add("toolBindings", viewer.toolBinder);
     this.add("toolPalettes", viewer.toolPalettes);
-    
+
     // Add UI configuration to state for persistence
     for (const key of VIEWER_UI_CONFIG_OPTIONS) {
       this.add(key, viewer.uiConfiguration[key]);

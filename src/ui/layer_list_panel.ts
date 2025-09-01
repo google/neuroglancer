@@ -344,18 +344,15 @@ export class LayerListPanel extends SidePanel {
     const { itemContainer, layerDropZone } = this;
     const { titleElement, titleBar } = this.addTitleBar({ title: "" });
     this.titleElement = titleElement!;
-    
+
     // Add layer panel toggle button to title bar
     if (this.showLayerPanel) {
-      const toggleButton = new CheckboxIcon(
-        this.showLayerPanel,
-        {
-          svg: svg_eye,
-          backgroundScheme: "dark",
-          enableTitle: "Hide layer panel",
-          disableTitle: "Show layer panel",
-        },
-      );
+      const toggleButton = new CheckboxIcon(this.showLayerPanel, {
+        svg: svg_eye,
+        backgroundScheme: "dark",
+        enableTitle: "Hide layer panel",
+        disableTitle: "Show layer panel",
+      });
       toggleButton.element.style.order = "50"; // Position before close button (order: 100)
       titleBar.appendChild(toggleButton.element);
       this.registerDisposer(toggleButton);
