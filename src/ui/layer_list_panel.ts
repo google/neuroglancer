@@ -338,11 +338,28 @@ export class LayerListPanel extends SidePanel {
     sidePanelManager: SidePanelManager,
     public manager: TopLevelLayerListSpecification,
     public state: LayerListPanelState,
+    public showLayerPanel?: import("#src/trackable_boolean.js").TrackableBoolean,
   ) {
     super(sidePanelManager, state.location);
     const { itemContainer, layerDropZone } = this;
-    const { titleElement } = this.addTitleBar({ title: "" });
+    const { titleElement, titleBar } = this.addTitleBar({ title: "" });
     this.titleElement = titleElement!;
+    
+    // Add layer panel toggle button to title bar
+    if (this.showLayerPanel) {
+      const toggleButton = new CheckboxIcon(
+        this.showLayerPanel,
+        {
+          svg: svg_eye,
+          backgroundScheme: "dark",
+          enableTitle: "Hide layer panel",
+          disableTitle: "Show layer panel",
+        },
+      );
+      toggleButton.element.style.order = "50"; // Position before close button (order: 100)
+      titleBar.appendChild(toggleButton.element);
+      this.registerDisposer(toggleButton);
+    }
     itemContainer.classList.add("neuroglancer-layer-list-panel-items");
     this.addBody(itemContainer);
     layerDropZone.style.flex = "1";
