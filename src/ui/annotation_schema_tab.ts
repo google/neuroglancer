@@ -196,7 +196,14 @@ class AnnotationUIProperty extends RefCounted {
     // For numeric types, we can set the default value directly
     const type = this.spec.type;
     if (isAnnotationTypeNumeric(type)) {
-      this.defaultValueElements[0].value = numberToStringFixed(defaultValue, 4);
+      const enumLabels = (this.spec as AnnotationNumericPropertySpec)
+        .enumLabels;
+      if (!isEnumType(enumLabels)) {
+        this.defaultValueElements[0].value = numberToStringFixed(
+          defaultValue,
+          4,
+        );
+      }
     }
     // For color types, we need to unpack the color and set the RGB values
     else if (type.startsWith("rgb")) {
@@ -511,6 +518,11 @@ class AnnotationUIProperty extends RefCounted {
 
     const inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
 
+    if (!this.readonly) {
+      const defaultSelector = this.createEnumDefaultSelector(oldProperty);
+      enumContainer.appendChild(defaultSelector);
+    }
+
     for (let i = 0; i < enumValues!.length; i++) {
       const entryInputs = this.createEnumEntry(
         enumValues![i],
@@ -530,6 +542,48 @@ class AnnotationUIProperty extends RefCounted {
 
     container.appendChild(enumContainer);
     return inputs;
+  }
+
+  private createEnumDefaultSelector(
+    enumProperty: AnnotationNumericPropertySpec,
+  ): HTMLDivElement {
+    const selectorContainer = document.createElement("div");
+    selectorContainer.className =
+      "neuroglancer-annotation-schema-enum-default-selector";
+
+    const label = document.createElement("label");
+    label.textContent = "Default:";
+    label.className = "neuroglancer-annotation-schema-enum-default-label";
+
+    const select = document.createElement("select");
+    select.className = "neuroglancer-annotation-schema-enum-default-select";
+
+    enumProperty.enumValues?.forEach((value: number, index: number) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      if (!enumProperty.enumLabels) {
+        option.textContent = "Non-schema value";
+      } else {
+        option.textContent = enumProperty.enumLabels[index];
+      }
+      option.selected = value === enumProperty.default;
+      select.appendChild(option);
+    });
+
+    select.addEventListener("change", (event) => {
+      const selectedValue = parseFloat(
+        (event.target as HTMLSelectElement).value,
+      );
+      const existingProperty = this.getPropertyByIdentifier(
+        enumProperty.identifier,
+      ) as AnnotationNumericPropertySpec;
+      this.updateProperty(existingProperty, { default: selectedValue });
+    });
+
+    selectorContainer.appendChild(label);
+    selectorContainer.appendChild(select);
+
+    return selectorContainer;
   }
 
   private createNumericInputs(
@@ -585,13 +639,21 @@ class AnnotationUIProperty extends RefCounted {
         );
         const newEnumValues = [...currentEnumValues!, suggestedEnumValue];
 
+        // Keep the current default value if it's still valid
+        // otherwise use the first value
+        // this could occur if the user deletes all values then adds a new one
+        const currentDefault = currentProperty.default;
+        const newDefault = newEnumValues.includes(currentDefault)
+          ? currentDefault
+          : newEnumValues[0];
+
         this.updateProperty(currentProperty, {
           enumValues: newEnumValues,
           enumLabels: [
             ...currentProperty.enumLabels!,
             `${suggestedEnumValue} (label)`,
           ],
-          default: newEnumValues[0],
+          default: newDefault,
         } as AnnotationNumericPropertySpec);
       },
     });
@@ -700,9 +762,17 @@ class AnnotationUIProperty extends RefCounted {
           (_, i) => i !== enumIndex,
         );
 
+        // If we're deleting the current default value, set the new default to the first remaining value
+        const deletedValue = currentProperty.enumValues![enumIndex];
+        const newDefault =
+          currentProperty.default === deletedValue
+            ? (newEnumValues[0] ?? 0)
+            : currentProperty.default;
+
         this.updateProperty(currentProperty, {
           enumValues: newEnumValues,
           enumLabels: newEnumLabels,
+          default: newDefault,
         });
       },
     });
@@ -1021,7 +1091,10 @@ export class AnnotationSchemaView extends Tab {
 
   private updateAnnotationText() {
     const setOrViewText = this.readonly.value ? "View read-only" : "Set";
-    this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.`;
+    const setExplainText = this.readonly.value
+      ? ""
+      : " Changing a default value in the schema is not retroactive and only applies to new annotations.";
+    this.schemaViewTextElement.textContent = `${setOrViewText} annotation property (metadata) schema for this layer which applies to all annotations in this layer.${setExplainText}`;
   }
 
   private updateElementVisibility() {
@@ -1470,7 +1543,7 @@ export class AnnotationSchemaView extends Tab {
     if (isEnum && isAnnotationTypeNumeric(type)) {
       return {
         enumValues: [0],
-        enumLabels: ["Default"],
+        enumLabels: ["0 (label)"],
       };
     }
     return {};
