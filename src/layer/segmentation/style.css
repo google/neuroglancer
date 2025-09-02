@@ -22,6 +22,7 @@
 
 .neuroglancer-segmentation-rendering-tab .neuroglancer-shader-code-widget {
   height: 6em;
+  resize: vertical;
 }
 
 .neuroglancer-segmentation-dropdown-skeleton-shader-header {

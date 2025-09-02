@@ -57,7 +57,7 @@ const SHADER_UPDATE_DELAY = 500;
 interface ShaderCodeState {
   shaderError: WatchableShaderError;
   shaderControlState?: ShaderControlState;
-  fragmentMain: WatchableValue<string>;
+  fragment: WatchableValue<string>;
   sourceStringNumber?: number;
 }
 
@@ -70,7 +70,7 @@ export class ShaderCodeWidget extends RefCounted {
   private debouncedValueUpdater = debounce(() => {
     this.changingValue = true;
     try {
-      this.state.fragmentMain.value = this.textEditor.getValue();
+      this.state.fragment.value = this.textEditor.getValue();
     } finally {
       this.changingValue = false;
     }
@@ -79,7 +79,7 @@ export class ShaderCodeWidget extends RefCounted {
   constructor(public state: ShaderCodeState) {
     super();
     this.textEditor = CodeMirror((_element) => {}, {
-      value: this.state.fragmentMain.value,
+      value: this.state.fragment.value,
       mode: "glsl",
       gutters: ["CodeMirror-lint-markers"],
     });
@@ -88,9 +88,9 @@ export class ShaderCodeWidget extends RefCounted {
       this.debouncedValueUpdater();
     });
     this.registerDisposer(
-      this.state.fragmentMain.changed.add(() => {
+      this.state.fragment.changed.add(() => {
         if (!this.changingValue) {
-          this.textEditor.setValue(this.state.fragmentMain.value);
+          this.textEditor.setValue(this.state.fragment.value);
         }
       }),
     );
@@ -215,13 +215,14 @@ export function makeShaderCodeWidgetTopRow<T extends Overlay>(
     href: string;
   },
   className: string,
+  title = "Shader",
 ) {
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
 
   const topRow = document.createElement("div");
   topRow.className = className;
-  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(document.createTextNode(title));
   topRow.appendChild(spacer);
 
   layer.registerDisposer(
