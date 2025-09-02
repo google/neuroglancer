@@ -263,6 +263,7 @@ export function parameterizedEmitterDependentShaderGetter<
       parameters,
       extraParameters,
     ) => {
+      console.log("we are here!");
       builder.require(emitter);
       return options.defineShader(builder, parameters, extraParameters);
     },
