@@ -100,6 +100,9 @@ function defineVolumeShader(builder: ShaderBuilder, wireFrame: boolean) {
   // Matrix by which computed vertices will be transformed.
   builder.addUniform("highp mat4", "uProjectionMatrix");
 
+  // Expose effective voxel size in shader for use in userMain
+  builder.addUniform("highp vec3", "uEffectiveVoxelSize");
+
   // Chunk size in voxels.
   builder.addUniform("highp vec3", "uChunkDataSize");
 
@@ -227,7 +230,10 @@ function beginSource(
     false,
     mat4.multiply(tempMat4, dataToDeviceMatrix, chunkLayout.transform),
   );
-
+  gl.uniform3fv(
+    shader.uniform("uEffectiveVoxelSize"),
+    tsource.effectiveVoxelSize,
+  );
   gl.uniform3fv(
     shader.uniform("uLowerClipBound"),
     tsource.lowerClipDisplayBound,
