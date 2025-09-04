@@ -75,6 +75,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
+import { glsl_nanometersToPixels } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -94,7 +95,20 @@ import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const tempMat2 = mat4.create();
 
-const DEFAULT_FRAGMENT_MAIN = `void main() {
+function defineNoOpEdgeSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setLineWidth(float width) {}
+`);
+}
+
+function defineNoOpNodeSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setNodeDiameter(float size) {}
+`);
+}
+
+const DEFAULT_VERTEX_MAIN = `
+void main() {
   emitDefault();
 }
 `;
@@ -126,6 +140,7 @@ class RenderHelper extends RefCounted {
     defineVertexId(builder);
     builder.addUniform("highp vec4", "uColor");
     builder.addUniform("highp mat4", "uProjection");
+    builder.addUniform("highp mat4", "uViewModel");
     builder.addUniform("highp uint", "uPickID");
   }
 
@@ -165,41 +180,64 @@ class RenderHelper extends RefCounted {
           this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
           defineLineShader(builder);
+          defineNoOpNodeSetters(builder);
           builder.addAttribute("highp uvec2", "aVertexIndex");
           builder.addUniform("highp float", "uLineWidth");
+          builder.addUniform("highp float", "uNodeDiameter");
+          builder.addVarying("vec4", "vColor");
+          builder.addVertexCode(glsl_COLORMAPS);
+          builder.addVertexCode(glsl_nanometersToPixels);
+          builder.addVertexCode(`
+float nanometersToPixels(float value) {
+  vec2 lineOffset = getLineOffset();
+  highp vec3 vertexA = readAttribute0(aVertexIndex.x);
+  highp vec3 vertexB = readAttribute0(aVertexIndex.y);
+  highp vec3 vertex = mix(vertexA, vertexB, lineOffset.x);
+  return nanometersToPixels(value, vertex, uProjection, uViewModel, 1.0 / uLineParams.x);
+}
+float ng_lineWidth;
+void setLineWidth(float width) {
+  ng_lineWidth = width;
+}
+void emitRGB(vec3 color) {
+  vColor = vec4(color.rgb, uColor.a);
+}
+void emitRGBA(vec4 color) {
+  vColor = color;
+}
+void emitDefault() {
+  emitRGBA(uColor);
+}
+`);
           let vertexMain = `
 highp vec3 vertexA = readAttribute0(aVertexIndex.x);
 highp vec3 vertexB = readAttribute0(aVertexIndex.y);
-emitLine(uProjection, vertexA, vertexB, uLineWidth);
 highp uint lineEndpointIndex = getLineEndpointIndex();
 highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
+setLineWidth(uLineWidth);
 `;
-
-          builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
-}
-void emitRGB(vec3 color) {
-  emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
-}
-void emitDefault() {
-  emit(vec4(uColor.rgb, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
-}
-`);
-          builder.addFragmentCode(glsl_COLORMAPS);
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;
           for (let i = 1; i < numAttributes; ++i) {
             const info = vertexAttributes[i];
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
-            builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addVertexCode(`#define ${info.name} vCustom${i}\n`);
           }
+          vertexMain += `
+userMain();
+emitLine(uProjection * uViewModel, vertexA, vertexB, ng_lineWidth);
+`;
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
-          builder.setFragmentMainFunction(
-            shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
+          builder.addVertexCode(
+            "\n#define main userMain\n" +
+              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
+              "\n#undef main\n",
           );
+          builder.setFragmentMain(`
+emit(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+`);
         },
       },
     );
@@ -230,42 +268,60 @@ void emitDefault() {
             builder,
             /*crossSectionFade=*/ this.targetIsSliceView,
           );
+          defineNoOpEdgeSetters(builder);
           builder.addUniform("highp float", "uNodeDiameter");
-          let vertexMain = `
-highp uint vertexIndex = uint(gl_InstanceID);
-highp vec3 vertexPosition = readAttribute0(vertexIndex);
-emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
-`;
-
-          builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
+          builder.addUniform("highp float", "uLineWidth");
+          builder.addVarying("vec4", "vColor");
+          builder.addVertexCode(glsl_COLORMAPS);
+          builder.addVertexCode(glsl_nanometersToPixels);
+          builder.addVertexCode(`
+float nanometersToPixels(float value) {
+  highp uint vertexIndex = uint(gl_InstanceID);
+  highp vec3 vertexPosition = readAttribute0(vertexIndex);
+  return nanometersToPixels(value, vertexPosition, uProjection, uViewModel, 1.0 / uCircleParams.x);
 }
-void emitRGBA(vec4 color) {
-  vec4 borderColor = color;
-  emit(getCircleColor(color, borderColor), uPickID);
+float ng_nodeDiameter;
+void setNodeDiameter(float size) {
+  ng_nodeDiameter = size;
 }
 void emitRGB(vec3 color) {
-  emitRGBA(vec4(color, 1.0));
+  vColor = vec4(color.rgb, uColor.a);
+}
+void emitRGBA(vec4 color) {
+  vColor = color;
 }
 void emitDefault() {
   emitRGBA(uColor);
 }
 `);
-          builder.addFragmentCode(glsl_COLORMAPS);
+          let vertexMain = `
+highp uint vertexIndex = uint(gl_InstanceID);
+highp vec3 vertexPosition = readAttribute0(vertexIndex);
+setNodeDiameter(uNodeDiameter);
+`;
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;
           for (let i = 1; i < numAttributes; ++i) {
             const info = vertexAttributes[i];
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
-            builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addVertexCode(`#define ${info.name} vCustom${i}\n`);
           }
+          vertexMain += `
+userMain();
+emitCircle(uProjection * uViewModel * vec4(vertexPosition, 1.0), ng_nodeDiameter, 0.0);
+`;
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
-          builder.setFragmentMainFunction(
-            shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
+          builder.addVertexCode(
+            "\n#define main userMain\n" +
+              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
+              "\n#undef main\n",
           );
+          builder.setFragmentMain(`
+vec4 borderColor = vColor;
+emit(getCircleColor(vColor, borderColor), uPickID);
+`);
         },
       },
     );
@@ -312,9 +368,10 @@ void emitDefault() {
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     modelMatrix: mat4,
   ) {
-    const { viewProjectionMat } = renderContext.projectionParameters;
-    const mat = mat4.multiply(tempMat2, viewProjectionMat, modelMatrix);
-    gl.uniformMatrix4fv(shader.uniform("uProjection"), false, mat);
+    const { viewMatrix, projectionMat } = renderContext.projectionParameters;
+    const viewModelMat = mat4.multiply(tempMat2, viewMatrix, modelMatrix);
+    gl.uniformMatrix4fv(shader.uniform("uProjection"), false, projectionMat);
+    gl.uniformMatrix4fv(shader.uniform("uViewModel"), false, viewModelMat);
     this.vertexIdHelper.enable();
   }
 
@@ -421,7 +478,7 @@ export class SkeletonRenderingOptions implements Trackable {
     return this.compound.changed;
   }
 
-  shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
+  shader = makeTrackableFragmentMain(DEFAULT_VERTEX_MAIN);
   shaderControlState = new ShaderControlState(this.shader);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
@@ -471,7 +528,7 @@ export class SkeletonLayer extends RefCounted {
   private sharedObject: SegmentationLayerSharedObject;
   vertexAttributes: VertexAttributeRenderInfo[];
   fallbackShaderParameters = new WatchableValue(
-    getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
+    getFallbackBuilderState(parseShaderUiControls(DEFAULT_VERTEX_MAIN)),
   );
 
   get visibility() {
