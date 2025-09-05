@@ -304,6 +304,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("selectedStateServer", viewer.selectedStateServer);
     this.add("toolBindings", viewer.toolBinder);
     this.add("toolPalettes", viewer.toolPalettes);
+    this.add("hideLayerPanel", viewer.hideLayerPanelState);
 
     // Add UI configuration to state for persistence
     for (const key of VIEWER_UI_CONFIG_OPTIONS) {
@@ -459,6 +460,7 @@ export class Viewer extends RefCounted implements ViewerState {
   partialViewport = new TrackableWindowedViewport();
   statisticsDisplayState = new StatisticsDisplayState();
   helpPanelState = new HelpPanelState();
+  hideLayerPanelState = new TrackableBoolean(false, false);
   settingsPanelState = new ViewerSettingsPanelState();
   layerSelectedValues = this.registerDisposer(
     new LayerSelectedValues(this.layerManager, this.mouseState),
