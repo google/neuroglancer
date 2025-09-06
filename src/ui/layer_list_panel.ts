@@ -339,6 +339,7 @@ export class LayerListPanel extends SidePanel {
     sidePanelManager: SidePanelManager,
     public manager: TopLevelLayerListSpecification,
     public state: LayerListPanelState,
+    public hideLayerPanel: TrackableBoolean,
     public showLayerPanel?: TrackableBoolean,
   ) {
     super(sidePanelManager, state.location);
@@ -347,8 +348,9 @@ export class LayerListPanel extends SidePanel {
     this.titleElement = titleElement!;
 
     // Add layer panel toggle button to title bar
-    if (this.showLayerPanel) {
-      const toggleButton = new CheckboxIcon(this.showLayerPanel, {
+    // Only show toggle button when showLayerPanel configuration is enabled
+    if (this.showLayerPanel?.value) {
+      const toggleButton = new CheckboxIcon(this.hideLayerPanel, {
         svg: svg_eye,
         backgroundScheme: "dark",
         enableTitle: "Hide layer panel",
@@ -357,6 +359,23 @@ export class LayerListPanel extends SidePanel {
       toggleButton.element.style.order = "50"; // Position before close button (order: 100)
       titleBar.appendChild(toggleButton.element);
       this.registerDisposer(toggleButton);
+      
+      // Watch for showLayerPanel configuration changes and hide/show button accordingly
+      this.registerDisposer(
+        this.showLayerPanel.changed.add(() => {
+          if (this.showLayerPanel!.value) {
+            // Configuration enabled - show button
+            if (!toggleButton.element.parentElement) {
+              titleBar.appendChild(toggleButton.element);
+            }
+          } else {
+            // Configuration disabled - hide button
+            if (toggleButton.element.parentElement) {
+              toggleButton.element.remove();
+            }
+          }
+        }),
+      );
     }
     itemContainer.classList.add("neuroglancer-layer-list-panel-items");
     this.addBody(itemContainer);
