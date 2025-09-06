@@ -359,7 +359,7 @@ export class LayerListPanel extends SidePanel {
       toggleButton.element.style.order = "50"; // Position before close button (order: 100)
       titleBar.appendChild(toggleButton.element);
       this.registerDisposer(toggleButton);
-      
+
       // Watch for showLayerPanel configuration changes and hide/show button accordingly
       this.registerDisposer(
         this.showLayerPanel.changed.add(() => {
