@@ -307,9 +307,9 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("hideLayerPanel", viewer.hideLayerPanelState);
 
     // Add UI configuration to state for persistence
-    for (const key of VIEWER_UI_CONFIG_OPTIONS) {
-      this.add(key, viewer.uiConfiguration[key]);
-    }
+    // for (const key of VIEWER_UI_CONFIG_OPTIONS) {
+    //   this.add(key, viewer.uiConfiguration[key]);
+    // }
   }
 
   restoreState(obj: any) {
@@ -499,6 +499,7 @@ export class Viewer extends RefCounted implements ViewerState {
   dataSourceProvider: Borrowed<DataSourceRegistry>;
 
   uiConfiguration: ViewerUIConfiguration;
+  effectiveShowLayerPanel: WatchableValueInterface<boolean>;
 
   private makeUiControlVisibilityState(
     key: (typeof VIEWER_UI_CONTROL_CONFIG_OPTIONS)[number],
@@ -580,6 +581,19 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.dataSourceProvider = dataSourceProvider;
     this.uiConfiguration = uiConfiguration;
+    
+    // Create effective showLayerPanel state that combines configuration and user preference
+    this.effectiveShowLayerPanel = this.registerDisposer(
+      makeDerivedWatchableValue(
+        (configEnabled: boolean, hideState: boolean) => {
+          // Layer panel is shown when config allows it AND hide state is false
+          return configEnabled && !hideState;
+        },
+        this.uiConfiguration.showLayerPanel,
+        this.hideLayerPanelState,
+      )
+    );
+    
 
     this.registerDisposer(
       observeWatchable((value) => {
@@ -993,6 +1007,7 @@ export class Viewer extends RefCounted implements ViewerState {
             this.sidePanelManager,
             this.layerSpecification,
             this.layerListPanelState,
+            this.hideLayerPanelState,
             this.uiConfiguration.showLayerPanel,
           ),
       }),
