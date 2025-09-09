@@ -63,7 +63,7 @@ describe("createBoundedNumberInputElement", () => {
 
     expect(input.min).toBe("");
     expect(input.max).toBe("");
-    expect(input.step).toBe("0.1");
+    expect(input.step).toBe("0.0001");
   });
 
   it("set bounds for INT data types", () => {
