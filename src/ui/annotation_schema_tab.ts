@@ -124,7 +124,11 @@ class AnnotationDescriptionEditDialog extends FramedDialog {
 class AnnotationUIProperty extends RefCounted {
   public element: HTMLDivElement = document.createElement("div");
   private defaultValueCell: HTMLDivElement | null = null;
-  private defaultValueElements: (HTMLInputElement | HTMLTextAreaElement)[] = [];
+  private defaultValueElements: (
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | HTMLSelectElement
+  )[] = [];
   private typeChangeDropdown: HTMLDivElement | null = null;
   private typeChanged = new NullarySignal();
   public isTypeDropdownExpanded = false;
@@ -223,6 +227,39 @@ class AnnotationUIProperty extends RefCounted {
       const input = inputs[2 * i + 1];
       input.value = numberToStringFixed(enumValues[i], 4);
     }
+  }
+  public updateEnumLabels(
+    enumProperty: AnnotationNumericPropertySpec,
+    selectElement?: HTMLSelectElement,
+  ) {
+    const select = selectElement ?? this.defaultValueElements[-1];
+    if (!(select instanceof HTMLSelectElement)) return;
+    removeChildren(select);
+    enumProperty.enumValues?.forEach((value: number, index: number) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      if (!enumProperty.enumLabels || enumProperty.enumLabels.length <= index) {
+        option.textContent = "No label defined";
+      } else {
+        option.textContent = enumProperty.enumLabels[index];
+      }
+      option.selected = value === enumProperty.default;
+      select.appendChild(option);
+    });
+
+    // If the default value is not in the enum values, add placeholder
+    if (
+      !enumProperty.enumValues?.includes(enumProperty.default) &&
+      enumProperty.default !== undefined
+    ) {
+      const placeholderOption = document.createElement("option");
+      placeholderOption.value = String(enumProperty.default);
+      placeholderOption.textContent = `Non-schema value (${enumProperty.default})`;
+      select.appendChild(placeholderOption);
+    }
+
+    // Init with the default value
+    select.value = String(enumProperty.default);
   }
   makeUI() {
     const { element, spec, readonly } = this;
@@ -393,16 +430,20 @@ class AnnotationUIProperty extends RefCounted {
       );
     }
 
-    const inputs = this.createInputsForType(type, oldProperty, container);
+    this.defaultValueElements = this.createInputsForType(
+      type,
+      oldProperty,
+      container,
+    );
 
-    return this.createFinalCell(container, inputs);
+    return this.createFinalCell(container);
   }
 
   private createInputsForType(
     type: AnnotationPropertyType,
     oldProperty: any,
     container: HTMLDivElement,
-  ): (HTMLInputElement | HTMLTextAreaElement)[] {
+  ) {
     if (type.startsWith("rgb")) {
       return this.createColorInputs(type, oldProperty, container);
     } else if (type === "bool") {
@@ -511,16 +552,22 @@ class AnnotationUIProperty extends RefCounted {
     type: AnnotationPropertyType,
     oldProperty: any,
     container: HTMLDivElement,
-  ): (HTMLInputElement | HTMLTextAreaElement)[] {
+  ) {
     const { enumValues, enumLabels } = oldProperty;
     const enumContainer = document.createElement("div");
     enumContainer.className = "neuroglancer-annotation-schema-enum-container";
 
-    const inputs: (HTMLInputElement | HTMLTextAreaElement)[] = [];
+    const inputs: (
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | HTMLSelectElement
+    )[] = [];
 
+    let selectInput = null;
     if (!this.readonly) {
-      const defaultSelector = this.createEnumDefaultSelector(oldProperty);
-      enumContainer.appendChild(defaultSelector);
+      const { container, select } = this.createEnumDefaultSelector(oldProperty);
+      enumContainer.appendChild(container);
+      selectInput = select;
     }
 
     for (let i = 0; i < enumValues!.length; i++) {
@@ -538,6 +585,7 @@ class AnnotationUIProperty extends RefCounted {
     if (!this.readonly) {
       const addButton = this.createAddEnumButton(type, oldProperty);
       enumContainer.appendChild(addButton);
+      inputs.push(selectInput!);
     }
 
     container.appendChild(enumContainer);
@@ -546,7 +594,7 @@ class AnnotationUIProperty extends RefCounted {
 
   private createEnumDefaultSelector(
     enumProperty: AnnotationNumericPropertySpec,
-  ): HTMLDivElement {
+  ) {
     const selectorContainer = document.createElement("div");
     selectorContainer.className =
       "neuroglancer-annotation-schema-enum-default-selector";
@@ -558,31 +606,7 @@ class AnnotationUIProperty extends RefCounted {
     const select = document.createElement("select");
     select.className = "neuroglancer-annotation-schema-enum-default-select";
 
-    enumProperty.enumValues?.forEach((value: number, index: number) => {
-      const option = document.createElement("option");
-      option.value = String(value);
-      if (!enumProperty.enumLabels || enumProperty.enumLabels.length <= index) {
-        option.textContent = "No label defined";
-      } else {
-        option.textContent = enumProperty.enumLabels[index];
-      }
-      option.selected = value === enumProperty.default;
-      select.appendChild(option);
-    });
-
-    // If the default value is not in the enum values, add placeholder
-    if (
-      !enumProperty.enumValues?.includes(enumProperty.default) &&
-      enumProperty.default !== undefined
-    ) {
-      const placeholderOption = document.createElement("option");
-      placeholderOption.value = String(enumProperty.default);
-      placeholderOption.textContent = `Non-schema value (${enumProperty.default})`;
-      select.appendChild(placeholderOption);
-    }
-
-    // Init with the default value
-    select.value = String(enumProperty.default);
+    this.updateEnumLabels(enumProperty, select);
 
     select.addEventListener("change", (event) => {
       const selectedValue = parseFloat(
@@ -606,7 +630,10 @@ class AnnotationUIProperty extends RefCounted {
     selectorContainer.appendChild(label);
     selectorContainer.appendChild(select);
 
-    return selectorContainer;
+    return {
+      container: selectorContainer,
+      select: select,
+    };
   }
 
   private createNumericInputs(
@@ -860,11 +887,7 @@ class AnnotationUIProperty extends RefCounted {
     });
   }
 
-  private createFinalCell(
-    container: HTMLDivElement,
-    inputs: (HTMLInputElement | HTMLTextAreaElement)[],
-  ): HTMLDivElement {
-    this.defaultValueElements = inputs;
+  private createFinalCell(container: HTMLDivElement): HTMLDivElement {
     const cell = this.createTableCell(
       container,
       "neuroglancer-annotation-schema-default-value-cell",
@@ -1276,6 +1299,11 @@ export class AnnotationSchemaView extends Tab {
             if (sameValues.enumLength && !sameValues.enumValues) {
               annotationUIProperty.updateEnumValues(
                 (propertySchema as AnnotationNumericPropertySpec).enumValues!,
+              );
+            }
+            if (sameValues.enumLength && !sameValues.enumLabels) {
+              annotationUIProperty.updateEnumLabels(
+                propertySchema as AnnotationNumericPropertySpec,
               );
             }
           } else {
