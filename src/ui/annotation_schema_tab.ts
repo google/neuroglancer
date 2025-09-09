@@ -581,17 +581,26 @@ class AnnotationUIProperty extends RefCounted {
       select.appendChild(placeholderOption);
     }
 
-    // Init with the selected value
+    // Init with the default value
     select.value = String(enumProperty.default);
 
     select.addEventListener("change", (event) => {
       const selectedValue = parseFloat(
         (event.target as HTMLSelectElement).value,
       );
-      const existingProperty = this.getPropertyByIdentifier(
+      // Find the enum index to get the corresponding value
+      const matchingIndex = enumProperty.enumValues?.findIndex(
+        (label) => label === selectedValue,
+      );
+      // Then fetch what the updated default value should be from schema
+      const schemaProperty = this.getPropertyByIdentifier(
         enumProperty.identifier,
       ) as AnnotationNumericPropertySpec;
-      this.updateProperty(existingProperty, { default: selectedValue });
+      if (matchingIndex === undefined || matchingIndex < 0) {
+        throw new Error("Selected enum label not found in enumLabels.");
+      }
+      const newDefault = schemaProperty.enumValues?.[matchingIndex];
+      this.updateProperty(schemaProperty, { default: newDefault });
     });
 
     selectorContainer.appendChild(label);
@@ -833,11 +842,21 @@ class AnnotationUIProperty extends RefCounted {
         4,
       );
 
-      this.updateProperty(currentProperty, {
+      // Check the old value to see if this was the default value
+      // If so, we need to update the default value to the new value
+      const oldValue = currentEnumValues[enumIndex];
+      const isDefault = currentProperty.default === oldValue;
+
+      const newValues = {
         enumValues: currentEnumValues.map((v, i) =>
           i === enumIndex ? newValue : v,
         ),
-      });
+      };
+      if (isDefault) {
+        Object.assign(newValues, { default: newValue });
+      }
+
+      this.updateProperty(currentProperty, newValues);
     });
   }
 
