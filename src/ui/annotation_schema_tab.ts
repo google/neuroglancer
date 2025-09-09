@@ -561,14 +561,28 @@ class AnnotationUIProperty extends RefCounted {
     enumProperty.enumValues?.forEach((value: number, index: number) => {
       const option = document.createElement("option");
       option.value = String(value);
-      if (!enumProperty.enumLabels) {
-        option.textContent = "Non-schema value";
+      if (!enumProperty.enumLabels || enumProperty.enumLabels.length <= index) {
+        option.textContent = "No label defined";
       } else {
         option.textContent = enumProperty.enumLabels[index];
       }
       option.selected = value === enumProperty.default;
       select.appendChild(option);
     });
+
+    // If the default value is not in the enum values, add placeholder
+    if (
+      !enumProperty.enumValues?.includes(enumProperty.default) &&
+      enumProperty.default !== undefined
+    ) {
+      const placeholderOption = document.createElement("option");
+      placeholderOption.value = String(enumProperty.default);
+      placeholderOption.textContent = `Non-schema value (${enumProperty.default})`;
+      select.appendChild(placeholderOption);
+    }
+
+    // Init with the selected value
+    select.value = String(enumProperty.default);
 
     select.addEventListener("change", (event) => {
       const selectedValue = parseFloat(
