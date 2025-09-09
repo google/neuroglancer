@@ -63,21 +63,16 @@
 .neuroglancer-annotation-schema-enum-default-selector {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
-}
-
-.neuroglancer-annotation-schema-enum-default-label {
-  margin-right: 8px;
-  font-size: 12px;
-  color: #ccc;
+  margin-bottom: 8px;
+  margin-right: 26px;
 }
 
 .neuroglancer-annotation-schema-enum-default-select {
   background: #2a2a2a;
   border: 1px solid #555;
   color: white;
-  padding: 2px 4px;
-  border-radius: 2px;
+  padding: 2px 0px;
+  border-radius: 1px;
   font-size: 12px;
   width: 100%;
 }
@@ -117,11 +112,6 @@
   visibility: visible;
 }
 
-.neuroglancer-annotation-schema-enum-entry:hover
-  .neuroglancer-annotation-schema-delete-icon {
-  border-color: #222;
-}
-
 .neuroglancer-annotation-schema-cell {
   flex: 1;
   display: inline-flex;
@@ -133,12 +123,6 @@
   border-bottom: none;
   border-right: none;
   max-width: 1.25rem;
-}
-
-.neuroglancer-annotation-schema-delete-icon {
-  min-width: 1.25rem;
-  border-right: 1px solid transparent;
-  padding-right: 2px;
 }
 
 .neuroglancer-annotation-schema-description-cell,

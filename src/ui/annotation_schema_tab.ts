@@ -602,11 +602,8 @@ class AnnotationUIProperty extends RefCounted {
     selectorContainer.className =
       "neuroglancer-annotation-schema-enum-default-selector";
 
-    const label = document.createElement("label");
-    label.textContent = "Default:";
-    label.className = "neuroglancer-annotation-schema-enum-default-label";
-
     const select = document.createElement("select");
+    select.title = "Select default enum label";
     select.className = "neuroglancer-annotation-schema-enum-default-select";
 
     this.updateEnumLabels(enumProperty, select);
@@ -630,7 +627,6 @@ class AnnotationUIProperty extends RefCounted {
       this.updateProperty(schemaProperty, { default: newDefault });
     });
 
-    selectorContainer.appendChild(label);
     selectorContainer.appendChild(select);
 
     return {
