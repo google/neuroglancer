@@ -707,9 +707,12 @@ class AnnotationUIProperty extends RefCounted {
     if (!this.readonly) {
       nameInput.addEventListener("change", (event) => {
         const newLabel = (event.target as HTMLInputElement).value;
-        this.updateProperty(oldProperty, {
-          enumLabels: oldProperty.enumLabels!.map((l: string, i: number) =>
-            i === enumIndex ? newLabel : l,
+        const existingProperty = this.getPropertyByIdentifier(
+          oldProperty.identifier,
+        ) as AnnotationNumericPropertySpec;
+        this.updateProperty(existingProperty, {
+          enumLabels: existingProperty.enumLabels!.map(
+            (l: string, i: number) => (i === enumIndex ? newLabel : l),
           ),
         });
       });
