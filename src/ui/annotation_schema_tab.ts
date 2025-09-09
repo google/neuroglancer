@@ -443,7 +443,7 @@ class AnnotationUIProperty extends RefCounted {
 
   private createInputsForType(
     type: AnnotationPropertyType,
-    oldProperty: any,
+    oldProperty: AnnotationPropertySpec,
     container: HTMLDivElement,
   ) {
     if (type.startsWith("rgb")) {
@@ -552,7 +552,7 @@ class AnnotationUIProperty extends RefCounted {
 
   private createEnumInputs(
     type: AnnotationPropertyType,
-    oldProperty: any,
+    oldProperty: AnnotationNumericPropertySpec,
     container: HTMLDivElement,
   ) {
     const { enumValues, enumLabels } = oldProperty;
@@ -713,7 +713,7 @@ class AnnotationUIProperty extends RefCounted {
     label: string,
     enumIndex: number,
     type: AnnotationPropertyType,
-    oldProperty: any,
+    oldProperty: AnnotationNumericPropertySpec,
     enumContainer: HTMLDivElement,
   ): (HTMLInputElement | HTMLTextAreaElement)[] {
     const enumRow = document.createElement("div");
@@ -742,7 +742,7 @@ class AnnotationUIProperty extends RefCounted {
   private createEnumNameInput(
     label: string,
     enumIndex: number,
-    oldProperty: any,
+    oldProperty: AnnotationNumericPropertySpec,
   ): HTMLTextAreaElement {
     const nameInput = this.createInputElement(label, {
       type: "text",
@@ -752,6 +752,15 @@ class AnnotationUIProperty extends RefCounted {
     nameInput.classList.add(
       "neuroglancer-annotation-schema-enum-entry-textarea",
     );
+
+    if (this.readonly) {
+      const defaultValue = oldProperty.default;
+      const isDefault =
+        oldProperty.enumValues &&
+        defaultValue === oldProperty.enumValues[enumIndex];
+      const newLabel = isDefault ? `${label} (default)` : label;
+      nameInput.value = newLabel;
+    }
 
     if (!this.readonly) {
       nameInput.addEventListener("change", (event) => {
