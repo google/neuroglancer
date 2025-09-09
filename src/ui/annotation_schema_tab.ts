@@ -232,7 +232,9 @@ class AnnotationUIProperty extends RefCounted {
     enumProperty: AnnotationNumericPropertySpec,
     selectElement?: HTMLSelectElement,
   ) {
-    const select = selectElement ?? this.defaultValueElements[-1];
+    const select =
+      selectElement ??
+      this.defaultValueElements[this.defaultValueElements.length - 1];
     if (!(select instanceof HTMLSelectElement)) return;
     removeChildren(select);
     enumProperty.enumValues?.forEach((value: number, index: number) => {
@@ -592,6 +594,7 @@ class AnnotationUIProperty extends RefCounted {
     return inputs;
   }
 
+  // TODO odd bug when you change a value and then change a label here
   private createEnumDefaultSelector(
     enumProperty: AnnotationNumericPropertySpec,
   ) {
@@ -1249,6 +1252,22 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateSchemaRepresentation(): boolean {
+    function checkKeysTrue(
+      keyStatusMap: Record<string, boolean>,
+      shouldBeFalse: string[] = [],
+      shouldIgnore: string[] = [],
+    ) {
+      for (const key in keyStatusMap) {
+        if (shouldIgnore.includes(key)) continue;
+        if (shouldBeFalse.includes(key)) {
+          if (keyStatusMap[key]) return false;
+        } else {
+          if (!keyStatusMap[key]) return false;
+        }
+      }
+      return true;
+    }
+
     // Check to see if the new IDs match the old keys
     const oldKeys = Array.from(this.annotationUIProperties.keys());
     const newKeys = this.schema.map((property) => property.identifier);
@@ -1278,34 +1297,20 @@ export class AnnotationSchemaView extends Tab {
         );
         // If the property is the same, we can skip updating it
         if (!comparedProperties.same) {
-          // If only the default value changed, we can update that
-          let allSameExceptDefault = true;
-          const sameValues = comparedProperties.sameValues;
-          for (const key in sameValues) {
-            if (key === "default") continue; // Skip default value
-            if (!sameValues[key as keyof typeof sameValues]) {
-              allSameExceptDefault = false;
-              break;
-            }
-          }
-          if (
-            (allSameExceptDefault && !sameValues.default) ||
-            (sameValues.enumLength && !sameValues.enumValues)
-          ) {
-            // Only the default changed, just update that
-            if (!sameValues.default) {
-              annotationUIProperty.updateDefaultValue(propertySchema.default);
-            }
-            if (sameValues.enumLength && !sameValues.enumValues) {
-              annotationUIProperty.updateEnumValues(
-                (propertySchema as AnnotationNumericPropertySpec).enumValues!,
-              );
-            }
-            if (sameValues.enumLength && !sameValues.enumLabels) {
-              annotationUIProperty.updateEnumLabels(
-                propertySchema as AnnotationNumericPropertySpec,
-              );
-            }
+          // In certain cases we don't need to recreate the entire property
+          // and we can just update the relevant parts of the UI
+          const { sameValues } = comparedProperties;
+          if (checkKeysTrue(sameValues, ["default"])) {
+            // The properties are all the same except for the default value
+            annotationUIProperty.updateDefaultValue(propertySchema.default);
+          } else if (checkKeysTrue(sameValues, ["enumValues"], ["default"])) {
+            annotationUIProperty.updateEnumValues(
+              (propertySchema as AnnotationNumericPropertySpec).enumValues!,
+            );
+          } else if (checkKeysTrue(sameValues, ["enumLabels"], ["default"])) {
+            annotationUIProperty.updateEnumLabels(
+              propertySchema as AnnotationNumericPropertySpec,
+            );
           } else {
             this.annotationUIProperties.set(
               propertySchema.identifier,
