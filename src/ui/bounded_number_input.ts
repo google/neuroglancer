@@ -45,7 +45,7 @@ export function createBoundedNumberInputElement(
     // If the dataType is provided, we can set min, max, and step based on it
     const dataType = config.dataType;
     if (dataType !== undefined) {
-      step = dataType === DataType.FLOAT32 ? 0.1 : 1;
+      step = dataType === DataType.FLOAT32 ? 0.0001 : 1;
       const bounds =
         dataType === DataType.FLOAT32
           ? [undefined, undefined]
