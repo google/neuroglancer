@@ -445,7 +445,7 @@ export class SingletonLayerGroupViewer
           ...getCommonViewerState(viewer),
         },
         {
-          showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
+          showLayerPanel: viewer.effectiveShowLayerPanel,
           showViewerMenu: false,
           showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues,
         },
@@ -762,7 +762,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
           ...getCommonViewerState(viewer),
         },
         {
-          showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
+          showLayerPanel: viewer.effectiveShowLayerPanel,
           showViewerMenu: true,
           showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues,
         },
