@@ -499,6 +499,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
     return options.registry.chunkManager.memoize.getAsync(
       {
         type: "zarr:MultiscaleVolumeChunkSource",
+        zarrVersion: this.zarrVersion,
         kvStoreUrl,
         dimensionSeparator,
       },
