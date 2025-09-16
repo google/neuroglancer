@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-import { debounce } from "lodash-es";
-import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { dynamicDebounce } from "#src/util/debounce.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {
   bigintToStringJsonReplacer,
   urlSafeParse,
   verifyObject,
 } from "#src/util/json.js";
-import type { Trackable } from "#src/util/trackable.js";
 import { getCachedJson } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.
@@ -68,23 +67,47 @@ export class UrlHashBinding extends RefCounted {
 
   private defaultFragment: string;
 
+  get root() {
+    return this.viewer.state;
+  }
+
+  get sharedKvStoreContext() {
+    return this.viewer.dataSourceProvider.sharedKvStoreContext;
+  }
+
   constructor(
-    public root: Trackable,
-    public sharedKvStoreContext: SharedKvStoreContext,
+    private viewer: Viewer,
     options: UrlHashBindingOptions = {},
   ) {
     super();
-    const { updateDelayMilliseconds = 200, defaultFragment = "{}" } = options;
+    const { defaultFragment = "{}" } = options;
+    const { root } = this;
     this.registerEventListener(window, "hashchange", () =>
       this.updateFromUrlHash(),
     );
-    const throttledSetUrlHash = debounce(
-      () => this.setUrlHash(),
-      updateDelayMilliseconds,
-      { maxWait: updateDelayMilliseconds * 2 },
+    const throttledSetUrlHash = this.registerDisposer(
+      dynamicDebounce(
+        () => this.setUrlHash(),
+        viewer.urlHashRateLimit,
+        (wait) => ({ maxWait: wait * 2 }),
+      ),
     );
     this.registerDisposer(root.changed.add(throttledSetUrlHash));
-    this.registerDisposer(() => throttledSetUrlHash.cancel());
+    // try to update the url before the user might attempt to be copying it
+    window.addEventListener("blur", () => {
+      throttledSetUrlHash.flush();
+    });
+    // mouseleave works better (occurs earlier) than blur
+    document.addEventListener("mouseleave", () => {
+      throttledSetUrlHash.flush();
+    });
+    // update url for the select url shortcut (ctrl+l/cmd+l)
+    // select url triggers the blur event, but for chrome, it occurs too late for the url to be updated
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "l") {
+        throttledSetUrlHash.flush();
+      }
+    });
     this.defaultFragment = defaultFragment;
   }
 
