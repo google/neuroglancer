@@ -2218,9 +2218,10 @@ export function UserLayerWithAnnotationsMixin<
                   const value = allValues[i];
                   // Readonly if regular property and source is readonly
                   // or if we have a default property
-                  const defaultProperty =
-                    i < defaultProperties.properties.length;
-                  const readonlyProperty = sourceReadonly || defaultProperty;
+                  const annotationPropertyIndex =
+                    i - defaultProperties.properties.length;
+                  const isDefaultProperty = annotationPropertyIndex < 0;
+                  const readonlyProperty = sourceReadonly || isDefaultProperty;
 
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
@@ -2256,7 +2257,8 @@ export function UserLayerWithAnnotationsMixin<
                         if (newAnnotation == null)
                           newAnnotation = reference.value;
                         if (newAnnotation == null) return;
-                        newAnnotation.properties[i] = inputValue;
+                        newAnnotation.properties[annotationPropertyIndex] =
+                          inputValue;
                         throttledUpdate();
                       };
 
