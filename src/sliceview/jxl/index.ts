@@ -115,8 +115,8 @@ export async function decompressJxl(
       buffer.byteLength,
     );
 
-    const width = height_and_width & 0x7fffffff;
-    const height = height_and_width >> 31;
+    const width = Number(height_and_width & 0x7fffffffn);
+    const height = Number(height_and_width >> 31n);
 
     if (width <= 0 || height <= 0) {
       throw new Error(
