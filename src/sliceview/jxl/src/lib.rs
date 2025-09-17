@@ -34,22 +34,10 @@ pub fn width(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
         slice::from_raw_parts(ptr, input_size)
     };
 
-    let image = match JxlImage::builder().read(data) {
-        Ok(image) => image,
-        Err(_image) => return -2,
-    };
-
-    for keyframe_idx in 0..image.num_loaded_keyframes() {
-        let frame = match image.render_frame(keyframe_idx) {
-            Ok(frame) => frame,
-            Err(_frame) => return -3,
-        };
-
-        let stream = frame.stream();
-        return stream.width() as i32;
+    match JxlImage::builder().read(data) {
+        Ok(image) => image.image_header().size.width as i32,
+        Err(_) => -2,
     }
-
-    -4 as i32
 }
 
 #[no_mangle]
@@ -62,22 +50,10 @@ pub fn height(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
         slice::from_raw_parts(ptr, input_size)
     };
 
-    let image = match JxlImage::builder().read(data) {
-        Ok(image) => image,
-        Err(_image) => return -2,
-    };
-
-    for keyframe_idx in 0..image.num_loaded_keyframes() {
-        let frame = match image.render_frame(keyframe_idx) {
-            Ok(frame) => frame,
-            Err(_frame) => return -3,
-        };
-
-        let stream = frame.stream();
-        return stream.height() as i32;
+    match JxlImage::builder().read(data) {
+        Ok(image) => image.image_header().size.height as i32,
+        Err(_) => -2,
     }
-
-    -4 as i32
 }
 
 #[no_mangle]
