@@ -20,6 +20,7 @@
 
 import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
+import { throttle } from "lodash-es";
 import {
   AnnotationDisplayState,
   AnnotationLayerState,
@@ -28,6 +29,7 @@ import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   Annotation,
   AnnotationId,
+  AnnotationNumericPropertySpec,
   AnnotationReference,
   AxisAlignedBoundingBox,
   Ellipsoid,
@@ -41,6 +43,7 @@ import {
   AnnotationType,
   annotationTypeHandlers,
   formatNumericProperty,
+  propertyTypeDataType,
 } from "#src/annotation/index.js";
 import {
   AnnotationLayer,
@@ -65,31 +68,39 @@ import {
   registerCallbackWhenSegmentationDisplayStateChanged,
   SegmentWidgetFactory,
 } from "#src/segmentation_display_state/frontend.js";
-import { ElementVisibilityFromTrackableBoolean } from "#src/trackable_boolean.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
+} from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
+  ConditionalWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   registerNested,
   WatchableValue,
 } from "#src/trackable_value.js";
+import type { AnnotationColorKey } from "#src/ui/annotation_properties.js";
+import {
+  makeReadonlyColorProperty,
+  makeEditableColorProperty,
+  makeDescriptionIcon,
+  isEnumType,
+  makeBoolCheckbox,
+} from "#src/ui/annotation_properties.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
-import {
-  serializeColor,
-  unpackRGB,
-  unpackRGBA,
-  useWhiteBackground,
-} from "#src/util/color.js";
+import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
-import { vec3 } from "#src/util/geom.js";
+import { vec3, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
 import {
   EventActionMap,
@@ -98,6 +109,8 @@ import {
 } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { nearlyEqual } from "#src/util/number.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import * as vector from "#src/util/vector.js";
@@ -1076,7 +1089,9 @@ export class PlacePointTool extends PlaceAnnotationTool {
         relatedSegments: getSelectedAssociatedSegments(annotationLayer),
         point,
         type: AnnotationType.POINT,
-        properties: annotationLayer.source.properties.map((x) => x.default),
+        properties: annotationLayer.source.properties.value.map(
+          (x) => x.default,
+        ),
       };
       const reference = annotationLayer.source.add(
         annotation,
@@ -1330,7 +1345,7 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
       description: "",
       pointA: point,
       pointB: point,
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1462,7 +1477,7 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       description: "",
       relatedSegments: this.storedRelationships,
       points: [point, point],
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1590,7 +1605,7 @@ class PlaceEllipsoidTool extends TwoStepAnnotationTool {
       segments: getSelectedAssociatedSegments(annotationLayer),
       center: point,
       radii: vec3.fromValues(0, 0, 0),
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
@@ -1685,6 +1700,11 @@ function makeRelatedSegmentList(
       if (segmentationDisplayState != null) {
         headerCheckbox = document.createElement("input");
         headerCheckbox.type = "checkbox";
+        headerCheckbox.classList.add(
+          "neuroglancer-related-segment-list-header-checkbox",
+        );
+        headerCheckbox.name =
+          "neuroglancer-related-segment-list-header-checkbox";
         headerCheckbox.addEventListener("change", () => {
           const { visibleSegments } =
             segmentationDisplayState.segmentationGroupState.value;
@@ -1861,6 +1881,7 @@ export function UserLayerWithAnnotationsMixin<
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
+    allowDependentAnnotationViewUpdate = new TrackableBoolean(true);
     static supportColorPickerInAnnotationTab = true;
 
     constructor(...args: any[]) {
@@ -1981,15 +2002,38 @@ export function UserLayerWithAnnotationsMixin<
       const reference = context.registerDisposer(
         annotationLayer.source.getReference(state.annotationId),
       );
+      let newAnnotation = reference.value;
+      const throttledUpdate = context.registerCancellable(
+        throttle(() => {
+          if (!newAnnotation) return;
+          this.allowDependentAnnotationViewUpdate.value = false;
+          try {
+            annotationLayer.source.update(reference, newAnnotation);
+            annotationLayer.source.commit(reference);
+          } finally {
+            this.allowDependentAnnotationViewUpdate.value = true;
+          }
+        }, 500),
+      );
+
+      const watchableVisibility = context.registerDisposer(
+        new AggregateWatchableValue(() => ({
+          annotation: reference,
+          chunkTransform: annotationLayer.chunkTransform,
+        })),
+      );
+
+      const watchableShouldUpdate = context.registerDisposer(
+        new ConditionalWatchableValue(
+          watchableVisibility,
+          this.allowDependentAnnotationViewUpdate,
+        ),
+      );
+
       parent.appendChild(
         context.registerDisposer(
           new DependentViewWidget(
-            context.registerDisposer(
-              new AggregateWatchableValue(() => ({
-                annotation: reference,
-                chunkTransform: annotationLayer.chunkTransform,
-              })),
-            ),
+            watchableShouldUpdate,
             ({ annotation, chunkTransform }, parent, context) => {
               let statusText: string | undefined;
               if (annotation == null) {
@@ -2008,7 +2052,7 @@ export function UserLayerWithAnnotationsMixin<
                     new AnnotationPropertySerializer(
                       rank,
                       numGeometryBytes,
-                      properties,
+                      properties.value,
                     );
                   const annotationIndex = state.annotationInstanceIndex!;
                   const annotationCount = state.annotationInstanceCount!;
@@ -2028,7 +2072,9 @@ export function UserLayerWithAnnotationsMixin<
                     annotationIndex,
                     annotationCount,
                     isLittleEndian,
-                    (annotation.properties = new Array(properties.length)),
+                    (annotation.properties = new Array(
+                      properties.value.length,
+                    )),
                   );
                   if (annotationLayer.source.hasNonSerializedProperties()) {
                     statusText = "Loading...";
@@ -2038,6 +2084,7 @@ export function UserLayerWithAnnotationsMixin<
                     annotation === null ? "Annotation not found" : "Loading...";
                 }
               }
+
               if (annotation != null) {
                 const layerRank =
                   chunkTransform.error === undefined
@@ -2114,19 +2161,24 @@ export function UserLayerWithAnnotationsMixin<
                 }
 
                 if (!annotationLayer.source.readonly) {
+                  const buttonWrapper = document.createElement("div");
                   const button = makeDeleteButton({
                     title: "Delete annotation",
                     onClick: () => {
                       annotationLayer.source.delete(reference);
                     },
                   });
-                  button.classList.add(
+                  buttonWrapper.classList.add(
                     "neuroglancer-selected-annotation-details-delete",
                   );
-                  positionGrid.appendChild(button);
+                  buttonWrapper.appendChild(button);
+                  positionGrid.appendChild(buttonWrapper);
                 }
 
-                const { relationships, properties } = annotationLayer.source;
+                const {
+                  relationships,
+                  properties: { value: properties },
+                } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
                 const defaultProperties =
                   annotationTypeHandlers[annotation.type].defaultProperties(
@@ -2142,74 +2194,220 @@ export function UserLayerWithAnnotationsMixin<
                 ];
 
                 // Add the ID to the annotation details.
-                const label = document.createElement("label");
-                label.classList.add("neuroglancer-annotation-property");
+                const label = document.createElement("div");
+                label.classList.add(
+                  "neuroglancer-annotation-property",
+                  "neuroglancer-annotation-property-id",
+                );
                 const idElement = document.createElement("span");
                 idElement.classList.add(
                   "neuroglancer-annotation-property-label",
                 );
                 idElement.textContent = "ID";
                 label.appendChild(idElement);
-                const valueElement = document.createElement("span");
-                valueElement.classList.add(
+                const idValueElement = document.createElement("span");
+                idValueElement.classList.add(
                   "neuroglancer-annotation-property-value",
                 );
-                valueElement.textContent = reference.id;
-                label.appendChild(valueElement);
+                idValueElement.textContent = reference.id;
+                label.appendChild(idValueElement);
                 parent.appendChild(label);
 
                 for (let i = 0, count = allProperties.length; i < count; ++i) {
                   const property = allProperties[i];
                   const value = allValues[i];
+                  // Readonly if regular property and source is readonly
+                  // or if we have a default property
+                  const annotationPropertyIndex =
+                    i - defaultProperties.properties.length;
+                  const isDefaultProperty = annotationPropertyIndex < 0;
+                  const readonlyProperty = sourceReadonly || isDefaultProperty;
 
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
+
+                  const nameWrapper = document.createElement("span");
+                  nameWrapper.classList.add(
+                    "neuroglancer-annotation-property-name-wrapper",
+                  );
+                  label.appendChild(nameWrapper);
+
+                  const { description } = property;
+                  if (description) {
+                    const iconWrapper = makeDescriptionIcon(description);
+                    nameWrapper.appendChild(iconWrapper);
+                  }
+
                   const idElement = document.createElement("span");
                   idElement.classList.add(
                     "neuroglancer-annotation-property-label",
                   );
                   idElement.textContent = property.identifier;
-                  label.appendChild(idElement);
-                  const { description } = property;
-                  if (description !== undefined) {
-                    label.title = description;
-                  }
-                  const valueElement = document.createElement("span");
-                  valueElement.classList.add(
-                    "neuroglancer-annotation-property-value",
+                  nameWrapper.appendChild(idElement);
+
+                  const valueElementWrapper = document.createElement("div");
+                  let valueElement: HTMLElement | undefined;
+                  // Just in case the frontend does not properly prevent
+                  // the user from editing read-only properties.
+                  const changeFunction = readonlyProperty
+                    ? (inputValue: any) => {
+                        inputValue;
+                      }
+                    : (inputValue: any) => {
+                        if (newAnnotation == null)
+                          newAnnotation = reference.value;
+                        if (newAnnotation == null) return;
+                        newAnnotation.properties[annotationPropertyIndex] =
+                          inputValue;
+                        throttledUpdate();
+                      };
+
+                  valueElementWrapper.classList.add(
+                    "neuroglancer-annotation-property-value-wrapper",
                   );
-                  switch (property.type) {
-                    case "rgb": {
-                      const colorVec = unpackRGB(value);
-                      const hex = serializeColor(colorVec);
-                      valueElement.textContent = hex;
-                      valueElement.style.backgroundColor = hex;
-                      valueElement.style.color = useWhiteBackground(colorVec)
-                        ? "white"
-                        : "black";
-                      break;
-                    }
-                    case "rgba": {
-                      const colorVec = unpackRGB(value);
-                      valueElement.textContent = serializeColor(
-                        unpackRGBA(value),
+                  if (property.type.startsWith("rgb")) {
+                    // Colors
+                    if (readonlyProperty) {
+                      valueElementWrapper.appendChild(
+                        makeReadonlyColorProperty(
+                          value,
+                          property.type as AnnotationColorKey,
+                        ),
                       );
-                      valueElement.style.backgroundColor = serializeColor(
-                        unpackRGB(value),
+                    } else {
+                      const colorProperty = makeEditableColorProperty(
+                        value,
+                        property.type as AnnotationColorKey,
                       );
-                      valueElement.style.color = useWhiteBackground(colorVec)
-                        ? "white"
-                        : "black";
-                      break;
+                      valueElementWrapper.appendChild(colorProperty.element);
+                      if (property.type === "rgb") {
+                        context.registerDisposer(
+                          colorProperty.model.changed.add(() => {
+                            changeFunction(
+                              packColor(colorProperty.color.getRGB()),
+                            );
+                          }),
+                        );
+                      } else {
+                        const rgbaChangeFunction = () => {
+                          const rgb = colorProperty.color.getRGB();
+                          const alpha = colorProperty.alpha!.valueAsNumber;
+                          const colorVec = vec4.fromValues(
+                            rgb[0],
+                            rgb[1],
+                            rgb[2],
+                            alpha,
+                          );
+                          changeFunction(packColor(colorVec));
+                        };
+                        context.registerDisposer(
+                          colorProperty.model.changed.add(rgbaChangeFunction),
+                        );
+                        colorProperty.alpha!.addEventListener(
+                          "change",
+                          rgbaChangeFunction,
+                        );
+                      }
                     }
-                    default:
-                      valueElement.textContent = formatNumericProperty(
-                        property,
+                  } else if (property.type === "bool") {
+                    if (readonlyProperty) {
+                      valueElement = document.createElement("span");
+                      valueElement.textContent = value ? "True" : "False";
+                    } else {
+                      valueElement = makeBoolCheckbox(value, (event) => {
+                        if (!event.target) return;
+                        changeFunction(
+                          (event.target as HTMLInputElement).checked ? 1 : 0,
+                        );
+                      });
+                      valueElementWrapper.style.justifyContent = "center";
+                    }
+                  } else {
+                    // Numeric or enums
+                    if (readonlyProperty) {
+                      valueElement = document.createElement("span");
+                      const valueToSet = formatNumericProperty(
+                        property as AnnotationNumericPropertySpec,
                         value,
                       );
-                      break;
+                      valueElement.textContent = valueToSet;
+                    } else {
+                      // Editable properties require knowing the type
+                      const propertyAsNum =
+                        property as AnnotationNumericPropertySpec;
+                      const isEnum = isEnumType(propertyAsNum.enumLabels);
+                      if (isEnum) {
+                        // Make a dropdown which combines the enum labels and values.
+                        const options = [];
+                        let optionsHasDefault = false;
+                        for (
+                          let j = 0;
+                          j < propertyAsNum.enumLabels!.length;
+                          ++j
+                        ) {
+                          const optionValue = propertyAsNum.enumValues![j];
+                          if (nearlyEqual(optionValue, value, 1e-3)) {
+                            optionsHasDefault = true;
+                          }
+                          options.push({
+                            label: propertyAsNum.enumLabels![j],
+                            value: optionValue,
+                          });
+                        }
+                        // We need to check if the current value is in the enum values.
+                        // Otherwise we need to add it as an option.
+                        if (!optionsHasDefault) {
+                          options.unshift({
+                            label: `Non-schema value`,
+                            value: value,
+                          });
+                        }
+
+                        const select = document.createElement("select");
+                        select.name = `neuroglancer-annotation-property-select-${i}`;
+                        select.classList.add(
+                          "neuroglancer-annotation-property-select",
+                        );
+                        for (const option of options) {
+                          const optionElement =
+                            document.createElement("option");
+                          optionElement.value = String(option.value);
+                          optionElement.textContent = `${option.label} (${numberToStringFixed(option.value, 2)})`;
+                          select.appendChild(optionElement);
+                        }
+                        select.value = String(value);
+                        select.addEventListener("change", () => {
+                          changeFunction(select.value);
+                        });
+                        valueElement = select;
+                      } else {
+                        const input = createBoundedNumberInputElement(value, {
+                          dataType: propertyTypeDataType[propertyAsNum.type],
+                        });
+                        input.classList.add(
+                          "neuroglancer-annotation-property-value-input",
+                        );
+                        input.name = `neuroglancer-annotation-property-value-input-${i}`;
+                        valueElement = input;
+                        valueElement.addEventListener("change", () => {
+                          const inputValue = input.valueAsNumber;
+                          if (propertyAsNum.type !== "float32") {
+                            changeFunction(Math.floor(inputValue));
+                          } else {
+                            changeFunction(inputValue);
+                          }
+                        });
+                      }
+                    }
                   }
-                  label.appendChild(valueElement);
+                  if (valueElement) {
+                    valueElement.classList.add(
+                      "neuroglancer-annotation-property-value",
+                    );
+                    valueElement.dataset.readonly = readonlyProperty.toString();
+                    valueElementWrapper.appendChild(valueElement);
+                  }
+                  label.appendChild(valueElementWrapper);
                   parent.appendChild(label);
                 }
 
