@@ -90,19 +90,19 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
         match image.pixel_format() {
             PixelFormat::Gray => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
                     output_buffer.push(value);
                 }
             },
             PixelFormat::Rgb => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
                     output_buffer.push(value);
                 }
             }
             PixelFormat::Rgba => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
                     output_buffer.push(value);
                     output_buffer.push(255);  // Alpha channel set to fully opaque
                 }
