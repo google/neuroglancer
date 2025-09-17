@@ -36,7 +36,7 @@ pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
 
     match JxlImage::builder().read(data) {
         Ok(image) => (
-            (image.image_header().size.height << 31) | ((image.image_header().size.width & 0x7fffffff))
+            ((image.image_header().size.height as i64) << 31) | (((image.image_header().size.width as i64) & 0x7fffffff))
         ) as i64,
         Err(_) => -2,
     }
