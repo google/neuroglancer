@@ -156,11 +156,18 @@ def _decode_ellipsoid_annotation(geom, rank: int, props, segments, id: str):
     )
 
 
+def _decode_polyline_annotation(geom, rank: int, props, segments, id: str):
+    return viewer_state.PolyLineAnnotation(
+        points=geom.reshape((-1, rank)), props=props, segments=segments, id=id
+    )
+
+
 _ANNOTATION_TYPE_CONSTRUCTORS = {
     "point": _decode_point_annotation,
     "line": _decode_line_annotation,
     "axis_aligned_bounding_box": _decode_axis_aligned_bounding_box_annotation,
     "ellipsoid": _decode_ellipsoid_annotation,
+    "polyline": _decode_polyline_annotation,
 }
 
 
@@ -197,11 +204,19 @@ def _ellipsoid_check_bounds(annotation, lower_bound, upper_bound):
     return _bbox_check_bounds(center - radii, center + radii, lower_bound, upper_bound)
 
 
+def _polyline_check_bounds(annotation, lower_bound, upper_bound):
+    points = annotation.points
+    min_pt = np.min(points, axis=0)
+    max_pt = np.max(points, axis=0)
+    return _bbox_check_bounds(min_pt, max_pt, lower_bound, upper_bound)
+
+
 _ANNOTATION_TYPE_CHECK_BOUNDS = {
     "point": _point_check_bounds,
     "line": _line_check_bounds,
     "axis_aligned_bounding_box": _axis_aligned_bounding_box_check_bounds,
     "ellipsoid": _ellipsoid_check_bounds,
+    "polyline": _polyline_check_bounds,
 }
 
 
@@ -331,18 +346,38 @@ class AnnotationReader:
             viewer_state.AnnotationPropertySpec(prop)
             for prop in self.metadata.get("properties", [])
         ]
-        self._dtype = write_annotations._get_dtype_for_geometry(
-            self.annotation_type, self.coordinate_space.rank
-        ) + write_annotations._get_dtype_for_properties(self.properties)
+        self._property_dtype = write_annotations._get_dtype_for_properties(
+            self.properties
+        )
+        self._dtype = (
+            write_annotations._get_dtype_for_geometry(
+                self.annotation_type, self.coordinate_space.rank
+            )
+            + self._property_dtype
+        )
         self.spatial = [
             self._get_child_spatial_map(spatial_metadata)
             for spatial_metadata in self.metadata.get("spatial", [])
         ]
 
+    def _get_dtype(self, encoded: bytes) -> np.dtype:
+        """Returns the dtype for the encoded annotation."""
+        if self.annotation_type == "polyline":
+            num_points_value = np.frombuffer(encoded, dtype="<u4", count=1)[0]
+            num_points = ("num_points", "<u4")
+            geometry = (
+                "geometry",
+                "<f4",
+                (num_points_value * self.coordinate_space.rank,),
+            )
+            return np.dtype([num_points, geometry] + self._property_dtype)
+        return self._dtype
+
     def _decode_single_annotation(
         self, annotation_id: int, encoded: bytes
     ) -> viewer_state.Annotation:
-        decoded = np.frombuffer(encoded, dtype=self._dtype, count=1)[0]
+        dtype = self._get_dtype(encoded)
+        decoded = np.frombuffer(encoded, dtype=dtype, count=1)[0]
         geom = decoded["geometry"]
         props = [decoded[f"property{i}"] for i in range(len(self.properties))]
         offset = decoded.nbytes
@@ -363,8 +398,22 @@ class AnnotationReader:
     ) -> list[viewer_state.Annotation]:
         count = np.frombuffer(encoded, dtype="<u8", count=1)[0]
         offset = 8
-        decoded = np.frombuffer(encoded, dtype=self._dtype, count=count, offset=offset)
-        offset += decoded.nbytes
+        if self.annotation_type == "polyline":
+            decoded_parts = []
+            for _ in range(count):
+                encoded_subset = encoded[offset:]
+                dtype = self._get_dtype(encoded_subset)
+                decoded_polyline = np.frombuffer(encoded_subset, dtype=dtype, count=1)[
+                    0
+                ]
+                decoded_parts.append(decoded_polyline)
+                offset += decoded_polyline.nbytes
+            decoded = np.array(decoded_parts, dtype=object)
+        else:
+            decoded = np.frombuffer(
+                encoded, dtype=self._dtype, count=count, offset=offset
+            )
+            offset += decoded.nbytes
         ids = np.frombuffer(encoded, dtype="<u8", count=count, offset=offset)
         offset += ids.nbytes
         if offset != len(encoded):

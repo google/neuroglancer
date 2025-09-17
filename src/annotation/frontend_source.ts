@@ -80,11 +80,11 @@ export function computeNumPickIds(
   serializedAnnotations: SerializedAnnotations,
 ) {
   let numPickIds = 0;
-  const { typeToIds } = serializedAnnotations;
+  const { typeToSize } = serializedAnnotations;
   for (const annotationType of annotationTypes) {
     numPickIds +=
       getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
-      typeToIds[annotationType].length;
+      typeToSize[annotationType];
   }
   return numPickIds;
 }
@@ -98,9 +98,11 @@ export class AnnotationGeometryData {
   constructor(x: SerializedAnnotations) {
     this.serializedAnnotations = {
       data: x.data,
+      typeToInstanceCounts: x.typeToInstanceCounts,
       typeToIds: x.typeToIds,
       typeToOffset: x.typeToOffset,
       typeToIdMaps: x.typeToIdMaps,
+      typeToSize: x.typeToSize,
     };
   }
   freeGPUMemory(gl: GL) {
@@ -357,6 +359,8 @@ export function updateAnnotation(
   const { serializedAnnotations } = chunk;
   const ids = serializedAnnotations.typeToIds[type];
   const idMap = serializedAnnotations.typeToIdMaps[type];
+  const typeToInstanceCount = serializedAnnotations.typeToInstanceCounts[type];
+  const typeToSize = serializedAnnotations.typeToSize;
   const handler = annotationTypeHandlers[type];
   const numBytes = propertySerializers[type].serializedBytes;
   let index = idMap.get(annotation.id);
@@ -381,6 +385,9 @@ export function updateAnnotation(
       /*destCount=*/ index + 1,
     );
     ids.push(annotation.id);
+    typeToSize[type] = ids.length;
+    const last = typeToInstanceCount.at(-1) ?? -1;
+    typeToInstanceCount.push(last + 1);
     serializedAnnotations.data = newData;
   }
   const bufferOffset = serializedAnnotations.typeToOffset![type];
@@ -417,6 +424,8 @@ export function deleteAnnotation(
 ): boolean {
   const { serializedAnnotations } = chunk;
   const idMap = serializedAnnotations.typeToIdMaps[type];
+  const typeToSize = serializedAnnotations.typeToSize;
+  const typeToInstanceCount = serializedAnnotations.typeToInstanceCounts[type];
   const index = idMap.get(id);
   if (index === undefined) {
     return false;
@@ -450,9 +459,12 @@ export function deleteAnnotation(
     /*destCount=*/ ids.length - 1,
   );
   ids.splice(index, 1);
+  typeToInstanceCount.splice(index, 1);
+  typeToSize[type] = ids.length;
   idMap.delete(id);
   for (let i = index, count = ids.length; i < count; ++i) {
     idMap.set(ids[i], i);
+    typeToInstanceCount[i] -= 1;
   }
   serializedAnnotations.data = newData;
   chunk.bufferValid = false;
@@ -485,10 +497,15 @@ export function makeTemporaryChunk() {
   const typeToIds: string[][] = [];
   const typeToOffset: number[] = [];
   const typeToIdMaps: Map<string, number>[] = [];
+  const typeToInstanceCounts: number[][] = [];
+  const typeToSize: number[] = [];
+
   for (const annotationType of annotationTypes) {
     typeToIds[annotationType] = [];
     typeToOffset[annotationType] = 0;
     typeToIdMaps[annotationType] = new Map();
+    typeToInstanceCounts[annotationType] = [];
+    typeToSize[annotationType] = 0;
   }
   return new AnnotationGeometryChunk(
     <AnnotationGeometryChunkSource>(<any>undefined),
@@ -498,6 +515,8 @@ export function makeTemporaryChunk() {
       typeToOffset,
       typeToIds,
       typeToIdMaps,
+      typeToInstanceCounts,
+      typeToSize,
     },
   );
 }
@@ -835,6 +854,28 @@ export class MultiscaleAnnotationSource
             tempLower[i] = c - r;
             tempUpper[i] = c + r;
           }
+          break;
+        case AnnotationType.POLYLINE:
+          for (const point of annotation.points) {
+            for (let i = 0; i < rank; ++i) {
+              tempLower[i] = Math.min(point[i], tempLower[i]);
+              tempUpper[i] = Math.max(point[i], tempUpper[i]);
+            }
+          }
+          matrix.transformPoint(
+            tempLower,
+            source.multiscaleToChunkTransform,
+            rank + 1,
+            tempLower,
+            rank,
+          );
+          matrix.transformPoint(
+            tempUpper,
+            source.multiscaleToChunkTransform,
+            rank + 1,
+            tempUpper,
+            rank,
+          );
           break;
       }
       let totalChunks = 1;

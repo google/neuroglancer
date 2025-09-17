@@ -17,9 +17,9 @@
 import type {
   Annotation,
   AnnotationPropertySpec,
-  AnnotationType,
 } from "#src/annotation/index.js";
 import {
+  AnnotationType,
   annotationTypeHandlers,
   getPropertyOffsets,
   propertyTypeDataType,
@@ -387,7 +387,11 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
 vec3 defaultColor() { return uColor; }
 highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }
 `);
-
+        if (this.annotationType !== AnnotationType.POLYLINE) {
+          builder.addVertexCode(`
+uint getNumRelatedInstances() { return 0u; }
+`);
+        }
         builder.addFragmentCode(`
 void emitAnnotation(vec4 color) {
   emit(color, vPickID);
@@ -447,13 +451,24 @@ bool ng_discardValue;
 void ng_discard() {
   ng_discardValue = true;
 }
-void setLineColor(vec4 startColor, vec4 endColor);
-void setLineWidth(float width);
+void setSingleLineColor(vec4 startColor, vec4 endColor);
+void setPolyLineColor(vec4 startColor, vec4 endColor);
+void setSingleLineWidth(float width);
+void setPolyLineWidth(float width);
+void setLineWidth(float width) {
+  setSingleLineWidth(width);
+  setPolyLineWidth(width);
+}
 
-void setEndpointMarkerColor(vec4 startColor, vec4 endColor);
-void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
-void setEndpointMarkerSize(float startSize, float endSize);
-void setEndpointMarkerBorderWidth(float startSize, float endSize);
+void setLineEndpointMarkerColor(vec4 startColor, vec4 endColor);
+void setLineEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setLineEndpointMarkerSize(float startSize, float endSize);
+void setLineEndpointMarkerBorderWidth(float startSize, float endSize);
+
+void setPolyEndpointMarkerColor(vec4 startColor, vec4 endColor);
+void setPolyEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setPolyEndpointMarkerSize(float startSize, float endSize);
+void setPolyEndpointMarkerBorderWidth(float startSize, float endSize);
 
 void setPointMarkerColor(vec4 color);
 void setPointMarkerColor(vec3 color) { setPointMarkerColor(vec4(color, 1.0)); }
@@ -468,21 +483,58 @@ void setBoundingBoxBorderColor(vec4 color);
 void setBoundingBoxBorderWidth(float size);
 void setBoundingBoxFillColor(vec4 color);
 
+void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
+  setLineEndpointMarkerColor(startColor, endColor);
+  setPolyEndpointMarkerColor(startColor, endColor);
+}
 void setEndpointMarkerColor(vec3 startColor, vec3 endColor) {
   setEndpointMarkerColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setEndpointMarkerColor(vec3 color) { setEndpointMarkerColor(color, color); }
+void setEndpointMarkerColor(vec4 color) { setEndpointMarkerColor(color, color); }
+void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
+  setLineEndpointMarkerBorderColor(startColor, endColor);
+  setPolyEndpointMarkerBorderColor(startColor, endColor);
 }
 void setEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
   setEndpointMarkerBorderColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
 }
-void setEndpointMarkerColor(vec3 color) { setEndpointMarkerColor(color, color); }
-void setEndpointMarkerColor(vec4 color) { setEndpointMarkerColor(color, color); }
 void setEndpointMarkerBorderColor(vec3 color) { setEndpointMarkerBorderColor(color, color); }
 void setEndpointMarkerBorderColor(vec4 color) { setEndpointMarkerBorderColor(color, color); }
+void setEndpointMarkerSize(float startSize, float endSize) {
+  setLineEndpointMarkerSize(startSize, endSize);
+  setPolyEndpointMarkerSize(startSize, endSize);
+}
 void setEndpointMarkerSize(float size) { setEndpointMarkerSize(size, size); }
+void setEndpointMarkerBorderWidth(float startSize, float endSize) {
+  setLineEndpointMarkerBorderWidth(startSize, endSize);
+  setPolyEndpointMarkerBorderWidth(startSize, endSize);
+}
 void setEndpointMarkerBorderWidth(float size) { setEndpointMarkerBorderWidth(size, size); }
+void setLineColor(vec4 startColor, vec4 endColor) {
+  setSingleLineColor(startColor, endColor);
+  setPolyLineColor(startColor, endColor);
+}
 void setLineColor(vec4 color) { setLineColor(color, color); }
 void setLineColor(vec3 color) { setLineColor(vec4(color, 1.0)); }
 void setLineColor(vec3 startColor, vec3 endColor) { setLineColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
+
+void setPolyEndpointMarkerColor(vec3 startColor, vec3 endColor) {
+  setPolyEndpointMarkerColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setPolyEndpointMarkerColor(vec3 color) { setPolyEndpointMarkerColor(color, color); }
+void setPolyEndpointMarkerColor(vec4 color) { setPolyEndpointMarkerColor(color, color); }
+void setPolyEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
+  setPolyEndpointMarkerBorderColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setPolyEndpointMarkerBorderColor(vec3 color) { setPolyEndpointMarkerBorderColor(color, color); }
+void setPolyEndpointMarkerBorderColor(vec4 color) { setPolyEndpointMarkerBorderColor(color, color); }
+void setPolyEndpointMarkerSize(float size) { setPolyEndpointMarkerSize(size, size); }
+void setPolyEndpointMarkerBorderWidth(float size) { setPolyEndpointMarkerBorderWidth(size, size); }
+void setPolyLineColor(vec4 color) { setPolyLineColor(color, color); }
+void setPolyLineColor(vec3 color) { setPolyLineColor(vec4(color, 1.0)); }
+void setPolyLineColor(vec3 startColor, vec3 endColor) { setPolyLineColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
+
 void setColor(vec4 color) {
   setPointMarkerColor(color);
   setLineColor(color);
@@ -534,8 +586,12 @@ ${partIndexExpressions
     s += `
   vPickID = pickID + pickOffset0;
   highp uint selectedIndex = uSelectedIndex;
-if (selectedIndex == pickBaseOffset${partIndexExpressions
-      .map((_, i) => ` || selectedIndex == pickOffset${i}`)
+  highp uint relatedInstancePickOffset = getNumRelatedInstances() * uint(${this.pickIdsPerInstance});
+if (selectedIndex + relatedInstancePickOffset == pickBaseOffset${partIndexExpressions
+      .map(
+        (_, i) =>
+          ` || selectedIndex + relatedInstancePickOffset == pickOffset${i}`,
+      )
       .join("")}) {
     vColor = vec4(mix(vColor.rgb, vec3(1.0, 1.0, 1.0), 0.75), vColor.a);
   }

@@ -812,6 +812,40 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
+type ShaderPropertyListMetadata = {
+  type: string;
+  identifier: string;
+  description?: string;
+};
+
+export const buildShaderPropertyList = (
+  properties: readonly Readonly<ShaderPropertyListMetadata>[],
+  parent: HTMLElement,
+) => {
+  const propertyList = document.createElement("div");
+  parent.appendChild(propertyList);
+  propertyList.classList.add("neuroglancer-annotation-shader-property-list");
+  for (const property of properties) {
+    const div = document.createElement("div");
+    div.classList.add("neuroglancer-annotation-shader-property");
+    const typeElement = document.createElement("span");
+    typeElement.classList.add("neuroglancer-annotation-shader-property-type");
+    typeElement.textContent = property.type;
+    const nameElement = document.createElement("span");
+    nameElement.classList.add(
+      "neuroglancer-annotation-shader-property-identifier",
+    );
+    nameElement.textContent = `prop_${property.identifier}`;
+    div.appendChild(typeElement);
+    div.appendChild(nameElement);
+    const { description } = property;
+    if (description !== undefined) {
+      div.title = description;
+    }
+    propertyList.appendChild(div);
+  }
+};
+
 class RenderingOptionsTab extends Tab {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
@@ -824,32 +858,7 @@ class RenderingOptionsTab extends Tab {
         layer.annotationDisplayState.annotationProperties,
         (properties, parent) => {
           if (properties === undefined || properties.length === 0) return;
-          const propertyList = document.createElement("div");
-          parent.appendChild(propertyList);
-          propertyList.classList.add(
-            "neuroglancer-annotation-shader-property-list",
-          );
-          for (const property of properties) {
-            const div = document.createElement("div");
-            div.classList.add("neuroglancer-annotation-shader-property");
-            const typeElement = document.createElement("span");
-            typeElement.classList.add(
-              "neuroglancer-annotation-shader-property-type",
-            );
-            typeElement.textContent = property.type;
-            const nameElement = document.createElement("span");
-            nameElement.classList.add(
-              "neuroglancer-annotation-shader-property-identifier",
-            );
-            nameElement.textContent = `prop_${property.identifier}`;
-            div.appendChild(typeElement);
-            div.appendChild(nameElement);
-            const { description } = property;
-            if (description !== undefined) {
-              div.title = description;
-            }
-            propertyList.appendChild(div);
-          }
+          buildShaderPropertyList(properties, parent);
         },
       ),
     ).element;

@@ -34,6 +34,7 @@ import type {
   AxisAlignedBoundingBox,
   Ellipsoid,
   Line,
+  PolyLine,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -91,7 +92,7 @@ import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { ArraySpliceOp } from "#src/util/array.js";
+import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -189,6 +190,11 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
     case AnnotationType.LINE:
       vector.add(center, annotation.pointA, annotation.pointB);
+      vector.scale(center, center, 0.5);
+      break;
+    case AnnotationType.POLYLINE:
+      // Return the first line of the polyline
+      vector.add(center, annotation.points[0], annotation.points[1]);
       vector.scale(center, center, 0.5);
       break;
     case AnnotationType.POINT:
@@ -483,6 +489,16 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(ellipsoidButton);
+
+    const polylineButton = makeIcon({
+      text: annotationTypeHandlers[AnnotationType.POLYLINE].icon,
+      title: "Annotate polyline",
+      onClick: () => {
+        this.layer.tool.value = new PlacePolylineTool(this.layer, {});
+      },
+    });
+    mutableControls.appendChild(polylineButton);
+
     const helpIcon = makeIcon({
       title:
         "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Rendering' tab.",
@@ -1052,6 +1068,7 @@ const ANNOTATE_POINT_TOOL_ID = "annotatePoint";
 const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
+const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
 
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
@@ -1115,6 +1132,108 @@ function getMousePositionInAnnotationCoordinates(
     return undefined;
   }
   return chunkPosition;
+}
+
+abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
+  inProgressAnnotation: WatchableValue<
+    | {
+        annotationLayer: AnnotationLayerState;
+        reference: AnnotationReference;
+        disposer: () => void;
+      }
+    | undefined
+  > = new WatchableValue(undefined);
+
+  abstract getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation;
+  abstract getUpdatedAnnotation(
+    oldAnnotation: Annotation,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+    triggered: boolean,
+  ): { newAnnotation: Annotation; finished: boolean };
+
+  trigger(mouseState: MouseSelectionState) {
+    const { annotationLayer, inProgressAnnotation } = this;
+    if (annotationLayer === undefined) {
+      // Not yet ready.
+      return;
+    }
+
+    if (mouseState.updateUnconditionally()) {
+      const updateNextPoint = (triggered: boolean = false) => {
+        const state = inProgressAnnotation.value!;
+        const reference = state.reference;
+        const annotationState = this.getUpdatedAnnotation(
+          reference.value!,
+          mouseState,
+          annotationLayer,
+          triggered,
+        );
+        const { newAnnotation, finished } = annotationState;
+        if (
+          JSON.stringify(
+            annotationToJson(newAnnotation, annotationLayer.source),
+          ) ===
+          JSON.stringify(
+            annotationToJson(reference.value!, annotationLayer.source),
+          )
+        ) {
+          return finished;
+        }
+        state.annotationLayer.source.update(reference, newAnnotation);
+        this.layer.selectAnnotation(annotationLayer, reference.id, true);
+        return finished;
+      };
+
+      if (inProgressAnnotation.value === undefined) {
+        const reference = annotationLayer.source.add(
+          this.getInitialAnnotation(mouseState, annotationLayer),
+          /*commit=*/ false,
+        );
+        this.layer.selectAnnotation(annotationLayer, reference.id, true);
+        const mouseDisposer = mouseState.changed.add(updateNextPoint);
+        const disposer = () => {
+          mouseDisposer();
+          reference.dispose();
+        };
+        inProgressAnnotation.value = {
+          annotationLayer,
+          reference,
+          disposer,
+        };
+      } else {
+        const finished = updateNextPoint(true);
+        if (finished) this.complete();
+      }
+    }
+  }
+
+  disposed() {
+    this.deactivate();
+    super.disposed();
+  }
+
+  deactivate() {
+    const state = this.inProgressAnnotation.value;
+    if (state !== undefined) {
+      state.annotationLayer.source.delete(state.reference);
+      state.disposer();
+      this.inProgressAnnotation.value = undefined;
+    }
+  }
+
+  complete() {
+    const state = this.inProgressAnnotation.value;
+    if (state === undefined) return;
+    state.annotationLayer.source.commit(state.reference);
+    state.disposer();
+    this.inProgressAnnotation.value = undefined;
+  }
+
+  abstract undo(): void;
 }
 
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
@@ -1331,6 +1450,144 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
 }
 PlaceLineTool.prototype.annotationType = AnnotationType.LINE;
 
+class PlacePolylineTool extends MultiStepAnnotationTool {
+  getBaseSegment = false;
+
+  private storedRelationships: BigUint64Array[] | undefined;
+
+  get description() {
+    return "annotate polyline";
+  }
+
+  getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation {
+    const point = getMousePositionInAnnotationCoordinates(
+      mouseState,
+      annotationLayer,
+    );
+    this.storedRelationships = getSelectedAssociatedSegments(
+      annotationLayer,
+      this.getBaseSegment,
+    );
+    return <PolyLine>{
+      type: AnnotationType.POLYLINE,
+      id: "",
+      description: "",
+      relatedSegments: this.storedRelationships,
+      points: [point, point],
+      properties: annotationLayer.source.properties.map((x) => x.default),
+    };
+  }
+
+  getUpdatedAnnotation(
+    oldAnnotation: PolyLine,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+    triggered: boolean,
+  ) {
+    function annotationWithUpdatedLastPoint(
+      annotation: PolyLine,
+      point: Float32Array,
+    ) {
+      return <PolyLine>{
+        ...annotation,
+        points: [...annotation.points.slice(0, -1), point],
+      };
+    }
+    function annotationWithNewPoint(annotation: PolyLine, point: Float32Array) {
+      return <PolyLine>{
+        ...annotation,
+        points: [...annotation.points, point],
+      };
+    }
+
+    const point = getMousePositionInAnnotationCoordinates(
+      mouseState,
+      annotationLayer,
+    );
+    if (point === undefined)
+      return { newAnnotation: oldAnnotation, finished: false };
+
+    let newAnnotation;
+    let finished = false;
+    if (!triggered) {
+      // Show a preview of the point being added until a click is triggered.
+      newAnnotation = annotationWithUpdatedLastPoint(oldAnnotation, point);
+    } else {
+      // Check if the point is the same as the last point, if so, done
+      const lastPoint = oldAnnotation.points[oldAnnotation.points.length - 1];
+      const secondLastPoint =
+        oldAnnotation.points[oldAnnotation.points.length - 2];
+      finished = arraysEqual(lastPoint, secondLastPoint);
+      // Add the point to the annotation if not finished.
+      newAnnotation =
+        finished && oldAnnotation.points.length > 2
+          ? oldAnnotation
+          : annotationWithNewPoint(oldAnnotation, point);
+    }
+
+    const initialRelationships = this.storedRelationships;
+    const newRelationships = getSelectedAssociatedSegments(
+      annotationLayer,
+      this.getBaseSegment,
+    );
+    if (initialRelationships === undefined) {
+      newAnnotation.relatedSegments = newRelationships;
+    } else {
+      newAnnotation.relatedSegments = Array.from(
+        newRelationships,
+        (newSegments, i) => {
+          const initialSegments = initialRelationships[i];
+          newSegments = newSegments.filter((x) => !initialSegments.includes(x));
+          return BigUint64Array.from([...initialSegments, ...newSegments]);
+        },
+      );
+    }
+    if (triggered) {
+      // Store the initial relationships for the next time the tool is triggered.
+      // Otherwise just show a preview
+      this.storedRelationships = newAnnotation.relatedSegments;
+    }
+    return { newAnnotation, finished };
+  }
+
+  toJSON() {
+    return ANNOTATE_POLYLINE_TOOL_ID;
+  }
+
+  private removeLastPointFromAnnotation() {
+    function annotationWithoutLastPoint(annotation: PolyLine) {
+      return <PolyLine>{
+        ...annotation,
+        points: annotation.points.slice(0, -1),
+      };
+    }
+    const state = this.inProgressAnnotation.value;
+    if (state === undefined) return;
+    const annotation = state.reference.value;
+    if (annotation === null || annotation === undefined) return;
+    if ((annotation as PolyLine).points.length > 2) {
+      state.annotationLayer.source.update(
+        state.reference,
+        annotationWithoutLastPoint(annotation as PolyLine),
+      );
+    }
+    // If preferred, could use this to prevent polylines that are a single point.
+    // state.annotationLayer.source.delete(state.reference);
+  }
+
+  complete() {
+    this.removeLastPointFromAnnotation();
+    super.complete();
+  }
+
+  undo() {
+    this.removeLastPointFromAnnotation();
+  }
+}
+
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
   getInitialAnnotation(
     mouseState: MouseSelectionState,
@@ -1400,6 +1657,11 @@ registerLegacyTool(
   ANNOTATE_ELLIPSOID_TOOL_ID,
   (layer, options) =>
     new PlaceEllipsoidTool(<UserLayerWithAnnotations>layer, options),
+);
+registerLegacyTool(
+  ANNOTATE_POLYLINE_TOOL_ID,
+  (layer, options) =>
+    new PlacePolylineTool(<UserLayerWithAnnotations>layer, options),
 );
 
 const newRelatedSegmentKeyMap = EventActionMap.fromObject({
@@ -1716,6 +1978,8 @@ export function UserLayerWithAnnotationsMixin<
       );
       state.annotationIndex = mouseState.pickedAnnotationIndex!;
       state.annotationCount = mouseState.pickedAnnotationCount!;
+      state.annotationInstanceIndex = mouseState.pickedAnnotationInstanceIndex!;
+      state.annotationInstanceCount = mouseState.pickedAnnotationInstanceCount!;
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
@@ -1790,8 +2054,8 @@ export function UserLayerWithAnnotationsMixin<
                       numGeometryBytes,
                       properties.value,
                     );
-                  const annotationIndex = state.annotationIndex!;
-                  const annotationCount = state.annotationCount!;
+                  const annotationIndex = state.annotationInstanceIndex!;
+                  const annotationCount = state.annotationInstanceCount!;
                   annotation = handler.deserialize(
                     dataView,
                     baseOffset +
@@ -1800,6 +2064,7 @@ export function UserLayerWithAnnotationsMixin<
                     isLittleEndian,
                     rank,
                     state.annotationId!,
+                    annotationPropertySerializer.propertyGroupBytes[0],
                   );
                   annotationPropertySerializer.deserialize(
                     dataView,
@@ -1915,6 +2180,18 @@ export function UserLayerWithAnnotationsMixin<
                   properties: { value: properties },
                 } = annotationLayer.source;
                 const sourceReadonly = annotationLayer.source.readonly;
+                const defaultProperties =
+                  annotationTypeHandlers[annotation.type].defaultProperties(
+                    annotation,
+                  );
+                const allProperties = [
+                  ...defaultProperties.properties,
+                  ...properties,
+                ];
+                const allValues = [
+                  ...defaultProperties.values,
+                  ...annotation.properties,
+                ];
 
                 // Add the ID to the annotation details.
                 const label = document.createElement("div");
@@ -1936,8 +2213,10 @@ export function UserLayerWithAnnotationsMixin<
                 label.appendChild(idValueElement);
                 parent.appendChild(label);
 
-                for (let i = 0, count = properties.length; i < count; ++i) {
-                  const property = properties[i];
+                for (let i = 0, count = allProperties.length; i < count; ++i) {
+                  const property = allProperties[i];
+                  const value = allValues[i];
+
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
 
@@ -1960,7 +2239,6 @@ export function UserLayerWithAnnotationsMixin<
                   idElement.textContent = property.identifier;
                   nameWrapper.appendChild(idElement);
 
-                  const value = annotation.properties[i];
                   const valueElementWrapper = document.createElement("div");
                   let valueElement: HTMLElement | undefined;
                   // Just in case the frontend does not properly prevent
@@ -1980,7 +2258,6 @@ export function UserLayerWithAnnotationsMixin<
                   valueElementWrapper.classList.add(
                     "neuroglancer-annotation-property-value-wrapper",
                   );
-
                   if (property.type.startsWith("rgb")) {
                     // Colors
                     if (sourceReadonly) {
