@@ -25,8 +25,8 @@ pub fn free(ptr: *mut u8, size: usize) {
 }
 
 #[no_mangle]
-pub fn width(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
-    if ptr.is_null() || input_size == 0 || output_size == 0 {
+pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
+    if ptr.is_null() || input_size == 0 {
         return -1;
     }
 
@@ -35,23 +35,9 @@ pub fn width(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
     };
 
     match JxlImage::builder().read(data) {
-        Ok(image) => image.image_header().size.width as i32,
-        Err(_) => -2,
-    }
-}
-
-#[no_mangle]
-pub fn height(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
-    if ptr.is_null() || input_size == 0 || output_size == 0 {
-        return -1;
-    }
-
-    let data: &[u8] = unsafe {
-        slice::from_raw_parts(ptr, input_size)
-    };
-
-    match JxlImage::builder().read(data) {
-        Ok(image) => image.image_header().size.height as i32,
+        Ok(image) => (
+            (image.image_header().size.height << 31) | ((image.image_header().size.width & 0x7fffffff))
+        ) as i64,
         Err(_) => -2,
     }
 }
