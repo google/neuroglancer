@@ -594,7 +594,6 @@ class AnnotationUIProperty extends RefCounted {
     return inputs;
   }
 
-  // TODO odd bug when you change a value and then change a label here
   private createEnumDefaultSelector(
     enumProperty: AnnotationNumericPropertySpec,
   ) {
