@@ -1477,7 +1477,7 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
       description: "",
       relatedSegments: this.storedRelationships,
       points: [point, point],
-      properties: annotationLayer.source.properties.map((x) => x.default),
+      properties: annotationLayer.source.properties.value.map((x) => x.default),
     };
   }
 
