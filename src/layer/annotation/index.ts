@@ -58,6 +58,7 @@ import type {
 } from "#src/ui/annotations.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { fromCSV, toCSV } from "#src/util/csv.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
@@ -682,6 +683,13 @@ export class AnnotationUserLayer extends Base {
       renderScaleControls.element,
       tab.element.firstChild,
     );
+    if (this.localAnnotations) {
+      const downloadButton = document.createElement("button");
+      downloadButton.textContent = "Download";
+      downloadButton.title = "Save as csv";
+      tab.element.appendChild(downloadButton);
+      downloadButton.addEventListener("click", () => this.saveToCSV());
+    }
     {
       const checkbox = tab.registerDisposer(
         new TrackableBooleanCheckbox(
@@ -732,6 +740,52 @@ export class AnnotationUserLayer extends Base {
       this.annotationDisplayState.shaderControls.toJSON();
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;
+  }
+
+  saveToCSV() {
+    const { localAnnotations } = this;
+    if (!localAnnotations) return;
+    const json = this.toJSON();
+    const saveToFile = (data: string, filename: string) => {
+      const blob = new Blob([data], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    const { [ANNOTATIONS_JSON_KEY]: annotations, ...metadata } = json;
+    saveToFile(JSON.stringify(metadata), `annotations_metadata.json`);
+    const typeToAnnotations = new Map<string, any[]>();
+    for (const [index, annotation] of annotations.entries()) {
+      annotation.index = index;
+      typeToAnnotations.set(
+        annotation.type,
+        (typeToAnnotations.get(annotation.type) ?? []).concat([annotation]),
+      );
+    }
+    for (const [type, annotations] of typeToAnnotations) {
+      saveToFile(toCSV(annotations), `annotations_${type}.csv`);
+    }
+  }
+
+  loadFromCSV(metadata: any, csvs: string[]) {
+    const { localAnnotations } = this;
+    if (!localAnnotations) return;
+    const annotations: any[] = [];
+    for (const csv of csvs) {
+      for (const { index, ...annotation } of fromCSV(csv)) {
+        annotations[index ?? annotations.length] = annotation;
+      }
+    }
+    this.dataSources = [];
+    this.restoreState({
+      ...metadata,
+      [ANNOTATIONS_JSON_KEY]: annotations,
+    });
   }
 
   observeLayerColor(callback: () => void) {
