@@ -2216,6 +2216,11 @@ export function UserLayerWithAnnotationsMixin<
                 for (let i = 0, count = allProperties.length; i < count; ++i) {
                   const property = allProperties[i];
                   const value = allValues[i];
+                  // Readonly if regular property and source is readonly
+                  // or if we have a default property
+                  const defaultProperty =
+                    i < defaultProperties.properties.length;
+                  const readonlyProperty = sourceReadonly || defaultProperty;
 
                   const label = document.createElement("label");
                   label.classList.add("neuroglancer-annotation-property");
@@ -2243,7 +2248,7 @@ export function UserLayerWithAnnotationsMixin<
                   let valueElement: HTMLElement | undefined;
                   // Just in case the frontend does not properly prevent
                   // the user from editing read-only properties.
-                  const changeFunction = sourceReadonly
+                  const changeFunction = readonlyProperty
                     ? (inputValue: any) => {
                         inputValue;
                       }
@@ -2260,7 +2265,7 @@ export function UserLayerWithAnnotationsMixin<
                   );
                   if (property.type.startsWith("rgb")) {
                     // Colors
-                    if (sourceReadonly) {
+                    if (readonlyProperty) {
                       valueElementWrapper.appendChild(
                         makeReadonlyColorProperty(
                           value,
@@ -2303,7 +2308,7 @@ export function UserLayerWithAnnotationsMixin<
                       }
                     }
                   } else if (property.type === "bool") {
-                    if (sourceReadonly) {
+                    if (readonlyProperty) {
                       valueElement = document.createElement("span");
                       valueElement.textContent = value ? "True" : "False";
                     } else {
@@ -2317,7 +2322,7 @@ export function UserLayerWithAnnotationsMixin<
                     }
                   } else {
                     // Numeric or enums
-                    if (sourceReadonly) {
+                    if (readonlyProperty) {
                       valueElement = document.createElement("span");
                       const valueToSet = formatNumericProperty(
                         property as AnnotationNumericPropertySpec,
@@ -2397,7 +2402,7 @@ export function UserLayerWithAnnotationsMixin<
                     valueElement.classList.add(
                       "neuroglancer-annotation-property-value",
                     );
-                    valueElement.dataset.readonly = sourceReadonly.toString();
+                    valueElement.dataset.readonly = readonlyProperty.toString();
                     valueElementWrapper.appendChild(valueElement);
                   }
                   label.appendChild(valueElementWrapper);
