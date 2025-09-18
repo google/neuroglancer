@@ -185,9 +185,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
     private maxDownsamplingFactor: number = 8,
     private desiredFrameTimingMs = 1000 / 30,
     private downsamplingPersistenceDurationInFrames = 15,
-  /** If true, logs factor changes and timing stats to console */
-  private enableLogging: boolean = false,
-  /** If true, always use MIN timing regardless of supplied method argument */
+    /** If true, logs factor changes and timing stats to console */
+    private enableLogging: boolean = false,
+    /** If true, always use MIN timing regardless of supplied method argument */
   ) {
     this.validateConstructorArguments();
     for (let i = 1; i <= this.maxDownsamplingFactor; i *= 2) {
@@ -305,7 +305,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
     if (this.enableLogging) {
       // Only log when the applied factor actually changes compared to previous frame.
       if ((this as any)._lastLoggedFactor !== applied) {
-  const methodName = FrameTimingMethod[method];
+        const methodName = FrameTimingMethod[method];
         console.log(
           `[Downsampling] factor=${applied} (raw=${downsampleFactorBasedOnFramerate}) ` +
             `frameTime=${calculatedFrameTime.toFixed(2)}ms ` +
