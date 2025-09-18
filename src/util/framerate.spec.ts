@@ -68,7 +68,7 @@ describe("FrameRateCounter", () => {
     const frameRateCounter = new DownsamplingBasedOnFrameRateCalculator(
       9,
       8,
-      33,
+      100,
       15,
     );
 
