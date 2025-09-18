@@ -297,7 +297,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
     6 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
-    8 /* desiredFrameTimingMs */,
+    33 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
   private isContinuousCameraMotionInProgress = false;
