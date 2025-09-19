@@ -19,7 +19,7 @@ export enum FrameTimingMethod {
   MEAN = 1,
   MAX = 2,
 }
-
+const DEBUG_ADAPTIVE_FRAMERATE = false;
 interface QueryInfo {
   glQuery: WebGLQuery;
   frameNumber: number;
@@ -173,21 +173,20 @@ export class DownsamplingBasedOnFrameRateCalculator {
   private frameDeltas: number[] = [];
   private downsamplingRates: Map<number, number> = new Map();
   private frameCount = 0;
+  /** Cache of last logged applied factor to avoid noisy logs when DEBUG_ADAPTIVE_FRAMERATE */
+  private lastLoggedFactor: number | null = null;
 
   /**
    * @param numberOfStoredFrameDeltas The number of frame deltas to store. Oldest frame deltas are removed. Must be at least 1.
    * @param maxDownsamplingFactor The maximum factor for downsampling. Must be at least 2.
    * @param desiredFrameTimingMs The desired frame timing in milliseconds. The downsampling rate is based on a comparison of the actual frame timing to this value.
    * @param downsamplingPersistenceDurationInFrames The max number of frames over which a high downsampling rate persists.
-   */
+  */
   constructor(
     public numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
     private desiredFrameTimingMs = 1000 / 30,
     private downsamplingPersistenceDurationInFrames = 15,
-    /** If true, logs factor changes and timing stats to console */
-    private enableLogging: boolean = false,
-    /** If true, always use MIN timing regardless of supplied method argument */
   ) {
     this.validateConstructorArguments();
     for (let i = 1; i <= this.maxDownsamplingFactor; i *= 2) {
@@ -302,9 +301,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
     const applied = this.updateMaxTrackedDownsamplingRate(
       downsampleFactorBasedOnFramerate,
     );
-    if (this.enableLogging) {
+    if (DEBUG_ADAPTIVE_FRAMERATE) {
       // Only log when the applied factor actually changes compared to previous frame.
-      if ((this as any)._lastLoggedFactor !== applied) {
+      if (this.lastLoggedFactor !== applied) {
         const methodName = FrameTimingMethod[method];
         console.log(
           `[Downsampling] factor=${applied} (raw=${downsampleFactorBasedOnFramerate}) ` +
@@ -312,7 +311,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
             `target=${this.desiredFrameTimingMs.toFixed(2)}ms method=${methodName} ` +
             `frames=${this.frameCount}`,
         );
-        (this as any)._lastLoggedFactor = applied;
+        this.lastLoggedFactor = applied;
       }
     }
     return applied;
