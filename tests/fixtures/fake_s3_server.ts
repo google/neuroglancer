@@ -62,6 +62,8 @@ export function fakeS3ServerFixture(
   });
   if (msw !== undefined) {
     beforeEach(async () => {
+      console.log("start beforeEach");
+      const startTime = performance.now();
       const serverUrl = await s3Server();
       (await msw()).use(
         http.all(
@@ -128,7 +130,9 @@ export function fakeS3ServerFixture(
           },
         ),
       );
-    });
+      const endTime = performance.now();
+      console.log('s3 fixture time', endTime - startTime);
+    }, 30000);
   }
   return s3Server;
 }
