@@ -61,7 +61,7 @@ beforeAll(async () => {
       Uint8Array.of(charCode),
     );
   }
-});
+}, 30000);
 
 describe("s3://", () => {
   testKvStore(constantFixture(`s3://${BUCKET}/`));
