@@ -31,6 +31,7 @@ export function fakeS3ServerFixture(
     msw?: ReturnType<typeof mswFixture>;
   } = {},
 ): Fixture<string> {
+  console.log("create fake S3 server");
   const { msw } = options;
   const s3Server = fixture(async (stack) => {
     const proc = stack.use(
@@ -42,6 +43,8 @@ export function fakeS3ServerFixture(
     );
 
     const { resolve, reject, promise } = Promise.withResolvers<string>();
+
+    console.log("proc", proc);
 
     (async () => {
       for await (const line of readline.createInterface({

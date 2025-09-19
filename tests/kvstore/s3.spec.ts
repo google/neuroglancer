@@ -38,9 +38,20 @@ for (let i = 1; i <= 9; ++i) {
   SPECIAL_CHAR_CODES.push(i);
 }
 
+  // const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+
 beforeAll(async () => {
+  console.log("running before all");
+
+
+  // await wait(30000);
+
+
+  const timeStart = performance.now();
   // Add data to S3.
   await createBucket(fakeS3Server, BUCKET);
+  console.log("cp3");
   for (const [relativePath, content] of await getTestFiles()) {
     await writeObject(
       fakeS3Server,
@@ -49,6 +60,8 @@ beforeAll(async () => {
       new Uint8Array(content),
     );
   }
+
+  console.log("cp2");
 
   // Create another bucket for testing special character handling in list
   // operations.
@@ -61,6 +74,8 @@ beforeAll(async () => {
       Uint8Array.of(charCode),
     );
   }
+  const timeEnd = performance.now();
+  console.log(`beforeAll took ${timeEnd - timeStart}ms`);
 }, 30000);
 
 describe("s3://", () => {
