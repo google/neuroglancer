@@ -181,7 +181,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
    * @param maxDownsamplingFactor The maximum factor for downsampling. Must be at least 2.
    * @param desiredFrameTimingMs The desired frame timing in milliseconds. The downsampling rate is based on a comparison of the actual frame timing to this value.
    * @param downsamplingPersistenceDurationInFrames The max number of frames over which a high downsampling rate persists.
-  */
+   */
   constructor(
     public numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
