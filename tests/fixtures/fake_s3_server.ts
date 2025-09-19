@@ -38,7 +38,7 @@ export function fakeS3ServerFixture(
       spawn(
         "uv",
         ["--project", PYTHON_TEST_TOOLS_PATH, "run", "moto_server", "-p", "0"],
-        { stdio: ["ignore", "ignore", "pipe"] },
+        { stdio: ["ignore", "pipe", "pipe"] },
       ),
     );
 
@@ -46,9 +46,14 @@ export function fakeS3ServerFixture(
 
     console.log("proc", proc);
 
+    proc.stdout!.on("data", (data) => {
+      console.log("foo: ", data);
+    });
+
     (async () => {
+
       for await (const line of readline.createInterface({
-        input: proc.stderr,
+        input: proc.stdout,
       })) {
         console.log(`moto_server: ${line}`);
         const m = line.match(/Running on (http:\/\/[^\s]+)$/);
