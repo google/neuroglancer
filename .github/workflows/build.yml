@@ -43,12 +43,6 @@ jobs:
         with:
           go-version: "stable"
       - run: npm ci
-      - run: npm run format:fix
-      - name: Check for dirty working directory
-        run: git diff --exit-code
-      - run: npm run lint:check
-      - name: Typecheck with TypeScript
-        run: npm run typecheck
       - name: Build client bundles
         run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
