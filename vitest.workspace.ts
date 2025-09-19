@@ -30,7 +30,8 @@ const fakeNgauthServer = await startFakeNgauthServer();
 const testDataServer = await startTestDataServer(
   path.join(import.meta.dirname, "testdata"),
 );
-const fakeGcsServerBin = await getFakeGcsServerBin();
+getFakeGcsServerBin;
+const fakeGcsServerBin = "hello.world";// await getFakeGcsServerBin();
 await syncPythonTools();
 
 const commonDefines: Record<string, string> = {

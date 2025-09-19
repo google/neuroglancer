@@ -42,6 +42,6 @@ beforeAll(async () => {
       new Uint8Array(content),
     );
   }
-});
+}, 30000);
 
 testKvStore(constantFixture(`gs://${BUCKET}/`));

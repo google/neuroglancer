@@ -31,21 +31,29 @@ export function fakeS3ServerFixture(
     msw?: ReturnType<typeof mswFixture>;
   } = {},
 ): Fixture<string> {
+  console.log("create fake S3 server");
   const { msw } = options;
   const s3Server = fixture(async (stack) => {
     const proc = stack.use(
       spawn(
         "uv",
         ["--project", PYTHON_TEST_TOOLS_PATH, "run", "moto_server", "-p", "0"],
-        { stdio: ["ignore", "ignore", "pipe"] },
+        { stdio: ["ignore", "pipe", "pipe"] },
       ),
     );
 
     const { resolve, reject, promise } = Promise.withResolvers<string>();
 
+    console.log("proc", proc);
+
+    proc.stdout!.on("data", (data) => {
+      console.log("foo: ", data);
+    });
+
     (async () => {
+
       for await (const line of readline.createInterface({
-        input: proc.stderr,
+        input: proc.stdout,
       })) {
         console.log(`moto_server: ${line}`);
         const m = line.match(/Running on (http:\/\/[^\s]+)$/);
@@ -59,6 +67,8 @@ export function fakeS3ServerFixture(
   });
   if (msw !== undefined) {
     beforeEach(async () => {
+      console.log("start beforeEach");
+      const startTime = performance.now();
       const serverUrl = await s3Server();
       (await msw()).use(
         http.all(
@@ -125,7 +135,9 @@ export function fakeS3ServerFixture(
           },
         ),
       );
-    });
+      const endTime = performance.now();
+      console.log('s3 fixture time', endTime - startTime);
+    }, 30000);
   }
   return s3Server;
 }

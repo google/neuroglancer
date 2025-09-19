@@ -40,7 +40,7 @@ export async function getFakeGcsServerBin(): Promise<string> {
     // Note: For unknown reasons, using `await promisify(spawn)` in place of
     // `spawnSync` causes the vitest process to exit as soon as the child
     // process completes.
-    spawnSync(
+    const { error } = spawnSync(
       "go",
       [
         "install",
@@ -51,6 +51,9 @@ export async function getFakeGcsServerBin(): Promise<string> {
         stdio: ["ignore", "inherit", "inherit"],
       },
     );
+    if (error) {
+      throw error;
+    }
     console.log("Done building fake-gcs-server");
   }
   return serverBinPath;
