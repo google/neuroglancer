@@ -93,6 +93,7 @@ export interface ViewerUIState
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
+  adaptiveDownsamplingTargetMs: TrackableValue<number>;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
@@ -178,6 +179,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     showAxisLines: viewer.showAxisLines,
     wireFrame: viewer.wireFrame,
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
+    adaptiveDownsamplingTargetMs: viewer.adaptiveDownsamplingTargetMs,
     visibleLayerRoles: viewer.visibleLayerRoles,
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,

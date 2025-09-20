@@ -55,6 +55,7 @@ import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
   WatchableSet,
   WatchableValueInterface,
+  TrackableValue,
 } from "#src/trackable_value.js";
 import { registerNested } from "#src/trackable_value.js";
 import { ContextMenu } from "#src/ui/context_menu.js";
@@ -92,6 +93,7 @@ export interface LayerGroupViewerState {
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
+  adaptiveDownsamplingTargetMs: TrackableValue<number>;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
@@ -357,6 +359,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get enableAdaptiveDownsampling() {
     return this.viewerState.enableAdaptiveDownsampling;
+  }
+  get adaptiveDownsamplingTargetMs() {
+    return this.viewerState.adaptiveDownsamplingTargetMs;
   }
   get hideCrossSectionBackground3D() {
     return this.viewerState.hideCrossSectionBackground3D;

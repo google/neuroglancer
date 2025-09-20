@@ -175,7 +175,6 @@ export class DownsamplingBasedOnFrameRateCalculator {
   private frameCount = 0;
   /** Cache of last logged applied factor to avoid noisy logs when DEBUG_ADAPTIVE_FRAMERATE */
   private lastLoggedFactor: number | null = null;
-
   /**
    * @param numberOfStoredFrameDeltas The number of frame deltas to store. Oldest frame deltas are removed. Must be at least 1.
    * @param maxDownsamplingFactor The maximum factor for downsampling. Must be at least 2.
@@ -244,6 +243,13 @@ export class DownsamplingBasedOnFrameRateCalculator {
     return maxTrackedDownsamplingRate;
   }
 
+  /** Adjust the desired frame timing dynamically (e.g., user preference change). */
+  setDesiredFrameTimingMs(ms: number) {
+    if (Number.isFinite(ms) && ms > 0) {
+      this.desiredFrameTimingMs = ms;
+    }
+  }
+
   /* This doesn't reset stored frame deltas. Is usually called on a new continous camera move */
   resetForNewFrameSet() {
     this.lastFrameTime = null;
@@ -264,6 +270,11 @@ export class DownsamplingBasedOnFrameRateCalculator {
     this.frameCount++;
   }
 
+  /** Optional cleanup if calculators are discarded explicitly. */
+  dispose() {
+    // no-op after removal of global registry
+  }
+
   calculateFrameTimeInMs(
     method: FrameTimingMethod = FrameTimingMethod.MAX,
   ): number {
@@ -280,7 +291,9 @@ export class DownsamplingBasedOnFrameRateCalculator {
     }
   }
 
-  /** Should be called once per frame for proper downsampling persistence */
+  /** Should be called once per frame for proper downsampling persistence.
+   * @param method Frame timing statistic method.
+   */
   calculateDownsamplingRate(
     method: FrameTimingMethod = FrameTimingMethod.MEAN,
   ): number {

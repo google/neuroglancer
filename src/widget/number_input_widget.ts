@@ -59,14 +59,17 @@ export class NumberInputWidget extends RefCounted {
   }
 
   updateModel() {
-    let value = parseFloat(this.inputElement.value.trim());
+    const value = parseFloat(this.inputElement.value.trim());
     if (Number.isNaN(value)) {
       this.updateView();
       return;
     }
     try {
-      value = this.validator(value);
-      this.model.value = value;
+      const validated = this.validator(value);
+      // Assign even if same value; underlying model may suppress change events when unchanged.
+      this.model.value = validated;
+      // Ensure the clamped/validated value is reflected even if no change event emitted.
+      this.updateView();
     } catch {
       this.updateView();
     }
