@@ -408,6 +408,7 @@ function getCommonViewerState(viewer: Viewer) {
     showAxisLines: viewer.showAxisLines,
     wireFrame: viewer.wireFrame,
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
+    adaptiveDownsamplingTargetMs: viewer.adaptiveDownsamplingTargetMs,
     showScaleBar: viewer.showScaleBar,
     scaleBarOptions: viewer.scaleBarOptions,
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,

@@ -123,6 +123,10 @@ import {
   EventActionMap,
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
+import {
+  loadUserSettings,
+  bindTrackableToLocalStorage,
+} from "#src/util/local_user_settings.js";
 import { ScreenshotManager } from "#src/util/screenshot_manager.js";
 import { NullarySignal } from "#src/util/signal.js";
 import {
@@ -158,7 +162,6 @@ declare let NEUROGLANCER_CREDIT_LINK: CreditLink | CreditLink[] | undefined;
 export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
 }
-
 export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showHelpButton",
   "showSettingsButton",
@@ -425,6 +428,11 @@ export class Viewer extends RefCounted implements ViewerState {
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
+  // Desired frame timing target (ms) for adaptive downsampling; persisted via local storage
+  adaptiveDownsamplingTargetMs = new TrackableValue<number>(
+    33,
+    verifyFinitePositiveFloat,
+  );
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   hideCrossSectionBackground3D = new TrackableBoolean(false, false);
@@ -517,6 +525,37 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
+    // Load persisted user settings early
+    const persisted = loadUserSettings();
+    if (persisted.adaptiveDownsamplingEnabled !== undefined) {
+      this.enableAdaptiveDownsampling.value =
+        !!persisted.adaptiveDownsamplingEnabled;
+    }
+    if (
+      persisted.adaptiveDownsamplingTargetMs !== undefined &&
+      Number.isFinite(persisted.adaptiveDownsamplingTargetMs)
+    ) {
+      this.adaptiveDownsamplingTargetMs.value = Math.max(
+        1,
+        Math.min(1000, Math.round(persisted.adaptiveDownsamplingTargetMs)),
+      );
+    }
+    // Bind watchers for persistence
+    bindTrackableToLocalStorage(
+      this.enableAdaptiveDownsampling,
+      "adaptiveDownsamplingEnabled",
+    );
+    bindTrackableToLocalStorage(
+      this.adaptiveDownsamplingTargetMs,
+      "adaptiveDownsamplingTargetMs",
+      (v) => Math.max(1, Math.min(1000, Math.round(v))),
+    );
+    // Listener retained for symmetry; panels reference the trackable directly now.
+    this.registerDisposer(
+      this.adaptiveDownsamplingTargetMs.changed.add(() => {
+        /* no-op: trackable observers handle updates */
+      }),
+    );
     this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
     this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {

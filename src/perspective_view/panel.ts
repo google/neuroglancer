@@ -88,6 +88,7 @@ import { SharedObject } from "#src/worker_rpc.js";
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   enableAdaptiveDownsampling: WatchableValueInterface<boolean>;
+  adaptiveDownsamplingTargetMs: TrackableValue<number>;
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -294,18 +295,23 @@ export class PerspectivePanel extends RenderedDataPanel {
   // after a camera move
   // if a high downsample rate is applied, it persists for a few frames
   // to avoid flickering when the camera is moving
-  private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
-    6 /* numberOfStoredFrameDeltas */,
-    8 /* maxDownsamplingFactor */,
-    33 /* desiredFrameTimingMs */,
-    60 /* downsamplingPersistenceDurationInFrames */,
-  );
+  private frameRateCalculator: DownsamplingBasedOnFrameRateCalculator;
   private isContinuousCameraMotionInProgress = false;
   get shouldDownsample() {
     return (
       this.viewer.enableAdaptiveDownsampling.value &&
       this.isContinuousCameraMotionInProgress &&
       this.hasVolumeRendering
+    );
+  }
+
+  // Hook adaptive preference changes.
+  private attachAdaptiveDownsamplingPreferenceListener() {
+    const target = this.viewer.adaptiveDownsamplingTargetMs; // always present in ViewerUIState now
+    this.registerDisposer(
+      target.changed.add(() => {
+        this.frameRateCalculator.setDesiredFrameTimingMs(target.value);
+      }),
     );
   }
 
@@ -404,6 +410,14 @@ export class PerspectivePanel extends RenderedDataPanel {
     viewer: PerspectiveViewerState,
   ) {
     super(context, element, viewer);
+    // Initialize frame rate calculator from viewer target (always provided).
+    const initialTargetMs = this.viewer.adaptiveDownsamplingTargetMs.value;
+    this.frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
+      6,
+      8,
+      initialTargetMs,
+      60,
+    );
     this.sliceViewRenderHelper = this.registerDisposer(
       SliceViewRenderHelper.get(
         this.gl,
@@ -465,6 +479,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       }),
     );
     this.projectionParameters.changed.add(() => this.context.scheduleRedraw());
+
+    // Wire adaptive downsampling preference updates.
+    this.attachAdaptiveDownsamplingPreferenceListener();
 
     const sharedObject = (this.sharedObject = this.registerDisposer(
       new PerspectiveViewState(this),

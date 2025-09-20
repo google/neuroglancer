@@ -83,12 +83,31 @@ export class ViewerSettingsPanel extends SidePanel {
       scroll.appendChild(titleWidget.element);
     }
 
-    const addLimitWidget = (label: string, limit: TrackableValue<number>) => {
+    interface LimitWidgetOptions {
+      validator?: (v: number) => number;
+      outerLabel?: string; // If provided, wrap in a <label> separate from internal widget label.
+    }
+    const addLimitWidget = (
+      label: string,
+      limit: TrackableValue<number>,
+      options: LimitWidgetOptions = {},
+    ) => {
+      const { validator, outerLabel } = options;
       const widget = this.registerDisposer(
-        new NumberInputWidget(limit, { label }),
+        new NumberInputWidget(limit, {
+          label: outerLabel ? "" : label,
+          validator,
+        }),
       );
       widget.element.classList.add("neuroglancer-settings-limit-widget");
-      scroll.appendChild(widget.element);
+      if (outerLabel) {
+        const labelEl = document.createElement("label");
+        labelEl.textContent = outerLabel;
+        labelEl.appendChild(widget.element);
+        scroll.appendChild(labelEl);
+      } else {
+        scroll.appendChild(widget.element);
+      }
     };
     addLimitWidget(
       "GPU memory limit",
@@ -132,6 +151,19 @@ export class ViewerSettingsPanel extends SidePanel {
     addCheckbox(
       "Enable adaptive downsampling",
       viewer.enableAdaptiveDownsampling,
+    );
+    // Adaptive downsampling target (ms)
+    addLimitWidget(
+      "Adaptive downsampling target (ms)",
+      viewer.adaptiveDownsamplingTargetMs,
+      {
+        outerLabel: "Adaptive downsampling target (ms)",
+        validator: (v: number) => {
+          if (!Number.isFinite(v))
+            return viewer.adaptiveDownsamplingTargetMs.value;
+          return Math.max(1, Math.min(1000, Math.round(v)));
+        },
+      },
     );
 
     const addColor = (label: string, value: WatchableValueInterface<vec3>) => {
