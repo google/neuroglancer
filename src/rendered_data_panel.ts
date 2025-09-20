@@ -27,6 +27,7 @@ import {
   displayToLayerCoordinates,
   layerToDisplayCoordinates,
 } from "#src/render_coordinate_transform.js";
+import { StatusMessage } from "#src/status.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type {
@@ -745,6 +746,57 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           ref.dispose();
         }
       }
+    });
+
+    registerActionListener(element, "finish-annotation", () => {
+      const selectedLayer = this.viewer.selectedLayer.layer;
+      if (selectedLayer === undefined) {
+        return;
+      }
+      const userLayer = selectedLayer.layer;
+      if (userLayer === null || userLayer.tool.value === undefined) {
+        return;
+      }
+      const annotationTool = userLayer.tool.value;
+      if (
+        !annotationTool ||
+        !(
+          "complete" in annotationTool &&
+          typeof annotationTool.complete === "function"
+        )
+      ) {
+        StatusMessage.showTemporaryMessage(
+          `The selected layer (${JSON.stringify(
+            selectedLayer.name,
+          )}) does not have annotation tool with complete step.`,
+        );
+        return;
+      }
+      annotationTool.complete();
+    });
+
+    registerActionListener(element, "undo-annotation-step", () => {
+      const selectedLayer = this.viewer.selectedLayer.layer;
+      if (selectedLayer === undefined) {
+        return;
+      }
+      const userLayer = selectedLayer.layer;
+      if (userLayer === null || userLayer.tool.value === undefined) {
+        return;
+      }
+      const annotationTool = userLayer.tool.value;
+      if (
+        !annotationTool ||
+        !("undo" in annotationTool && typeof annotationTool.undo === "function")
+      ) {
+        StatusMessage.showTemporaryMessage(
+          `The selected layer (${JSON.stringify(
+            selectedLayer.name,
+          )}) does not have annotation tool with complete step.`,
+        );
+        return;
+      }
+      annotationTool.undo();
     });
 
     registerActionListener(
