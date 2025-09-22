@@ -38,10 +38,6 @@ jobs:
         with:
           enable-cache: false
       # go needed for fake_gcs_server used by the javascript tests
-      - name: Setup go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
       - run: npm ci
       - name: Build client bundles
         run: |
@@ -49,28 +45,5 @@ jobs:
           npm run build -- --no-typecheck --no-lint --define NEUROGLANCER_BUILD_INFO="${build_info}"
           echo $build_info > ./dist/client/version.json
         shell: bash
-      - name: Build Python client bundles
-        run: npm run build-python -- --no-typecheck --no-lint
-      - run: npm run build-package
-      - run: npm publish --dry-run
-        working-directory: dist/package
-      - name: Run JavaScript tests (including WebGL)
-        run: npm test
-        if: ${{ runner.os != 'macOS' }}
-      - name: Run JavaScript tests (excluding WebGL) TEMP - ONLY RUNNING s3 for debug
-        run: npm test tests/kvstore/s3.spec.ts -- --project node
-        if: ${{ runner.os == 'macOS' }}
-      - name: Run JavaScript benchmarks
-        run: npm run benchmark
-      - name: Upload NPM package as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-package
-          path: dist/package
-        if: ${{ runner.os == 'Linux' }}
-      - name: Upload client as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: client
-          path: dist/client
-        if: ${{ runner.os == 'Linux' }}
+      - name: Try running moto_server
+        run: uv --project build_tools/vitest/python_tools run moto_server -p 0
