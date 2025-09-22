@@ -46,14 +46,14 @@ export function fakeS3ServerFixture(
 
     console.log("proc", proc);
 
-    proc.stdout!.on("data", (data) => {
+    proc.stderr.on("data", (data) => {
       console.log("foo: ", data);
     });
 
     (async () => {
 
       for await (const line of readline.createInterface({
-        input: proc.stdout,
+        input: proc.stderr,
       })) {
         console.log(`moto_server: ${line}`);
         const m = line.match(/Running on (http:\/\/[^\s]+)$/);
