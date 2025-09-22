@@ -21,15 +21,15 @@ await execFileAsync("npm", ["run", "build-package"], {
 });
 
 // Update lockfiles in examples.
-await Promise.all(
-  (await glob("examples/*/*/package.json", { absolute: true, cwd: rootDir }))
-    .map((examplePackageJsonPath) => path.dirname(examplePackageJsonPath))
-    .map(async (exampleDir: string) => {
-      await execFileAsync("pnpm", ["install"], {
-        cwd: exampleDir,
-      });
-    }),
-);
+for (const examplePackageJsonPath of await glob("examples/*/*/package.json", {
+  absolute: true,
+  cwd: rootDir,
+})) {
+  const exampleDir = path.dirname(examplePackageJsonPath);
+  await execFileAsync("pnpm", ["install"], {
+    cwd: exampleDir,
+  });
+}
 
 await execFileAsync(
   "git",

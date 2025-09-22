@@ -1567,6 +1567,14 @@ packages:
     deprecated: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
     hasBin: true
 
+  valibot@1.1.0:
+    resolution: {integrity: sha512-Nk8lX30Qhu+9txPYTwM0cFlWLdPFsFr6LblzqIySfbZph9+BFsAHsNvHOymEviUepeIW6KFHzpX8TKhbptBXXw==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   verror@1.10.0:
     resolution: {integrity: sha512-ZZKSmDAEFOijERBLkmYfJ+vmk3w+7hOLYDNkRCuRuMJGEmqYNCNLyBBFwWKVMhfwaEF3WOd0Zlw86U/WC/+nYw==}
     engines: {'0': node >=0.6.0}
@@ -3084,10 +3092,13 @@ snapshots:
       gl-matrix: 3.1.0
       ikonate: https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89
       lodash-es: 4.17.21
+      msgpackr: 1.11.2
       nifti-reader-js: 0.6.8
       numcodecs: 0.3.2
+      valibot: 1.1.0
     transitivePeerDependencies:
       - bufferutil
+      - typescript
       - utf-8-validate
 
   nifti-reader-js@0.6.8:
@@ -3433,6 +3444,8 @@ snapshots:
   utility-types@3.11.0: {}
 
   uuid@3.4.0: {}
+
+  valibot@1.1.0: {}
 
   verror@1.10.0:
     dependencies:
