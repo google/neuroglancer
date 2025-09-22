@@ -66,7 +66,7 @@ jobs:
         run: npm test
         if: ${{ runner.os != 'macOS' }}
       - name: Run JavaScript tests (excluding WebGL)
-        run: npm test -- --project node
+        run: npm test -- --project mac
         if: ${{ runner.os == 'macOS' }}
       - name: Run JavaScript benchmarks
         run: npm run benchmark

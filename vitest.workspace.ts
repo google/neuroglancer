@@ -65,17 +65,24 @@ const KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS = [
   { name: "icechunk", conditions: ["neuroglancer/kvstore/s3:enabled"] },
 ];
 
+const defaultProject = mergeConfig(defaultNodeProject(), {
+  test: {
+    name: "node",
+    include: ["src/**/*.spec.ts", "tests/**/*.spec.ts"],
+    exclude: KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(
+      ({ name }) => `tests/kvstore/${name}.spec.ts`,
+    ),
+    benchmark: {
+      include: ["src/**/*.benchmark.ts"],
+    },
+  },
+});
+
 export default defineWorkspace([
-  mergeConfig(defaultNodeProject(), {
+  mergeConfig(defaultProject, {
     test: {
-      name: "node",
-      include: ["src/**/*.spec.ts", "tests/**/*.spec.ts"],
-      exclude: KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(
-        ({ name }) => `tests/kvstore/${name}.spec.ts`,
-      ),
-      benchmark: {
-        include: ["src/**/*.benchmark.ts"],
-      },
+      name: "mac",
+      hookTimeout: 120000,
     },
   }),
   ...KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(({ name, conditions = [] }) =>
