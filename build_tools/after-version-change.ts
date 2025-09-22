@@ -28,6 +28,10 @@ for (const examplePackageJsonPath of await glob("examples/*/*/package.json", {
   const exampleDir = path.dirname(examplePackageJsonPath);
   await execFileAsync("pnpm", ["install"], {
     cwd: exampleDir,
+    env: {
+      ...process.env,
+      COREPACK_ENABLE_AUTO_PIN: "0",
+    },
   });
 }
 
