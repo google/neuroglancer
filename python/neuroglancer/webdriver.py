@@ -19,8 +19,12 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
-from selenium.webdriver.common.bidi.log import ConsoleLogEntry
+if TYPE_CHECKING:
+    from selenium.webdriver.common.bidi.log import ConsoleLogEntry
+else:
+    ConsoleLogEntry = None
 
 LogListener = Callable[[ConsoleLogEntry], None]
 
