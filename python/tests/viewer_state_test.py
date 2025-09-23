@@ -43,24 +43,24 @@ def test_coordinate_space_from_json():
     assert x["z"] == viewer_state.DimensionScale(6e-9, "m")
     assert x[3] == viewer_state.DimensionScale(2, "s")
     assert x["t"] == viewer_state.DimensionScale(2, "s")
-    assert x.to_json() == {
-        "x": [4e-9, "m"],
-        "y": [5e-9, "m"],
-        "z": [6e-9, "m"],
-        "t": [2, "s"],
-    }
+    assert x.to_json() == [
+        {"name": "x", "scale": [4e-9, "m"]},
+        {"name": "y", "scale": [5e-9, "m"]},
+        {"name": "z", "scale": [6e-9, "m"]},
+        {"name": "t", "scale": [2, "s"]},
+    ]
 
 
 def test_coordinate_space_from_split():
     x = viewer_state.CoordinateSpace(
         names=["x", "y", "z", "t"], scales=[4, 5, 6, 2], units=["nm", "nm", "nm", "s"]
     )
-    assert x.to_json() == {
-        "x": [4e-9, "m"],
-        "y": [5e-9, "m"],
-        "z": [6e-9, "m"],
-        "t": [2, "s"],
-    }
+    assert x.to_json() == [
+        {"name": "x", "scale": [4e-9, "m"]},
+        {"name": "y", "scale": [5e-9, "m"]},
+        {"name": "z", "scale": [6e-9, "m"]},
+        {"name": "t", "scale": [2, "s"]},
+    ]
 
 
 def test_layers():
