@@ -76,6 +76,12 @@ def write_some_annotations(
             enum_values=[0, 1],
             enum_labels=["False", "True"],
         ),
+        neuroglancer.AnnotationPropertySpec(
+            id="p_uint32",
+            type="uint32",
+            default=1,
+            description="A uint32 property",
+        ),
     ]
 
     writer = neuroglancer.write_annotations.AnnotationWriter(
@@ -119,6 +125,7 @@ def write_some_annotations(
         p_enum1=3,
         p_fnum32=3.0,
         p_boola=0,
+        p_uint32=42,
     )
 
     writer.add_point([40, 20, 24])

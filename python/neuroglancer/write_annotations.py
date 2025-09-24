@@ -50,7 +50,7 @@ class Annotation(NamedTuple):
 _PROPERTY_DTYPES: dict[str, tuple[tuple[str] | tuple[str, tuple[int, ...]], int]] = {
     "uint8": (("|u1",), 1),
     "uint16": (("<u2",), 2),
-    "uint32": (("<u4",), 3),
+    "uint32": (("<u4",), 4),
     "int8": (("|i1",), 1),
     "int16": (("<i2",), 2),
     "int32": (("<i4",), 4),
