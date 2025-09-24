@@ -187,7 +187,7 @@ The spatial index levels should be computed as follows:
   - Define `maxCount(level)` to be the maximum over all `cell` positions of the size of
     `remaining_annotations(level, cell)`.
   - For each `cell`:
-    - Compute a subset `emitted(level, cell)` of `remaining_annotations(0, cell)` where each
+    - Compute a subset `emitted(level, cell)` of `remaining_annotations(level, cell)` where each
       annotation is chosen uniformly at random with probability `min(1, limit / maxCount(level))`.
     - This spatial index level maps `cell` to the list of annotations in `emitted(level, cell)`.
       The annotations are encoded in the [multiple annotation
