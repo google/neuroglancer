@@ -43,7 +43,7 @@ members:
   units specified by `dimensions`). All annotation geometry should be contained within the bounding
   box defined by `lower_bound` and `upper_bound`.
 - `"annotation_type"`: Indicates the annotation geometry type. Must be one of `"POINT"`, `"LINE"`,
-  `"AXIS_ALIGNED_BOUNDING_BOX"`, `"ELLIPSOID"`.
+  `"AXIS_ALIGNED_BOUNDING_BOX"`, `"ELLIPSOID"`, or `"POLYLINE"`.
 - `"properties"`: Array of JSON objects, each with the following members:
   - `"id"`: String value specifying unique identifier for the property. Must match the regular expression `/^[a-z][a-zA-Z0-9_]*$/`.
   - `"type"`: String value specifying the property type. Must be one of: `rgb` (represented as 3
