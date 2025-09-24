@@ -133,12 +133,14 @@ class AnnotationWriter:
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
         self.properties = list(properties)
-        self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
+        self.properties_sorted = sorted(
+            self.properties, key=lambda p: -_PROPERTY_DTYPES[p.type][1]
+        )
         self.annotations = []
         self.rank = coordinate_space.rank
         self._dtype = _get_dtype_for_geometry(
             annotation_type, coordinate_space.rank
-        ) + _get_dtype_for_properties(self.properties)
+        ) + _get_dtype_for_properties(self.properties_sorted)
         self.lower_bound = np.full(
             shape=(self.rank,), fill_value=float("inf"), dtype=np.float32
         )
@@ -161,7 +163,8 @@ class AnnotationWriter:
             geometry = ("geometry", "<f4", annotation_size)
             num_points = ("num_points", "<u4")
             return np.dtype(
-                [num_points, geometry] + _get_dtype_for_properties(self.properties)
+                [num_points, geometry]
+                + _get_dtype_for_properties(self.properties_sorted)
             )
         return self._dtype
 
@@ -265,7 +268,7 @@ class AnnotationWriter:
             encoded[()]["num_points"] = len(coords) // self.rank  # type: ignore[call-overload]
         encoded[()]["geometry"] = coords  # type: ignore[call-overload]
 
-        for i, p in enumerate(self.properties):
+        for i, p in enumerate(self.properties_sorted):
             default_value = p.default
             if p.id in kwargs:
                 default_value = kwargs.pop(p.id)
