@@ -50,8 +50,10 @@ import {
 } from "#src/trackable_boolean.js";
 import {
   makeCachedLazyDerivedWatchableValue,
+  WatchableValue,
   observeWatchable,
 } from "#src/trackable_value.js";
+import { AnnotationSchemaTab } from "#src/ui/annotation_schema_tab.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -398,7 +400,8 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
-  private localAnnotationProperties: AnnotationPropertySpec[] | undefined;
+  private localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
+    new WatchableValue([]);
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
@@ -440,6 +443,11 @@ export class AnnotationUserLayer extends Base {
       order: -100,
       getter: () => new RenderingOptionsTab(this),
     });
+    this.tabs.add("schema", {
+      label: "Schema",
+      order: 20,
+      getter: () => new AnnotationSchemaTab(this),
+    });
     this.tabs.default = "annotations";
   }
 
@@ -448,11 +456,13 @@ export class AnnotationUserLayer extends Base {
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
-    this.localAnnotationProperties = verifyOptionalObjectProperty(
+    const properties = verifyOptionalObjectProperty(
       specification,
       ANNOTATION_PROPERTIES_JSON_KEY,
       parseAnnotationPropertySpecs,
     );
+    this.localAnnotationProperties.value = properties ?? [];
+
     this.localAnnotationRelationships = verifyOptionalObjectProperty(
       specification,
       ANNOTATION_RELATIONSHIPS_JSON_KEY,
@@ -535,14 +545,21 @@ export class AnnotationUserLayer extends Base {
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     let hasLocalAnnotations = false;
-    let properties: AnnotationPropertySpec[] | undefined;
+    let properties:
+      | WatchableValue<readonly Readonly<AnnotationPropertySpec>[]>
+      | undefined;
     for (const loadedSubsource of subsources) {
       const { subsourceEntry } = loadedSubsource;
       const { local } = subsourceEntry.subsource;
-      const setProperties = (newProperties: AnnotationPropertySpec[]) => {
+      const setProperties = (
+        newProperties: WatchableValue<
+          readonly Readonly<AnnotationPropertySpec>[]
+        >,
+      ) => {
         if (
           properties !== undefined &&
-          stableStringify(newProperties) !== stableStringify(properties)
+          stableStringify(newProperties.value) !==
+            stableStringify(properties.value)
         ) {
           loadedSubsource.deactivate(
             "Annotation properties are not compatible",
@@ -560,12 +577,12 @@ export class AnnotationUserLayer extends Base {
           continue;
         }
         hasLocalAnnotations = true;
-        if (!setProperties(this.localAnnotationProperties ?? [])) continue;
+        if (!setProperties(this.localAnnotationProperties)) continue;
         loadedSubsource.activate((refCounted) => {
           const localAnnotations = (this.localAnnotations =
             new LocalAnnotationSource(
               loadedSubsource.loadedDataSource.transform,
-              this.localAnnotationProperties ?? [],
+              this.localAnnotationProperties,
               this.localAnnotationRelationships,
             ));
           try {
@@ -636,9 +653,19 @@ export class AnnotationUserLayer extends Base {
     const prevAnnotationProperties =
       this.annotationDisplayState.annotationProperties.value;
     if (
-      stableStringify(prevAnnotationProperties) !== stableStringify(properties)
+      properties !== undefined &&
+      stableStringify(prevAnnotationProperties) !==
+        stableStringify(properties.value)
     ) {
-      this.annotationDisplayState.annotationProperties.value = properties;
+      this.registerDisposer(
+        properties.changed.add(() => {
+          this.annotationDisplayState.annotationProperties.value =
+            properties !== undefined ? [...properties.value] : [];
+        }),
+      );
+      this.annotationDisplayState.annotationProperties.value = [
+        ...properties.value,
+      ];
     }
   }
 
@@ -717,7 +744,7 @@ export class AnnotationUserLayer extends Base {
       x[ANNOTATIONS_JSON_KEY] = this.localAnnotationsJson;
     }
     x[ANNOTATION_PROPERTIES_JSON_KEY] = annotationPropertySpecsToJson(
-      this.localAnnotationProperties,
+      this.localAnnotationProperties.value,
     );
     const { localAnnotationRelationships } = this;
     x[ANNOTATION_RELATIONSHIPS_JSON_KEY] =
