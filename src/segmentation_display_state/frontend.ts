@@ -48,18 +48,28 @@ import { isWithinSelectionPanel } from "#src/ui/selection_details.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import { wrapSigned32BitIntegerToUint64 } from "#src/util/bigint.js";
 import { setClipboard } from "#src/util/clipboard.js";
-import { useWhiteBackground } from "#src/util/color.js";
+import {
+  packColor,
+  serializeColor,
+  TrackableRGB,
+  useWhiteBackground,
+} from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { measureElementClone } from "#src/util/dom.js";
-import type { vec3 } from "#src/util/geom.js";
-import { kOneVec, vec4 } from "#src/util/geom.js";
+import { kOneVec, vec3, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import { ColorWidget } from "#src/widget/color.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeEyeButton } from "#src/widget/eye_button.js";
 import { makeFilterButton } from "#src/widget/filter_button.js";
 import { makeStarButton } from "#src/widget/star_button.js";
+
+declare const SEGMENT_LIST_COLOR_WIDGET: boolean | undefined;
+const SEGMENT_LIST_COLOR_WIDGET_ENABLED =
+  typeof SEGMENT_LIST_COLOR_WIDGET !== "undefined" &&
+  SEGMENT_LIST_COLOR_WIDGET === true;
 
 export class Uint64MapEntry {
   constructor(
@@ -293,6 +303,8 @@ export function bindSegmentListWidth(
 const segmentWidgetTemplate = (() => {
   const template = document.createElement("div");
   template.classList.add("neuroglancer-segment-list-entry");
+  template.title =
+    "Right click to move to segment, alt+click to set color, alt+shift+click to unset color";
   const stickyContainer = document.createElement("div");
   stickyContainer.classList.add("neuroglancer-segment-list-entry-sticky");
   template.appendChild(stickyContainer);
@@ -337,6 +349,11 @@ const segmentWidgetTemplate = (() => {
   filterElement.classList.add("neuroglancer-segment-list-entry-filter");
   const filterIndex = template.childElementCount;
   template.appendChild(filterElement);
+  const colorWidgetIndex = template.childElementCount;
+  const colorWidget = template.appendChild(ColorWidget.template());
+  colorWidget.classList.add("neuroglancer-segment-list-entry-color-widget");
+  colorWidget.classList.toggle("hidden", !SEGMENT_LIST_COLOR_WIDGET_ENABLED);
+  colorWidget.title = "Set segment color (right click to unset)";
   return {
     template,
     copyContainerIndex,
@@ -347,6 +364,7 @@ const segmentWidgetTemplate = (() => {
     labelIndex,
     filterIndex,
     starIndex,
+    colorWidgetIndex,
     unmappedIdIndex: -1,
     unmappedCopyIndex: -1,
   };
@@ -528,6 +546,34 @@ function makeRegisterSegmentWidgetEventHandlers(
       const { selectedSegments } = displayState.segmentationGroupState.value;
       selectedSegments.set(id, !selectedSegments.has(id));
     });
+    const trackableRGB = new TrackableRGB(vec3.fromValues(0, 0, 0));
+    trackableRGB.changed.add(() => {
+      const testU = BigInt(packColor(trackableRGB.value));
+      const idString = element.dataset.id!;
+      const id = BigInt(idString);
+      displayState.segmentStatedColors.value.delete(id);
+      displayState.segmentStatedColors.value.set(id, testU);
+    });
+    const colorWidget = new ColorWidget(
+      trackableRGB,
+      undefined,
+      children[template.colorWidgetIndex] as HTMLInputElement,
+      () => {
+        const idString = element.dataset.id!;
+        const id = BigInt(idString);
+        displayState.segmentStatedColors.value.delete(id);
+      },
+      false,
+    );
+    element.addEventListener("mousedown", (event: MouseEvent) => {
+      if (event.altKey) {
+        if (event.shiftKey) {
+          colorWidget.unsetHandler();
+        } else {
+          colorWidget.element.showPicker();
+        }
+      }
+    });
   };
 }
 
@@ -653,14 +699,24 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     const idContainer = stickyChildren[
       template.idContainerIndex
     ] as HTMLElement;
+    let color = getBaseObjectColor(this.displayState, mapped) as vec3;
     setSegmentIdElementStyle(
       idContainer.children[template.idIndex] as HTMLElement,
-      getBaseObjectColor(this.displayState, mapped) as vec3,
+      color,
+      !SEGMENT_LIST_COLOR_WIDGET_ENABLED &&
+        !!this.displayState?.segmentStatedColors.value.has(mapped),
     );
+    children[template.colorWidgetIndex] as HTMLInputElement;
+    if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+      setColorWidgetColor(
+        children[template.colorWidgetIndex] as HTMLInputElement,
+        color,
+        !!this.displayState?.segmentStatedColors.value.has(mapped),
+      );
+    }
     const { unmappedIdIndex } = template;
     if (unmappedIdIndex !== -1) {
       let unmappedIdString: string | undefined;
-      let color: vec3;
       if (
         displayState!.baseSegmentColoring.value &&
         (unmappedIdString = container.dataset.unmappedId) !== undefined
@@ -678,9 +734,23 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
   }
 }
 
-function setSegmentIdElementStyle(element: HTMLElement, color: vec3) {
+function setSegmentIdElementStyle(
+  element: HTMLElement,
+  color: vec3,
+  stated = false,
+) {
   element.style.backgroundColor = getCssColor(color);
   element.style.color = useWhiteBackground(color) ? "white" : "black";
+  element.classList.toggle("stated-color", stated);
+}
+
+function setColorWidgetColor(
+  element: HTMLInputElement,
+  color: vec3,
+  stated: boolean,
+) {
+  element.value = serializeColor(color.subarray(0, 3) as vec3);
+  element.classList.toggle("stated-color", stated);
 }
 
 export class SegmentWidgetWithExtraColumnsFactory extends SegmentWidgetFactory<SegmentWidgetWithExtraColumnsTemplate> {
@@ -867,6 +937,9 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
     displayState.baseSegmentColoring.changed.add(callback),
   );
   context.registerDisposer(displayState.hoverHighlight.changed.add(callback));
+  context.registerDisposer(
+    displayState.segmentStatedColors.changed.add(callback),
+  );
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(

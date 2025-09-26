@@ -127,6 +127,11 @@
   visibility: visible;
 }
 
+.neuroglancer-segment-list-entry-color-widget.hidden {
+  position: absolute;
+  visibility: hidden;
+}
+
 .neuroglancer-segment-query-result-tag-list {
   display: grid;
   grid-auto-rows: auto;
