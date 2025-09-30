@@ -45,7 +45,7 @@ export async function fetchWithBossCredentials(
       credentialsProvider,
       input,
       init,
-      (credentials) => {
+      async (credentials) => {
         const headers = new Headers(init.headers);
         headers.set("Authorization", `Bearer ${credentials}`);
         return { ...init, headers };
