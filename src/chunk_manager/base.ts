@@ -110,6 +110,10 @@ export interface ChunkSourceParametersConstructor<T> {
   RPC_ID: string;
 }
 
+export interface ChunkSourceStateConstructor<T> {
+  new (): T;
+}
+
 export class LayerChunkProgressInfo {
   numVisibleChunksNeeded = 0;
   numVisibleChunksAvailable = 0;

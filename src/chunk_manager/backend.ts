@@ -450,8 +450,11 @@ function startChunkDownload(chunk: Chunk) {
     (error: any) => {
       if (chunk.downloadAbortController === downloadAbortController) {
         chunk.downloadAbortController = undefined;
-        chunk.downloadFailed(error);
-        console.log(`Error retrieving chunk ${chunk}: ${error}`);
+        if (error === "retry") {
+        } else {
+          chunk.downloadFailed(error);
+          console.log(`Error retrieving chunk ${chunk}: ${error}`);
+        }
       }
     },
   );
