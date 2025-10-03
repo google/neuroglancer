@@ -140,6 +140,13 @@ const DATA_TYPE_CONVERSIONS = new Map([
   [NiftiDataType.INT64, { dataType: DataType.UINT64 }],
   [NiftiDataType.UINT64, { dataType: DataType.UINT64 }],
   [NiftiDataType.FLOAT32, { dataType: DataType.FLOAT32 }],
+  // Downcast unsupported float64 to float32 for visualization.
+  [
+    NiftiDataType.FLOAT64,
+    { dataType: DataType.FLOAT32, forceConvertFrom: NiftiDataType.FLOAT64 },
+  ],
+  // Some NIFTI variants may encode float16 (not enumerated here); if encountered treat as float32.
+  // (FLOAT16 is not part of this enum; placeholder for future library update.)
 ]);
 
 registerPromiseRPC(
@@ -295,7 +302,14 @@ export class NiftiVolumeChunkSource extends WithParameters(
       this.parameters.url,
       { signal },
     );
-    const imageBuffer = readImage(data.header, data.uncompressedData);
+    let imageBuffer = readImage(data.header, data.uncompressedData);
+    // If original header datatype was FLOAT64 (downcast) convert the buffer to Float32.
+    if (data.header.datatypeCode === NiftiDataType.FLOAT64) {
+      const src = new Float64Array(imageBuffer);
+      const dst = new Float32Array(src.length);
+      for (let i = 0; i < src.length; ++i) dst[i] = src[i];
+      imageBuffer = dst.buffer;
+    }
     await decodeRawChunk(
       chunk,
       signal,
