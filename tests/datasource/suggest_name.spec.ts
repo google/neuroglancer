@@ -25,6 +25,8 @@ test.for([
   ["http://localhost/path/to/array", "array"],
   ["http://localhost/path/to/group/|zarr3:path/to/array/", "array"],
   ["brainmaps://foo:bar:baz", "baz"],
+  ["http://localhost/path/to/array/?a=b", "array"],
+  ["http://localhost/path/to/array?a=b", "array"],
 ])("%s -> %s", async ([url, expectedName]) => {
   const registry = await datasourceProviderFixture();
   expect(registry.suggestLayerName(url)).toEqual(expectedName);

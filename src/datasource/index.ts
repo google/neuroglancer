@@ -35,6 +35,7 @@ import {
   extractQueryAndFragment,
   finalPipelineUrlComponent,
   parsePipelineUrlComponent,
+  parseUrlSuffix,
   splitPipelineUrl,
 } from "#src/kvstore/url.js";
 import type { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
@@ -607,7 +608,9 @@ export class DataSourceRegistry extends RefCounted {
     for (let i = parts.length - 1; i >= 0; --i) {
       let { suffix } = parts[i];
       if (!suffix) continue;
-      suffix = suffix.replace(/^\/+/, "").replace(/\/+$/, "");
+      const { authorityAndPath } = parseUrlSuffix(suffix);
+      if (!authorityAndPath) continue;
+      suffix = authorityAndPath.replace(/^\/+/, "").replace(/\/+$/, "");
       if (!suffix) continue;
       return suggestLayerNameBasedOnSeparator(suffix);
     }
