@@ -20,6 +20,10 @@ import type {
   SingleChannelMetadata,
   ChannelMetadata,
 } from "#src/datasource/index.js";
+import {
+  joinBaseUrlAndPath,
+  kvstoreEnsureDirectoryPipelineUrl,
+} from "#src/kvstore/url.js";
 import { parseRGBColorSpecification } from "#src/util/color.js";
 import {
   parseArray,
@@ -269,7 +273,9 @@ function parseMultiscaleScale(
     "coordinateTransformations",
     (x) => parseOmeCoordinateTransforms(rank, x),
   );
-  const scaleUrl = `${url}${path}/`;
+  const scaleUrl = kvstoreEnsureDirectoryPipelineUrl(
+    joinBaseUrlAndPath(url, path),
+  );
   return { url: scaleUrl, transform };
 }
 
