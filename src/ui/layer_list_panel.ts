@@ -363,18 +363,9 @@ export class LayerListPanel extends SidePanel {
       // Watch for showLayerPanel configuration changes and hide/show button accordingly
       this.registerDisposer(
         this.showLayerPanel.changed.add(() => {
-          if (this.showLayerPanel!.value) {
-            // Configuration enabled - show button
-            if (!toggleButton.element.parentElement) {
-              titleBar.appendChild(toggleButton.element);
-            }
-          } else {
-            // Configuration disabled - hide button
-            if (toggleButton.element.parentElement) {
-              toggleButton.element.remove();
-            }
-          }
-        }),
+          toggleButton.element.style.display = this.showLayerPanel!.value
+            ? ""
+            : "none";
       );
     }
     itemContainer.classList.add("neuroglancer-layer-list-panel-items");
