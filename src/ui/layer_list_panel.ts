@@ -366,6 +366,7 @@ export class LayerListPanel extends SidePanel {
           toggleButton.element.style.display = this.showLayerPanel!.value
             ? ""
             : "none";
+        }),
       );
     }
     itemContainer.classList.add("neuroglancer-layer-list-panel-items");
