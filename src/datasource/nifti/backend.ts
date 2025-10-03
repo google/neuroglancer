@@ -306,8 +306,8 @@ export class NiftiVolumeChunkSource extends WithParameters(
     // If original header datatype was FLOAT64 (downcast) convert the buffer to Float32.
     if (data.header.datatypeCode === NiftiDataType.FLOAT64) {
       const src = new Float64Array(imageBuffer);
-      const dst = new Float32Array(src.length);
-      for (let i = 0; i < src.length; ++i) dst[i] = src[i];
+      let dst = new Float32Array(src.length);
+      dst = Float32Array.from(src);
       imageBuffer = dst.buffer;
     }
     await decodeRawChunk(
