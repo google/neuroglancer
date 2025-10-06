@@ -141,10 +141,7 @@ const DATA_TYPE_CONVERSIONS = new Map([
   [NiftiDataType.UINT64, { dataType: DataType.UINT64 }],
   [NiftiDataType.FLOAT32, { dataType: DataType.FLOAT32 }],
   // Downcast unsupported float64 to float32 for visualization.
-  [
-    NiftiDataType.FLOAT64,
-    { dataType: DataType.FLOAT32, forceConvertFrom: NiftiDataType.FLOAT64 },
-  ],
+  [NiftiDataType.FLOAT64, { dataType: DataType.FLOAT32 }],
   // Some NIFTI variants may encode float16 (not enumerated here); if encountered treat as float32.
   // (FLOAT16 is not part of this enum; placeholder for future library update.)
 ]);
