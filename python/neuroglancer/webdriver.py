@@ -22,7 +22,7 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from selenium.webdriver.common.bidi.script import ConsoleLogEntry
+    from selenium.webdriver.common.bidi.log import ConsoleLogEntry
 else:
     ConsoleLogEntry = None
 

@@ -43,7 +43,7 @@ members:
   units specified by `dimensions`). All annotation geometry should be contained within the bounding
   box defined by `lower_bound` and `upper_bound`.
 - `"annotation_type"`: Indicates the annotation geometry type. Must be one of `"POINT"`, `"LINE"`,
-  `"AXIS_ALIGNED_BOUNDING_BOX"`, `"ELLIPSOID"`.
+  `"AXIS_ALIGNED_BOUNDING_BOX"`, `"ELLIPSOID"`, or `"POLYLINE"`.
 - `"properties"`: Array of JSON objects, each with the following members:
   - `"id"`: String value specifying unique identifier for the property. Must match the regular expression `/^[a-z][a-zA-Z0-9_]*$/`.
   - `"type"`: String value specifying the property type. Must be one of: `rgb` (represented as 3
@@ -187,7 +187,7 @@ The spatial index levels should be computed as follows:
   - Define `maxCount(level)` to be the maximum over all `cell` positions of the size of
     `remaining_annotations(level, cell)`.
   - For each `cell`:
-    - Compute a subset `emitted(level, cell)` of `remaining_annotations(0, cell)` where each
+    - Compute a subset `emitted(level, cell)` of `remaining_annotations(level, cell)` where each
       annotation is chosen uniformly at random with probability `min(1, limit / maxCount(level))`.
     - This spatial index level maps `cell` to the list of annotations in `emitted(level, cell)`.
       The annotations are encoded in the [multiple annotation

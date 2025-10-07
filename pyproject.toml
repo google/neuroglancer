@@ -7,10 +7,9 @@ readme = "README.md"
 authors = [
   { name = "Jeremy Maitin-Shepard", email = "jbms@google.com" },
 ]
-license = { file = "LICENSE" }
+license = "Apache-2.0"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
-  "License :: OSI Approved :: Apache Software License",
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = [

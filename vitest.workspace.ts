@@ -76,6 +76,9 @@ export default defineWorkspace([
       benchmark: {
         include: ["src/**/*.benchmark.ts"],
       },
+      // On Github actions macos runners, s3 fixture can take a long time for
+      // some reason.
+      hookTimeout: 120000,
     },
   }),
   ...KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(({ name, conditions = [] }) =>

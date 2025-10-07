@@ -2,7 +2,7 @@
   "name": "neuroglancer",
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
-  "version": "2.40.1",
+  "version": "2.41.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google/neuroglancer.git"
