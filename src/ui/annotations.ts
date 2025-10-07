@@ -397,7 +397,10 @@ export class AnnotationLayerView extends Tab {
           (x) =>
             x.sourceIndex === layerSelectionState.annotationSourceIndex &&
             (layerSelectionState.annotationSubsource === undefined ||
-              x.subsourceId === layerSelectionState.annotationSubsource),
+              x.subsourceId === layerSelectionState.annotationSubsource) &&
+            (layerSelectionState.annotationSubsubsourceId === undefined ||
+              x.subsubsourceId ===
+                layerSelectionState.annotationSubsubsourceId),
         );
         if (annotationLayerState === undefined) return undefined;
         return { annotationId, annotationLayerState, pin };
