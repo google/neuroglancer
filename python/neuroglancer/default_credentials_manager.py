@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    aws_credentials,
     boss_credentials,
     credentials_provider,
     dvid_credentials,
@@ -44,6 +45,11 @@ default_credentials_manager.register(
     lambda parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider(
         parameters
     ),
+)
+
+default_credentials_manager.register(
+    "s3",
+    lambda _parameters: aws_credentials.get_aws_application_default_credentials_provider(),
 )
 
 

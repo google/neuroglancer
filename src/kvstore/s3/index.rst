@@ -43,7 +43,28 @@ Capabilities
 Authentication
 --------------
 
-Currently, only anonymous access is supported.
+When not using the :ref:`Python API<python-api>`:
+
+- The :file:`s3://{bucket}/{path}` syntax implies anonymous access, meaning the
+  :file:`{bucket}` must allow public read access without `requester pays
+  <https://docs.aws.amazon.com/AmazonS3/latest/userguide/RequesterPaysBuckets.html>`__. Refer to the AWS
+  documentation for `details on making buckets publicly accessible
+  <https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-management.html>`__.
+
+When using the :ref:`Python API<python-api>` with credentials enabled:
+
+- The :file:`s3://{bucket}/{path}` syntax uses the `AWS Default
+  Credentials
+  <https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html>`__,
+  if available.
+
+
+Required permissions
+--------------------
+
+- The ``s3:GetObject`` permission is required for reading.
+- Additionally, the ``s3:ListBucket`` permission is required for listing
+  directories.
 
 CORS
 ----
