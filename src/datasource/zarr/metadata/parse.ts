@@ -362,6 +362,31 @@ export function parseV2Metadata(
       verifyObject(compressor);
       const id = verifyObjectProperty(compressor, "id", verifyString);
       switch (id) {
+        case "imagecodecs_jpegxl":
+          {
+            // bitspersample may be omitted or explicitly null. In either case, fall back to dtype size.
+            const bitspersampleRaw = verifyOptionalObjectProperty(
+              compressor,
+              "bitspersample",
+              (v) => (v === null ? null : verifyInt(v)),
+              null,
+            );
+            const bitspersample =
+              bitspersampleRaw == null
+                ? DATA_TYPE_BYTES[dataType] * 8
+                : bitspersampleRaw;
+            const chunkElements = chunkShape.reduce((a, b) => a * b, 1);
+            // For JPEG XL we encode an entire chunk (all z-slices) as one codestream.
+            codecs.push({
+              name: "jpegxl",
+              configuration: {
+                bitspersample,
+                chunkElements,
+                chunkShape: Array.from(chunkShape),
+              },
+            });
+          }
+          break;
         case "blosc":
           codecs.push({
             name: "blosc",
