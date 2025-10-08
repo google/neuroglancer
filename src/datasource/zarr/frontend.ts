@@ -58,6 +58,7 @@ import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js"
 import type { CompletionResult } from "#src/kvstore/context.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import {
+  joinBaseUrlAndPath,
   kvstoreEnsureDirectoryPipelineUrl,
   parseUrlSuffix,
   pipelineUrlJoin,
@@ -388,13 +389,13 @@ async function getMetadata(
     const [zarray, zattrs] = await Promise.all([
       getJsonResource(
         sharedKvStoreContext,
-        `${url}.zarray`,
+        joinBaseUrlAndPath(url, ".zarray"),
         "zarr v2 array metadata",
         options,
       ),
       getJsonResource(
         sharedKvStoreContext,
-        `${url}.zattrs`,
+        joinBaseUrlAndPath(url, ".zattrs"),
         "zarr v2 attributes",
         options,
       ),
@@ -424,7 +425,7 @@ async function getMetadata(
   if (options.zarrVersion === 3) {
     const zarrJson = await getJsonResource(
       sharedKvStoreContext,
-      `${url}zarr.json`,
+      joinBaseUrlAndPath(url, "zarr.json"),
       "zarr v3 metadata",
       options,
     );
