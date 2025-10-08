@@ -1,0 +1,29 @@
+[
+  {
+    "file": "gray_u8_128.jxl",
+    "width": 1,
+    "height": 1,
+    "channels": 1,
+    "bytesPerSample": 1,
+    "kind": "u8",
+    "value": 128
+  },
+  {
+    "file": "gray_u16_40000.jxl",
+    "width": 1,
+    "height": 1,
+    "channels": 1,
+    "bytesPerSample": 2,
+    "kind": "u16",
+    "value": 40000
+  },
+  {
+    "file": "gray_f32_0_25.jxl",
+    "width": 1,
+    "height": 1,
+    "channels": 1,
+    "bytesPerSample": 4,
+    "kind": "f32",
+    "value": 0.25
+  }
+]

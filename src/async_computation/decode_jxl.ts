@@ -22,8 +22,8 @@ registerAsyncComputation(
   decodeJxl,
   async (
     data: Uint8Array,
-    area: number | undefined,
-    numComponents: number | undefined,
+    area: number,
+    numComponents: number,
     bytesPerPixel: number,
   ) => {
     const result = await decompressJxl(

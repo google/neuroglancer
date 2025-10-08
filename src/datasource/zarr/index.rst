@@ -78,6 +78,7 @@ Supported compressors:
 - null (raw)
 - zlib
 - zstd
+- jpegxl
 
 Filters are not supported.
 

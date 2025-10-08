@@ -16,7 +16,7 @@
 
 import "#src/datasource/zarr/codec/blosc/resolve.js";
 import "#src/datasource/zarr/codec/zstd/resolve.js";
-
+import "#src/datasource/zarr/codec/jpegxl/resolve.js";
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
