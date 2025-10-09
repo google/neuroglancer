@@ -24,10 +24,8 @@ pub fn free(ptr: *mut u8, size: usize) {
     }
 }
 
-/// Returns image width from header metadata without decoding any frame.
-/// Error codes:
-///  -1 invalid pointer/size
-///  -2 header parse failure
+/// Returns width and height (no frame decode) packed into i64: bits 0..30 width, 31..61 height.
+/// Error codes: -1 invalid args, -2 parse failure.
 #[no_mangle]
 pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
     if ptr.is_null() || input_size == 0 {
@@ -39,11 +37,47 @@ pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
     };
 
     match JxlImage::builder().read(data) {
-        Ok(image) => (
-            ((image.image_header().size.height as i64) << 31) | (((image.image_header().size.width as i64) & 0x7fffffff))
-        ) as i64,
+        Ok(image) => {
+            let w = image.image_header().size.width as i64 & 0x7fffffff;
+            let h = image.image_header().size.height as i64 & 0x7fffffff;
+            (h << 31) | w
+        }
         Err(_) => -2,
     }
+}
+
+/// Combined metadata probe returning width, height, frame count in one call without decoding frames.
+/// Encoded in i128: bits 0..30 width, 31..61 height, 62..92 frames. (All 31-bit slots.)
+/// Returns negative on error (fits in i128). For JS FFI you may prefer a separate pointer-based variant.
+#[no_mangle]
+pub fn width_height_frames(ptr: *mut u8, input_size: usize) -> i128 {
+    if ptr.is_null() || input_size == 0 { return -1; }
+    let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
+    let image = match JxlImage::builder().read(data) { Ok(img) => img, Err(_) => return -2 };
+    let w = image.image_header().size.width as i128 & 0x7fffffff;
+    let h = image.image_header().size.height as i128 & 0x7fffffff;
+    let frames_loaded = image.num_loaded_keyframes() as i128; // may be 0 pre-render
+    let f = if frames_loaded <= 0 { 1 } else { frames_loaded & 0x7fffffff };
+    (f << 62) | (h << 31) | w
+}
+
+/// Combined metadata probe using an output buffer: writes [width, height, frames] as u32.
+/// Returns 0 on success, negative error codes like width_height_frames.
+#[no_mangle]
+pub fn width_height_frames_out(ptr: *mut u8, input_size: usize, out: *mut u32) -> i32 {
+    if ptr.is_null() || input_size == 0 || out.is_null() { return -1; }
+    let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
+    let image = match JxlImage::builder().read(data) { Ok(img) => img, Err(_) => return -2 };
+    let w = image.image_header().size.width as u32;
+    let h = image.image_header().size.height as u32;
+    let loaded = image.num_loaded_keyframes() as u32;
+    let f = if loaded == 0 { 1 } else { loaded };
+    unsafe {
+        *out.add(0) = w;
+        *out.add(1) = h;
+        *out.add(2) = f;
+    }
+    0
 }
 
 /// Returns number of keyframes (frames) in the codestream, or negative on error.
