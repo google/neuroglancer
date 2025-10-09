@@ -24,6 +24,10 @@ pub fn free(ptr: *mut u8, size: usize) {
     }
 }
 
+/// Returns image width from header metadata without decoding any frame.
+/// Error codes:
+///  -1 invalid pointer/size
+///  -2 header parse failure
 #[no_mangle]
 pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
     if ptr.is_null() || input_size == 0 {
@@ -43,18 +47,19 @@ pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
 }
 
 /// Returns number of keyframes (frames) in the codestream, or negative on error.
+/// Attempts to return number of keyframes without fully decoding them.
+/// Note: jxl_oxide lazily loads keyframes; if none are yet loaded this may return 1 as a heuristic.
+/// Error codes: -1 invalid args, -2 header parse failure.
 #[no_mangle]
-pub fn frames(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
-    if ptr.is_null() || input_size == 0 || output_size == 0 { return -1; }
+pub fn frames(ptr: *mut u8, input_size: usize, _output_size: usize) -> i32 {
+    if ptr.is_null() || input_size == 0 { return -1; }
     let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
-    let image = match JxlImage::builder().read(data) { Ok(image) => image, Err(_image) => return -2 };
-    let mut count = 0i32;
-    for keyframe_idx in 0..image.num_loaded_keyframes() {
-        let _ = match image.render_frame(keyframe_idx) { Ok(frame) => frame, Err(_frame) => return -3 };
-        count += 1;
-    }
-    if count == 0 { -4 } else { count }
+    let image = match JxlImage::builder().read(data) { Ok(img) => img, Err(_) => return -2 };
+    // We don't force rendering here; if no frames are "loaded" yet assume 1 (common case).
+    let loaded = image.num_loaded_keyframes() as i32;
+    if loaded <= 0 { 1 } else { loaded }
 }
+
 
 #[no_mangle]
 pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 {

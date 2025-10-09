@@ -97,19 +97,17 @@ export async function decompressJxl(
 ): Promise<DecodedImage> {
   const m = await getJxlModulePromise();
   checkHeader(buffer);
-
   area ||= 0;
   numComponents ||= 1;
-
-  const nbytes = area * bytesPerPixel * numComponents;
 
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, jxlImagePtr);
 
   let imagePtr: number = 0;
-  // Will be set after we know width/height.
+  // Will be set after we probe metadata (single probe call now).
   let frameCount = 1;
+  let nbytes = 0;
 
   try {
     const height_and_width = (m.exports.height_and_width as Function)(
@@ -131,31 +129,24 @@ export async function decompressJxl(
         `jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`,
       );
     }
-
-    if (area !== undefined && width * height * frameCount !== area) {
-      throw new Error(
-        `jxl: Expected width and height (${width} x ${height} x ${frameCount}, ${width * height * frameCount}) to match area: ${area}.`,
-      );
+    if (area !== undefined && area !== 0 && width * height * frameCount !== area) {
+      throw new Error(`jxl: Expected volume area ${width}x${height}x${frameCount}=${width * height * frameCount} to match area: ${area}.`);
     }
+    // Compute bytes required using probed metadata.
+    nbytes = width * height * frameCount * numComponents * bytesPerPixel;
     if (bytesPerPixel === 1) {
-      imagePtr = (m.exports.decode as Function)(
-        jxlImagePtr,
-        buffer.byteLength,
-        nbytes,
-      );
+      imagePtr = (m.exports.decode as Function)(jxlImagePtr, buffer.byteLength, nbytes);
     } else {
-      imagePtr = (m.exports.decode_with_bpp as Function)(
-        jxlImagePtr,
-        buffer.byteLength,
-        nbytes,
-        bytesPerPixel,
-      );
+      imagePtr = (m.exports.decode_with_bpp as Function)(jxlImagePtr, buffer.byteLength, nbytes, bytesPerPixel);
     }
 
     if (imagePtr === 0) {
       throw new Error("jxl: Decoding failed. Null pointer returned.");
     }
 
+    // Likewise, we reference memory.buffer instead of heap.buffer
+    // because memory growth during decompress could have detached
+    // the buffer.
     const image = new Uint8Array(
       (m.exports.memory as WebAssembly.Memory).buffer,
       imagePtr,
