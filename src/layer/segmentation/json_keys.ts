@@ -12,6 +12,7 @@ export const SEGMENTS_JSON_KEY = "segments";
 export const EQUIVALENCES_JSON_KEY = "equivalences";
 export const COLOR_SEED_JSON_KEY = "colorSeed";
 export const SEGMENT_STATED_COLORS_JSON_KEY = "segmentColors";
+export const SEGMENT_PROPERTY_COLORS_JSON_KEY = "segmentPropertyColors";
 export const MESH_RENDER_SCALE_JSON_KEY = "meshRenderScale";
 export const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 export const SKELETON_RENDERING_JSON_KEY = "skeletonRendering";

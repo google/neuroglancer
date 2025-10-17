@@ -682,28 +682,31 @@ export function verify3dDimensions(obj: any) {
   return parseFixedLengthArray(vec3.create(), obj, verifyPositiveInt);
 }
 
-export function verifyStringArray(a: any) {
+export function verifyArray(a: any) {
   if (!Array.isArray(a)) {
     throw new Error(`Expected array, received: ${JSON.stringify(a)}.`);
   }
-  for (const x of a) {
+  return a;
+}
+
+export function verifyStringArray(a: any) {
+  const arr = verifyArray(a);
+  for (const x of arr) {
     if (typeof x !== "string") {
       throw new Error(`Expected string, received: ${JSON.stringify(x)}.`);
     }
   }
-  return <string[]>a;
+  return <string[]>arr;
 }
 
 export function verifyIntegerArray(a: unknown) {
-  if (!Array.isArray(a)) {
-    throw new Error(`Expected array, received: ${JSON.stringify(a)}.`);
-  }
-  for (const x of a) {
+  const arr = verifyArray(a);
+  for (const x of arr) {
     if (!Number.isInteger(x)) {
       throw new Error(`Expected integer, received: ${JSON.stringify(x)}.`);
     }
   }
-  return <number[]>a;
+  return <number[]>arr;
 }
 
 export function verifyBoolean(x: any) {

@@ -18,7 +18,10 @@ import type { LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
 import type { LayerSelectedValues } from "#src/layer/index.js";
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import type {
+  SegmentationUserLayer,
+  SegmentPropertyColor,
+} from "#src/layer/segmentation/index.js";
 import type { PickIDManager } from "#src/object_picking.js";
 import type { WatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
@@ -178,6 +181,8 @@ export interface SegmentationColorGroupState {
   segmentColorHash: SegmentColorHash;
   segmentStatedColors: Uint64Map;
   tempSegmentStatedColors2d: Uint64Map;
+  segmentPropertyColors: WatchableValueInterface<SegmentPropertyColor[]>;
+  segmentPropertyColorsMap: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3 | undefined>;
   tempSegmentDefaultColor2d: WatchableValueInterface<vec3 | vec4 | undefined>;
 }
@@ -199,6 +204,7 @@ export interface SegmentationDisplayState {
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: WatchableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  segmentPropertyColorsMap: WatchableValueInterface<Uint64Map>;
   tempSegmentStatedColors2d: WatchableValueInterface<Uint64Map>;
   useTempSegmentStatedColors2d: WatchableValueInterface<boolean>;
   segmentDefaultColor: WatchableValueInterface<vec3 | undefined>;
@@ -934,7 +940,10 @@ export function getBaseObjectColor(
     return color;
   }
   const colorGroupState = displayState.segmentationColorGroupState.value;
-  const { segmentStatedColors } = colorGroupState;
+  const {
+    segmentStatedColors,
+    segmentPropertyColorsMap: { value: segmentPropertyColorsMap },
+  } = colorGroupState;
   let statedColor: bigint | undefined;
   if (
     segmentStatedColors.size !== 0 &&
@@ -945,6 +954,16 @@ export function getBaseObjectColor(
     color[0] = Number(statedColor & 0x0000ffn) / 255.0;
     color[1] = (Number(statedColor & 0x00ff00n) >>> 8) / 255.0;
     color[2] = (Number(statedColor & 0xff0000n) >>> 16) / 255.0;
+    return color;
+  }
+  let propertyColor: bigint | undefined;
+  if (
+    segmentPropertyColorsMap.size !== 0 &&
+    (propertyColor = segmentPropertyColorsMap.get(objectId)) !== undefined
+  ) {
+    color[0] = Number(propertyColor & 0x0000ffn) / 255.0;
+    color[1] = (Number(propertyColor & 0x00ff00n) >>> 8) / 255.0;
+    color[2] = (Number(propertyColor & 0xff0000n) >>> 16) / 255.0;
     return color;
   }
   const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
