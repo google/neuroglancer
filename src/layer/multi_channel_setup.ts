@@ -60,11 +60,12 @@ type MakeLayerFn = (
 const MULTICHANNEL_FRAGMENT_MAIN = `#uicontrol invlerp contrast
 #uicontrol vec3 color color
 void main() {
-  float contrast_value = contrast();
   if (VOLUME_RENDERING) {
+    float contrast_value = contrast(true /* interpolation */);
     emitRGBA(vec4(color * contrast_value, contrast_value));
   }
   else {
+    float contrast_value = contrast(false /* no interpolation */);
     emitRGB(color * contrast_value);
   }
 }
