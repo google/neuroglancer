@@ -1857,6 +1857,14 @@ vec4 ${name}(${shaderType} inputValue) {
 vec4 ${name}() {
   return ${name}(getDataValue(${channel.join(",")}));
 }
+vec4 ${name}(bool interpolate) {
+  if (interpolate) {
+    return ${name}(getInterpolatedDataValue(${channel.join(",")}));
+  }
+  else {
+    return ${name}(getDataValue(${channel.join(",")}));
+  }
+}
 `;
   if (dataType !== DataType.UINT64 && dataType !== DataType.FLOAT32) {
     const scalarType = DATA_TYPE_SIGNED[dataType] ? "int" : "uint";
