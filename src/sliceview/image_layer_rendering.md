@@ -305,19 +305,29 @@ If a discontinuous color mapping is applied to a volume that is stored or retrie
 
 ### Examples
 
-The default shader, that displays the first channel as a grayscale intensity:
+The default shader, which displays the first channel as a grayscale intensity using the `invlerp` ui control for easier editing of contrast limits and channels:
+
+```glsl
+#uicontrol invlerp normalized
+void main () {
+  emitGrayscale(normalized());
+}
+```
+
+Trilinear interpolation on the data with an `invlerp` ui control, displaying the first channel as a grayscale intensity:
+
+```glsl
+#uicontrol invlerp normalized
+void main () {
+  emitGrayscale(normalized(getInterpolatedDataValue()));
+}
+```
+
+Display the first channel as a grayscale intensity using `toNormalized` to map the full data range to [0,1]:
 
 ```glsl
 void main () {
   emitGrayscale(toNormalized(getDataValue()));
-}
-```
-
-Trilinear interpolation, displaying the first channel as a grayscale intensity:
-
-```glsl
-void main () {
-  emitGrayscale(toNormalized(getInterpolatedDataValue()));
 }
 ```
 
