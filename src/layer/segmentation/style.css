@@ -79,6 +79,10 @@
   width: var(--neuroglancer-segment-list-width);
 }
 
+.neuroglancer-segment-list-entry-id.stated-color {
+  border: 1px solid white;
+}
+
 .neuroglancer-segment-list .neuroglancer-segment-list-entry-sticky {
   position: sticky;
   left: 0;
@@ -135,4 +139,31 @@
   .neuroglancer-tool-button
   + .neuroglancer-tool-button {
   margin-left: 1em;
+}
+
+.neuroglancer-segment-list-entry .neuroglancer-segment-list-entry-color-input {
+  border: none;
+  appearance: none;
+  background-color: transparent;
+  padding: 2px;
+  margin: 0;
+  margin-left: 3px;
+  height: 18px;
+  width: 20px;
+}
+
+.neuroglancer-segment-list-entry
+  .neuroglancer-segment-list-entry-color-input.hidden {
+  position: absolute;
+  visibility: hidden;
+}
+
+.neuroglancer-segment-list-entry
+  .neuroglancer-segment-list-entry-color-input.stated-color {
+  background-color: white;
+}
+
+.neuroglancer-segment-list-entry
+  .neuroglancer-segment-list-entry-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
 }
