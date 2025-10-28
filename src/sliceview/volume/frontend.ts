@@ -109,6 +109,9 @@ export function defineChunkDataShaderAccess(
   }
 
   builder.addFragmentCode(glsl_mixLinear);
+  builder.addFragmentCode(`
+#define SHADER_TYPE ${getShaderType(dataType)}
+`);
   const dataAccessCode = `
 ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
   highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
