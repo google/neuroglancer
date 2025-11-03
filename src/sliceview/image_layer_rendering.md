@@ -210,6 +210,15 @@ may still be specified.
 The `getDataValue` function returns the nearest value without interpolation, while the
 `getInterpolatedDataValue` function uses trilinear interpolation.
 
+The `DATA_VALUE_TYPE` macro constant holds the return type of `getDataValue` and `getInterpolatedDataValue`. This can be used for type-generic programming. For example:
+
+```glsl
+DATA_VALUE_TYPE value = getDataValue();
+#if DATA_VALUE_TYPE == float
+  // Do something specific for float data
+#endif
+```
+
 Note that only `float` is a builtin GLSL type. The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
 
 ```glsl
