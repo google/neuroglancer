@@ -1851,7 +1851,7 @@ vec4 ${name}_(float inputValue) {
 }
 vec4 ${name}(${shaderType} inputValue) {
   float v = computeInvlerp(inputValue, uLerpParams_${name});
-  defaultMaxProjectionIntensity = v;
+  defaultMaxProjectionIntensity = max(v, defaultMaxProjectionIntensity);
   return v < 0.0 ? vec4(0.0, 0.0, 0.0, 0.0) : ${name}_(clamp(v, 0.0, 1.0));
 }
 vec4 ${name}() {
