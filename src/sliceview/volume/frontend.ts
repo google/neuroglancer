@@ -110,7 +110,7 @@ export function defineChunkDataShaderAccess(
 
   builder.addFragmentCode(glsl_mixLinear);
   builder.addFragmentCode(`
-#define SHADER_TYPE ${getShaderType(dataType)}
+#define DATA_VALUE_TYPE ${getShaderType(dataType)}
 `);
   const dataAccessCode = `
 ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
