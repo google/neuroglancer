@@ -782,10 +782,16 @@ export function addControlsToBuilder(
 float ${uName}() {
   return ${uName}(getDataValue(${builderValue.channel.join(",")}));
 }
+float ${uName}Interpolated() {
+  return ${uName}(getInterpolatedDataValue(${builderValue.channel.join(",")}));
+}
 `,
         ];
         builder.addFragmentCode(code);
         builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        builder.addFragmentCode(
+          `#define ${name}Interpolated ${uName}Interpolated\n`,
+        );
         break;
       }
       case "propertyInvlerp": {
