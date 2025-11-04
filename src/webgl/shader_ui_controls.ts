@@ -782,6 +782,15 @@ export function addControlsToBuilder(
 float ${uName}() {
   return ${uName}(getDataValue(${builderValue.channel.join(",")}));
 }
+float ${uName}(bool interpolate) {
+  if (interpolate) {
+    return ${uName}(getInterpolatedDataValue(${builderValue.channel.join(",")}));
+  }
+  else {
+    return ${uName}(getDataValue(${builderValue.channel.join(",")}));
+  }
+}
+
 `,
         ];
         builder.addFragmentCode(code);
