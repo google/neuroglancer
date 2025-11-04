@@ -61,7 +61,7 @@ const MULTICHANNEL_FRAGMENT_MAIN = `#uicontrol invlerp contrast
 #uicontrol vec3 color color
 void main() {
   if (VOLUME_RENDERING) {
-    float contrast_value = contrastInterpolated();
+    float contrast_value = contrast(true /* with trilinear interpolation */);
     emitRGBA(vec4(color * contrast_value, contrast_value));
   }
   else {
