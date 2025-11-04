@@ -38,7 +38,6 @@ import { vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFixedLengthArray,
-  verifyBoolean,
   verifyFiniteFloat,
   verifyInt,
   verifyObject,
@@ -455,7 +454,6 @@ function parseImageInvlerpDirective(
   let channel = new Array(imageData.channelRank).fill(0);
   const { dataType } = imageData;
   let clamp = true;
-  let interpolate = false;
   let range = defaultDataTypeRange[dataType];
   let window: DataTypeInterval | undefined;
   for (const [key, value] of parameters) {
@@ -476,14 +474,6 @@ function parseImageInvlerpDirective(
             errors.push(`Invalid clamp value: ${JSON.stringify(value)}`);
           } else {
             clamp = value;
-          }
-          break;
-        }
-        case "interpolate": {
-          if (typeof value !== "boolean") {
-            errors.push(`Invalid interpolate value: ${JSON.stringify(value)}`);
-          } else {
-            interpolate = value;
           }
           break;
         }
@@ -511,7 +501,6 @@ function parseImageInvlerpDirective(
         range,
         window: window ?? normalizeDataTypeInterval(range),
         channel,
-        interpolate,
       },
     } as ShaderImageInvlerpControl,
     errors: undefined,
@@ -791,15 +780,7 @@ export function addControlsToBuilder(
           ),
           `
 float ${uName}() {
-  return ${uName}(${builderValue.interpolate ? "getInterpolatedDataValue" : "getDataValue"}(${builderValue.channel.join(",")}));
-}
-float ${uName}(bool interpolate) {
-  if (interpolate) {
-    return ${uName}(getInterpolatedDataValue(${builderValue.channel.join(",")}));
-  }
-  else {
-    return ${uName}(getDataValue(${builderValue.channel.join(",")}));
-  }
+  return ${uName}(getDataValue(${builderValue.channel.join(",")}));
 }
 `,
         ];
@@ -890,7 +871,6 @@ export interface InvlerpParameters {
 
 export interface ImageInvlerpParameters extends InvlerpParameters {
   channel: number[];
-  interpolate?: boolean;
 }
 
 export interface PropertyInvlerpParameters {
@@ -926,12 +906,6 @@ function parseImageInvlerpParameters(
       (x) => parseInvlerpChannel(x, defaultValue.channel.length),
       defaultValue.channel,
     ),
-    interpolate: verifyOptionalObjectProperty(
-      obj,
-      "interpolate",
-      verifyBoolean,
-      defaultValue.interpolate ?? false,
-    ),
   };
 }
 
@@ -947,7 +921,7 @@ class TrackableImageInvlerpParameters extends TrackableValue<ImageInvlerpParamet
 
   toJSON() {
     const {
-      value: { range, window, channel, interpolate },
+      value: { range, window, channel },
       dataType,
       defaultValue,
     } = this;
@@ -964,22 +938,14 @@ class TrackableImageInvlerpParameters extends TrackableValue<ImageInvlerpParamet
     const channelJson = arraysEqual(defaultValue.channel, channel)
       ? undefined
       : channel;
-    const interpolateJson =
-      interpolate === defaultValue.interpolate ? undefined : interpolate;
     if (
       rangeJson === undefined &&
       windowJson === undefined &&
-      channelJson === undefined &&
-      interpolateJson === undefined
+      channelJson === undefined
     ) {
       return undefined;
     }
-    return {
-      range: rangeJson,
-      window: windowJson,
-      channel: channelJson,
-      interpolate: interpolateJson,
-    };
+    return { range: rangeJson, window: windowJson, channel: channelJson };
   }
 }
 
@@ -1275,7 +1241,6 @@ function getControlTrackable(control: ShaderUiControl): {
         getBuilderValue: (value: ImageInvlerpParameters) => ({
           channel: value.channel,
           dataType: control.dataType,
-          interpolate: value.interpolate,
         }),
       };
     case "propertyInvlerp":
