@@ -342,13 +342,11 @@ export class ImageUserLayer extends Base {
   }
 
   private volumeRenderingDepthSamplesTargetToJSON() {
-    const samplesAsJSON = this.volumeRenderingDepthSamplesTarget.toJSON();
     const isVolumeRenderingActive =
       this.volumeRenderingMode.value !== VolumeRenderingModes.OFF;
-    if (samplesAsJSON === undefined && isVolumeRenderingActive) {
-      return this.volumeRenderingDepthSamplesTarget.value;
-    }
-    return samplesAsJSON;
+    return isVolumeRenderingActive
+      ? this.volumeRenderingDepthSamplesTarget.value
+      : this.volumeRenderingDepthSamplesTarget.toJSON();
   }
 
   toJSON() {
