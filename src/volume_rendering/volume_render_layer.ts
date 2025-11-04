@@ -106,7 +106,7 @@ import {
 } from "#src/webgl/shader_ui_controls.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
-export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 256;
+export const VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE = 64;
 const VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN = 1;
 const VOLUME_RENDERING_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
 const HISTOGRAM_SAMPLES_PER_INSTANCE = 256;
@@ -367,7 +367,7 @@ void emitRGBA(vec4 rgba) {
             glsl_handleMaxProjectionUpdate = `
   float newIntensity = getIntensity();
   bool intensityChanged = newIntensity > savedIntensity;
-  savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
+  savedIntensity = intensityChanged ? newIntensity : savedIntensity;
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity, uPickId);

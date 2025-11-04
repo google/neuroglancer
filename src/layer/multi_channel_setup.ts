@@ -77,7 +77,7 @@ const DEFAULT_ARRAY_COLORS = new Map([
   [3, new Float32Array([1, 1, 1])],
 ]);
 
-const DEFAULT_VOLUME_RENDERING_SAMPLES = 512;
+const DEFAULT_VOLUME_RENDERING_SAMPLES = 256;
 
 /**
  * Rename each output dim with ^ to be ' instead.
