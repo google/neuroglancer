@@ -53,7 +53,7 @@ export function composeByteRangeRequest(
 }
 
 export function handleByteRangeRequestFromUint8Array(
-  value: Uint8Array,
+  value: Uint8Array<ArrayBuffer>,
   byteRange: ByteRangeRequest | undefined,
 ): ReadResponse {
   const {

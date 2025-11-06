@@ -20,7 +20,7 @@
 // JavaScript package.
 
 import { test } from "@playwright/test";
-import { buildPackage } from "build_tools/build-package.js";
+import { buildPackage } from "../../build_tools/build-package.js";
 
 test("build package", async () => {
   await buildPackage({

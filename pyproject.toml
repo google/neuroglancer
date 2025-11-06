@@ -38,7 +38,7 @@ requires = [
   "wheel",
   "setuptools_scm>=8.1.0",
   "numpy>=2",
-  "nodejs-wheel>=22",
+  "nodejs-wheel>=22.18",
 ]
 build-backend = "setuptools.build_meta"
 
