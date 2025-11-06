@@ -49,7 +49,7 @@ function defaultNodeProject(): ViteUserConfig {
   return {
     define: { ...nodeDefines },
     test: {
-      environment: "jsdom",
+      environment: "jsdom-patched",
       setupFiles: [
         "./build_tools/vitest/polyfill-browser-globals-in-node.ts",
         "@vitest/web-worker",

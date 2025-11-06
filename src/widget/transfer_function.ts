@@ -197,7 +197,6 @@ export class SortedControlPoints {
     public dataType: DataType,
     private autoComputeRange: boolean = true,
   ) {
-    this.controlPoints = controlPoints;
     this.range = defaultDataTypeRange[dataType];
     this.sortAndComputeRange();
   }

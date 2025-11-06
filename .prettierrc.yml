@@ -5,3 +5,6 @@ overrides:
   - files: "tsconfig.json"
     options:
       parser: "jsonc"
+  - files: ".oxlintrc.json"
+    options:
+      parser: "jsonc"

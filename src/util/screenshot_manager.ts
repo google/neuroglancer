@@ -167,7 +167,6 @@ export class ScreenshotManager extends RefCounted {
 
   constructor(public viewer: Viewer) {
     super();
-    this.viewer = viewer;
     this.registerDisposer(
       this.viewer.screenshotHandler.sendScreenshotRequested.add(
         (actionState) => {

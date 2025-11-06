@@ -62,7 +62,6 @@ const EXAMPLE_PROJECTS = [
 const ROOT_CLIENT: ClientOptions = {
   name: "root",
   clientDir: ROOT_DIR,
-  clientBuildOptions: ["--no-lint", "--no-typecheck"],
   distDir: "dist/client",
 };
 
