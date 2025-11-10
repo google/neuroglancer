@@ -22,9 +22,6 @@ export interface VoxMapConfig {
   steps: number[];
   // Optional original data source URL for on-demand import of base labels (e.g., precomputed://, zarr://, n5://)
   importUrl?: string;
-  // Legacy/obsolete remote server fields retained for backward compatibility. Do not use.
-  serverUrl?: string;
-  token?: string;
 }
 
 /**
@@ -103,8 +100,6 @@ export type VoxMapInput = {
   unit: string;
   steps?: number[];
   importUrl?: string;
-  serverUrl?: string;
-  token?: string;
 };
 
 export function constructVoxMapConfig(input: VoxMapInput): VoxMapConfig {
@@ -158,8 +153,6 @@ export function constructVoxMapConfig(input: VoxMapInput): VoxMapConfig {
     unit,
     steps,
     importUrl: input.importUrl,
-    serverUrl: input.serverUrl,
-    token: input.token,
   };
 }
 

@@ -12,7 +12,6 @@
     dicator in the ui. We also may need to restrict the max bru
     sh size to avoid too long waiting time." -> no upscaling for now (e.g. drawn voxel size/lod level is always 1), only downscaling.
 
-- cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
 - continue to study the segmentation compression, using it should greatly reduce the ram and indexDB usage, but it no easy integration of the hot chunk reloading in the frontend for drawing tool responsiveness has been found.
 - Fix the orientation of the disk in the brush tool
 - Add support for flood fill on different planes

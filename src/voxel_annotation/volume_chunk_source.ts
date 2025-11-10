@@ -92,10 +92,6 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
           VoxChunkSource,
           {
             spec: baseSpec,
-            vox: {
-              serverUrl: map.serverUrl,
-              token: map.token,
-            },
             lodFactor: f,
           },
         );

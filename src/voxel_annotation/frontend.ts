@@ -25,10 +25,8 @@ import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 export class VoxChunkSource extends BaseVolumeChunkSource {
   declare OPTIONS: {
     spec: VolumeChunkSpecification;
-    vox?: { serverUrl?: string; token?: string };
     lodFactor?: number;
   };
-  private voxOptions?: { serverUrl?: string; token?: string };
   private tempVoxChunkGridPosition = new Float32Array(3);
   private tempLocalPosition = new Uint32Array(3);
   private dirtyChunks = new Set<string>();
@@ -51,18 +49,14 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
   constructor(
     chunkManager: ChunkManager,
-    options: { spec: VolumeChunkSpecification; vox?: { serverUrl?: string; token?: string }; lodFactor?: number },
+    options: { spec: VolumeChunkSpecification; lodFactor?: number },
   ) {
     super(chunkManager, options);
-    this.voxOptions = options.vox;
     this.lodFactor = options.lodFactor ?? 1;
   }
 
   override initializeCounterpart(rpc: any, options: any) {
     const opts = { ...(options || {}), spec: this.spec };
-    if (this.voxOptions) {
-      (opts as any).vox = { ...this.voxOptions };
-    }
     opts.lodFactor = this.lodFactor;
     super.initializeCounterpart(rpc, opts);
   }

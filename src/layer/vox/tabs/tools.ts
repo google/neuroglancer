@@ -16,8 +16,8 @@ export class VoxToolTab extends Tab {
   private renderLabels() {
     const cont = this.labelsContainer;
     cont.innerHTML = "";
-    const labels = this.layer.voxLabels;
-    const selected = this.layer.voxSelectedLabelId;
+    const labels = this.layer.voxLabelsManager.labels;
+    const selected = this.layer.voxLabelsManager.selectedLabelId;
     for (const lab of labels) {
       const row = document.createElement("div");
       row.className = "neuroglancer-vox-label-row";
@@ -31,7 +31,7 @@ export class VoxToolTab extends Tab {
       sw.style.height = "16px";
       sw.style.borderRadius = "3px";
       sw.style.border = "1px solid rgba(0,0,0,0.2)";
-      sw.style.background = this.layer.colorForValue(lab.id);
+      sw.style.background = this.layer.voxLabelsManager.colorForValue(lab.id);
       // id text (monospace)
       const txt = document.createElement("div");
       txt.textContent = String(lab.id >>> 0);
@@ -51,13 +51,13 @@ export class VoxToolTab extends Tab {
         row.style.outline = "1px solid rgba(100,150,255,0.6)";
       }
       row.addEventListener("click", () => {
-        this.layer.selectVoxLabel(lab.id);
+        this.layer.voxLabelsManager.selectVoxLabel(lab.id);
         this.renderLabels();
       });
       cont.appendChild(row);
     }
     // Update error message area
-    const err = this.layer.voxLabelsError;
+    const err = this.layer.voxLabelsManager.labelsError;
     if (err && err.length > 0) {
       this.labelsError.textContent = err;
       this.labelsError.style.display = "block";
@@ -278,8 +278,8 @@ export class VoxToolTab extends Tab {
     const createBtn = document.createElement("button");
     createBtn.textContent = "New label";
     createBtn.addEventListener("click", () => {
-      this.layer.createVoxLabel();
-      // Rendering will be triggered by layer via onLabelsChanged callback.
+      this.layer.voxLabelsManager.createVoxLabel(this.layer.voxEditController);
+      // Rendering will be triggered by LabelsManager via onLabelsChanged callback.
     });
     buttonsRow.appendChild(createBtn);
 
@@ -326,7 +326,7 @@ export class VoxToolTab extends Tab {
       }
     };
 
-    this.layer.onLabelsChanged = () => this.requestRenderLabels();
+    this.layer.voxLabelsManager.onLabelsChanged = () => this.requestRenderLabels();
     this.layer.onDrawMessageChanged = () => updateDrawError();
 
     this.renderLabels();

@@ -16,7 +16,6 @@ import {
 import type { VoxSourceWriter } from "#src/voxel_annotation/index.js";
 import { LocalVoxSourceWriter } from "#src/voxel_annotation/local_source.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
-import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import type { RPC} from "#src/worker_rpc.js";
 import { SharedObject , registerPromiseRPC, registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
 
@@ -50,9 +49,7 @@ export class VoxelEditController extends SharedObject {
   async initMap(arg: { map?: VoxMapConfig } | VoxMapConfig) {
     const map: VoxMapConfig = (arg as any)?.map ?? (arg as any);
     if (!map) throw new Error("VoxEditBackend.initMap: map configuration is required");
-    const src = map.serverUrl
-      ? new RemoteVoxSource(map.serverUrl, map.token)
-      : new LocalVoxSourceWriter(this);
+    const src = new LocalVoxSourceWriter(this);
     await src.init(map);
     this.source = src;
     try { this.resolveMapReady(); } catch {/* ignore */}

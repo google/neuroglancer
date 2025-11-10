@@ -40,7 +40,6 @@ import { VoxSettingsTab } from "#src/layer/vox/tabs/settings.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import {
-  RenderScaleHistogram,
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
 import {
@@ -51,7 +50,6 @@ import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
 import { VoxMapRegistry } from "#src/voxel_annotation/map.js";
-import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 
@@ -59,7 +57,6 @@ export class VoxUserLayer extends UserLayer {
   // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
   private voxRenderLayerInstance?: VoxelAnnotationRenderLayer;
   // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
-  sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   static type = "vox";
   static typeAbbreviation = "vox";
@@ -84,47 +81,6 @@ export class VoxUserLayer extends UserLayer {
       /* ignore */
     }
   }
-
-  // Labels manager integration proxies
-  get onLabelsChanged(): (() => void) | undefined {
-    return this.voxLabelsManager.onLabelsChanged;
-  }
-  set onLabelsChanged(cb: (() => void) | undefined) {
-    this.voxLabelsManager.onLabelsChanged = cb;
-  }
-
-  get voxLabels(): { id: number }[] {
-    return this.voxLabelsManager.labels;
-  }
-  get voxSelectedLabelId(): number | undefined {
-    return this.voxLabelsManager.selectedLabelId;
-  }
-  get voxLabelsError(): string | undefined {
-    return this.voxLabelsManager.labelsError;
-  }
-
-  colorForValue(v: number): string {
-    return this.voxLabelsManager.colorForValue(v);
-  }
-  createVoxLabel(): void {
-    this.voxLabelsManager.createVoxLabel(this.voxEditController);
-  }
-  selectVoxLabel(id: number): void {
-    this.voxLabelsManager.selectVoxLabel(id);
-  }
-  getCurrentLabelValue(): number {
-    return this.voxLabelsManager.getCurrentLabelValue(!!this.voxEraseMode);
-  }
-
-  private async loadLabels(): Promise<void> {
-    const ctrl = this.voxEditController;
-    if (!ctrl) return;
-    await this.voxLabelsManager.initialize(ctrl);
-  }
-
-  // Remote server configuration when using vox+http(s):// data sources
-  voxServerUrl?: string;
-  voxServerToken?: string;
 
   beginRenderLodLock(lockedIndex: number): void {
     if (!Number.isInteger(lockedIndex) || lockedIndex < 0) {
@@ -230,88 +186,10 @@ export class VoxUserLayer extends UserLayer {
     }
   }
 
-  /** Returns in-plane basis vectors (u, v) for the current slice plane in voxel coordinates.
-   *  Uses MouseSelectionState.displayDimensions to select the two displayed axes, then maps unit
-   *  vectors along those axes through the renderLayer->voxel transform.
-   *  TODO: this is not working, ai are dogshit at 3d stuffs.
-   */
-  getBrushPlaneBasis(
-    mouseState?: MouseSelectionState,
-  ): { u: Float32Array; v: Float32Array } | undefined {
-    try {
-      const inv = this.getModelToVoxTransform();
-      if (!inv) return undefined;
-      const di = mouseState?.displayDimensions?.displayDimensionIndices;
-      const rank = mouseState?.displayDimensions?.displayRank ?? 0;
-      const i0 = di && rank >= 2 ? di[0] : 0;
-      const i1 = di && rank >= 2 ? di[1] : 1;
-
-      // Build origin and unit vectors in model/render-layer coordinate space aligned to displayed axes.
-      const p0 = vec3.transformMat4(
-        vec3.create(),
-        vec3.fromValues(0, 0, 0),
-        inv,
-      );
-      const uModel = [0, 0, 0] as number[];
-      const vModel = [0, 0, 0] as number[];
-      if (i0 >= 0 && i0 < 3) uModel[i0] = 1;
-      if (i1 >= 0 && i1 < 3) vModel[i1] = 1;
-      const pU = vec3.transformMat4(
-        vec3.create(),
-        vec3.fromValues(uModel[0], uModel[1], uModel[2]),
-        inv,
-      );
-      const pV = vec3.transformMat4(
-        vec3.create(),
-        vec3.fromValues(vModel[0], vModel[1], vModel[2]),
-        inv,
-      );
-
-      // Compute direction vectors and normalize.
-      const ux = pU[0] - p0[0];
-      const uy = pU[1] - p0[1];
-      const uz = pU[2] - p0[2];
-      const vx = pV[0] - p0[0];
-      const vy = pV[1] - p0[1];
-      const vz = pV[2] - p0[2];
-
-      const ul = Math.hypot(ux, uy, uz);
-      const vl = Math.hypot(vx, vy, vz);
-      if (!Number.isFinite(ul) || ul === 0 || !Number.isFinite(vl) || vl === 0)
-        return undefined;
-
-      const u = new Float32Array([ux / ul, uy / ul, uz / ul]);
-      const v = new Float32Array([vx / vl, vy / vl, vz / vl]);
-      return { u, v };
-    } catch {
-      return undefined;
-    }
-  }
-
-
-  private parseVoxRemoteUrl(url: string): { scheme: string; baseUrl: string; token?: string } | undefined {
-    const m = url.match(/^(vox\+https?):\/\/(.+)$/);
-    if (!m) return undefined;
-    const scheme = m[1]; // vox+http or vox+https
-    const rest = m[2];
-    // Build a temporary URL for parsing. Always ensure there is a protocol.
-    const proto = scheme.substring(4); // http or https
-    // If rest already contains a path/query, URL will parse it.
-    let tmp: URL;
-    try {
-      tmp = new URL(`${proto}://${rest}`);
-    } catch {
-      return undefined;
-    }
-    const baseUrl = `${proto}://${tmp.host}`;
-    const token = tmp.searchParams.get("token") || undefined;
-    return { scheme, baseUrl, token };
-  }
-
-  private async verifyVoxRemote(baseUrl: string, token?: string): Promise<void> {
-    // Delegate verification to VoxSource: attempt to list maps via RemoteVoxSource.
-    const src = new RemoteVoxSource(baseUrl, token);
-    await src.listMaps();
+  private async loadLabels(): Promise<void> {
+    const controller = this.voxEditController;
+    if (!controller) return;
+    await this.voxLabelsManager.initialize(controller);
   }
 
   buildOrRebuildVoxLayer() {
@@ -401,37 +279,16 @@ export class VoxUserLayer extends UserLayer {
       const { subsourceEntry } = loadedSubsource;
       const { subsource } = subsourceEntry;
       const isLocalVox = subsource.local === LocalDataSource.voxelAnnotations;
-      const urlStr = loadedSubsource.loadedDataSource.layerDataSource.spec.url;
 
       if (isLocalVox) {
         // Local in-memory vox datasource.
-        this.voxServerUrl = undefined;
-        this.voxServerToken = undefined;
         this.voxLoadedSubsource = loadedSubsource;
-        continue;
-      }
-
-      // Non-local: only accept vox+http(s) schemes.
-      const parsed = this.parseVoxRemoteUrl(urlStr);
-      if (parsed) {
-        // Verify the remote server before activation.
-        (async () => {
-          try {
-            await this.verifyVoxRemote(parsed.baseUrl, parsed.token);
-            this.voxServerUrl = parsed.baseUrl;
-            this.voxServerToken = parsed.token;
-            this.voxLoadedSubsource = loadedSubsource;
-          } catch (e: any) {
-            const msg = `Vox remote source check failed: ${e?.message || e}`;
-            loadedSubsource.deactivate(msg);
-          }
-        })();
         continue;
       }
 
       // Reject anything else.
       loadedSubsource.deactivate(
-        "Not compatible with vox layer; supported sources: local://voxel-annotations, vox+http://host[:port]/(?token=TOKEN), vox+https://host[:port]/(?token=TOKEN)",
+        "Not compatible with vox layer; supported sources: local://voxel-annotations",
       );
     }
   }

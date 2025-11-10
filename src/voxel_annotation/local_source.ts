@@ -307,8 +307,6 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
             scaleMeters: Array.from(r.scaleMeters ?? [1,1,1]),
             unit: String(r.unit),
             steps: Array.isArray(r?.steps) ? r.steps : steps,
-            serverUrl: r?.serverUrl,
-            token: r?.token,
             importUrl: r?.importUrl,
           });
           maps.push(map);

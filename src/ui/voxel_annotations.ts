@@ -91,9 +91,7 @@ export const FLOODFILL_TOOL_ID = "voxFloodFill";
     }
     layer.beginRenderLodLock(editLodIndex);
 
-    const value =
-      layer.getCurrentLabelValue() ??
-      (layer.voxEraseMode ? 0 : 42);
+    const value = layer.voxLabelsManager.getCurrentLabelValue(layer.voxEraseMode);
 
     this.paintPoint(centerCanonical, value);
     this.lastPoint = start;
@@ -217,7 +215,7 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
         throw new Error("Flood fill: failed to get voxel position from mouse");
       }
 
-      const value = layer.getCurrentLabelValue();
+      const value = layer.voxLabelsManager.getCurrentLabelValue(layer.voxEraseMode);
       const max = Number((layer as any).voxFloodMaxVoxels);
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Flood fill: invalid max voxels; set it in the tool panel");

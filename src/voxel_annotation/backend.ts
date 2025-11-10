@@ -16,7 +16,6 @@ import {
   LocalVoxSource,
 } from "#src/voxel_annotation/local_source.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
-import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerRPC, registerSharedObject } from "#src/worker_rpc.js";
 // Ensure voxel edit backend and its RPC handlers are registered in the worker bundle.
@@ -30,8 +29,6 @@ import "#src/voxel_annotation/edit_backend.js";
 @registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
   private source?: VoxSource;
-  private voxServerUrl?: string;
-  private voxToken?: string;
   public lodFactor: number;
   private mapReadyPromise: Promise<void>;
   private resolveMapReady!: () => void;
@@ -40,8 +37,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     super(rpc, options);
     // Detect remote server configuration from options (flexible keys)
     const o = options || {};
-    this.voxServerUrl = o.voxServerUrl || o.serverUrl || o.vox?.serverUrl;
-    this.voxToken = o.voxToken || o.token || o.vox?.token;
     this.lodFactor = o.lodFactor;
     if (this.lodFactor == undefined) {
       throw new Error("lodFactor is required");
@@ -54,21 +49,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   async initMap(arg: { map?: VoxMapConfig } | VoxMapConfig) {
     const map: VoxMapConfig = (arg as any)?.map ?? (arg as any);
     if (!map) throw new Error("initMap: map configuration is required");
-    if (map.serverUrl) {
-      if (this.voxServerUrl && this.voxServerUrl !== map.serverUrl) {
-        throw new Error("initMap: conflicting serverUrl provided");
-      }
-      this.voxServerUrl = map.serverUrl;
-    }
-    if (map.token) {
-      if (this.voxToken && this.voxToken !== map.token) {
-        throw new Error("initMap: conflicting token provided");
-      }
-      this.voxToken = map.token;
-    }
-    const src = this.voxServerUrl
-      ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
-      : new LocalVoxSource();
+    const src = new LocalVoxSource();
     await src.init(map);
     this.source = src;
     try { this.resolveMapReady(); } catch { /* ignore */ }
