@@ -521,6 +521,12 @@
       "neuroglancer/layer/single_mesh:disabled": "./src/util/false.ts",
       "default": "./src/layer/single_mesh/index.ts"
     },
+    "#layer/vox": {
+      "neuroglancer/layer/vox:enabled": "./src/layer/vox/index.ts",
+      "neuroglancer/layer:none_by_default": "./src/util/false.ts",
+      "neuroglancer/layer/vox:disabled": "./src/util/false.ts",
+      "default": "./src/layer/vox/index.ts"
+    },
     "#main": {
       "neuroglancer/python": "./src/main_python.ts",
       "default": "./src/main.ts"

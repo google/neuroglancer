@@ -3,3 +3,4 @@ import "#layer/annotation";
 import "#layer/image";
 import "#layer/segmentation";
 import "#layer/single_mesh";
+import "#layer/vox";
