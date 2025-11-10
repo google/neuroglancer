@@ -16,7 +16,7 @@
 
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { fetchOkWithOAuth2CredentialsAdapter } from "#src/credentials_provider/oauth2.js";
-import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import type {
   DriverReadOptions,
   KvStore,
@@ -135,7 +135,7 @@ export class SsaS3KvStore implements KvStore {
   private authenticatePromise: Promise<SsaAuthenticateResponse> | undefined;
 
   constructor(
-    public readonly sharedKvStoreContext: SharedKvStoreContext,
+    public readonly sharedKvStoreContext: SharedKvStoreContextBase,
     workerOrigin: string,
     datasetBasePrefix: string,
     displayBaseUrl: string,

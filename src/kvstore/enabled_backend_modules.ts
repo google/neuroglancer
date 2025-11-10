@@ -9,3 +9,4 @@ import "#kvstore/ngauth/register";
 import "#kvstore/ocdbt/register_backend";
 import "#kvstore/s3/register_backend";
 import "#kvstore/zip/register_backend";
+import "#kvstore/ssa_s3/register_backend";

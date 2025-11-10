@@ -498,6 +498,12 @@
       "neuroglancer/kvstore/ssa_s3:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/ssa_s3/register_frontend.ts"
     },
+    "#kvstore/ssa_s3/register_backend": {
+      "neuroglancer/kvstore/ssa_s3:enabled": "./src/kvstore/ssa_s3/register_backend.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/ssa_s3:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/ssa_s3/register_backend.ts"
+    },
     "#kvstore/zip/register_frontend": {
       "neuroglancer/kvstore/zip:enabled": "./src/kvstore/zip/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
