@@ -33,7 +33,7 @@ export function compositeLabelsDbKey(mapId: string, scaleKey: string): string {
   return `${mapId}:${scaleKey}:labels`;
 }
 
-export class VoxSource {
+export abstract class VoxSource {
   protected mapId: string = 'default';
   protected scaleKey: string = '';
   protected chunkDataSize: Uint32Array = new Uint32Array([64, 64, 64]);
@@ -49,6 +49,13 @@ export class VoxSource {
   // Dirty tracking and debounced save
   protected dirty = new Set<string>();
   protected saveTimer: number | undefined;
+
+  /**
+   * Generic label persistence hooks. Subclasses override to connect to the chosen datasource.
+   * Default implementation is a no-op empty list.
+   */
+  async getLabelIds(): Promise<number[]> { return []; }
+  async setLabelIds(_ids: number[]): Promise<void> { /* no-op */ }
 
   init(_opts: VoxMapInitOptions): Promise<{ mapId: string; scaleKey: string }> {
     // Base provides default bookkeeping; persistence layer does real work.
@@ -81,7 +88,6 @@ export class VoxSource {
   }
 
   // Overridden by subclass to actually persist dirty chunks.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected async flushSaves(): Promise<void> {}
 
   // Apply edits into an in-memory chunk array; returns the SavedChunk.
@@ -109,6 +115,32 @@ export class VoxSource {
 /** IndexedDB-backed local source. */
 export class LocalVoxSource extends VoxSource {
   private dbPromise: Promise<IDBDatabase> | null = null;
+
+  override async getLabelIds(): Promise<number[]> {
+    try {
+      const db = await this.getDb();
+      const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
+      const arr = await idbGet<number[]>(db, 'labels', key);
+      if (arr && Array.isArray(arr)) return arr.map(v => v >>> 0);
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  override async setLabelIds(ids: number[]): Promise<void> {
+    try {
+      const db = await this.getDb();
+      const tx = db.transaction('labels', 'readwrite');
+      const store = tx.objectStore('labels');
+      const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
+      const payload = ids.map(v => v >>> 0);
+      await idbPut(store, payload, key);
+      await txDone(tx);
+    } catch {
+      // ignore
+    }
+  }
 
   private touch(key: string) {
     const v = this.saved.get(key);
@@ -226,8 +258,18 @@ export class LocalVoxSource extends VoxSource {
 }
 
 export class RemoteVoxSource extends VoxSource {
+  private labelsCache: number[] = [];
   constructor(public url: string) {
     super();
+  }
+  override async getLabelIds(): Promise<number[]> {
+    // Placeholder: if a remote endpoint exists, fetch from `${url}/labels` with map/scale.
+    // For now, return in-memory cache.
+    return Array.from(this.labelsCache);
+  }
+  override async setLabelIds(ids: number[]): Promise<void> {
+    // Placeholder: post to remote endpoint; cache locally as best-effort.
+    this.labelsCache = ids.map(v => v >>> 0);
   }
 }
 

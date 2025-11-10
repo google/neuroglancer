@@ -348,7 +348,6 @@ export abstract class SliceViewVolumeRenderLayer<
     multiscaleSource: MultiscaleVolumeChunkSource,
     options: RenderLayerOptions<ShaderParameters>,
   ) {
-    console.log("SliceViewVolumeRenderLayer constructor called with options DEBUG 1");
     const { shaderError = makeWatchableShaderError(), shaderParameters } =
       options;
     super(multiscaleSource.chunkManager, multiscaleSource, options);
@@ -381,7 +380,6 @@ export abstract class SliceViewVolumeRenderLayer<
         ],
       ),
     );
-    console.log("calling parameterizedContextDependentShaderGetter")
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, gl, {
       memoizeKey: `volume/RenderLayer:${getObjectId(this.constructor)}`,
       fallbackParameters: options.fallbackShaderParameters,
@@ -398,7 +396,6 @@ export abstract class SliceViewVolumeRenderLayer<
         parameters: ShaderParameters,
         extraParameters: ShaderContext,
       ) => {
-        console.log("defining shader with parameters DEBUG 3");
         const { chunkFormat, dataHistogramsEnabled } = context;
         const { dataHistogramChannelSpecifications, numChannelDimensions } =
           extraParameters;
@@ -410,7 +407,6 @@ void emit(vec4 color) {
 }
 `);
         if (chunkFormat === null) {
-          console.log("no chunk format");
           return;
         }
         defineChunkDataShaderAccess(
@@ -457,7 +453,6 @@ void main() {
 }
 #define main userMain\n`);
         }
-        console.log("defining shader with parameters DEBUG 2", parameters);
         this.defineShader(builder, parameters);
       },
       getContextKey: (context) =>
@@ -465,7 +460,6 @@ void main() {
     });
     this.tempChunkPosition = new Float32Array(multiscaleSource.rank);
     this.initializeCounterpart();
-    console.log("constructor done");
   }
 
   get dataType() {

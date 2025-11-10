@@ -40,13 +40,11 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
     multiscaleSource: MultiscaleVolumeChunkSource,
     options: RenderLayerOptions<EmptyParams>,
   ) {
-    console.log('$$$$$$$ VoxelAnnotationRenderLayer creation with options:', options);
     super(multiscaleSource, {
       ...options,
       shaderParameters: options.shaderParameters ?? constantWatchableValue({} as EmptyParams),
       encodeShaderParameters: () => 0,
     });
-    console.log('###### VoxelAnnotationRenderLayer created with options:', options);
   }
 
   defineShader(builder: ShaderBuilder) {

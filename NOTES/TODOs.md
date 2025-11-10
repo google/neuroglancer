@@ -1,6 +1,5 @@
 # TODO List
 - continue to study the segmentation compression, using it should greatly reduce the ram and indexDB usage, but it no easy integration of the hot chunk reloading in the frontend for drawing tool responsiveness has been found.
-- add label creation (with color, name, description and uuid)
 - add flood fill tool (with a max expansion safeguard), this tool should be 2d (e.g. act on a plane, the plane normal to the z axis is sufficient for a v1)
 - Fix the orientation of the disk in the brush tool 
 - the uncaching of chunks the VoxSource is working great, but since it has no way of knowing which chunks are in view, it will delete them, causing flickering of the drawings.

@@ -40,7 +40,7 @@ import { registerVoxelAnnotationTools, VoxelBrushLegacyTool, VoxelPixelLegacyToo
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
-import { openVoxDb, idbGet, idbPut, txDone, toScaleKey, compositeLabelsDbKey } from "#src/voxel_annotation/index.js";
+import { toScaleKey } from "#src/voxel_annotation/index.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 import { Tab } from "#src/widget/tab_view.js";
@@ -397,8 +397,6 @@ class VoxToolTab extends Tab {
 export class VoxUserLayer extends UserLayer {
   onLabelsChanged?: () => void;
   private voxMapId: string | undefined;
-  private voxScaleKey: string | undefined;
-  private labelsDbPromise: Promise<IDBDatabase> | null = null;
   // Label state for painting: only store ids; colors are hashed from id on the fly
   voxLabels: { id: number }[] = [];
   voxSelectedLabelId: number | undefined = undefined;
@@ -450,39 +448,19 @@ export class VoxUserLayer extends UserLayer {
     return this.segmentColorHash.computeCssColor(BigInt(v >>> 0));
   }
 
-  // --- Labels persistence (IndexedDB) ---
-  private async getLabelsDb(): Promise<IDBDatabase> {
-    if (this.labelsDbPromise) return this.labelsDbPromise;
-    this.labelsDbPromise = openVoxDb();
-    return this.labelsDbPromise;
-  }
-  private compositeLabelsKey() {
-    const mapId = this.voxMapId || 'default';
-    const scaleKey = this.voxScaleKey || 'default';
-    return compositeLabelsDbKey(mapId, scaleKey);
-  }
-  private async saveLabelsToDb() {
+  // --- Labels persistence (via VoxSource) ---
+  private async saveLabels() {
     try {
-      console.log('saveLabelsToDb');
-      const db = await this.getLabelsDb();
-      const tx = db.transaction('labels', 'readwrite');
-      const store = tx.objectStore('labels');
-      const key = this.compositeLabelsKey();
-      const payload = this.voxLabels.map(l => l.id >>> 0);
-      await idbPut(store, payload, key);
-      await txDone(tx);
+      const ids = this.voxLabels.map(l => l.id >>> 0);
+      await this.voxEditController?.setLabelIds(ids);
     } catch {
       // ignore persistence failures
     }
   }
-  private async loadLabelsFromDb() {
+  private async loadLabels() {
     try {
-      console.log('loadLabelsFromDb');
-      const db = await this.getLabelsDb();
-      const key = this.compositeLabelsKey();
-      const arr = await idbGet<number[]>(db, 'labels', key);
+      const arr = await this.voxEditController?.getLabelIds();
       const existing = new Set(this.voxLabels.map(l => l.id >>> 0));
-      console.log("hey",existing, arr, key);
       if (arr && Array.isArray(arr) && arr.length > 0) {
         // Merge previously created labels (before init) with stored ones.
         const mergedIds = new Set<number>(arr.map(id => id >>> 0));
@@ -493,14 +471,12 @@ export class VoxUserLayer extends UserLayer {
         if (!sel || !this.voxLabels.some(l => l.id === sel)) {
           this.voxSelectedLabelId = this.voxLabels[0].id;
         }
-        console.log('loadLabelsFromDb', this.voxLabels);
-        console.log('loadLabelsFromDb', this.voxSelectedLabelId);
-        // Write back merged set to DB to keep in sync.
-        await this.saveLabelsToDb();
+        // Write back merged set to keep in sync.
+        await this.saveLabels();
       } else {
         // Nothing stored: if any labels were created pre-init, persist them; otherwise, create one.
         if (this.voxLabels.length === 0) this.ensureDefaultLabel();
-        await this.saveLabelsToDb();
+        await this.saveLabels();
       }
     } catch {
       // Fallback to default if load fails
@@ -519,10 +495,9 @@ export class VoxUserLayer extends UserLayer {
     const id = this.genId(); // unique uint32
     this.voxLabels.push({ id });
     this.voxSelectedLabelId = id;
-    // Persist immediately only once map meta is known to avoid wrong key.
-    console.log('createVoxLabel', this.voxMapId, this.voxScaleKey);
-    if (this.voxMapId && this.voxScaleKey) {
-      try { await this.saveLabelsToDb(); } catch { /* ignore */ }
+    // Persist immediately once the source/controller is available.
+    if (this.voxEditController) {
+      try { await this.saveLabels(); } catch { /* ignore */ }
     }
     // Notify UI to re-render labels list whenever a label is created.
     try { this.onLabelsChanged?.(); } catch { /* ignore */ }
@@ -733,12 +708,8 @@ export class VoxUserLayer extends UserLayer {
         const scaleKey = toScaleKey(cfgCds, lowerArr, upperArr);
         // mapId can be any stable string; default to 'local' unless already set.
         if (!this.voxMapId) this.voxMapId = 'local';
-        this.voxScaleKey = scaleKey;
-        // Kick off label load immediately; persistence now has proper keys.
-        void this.loadLabelsFromDb().catch(() => {
-          console.warn("Failed to load labels from IndexedDB");
-        });
-        void source.initializeMap({
+        // Initialize backend map first, then load labels from the chosen datasource.
+        source.initializeMap({
           mapId: this.voxMapId,
           dataType: voxSource.dataType,
           chunkDataSize: cfgCds,
@@ -746,7 +717,8 @@ export class VoxUserLayer extends UserLayer {
           upperVoxelBound: upperArr,
           unit: this.voxScaleUnit,
           scaleKey,
-        }).catch(() => { /* ignore init failures */ });
+        });
+        this.loadLabels();
 
         // Build transform with current scale and units.
         const identity3D = this.createIdentity3D();

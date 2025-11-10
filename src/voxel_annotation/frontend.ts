@@ -10,7 +10,7 @@ import type { VolumeChunk } from '#src/sliceview/volume/frontend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/frontend.js';
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { TypedArray } from '#src/util/array.js';
-import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID } from '#src/voxel_annotation/base.js';
+import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID, VOX_LABELS_GET_RPC_ID, VOX_LABELS_SET_RPC_ID } from '#src/voxel_annotation/base.js';
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 
@@ -27,17 +27,36 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   );
 
   /** Initialize map in the worker/backend for this source. */
-  async initializeMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; baseVoxelOffset?: number[]; unit?: string; scaleKey?: string}) {
+  initializeMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; baseVoxelOffset?: number[]; unit?: string; scaleKey?: string}) {
     try {
-      return await this.rpc!.invoke(VOX_MAP_INIT_RPC_ID, { id: this.rpcId, ...opts });
+      this.rpc!.invoke(VOX_MAP_INIT_RPC_ID, { id: this.rpcId, ...opts });
     } catch {
       // initialization is best-effort; continue even if it fails
-      return undefined;
+      console.warn('VoxChunkSource.initializeMap: Failed to initialize voxel map.');
     }
   }
 
   constructor(chunkManager: ChunkManager, options: { spec: VolumeChunkSpecification }) {
     super(chunkManager, options);
+  }
+
+  async getLabelIds(): Promise<number[]> {
+    try {
+      /*
+      NOTE: do not pass the rpcId as { id: this.rpcId } since the id field it will be overwritten by promiseInvoke, use another name like { rpcId: this.rpcId }
+       */
+      return await this.rpc!.promiseInvoke<number[]>(VOX_LABELS_GET_RPC_ID, { rpcId: this.rpcId });
+    } catch {
+      return [];
+    }
+  }
+
+  setLabelIds(ids: number[]){
+    try {
+      this.rpc!.invoke(VOX_LABELS_SET_RPC_ID, { id: this.rpcId, ids });
+    } catch {
+      // ignore
+    }
   }
 
   private scheduleUpdate(key: string) {

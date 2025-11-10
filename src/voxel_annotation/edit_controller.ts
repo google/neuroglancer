@@ -104,4 +104,23 @@ export class VoxelEditController {
   paintBrush(center: Float32Array, radius: number, value: number) {
     this.paintBrushWithShape(center, radius, value, 'sphere');
   }
+
+  async getLabelIds(): Promise<number[]> {
+    try {
+      const source = this.getSource();
+      if (!source) return [];
+      return await source.getLabelIds();
+    } catch {
+      return [];
+    }
+  }
+
+  setLabelIds(ids: number[]) {
+    try {
+      const source = this.getSource();
+      source?.setLabelIds(ids);
+    } catch {
+      // ignore
+    }
+  }
 }

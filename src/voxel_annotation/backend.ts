@@ -6,11 +6,11 @@
 import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
 import { DataType } from '#src/util/data_type.js';
-import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID } from '#src/voxel_annotation/base.js';
+import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID, VOX_LABELS_GET_RPC_ID, VOX_LABELS_SET_RPC_ID } from '#src/voxel_annotation/base.js';
 import type { VoxMapInitOptions } from '#src/voxel_annotation/index.js';
 import { LocalVoxSource, toScaleKey } from '#src/voxel_annotation/index.js';
 import type { RPC } from '#src/worker_rpc.js';
-import { registerRPC, registerSharedObject } from '#src/worker_rpc.js';
+import { registerRPC, registerPromiseRPC, registerSharedObject } from '#src/worker_rpc.js';
 
 /**
  * Backend volume source that persists voxel edits per chunk. It returns saved data if available,
@@ -18,7 +18,7 @@ import { registerRPC, registerSharedObject } from '#src/worker_rpc.js';
  */
 @registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
-  private local = new LocalVoxSource();
+  local = new LocalVoxSource();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -116,5 +116,17 @@ registerRPC(VOX_COMMIT_VOXELS_RPC_ID, function (x: any) {
 // RPC to initialize map
 registerRPC(VOX_MAP_INIT_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
-  return obj.initMap(x || {});
+  obj.initMap(x || {});
+});
+
+// RPCs for label persistence (promise-based)
+registerPromiseRPC<number[]>(VOX_LABELS_GET_RPC_ID, async function (x: any): Promise<any> {
+  const obj = this.get(x.rpcId) as VoxChunkSource;
+  const ids = await obj.local.getLabelIds();
+  return { value: ids };
+});
+
+registerRPC(VOX_LABELS_SET_RPC_ID, function (x: any) {
+  const obj = this.get(x.id) as VoxChunkSource;
+  obj.local.setLabelIds(Array.isArray(x?.ids) ? x.ids : []);
 });
