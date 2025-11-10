@@ -27,9 +27,6 @@ import {
 } from "#src/render_coordinate_transform.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
-  VolumeType,
-} from "#src/sliceview/volume/base.js";
-import type {
   MultiscaleVolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
@@ -74,6 +71,7 @@ export class VoxelEditingContext
     public primarySource: MultiscaleVolumeChunkSource,
     public previewSource: VoxelPreviewMultiscaleSource,
     public optimisticRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
+    public primaryRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
   ) {
     super();
     this.controller = new VoxelEditController(this);
@@ -145,15 +143,6 @@ export class VoxelEditingContext
     if (!ok) return undefined;
     return this.cachedVoxelPosition;
   }
-
-
-  get voxRenderLayerInstance():
-    | ImageRenderLayer
-    | SegmentationRenderLayer
-    | undefined {
-    // TODO
-    return undefined;
-  }
 }
 
 export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
@@ -175,7 +164,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
 
-  initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, volumeType: VolumeType): void;
+  initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, renderlayer: SegmentationRenderLayer | ImageRenderLayer): void;
   deinitializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
   ): void;
@@ -233,7 +222,7 @@ export function UserLayerWithVoxelEditingMixin<
     ): ImageRenderLayer | SegmentationRenderLayer;
 
 
-    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
+    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, renderlayer: SegmentationRenderLayer | ImageRenderLayer): void {
       if (this.editingContexts.has(loadedSubsource)) return;
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
@@ -266,6 +255,7 @@ export function UserLayerWithVoxelEditingMixin<
         primarySource,
         previewSource,
         optimisticRenderLayer,
+        renderlayer
       );
       this.editingContexts.set(loadedSubsource, context);
       this.addRenderLayer(optimisticRenderLayer);

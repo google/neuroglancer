@@ -439,7 +439,7 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
     this.setCursor(pickerCursor);
     activation.registerDisposer(() => {this.resetCursor()})
 
-    const voxelEditingContext = this.layer.editingContexts.values().next().value as VoxelEditingContext;
+    const voxelEditingContext = this.layer.editingContexts.values().next().value;
     if (!voxelEditingContext) {
       StatusMessage.showTemporaryMessage(
         "Cannot pick label: layer is not ready.",
@@ -458,7 +458,7 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
       return;
     }
 
-    const renderLayer = voxelEditingContext.voxRenderLayerInstance;
+    const renderLayer = voxelEditingContext.primaryRenderLayer;
     if (!renderLayer) {
       StatusMessage.showTemporaryMessage("Render layer not available.", 3000);
       return;

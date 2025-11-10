@@ -795,18 +795,19 @@ export class SegmentationUserLayer extends Base {
         hasVolume = true;
         loadedSubsource.activate(
           (context) => {
-            loadedSubsource.addRenderLayer(
-              new SegmentationRenderLayer(volume, {
+            const segmentationRenderLayer = new SegmentationRenderLayer(volume, {
                 ...this.displayState,
                 transform: loadedSubsource.getRenderLayerTransform(),
                 renderScaleTarget: this.sliceViewRenderScaleTarget,
                 renderScaleHistogram: this.sliceViewRenderScaleHistogram,
                 localPosition: this.localPosition,
-              }),
+              });
+            loadedSubsource.addRenderLayer(
+              segmentationRenderLayer
             )
             context.registerDisposer(registerNested((context, isWritable) => {
               if (isWritable) {
-                this.initializeVoxelEditingForSubsource(loadedSubsource);
+                this.initializeVoxelEditingForSubsource(loadedSubsource, segmentationRenderLayer);
                 context.registerDisposer(() => {
                   this.deinitializeVoxelEditingForSubsource(loadedSubsource);
                 });

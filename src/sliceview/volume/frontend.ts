@@ -335,22 +335,33 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     const chunksToUpdate = new Set<VolumeChunk>();
     const { dataType } = this.spec;
 
-    console.log("applyLocalEdits", edits);
-
     for (const [key, edit] of edits.entries()) {
       const chunkGridPosition = new Float32Array(key.split(",").map(Number));
 
       // getChunk on InMemoryVolumeChunkSource is guaranteed to return a chunk
-      const chunk = this.getChunk(chunkGridPosition);
+      const chunk = this.getChunk({ chunkGridPosition: chunkGridPosition });
       chunksToUpdate.add(chunk);
 
       const cpuArray = chunk.data!;
 
       for (const index of edit.indices) {
-        if (dataType === DataType.UINT32) {
-          cpuArray[index] = Number(edit.value);
-        } else {
-          (cpuArray as BigUint64Array)[index] = edit.value;
+        const value = edit.value;
+        switch (dataType) {
+          case DataType.UINT8:
+          case DataType.INT8:
+          case DataType.UINT16:
+          case DataType.INT16:
+          case DataType.UINT32:
+          case DataType.INT32:
+          case DataType.FLOAT32:
+            cpuArray[index] = Number(value);
+            break;
+          case DataType.UINT64:
+            (cpuArray as BigUint64Array)[index] = value;
+            break;
+          default:
+            console.warn(`Unsupported data type for editing: ${DataType[dataType]}`);
+            break;
         }
       }
     }
@@ -358,18 +369,26 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     this.invalidateGpuData(chunksToUpdate);
   }
 
-  getChunk(chunkGridPosition: Float32Array): UncompressedVolumeChunk {
-    const key = Array.from(chunkGridPosition).join();
+  // at least 10h of debugging just because this parameter is of a type any -- this was horrible
+  getChunk(x: any): UncompressedVolumeChunk {
+    const key = Array.from(x.chunkGridPosition).join();
     let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
+
     if (chunk === undefined) {
       const { spec } = this;
       const chunkDataSize = spec.chunkDataSize;
       const numElements = chunkDataSize.reduce((a, b) => a * b, 1);
       const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[spec.dataType];
       const data = new (Ctor as any)(numElements) as TypedArray;
-
+      if (
+        spec.dataType === DataType.UINT64
+      ) {
+        (data as BigUint64Array).fill(1n);
+      } else if( spec.dataType === DataType.UINT32) {
+        (data as Uint32Array).fill(1);
+      }
       chunk = new UncompressedVolumeChunk(this, {
-        chunkGridPosition: Array.from(chunkGridPosition),
+        chunkGridPosition: Array.from(x.chunkGridPosition),
         data: data,
         chunkDataSize: chunkDataSize,
       });

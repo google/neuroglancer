@@ -177,12 +177,16 @@ export class ImageUserLayer extends Base {
   ): ImageRenderLayer {
     const wrappedFragmentMain = makeDerivedWatchableValue(
       (originalShader: string) => `
+#define main userMain
+${originalShader}
+#undef main
+
 void main() {
-  if (toRaw(getDataValue()) == 0) {
+  if (toRaw(getDataValue()) == 0n) {
     emitTransparent();
     return;
   }
-  ${originalShader}
+  userMain();
 }
 `,
       this.fragmentMain,
@@ -267,8 +271,7 @@ void main() {
       }
       dataType = volume.dataType;
       loadedSubsource.activate((context) => {
-        loadedSubsource.addRenderLayer(
-          new ImageRenderLayer(volume, {
+        const imageRenderLayer = new ImageRenderLayer(volume, {
             opacity: this.opacity,
             blendMode: this.blendMode,
             shaderControlState: this.shaderControlState,
@@ -280,7 +283,9 @@ void main() {
             renderScaleHistogram: this.sliceViewRenderScaleHistogram,
             localPosition: this.localPosition,
             channelCoordinateSpace: this.channelCoordinateSpace,
-          }),
+          });
+        loadedSubsource.addRenderLayer(
+          imageRenderLayer
         );
         const volumeRenderLayer = context.registerDisposer(
           new VolumeRenderingRenderLayer({
@@ -313,7 +318,7 @@ void main() {
         this.shaderError.changed.dispatch();
         context.registerDisposer(registerNested((context, isWritable) => {
           if (isWritable) {
-            this.initializeVoxelEditingForSubsource(loadedSubsource);
+            this.initializeVoxelEditingForSubsource(loadedSubsource, imageRenderLayer);
             context.registerDisposer(() => {
               this.deinitializeVoxelEditingForSubsource(loadedSubsource);
             });
