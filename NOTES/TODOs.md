@@ -1,7 +1,9 @@
 # TODO List
 
 - LOD -> where am I:
-  - choosing the lod level depanding on the brush size, live rendering is working but data saving need to be updated.
+  - choosing the lod level depanding on the brush size, live rendering is working local data saving is working.
+  - there are some performance issues at very high brush sizes (>1000)
+  - implement down/upsampleing (see diagram below)
 
 - cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
 - Add redundancy to avoid corrupt/unsaved chunks on the remote
@@ -14,6 +16,8 @@
 - look into the massive ram usage when a lot of voxel annotations are drawn
 - Add Uint64 support for annotation id
 - Replace the current map settings to use the built-ins of neuroglancer (viewable under the datasource url), handle multimap with link choices, look into how to keep the init/creation logic.
+- adapt the brush size to the zoom level linearly
+
 
 # Saving/importing/exporting
 
@@ -28,3 +32,12 @@ The RemoteVoxSource will be activated when a https:// link to a specially made s
 1. on saving of data, we should propagate the complete voxel cube to the upper levels (lower zoom levels) recursively
 2. on loading of data, we should retrieve not only the current scale chunks but also the ones from the lower zoom levels.
    This last step will introduce conflicts what if the same voxel does not have the same value in the different scales? And how to know if there has been deletion or if there are just no data? To solve this, we must introduce a special value for the deleted voxels and also timestamp for the last chunk updates. ~~To avoid too many conficts, we should resolve them when loading the data.~~ Actually, we should not resolve those conflicts live as doing so will prevent us from implementing an undo feature.
+
+Drawing Flow chart:
+-> Brush stroke start
+  -> lock LOD level to the brush size one
+  -> Live render the drawing
+  -> Commit modifications to backend -> Save, downsample and mark upsamples as dirty
+-> Brush stoke ends
+  -> Unlock LOD level (maybe add a small delay to avoid flickering)
+  -> Progressivly download upscalings as they roll out

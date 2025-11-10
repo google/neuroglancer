@@ -50,8 +50,8 @@ import {
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
-import { RemoteVoxSource } from "#src/voxel_annotation/index.js";
 import { VoxMapRegistry } from "#src/voxel_annotation/map.js";
+import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 
@@ -412,12 +412,10 @@ export class VoxUserLayer extends UserLayer {
         this.voxEditController = new VoxelEditController(voxSource);
 
         const sources2D = voxSource.getSources({} as any);
-        const base = sources2D[0]?.[0];
-        if (base) {
-          const source = base.chunkSource as any;
-          source.initializeMap(map);
-          this.loadLabels();
+        for (const level of (sources2D[0] ?? [])) {
+          (level.chunkSource as any).initializeMap(map);
         }
+        this.loadLabels();
 
         // Build transform with current scale and units.
         const identity3D = this.createIdentity3D();

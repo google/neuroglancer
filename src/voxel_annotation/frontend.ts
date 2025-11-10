@@ -16,6 +16,7 @@ import {
   VOX_MAP_INIT_RPC_ID,
   VOX_LABELS_GET_RPC_ID,
   VOX_LABELS_ADD_RPC_ID,
+  makePersistantChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
@@ -65,6 +66,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     if (this.voxOptions) {
       (opts as any).vox = { ...this.voxOptions };
     }
+    opts.lodFactor = this.lodFactor;
     super.initializeCounterpart(rpc, opts);
   }
 
@@ -114,13 +116,17 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   private processPendingUploads() {
+    const remaining = new Set<string>();
     for (const key of this.dirtyChunks) {
       const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-      if (chunk && this.getCpuArrayForChunk(chunk)) {
+      const cpuArray = chunk ? this.getCpuArrayForChunk(chunk) : null;
+      if (chunk && cpuArray) {
         this.invalidateChunkUpload(chunk);
+      } else {
+        remaining.add(key);
       }
     }
-    this.dirtyChunks.clear();
+    this.dirtyChunks = remaining;
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 
@@ -129,7 +135,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     if (!voxels || voxels.length === 0) return;
     const editsByKey = new Map<string, number[]>();
     const chunksToUpdate = new Set<string>();
-    console.log("painting a lod level: ", this.lodFactor)
 
     for (const v of voxels) {
       if (!v) continue;
@@ -137,23 +142,31 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       // Immediate draw on CPU array if present
       if (chunkLocalIndex >= 0) {
         const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-        const baseArray = chunk && this.getCpuArrayForChunk(chunk);
-        if (baseArray) {
-          (baseArray as any)[chunkLocalIndex] = value as any;
-          chunksToUpdate.add(key);
+        const cpuArray = chunk ? this.getCpuArrayForChunk(chunk) : null;
+
+        // Best effort immediate local write for responsive painting
+        if (cpuArray) {
+          (cpuArray as any)[chunkLocalIndex] = value as any;
         }
+
+        // Always schedule an update for this chunk. If the CPU array isn’t ready yet,
+        // the pending key will be retried by processPendingUploads once it becomes available.
+        // This ensures the draw becomes visible once the chunk is present.
+        //
+        // Important: we schedule even if cpuArray was null.
+        chunksToUpdate.add(key);
       }
+
       let arr = editsByKey.get(key);
       if (!arr) editsByKey.set(key, (arr = []));
       arr.push(canonicalIndex);
     }
-
     for (const key of chunksToUpdate) this.scheduleUpdate(key);
 
     if (editsByKey.size > 0) {
       const size = Array.from(this.spec.chunkDataSize);
       const edits = Array.from(editsByKey, ([key, indices]) => ({
-        key,
+        key: makePersistantChunkKey(key, this.lodFactor),
         indices,
         value,
         size,

@@ -3,7 +3,10 @@
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { DataType } from "#src/util/data_type.js";
-import { computeSteps, VoxMapConfig } from "#src/voxel_annotation/map.js";
+import { LocalVoxSource } from "#src/voxel_annotation/local_source.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
+import { computeSteps } from "#src/voxel_annotation/map.js";
+import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 export class VoxSettingsTab extends Tab {
@@ -121,11 +124,9 @@ export class VoxSettingsTab extends Tab {
         // Dynamically use the appropriate VoxSource
         let maps: any[] = [];
         if (this.layer.voxServerUrl) {
-          const { RemoteVoxSource } = await import("#src/voxel_annotation/index.js");
           const src = new RemoteVoxSource(this.layer.voxServerUrl, this.layer.voxServerToken);
           maps = await src.listMaps();
         } else {
-          const { LocalVoxSource } = await import("#src/voxel_annotation/index.js");
           const src = new LocalVoxSource();
           maps = await src.listMaps();
         }

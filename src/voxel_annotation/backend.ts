@@ -7,31 +7,63 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource as BaseVolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType } from "#src/util/data_type.js";
 import {
+  makePersistantChunkKey,
   VOX_CHUNK_SOURCE_RPC_ID,
   VOX_COMMIT_VOXELS_RPC_ID,
-  VOX_MAP_INIT_RPC_ID,
-  VOX_LABELS_GET_RPC_ID,
   VOX_LABELS_ADD_RPC_ID,
+  VOX_LABELS_GET_RPC_ID,
+  VOX_MAP_INIT_RPC_ID
 } from "#src/voxel_annotation/base.js";
-import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
-import { LocalVoxSource, RemoteVoxSource } from "#src/voxel_annotation/index.js";
 import type { VoxSource } from "#src/voxel_annotation/index.js";
+import { LocalVoxSource } from "#src/voxel_annotation/local_source.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
+import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import type { RPC } from "#src/worker_rpc.js";
-import {
-  registerRPC,
-  registerPromiseRPC,
-  registerSharedObject,
-} from "#src/worker_rpc.js";
+import { registerPromiseRPC, registerRPC, registerSharedObject } from "#src/worker_rpc.js";
 
 /**
  * Backend volume source that persists voxel edits per chunk. It returns saved data if available,
  * otherwise returns an empty chunk (filled with zeros).
  */
+// --- VoxSource registry: share per (serverUrl, token, mapId, scaleKey) ---
+const voxSourceRegistry = new Map<string, VoxSource>();
+
+function makeServerKey(serverUrl?: string, token?: string): string {
+  if (!serverUrl) return "local";
+  return `remote:${serverUrl}|${token ?? ""}`;
+}
+
+function toScaleKeySafe(map: VoxMapConfig): string {
+  const cds = Array.from(map.chunkDataSize);
+  const lower = Array.from(map.baseVoxelOffset);
+  const upper = Array.from(map.upperVoxelBound);
+  return `${cds.join(',')}:${lower.join(',')}-${upper.join(',')}`;
+}
+
+function makeRegistryKey(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig): string {
+  const sk = makeServerKey(serverUrl, token);
+  const scaleKey = toScaleKeySafe(map);
+  return `${sk}|${map.id}|${scaleKey}`;
+}
+
+async function getOrCreateRegisteredVoxSource(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig): Promise<VoxSource> {
+  const key = makeRegistryKey(serverUrl, token, map);
+  const existing = voxSourceRegistry.get(key);
+  if (existing) return existing;
+  const src = serverUrl ? new RemoteVoxSource(serverUrl, token) : new LocalVoxSource();
+  await src.init(map);
+  voxSourceRegistry.set(key, src);
+  return src;
+}
+
 @registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
-  source: VoxSource;
+  private source?: VoxSource;
   private voxServerUrl?: string;
   private voxToken?: string;
+  private lodFactor: number;
+  private mapReadyPromise: Promise<void>;
+  private resolveMapReady!: () => void;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -39,25 +71,40 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     const o = options || {};
     this.voxServerUrl = o.voxServerUrl || o.serverUrl || o.vox?.serverUrl;
     this.voxToken = o.voxToken || o.token || o.vox?.token;
-    this.source = this.voxServerUrl
-      ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
-      : new LocalVoxSource();
+    this.lodFactor = o.lodFactor;
+    if (this.lodFactor == undefined) {
+      throw new Error("lodFactor is required");
+    }
+    this.mapReadyPromise = new Promise<void>((resolve) => {
+      this.resolveMapReady = resolve;
+    });
   }
 
   /** Initialize map metadata and persistence backend using a VoxMapConfig. */
   async initMap(arg: { map?: VoxMapConfig } | VoxMapConfig) {
     const map: VoxMapConfig = (arg as any)?.map ?? (arg as any);
-    if (!map) return;
-    // Allow runtime override of server settings via map
-    if (map.serverUrl) this.voxServerUrl = map.serverUrl;
-    if (map.token) this.voxToken = map.token;
-    // Swap source if configuration changed
-    this.source = this.voxServerUrl
-      ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
-      : new LocalVoxSource();
-
-    // Initialize underlying source with the provided map config
-    await this.source.init(map);
+    if (!map) throw new Error("initMap: map configuration is required");
+    // Allow runtime override/validation of server settings via map
+    if (map.serverUrl) {
+      if (this.voxServerUrl && this.voxServerUrl !== map.serverUrl) {
+        throw new Error("initMap: conflicting serverUrl provided");
+      }
+      this.voxServerUrl = map.serverUrl;
+    }
+    if (map.token) {
+      if (this.voxToken && this.voxToken !== map.token) {
+        throw new Error("initMap: conflicting token provided");
+      }
+      this.voxToken = map.token;
+    }
+    // Bind to a per-(server,map,scaleKey) registered source
+    this.source = await getOrCreateRegisteredVoxSource(
+      this.voxServerUrl,
+      this.voxToken,
+      map,
+    );
+    // Signal readiness for any pending downloads/commits
+    try { this.resolveMapReady(); } catch { /* ignore multiple resolutions */ }
   }
 
   /** Commit voxel edits from the frontend. */
@@ -70,11 +117,31 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       size?: number[];
     }[],
   ) {
-    await this.source.applyEdits(edits);
+    await this.mapReadyPromise;
+    const src = this.source;
+    if (!src) throw new Error("commitVoxels: source is not initialized for this map");
+    await src.applyEdits(edits);
+  }
+
+  async getLabelIds(): Promise<number[]> {
+    await this.mapReadyPromise;
+    const src = this.source;
+    if (!src) throw new Error("getLabelIds: source is not initialized for this map");
+    return await src.getLabelIds();
+  }
+
+  async addLabel(value: number): Promise<number[]> {
+    await this.mapReadyPromise;
+    const src = this.source;
+    if (!src) throw new Error("addLabel: source is not initialized for this map");
+    return await src.addLabel(value >>> 0);
   }
 
   async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw signal.reason ?? new Error("aborted");
+    await this.mapReadyPromise;
+    const src = this.source;
+    if (!src) throw new Error("download: source is not initialized for this map");
     // Determine chunk key and size (may be clipped at upper bound).
     this.computeChunkBounds(chunk);
     const cds = chunk.chunkDataSize!;
@@ -83,7 +150,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     // Always produce a typed array matching the spec type; MVP uses UINT32
     const array = this.allocateTypedArray(this.spec.dataType, total, 0);
     // Load saved chunk if present and copy overlapping region
-    const saved = await this.source.getSavedChunk(key);
+    const saved = await src.getSavedChunk(makePersistantChunkKey(key, this.lodFactor));
     if (saved) {
       const sxS = saved.size[0],
         syS = saved.size[1],
@@ -94,14 +161,14 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       const ox = Math.min(sxS, sxD);
       const oy = Math.min(syS, syD);
       const oz = Math.min(szS, szD);
-      const src = saved.data as any;
+      const srcArr = saved.data as any;
       const dst = array as any;
       for (let z = 0; z < oz; ++z) {
         for (let y = 0; y < oy; ++y) {
           const baseSrc = (z * syS + y) * sxS;
           const baseDst = (z * syD + y) * sxD;
           for (let x = 0; x < ox; ++x) {
-            dst[baseDst + x] = src[baseSrc + x];
+            dst[baseDst + x] = srcArr[baseSrc + x];
           }
         }
       }
@@ -152,7 +219,7 @@ registerPromiseRPC<number[]>(
   VOX_LABELS_GET_RPC_ID,
   async function (x: any): Promise<any> {
     const obj = this.get(x.rpcId) as VoxChunkSource;
-    const ids = await obj.source.getLabelIds();
+    const ids = await obj.getLabelIds();
     return { value: ids };
   },
 );
@@ -160,6 +227,6 @@ registerPromiseRPC<number[]>(
 
 registerPromiseRPC<number[]>(VOX_LABELS_ADD_RPC_ID, async function (x: any) {
   const obj = this.get(x.rpcId) as VoxChunkSource;
-  const ids = await obj.source.addLabel(x?.value >>> 0);
+  const ids = await obj.addLabel(x?.value >>> 0);
   return { value: ids };
 });
