@@ -2,8 +2,8 @@
  * Vox Settings tab UI split from index.ts
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
-import { VoxMapRegistry, computeSteps } from "#src/voxel_annotation/map.js";
 import { DataType } from "#src/util/data_type.js";
+import { computeSteps, VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 export class VoxSettingsTab extends Tab {
@@ -36,10 +36,6 @@ export class VoxSettingsTab extends Tab {
       return inp;
     };
 
-    const sMeters = this.layer.voxScale; // stored in meters
-    const a = this.layer.voxCornerA;
-    const c = this.layer.voxCornerB;
-
     // Unit helpers
     const unitFactor: Record<string, number> = {
       m: 1,
@@ -47,8 +43,7 @@ export class VoxSettingsTab extends Tab {
       µm: 1e-6,
       nm: 1e-9,
     };
-    const currentUnit =
-      this.layer.voxScaleUnit in unitFactor ? this.layer.voxScaleUnit : "m";
+    const currentUnit = "nm";
     const factor = (u: string) => unitFactor[u] ?? 1;
 
     // Prepare UI elements
@@ -63,17 +58,17 @@ export class VoxSettingsTab extends Tab {
     let prevUnit = currentUnit;
 
     // Show scale values in the chosen unit for convenience
-    const sx = makeNumberInput(sMeters[0] / factor(currentUnit), "any");
-    const sy = makeNumberInput(sMeters[1] / factor(currentUnit), "any");
-    const sz = makeNumberInput(sMeters[2] / factor(currentUnit), "any");
+    const sx = makeNumberInput(8, "any");
+    const sy = makeNumberInput(8, "any");
+    const sz = makeNumberInput(8, "any");
 
-    const ax = makeNumberInput(a[0], "1");
-    const ay = makeNumberInput(a[1], "1");
-    const az = makeNumberInput(a[2], "1");
+    const ax = makeNumberInput(0, "1");
+    const ay = makeNumberInput(0, "1");
+    const az = makeNumberInput(0, "1");
 
-    const bx = makeNumberInput(c[0], "1");
-    const by = makeNumberInput(c[1], "1");
-    const bz = makeNumberInput(c[2], "1");
+    const bx = makeNumberInput(100_000, "1");
+    const by = makeNumberInput(100_000, "1");
+    const bz = makeNumberInput(100_000, "1");
 
     element.appendChild(row("Scale (x,y,z)", [sx, sy, sz]));
     element.appendChild(row("Scale unit", [unitSel]));
@@ -98,7 +93,7 @@ export class VoxSettingsTab extends Tab {
     const mapIdInp = document.createElement("input");
     mapIdInp.type = "text";
     mapIdInp.placeholder = "map id";
-    mapIdInp.value = this.layer.voxMapId || "";
+    mapIdInp.value = "";
     const mapNameInp = document.createElement("input");
     mapNameInp.type = "text";
     mapNameInp.placeholder = "map name";
@@ -109,7 +104,7 @@ export class VoxSettingsTab extends Tab {
     const mapsSel = document.createElement("select");
     const refreshMaps = () => {
       mapsSel.innerHTML = "";
-      const maps = VoxMapRegistry.list();
+      const maps = this.layer.voxMapRegistry.list();
       for (const m of maps) {
         const opt = document.createElement("option");
         opt.value = m.id;
@@ -134,7 +129,7 @@ export class VoxSettingsTab extends Tab {
           const src = new LocalVoxSource();
           maps = await src.listMaps();
         }
-        for (const m of maps) VoxMapRegistry.upsert(m as any);
+        for (const m of maps) this.layer.voxMapRegistry.upsert(m as any);
         refreshMaps();
       } catch {
         // ignore
@@ -152,19 +147,19 @@ export class VoxSettingsTab extends Tab {
       const syNum = Number.parseFloat(sy.value);
       const szNum = Number.parseFloat(sz.value);
       const ns = new Float64Array([
-        Number.isFinite(sxNum) ? sxNum * f : sMeters[0],
-        Number.isFinite(syNum) ? syNum * f : sMeters[1],
-        Number.isFinite(szNum) ? szNum * f : sMeters[2],
+        sxNum * f,
+        syNum * f,
+        szNum * f
       ]);
       const ca = new Float32Array([
-        Math.floor(Number(ax.value) || this.layer.voxCornerA[0]),
-        Math.floor(Number(ay.value) || this.layer.voxCornerA[1]),
-        Math.floor(Number(az.value) || this.layer.voxCornerA[2]),
+        Math.floor(Number(ax.value)),
+        Math.floor(Number(ay.value)),
+        Math.floor(Number(az.value)),
       ]);
       const cb = new Float32Array([
-        Math.floor(Number(bx.value) || this.layer.voxCornerB[0]),
-        Math.floor(Number(by.value) || this.layer.voxCornerB[1]),
-        Math.floor(Number(bz.value) || this.layer.voxCornerB[2]),
+        Math.floor(Number(bx.value)),
+        Math.floor(Number(by.value)),
+        Math.floor(Number(bz.value)),
       ]);
 
       // Normalize bounds
@@ -184,10 +179,10 @@ export class VoxSettingsTab extends Tab {
       const chunkDataSize = [64, 64, 64];
       const steps = computeSteps(bounds, chunkDataSize);
 
-      const id = mapIdInp.value || this.layer.voxMapId || `map-${Date.now()}`;
+      const id = mapIdInp.value || `map-${Date.now()}`;
       const name = mapNameInp.value || id;
 
-      const map = {
+      const map:VoxMapConfig = {
         id,
         name,
         baseVoxelOffset: lower,
@@ -200,9 +195,9 @@ export class VoxSettingsTab extends Tab {
         serverUrl: this.layer.voxServerUrl,
         token: this.layer.voxServerToken,
       };
-      VoxMapRegistry.upsert(map as any);
-      VoxMapRegistry.setCurrent(map as any);
-      this.layer.applyVoxSettings(ns, u, ca, cb);
+      this.layer.voxMapRegistry.upsert(map);
+      this.layer.voxMapRegistry.setCurrent(map);
+      this.layer.buildOrRebuildVoxLayer();
       refreshMaps();
     });
     element.appendChild(createBtn);
@@ -211,9 +206,9 @@ export class VoxSettingsTab extends Tab {
     selectBtn.textContent = "Select Map";
     selectBtn.addEventListener("click", () => {
       const id = mapsSel.value;
-      const found = VoxMapRegistry.list().find((m) => m.id === id);
+      const found = this.layer.voxMapRegistry.list().find((m) => m.id === id);
       if (found) {
-        VoxMapRegistry.setCurrent(found);
+        this.layer.voxMapRegistry.setCurrent(found);
         this.layer.buildOrRebuildVoxLayer();
       }
     });

@@ -57,7 +57,7 @@ import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chu
 
 export class VoxUserLayer extends UserLayer {
   onLabelsChanged?: () => void;
-  voxMapId: string | undefined;
+  voxMapRegistry = new VoxMapRegistry();
   // Label state for painting: only store ids; colors are hashed from id on the fly
   voxLabels: { id: number }[] = [];
   voxSelectedLabelId: number | undefined = undefined;
@@ -72,16 +72,6 @@ export class VoxUserLayer extends UserLayer {
   static typeAbbreviation = "vox";
   voxEditController?: VoxelEditController;
 
-  // Settings state
-  voxScale: Float64Array = new Float64Array([
-    0.000000008, 0.000000008, 0.000000008,
-  ]);
-  voxScaleUnit: string = "nm";
-  // Region selection via corners
-  voxCornerA: Float32Array = new Float32Array([0, 0, 0]);
-  voxCornerB: Float32Array = new Float32Array([
-    1_000_000, 1_000_000, 1_000_000,
-  ]);
   // Draw tool state
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
@@ -215,53 +205,17 @@ export class VoxUserLayer extends UserLayer {
     this.tabs.default = "vox";
   }
 
-  applyVoxSettings(
-    scale: Float64Array,
-    unit: string,
-    cornerA: Float32Array,
-    cornerB: Float32Array,
-  ) {
-    // Update and rebuild if values changed.
-    let changed = false;
-    // Update scale
-    for (let i = 0; i < 3; ++i) {
-      if (this.voxScale[i] !== scale[i]) {
-        this.voxScale[i] = scale[i];
-        changed = true;
-      }
-    }
-    // Normalize corners to an axis-aligned [lower, upper) box
-    const lower = new Float32Array(3);
-    const upper = new Float32Array(3);
-    for (let i = 0; i < 3; ++i) {
-      const lo = Math.floor(Math.min(cornerA[i], cornerB[i]));
-      const up = Math.ceil(Math.max(cornerA[i], cornerB[i]));
-      lower[i] = lo;
-      upper[i] = Math.max(up, lo + 1); // enforce non-empty
-    }
-    // Update stored corners and derived upper bound
-    for (let i = 0; i < 3; ++i) {
-      if (this.voxCornerA[i] !== cornerA[i]) {
-        this.voxCornerA[i] = cornerA[i];
-        changed = true;
-      }
-      if (this.voxCornerB[i] !== cornerB[i]) {
-        this.voxCornerB[i] = cornerB[i];
-        changed = true;
-      }
-    }
-    if (this.voxScaleUnit !== unit) {
-      this.voxScaleUnit = unit;
-      changed = true;
-    }
-    if (changed) this.buildOrRebuildVoxLayer();
-  }
-
   private createIdentity3D() {
+    const map = this.voxMapRegistry.getCurrent();
+    if (!map || !map.scaleMeters || !map.unit) {
+      console.log("debug: ", map)
+      throw new Error("createIdentity3D: no map selected or missing properties");
+    }
+    
     const units = [
-      this.voxScaleUnit,
-      this.voxScaleUnit,
-      this.voxScaleUnit,
+      map.unit,
+      map.unit,
+      map.unit,
     ] as string[];
 
     return new WatchableCoordinateSpaceTransform(
@@ -270,7 +224,7 @@ export class VoxUserLayer extends UserLayer {
           rank: 3,
           names: ["x", "y", "z"],
           units,
-          scales: new Float64Array(this.voxScale),
+          scales: new Float64Array(map.scaleMeters as number[]),
         }),
       ),
     );
@@ -398,47 +352,32 @@ export class VoxUserLayer extends UserLayer {
     const ls = this.voxLoadedSubsource;
     if (!ls) return;
 
-    console.log("buildOrRebuildVoxLayer");
     // Require an explicit map selection/creation
-    const map = VoxMapRegistry.getCurrent();
+    const map = this.voxMapRegistry.getCurrent();
     if (!map) return;
 
-    const guardScale = Array.from(this.voxScale);
+    const guardScale = Array.from(map?.scaleMeters || [1, 1, 1]);
     // Use map bounds for guard and source
-    const upper = new Float32Array(map.upperVoxelBound as any);
+    const upper = new Float32Array(map.upperVoxelBound as number[]);
     const guardBounds = Array.from(upper);
-    const guardUnit = map.unit || this.voxScaleUnit;
+    const guardUnit = map.unit;
 
     ls.activate(
       () => {
-        console.log("buildOrRebuildVoxLayer: activate source", map.id);
         const voxSource = new VoxMultiscaleVolumeChunkSource(
           this.manager.chunkManager,
           {
-            map: map as any,
+            map: map,
           },
         );
         // Expose a controller so tools can paint voxels via the source.
         this.voxEditController = new VoxelEditController(voxSource);
 
-        // Initialize worker-side map persistence for this source (best-effort, fire-and-forget).
         const sources2D = voxSource.getSources({} as any);
         const base = sources2D[0]?.[0];
         if (base) {
           const source = base.chunkSource as any;
-          // Ensure we have a stable id on the map for persistence purposes.
-          const mapId = map.id || this.voxMapId || "local";
-          this.voxMapId = mapId;
-          const mapForInit = {
-            ...map,
-            id: mapId,
-            unit: guardUnit,
-            serverUrl: map.serverUrl ?? this.voxServerUrl,
-            token: map.token ?? this.voxServerToken,
-            dataType: map.dataType ?? voxSource.dataType,
-          } as any;
-          // Initialize backend map first, then load labels from the chosen datasource.
-          source.initializeMap(mapForInit);
+          source.initializeMap(map);
           this.loadLabels();
         }
 
@@ -503,9 +442,7 @@ export class VoxUserLayer extends UserLayer {
         // Local in-memory vox datasource.
         this.voxServerUrl = undefined;
         this.voxServerToken = undefined;
-        this.voxMapId = "local";
         this.voxLoadedSubsource = loadedSubsource;
-        this.buildOrRebuildVoxLayer();
         continue;
       }
 
@@ -518,9 +455,7 @@ export class VoxUserLayer extends UserLayer {
             await this.verifyVoxRemote(parsed.baseUrl, parsed.token);
             this.voxServerUrl = parsed.baseUrl;
             this.voxServerToken = parsed.token;
-            this.voxMapId = "remote";
             this.voxLoadedSubsource = loadedSubsource;
-            this.buildOrRebuildVoxLayer();
           } catch (e: any) {
             const msg = `Vox remote source check failed: ${e?.message || e}`;
             loadedSubsource.deactivate(msg);

@@ -13,9 +13,9 @@ export interface VoxMapConfig {
   // Chunking and scale
   chunkDataSize: Uint32Array | number[];
   // Data type of the voxel labels (default: uint32)
-  dataType?: number;
-  scaleMeters?: Float64Array | number[]; // physical voxel size in meters
-  unit?: string; // convenience for UI
+  dataType: number;
+  scaleMeters: Float64Array | number[]; // physical voxel size in meters
+  unit: string; // convenience for UI
   // Fixed LOD steps (factors), finest → coarsest, starting at 1.
   steps: number[];
   // Optional remote info for convenience
@@ -58,7 +58,7 @@ export function computeSteps(
 }
 
 /** Simple in-memory registry to hold current map selection and list. */
-class RegistryImpl {
+export class VoxMapRegistry {
   private current?: VoxMapConfig;
   private maps: VoxMapConfig[] = [];
 
@@ -80,5 +80,3 @@ class RegistryImpl {
     return [...this.maps];
   }
 }
-
-export const VoxMapRegistry = new RegistryImpl();

@@ -46,7 +46,7 @@ export abstract class VoxSource {
   }
   protected mapId: string = "default";
   protected scaleKey: string = "";
-  protected mapCfg?: VoxMapConfig; // Keep the entire configuration in one place
+  protected mapCfg: VoxMapConfig; // Keep the entire configuration in one place
 
   // In-memory cache of loaded chunks
   protected maxSavedChunks = 128; // cap to prevent unbounded growth
@@ -69,35 +69,13 @@ export abstract class VoxSource {
   }
 
   init(map: VoxMapConfig): Promise<{ mapId: string; scaleKey: string }> {
-    // Store the whole map config instead of decomposing into many fields.
-    const cfgIn = (map || ({} as VoxMapConfig));
-    // Normalize arrays and defaults while keeping a single cfg object.
-    const id = cfgIn.id || this.mapId || (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) || String(Date.now());
-    const chunkDataSize = new Uint32Array(Array.from(cfgIn.chunkDataSize ?? [64, 64, 64]));
-    const upperVoxelBound = new Float32Array(Array.from(cfgIn.upperVoxelBound ?? [0, 0, 0]));
-    const baseVoxelOffset = new Float32Array(Array.from(cfgIn.baseVoxelOffset ?? [0, 0, 0]));
-    const dataType = (cfgIn.dataType ?? DataType.UINT32) as number;
-    const unit = cfgIn.unit ?? "";
-    const steps = Array.isArray(cfgIn.steps) && cfgIn.steps.length > 0 ? [...cfgIn.steps] : [1];
-    const scaleMeters = cfgIn.scaleMeters
-      ? new Float64Array(Array.from(cfgIn.scaleMeters as any))
-      : undefined;
-
-    this.mapCfg = {
-      ...cfgIn,
-      id,
-      chunkDataSize,
-      upperVoxelBound,
-      baseVoxelOffset,
-      dataType,
-      unit,
-      steps,
-      scaleMeters,
-    } as VoxMapConfig;
-
-    this.mapId = id;
-    // Compute scaleKey from config to avoid collisions across regions
-    this.scaleKey = toScaleKey(chunkDataSize, baseVoxelOffset, upperVoxelBound);
+    if(!map)
+    {
+      throw new Error("VoxSource: init: Map config is required");
+    }
+    this.mapCfg = map;
+    this.mapId = map.id;
+    this.scaleKey = toScaleKey(map.chunkDataSize, map.baseVoxelOffset, map.upperVoxelBound);
     return Promise.resolve({ mapId: this.mapId, scaleKey: this.scaleKey });
   }
 
@@ -198,10 +176,27 @@ export class LocalVoxSource extends VoxSource {
       const maps: VoxMapConfig[] = [];
       for (const r of rows) {
         try {
-          const id = String(r?.mapId ?? r?.id ?? `local-${Date.now()}`);
-          const lower = Array.from(r?.baseVoxelOffset ?? [0, 0, 0]).map((v: any) => Number(v) | 0) as number[];
-          const upper = Array.from(r?.upperVoxelBound ?? [0, 0, 0]).map((v: any) => Number(v) | 0) as number[];
-          const cds = Array.from(r?.chunkDataSize ?? [64, 64, 64]).map((v: any) => Math.max(1, Number(v) | 0)) as number[];
+          if (
+            r?.id === undefined ||
+            r?.baseVoxelOffset === undefined ||
+            r?.upperVoxelBound === undefined ||
+            r?.chunkDataSize === undefined ||
+            r?.dataType === undefined ||
+            r?.scaleMeters === undefined ||
+            r?.unit === undefined
+          ) {
+            throw new Error("Invalid map configuration");
+          }
+          const id = String(r.id);
+          const lower = Array.from(r.baseVoxelOffset).map((v: any) =>
+            Number(v),
+          ) as number[];
+          const upper = Array.from(r.upperVoxelBound).map((v: any) =>
+            Number(v),
+          ) as number[];
+          const cds = Array.from(r.chunkDataSize).map((v: any) =>
+            Math.max(1, Number(v)),
+          ) as number[];
           const bounds = [
             (upper[0] | 0) - (lower[0] | 0),
             (upper[1] | 0) - (lower[1] | 0),
@@ -211,12 +206,12 @@ export class LocalVoxSource extends VoxSource {
           maps.push({
             id,
             name: r?.name ?? id,
-            baseVoxelOffset: new Float32Array(lower as any),
-            upperVoxelBound: new Float32Array(upper as any),
-            chunkDataSize: new Uint32Array(cds as any),
-            dataType: r?.dataType ?? DataType.UINT32,
-            scaleMeters: r?.scaleMeters ?? undefined,
-            unit: r?.unit ?? undefined,
+            baseVoxelOffset: new Float32Array(lower),
+            upperVoxelBound: new Float32Array(upper),
+            chunkDataSize: new Uint32Array(cds),
+            dataType: r.dataType,
+            scaleMeters: r.scaleMeters,
+            unit: r.unit,
             steps,
           });
         } catch {
@@ -288,16 +283,7 @@ export class LocalVoxSource extends VoxSource {
     const tx = db.transaction("maps", "readwrite");
     const cfg = this.mapCfg!;
     tx.objectStore("maps").put(
-      {
-        mapId: this.mapId,
-        dataType: cfg.dataType,
-        chunkDataSize: Array.from(cfg.chunkDataSize as any),
-        upperVoxelBound: Array.from(cfg.upperVoxelBound as any),
-        baseVoxelOffset: Array.from(cfg.baseVoxelOffset as any),
-        unit: cfg.unit,
-        scaleKey: this.scaleKey,
-        updatedAt: Date.now(),
-      },
+      cfg,
       this.mapId,
     );
     await txDone(tx);
@@ -422,17 +408,17 @@ export class RemoteVoxSource extends VoxSource {
         try {
           const id: string = String(ds?.mapId ?? ds?.id ?? ds?.name ?? ds?.url ?? `map-${Date.now()}`);
           const arrays = Array.isArray(ds?.arrays) ? ds.arrays : [];
-          let arr = arrays.find((a: any) => a?.path === "0") ?? arrays[0];
+          const arr = arrays.find((a: any) => a?.path === "0") ?? arrays[0];
           if (!arr) continue;
-          const shapeRaw = Array.isArray(arr?.shape) ? arr.shape : [0, 0, 0];
-          const chunksRaw = Array.isArray(arr?.chunks) ? arr.chunks : [64, 64, 64];
-          const dtypeRaw = String(arr?.dtype || "uint32");
-          const dtype = dtypeRaw === "uint64" ? DataType.UINT64 : DataType.UINT32;
-          const upper = toXYZ(shapeRaw);
-          const cds = toXYZ(chunksRaw).map((v) => Math.max(1, v));
+          // TODO: the server way of storing maps is wrong, espcially the bounds, data organization and missing scale and unit
+          const dtype = String(arr?.dtype) === "uint64" ? DataType.UINT64 : DataType.UINT32;
+          const upper = toXYZ(arr.shape);
+          const cds = toXYZ(arr.chunks).map((v) => Math.max(1, v));
           const lower = [0, 0, 0];
           const steps = computeSteps(upper, cds);
           out.push({
+            scaleMeters: [0.000000008, 0.000000008, 0.000000008],
+            unit: "nm",
             id,
             name: ds?.name ?? id,
             baseVoxelOffset: new Float32Array(lower),
@@ -441,7 +427,7 @@ export class RemoteVoxSource extends VoxSource {
             dataType: dtype,
             steps,
             serverUrl: this.baseUrl,
-            token: this.token,
+            token: this.token
           });
         } catch {
           // ignore
