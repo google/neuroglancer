@@ -35,7 +35,11 @@ import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.j
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
+import {
+  makeDerivedWatchableValue,
+  TrackableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import { randomUint64 } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -229,6 +233,10 @@ export function UserLayerWithVoxelEditingMixin<
       this.tabs.add("Draw", {
         label: "Draw",
         order: 20,
+        hidden: makeDerivedWatchableValue(
+          (editable) => !editable,
+          this.isEditable,
+        ),
         getter: () => new VoxToolTab(this),
       });
     }
@@ -307,6 +315,7 @@ export function UserLayerWithVoxelEditingMixin<
       );
       this.editingContexts.set(loadedSubsource, context);
       this.addRenderLayer(optimisticRenderLayer);
+      this.isEditable.value = true;
     }
 
     deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
