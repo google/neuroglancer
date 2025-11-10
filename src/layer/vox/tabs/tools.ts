@@ -310,7 +310,7 @@ export class VoxToolTab extends Tab {
 
     // Initialize with an explicit safe default if not set.
     if (!Number.isFinite((this.layer as any).voxFloodMaxVoxels)) {
-      (this.layer as any).voxFloodMaxVoxels = 100000;
+      (this.layer as any).voxFloodMaxVoxels = 10000;
     }
     floodMaxInput.value = String((this.layer as any).voxFloodMaxVoxels);
 

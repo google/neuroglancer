@@ -67,11 +67,11 @@ export class VoxelEditController extends SharedObject {
   }
 
   private morphologicalConfig = {
-    // At what `filledCount` thresholds the neighborhood size increases.
     growthThresholds: [
-      { count: 1000, size: 3 },  // Requires 3px thick channels
-      { count: 10000, size: 5 },  // Requires 5px thick channels
-      { count: 100000, size: 7 }, // Requires 7px thick channels
+      { count: 100, size: 1 },
+      { count: 1000, size: 3 },
+      { count: 10000, size: 5 },
+      { count: 100000, size: 7 },
     ],
     maxSize: 9,
   };
@@ -242,51 +242,50 @@ export class VoxelEditController extends SharedObject {
     startPositionCanonical: Float32Array,
     fillValue: bigint,
     maxVoxels: number,
-   _planeNormal: vec3,
+    planeNormal: vec3, // MUST be a normalized vector
   ): Promise<{ edits: { key: string; indices: number[]; value: bigint }[]; filledCount: number; originalValue: bigint }> {
-    if (!startPositionCanonical || startPositionCanonical.length < 3) {
-      throw new Error("VoxelEditController.floodFillPlane2D: startPositionCanonical must be Float32Array[3].");
-    }
-    if (!Number.isFinite(maxVoxels) || maxVoxels <= 0) {
-      throw new Error("VoxelEditController.floodFillPlane2D: maxVoxels must be > 0.");
-    }
+      const sourceIndex = 0;
+      const source = this.getSourceForLOD(sourceIndex);
+      const startVoxelLod = vec3.round(vec3.create(), startPositionCanonical as vec3);
 
-    // For V1 we use the minimum LOD (index 0)
-    const voxelSize = 1;
-    const sourceIndex = 0;
-    const source = this.getSourceForLOD(sourceIndex);
-
-    // Convert canonical/world to level grid coordinates.
-    const startVoxelLod = new Float32Array([
-      Math.round((startPositionCanonical[0] ?? NaN) / voxelSize),
-      Math.round((startPositionCanonical[1] ?? NaN) / voxelSize),
-      Math.round((startPositionCanonical[2] ?? NaN) / voxelSize),
-    ]);
-
-    if (!startVoxelLod || startVoxelLod.length < 3) {
-      throw new Error("VoxChunkSource.floodFillPlane2D: startVoxelLod must be Float32Array[3].");
-    }
-    if (!Number.isFinite(maxVoxels) || maxVoxels <= 0) {
-      throw new Error("VoxChunkSource.floodFillPlane2D: maxVoxels must be > 0.");
-    }
-
-    const originalValueResult = await source.getEnsuredValueAt(startVoxelLod, this.singleChannelAccess);
-    if (originalValueResult === null) {
+      const originalValueResult = await source.getEnsuredValueAt(startVoxelLod as Float32Array, this.singleChannelAccess);
+      if (originalValueResult === null) {
       throw new Error("Flood fill seed is in an unloaded or out-of-bounds chunk.");
     }
     const originalValue = typeof originalValueResult !== "bigint" ? BigInt(originalValueResult as number) : originalValueResult;
+
     if (originalValue === fillValue) {
       return { edits: [], filledCount: 0, originalValue };
     }
 
-    const zPlane = startVoxelLod[2] | 0;
+    const U = vec3.create();
+    const V = vec3.create();
+    const tempVec = Math.abs(vec3.dot(planeNormal, vec3.fromValues(1, 0, 0))) < 0.9 ?
+      vec3.fromValues(1, 0, 0) : vec3.fromValues(0, 1, 0);
+    vec3.cross(U, tempVec, planeNormal);
+    vec3.normalize(U, U);
+    vec3.cross(V, planeNormal, U);
+    vec3.normalize(V, V);
+
     const visited = new Set<string>();
     const queue: [number, number][] = [];
     let filledCount = 0;
+    const voxelsToFill: Float32Array[] = [];
 
-    const isOriginalAt = async (px: number, py: number): Promise<boolean> => {
-      const value = await source.getEnsuredValueAt(new Float32Array([px, py, zPlane]), this.singleChannelAccess);
-      return (typeof value !== "bigint" ? BigInt(value as number) : value) === originalValue;
+
+    const map2dTo3d = (u: number, v: number): vec3 => {
+      const point = vec3.clone(startVoxelLod);
+      vec3.scaleAndAdd(point, point, U, u);
+      vec3.scaleAndAdd(point, point, V, v);
+      return vec3.round(vec3.create(), point);
+    };
+
+    const isFillable = async (p: vec3): Promise<boolean> => {
+      const value = await source.getEnsuredValueAt(p as Float32Array, this.singleChannelAccess);
+      if (value === null) return false;
+      const bigValue = (typeof value !== "bigint") ? BigInt(value as number) : value;
+      if (originalValue === 0n) return bigValue === 0n;
+      return bigValue === originalValue;
     };
 
     const getCurrentThickness = (): number => {
@@ -299,112 +298,96 @@ export class VoxelEditController extends SharedObject {
       return Math.min(thickness, this.morphologicalConfig.maxSize);
     };
 
-    const hasThickEnoughChannel = (
-      x: number,
-      y: number,
-      nx: number,
-      ny: number,
-      requiredThickness: number
-    ): boolean => {
+    const hasThickEnoughChannel = async (u: number, v: number, nu: number, nv: number, requiredThickness: number): Promise<boolean> => {
       if (requiredThickness <= 1) return true;
 
-      const dx = nx - x;
-      const dy = ny - y;
-
-      if ((dx === 0) === (dy === 0)) return false;
-
       const halfThickness = Math.floor(requiredThickness / 2);
+      const du = nu - u;
+      const dv = nv - v;
 
-      if (dx !== 0) {
-        for (const checkX of [x, nx]) {
-          for (let offset = -halfThickness; offset <= halfThickness; offset++) {
-            if (!isOriginalAt(checkX, ny + offset)) {
-              return false;
-            }
-          }
-        }
-      } else {
-        for (const checkY of [y, ny]) {
-          for (let offset = -halfThickness; offset <= halfThickness; offset++) {
-            if (!isOriginalAt(nx + offset, checkY)) {
-              return false;
-            }
-          }
+      // Perpendicular direction
+      const perpU = -dv;
+      const perpV = du;
+
+      // Check if the NEIGHBOR position has sufficient thickness on both sides
+      for (let offset = -halfThickness; offset <= halfThickness; ++offset) {
+        const testU = nu + perpU * offset;
+        const testV = nv + perpV * offset;
+        const pointToTest = map2dTo3d(testU, testV);
+
+        if (!await isFillable(pointToTest)) {
+          return false;
         }
       }
 
       return true;
     };
 
-    const fillBorderRegion = async (
-      startX: number,
-      startY: number,
-      requiredThickness: number
-    ) => {
+    const fillBorderRegion = async (startU: number, startV: number, requiredThickness: number) => {
       const subQueue: [number, number][] = [];
-      const halfThickness = Math.floor(requiredThickness / 2) + 1;
+      // The bounding box for the local fill is defined in the (u, v) coordinate system
+      const halfSize = Math.floor(requiredThickness / 2) + 1;
+      const startKey = `${startU},${startV}`;
+      if (visited.has(startKey)) return;
 
-      const k = `${startX},${startY}`;
-      if (visited.has(k)) return;
-
-      subQueue.push([startX, startY]);
-      visited.add(k); // Mark as visited immediately to avoid re-processing
+      subQueue.push([startU, startV]);
+      visited.add(startKey);
 
       while (subQueue.length > 0) {
-        const [cx, cy] = subQueue.shift()!;
+        if (filledCount >= maxVoxels) return;
+        const [u, v] = subQueue.shift()!;
+
+        const currentPoint = map2dTo3d(u, v);
         filledCount++;
-        voxelsToFill.push(new Float32Array([cx, cy, zPlane]));
+        voxelsToFill.push(currentPoint as Float32Array);
 
-        const neighbors: [number, number][] = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-        for (const [nnx, nny] of neighbors) {
-          if (nnx < startX - halfThickness || nnx > startX + halfThickness ||
-            nny < startY - halfThickness || nny > startY + halfThickness) {
-            continue; // Outside the bounding box
+        const neighbors2d: [number, number][] = [[u + 1, v], [u - 1, v], [u, v + 1], [u, v - 1]];
+        for (const [nu, nv] of neighbors2d) {
+          // Constrain this local search to a small bounding box
+          if (nu < startU - halfSize || nu > startU + halfSize ||
+            nv < startV - halfSize || nv > startV + halfSize) {
+            continue;
           }
-          const nk = `${nnx},${nny}`;
-          if (visited.has(nk)) continue;
 
-          if (await isOriginalAt(nnx, nny)) {
-            visited.add(nk);
-            subQueue.push([nnx, nny]);
+          const neighborKey = `${nu},${nv}`;
+          if (visited.has(neighborKey)) continue;
+
+          const neighborPoint = map2dTo3d(nu, nv);
+          if (await isFillable(neighborPoint)) {
+            visited.add(neighborKey);
+            subQueue.push([nu, nv]);
           }
         }
       }
     };
 
-    // Seed the queue
-    queue.push([startVoxelLod[0] | 0, startVoxelLod[1] | 0]);
-    visited.add(`${startVoxelLod[0] | 0},${startVoxelLod[1] | 0}`);
-    const voxelsToFill: Float32Array[] = [];
+    queue.push([0, 0]);
+    visited.add("0,0");
 
-    // BFS with thickness constraints
     while (queue.length > 0) {
       if (filledCount >= maxVoxels) {
-        throw new Error(`VoxChunkSource.floodFillPlane2D: region exceeds maxVoxels (${maxVoxels}).`);
+        throw new Error(`Flood fill region exceeds the limit of ${maxVoxels} voxels.`);
       }
-      const [x, y] = queue.shift()!;
+      const [u, v] = queue.shift()!;
 
-      // Schedule this pixel for filling
+      const currentPoint = map2dTo3d(u, v);
       filledCount++;
-      voxelsToFill.push(new Float32Array([x, y, zPlane]));
+      voxelsToFill.push(currentPoint as Float32Array);
 
-      // Get current thickness requirement
       const requiredThickness = getCurrentThickness();
+      const neighbors2d: [number, number][] = [[u + 1, v], [u - 1, v], [u, v + 1], [u, v - 1]];
 
-      // Check 4-neighbors
-      const neighbors: [number, number][] = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
-      for (const [nx, ny] of neighbors) {
-        const k = `${nx},${ny}`;
+      for (const [nu, nv] of neighbors2d) {
+        const k = `${nu},${nv}`;
         if (visited.has(k)) continue;
 
-        if (await isOriginalAt(nx, ny)) {
-          // The neighbor is a valid fill target. Now check if we can propagate from it.
-          if (hasThickEnoughChannel(x, y, nx, ny, requiredThickness)) {
-            // Channel is thick enough: Add to queue to propagate.
+        const neighborPoint = map2dTo3d(nu, nv);
+        if (await isFillable(neighborPoint)) {
+          if (await hasThickEnoughChannel(u, v, nu, nv, requiredThickness)) {
             visited.add(k);
-            queue.push([nx, ny]);
+            queue.push([nu, nv]);
           } else {
-            await fillBorderRegion(nx, ny, requiredThickness);
+            await fillBorderRegion(nu, nv, requiredThickness);
           }
         }
       }
@@ -415,7 +398,6 @@ export class VoxelEditController extends SharedObject {
       const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
       const chunkKey = chunkGridPosition.join();
       const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
-
       let entry = editsByVoxKey.get(voxKey);
       if (!entry) {
         entry = { indices: [], value: fillValue };
@@ -425,8 +407,6 @@ export class VoxelEditController extends SharedObject {
       const index = (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) * chunkDataSize[0] + positionWithinChunk[0];
       entry.indices.push(index);
     }
-
-    // Apply edits locally for preview on this source.
     const localEdits = new Map<string, {indices: number[], value: bigint}>();
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       const parsed = parseVoxChunkKey(voxKey);
@@ -434,16 +414,13 @@ export class VoxelEditController extends SharedObject {
       localEdits.set(parsed.chunkKey, edit);
     }
     source.applyLocalEdits(localEdits);
-
-    // Prepare edits for the backend keyed by voxKey.
     const backendEdits: { key: string; indices: number[]; value: bigint }[] = [];
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
     }
-
     this.commitEdits(backendEdits);
 
-    return { edits: backendEdits, filledCount, originalValue: originalValue };
+    return { edits: backendEdits, filledCount, originalValue };
   }
 
   callChunkReload(voxChunkKeys: string[]) {
