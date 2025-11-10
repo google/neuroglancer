@@ -136,6 +136,17 @@ export class VoxelPixelLegacyTool extends LegacyTool<VoxUserLayer> {
       console.log(
         `Mouse: ${mousePosStr} | Zoom: ${zoomStr} | Viewport scale: ${imageScaleParts.join(", ")}`,
       );
+
+      // Connect to the controller: paint a voxel under the mouse if we have voxel coords.
+      if (mouseState?.active && pos && cs) {
+        const vx = Math.floor(pos[0] ?? 0);
+        const vy = Math.floor(pos[1] ?? 0);
+        const vz = Math.floor((pos[2] as number | undefined) ?? 0);
+        (this.layer as any).voxEditController?.paintVoxel(
+          new Float32Array([vx, vy, vz]),
+          42,
+        );
+      }
     } catch (e) {
       console.log("[VoxelPixelLegacyTool] Error computing info:", e);
     }

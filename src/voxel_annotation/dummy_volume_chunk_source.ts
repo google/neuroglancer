@@ -22,7 +22,7 @@ import {
   MultiscaleVolumeChunkSource,
 } from '#src/sliceview/volume/frontend.js';
 import { DataType } from '#src/util/data_type.js';
-import { VoxDummyChunkSource } from '#src/voxel_annotation/frontend.js';
+import { VoxChunkSource } from '#src/voxel_annotation/frontend.js';
 
 /**
  * This is an abstract representation of 3D (volumetric) data that can exist at multiple resolutions or "scales."
@@ -36,6 +36,11 @@ import { VoxDummyChunkSource } from '#src/voxel_annotation/frontend.js';
  * - Chunking: Data is divided into smaller, manageable 3D blocks (chunks) to optimize loading and memory usage.
  * - Asynchronous: Data loading is typically asynchronous, as it might involve fetching from a remote server or reading from large local files.
  */
+export interface DummyMultiscaleOptions {
+  chunkDataSize?: Uint32Array | number[];
+  upperVoxelBound?: Float32Array | number[];
+}
+
 export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   dataType = DataType.UINT32;
   volumeType = VolumeType.SEGMENTATION;
@@ -43,38 +48,83 @@ export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
     return 3;
   }
 
-  constructor(chunkManager: ChunkManager) {
+  private cfgChunkDataSize: Uint32Array;
+  private cfgUpperVoxelBound: Float32Array;
+
+  constructor(chunkManager: ChunkManager, options?: DummyMultiscaleOptions) {
     super(chunkManager);
+    this.cfgChunkDataSize = new Uint32Array(
+      options?.chunkDataSize ? Array.from(options.chunkDataSize) : [64, 64, 64],
+    );
+    this.cfgUpperVoxelBound = new Float32Array(
+      options?.upperVoxelBound ? Array.from(options.upperVoxelBound) : [1_000, 1_000, 1_000],
+    );
   }
 
   getSources(_options: VolumeSourceOptions) {
-    // Provide a single-scale, single-orientation dummy source.
+    // Provide a base scale and a coarse "guard" scale to avoid memory blowups at extreme zoom out.
     const rank = this.rank;
-    const chunkDataSize = new Uint32Array([32, 32, 32]);
-    const upperVoxelBound = new Float32Array([1024, 1024, 1024]);
 
-    const spec = makeVolumeChunkSpecification({
+    // Base (fine) scale specification.
+    const baseSpec = makeVolumeChunkSpecification({
       rank,
       dataType: this.dataType,
-      chunkDataSize,
-      upperVoxelBound,
+      chunkDataSize: this.cfgChunkDataSize,
+      upperVoxelBound: this.cfgUpperVoxelBound,
     });
+    const baseSource: VoxChunkSource = this.chunkManager.getChunkSource(
+      VoxChunkSource as any,
+      { spec: baseSpec },
+    );
 
-    const chunkSource: VoxDummyChunkSource = this.chunkManager.getChunkSource(VoxDummyChunkSource as any, { spec });
-
+    // Identity transform for base scale.
     const identity = new Float32Array((rank + 1) * (rank + 1));
     for (let i = 0; i < rank; ++i) {
       identity[i * (rank + 1) + i] = 1;
     }
     identity[rank * (rank + 1) + rank] = 1;
 
-    const single: SliceViewSingleResolutionSource<VoxDummyChunkSource> = {
-      chunkSource,
+    const base: SliceViewSingleResolutionSource<VoxChunkSource> = {
+      chunkSource: baseSource,
       chunkToMultiscaleTransform: identity,
-      lowerClipBound: spec.lowerVoxelBound,
-      upperClipBound: spec.upperVoxelBound,
+      lowerClipBound: baseSpec.lowerVoxelBound,
+      upperClipBound: baseSpec.upperVoxelBound,
     };
-    // Outer array: orientations. Inner: scales (just one).
-    return [[single]];
+
+    // Coarse guard scale: no chunks will be created (zero-sized bounds) but it will be selected
+    // at extremely low zoom levels due to a very large voxel scale transform.
+    const guardSpec = makeVolumeChunkSpecification({
+      rank,
+      dataType: this.dataType,
+      // Use same chunk size; since bounds are empty below, no chunks are actually requested.
+      chunkDataSize: this.cfgChunkDataSize,
+      // Zero-sized bounds => lowerChunkBound === upperChunkBound, therefore 0 chunks.
+      upperVoxelBound: new Float32Array(rank),
+      lowerVoxelBound: new Float32Array(rank),
+    });
+
+    const guardSource: VoxChunkSource = this.chunkManager.getChunkSource(
+      VoxChunkSource as any,
+      { spec: guardSpec },
+    );
+
+    // Large diagonal scale to make effective voxel size huge, ensuring guard scale is used when
+    // zoomed out. Homogeneous (rank+1)x(rank+1) matrix.
+    const scale = 1 << 3;
+    const guardXform = new Float32Array((rank + 1) * (rank + 1));
+    for (let i = 0; i < rank; ++i) {
+      guardXform[i * (rank + 1) + i] = scale;
+    }
+    guardXform[rank * (rank + 1) + rank] = 1;
+
+    const guard: SliceViewSingleResolutionSource<VoxChunkSource> = {
+      chunkSource: guardSource,
+      chunkToMultiscaleTransform: guardXform,
+      lowerClipBound: guardSpec.lowerVoxelBound,
+      upperClipBound: guardSpec.upperVoxelBound,
+    };
+
+    // Outer array: orientations. Inner array: scales ordered from finest -> coarsest.
+    return [[base, guard]];
   }
 }

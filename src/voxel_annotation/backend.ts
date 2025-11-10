@@ -6,7 +6,7 @@
 import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
 import { DataType } from '#src/util/data_type.js';
-import { VOX_DUMMY_CHUNK_SOURCE_RPC_ID } from "#src/voxel_annotation/base.js";
+import { VOX_CHUNK_SOURCE_RPC_ID } from "#src/voxel_annotation/base.js";
 import type { RPC } from '#src/worker_rpc.js';
 import { registerSharedObject } from '#src/worker_rpc.js';
 
@@ -15,8 +15,8 @@ import { registerSharedObject } from '#src/worker_rpc.js';
  * Minimal backend volume source that procedurally generates data for voxel annotations demo.
  * It fills chunk.data with a simple pattern (checkerboard based on voxel coords).
  */
-@registerSharedObject(VOX_DUMMY_CHUNK_SOURCE_RPC_ID)
-export class VoxDummyChunkSource extends BaseVolumeChunkSource {
+@registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
+export class VoxChunkSource extends BaseVolumeChunkSource {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
   }
@@ -44,7 +44,7 @@ export class VoxDummyChunkSource extends BaseVolumeChunkSource {
           const gz = origin[2] + z;
           // Checker pattern in world space with large squares
           const square = ((Math.floor(gx / 16) + Math.floor(gy / 16) + Math.floor(gz / 16)) & 1) !== 0;
-          array[index] = square ? 255 : 0;
+          array[index] = square ? 5 : 0;
         }
       }
     }

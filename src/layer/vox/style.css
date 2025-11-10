@@ -1,0 +1,98 @@
+:root {
+  /* best-effort variables if app doesn't define them */
+  --ng-bg: rgba(20, 22, 27, 0.9);
+  --ng-card: rgba(255, 255, 255, 0.04);
+  --ng-border: rgba(255, 255, 255, 0.15);
+  --ng-text: rgba(230, 230, 235, 0.95);
+  --ng-muted: rgba(230, 230, 235, 0.65);
+  --ng-accent: #3a6df0;
+}
+
+.neuroglancer-vox-settings-tab,
+.neuroglancer-vox-tools-tab {
+  box-sizing: border-box;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ng-text);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.neuroglancer-vox-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--ng-card);
+  border: 1px solid var(--ng-border);
+  border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.neuroglancer-vox-row label {
+  flex: 0 0 140px; /* fixed column for label */
+  min-width: 0;
+  font-weight: 500;
+  color: var(--ng-muted);
+}
+
+.neuroglancer-vox-input,
+.neuroglancer-vox-settings-tab select {
+  box-sizing: border-box;
+  flex: 1 1 8.5em; /* prefer ~8.5em but allow shrink/grow */
+  min-width: 0;     /* critical to allow shrinking within flex rows */
+  width: auto;
+  max-width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ng-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ng-text);
+  outline: none;
+}
+
+/* Ensure any non-label child in a row can shrink and wrap instead of forcing horizontal overflow */
+.neuroglancer-vox-row > :not(label) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.neuroglancer-vox-input:focus,
+.neuroglancer-vox-settings-tab select:focus {
+  border-color: color-mix(in oklab, var(--ng-accent) 60%, var(--ng-border));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ng-accent) 25%, transparent);
+}
+
+.neuroglancer-vox-settings-tab button,
+.neuroglancer-vox-tools-tab button {
+  align-self: flex-start;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in oklab, var(--ng-accent) 55%, var(--ng-border));
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--ng-accent) 88%, #2a2a2a) 0%,
+    color-mix(in oklab, var(--ng-accent) 70%, #1f1f1f) 100%);
+  color: #fff;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 60ms ease;
+}
+
+.neuroglancer-vox-settings-tab button:hover,
+.neuroglancer-vox-tools-tab button:hover {
+  filter: brightness(1.06);
+}
+
+.neuroglancer-vox-settings-tab button:active,
+.neuroglancer-vox-tools-tab button:active {
+  transform: translateY(1px);
+}
+
+.neuroglancer-vox-toolbox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -33,7 +33,7 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 type EmptyParams = Record<string, never>;
 
 export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<EmptyParams> {
-  // Defensive draw override to avoid crashes if layerInfo is not initialized yet.
+
   override draw(renderContext: any) {
     const { sliceView } = renderContext;
     const layerInfo = sliceView.visibleLayers.get(this);
@@ -41,6 +41,7 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
       // Visible layers not ready yet; skip drawing this frame.
       return;
     }
+    console.log("drawn")
     super.draw(renderContext);
   }
   constructor(
@@ -58,13 +59,8 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
 
   defineShader(builder: ShaderBuilder) {
     builder.setFragmentMain(`
-  // vChunkPosition is in voxel coords [0..uChunkDataSize]; normalize XY.
-  vec2 tex = vChunkPosition.xy / uChunkDataSize.xy;
-  float tiles = 8.0; // fewer tiles for larger squares
-  float u = tex.x * tiles;
-  float v = tex.y * tiles;
-  float checker = mod(floor(u) + floor(v), 2.0);
-  vec4 color = checker > 0.5 ? vec4(1.0, 1.0, 0.0, 0.5) : vec4(0.0, 1.0, 0.0, 0.5);
+  float t = float(getDataValue().value);
+  vec4 color = t > 10.0 ? vec4(1.0, 1.0, 0.0, 1.0) : vec4(clamp(t, 0.0, 1.0), 0.0, 0.0, t > 0.0 ? 0.3 : 0.0);
   emit(color);
   `);
 
