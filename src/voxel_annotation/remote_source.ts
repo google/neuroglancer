@@ -68,7 +68,6 @@ export class RemoteVoxSource extends VoxSource {
     // Call /init (best-effort; server may already have it)
     const qs = this.qs({
       mapId: this.mapId,
-      scaleKey: this.scaleKey,
       dtype: dtypeStr,
     });
     try {

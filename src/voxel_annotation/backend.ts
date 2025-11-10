@@ -7,12 +7,13 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource as BaseVolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType } from "#src/util/data_type.js";
 import {
-  makePersistantChunkKey,
+  makeVoxChunkKey,
   VOX_CHUNK_SOURCE_RPC_ID,
   VOX_COMMIT_VOXELS_RPC_ID,
   VOX_LABELS_ADD_RPC_ID,
   VOX_LABELS_GET_RPC_ID,
-  VOX_MAP_INIT_RPC_ID
+  VOX_MAP_INIT_RPC_ID,
+  VOX_RELOAD_CHUNKS_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import type { VoxSource } from "#src/voxel_annotation/index.js";
 import { LocalVoxSource } from "#src/voxel_annotation/local_source.js";
@@ -46,13 +47,18 @@ function makeRegistryKey(serverUrl: string | undefined, token: string | undefine
   return `${sk}|${map.id}|${scaleKey}`;
 }
 
-async function getOrCreateRegisteredVoxSource(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig): Promise<VoxSource> {
+async function getOrCreateRegisteredVoxSource(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig, vcsInstance: VoxChunkSource): Promise<VoxSource> {
   const key = makeRegistryKey(serverUrl, token, map);
   const existing = voxSourceRegistry.get(key);
-  if (existing) return existing;
+  if (existing)
+  {
+    existing.addVoxChunkSource(vcsInstance);
+    return existing;
+  }
   const src = serverUrl ? new RemoteVoxSource(serverUrl, token) : new LocalVoxSource();
   await src.init(map);
   voxSourceRegistry.set(key, src);
+  src.addVoxChunkSource(vcsInstance);
   return src;
 }
 
@@ -61,7 +67,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   private source?: VoxSource;
   private voxServerUrl?: string;
   private voxToken?: string;
-  private lodFactor: number;
+  public lodFactor: number;
   private mapReadyPromise: Promise<void>;
   private resolveMapReady!: () => void;
 
@@ -102,9 +108,17 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       this.voxServerUrl,
       this.voxToken,
       map,
+      this
     );
     // Signal readiness for any pending downloads/commits
     try { this.resolveMapReady(); } catch { /* ignore multiple resolutions */ }
+  }
+
+  reloadChunksByKey(keys: string[]) {
+    this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
+      id: this.rpcId,
+      keys,
+    });
   }
 
   /** Commit voxel edits from the frontend. */
@@ -150,7 +164,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     // Always produce a typed array matching the spec type; MVP uses UINT32
     const array = this.allocateTypedArray(this.spec.dataType, total, 0);
     // Load saved chunk if present and copy overlapping region
-    const saved = await src.getSavedChunk(makePersistantChunkKey(key, this.lodFactor));
+    const saved = await src.getSavedChunk(makeVoxChunkKey(key, this.lodFactor));
     if (saved) {
       const sxS = saved.size[0],
         syS = saved.size[1],

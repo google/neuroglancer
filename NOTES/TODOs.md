@@ -3,7 +3,7 @@
 - LOD -> where am I:
   - choosing the lod level depanding on the brush size, live rendering is working local data saving is working.
   - there are some performance issues at very high brush sizes (>1000)
-  - implement down/upsampleing (see diagram below)
+  - TODO FOR TOMORROW: implement down/upsampling locally (see diagram below), note we may need a way to trigger redownload on the front from the backend.
 
 - cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
 - Add redundancy to avoid corrupt/unsaved chunks on the remote
@@ -37,7 +37,7 @@ Drawing Flow chart:
 -> Brush stroke start
   -> lock LOD level to the brush size one
   -> Live render the drawing
-  -> Commit modifications to backend -> Save, downsample and mark upsamples as dirty
+  -> Commit modifications to backend -> Save, downsample and mark upsamples as dirty (they will be recalculated on the fly when needed)
 -> Brush stoke ends
   -> Unlock LOD level (maybe add a small delay to avoid flickering)
   -> Progressivly download upscalings as they roll out

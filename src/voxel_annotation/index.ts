@@ -3,6 +3,8 @@
  * The LocalVoxSource persists per-chunk arrays into IndexedDB with a debounced saver.
  */
 
+import type { VoxChunkSource } from "#src/voxel_annotation/backend.js";
+import { parseVoxChunkKey } from "#src/voxel_annotation/base.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 
 
@@ -11,27 +13,15 @@ export interface SavedChunk {
   size: Uint32Array; // canonical size used for linearization (usually spec.chunkDataSize)
 }
 
-export function toScaleKey(
-  chunkDataSize: number[] | Uint32Array,
-  baseVoxelOffset?: number[] | Uint32Array | Float32Array,
-  upperVoxelBound?: number[] | Uint32Array | Float32Array,
-): string {
-  const cds = Array.from(chunkDataSize);
-  const lower = Array.from(baseVoxelOffset ?? [0, 0, 0]);
-  const upper = Array.from(upperVoxelBound ?? [0, 0, 0]);
-  return `${cds[0]}_${cds[1]}_${cds[2]}:${lower[0]}_${lower[1]}_${lower[2]}-${upper[0]}_${upper[1]}_${upper[2]}`;
-}
-
 export function compositeChunkDbKey(
   mapId: string,
-  scaleKey: string,
   chunkKey: string,
 ): string {
-  return `${mapId}:${scaleKey}:${chunkKey}`;
+  return `${mapId}:${chunkKey}`;
 }
 
-export function compositeLabelsDbKey(mapId: string, scaleKey: string): string {
-  return `${mapId}:${scaleKey}:labels`;
+export function compositeLabelsDbKey(mapId: string): string {
+  return `${mapId}:labels`;
 }
 
 export abstract class VoxSource {
@@ -43,16 +33,16 @@ export abstract class VoxSource {
     return [];
   }
   protected mapId: string = "default";
-  protected scaleKey: string = "";
   protected mapCfg: VoxMapConfig; // Keep the entire configuration in one place
 
   // In-memory cache of loaded chunks
-  protected maxSavedChunks = 128; // cap to prevent unbounded growth
+  protected maxSavedChunks = 0; // cap to prevent unbounded growth
   protected saved = new Map<string, SavedChunk>();
 
   // Dirty tracking and debounced save
   protected dirty = new Set<string>();
   protected saveTimer: number | undefined;
+  protected voxChunkSources = new Map<number, VoxChunkSource>();
 
   /**
    * Generic label persistence hooks. Subclasses override to connect to the chosen datasource.
@@ -66,15 +56,30 @@ export abstract class VoxSource {
     return [];
   }
 
-  init(map: VoxMapConfig): Promise<{ mapId: string; scaleKey: string }> {
+  init(map: VoxMapConfig): Promise<{ mapId: string}> {
     if(!map)
     {
       throw new Error("VoxSource: init: Map config is required");
     }
     this.mapCfg = map;
     this.mapId = map.id;
-    this.scaleKey = toScaleKey(map.chunkDataSize, map.baseVoxelOffset, map.upperVoxelBound);
-    return Promise.resolve({ mapId: this.mapId, scaleKey: this.scaleKey });
+    return Promise.resolve({ mapId: this.mapId });
+  }
+
+  addVoxChunkSource(vcs: VoxChunkSource) {
+    this.voxChunkSources.set(vcs.lodFactor, vcs);
+  }
+
+  callChunkReload(voxChunkKey: string) {
+      const parsed_vck = parseVoxChunkKey(voxChunkKey);
+      if (!parsed_vck) {
+        console.error("VoxSource: callChunkReload: invalid chunk key", voxChunkKey);
+        return;
+      }
+      const vcs = this.voxChunkSources.get(parsed_vck.lod);
+      if (vcs) {
+        vcs.reloadChunksByKey([parsed_vck.chunkKey]);
+      }
   }
 
   // Common helpers

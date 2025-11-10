@@ -16,10 +16,11 @@ import {
   VOX_MAP_INIT_RPC_ID,
   VOX_LABELS_GET_RPC_ID,
   VOX_LABELS_ADD_RPC_ID,
-  makePersistantChunkKey,
+  makeVoxChunkKey,
+  VOX_RELOAD_CHUNKS_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
-import { registerSharedObjectOwner } from "#src/worker_rpc.js";
+import { registerRPC, registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 /**
  * Frontend owner for VoxChunkSource, extended with a local optimistic edit overlay.
@@ -130,6 +131,17 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 
+  invalidateChunksByKey(keys: string[]) {
+    for (const key of keys) {
+      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
+      const cpuArray = chunk ? this.getCpuArrayForChunk(chunk) : null;
+      if (chunk && cpuArray) {
+        this.invalidateChunkUpload(chunk);
+      }
+    }
+    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+  }
+
   /** Batch paint API to minimize GPU uploads by chunk. */
   paintVoxelsBatch(voxels: Float32Array[], value: number) {
     if (!voxels || voxels.length === 0) return;
@@ -166,7 +178,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     if (editsByKey.size > 0) {
       const size = Array.from(this.spec.chunkDataSize);
       const edits = Array.from(editsByKey, ([key, indices]) => ({
-        key: makePersistantChunkKey(key, this.lodFactor),
+        key: makeVoxChunkKey(key, this.lodFactor),
         indices,
         value,
         size,
@@ -246,3 +258,8 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     chunk.copyToGPU(gl);
   }
 }
+
+registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
+  const obj = this.get(x.id) as VoxChunkSource;
+  obj.invalidateChunksByKey(x.keys);
+});

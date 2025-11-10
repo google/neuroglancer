@@ -1,5 +1,5 @@
-import type {
-  SavedChunk} from "#src/voxel_annotation/index.js";
+import { makeVoxChunkKey, parseVoxChunkKey } from "#src/voxel_annotation/base.js";
+import type { SavedChunk } from "#src/voxel_annotation/index.js";
 import {
   compositeChunkDbKey,
   compositeLabelsDbKey,
@@ -7,6 +7,17 @@ import {
 } from "#src/voxel_annotation/index.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { computeSteps } from "#src/voxel_annotation/map.js";
+
+/**
+ * Calculates the number of meaningful downsample passes for the worst case
+ */
+function calculateDownsamplePasses(chunkSize: number) {
+  if (chunkSize <= 1) {
+    return 0;
+  }
+
+  return Math.ceil(Math.log2(chunkSize));
+}
 
 /** IndexedDB-backed local source. */
 export class LocalVoxSource extends VoxSource {
@@ -91,7 +102,7 @@ export class LocalVoxSource extends VoxSource {
   override async getLabelIds(): Promise<number[]> {
     try {
       const db = await this.getDb();
-      const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
+      const key = compositeLabelsDbKey(this.mapId);
       const arr = await idbGet<number[]>(db, "labels", key);
       if (arr && Array.isArray(arr)) return arr.map((v) => v >>> 0);
       return [];
@@ -104,7 +115,7 @@ export class LocalVoxSource extends VoxSource {
   override async addLabel(value: number): Promise<number[]> {
     const v = value >>> 0;
     const db = await this.getDb();
-    const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
+    const key = compositeLabelsDbKey(this.mapId);
     const arr = (await idbGet<number[]>(db, "labels", key)) || [];
     // Ensure uniqueness
     if (!arr.some((x) => (x >>> 0) === v)) arr.push(v);
@@ -222,8 +233,125 @@ export class LocalVoxSource extends VoxSource {
       );
       this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
       this.markDirty(e.key);
+      this.propagateDownsample(e.key);
     }
   }
+
+  /**
+   * Public entry point to start the downsampling cascade for a modified chunk.
+   * @param sourceKey The key of the chunk that was edited.
+   */
+  public async propagateDownsample(sourceKey: string): Promise<void> {
+    const keyInfo = parseVoxChunkKey(sourceKey);
+    if (!keyInfo || !this.mapCfg) return;
+
+    // Assuming cubic chunks
+    const chunkSize = this.mapCfg.chunkDataSize[0];
+    const maxPasses = calculateDownsamplePasses(chunkSize);
+    const maxLOD = this.mapCfg.steps[this.mapCfg.steps.length - 1];
+
+    let currentKey = sourceKey;
+    for (let i = 0; i < maxPasses; i++) {
+      const currentKeyInfo = parseVoxChunkKey(currentKey)!;
+      if (currentKeyInfo.lod >= maxLOD) {
+        console.log(`Reached max LOD ${maxLOD}, stopping downsample.`);
+        break;
+      }
+
+      const targetKey = await this._downsampleStep(currentKey);
+      if (!targetKey) {
+        console.log("Downsample step failed or was unnecessary, stopping cascade.");
+        break;
+      }
+      console.log(`Downsampled ${currentKey} to ${targetKey}`);
+      this.callChunkReload(targetKey);
+      currentKey = targetKey;
+    }
+  }
+
+  /**
+   * Performs a single downsample step, creating one lower-resolution chunk
+   * from a higher-resolution one.
+   */
+  private async _downsampleStep(sourceKey: string): Promise<string | null> {
+    const sourceKeyInfo = parseVoxChunkKey(sourceKey);
+    if (!sourceKeyInfo) return null;
+
+    const sourceChunk = await this.getSavedChunk(sourceKey);
+    if (!sourceChunk) return null; // Cannot downsample if source doesn't exist.
+
+    const targetLOD = sourceKeyInfo.lod * 2;
+    const targetX = Math.floor(sourceKeyInfo.x / 2);
+    const targetY = Math.floor(sourceKeyInfo.y / 2);
+    const targetZ = Math.floor(sourceKeyInfo.z / 2);
+    const targetKey = makeVoxChunkKey(`${targetX},${targetY},${targetZ}`, targetLOD);
+
+    const targetChunk = await this.ensureChunk(targetKey);
+
+    // Determine the 32x32x32 sub-volume to write into the target chunk
+    const [chunkW, chunkH, chunkD] = targetChunk.size;
+    const [subW, subH, subD] = [chunkW / 2, chunkH / 2, chunkD / 2];
+    const offsetX = (sourceKeyInfo.x % 2) * subW;
+    const offsetY = (sourceKeyInfo.y % 2) * subH;
+    const offsetZ = (sourceKeyInfo.z % 2) * subD;
+
+    for (let z = 0; z < subD; z++) {
+      for (let y = 0; y < subH; y++) {
+        for (let x = 0; x < subW; x++) {
+          const sourceValues: number[] = [];
+          // Collect the 8 corresponding source voxels
+          for (let dz = 0; dz < 2; dz++) {
+            for (let dy = 0; dy < 2; dy++) {
+              for (let dx = 0; dx < 2; dx++) {
+                const val = this._getVoxel(sourceChunk, x * 2 + dx, y * 2 + dy, z * 2 + dz);
+                sourceValues.push(val as number); // WARNING: Bigint not supported
+              }
+            }
+          }
+          const mode = this._calculateMode(sourceValues);
+          this._setVoxel(targetChunk, x + offsetX, y + offsetY, z + offsetZ, mode);
+        }
+      }
+    }
+
+    this.saved.set(targetKey, targetChunk);
+    this.markDirty(targetKey);
+    return targetKey;
+  }
+
+  private _getVoxel(chunk: SavedChunk, x: number, y: number, z: number): number | bigint {
+    const [sx, sy] = chunk.size;
+    // Bounds check is implicitly handled by the loop structure but good practice
+    const index = z * sx * sy + y * sx + x;
+    return chunk.data[index];
+  }
+
+  private _setVoxel(chunk: SavedChunk, x: number, y: number, z: number, value: number | bigint): void {
+    const [sx, sy] = chunk.size;
+    const index = z * sx * sy + y * sx + x;
+    chunk.data[index] = value;
+  }
+
+  /** Calculates the most frequent non-zero value (mode) for label data. */
+  // TODO: support bigint
+  private _calculateMode(values: number[] | bigint[]): number | bigint {
+    if (values.length === 0) return 0;
+    const counts = new Map<number | bigint, number>();
+    let maxCount = 0;
+    let mode = 0; // Default to 0 (background)
+
+    for (const val of values) {
+      if (val === 0) continue; // Ignore the background label
+      const count = (counts.get(val) || 0) + 1;
+      counts.set(val, count);
+      if (count > maxCount) {
+        maxCount = count;
+        mode = val as number; // WARNING: this will break if bigint is used for labels
+      }
+    }
+    return mode;
+  }
+
 
   protected override async flushSaves() {
     const keys = Array.from(this.dirty);
@@ -245,7 +373,7 @@ export class LocalVoxSource extends VoxSource {
   }
 
   private compositeKey(key: string) {
-    return compositeChunkDbKey(this.mapId, this.scaleKey, key);
+    return compositeChunkDbKey(this.mapId, key);
   }
 
   private async getDb(): Promise<IDBDatabase> {
