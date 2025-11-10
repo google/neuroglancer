@@ -23,7 +23,6 @@ import {
   DataType, SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
 import type {
   SliceViewChunk,
-  SliceViewSingleResolutionSource,
 } from "#src/sliceview/frontend.js";
 import {
   MultiscaleSliceViewChunkSource,
@@ -47,7 +46,6 @@ import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
 } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
-import * as matrix from "#src/util/matrix.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
@@ -320,8 +318,8 @@ export class VolumeChunkSource
 
 @registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
 export class InMemoryVolumeChunkSource extends VolumeChunkSource {
-  constructor(chunkManager: ChunkManager, spec: VolumeChunkSpecification) {
-    super(chunkManager, { spec });
+  constructor(chunkManager: ChunkManager, options: { spec: VolumeChunkSpecification }) {
+    super(chunkManager, options);
     this.initializeCounterpart(this.chunkManager.rpc!, {});
   }
 
@@ -389,62 +387,6 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
 > {
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
-}
-
-export class SingleScaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
-  dataType: DataType;
-  volumeType: VolumeType;
-  baseSpec: VolumeChunkSpecification;
-
-  constructor(
-    chunkManager: ChunkManager,
-    public baseSource: VolumeChunkSource, // Renamed for clarity
-    volumeType: VolumeType,
-  ) {
-    super(chunkManager);
-    this.baseSpec = baseSource.spec;
-    this.dataType = this.baseSpec.dataType;
-    this.volumeType = volumeType;
-  }
-
-  get rank() {
-    return this.baseSpec.rank;
-  }
-
-  getSources(
-    _options: VolumeSourceOptions,
-  ): SliceViewSingleResolutionSource<VolumeChunkSource>[][] {
-    const { baseSource, baseSpec } = this;
-    const { rank } = baseSpec;
-
-    // --- Level 0: The actual editing source ---
-    const fineSource: SliceViewSingleResolutionSource<VolumeChunkSource> = {
-      chunkSource: baseSource,
-      chunkToMultiscaleTransform: matrix.createIdentity(Float32Array, rank + 1),
-    };
-
-    // --- Level 1: The coarse safeguard source ---
-    const coarseChunkSize = new Uint32Array(rank);
-    for (let i = 0; i < rank; ++i) {
-      coarseChunkSize[i] = baseSpec.upperVoxelBound[i] - baseSpec.lowerVoxelBound[i];
-    }
-    const coarseSpec: VolumeChunkSpecification = {
-      ...baseSpec,
-      chunkDataSize: coarseChunkSize,
-    };
-
-    const coarseSource = this.chunkManager.memoize.get(
-      `VoxelEditingCoarseSafeguard:${JSON.stringify(coarseSpec)}`,
-      () => new InMemoryVolumeChunkSource(this.chunkManager, coarseSpec)
-    );
-
-    const coarseSourceSpec: SliceViewSingleResolutionSource<VolumeChunkSource> = {
-      chunkSource: coarseSource,
-      chunkToMultiscaleTransform: matrix.createIdentity(Float32Array, rank + 1),
-    };
-
-    return [[fineSource, coarseSourceSpec]];
-  }
 }
 
 export { VolumeChunk };

@@ -806,7 +806,7 @@ export class SegmentationUserLayer extends Base {
             )
             context.registerDisposer(registerNested((context, isWritable) => {
               if (isWritable) {
-                this.initializeVoxelEditingForSubsource(loadedSubsource, VolumeType.SEGMENTATION);
+                this.initializeVoxelEditingForSubsource(loadedSubsource);
                 context.registerDisposer(() => {
                   this.deinitializeVoxelEditingForSubsource(loadedSubsource);
                 });

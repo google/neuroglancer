@@ -27,14 +27,10 @@ import {
 } from "#src/render_coordinate_transform.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
-  VolumeChunkSpecification,
   VolumeType,
 } from "#src/sliceview/volume/base.js";
 import type {
-  MultiscaleVolumeChunkSource} from "#src/sliceview/volume/frontend.js";
-import {
-  SingleScaleVolumeChunkSource,
-  InMemoryVolumeChunkSource
+  MultiscaleVolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
@@ -52,6 +48,7 @@ import { RefCounted } from "#src/util/disposable.js";
 import { verifyFiniteFloat, verifyInt } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
+import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
 import type { VoxelEditControllerHost } from "#src/voxel_annotation/edit_controller.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
@@ -75,13 +72,12 @@ export class VoxelEditingContext
   constructor(
     public hostLayer: UserLayerWithVoxelEditing,
     public primarySource: MultiscaleVolumeChunkSource,
-    public previewSource: InMemoryVolumeChunkSource,
+    public previewSource: VoxelPreviewMultiscaleSource,
     public optimisticRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
   ) {
     super();
     this.controller = new VoxelEditController(this);
-    this.registerDisposer(optimisticRenderLayer);
-    this.registerDisposer(previewSource);
+    //this.registerDisposer(optimisticRenderLayer);
   }
 
   // VoxelEditControllerHost implementation
@@ -237,7 +233,7 @@ export function UserLayerWithVoxelEditingMixin<
     ): ImageRenderLayer | SegmentationRenderLayer;
 
 
-    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, volumeType: VolumeType) {
+    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
       if (this.editingContexts.has(loadedSubsource)) return;
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
@@ -253,26 +249,15 @@ export function UserLayerWithVoxelEditingMixin<
         );
       }
 
-      const previewSpec: VolumeChunkSpecification = {
-        ...baseSpec,
-        compressedSegmentationBlockSize: undefined,
-      };
-
-      const previewSource = new InMemoryVolumeChunkSource(
+      const previewSource = new VoxelPreviewMultiscaleSource(
         this.manager.chunkManager,
-        previewSpec,
-      );
-
-      const multiscalePreviewSource = new SingleScaleVolumeChunkSource(
-        this.manager.chunkManager,
-        previewSource,
-        volumeType
+        primarySource
       );
 
       const transform = loadedSubsource.getRenderLayerTransform();
 
       const optimisticRenderLayer = this._createVoxelRenderLayer(
-        multiscalePreviewSource,
+        previewSource,
         transform,
       );
 

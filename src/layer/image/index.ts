@@ -313,7 +313,7 @@ void main() {
         this.shaderError.changed.dispatch();
         context.registerDisposer(registerNested((context, isWritable) => {
           if (isWritable) {
-            this.initializeVoxelEditingForSubsource(loadedSubsource, VolumeType.IMAGE);
+            this.initializeVoxelEditingForSubsource(loadedSubsource);
             context.registerDisposer(() => {
               this.deinitializeVoxelEditingForSubsource(loadedSubsource);
             });

@@ -192,6 +192,7 @@ export class VoxelEditController extends SharedObject {
         if (firstErrorMessage === undefined) firstErrorMessage = msg;
       }
     }
+    this.callChunkReload(editsByVoxKey.keys().toArray());
 
     if (newAction.changes.size > 0) {
       this.undoStack.push(newAction);
@@ -336,6 +337,8 @@ export class VoxelEditController extends SharedObject {
     }
     const { parentKey, parentSource, parentRes } = parentInfo;
 
+    // TODO: decompress the data if it's compressed
+
     // 3. Calculate the update for the parent chunk based on the child chunk's data.
     const update = this._calculateParentUpdate(
       childChunkData,
@@ -346,6 +349,8 @@ export class VoxelEditController extends SharedObject {
     if (update.indices.length === 0) {
       return parentKey;
     }
+
+    // TODO: recompress the data if uncompressed before
 
     // 4. Commit the update to the parent chunk and notify the frontend.
     try {

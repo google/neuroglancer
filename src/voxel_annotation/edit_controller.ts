@@ -24,6 +24,7 @@ import type {
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { vec3 } from "#src/util/geom.js";
+import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
 import type { VoxelLayerResolution } from "#src/voxel_annotation/base.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
@@ -47,7 +48,7 @@ import {
 
 export interface VoxelEditControllerHost {
   primarySource: MultiscaleVolumeChunkSource;
-  previewSource?: InMemoryVolumeChunkSource;
+  previewSource: VoxelPreviewMultiscaleSource;
   labelsManager: LabelsManager;
   rpc: RPC;
   setDrawErrorMessage(message: string | undefined): void;
@@ -181,7 +182,7 @@ export class VoxelEditController extends SharedObject {
     // For V1 we use the minimum LOD (index 0)
     const voxelSize = 1;
     const sourceIndex = 0;
-    const source = this.host.previewSource;
+    const source = this.host.previewSource.getSources(this.getIdentitySliceViewSourceOptions())[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
     if (!source) {
       throw new Error(
         "paintBrushWithShape: Missing preview source",
@@ -511,7 +512,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const previewSource = this.host.previewSource;
+    const previewSource = this.host.previewSource.getSources(this.getIdentitySliceViewSourceOptions())[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
     if (!previewSource) {
       throw new Error(
         "paintBrushWithShape: Missing preview source",
