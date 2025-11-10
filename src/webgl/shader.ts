@@ -663,6 +663,34 @@ ${this.fragmentMain}
     }
     return shader;
   }
+
+  print() {
+      const vertexSource = `#version 300 es
+precision highp float;
+precision highp int;
+${this.uniformsCode}
+${this.attributesCode}
+${this.varyingsCodeVS}
+float defaultMaxProjectionIntensity = 0.0;
+${this.vertexCode}
+void main() {
+${this.vertexMain}
+}
+`;
+      const fragmentSource = `#version 300 es
+${this.fragmentExtensions}
+precision highp float;
+precision highp int;
+${this.uniformsCode}
+${this.varyingsCodeFS}
+${this.outputBufferCode}
+float defaultMaxProjectionIntensity = 0.0;
+${this.fragmentCode}
+${this.fragmentMain}
+`;
+      console.log('----- VERTEX SHADER -----\n' + vertexSource);
+      console.log('----- FRAGMENT SHADER -----\n' + fragmentSource);
+  }
 }
 
 export function shaderContainsIdentifiers(

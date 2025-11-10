@@ -6,11 +6,10 @@
 import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
 import { DataType } from '#src/util/data_type.js';
+import { VOX_DUMMY_CHUNK_SOURCE_RPC_ID } from "#src/voxel_annotation/base.js";
 import type { RPC } from '#src/worker_rpc.js';
 import { registerSharedObject } from '#src/worker_rpc.js';
 
-// RPC id for the vox dummy chunk source
-export const VOX_DUMMY_CHUNK_SOURCE_RPC_ID = 'vox/VoxDummyChunkSource';
 
 /**
  * Minimal backend volume source that procedurally generates data for voxel annotations demo.

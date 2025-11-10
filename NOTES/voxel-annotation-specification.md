@@ -21,6 +21,9 @@ Similarely to the rendering of image or segmentation data, the voxel annotation 
 
 After investigation of the storage of the current annotation system of Neuroglancer, although not plugable to our new system, its implementation still seems well-designed for our needs. We will probably inspire ourselves to write the storage part of the voxel annotation system. The key feature relies on the asynchronous saving from the front to the back, this allows for fluid user experience (not waiting for the save to complete before being able to continue drawing). The data will be stored in a local data source (local://voxel-annotations) as a 3D array of uint32, with 0 meaning no annotation, and values 1..n meaning different labels. The data will be chunked in 64x64x64 blocks.
 
+Using the current local://voxel-annotations is one way of saving the data, with this approach one could retreive the data thanks to some kind of exporting feature that remains to be design. An other way of saving the data may be with a distant server providing the datasource and centralizing the users, this would allow for live multi-users annotation. The best would be to have both.
+
+
 ## Implementation plan
 
 A new layer type should be created for voxel annotations (abv: 'vox'):

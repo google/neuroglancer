@@ -6,7 +6,7 @@
 import type { ChunkManager } from '#src/chunk_manager/frontend.js';
 import type { VolumeChunkSpecification } from '#src/sliceview/volume/base.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/frontend.js';
-import { VOX_DUMMY_CHUNK_SOURCE_RPC_ID } from '#src/voxel_annotation/backend.js';
+import { VOX_DUMMY_CHUNK_SOURCE_RPC_ID } from '#src/voxel_annotation/base.js';
 
 /**
  * Frontend owner for VoxDummyChunkSource. It simply sets the RPC_TYPE_ID so the backend

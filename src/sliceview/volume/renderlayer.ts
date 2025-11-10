@@ -597,7 +597,6 @@ void main() {
       this.endSlice(sliceView, shader, shaderResult.parameters);
     };
     let newSource = true;
-    console.log("number of visible sources:", visibleSources.length);
     for (const transformedSource of visibleSources) {
       const chunkLayout = getNormalizedChunkLayout(
         projectionParameters,

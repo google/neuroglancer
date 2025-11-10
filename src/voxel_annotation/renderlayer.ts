@@ -57,20 +57,30 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   }
 
   defineShader(builder: ShaderBuilder) {
-    // Highly-visible checkerboard, fully opaque, large tiles so it's hard to miss.
     builder.setFragmentMain(`
-void main() {
   // vChunkPosition is in voxel coords [0..uChunkDataSize]; normalize XY.
   vec2 tex = vChunkPosition.xy / uChunkDataSize.xy;
   float tiles = 8.0; // fewer tiles for larger squares
   float u = tex.x * tiles;
   float v = tex.y * tiles;
   float checker = mod(floor(u) + floor(v), 2.0);
-  vec4 color = checker > 0.5 ? vec4(1.0, 1.0, 0.0, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
+  vec4 color = checker > 0.5 ? vec4(1.0, 1.0, 0.0, 0.5) : vec4(0.0, 1.0, 0.0, 0.5);
   emit(color);
-}
   `);
-    console.log('VoxelAnnotationRenderLayer fragment shader installed.');
+
+    /**
+     * Notes on the shader building:
+     * - The shader is not built until the first draw call, in the `draw` method.
+     * - the SliceViewVolumeRenderLayer build a shader getter in the constructor, the getter builds the shader and memoize it.
+     * - when the build process fails no error is thrown, this makes a wrong shader hard to debug.
+     * - here we add a try/catch to log the error if the build fails, its soul purpose is for debugging.
+     */
+    try {
+      builder.build();
+    }catch (e) {
+      builder.print()
+      console.error(e)
+    }
   }
 
   initializeShader(
@@ -80,6 +90,5 @@ void main() {
     _fallback: boolean,
   ) {
     // No specific uniforms for the checkerboard yet, but this is where they would go.
-    console.log('VoxelAnnotationRenderLayer shader initialized.');
   }
 }
