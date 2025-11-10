@@ -381,6 +381,9 @@ export class VoxelEditController extends SharedObject {
 
     // BFS with thickness constraints
     while (queue.length > 0) {
+      if (filledCount >= maxVoxels) {
+        throw new Error(`VoxChunkSource.floodFillPlane2D: region exceeds maxVoxels (${maxVoxels}).`);
+      }
       const [x, y] = queue.shift()!;
 
       // Schedule this pixel for filling

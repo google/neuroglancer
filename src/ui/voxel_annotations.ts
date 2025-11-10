@@ -27,6 +27,39 @@ export const FLOODFILL_TOOL_ID = "voxFloodFill";
   protected mouseDisposer: (() => void) | undefined;
   protected onMouseUp = () => this.stopDrawing();
   protected currentMouseState: MouseSelectionState | undefined;
+  // Store the latest mouse state without processing it immediately.
+  private latestMouseState: MouseSelectionState | null = null;
+  private animationFrameHandle: number | null = null;
+
+  // The main drawing loop synchronized to display refresh
+  private drawLoop = (): void => {
+    if (!this.isDrawing) {
+      this.animationFrameHandle = null;
+      return;
+    }
+    if (this.latestMouseState === null) {
+      this.animationFrameHandle = requestAnimationFrame(this.drawLoop);
+      return;
+    }
+
+    const layer = this.layer as unknown as VoxUserLayer;
+    const value = layer.voxLabelsManager.getCurrentLabelValue(layer.voxEraseMode);
+    const cur = this.getPoint(this.latestMouseState);
+    this.latestMouseState = null; // mark processed
+
+    if (cur) {
+      const last = this.lastPoint;
+      if (last && (cur[0] !== last[0] || cur[1] !== last[1] || cur[2] !== last[2])) {
+        const points = this.linePoints(last, cur);
+        if (points.length > 0) {
+          this.paintPoints(points, value);
+        }
+      }
+      this.lastPoint = cur;
+    }
+
+    this.animationFrameHandle = requestAnimationFrame(this.drawLoop);
+  };
 
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
     const vox = (this.layer as any).getVoxelPositionFromMouse?.(mouseState) as
@@ -95,36 +128,44 @@ export const FLOODFILL_TOOL_ID = "voxFloodFill";
 
     this.paintPoint(centerCanonical, value);
     this.lastPoint = start;
+    // Initialize latest mouse state so RAF can process immediately
+    this.latestMouseState = mouseState;
 
+    // On mouse move, just update the latest position.
     this.mouseDisposer = mouseState.changed.add(() => {
-      if (!this.isDrawing) return;
+      this.latestMouseState = mouseState;
       this.currentMouseState = mouseState;
-      const cur = this.getPoint(mouseState);
-      if (!cur) return;
-      const last = this.lastPoint;
-      if (!last) {
-        this.paintPoint(new Float32Array([cur[0], cur[1], cur[2]]), value);
-        this.lastPoint = cur;
-        return;
-      }
-      if (cur[0] === last[0] && cur[1] === last[1] && cur[2] === last[2]) return;
-      const points = this.linePoints(last, cur);
-      if (points.length > 0) {
-        this.paintPoints(points, value);
-      }
-      this.lastPoint = cur;
     });
-    window.addEventListener("mouseup", this.onMouseUp, { once: true });
+
+    // On mouse up, stop drawing and cleanup.
+    const mouseUpHandler = () => {
+      this.stopDrawing();
+      window.removeEventListener("mouseup", mouseUpHandler);
+      if (this.mouseDisposer) { this.mouseDisposer(); this.mouseDisposer = undefined; }
+    };
+    window.addEventListener("mouseup", mouseUpHandler);
+
+    // Start the animation loop if not running
+    if (this.animationFrameHandle === null) {
+      this.animationFrameHandle = requestAnimationFrame(this.drawLoop);
+    }
   }
 
   protected stopDrawing() {
     if (!this.isDrawing) return;
     this.isDrawing = false;
     this.lastPoint = undefined;
+
+    if (this.animationFrameHandle !== null) {
+      cancelAnimationFrame(this.animationFrameHandle);
+      this.animationFrameHandle = null;
+    }
+
     if (this.mouseDisposer) {
       this.mouseDisposer();
       this.mouseDisposer = undefined;
     }
+
     // Always release any active render LOD lock.
     try {
       this.layer.endRenderLodLock();
@@ -138,7 +179,8 @@ export const FLOODFILL_TOOL_ID = "voxFloodFill";
     try {
       this.startDrawing(mouseState);
     } catch (e) {
-      console.log(`[${this.constructor.name}] Error:`, e);
+      console.error(`[${this.constructor.name}] Error:`, e);
+      this.stopDrawing();
     }
   }
 

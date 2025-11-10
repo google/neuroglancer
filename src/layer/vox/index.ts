@@ -31,6 +31,7 @@ import {
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
+import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
 import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
@@ -67,6 +68,11 @@ export class VoxUserLayer extends UserLayer {
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
   voxBrushShape: "disk" | "sphere" = "disk";
+
+  // Cached transform and voxel buffer to avoid recomputation/allocation on every mouse move
+  private cachedChunkTransform: ChunkTransformParameters | undefined;
+  private cachedTransformGeneration: number = -1;
+  private cachedVoxelPosition: Float32Array = new Float32Array(3);
 
   // Draw tab error messaging
   voxDrawErrorMessage: string | undefined = undefined;
@@ -141,43 +147,53 @@ export class VoxUserLayer extends UserLayer {
 
     const renderLayerTransform = renderLayer.transform.value;
     if (renderLayerTransform.error !== undefined) {
-      console.error("Render layer transform error:", renderLayerTransform.error);
       return undefined;
     }
 
-    const multiscaleSource = renderLayer.multiscaleSource;
-    const options: SliceViewSourceOptions = {
-      displayRank: multiscaleSource.rank,
-      multiscaleToViewTransform: matrix.createIdentity(Float32Array, multiscaleSource.rank * multiscaleSource.rank),
-      modelChannelDimensionIndices: [],
-    };
-    const sources = multiscaleSource.getSources(options);
-    if (sources.length === 0 || sources[0].length === 0) return undefined;
-    const baseSource = sources[0][0];
-
-    try {
-      const chunkTransform = getChunkTransformParameters(
-        renderLayerTransform,
-        baseSource.chunkToMultiscaleTransform,
-      );
-
-      const chunkPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
-
-      if (!getChunkPositionFromCombinedGlobalLocalPositions(
-        chunkPosition,
-        mouseState.unsnappedPosition, // Use unsnapped for higher precision
-        this.localPosition.value,
-        chunkTransform.layerRank,
-        chunkTransform.combinedGlobalLocalToChunkTransform,
-      )) {
-        return undefined;
+    // Caching logic for chunk transform parameters
+    const transformGeneration = renderLayer.transform.changed.count;
+    if (this.cachedTransformGeneration !== transformGeneration) {
+      this.cachedChunkTransform = undefined;
+      const multiscaleSource = renderLayer.multiscaleSource;
+      const options: SliceViewSourceOptions = {
+        displayRank: multiscaleSource.rank,
+        multiscaleToViewTransform: matrix.createIdentity(Float32Array, multiscaleSource.rank * multiscaleSource.rank),
+        modelChannelDimensionIndices: [],
+      };
+      const sources = multiscaleSource.getSources(options);
+      if (sources.length > 0 && sources[0].length > 0) {
+        const baseSource = sources[0][0];
+        try {
+          this.cachedChunkTransform = getChunkTransformParameters(
+            renderLayerTransform,
+            baseSource.chunkToMultiscaleTransform,
+          );
+          this.cachedTransformGeneration = transformGeneration;
+        } catch (e) {
+          this.cachedTransformGeneration = -1;
+          console.error("Error computing chunk transform parameters:", e);
+          return undefined;
+        }
       }
-
-      return chunkPosition;
-    } catch (e) {
-      console.error("Error computing voxel position:", e);
-      return undefined;
     }
+
+    const chunkTransform = this.cachedChunkTransform;
+    if (chunkTransform === undefined) return undefined;
+
+    if (this.cachedVoxelPosition.length !== chunkTransform.modelTransform.unpaddedRank) {
+      this.cachedVoxelPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
+    }
+
+    const ok = getChunkPositionFromCombinedGlobalLocalPositions(
+      this.cachedVoxelPosition,
+      mouseState.unsnappedPosition,
+      this.localPosition.value,
+      chunkTransform.layerRank,
+      chunkTransform.combinedGlobalLocalToChunkTransform,
+    );
+    if (!ok) return undefined;
+
+    return this.cachedVoxelPosition;
   }
 
   getLegacyDataSourceSpecifications(
