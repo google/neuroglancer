@@ -82,6 +82,8 @@
   - Response: `{ status: "ok" }` on success.
 - GET `/health`
   - Response: `200 OK` if the server is ready and can reach the storage.
+- `GET /labels?mapId=<mapId>` → JSON `{ "labels": [ ... ] }` for that dataset. Labels are stored as a list and must fit the dataset dtype (uint32/uint64).
+- `PUT /labels?mapId=<mapId>` → Add a label. Body can be a JSON number, `{ "value": <number> }`, or a plain text integer. Returns updated `{ "labels": [...] }`.
 
 scale key calculation:
 ```ts
