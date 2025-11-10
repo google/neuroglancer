@@ -6,59 +6,91 @@
 import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
 import { DataType } from '#src/util/data_type.js';
-import { VOX_CHUNK_SOURCE_RPC_ID } from "#src/voxel_annotation/base.js";
+import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID } from "#src/voxel_annotation/base.js";
 import type { RPC } from '#src/worker_rpc.js';
-import { registerSharedObject } from '#src/worker_rpc.js';
+import { registerRPC, registerSharedObject } from '#src/worker_rpc.js';
 
+/** Backend-side persisted storage for voxel annotation chunks. */
+interface SavedChunk {
+  data: ArrayBufferView;
+  size: Uint32Array; // [sx, sy, sz] used for linearization
+}
 
 /**
- * Minimal backend volume source that procedurally generates data for voxel annotations demo.
- * It fills chunk.data with a simple pattern (checkerboard based on voxel coords).
+ * Backend volume source that persists voxel edits per chunk. It returns saved data if available,
+ * otherwise returns an empty chunk (filled with zeros).
  */
 @registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
+  private saved = new Map<string, SavedChunk>();
+
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
   }
 
-  async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
-    // Respect aborts
-    if (signal.aborted) throw signal.reason ?? new Error('aborted');
-    const { spec } = this;
-    const { dataType, fillValue } = spec;
-    // Compute bounds and chunkDataSize (may be clipped at upper bound)
-    const origin = this.computeChunkBounds(chunk);
-
-    // Allocate a typed array matching the spec.dataType and size
-    const size = this.getChunkVoxelCount(chunk);
-    const array = this.allocateTypedArray(dataType, size, Number(fillValue ?? 0));
-
-    // Populate a simple 3D pattern for visualization
-    const d = 1;
-    const cds = chunk.chunkDataSize!;
-    let index = 0;
-    for (let z = 0; z < cds[2]; ++z) {
-      for (let y = 0; y < cds[1]; ++y) {
-        for (let x = 0; x < cds[0]; ++x, ++index) {
-          const gx = origin[0] + x;
-          const gy = origin[1] + y;
-          const gz = origin[2] + z;
-          // Checker pattern in world space with large squares
-          const square = ((Math.floor(gx / d) + Math.floor(gy / d) + Math.floor(gz / d)) & 1) !== 0;
-          array[index] = square ? 5 : 0;
+  /** Commit voxel edits from the frontend. */
+  commitVoxels(edits: { key: string; indices: number[] | Uint32Array; value?: number; values?: ArrayLike<number>; size?: number[] }[]) {
+    const { dataType } = this.spec;
+    for (const e of edits) {
+      const key = e.key;
+      // Determine the target size for this chunk. If not provided, fall back to spec chunkDataSize.
+      const sizeArr = e.size ? Uint32Array.from(e.size) : this.spec.chunkDataSize;
+      let entry = this.saved.get(key);
+      if (!entry || !arraysEqual(entry.size, sizeArr)) {
+        // Allocate new backing store for this key with the requested size.
+        const total = sizeArr[0] * sizeArr[1] * sizeArr[2];
+        const arr = this.allocateTypedArray(dataType, total, 0);
+        entry = { data: arr, size: Uint32Array.from(sizeArr) };
+        this.saved.set(key, entry);
+      }
+      const dest = entry.data as any;
+      const idxs: number[] = Array.from(e.indices as ArrayLike<number>) as number[];
+      if (e.values != null) {
+        const vals: ArrayLike<number> = e.values as ArrayLike<number>;
+        const n = Math.min(idxs.length, vals.length);
+        for (let i = 0; i < n; ++i) {
+          const idx = (idxs[i] as number) | 0;
+          if (idx >= 0 && idx < (dest as ArrayLike<number>).length) (dest as any)[idx] = vals[i] as any;
+        }
+      } else if (e.value != null) {
+        const v = e.value as number;
+        for (let i = 0; i < idxs.length; ++i) {
+          const idx = (idxs[i] as number) | 0;
+          if (idx >= 0 && idx < (dest as ArrayLike<number>).length) (dest as any)[idx] = v as any;
         }
       }
     }
-
-    // Stash data on chunk for transfer to frontend
-    (chunk as any).data = array;
   }
 
-  private getChunkVoxelCount(chunk: VolumeChunk) {
+  async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) throw signal.reason ?? new Error('aborted');
+    // Determine chunk key and size (may be clipped at upper bound).
+    this.computeChunkBounds(chunk);
     const cds = chunk.chunkDataSize!;
-    let n = 1;
-    for (let i = 0; i < cds.length; ++i) n *= cds[i];
-    return n;
+    const key = chunk.chunkGridPosition.join();
+    const total = cds[0] * cds[1] * cds[2];
+    const array = this.allocateTypedArray(this.spec.dataType, total, 0);
+    const saved = this.saved.get(key);
+    if (saved) {
+      // Copy overlapping region from saved into array, accounting for possibly different strides.
+      const sxS = saved.size[0], syS = saved.size[1], szS = saved.size[2];
+      const sxD = cds[0], syD = cds[1], szD = cds[2];
+      const ox = Math.min(sxS, sxD);
+      const oy = Math.min(syS, syD);
+      const oz = Math.min(szS, szD);
+      const src = saved.data as any;
+      const dst = array as any;
+      for (let z = 0; z < oz; ++z) {
+        for (let y = 0; y < oy; ++y) {
+          const baseSrc = (z * syS + y) * sxS;
+          const baseDst = (z * syD + y) * sxD;
+          for (let x = 0; x < ox; ++x) {
+            dst[baseDst + x] = src[baseSrc + x];
+          }
+        }
+      }
+    }
+    (chunk as any).data = array;
   }
 
   private allocateTypedArray(dataType: number, size: number, fill: number) {
@@ -76,7 +108,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       case DataType.INT32:
         return new Int32Array(size).fill(fill | 0);
       case DataType.UINT64: {
-        // Represent as 64-bit unsigned. Use BigUint64Array; frontend will reinterpret as Uint32Array.
         const big = BigInt(fill >>> 0);
         return new BigUint64Array(size).fill(big);
       }
@@ -87,3 +118,15 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     }
   }
 }
+
+function arraysEqual(a: Uint32Array, b: Uint32Array) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; ++i) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// RPC to commit voxel edits.
+registerRPC(VOX_COMMIT_VOXELS_RPC_ID, function (x: any) {
+  const obj = this.get(x.id) as VoxChunkSource;
+  obj.commitVoxels(x.edits || []);
+});
