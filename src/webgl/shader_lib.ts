@@ -19,10 +19,11 @@ import {
   DATA_TYPE_SIGNED,
   DataType,
 } from "#src/util/data_type.js";
-import type {
-  AttributeIndex,
-  ShaderBuilder,
-  ShaderCodePart,
+import {
+  getShader,
+  type AttributeIndex,
+  type ShaderBuilder,
+  type ShaderCodePart,
 } from "#src/webgl/shader.js";
 
 export const glsl_mixLinear = `
@@ -498,27 +499,15 @@ export function getShaderType(dataType: DataType, numComponents = 1) {
   );
 }
 
-export function getShaderTypeDefines(dataType: DataType, numComponents = 1) {
-  const shaderType = getShaderType(dataType, numComponents);
-  const allShaderTypes = new Set<string>();
-
-  // Generate all possible shader types
-  for (const dt of [DataType.UINT8, DataType.INT8, DataType.UINT16, DataType.INT16,
-  DataType.UINT32, DataType.INT32, DataType.UINT64, DataType.FLOAT32]) {
-    for (let nc = 1; nc <= 4; nc++) {
-      try {
-        allShaderTypes.add(getShaderType(dt, nc));
-      } catch {
-        // Ignore invalid combinations
-      }
-    }
-  }
+export function getShaderTypeDefines(dataType: DataType) {
+  const shaderType = getShaderType(dataType);
 
   const defines: string[] = [`#define DATA_VALUE_TYPE ${shaderType}`];
 
-  for (const type of allShaderTypes) {
-    const upperType = type.toUpperCase();
-    defines.push(`#define DATA_VALUE_TYPE_IS_${upperType} ${type === shaderType ? 1 : 0}`);
+  for (const type of [DataType.UINT8, DataType.INT8, DataType.UINT16, DataType.INT16,
+  DataType.UINT32, DataType.INT32, DataType.UINT64, DataType.FLOAT32]) {
+    const upperType = getShaderType(type).toUpperCase();
+    defines.push(`#define DATA_VALUE_TYPE_IS_${upperType} ${dataType === type ? 1 : 0}`);
   }
 
   return defines.join('\n');

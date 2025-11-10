@@ -25,94 +25,31 @@ function expectExactlyOneTypeSet(result: string) {
 
 describe("getShaderTypeDefines", () => {
   it("includes all possible shader types as defines", () => {
-    const result = getShaderTypeDefines(DataType.FLOAT32, 1);
-    expect(result.split("\n").length).toEqual(20); // 1 for DATA_VALUE_TYPE and 19 for DATA_VALUE_TYPE_IS_*
+    const result = getShaderTypeDefines(DataType.FLOAT32);
+    expect(result.split("\n").length).toEqual(1+8); // 1 for DATA_VALUE_TYPE and 8 for DATA_VALUE_TYPE_IS_*
 
     // Check that all float types are included
     expect(result).toContain("DATA_VALUE_TYPE_IS_FLOAT");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_VEC2");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_VEC3");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_VEC4");
-
-    // Check that uint8 types are included
     expect(result).toContain("DATA_VALUE_TYPE_IS_UINT8_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_UINT8X2_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_UINT8X3_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_UINT8X4_T");
-
-    // Check that int8 types are included
     expect(result).toContain("DATA_VALUE_TYPE_IS_INT8_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_INT8X2_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_INT8X3_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_INT8X4_T");
-
-    // Check that uint16 types are included
-    expect(result).toContain("DATA_VALUE_TYPE_IS_UINT16_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_UINT16X2_T");
-
-    // Check that int16 types are included
+    expect(result).toContain("DATA_VALUE_TYPE_IS_UINT16_T")
     expect(result).toContain("DATA_VALUE_TYPE_IS_INT16_T");
-    expect(result).toContain("DATA_VALUE_TYPE_IS_INT16X2_T");
-
-    // Check that uint32, int32, uint64 types are included
     expect(result).toContain("DATA_VALUE_TYPE_IS_UINT32_T");
     expect(result).toContain("DATA_VALUE_TYPE_IS_INT32_T");
     expect(result).toContain("DATA_VALUE_TYPE_IS_UINT64_T");
   });
 
-  it("generates correct defines for FLOAT32 with 1 component", () => {
-    const result = getShaderTypeDefines(DataType.FLOAT32, 1);
-    expect(result).toContain("#define DATA_VALUE_TYPE float");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_FLOAT 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("generates correct defines for FLOAT32 with 4 components", () => {
-    const result = getShaderTypeDefines(DataType.FLOAT32, 4);
-    expect(result).toContain("#define DATA_VALUE_TYPE vec4");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_VEC4 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("generates correct defines for UINT8 with 1 component", () => {
-    const result = getShaderTypeDefines(DataType.UINT8, 1);
-    expect(result).toContain("#define DATA_VALUE_TYPE uint8_t");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_UINT8_T 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("generates correct defines for UINT8 with 4 components", () => {
-    const result = getShaderTypeDefines(DataType.UINT8, 4);
-    expect(result).toContain("#define DATA_VALUE_TYPE uint8x4_t");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_UINT8X4_T 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("generates correct defines for INT16 with 2 components", () => {
-    const result = getShaderTypeDefines(DataType.INT16, 2);
-    expect(result).toContain("#define DATA_VALUE_TYPE int16x2_t");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_INT16X2_T 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("generates correct defines for UINT32 with 1 component", () => {
-    const result = getShaderTypeDefines(DataType.UINT32, 1);
-    expect(result).toContain("#define DATA_VALUE_TYPE uint32_t");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_UINT32_T 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("generates correct defines for UINT64 with 1 component", () => {
-    const result = getShaderTypeDefines(DataType.UINT64, 1);
-    expect(result).toContain("#define DATA_VALUE_TYPE uint64_t");
-    expect(result).toContain("#define DATA_VALUE_TYPE_IS_UINT64_T 1");
-    expectExactlyOneTypeSet(result);
-  });
-
-  it("defaults to numComponents=1 when not specified", () => {
+  it("generates correct defines for FLOAT32", () => {
     const result = getShaderTypeDefines(DataType.FLOAT32);
     expect(result).toContain("#define DATA_VALUE_TYPE float");
     expect(result).toContain("#define DATA_VALUE_TYPE_IS_FLOAT 1");
+    expectExactlyOneTypeSet(result);
+  });
+
+  it("generates correct defines for UINT8", () => {
+    const result = getShaderTypeDefines(DataType.UINT8);
+    expect(result).toContain("#define DATA_VALUE_TYPE uint8_t");
+    expect(result).toContain("#define DATA_VALUE_TYPE_IS_UINT8_T 1");
     expectExactlyOneTypeSet(result);
   });
 });

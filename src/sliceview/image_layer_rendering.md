@@ -222,15 +222,6 @@ DATA_VALUE_TYPE value = getDataValue();
   // Do something for other data types
 #endif
 ```
-The full list of data types are:
-- `float`, `vec2`, `vec3`, `vec4`
-- `uint64_t`
-- `uint32_t`
-- `uint16_t`, `uint16x2_t`
-- `uint8_t`, `uint8x2_t`, `uint8x3_t`, `uint8x4_t`
-- `int32_t`
-- `int16_t`, `int16x2_t`
-- `int8_t`, `int8x2_t`, `int8x3_t`, `int8x4_t`
 
 Note that only `float` is a builtin GLSL type. The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
 
@@ -248,6 +239,8 @@ struct uint64_t {
   highp uvec2 value;
 };
 ```
+
+Similar structures exist for signed integer types.
 
 To obtain the raw value as a float, call the `toRaw` function:
 
