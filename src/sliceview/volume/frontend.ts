@@ -18,14 +18,25 @@ import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { DataType, SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
-import { MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource } from "#src/sliceview/frontend.js";
+import { ChunkFormat as CompressedChunkFormat } from "#src/sliceview/compressed_segmentation/chunk_format.js";
+import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
+import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
+import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
+import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
+import type { SliceViewChunk } from "#src/sliceview/frontend.js";
+import { MultiscaleSliceViewChunkSource, SliceViewChunkSource } from "#src/sliceview/frontend.js";
+import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
+import { ChunkFormat as UncompressedChunkFormat } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
   VolumeType
 } from "#src/sliceview/volume/base.js";
-import type { TypedArray } from "#src/util/array.js";
+import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
+import type { TypedArray} from "#src/util/array.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
+import { DataType as DataTypeUtil } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -149,26 +160,6 @@ export interface ChunkFormatHandler extends Disposable {
   getChunk(source: SliceViewChunkSource, x: any): SliceViewChunk;
 }
 
-export type ChunkFormatHandlerFactory = (
-  gl: GL,
-  spec: VolumeChunkSpecification,
-) => ChunkFormatHandler | null;
-
-const chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
-
-export function registerChunkFormatHandler(factory: ChunkFormatHandlerFactory) {
-  chunkFormatHandlers.push(factory);
-}
-
-export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
-  for (const handler of chunkFormatHandlers) {
-    const result = handler(gl, spec);
-    if (result != null) {
-      return result;
-    }
-  }
-  throw new Error("No chunk format handler found.");
-}
 
 export class VolumeChunkSource
   extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk>
@@ -246,11 +237,54 @@ export class VolumeChunkSource
       if (!chunk || !(chunk as any).data) {
         continue;
       }
-      const cpuArray = (chunk as any).data as TypedArray;
-      for (const index of edit.indices) {
-        cpuArray[index] = edit.value;
+
+      const chunkFormat = chunk.chunkFormat;
+
+      if (chunkFormat instanceof UncompressedChunkFormat) {
+        const cpuArray = (chunk as any).data as TypedArray;
+        for (const index of edit.indices) {
+          cpuArray[index] = edit.value;
+        }
+        chunksToUpdate.add(chunk);
+      } else if (chunkFormat instanceof CompressedChunkFormat) {
+        // using an idiotic logic to handle compressed chunks: uncompress -> edit -> recompress
+        // TODO: rework this
+        const compressedData = (chunk as any).data as Uint32Array;
+        const { chunkDataSize } = chunk;
+        const numElements = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+        const { dataType, subchunkSize } = chunkFormat;
+
+        // Note: Assuming single-channel for simplicity. Multi-channel would require handling offsets.
+        const baseOffset = compressedData[0];
+
+        const outputBuilder = new TypedArrayBuilder(Uint32Array, compressedData.length);
+        // Write multi-channel header (for single channel)
+        outputBuilder.resize(1);
+        outputBuilder.data[0] = 1;
+
+        if (dataType === DataTypeUtil.UINT32) {
+          const uncompressedData = new Uint32Array(numElements);
+          decodeChannelUint32(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
+
+          for (const index of edit.indices) {
+            uncompressedData[index] = edit.value;
+          }
+
+          encodeChannelUint32(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
+        } else { // Assumes UINT64
+          const uncompressedData = new BigUint64Array(numElements);
+          decodeChannelUint64(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
+
+          for (const index of edit.indices) {
+            uncompressedData[index] = BigInt(edit.value);
+          }
+
+          encodeChannelUint64(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
+        }
+
+        (chunk as any).data = outputBuilder.view;
+        chunksToUpdate.add(chunk);
       }
-      chunksToUpdate.add(chunk);
     }
     this.invalidateGpuData(chunksToUpdate);
   }
@@ -337,22 +371,7 @@ export class VolumeChunkSource
   }
 }
 
-export abstract class VolumeChunk extends SliceViewChunk {
-  declare source: VolumeChunkSource;
-  chunkDataSize: Uint32Array;
-  declare CHUNK_FORMAT_TYPE: ChunkFormat;
-
-  get chunkFormat(): this["CHUNK_FORMAT_TYPE"] {
-    return this.source.chunkFormat;
-  }
-
-  constructor(source: VolumeChunkSource, x: any) {
-    super(source, x);
-    this.chunkDataSize = x.chunkDataSize || source.spec.chunkDataSize;
-  }
-  abstract getValueAt(dataPosition: Uint32Array): any;
-  abstract updateFromCpuData(gl: GL): void;
-}
+// VolumeChunk moved to src/sliceview/volume/chunk.ts
 
 export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource<
   VolumeChunkSource,
@@ -361,3 +380,5 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
 }
+
+export { VolumeChunk };

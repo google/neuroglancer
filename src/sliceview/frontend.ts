@@ -21,6 +21,8 @@ import type {
   ChunkRequesterState,
 } from "#src/chunk_manager/frontend.js";
 import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
+export { SliceViewChunk } from "#src/sliceview/chunk_base.js";
+import type { SliceViewChunk as SliceViewChunk } from "#src/sliceview/chunk_base.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
 import type { LayerManager } from "#src/layer/index.js";
 import type {
@@ -724,6 +726,7 @@ export interface SliceViewChunkSource {
   getChunk(x: any): any;
 }
 
+/*
 export class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
   declare source: SliceViewChunkSource;
@@ -734,6 +737,7 @@ export class SliceViewChunk extends Chunk {
     this.state = ChunkState.SYSTEM_MEMORY;
   }
 }
+*/
 
 /**
  * Helper for rendering a SliceView that has been pre-rendered to a texture.
