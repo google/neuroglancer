@@ -152,7 +152,13 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   private invalidateChunkUpload(chunk: VolumeChunk) {
-    // Force re-upload on next frame.
-    chunk.state = ChunkState.SYSTEM_MEMORY;
+    // Re-upload updated CPU data to the GPU immediately so the chunk continues to render.
+    const gl = chunk.gl;
+    if (chunk.state === ChunkState.GPU_MEMORY) {
+      // Release the old texture before uploading the new data to avoid leaks.
+      chunk.freeGPUMemory(gl);
+    }
+    // Upload the latest CPU-side data and mark the chunk as GPU resident.
+    chunk.copyToGPU(gl);
   }
 }
