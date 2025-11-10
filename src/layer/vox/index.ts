@@ -38,7 +38,7 @@ import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_sc
 import { registerVoxelAnnotationTools, VoxelBrushLegacyTool, VoxelPixelLegacyTool } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
-import { DummyMultiscaleVolumeChunkSource } from "#src/voxel_annotation/dummy_volume_chunk_source.js";
+import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { Tab } from "#src/widget/tab_view.js";
@@ -287,7 +287,7 @@ export class VoxUserLayer extends UserLayer {
     const guardUnit = this.voxScaleUnit;
     ls.activate(
       () => {
-        const dummySource = new DummyMultiscaleVolumeChunkSource(
+        const dummySource = new VoxMultiscaleVolumeChunkSource(
           this.manager.chunkManager,
           {
             chunkDataSize: new Uint32Array([64, 64, 64]),

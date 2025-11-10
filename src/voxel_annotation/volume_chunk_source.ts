@@ -36,12 +36,12 @@ import { VoxChunkSource } from '#src/voxel_annotation/frontend.js';
  * - Chunking: Data is divided into smaller, manageable 3D blocks (chunks) to optimize loading and memory usage.
  * - Asynchronous: Data loading is typically asynchronous, as it might involve fetching from a remote server or reading from large local files.
  */
-export interface DummyMultiscaleOptions {
+export interface VoxMultiscaleOptions {
   chunkDataSize?: Uint32Array | number[];
   upperVoxelBound?: Float32Array | number[];
 }
 
-export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   dataType = DataType.UINT32;
   volumeType = VolumeType.SEGMENTATION;
   get rank() {
@@ -51,7 +51,7 @@ export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
   private cfgChunkDataSize: Uint32Array;
   private cfgUpperVoxelBound: Float32Array;
 
-  constructor(chunkManager: ChunkManager, options?: DummyMultiscaleOptions) {
+  constructor(chunkManager: ChunkManager, options?: VoxMultiscaleOptions) {
     super(chunkManager);
     this.cfgChunkDataSize = new Uint32Array(
       options?.chunkDataSize ? Array.from(options.chunkDataSize) : [64, 64, 64],
@@ -110,7 +110,7 @@ export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
 
     // Large diagonal scale to make effective voxel size huge, ensuring guard scale is used when
     // zoomed out. Homogeneous (rank+1)x(rank+1) matrix.
-    const scale = 1 << 3;
+    const scale = 1 << 2;
     const guardXform = new Float32Array((rank + 1) * (rank + 1));
     for (let i = 0; i < rank; ++i) {
       guardXform[i * (rank + 1) + i] = scale;

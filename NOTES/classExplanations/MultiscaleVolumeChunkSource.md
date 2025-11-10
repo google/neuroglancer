@@ -66,7 +66,7 @@ Backends:
 
 
 ### Review of your DummyMultiscaleVolumeChunkSource
-File: src/voxel_annotation/dummy_volume_chunk_source.ts
+File: src/voxel_annotation/volume_chunk_source.ts
 
 What it sets up:
 - Extends MultiscaleVolumeChunkSource with:

@@ -14,7 +14,7 @@ Below is a concrete design that fits the current codebase and follows the attach
   - src/voxel_annotation/backend.ts
     - VoxChunkSource backend counterpart returns a checkerboard in download() (lines 24–54).
 - A dummy multiscale provider and layer hookup:
-  - src/voxel_annotation/dummy_volume_chunk_source.ts: builds multiscale and returns our frontend VoxChunkSource (lines 64–129).
+  - src/voxel_annotation/volume_chunk_source.ts: builds multiscale and returns our frontend VoxChunkSource (lines 64–129).
   - src/layer/vox/index.ts: the Vox layer, its settings/draw tabs, and the render layer. It already has UI hooks to rebuild based on scale/bounds (lines 194–253), and a simple toolset that calls VoxelEditController which calls VoxChunkSource.paintVoxel() (src/voxel_annotation/edit_controller.ts lines 10–22 and 24–52; ui tools in src/ui/voxel_annotations.ts lines 26–187).
 
 This is already close to the “tiered” architecture in the spec:
