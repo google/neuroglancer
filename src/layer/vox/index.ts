@@ -30,6 +30,7 @@ import {
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
+import { DataType } from "#src/sliceview/base.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
@@ -61,6 +62,16 @@ const ERASE_MODE_JSON_KEY = "eraseMode";
 const BRUSH_SHAPE_JSON_KEY = "brushShape";
 const FLOOD_FILL_MAX_VOXELS_JSON_KEY = "floodFillMaxVoxels";
 const PAINT_VALUE_JSON_KEY = "paintValue";
+
+const DATA_TYPE_BIT_INFO = {
+  [DataType.UINT8]: { bits: 8, signed: false },
+  [DataType.INT8]: { bits: 8, signed: true },
+  [DataType.UINT16]: { bits: 16, signed: false },
+  [DataType.INT16]: { bits: 16, signed: true },
+  [DataType.UINT32]: { bits: 32, signed: false },
+  [DataType.INT32]: { bits: 32, signed: true },
+  [DataType.UINT64]: { bits: 64, signed: false },
+};
 
 export class VoxelEditingContext
   extends RefCounted
@@ -189,7 +200,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
   abstract getVoxelPaintValue(erase: boolean): bigint;
-  abstract setVoxelPaintValue(value: bigint): void;
+  abstract setVoxelPaintValue(value: any): bigint;
 
   initializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
@@ -276,9 +287,40 @@ export function UserLayerWithVoxelEditingMixin<
       if (erase) return 0n;
       return this.paintValue.value;
     }
-    setVoxelPaintValue(value: bigint) {
-      this.paintValue.value = value;
+
+    setVoxelPaintValue(x: any) {
+      const editContext = this.editingContexts.values().next().value;
+      const dataType = editContext.primarySource.dataType;
+      let value: bigint;
+
+      if (dataType === DataType.FLOAT32) {
+        const floatValue = parseFloat(String(x));
+        value = BigInt(Math.round(floatValue));
+      } else {
+        value = BigInt(x);
+      }
+
+      const info = DATA_TYPE_BIT_INFO[dataType as keyof typeof DATA_TYPE_BIT_INFO];
+      if (!info) {
+        this.paintValue.value = value;
+        return value;
+      }
+
+      const { bits, signed } = info;
+      const mask = (1n << BigInt(bits)) - 1n;
+      let truncated = value & mask;
+
+      if (signed) {
+        const signBit = 1n << BigInt(bits - 1);
+        if ((truncated & signBit) !== 0n) {
+          truncated -= (1n << BigInt(bits));
+        }
+      }
+
+      this.paintValue.value = truncated;
+      return truncated;
     }
+
 
     abstract _createVoxelRenderLayer(
       source: MultiscaleVolumeChunkSource,
@@ -359,7 +401,7 @@ export function UserLayerWithVoxelEditingMixin<
           controller.redo();
           break;
         case "randomize-paint-value":
-          this.paintValue.value = randomUint64();
+          this.setVoxelPaintValue(randomUint64());
           break;
       }
     }
