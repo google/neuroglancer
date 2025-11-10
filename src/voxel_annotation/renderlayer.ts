@@ -34,16 +34,6 @@ type EmptyParams = Record<string, never>;
 
 export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<EmptyParams> {
 
-  override draw(renderContext: any) {
-    const { sliceView } = renderContext;
-    const layerInfo = sliceView.visibleLayers.get(this);
-    if (layerInfo === undefined) {
-      // Visible layers not ready yet; skip drawing this frame.
-      return;
-    }
-    console.log("drawn")
-    super.draw(renderContext);
-  }
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     options: RenderLayerOptions<EmptyParams>,

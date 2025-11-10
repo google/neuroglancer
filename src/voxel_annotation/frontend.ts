@@ -8,6 +8,7 @@ import type { ChunkManager } from '#src/chunk_manager/frontend.js';
 import type { VolumeChunkSpecification } from '#src/sliceview/volume/base.js';
 import type { VolumeChunk } from '#src/sliceview/volume/frontend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/frontend.js';
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { TypedArray } from '#src/util/array.js';
 import { VOX_CHUNK_SOURCE_RPC_ID } from '#src/voxel_annotation/base.js';
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
@@ -23,7 +24,6 @@ class VoxelEditOverlay {
       this.edits.set(key, m);
     }
     m.set(localIndex, value);
-    console.log(`Applied edit to chunk ${key} at index ${localIndex} with value ${value}`);
   }
 
   mergeIntoChunkData(key: string, baseArray: TypedArray) {
@@ -58,6 +58,10 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   private overlay = new VoxelEditOverlay();
   private tempVoxChunkGridPosition = new Float32Array(3);
   private tempLocalPosition = new Uint32Array(3);
+  private dirtyChunks = new Set<string>();
+  private scheduleProcessPendingUploads = animationFrameDebounce(
+    () => this.processPendingUploads()
+  );
 
   constructor(chunkManager: ChunkManager, options: { spec: VolumeChunkSpecification }) {
     super(chunkManager, options);
@@ -84,10 +88,29 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       if (baseArray) {
         // Merge and mark for re-upload.
         this.overlay.mergeIntoChunkData(key, baseArray);
-        this.invalidateChunkUpload(chunk);
+        this.scheduleUpdate(key);
       }
     }
-    // Request redraw.
+  }
+
+  private scheduleUpdate(key: string) {
+    this.dirtyChunks.add(key);
+    this.scheduleProcessPendingUploads();
+  }
+
+  private processPendingUploads() {
+    for (const key of this.dirtyChunks) {
+      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
+      if (chunk && this.getCpuArrayForChunk(chunk)) {
+        // The original blocking upload logic is now here
+        const gl = chunk.gl;
+        if (chunk.state === ChunkState.GPU_MEMORY) {
+          chunk.freeGPUMemory(gl);
+        }
+        chunk.copyToGPU(gl);
+      }
+    }
+    this.dirtyChunks.clear();
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 
@@ -110,11 +133,9 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       const baseArray = this.getCpuArrayForChunk(chunk);
       if (!baseArray) continue;
       this.overlay.mergeIntoChunkData(key, baseArray);
-      this.invalidateChunkUpload(chunk);
+      this.scheduleUpdate(key);
     }
-    // Request redraw once.
-    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
-  }
+    }
 
   /** getValueAt that respects overlay if present. */
   override getValueAt(chunkPosition: Float32Array, channelAccess: any) {
@@ -174,13 +195,14 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   private invalidateChunkUpload(chunk: VolumeChunk) {
-    // Re-upload updated CPU data to the GPU immediately so the chunk continues to render.
     const gl = chunk.gl;
-    if (chunk.state === ChunkState.GPU_MEMORY) {
-      // Release the old texture before uploading the new data to avoid leaks.
-      chunk.freeGPUMemory(gl);
+    // If already on GPU and the concrete implementation supports in-place update, use it.
+    const anyChunk = chunk as any;
+    if (chunk.state === ChunkState.GPU_MEMORY && typeof anyChunk.updateFromCpuData === 'function') {
+      anyChunk.updateFromCpuData(gl);
+      return;
     }
-    // Upload the latest CPU-side data and mark the chunk as GPU resident.
+    // Otherwise, just upload (don’t free first).
     chunk.copyToGPU(gl);
   }
 }

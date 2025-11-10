@@ -146,6 +146,78 @@ export abstract class SingleTextureVolumeChunk<
     gl.bindTexture(textureTarget, null);
   }
 
+  updateFromCpuData(gl: GL, _region?: { offset: Uint32Array; size: Uint32Array }) {
+    if (this.data == null) return;
+
+    // If there is no existing texture, just perform the normal upload path.
+    if (this.texture == null) {
+      this.copyToGPU(gl);
+      return;
+    }
+
+    const fmt = this.chunkFormat as any; // Both uncompressed and compressed implement TextureFormat-like fields
+    const textureTarget = textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
+    gl.bindTexture(textureTarget, this.texture);
+    gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
+
+    // If we have a textureLayout with a definite shape (uncompressed path), we can sub-update.
+    const layout: any = this.textureLayout;
+    const hasShape = layout && layout.textureShape && layout.textureShape.length >= 2;
+
+    try {
+      // Prefer texSubImage path when we can compute exact sizes (uncompressed formats):
+      if (hasShape && typeof fmt.textureDims === 'number') {
+        const texelsPerElement = fmt.texelsPerElement ?? 1;
+        const w = layout.textureShape[0] * texelsPerElement;
+        const h = layout.textureShape[1] ?? 1;
+        const d = fmt.textureDims === 3 ? (layout.textureShape[2] ?? 1) : undefined;
+
+        // Ensure typed array type matches GL expectations
+        let data: any = this.data;
+        const ctor = fmt.arrayConstructor as { new (b: ArrayBuffer, o: number, l: number): any } | undefined;
+        if (ctor && data.constructor !== ctor) {
+          data = new (ctor as any)(data.buffer, data.byteOffset, data.byteLength / (ctor as any).BYTES_PER_ELEMENT);
+        }
+
+        if (fmt.textureDims === 3 && d !== undefined) {
+          // 3D update
+          gl.texSubImage3D(
+            WebGL2RenderingContext.TEXTURE_3D,
+            /*level=*/ 0,
+            /*xoffset=*/ 0,
+            /*yoffset=*/ 0,
+            /*zoffset=*/ 0,
+            /*width=*/ w,
+            /*height=*/ h,
+            /*depth=*/ d,
+            fmt.textureFormat,
+            fmt.texelType,
+            data,
+          );
+        } else {
+          // 2D update
+          gl.texSubImage2D(
+            WebGL2RenderingContext.TEXTURE_2D,
+            /*level=*/ 0,
+            /*xoffset=*/ 0,
+            /*yoffset=*/ 0,
+            /*width=*/ w,
+            /*height=*/ h,
+            fmt.textureFormat,
+            fmt.texelType,
+            data,
+          );
+        }
+      } else {
+        // Fallback: re-specify the texture contents onto the existing texture object.
+        // This still avoids delete+create and the associated driver sync.
+        this.setTextureData(gl);
+      }
+    } finally {
+      gl.bindTexture(textureTarget, null);
+    }
+  }
+
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
     if (this.data === null) return;

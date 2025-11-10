@@ -39,12 +39,13 @@ export class VoxelEditController {
     }
   }
 
-  /** Paint a brush with selectable shape: 'disk' (2D in XY plane) or 'sphere' (3D). Default: 'disk'. */
+  /** Paint a brush with selectable shape: 'disk' (2D oriented to slice plane) or 'sphere' (3D). Default: 'disk'. */
   paintBrushWithShape(
     center: Float32Array,
     radius: number,
     value: number,
     shape: 'disk' | 'sphere' = 'disk',
+    basis?: { u: Float32Array; v: Float32Array },
   ) {
     if (!Number.isFinite(radius) || radius <= 0) return;
     const r = Math.floor(radius);
@@ -66,11 +67,41 @@ export class VoxelEditController {
         }
       }
     } else {
-      // Disk in XY plane at fixed Z = cz
-      for (let dy = -r; dy <= r; ++dy) {
-        for (let dx = -r; dx <= r; ++dx) {
-          if (dx * dx + dy * dy <= rr) {
-            voxels.push(new Float32Array([cx + dx, cy + dy, cz]));
+      // Oriented disk in the provided slice plane; if basis not provided, fall back to XY at fixed Z = cz.
+      const u = basis?.u;
+      const v = basis?.v;
+      if (u && v && Number.isFinite(u[0]) && Number.isFinite(u[1]) && Number.isFinite(u[2]) && Number.isFinite(v[0]) && Number.isFinite(v[1]) && Number.isFinite(v[2])) {
+        // Normalize u and v for safety.
+        const ul = Math.hypot(u[0], u[1], u[2]) || 1;
+        const vl = Math.hypot(v[0], v[1], v[2]) || 1;
+        const un = [u[0] / ul, u[1] / ul, u[2] / ul];
+        const vn = [v[0] / vl, v[1] / vl, v[2] / vl];
+        const seen = new Set<string>();
+        for (let dy = -r; dy <= r; ++dy) {
+          for (let dx = -r; dx <= r; ++dx) {
+            if (dx * dx + dy * dy <= rr) {
+              const px = cx + dx * un[0] + dy * vn[0];
+              const py = cy + dx * un[1] + dy * vn[1];
+              const pz = cz + dx * un[2] + dy * vn[2];
+              const ix = Math.round(px);
+              const iy = Math.round(py);
+              const iz = Math.round(pz);
+              const key = ix + ',' + iy + ',' + iz;
+              if (!seen.has(key)) {
+                seen.add(key);
+                voxels.push(new Float32Array([ix, iy, iz]));
+              }
+            }
+          }
+        }
+      } else {
+        console.warn('No basis provided for disk brush, falling back to XY plane at fixed Z = cz.');
+        // Fallback: Disk in XY plane at fixed Z = cz
+        for (let dy = -r; dy <= r; ++dy) {
+          for (let dx = -r; dx <= r; ++dx) {
+            if (dx * dx + dy * dy <= rr) {
+              voxels.push(new Float32Array([cx + dx, cy + dy, cz]));
+            }
           }
         }
       }

@@ -247,7 +247,7 @@ export class VoxUserLayer extends UserLayer {
 
   // Settings state
   voxScale: Float64Array = new Float64Array([
-    0.00000008, 0.00000008, 0.00000008,
+    0.000000008, 0.000000008, 0.000000008,
   ]);
   voxScaleUnit: string = "nm";
   voxUpperBound: Float32Array = new Float32Array([
@@ -256,7 +256,7 @@ export class VoxUserLayer extends UserLayer {
   // Draw tool state
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
-  voxBrushShape: 'disk' | 'sphere' = 'disk';
+  voxBrushShape: "disk" | "sphere" = "disk";
   private voxLoadedSubsource?: LoadedDataSubsource;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
@@ -317,31 +317,86 @@ export class VoxUserLayer extends UserLayer {
     );
   }
 
+  private getModelToVoxTransform(): mat4 | undefined {
+    const identity3D = this.createIdentity3D();
+    const watchable = getWatchableRenderLayerTransform(
+      this.manager.root.coordinateSpace,
+      this.localPosition.coordinateSpace,
+      identity3D,
+      undefined,
+    );
+    const tOrError = watchable.value as any;
+    if (tOrError?.error) return undefined;
+    return (
+      mat4.invert(mat4.create(), tOrError.modelToRenderLayerTransform) ||
+      mat4.identity(mat4.create())
+    );
+  }
+
   getVoxelPositionFromMouse(
     mouseState: MouseSelectionState,
   ): Float32Array | undefined {
     try {
       if (!mouseState?.active || !mouseState?.position) return undefined;
-
-      // There might be a simpler way to retrieve global transform?
-      const identity3D = this.createIdentity3D();
-      const watchable = getWatchableRenderLayerTransform(
-        this.manager.root.coordinateSpace,
-        this.localPosition.coordinateSpace,
-        identity3D,
-        undefined,
-      );
-      const tOrError = watchable.value as any;
-      if (tOrError?.error) return undefined;
-
+      const inv = this.getModelToVoxTransform();
+      if (!inv) return undefined;
       const p = mouseState.position;
-
       return vec3.transformMat4(
         vec3.create(),
         vec3.fromValues(p[0], p[1], p[2]),
-        mat4.invert(mat4.create(), tOrError.modelToRenderLayerTransform) ||
-          mat4.identity(mat4.create()),
+        inv,
       );
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Returns in-plane basis vectors (u, v) for the current slice plane in voxel coordinates.
+   *  Uses MouseSelectionState.displayDimensions to select the two displayed axes, then maps unit
+   *  vectors along those axes through the renderLayer->voxel transform.
+   *  TODO: this is not working, ai are dogshit at 3d stuffs.
+   */
+  getBrushPlaneBasis(mouseState?: MouseSelectionState): { u: Float32Array; v: Float32Array } | undefined {
+    try {
+      const inv = this.getModelToVoxTransform();
+      if (!inv) return undefined;
+      const di = mouseState?.displayDimensions?.displayDimensionIndices;
+      const rank = mouseState?.displayDimensions?.displayRank ?? 0;
+      const i0 = (di && rank >= 2) ? di[0] : 0;
+      const i1 = (di && rank >= 2) ? di[1] : 1;
+
+      // Build origin and unit vectors in model/render-layer coordinate space aligned to displayed axes.
+      const p0 = vec3.transformMat4(vec3.create(), vec3.fromValues(0, 0, 0), inv);
+      const uModel = [0, 0, 0] as number[];
+      const vModel = [0, 0, 0] as number[];
+      if (i0 >= 0 && i0 < 3) uModel[i0] = 1;
+      if (i1 >= 0 && i1 < 3) vModel[i1] = 1;
+      const pU = vec3.transformMat4(
+        vec3.create(),
+        vec3.fromValues(uModel[0], uModel[1], uModel[2]),
+        inv,
+      );
+      const pV = vec3.transformMat4(
+        vec3.create(),
+        vec3.fromValues(vModel[0], vModel[1], vModel[2]),
+        inv,
+      );
+
+      // Compute direction vectors and normalize.
+      const ux = pU[0] - p0[0];
+      const uy = pU[1] - p0[1];
+      const uz = pU[2] - p0[2];
+      const vx = pV[0] - p0[0];
+      const vy = pV[1] - p0[1];
+      const vz = pV[2] - p0[2];
+
+      const ul = Math.hypot(ux, uy, uz);
+      const vl = Math.hypot(vx, vy, vz);
+      if (!Number.isFinite(ul) || ul === 0 || !Number.isFinite(vl) || vl === 0) return undefined;
+
+      const u = new Float32Array([ux / ul, uy / ul, uz / ul]);
+      const v = new Float32Array([vx / vl, vy / vl, vz / vl]);
+      return { u, v };
     } catch {
       return undefined;
     }
