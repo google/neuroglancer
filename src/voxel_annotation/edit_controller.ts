@@ -182,6 +182,55 @@ export class VoxelEditController extends SharedObject {
     });
   }
 
+  /** Commit helper for UI tools. */
+  commitEdits(edits: { key: string; indices: number[] | Uint32Array; value?: number; values?: ArrayLike<number>; size?: number[] }[]): void {
+    if (!this.rpc) throw new Error("VoxelEditController.commitEdits: RPC not initialized.");
+    if (!Array.isArray(edits)) {
+      throw new Error("VoxelEditController.commitEdits: edits must be an array.");
+    }
+    this.rpc.invoke(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
+      rpcId: this.rpcId,
+      edits,
+    });
+  }
+
+  /**
+   * Frontend 2D flood fill helper: computes on currently selected LOD and returns an edits payload
+   * suitable for VOX_EDIT_COMMIT_VOXELS without committing. Hard-cap deny semantics.
+   * The seed is simply the first clicked voxel in canonical/world units.
+   */
+  floodFillPlane2D(
+    startPositionCanonical: Float32Array,
+    fillValue: number,
+    maxVoxels: number,
+  ): { edits: { key: string; indices: number[]; value: number }[]; filledCount: number; originalValue: number } {
+    if (!startPositionCanonical || startPositionCanonical.length < 3) {
+      throw new Error("VoxelEditController.floodFillPlane2D: startPositionCanonical must be Float32Array[3].");
+    }
+    if (!Number.isFinite(maxVoxels) || maxVoxels <= 0) {
+      throw new Error("VoxelEditController.floodFillPlane2D: maxVoxels must be > 0.");
+    }
+
+    // For V1 we use the minimum LOD (index 0) to keep behavior predictable.
+    const voxelSize = this.getOptimalVoxelSize(1); // will return min when restrictToMinLOD=true
+    const sourceIndex = Math.floor(Math.log2(voxelSize));
+    const src2D = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
+    if (!src2D || !src2D[0] || src2D[0].length <= sourceIndex) {
+      throw new Error("VoxelEditController.floodFillPlane2D: No multiscale levels available.");
+    }
+    const source = src2D[0][sourceIndex]?.chunkSource as VoxChunkSource;
+    if (!source) throw new Error("VoxelEditController.floodFillPlane2D: Selected level has no chunk source.");
+
+    // Convert canonical/world to level grid coordinates.
+    const startVoxelLod = new Float32Array([
+      Math.floor((startPositionCanonical[0] ?? NaN) / voxelSize),
+      Math.floor((startPositionCanonical[1] ?? NaN) / voxelSize),
+      Math.floor((startPositionCanonical[2] ?? NaN) / voxelSize),
+    ]);
+
+    return source.floodFillPlane2D(startVoxelLod, fillValue >>> 0, maxVoxels | 0);
+  }
+
   callChunkReload(voxChunkKeys: string[]) {
     const src2D = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
     if (!src2D || !src2D[0] || src2D[0].length === 0) {

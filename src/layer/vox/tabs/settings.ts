@@ -219,9 +219,11 @@ export class VoxSettingsTab extends Tab {
     // --- Export to Zarr (LOD 1 only) ---
     const exportUrlInput = document.createElement("input");
     exportUrlInput.type = "text";
-    exportUrlInput.placeholder = "Export base URL (http(s)://..., s3+http(s)://endpoint/bucket/prefix, or s3://bucket/prefix [AWS]) e.g. http://localhost:9000/zarr/mydataset/";
-    exportUrlInput.size = 40;
-
+    exportUrlInput.placeholder = "Export base URL";
+    exportUrlInput.size = 80;
+    exportUrlInput.classList.add("neuroglancer-vox-status");
+    exportUrlInput.style.marginLeft = "0";
+1
     const exportButton = document.createElement("button");
     exportButton.textContent = "Export to Zarr";
     exportButton.title = "Exports current map LOD=1 chunks to a Zarr v2 dataset at path '0' under the provided base URL";

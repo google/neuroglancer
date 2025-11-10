@@ -19,8 +19,9 @@ import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 
 export const BRUSH_TOOL_ID = "voxBrush";
-
-abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
+export const FLOODFILL_TOOL_ID = "voxFloodFill";
+ 
+ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
   protected isDrawing = false;
   protected lastPoint: Int32Array | undefined;
   protected mouseDisposer: (() => void) | undefined;
@@ -193,9 +194,48 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
   }
 }
 
+export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
+  description = "flood fill (2D plane, 4-connected)";
+
+  toJSON() {
+    return FLOODFILL_TOOL_ID;
+  }
+
+  trigger(mouseState: MouseSelectionState) {
+    const layer = this.layer as unknown as VoxUserLayer;
+    if (!mouseState?.active) return;
+    const pos = (layer as any).getVoxelPositionFromMouse?.(mouseState) as Float32Array | undefined;
+    if (!pos || pos.length < 3) {
+      throw new Error("VoxelFloodFillLegacyTool.trigger: failed to get voxel position from mouse");
+    }
+    const value = layer.getCurrentLabelValue() ?? (layer.voxEraseMode ? 0 : 42);
+    const max = Number((layer as any).voxFloodMaxVoxels);
+    if (!Number.isFinite(max) || max <= 0) {
+      throw new Error("VoxelFloodFillLegacyTool.trigger: invalid max voxels; set it in the tool panel");
+    }
+    const ctrl = (layer as any).voxEditController;
+    if (!ctrl) throw new Error("VoxelFloodFillLegacyTool.trigger: missing VoxelEditController on layer");
+    const seed = new Float32Array([Math.floor(pos[0]), Math.floor(pos[1]), Math.floor(pos[2])]);
+    const { edits } = ctrl.floodFillPlane2D(seed, value >>> 0, Math.floor(max));
+    if (edits.length === 0) return;
+    if (typeof ctrl.commitEdits === "function") {
+      ctrl.commitEdits(edits);
+    } else if ((ctrl as any).rpc && (ctrl as any).rpc.invoke) {
+      // Fallback commit path if helper is not present
+      (ctrl as any).rpc.invoke("VOX_EDIT_COMMIT_VOXELS", { rpcId: (ctrl as any).rpcId, edits });
+    } else {
+      throw new Error("VoxelFloodFillLegacyTool.trigger: no way to commit edits");
+    }
+  }
+}
+
 export function registerVoxelAnnotationTools() {
   registerLegacyTool(
     BRUSH_TOOL_ID,
     (layer) => new VoxelBrushLegacyTool(layer as unknown as VoxUserLayer),
+  );
+  registerLegacyTool(
+    FLOODFILL_TOOL_ID,
+    (layer) => new VoxelFloodFillLegacyTool(layer as unknown as VoxUserLayer),
   );
 }

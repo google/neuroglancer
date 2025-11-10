@@ -2,7 +2,7 @@
  * Vox Tool tab UI split from index.ts
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
-import { VoxelBrushLegacyTool } from "#src/ui/voxel_annotations.js";
+import { VoxelBrushLegacyTool, VoxelFloodFillLegacyTool } from "#src/ui/voxel_annotations.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 
@@ -88,7 +88,15 @@ export class VoxToolTab extends Tab {
       this.layer.tool.value = new VoxelBrushLegacyTool(this.layer);
     });
 
+    const floodButton = document.createElement("button");
+    floodButton.textContent = "Flood fill";
+    floodButton.title = "Click a voxel to flood fill the connected region on the current Z plane";
+    floodButton.addEventListener("click", () => {
+      this.layer.tool.value = new VoxelFloodFillLegacyTool(this.layer);
+    });
+
     toolsWrap.appendChild(brushButton);
+    toolsWrap.appendChild(floodButton);
     toolsRow.appendChild(toolsLabel);
     toolsRow.appendChild(toolsWrap);
     toolbox.appendChild(toolsRow);
@@ -199,6 +207,57 @@ export class VoxToolTab extends Tab {
 
     brushRow.appendChild(group);
     toolbox.appendChild(brushRow);
+
+    // Section: Flood fill settings
+    const floodRow = document.createElement("div");
+    floodRow.className = "neuroglancer-vox-row";
+
+    const floodLabel = document.createElement("label");
+    floodLabel.textContent = "Max fill voxels";
+    const floodControls = document.createElement("div");
+    floodControls.style.display = "flex";
+    floodControls.style.alignItems = "center";
+    floodControls.style.gap = "8px";
+
+    const floodMaxInput = document.createElement("input");
+    floodMaxInput.type = "number";
+    floodMaxInput.className = "neuroglancer-vox-input";
+    floodMaxInput.min = "1";
+    floodMaxInput.step = "1";
+
+    // Initialize with an explicit safe default if not set.
+    if (!Number.isFinite((this.layer as any).voxFloodMaxVoxels)) {
+      (this.layer as any).voxFloodMaxVoxels = 100000;
+    }
+    floodMaxInput.value = String((this.layer as any).voxFloodMaxVoxels);
+
+    floodMaxInput.addEventListener("change", () => {
+      const v = Math.floor(Number(floodMaxInput.value));
+      if (!Number.isFinite(v) || v <= 0) {
+        throw new Error("VoxToolTab: Invalid max fill voxels value");
+      }
+      (this.layer as any).voxFloodMaxVoxels = v;
+      floodMaxInput.value = String(v);
+    });
+
+    floodControls.appendChild(floodMaxInput);
+
+    const floodGroup = document.createElement("div");
+    floodGroup.style.display = "grid";
+    floodGroup.style.gridTemplateColumns = "minmax(120px,auto) 1fr";
+    floodGroup.style.columnGap = "8px";
+    floodGroup.style.rowGap = "8px";
+
+    const floodLabelCell = document.createElement("div");
+    floodLabelCell.appendChild(floodLabel);
+    const floodControlsCell = document.createElement("div");
+    floodControlsCell.appendChild(floodControls);
+
+    floodGroup.appendChild(floodLabelCell);
+    floodGroup.appendChild(floodControlsCell);
+
+    floodRow.appendChild(floodGroup);
+    toolbox.appendChild(floodRow);
 
     // Section: Labels (moved to end, title on top for full width)
     const labelsSection = document.createElement("div");

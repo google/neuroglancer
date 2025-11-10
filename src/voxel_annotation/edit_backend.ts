@@ -35,7 +35,7 @@ export class VoxelEditController extends SharedObject {
     size?: number[];
   }[] = [];
   private commitDebounceTimer: number | undefined;
-  private readonly commitDebounceDelayMs: number = 200;
+  private readonly commitDebounceDelayMs: number = 300;
 
   constructor(rpc: RPC, options: any) {
     super();
