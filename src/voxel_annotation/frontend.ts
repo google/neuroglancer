@@ -34,7 +34,6 @@ class VoxelEditOverlay {
         (baseArray as any)[idx] = val as any;
       }
     }
-    console.log(`Merged edits into chunk ${key}`);
   }
 
   getOverlayValue(key: string, localIndex: number): number | undefined {
@@ -88,8 +87,32 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
         this.invalidateChunkUpload(chunk);
       }
     }
-    console.log("Painted voxel at ", chunk, " to value ", value);
     // Request redraw.
+    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+  }
+
+  /** Batch paint API to minimize GPU uploads by chunk. */
+  paintVoxelsBatch(voxels: Float32Array[], value: number) {
+    if (!voxels || voxels.length === 0) return;
+    const affectedKeys = new Set<string>();
+    // Apply edits to overlay and collect affected chunk keys.
+    for (const v of voxels) {
+      if (!v) continue;
+      const { key, localIndex } = this.computeChunkKeyAndIndex(v);
+      if (localIndex < 0) continue;
+      this.overlay.applyEdit(key, localIndex, value);
+      affectedKeys.add(key);
+    }
+    // For each affected chunk currently resident on CPU, merge and re-upload once.
+    for (const key of affectedKeys) {
+      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
+      if (!chunk) continue;
+      const baseArray = this.getCpuArrayForChunk(chunk);
+      if (!baseArray) continue;
+      this.overlay.mergeIntoChunkData(key, baseArray);
+      this.invalidateChunkUpload(chunk);
+    }
+    // Request redraw once.
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 

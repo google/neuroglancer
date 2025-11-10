@@ -35,7 +35,8 @@ export class VoxelPixelLegacyTool extends LegacyTool<VoxUserLayer> {
       const vx = Math.floor(vox[0]);
       const vy = Math.floor(vox[1]);
       const vz = Math.floor(vox[2]);
-      (this.layer as any).voxEditController?.paintVoxel(new Float32Array([vx, vy, vz]), 42);
+      const value = (this.layer as any).voxEraseMode ? 0 : 42;
+      (this.layer as any).voxEditController?.paintVoxel(new Float32Array([vx, vy, vz]), value);
     } catch (e) {
       console.log('[VoxelPixelLegacyTool] Error computing voxel position:', e);
     }
@@ -44,7 +45,6 @@ export class VoxelPixelLegacyTool extends LegacyTool<VoxUserLayer> {
 
 export class VoxelBrushLegacyTool extends LegacyTool<VoxUserLayer> {
   description = "brush";
-  radius = 3;
   toJSON() {
     return BRUSH_TOOL_ID;
   }
@@ -57,7 +57,9 @@ export class VoxelBrushLegacyTool extends LegacyTool<VoxUserLayer> {
       const cx = Math.floor(vox[0]);
       const cy = Math.floor(vox[1]);
       const cz = Math.floor(vox[2]);
-      (this.layer as any).voxEditController?.paintBrush(new Float32Array([cx, cy, cz]), this.radius, 42);
+      const radius = Math.max(1, Math.floor((this.layer as any).voxBrushRadius ?? 3));
+      const value = (this.layer as any).voxEraseMode ? 0 : 42;
+      (this.layer as any).voxEditController?.paintBrush(new Float32Array([cx, cy, cz]), radius, value);
     } catch (e) {
       console.log('[VoxelBrushLegacyTool] Error:', e);
     }

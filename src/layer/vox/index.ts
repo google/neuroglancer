@@ -38,9 +38,9 @@ import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_sc
 import { registerVoxelAnnotationTools, VoxelBrushLegacyTool, VoxelPixelLegacyTool } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
-import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
+import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 class VoxSettingsTab extends Tab {
@@ -168,6 +168,44 @@ class VoxToolTab extends Tab {
     });
     toolbox.appendChild(brushButton);
 
+    // Brush size control
+    const sizeWrap = document.createElement("div");
+    sizeWrap.style.display = "inline-flex";
+    sizeWrap.style.alignItems = "center";
+    sizeWrap.style.gap = "4px";
+    const sizeLabel = document.createElement("label");
+    sizeLabel.textContent = "Brush size";
+    const sizeInput = document.createElement("input");
+    sizeInput.type = "number";
+    sizeInput.min = "1";
+    sizeInput.step = "1";
+    sizeInput.value = String(this.layer.voxBrushRadius ?? 3);
+    sizeInput.addEventListener("change", () => {
+      const v = Math.max(1, Math.floor(Number(sizeInput.value) || 1));
+      this.layer.voxBrushRadius = v;
+      sizeInput.value = String(v);
+    });
+    sizeWrap.appendChild(sizeLabel);
+    sizeWrap.appendChild(sizeInput);
+    toolbox.appendChild(sizeWrap);
+
+    // Eraser toggle
+    const erWrap = document.createElement("div");
+    erWrap.style.display = "inline-flex";
+    erWrap.style.alignItems = "center";
+    erWrap.style.gap = "4px";
+    const erLabel = document.createElement("label");
+    erLabel.textContent = "Eraser";
+    const erChk = document.createElement("input");
+    erChk.type = "checkbox";
+    erChk.checked = !!this.layer.voxEraseMode;
+    erChk.addEventListener("change", () => {
+      this.layer.voxEraseMode = !!erChk.checked;
+    });
+    erWrap.appendChild(erLabel);
+    erWrap.appendChild(erChk);
+    toolbox.appendChild(erWrap);
+
     element.appendChild(toolbox);
   }
 }
@@ -189,6 +227,9 @@ export class VoxUserLayer extends UserLayer {
   voxUpperBound: Float32Array = new Float32Array([
     1_000_000, 1_000_000, 1_000_000,
   ]);
+  // Draw tool state
+  voxBrushRadius: number = 3;
+  voxEraseMode: boolean = false;
   private voxLoadedSubsource?: LoadedDataSubsource;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {

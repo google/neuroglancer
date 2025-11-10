@@ -21,7 +21,7 @@ export class VoxelEditController {
     }
   }
 
-  /** Paint a simple spherical brush (3D) of integer radius around center. */
+  /** Paint a simple spherical brush (3D) of integer radius around center */
   paintBrush(center: Float32Array, radius: number, value: number) {
     if (!Number.isFinite(radius) || radius <= 0) return;
     const r = Math.floor(radius);
@@ -39,14 +39,16 @@ export class VoxelEditController {
       // ignore
     }
     if (!source) return;
+    const voxels: Float32Array[] = [];
     for (let dz = -r; dz <= r; ++dz) {
       for (let dy = -r; dy <= r; ++dy) {
         for (let dx = -r; dx <= r; ++dx) {
           if (dx*dx + dy*dy + dz*dz <= rr) {
-            source.paintVoxel(new Float32Array([cx + dx, cy + dy, cz + dz]), value);
+            voxels.push(new Float32Array([cx + dx, cy + dy, cz + dz]));
           }
         }
       }
     }
+    source.paintVoxelsBatch(voxels, value);
   }
 }
